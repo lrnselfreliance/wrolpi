@@ -10,13 +10,15 @@ WROLPi runs in a couple Docker containers.  Lets get the prerequisites installed
 1. [Install docker-ce](https://docs.docker.com/install/linux/docker-ce/ubuntu/)
 1. [Install docker-compose](https://docs.docker.com/compose/install/)
 1. Copy the latest WROLPi code
- * `git clone git@github.com:lrnselfreliance/wrolpi.git`
+    * `git clone git@github.com:lrnselfreliance/wrolpi.git`
 1. Change directory into the code base
- * `cd wrolpi`
+    * `cd wrolpi`
 1. Build the docker containers
- * `docker-compose build`
+    * `docker-compose build`
 1. Start the docker containers
- * `docker-compose up`
+    * `docker-compose up`
+1. Navigate to WROLPi
+    * https://127.0.0.1:8080
 
 
 # Charter

@@ -1,0 +1,20 @@
+version: '3'
+services:
+  postgres:
+    container_name: wrolpi_postgres
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
+    ports:
+      - 54321:5432  # for local development
+  web:
+    container_name: wrolpi_web
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+    ports:
+      - 8080:8080  # for local development
+    volumes:
+      - .:/opt/wrolpi
+    environment:
+      - DOCKER=true  # tell the python code that its dockerized

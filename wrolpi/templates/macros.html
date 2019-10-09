@@ -1,0 +1,25 @@
+{# form buttons #}
+{% macro button_group(form, id, kind, value) %}
+    <button id="{{ id }}" class="btn btn-{{ kind }}" onclick="{{ form }}_form(this)">
+        {{ value }}
+        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"
+              style="display: none"></span>
+        <span class="checkmark" aria-hidden="true" style="display: none">✓</span>
+        <span class="xmark" aria-hidden="true" style="display: none">✖</span>
+    </button>
+{% endmacro %}
+
+{% macro put_form_button(id, kind, value) %}
+    {{ button_group('put', id, kind, value) }}
+{% endmacro %}
+{% macro post_form_button(id, kind, value) %}
+    {{ button_group('post', id, kind, value) }}
+{% endmacro %}
+{% macro get_form_button(id, kind, value) %}
+    {{ button_group('get', id, kind, value) }}
+{% endmacro %}
+{% macro delete_form_button(id, kind, value) %}
+    {{ button_group('delete', id, kind, value) }}
+{% endmacro %}
+
+{% block html %}{% endblock %}

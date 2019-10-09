@@ -1,0 +1,25 @@
+downloader:
+  continue_dl: true
+  dateafter: 19900101
+  embedsubtitles: true
+  embedthumbnail: true
+  file_name_format: "%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s"
+  format: 22/135/18/43
+  ignoreerrors: true
+  max_downloads_per_channel: 0
+  nooverwrites: true
+  quiet: false
+  video_root_directory: test/example_videos/  # relative to project's root directory
+  writeautomaticsub: true
+  writeinfojson: true
+  writesubtitles: true
+  writethumbnail: true
+  youtube_include_dash_manifest: false
+
+download_collection:
+  # These are channels or playlists that will be downloaded
+  bigbuckbunny:
+    directory: blender  # relative to the `downloader.video_root_directory`
+    match_regex: .*b?Bunny.*
+    name: Big Buck Bunny
+    url: https://www.youtube.com/user/BlenderFoundation/videos

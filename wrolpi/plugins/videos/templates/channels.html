@@ -1,0 +1,30 @@
+{% extends 'wrolpi/templates/base.html' %}
+{% set title=title or 'Videos' %}
+
+{% block body %}
+    <div class="container-fluid">
+
+        <div class="row">
+            <div class="col-3">
+                <h4 class="h4">CHANNELS</h4>
+                <p>
+                    <a href="/videos/settings" class="btn btn-info">
+                        <span class="fas fa-cog"></span> Manage Channels</a>
+                </p>
+
+                <ul class="nav nav-pills nav-stacked">
+                    {% for channel in channels %}
+                        {% set active="active" if channel['link'] == link else "" %}
+                        <li class="nav-item nav-fill" style="width: 100%">
+                            <a class="nav-link {{ active }}"
+                               href="/videos/channel/{{ channel['link'] }}">{{ channel['name'] }}</a>
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            <div class="col-9">
+                {% block video %}{% endblock %}
+            </div>
+        </div>
+    </div>
+{% endblock %}

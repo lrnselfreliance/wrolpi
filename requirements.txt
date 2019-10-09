@@ -1,0 +1,10 @@
+cherrypy>=18.2.0
+dictorm>=4.1.2
+docker>=4.1.0
+green>=3.0.0
+Jinja2>=2.10.1
+mock>=3.0.5
+psycopg2-binary>=2.8.3
+pyyaml>=5.1.2
+youtube-dl>=2019.8.13
+pytest>=5.2.1

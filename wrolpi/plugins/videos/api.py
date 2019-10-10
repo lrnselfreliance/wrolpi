@@ -47,6 +47,14 @@ class Refresh(object):
 class ChannelAPI(object):
 
     @cherrypy.tools.db()
+    def GET(self, link, db: DictDB):
+        Channel = db['channel']
+        channel = Channel.get_one(link=link)
+        if not channel:
+            return json.dumps({'error': 'Unknown channel'})
+        return json.dumps({'channel': channel})
+
+    @cherrypy.tools.db()
     def POST(self, db: DictDB, **form_data):
         """Create a new channel"""
         Channel = db['channel']
@@ -128,6 +136,16 @@ class ChannelAPI(object):
             existing_channel.flush()
 
         return json.dumps({'success': 'The channel was updated successfully.'})
+
+    @cherrypy.tools.db()
+    def DELETE(self, link, db: DictDB):
+        Channel = db['channel']
+        channel = Channel.get_one(link=link)
+        if not channel:
+            return json.dumps({'error': 'Unknown channel'})
+        with db.transaction(commit=True):
+            channel.delete()
+        return json.dumps({'success': 'Channel deleted'})
 
 
 def get_channel_form(form_data: dict):

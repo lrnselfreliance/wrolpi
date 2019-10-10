@@ -7,14 +7,14 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 
 # Install
 WROLPi runs in a couple Docker containers.  Lets get the prerequisites installed...
-1. [Install docker-ce](https://docs.docker.com/install/linux/docker-ce/ubuntu/)
-1. [Install docker-compose](https://docs.docker.com/compose/install/)
+1. [Install docker-ce](https://docs.docker.com/install/linux/docker-ce/ubuntu/) and
+    [docker-compose](https://docs.docker.com/compose/install/)
 1. Copy the latest WROLPi code
     * `git clone git@github.com:lrnselfreliance/wrolpi.git`
 1. Change directory into the code base
     * `cd wrolpi`
 1. Build the docker containers
-    * `docker-compose build`
+    * `docker-compose build --parallel`
 1. Start the docker containers
     * `docker-compose up`
 1. Navigate to WROLPi

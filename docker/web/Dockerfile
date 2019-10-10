@@ -12,4 +12,4 @@ RUN pip install -r requirements.txt
 
 # Copy the main script as well as the WROLPi directory
 WORKDIR /opt/wrolpi
-CMD [ "python3", "/opt/wrolpi/main.py", "web", "--host", "0.0.0.0" ]
+CMD [ "python3", "/opt/wrolpi/main.py", "-v", "web", "--host", "0.0.0.0" ]

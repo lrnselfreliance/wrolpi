@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from shutil import copyfile
@@ -63,14 +64,16 @@ class TestAPI(unittest.TestCase):
 
         with get_db_context() as (db_conn, db):
             Channel = db['channel']
+
             # Channel doesn't exist
-            existing = Channel.get_one(name='Example Channel 1')
-            self.assertIsNone(existing)
+            existing = api.channel.GET('examplechannel1', db)
+            self.assertIn('error', existing)
 
             # Create it
             result = api.channel.POST(db, **new_channel)
             self.assertIn('success', result)
-            created = Channel.get_one(link='examplechannel1')
+            response = api.channel.GET('examplechannel1', db)
+            created = json.loads(response)['channel']
             self.assertIsNotNone(created)
             self.assertIsNotNone(created['id'])
 
@@ -90,3 +93,7 @@ class TestAPI(unittest.TestCase):
             # Can't update channel that doesn't exist
             result = api.channel.PUT('DoesntExist', db, **new_channel)
             self.assertIn('error', result)
+
+            # Delete the new channel
+            result = api.channel.DELETE('examplechannel1', db)
+            self.assertIn('success', result)

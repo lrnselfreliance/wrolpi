@@ -34,8 +34,6 @@ def main():
                         help='Initialize the database (all data will be lost).')
     parser.add_argument('-s', '--save-config', action='store_const', const=CONFIG_PATH,
                         help=f'Save the settings to this config file.  DEFAULT: {CONFIG_PATH}')
-    parser.add_argument('-i', '--import-config', action='store_const', const=CONFIG_PATH,
-                        help=f'Import this config, updating existing settings.  DEFAULT: {CONFIG_PATH}')
 
     sub_commands = parser.add_subparsers(title='sub-commands', dest='sub_commands')
 
@@ -59,18 +57,18 @@ def main():
         logger.warning('Setting verbosity to DEBUG')
         logger.setLevel(logging.DEBUG)
 
+    # Always update the DB from the configs
+    import_settings_configs(PLUGINS)
+
     if args.sub_commands:
-        sub_main = choices_to_mains[args.sub_commands]
-        return sub_main(args)
+        plugin_main = choices_to_mains[args.sub_commands]
+        return plugin_main(args)
     elif args.db:
         return_code = update_db(PLUGINS)
         logger.info('DB updated.')
     elif args.save_config:
         return_code = save_settings_configs(PLUGINS)
         logger.info('Config written.')
-    elif args.import_config:
-        return_code = import_settings_configs(PLUGINS)
-        logger.info('Config imported.')
     else:
         parser.print_help()
         return_code = 1

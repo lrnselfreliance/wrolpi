@@ -18,7 +18,7 @@ REQUIRED_OPTIONS = ['name', 'directory']
 
 
 def get_update_sql(db_conn, db):
-    with open(MY_DIR / 'sql/v1.sql', 'rt') as fh:
+    with open(MY_DIR / 'v1.sql', 'rt') as fh:
         contents = fh.read()
         return contents
 

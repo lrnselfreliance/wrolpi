@@ -181,6 +181,15 @@ def refresh_videos(db: DictDB):
     logger.info('Refreshing video list')
     Channel = db['channel']
 
+    # Remove any videos that don't exist
+    curs = db.get_cursor()
+    curs.execute('SELECT id, video_path FROM video')
+    existing_videos = curs.fetchall()
+    for video in existing_videos:
+        if not pathlib.Path(video['video_path']).is_file():
+            curs.execute('DELETE FROM video WHERE id = %s', (video['id'],))
+        return
+
     for channel in Channel.get_where():
         with db.transaction(commit=True):
             refresh_channel_videos(db, channel)

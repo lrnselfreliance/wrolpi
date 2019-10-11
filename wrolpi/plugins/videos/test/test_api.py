@@ -48,6 +48,11 @@ class TestAPI(unittest.TestCase):
         with get_db_context() as (db_conn, db):
             Video, Channel = db['video'], db['channel']
             import_settings_config()
+
+            # Insert a bogus video, it should be removed
+            bogus = Video(video_path='bar').flush()
+            assert bogus['id'], 'Failed to insert a bogus video for removal'
+
             api.settings.refresh.GET(db)
             self.assertEqual(Channel.count(), 1)
             self.assertEqual(Video.count(), 1)

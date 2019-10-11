@@ -3,7 +3,9 @@ import tempfile
 import unittest
 from shutil import copyfile
 
+import cherrypy
 import mock
+from cherrypy.test import helper
 
 from wrolpi.common import get_db_context
 from wrolpi.plugins.videos.api import APIRoot
@@ -46,16 +48,18 @@ class TestAPI(unittest.TestCase):
     def test_refresh(self):
         api = APIRoot()
         with get_db_context() as (db_conn, db):
-            Video, Channel = db['video'], db['channel']
+            Video, Channel, RefreshStatus = db['video'], db['channel'], db['refresh_status']
             import_settings_config()
 
             # Insert a bogus video, it should be removed
             bogus = Video(video_path='bar').flush()
             assert bogus['id'], 'Failed to insert a bogus video for removal'
 
-            api.settings.refresh.GET(db)
+            api.settings.refresh.POST(db)
             self.assertEqual(Channel.count(), 1)
             self.assertEqual(Video.count(), 1)
+            # Some statuses were saved
+            self.assertGreater(RefreshStatus.count(), 0)
 
     @test_db_wrapper
     def test_channel(self):
@@ -102,3 +106,26 @@ class TestAPI(unittest.TestCase):
             # Delete the new channel
             result = api.channel.DELETE('examplechannel1', db)
             self.assertIn('success', result)
+
+    @test_db_wrapper
+    def test_refresh(self):
+        # Insert some statuses
+        with get_db_context() as (db_conn, db):
+            RefreshStatus = db['refresh_status']
+            example_statuses = [
+                'Foo',
+                'Bar',
+                'Baz',
+                'Refresh complete',
+                'this should not be shown'
+            ]
+            for status in example_statuses:
+                RefreshStatus(status=status).flush()
+
+        response = self.getPage('/api/videos/settings/refresh')
+        statuses = '\n'.join([
+            'Foo',
+            'Bar',
+            'Baz',
+            'Refresh complete'
+        ])

@@ -1,10 +1,12 @@
 import json
 import pathlib
+import time
 
 import cherrypy
+import psycopg2
 from dictorm import DictDB
 
-from wrolpi.common import sanitize_link
+from wrolpi.common import sanitize_link, get_db_context
 from wrolpi.plugins.videos.common import get_conflicting_channels
 from wrolpi.plugins.videos.downloader import insert_video
 from wrolpi.plugins.videos.main import logger
@@ -38,9 +40,23 @@ class SettingsAPI(object):
 class Refresh(object):
 
     @cherrypy.tools.db()
-    def GET(self, db: DictDB):
+    def POST(self, db: DictDB):
         refresh_videos(db)
         return json.dumps({'success': 'Videos refreshed'})
+
+    def GET(self):
+        cherrypy.response.headers['Content-Type'] = 'text/event-stream'
+
+        def streamer():
+            with get_db_context() as (db_conn, db):
+                Video = db['video']
+                for video in Video.get_where():
+                    yield f'{video["name"]}\n'
+                    time.sleep(0.5)
+
+        return streamer()
+
+    GET._cp_config = {'response.stream': True}
 
 
 @cherrypy.expose
@@ -177,19 +193,31 @@ def refresh_channel_videos(db, channel):
     logger.info(f'{channel["name"]}: Added {len(new_videos)} new videos, {len(existing_paths)} already existed.')
 
 
+def insert_status(curs, status):
+    curs.execute('INSERT INTO refresh_status (status) VALUES (%s);', (status,))
+
+
 def refresh_videos(db: DictDB):
     logger.info('Refreshing video list')
     Channel = db['channel']
 
     # Remove any videos that don't exist
     curs = db.get_cursor()
+    insert_status(curs, 'Refreshing video list')
+    deleted_any = False
     curs.execute('SELECT id, video_path FROM video')
     existing_videos = curs.fetchall()
     for video in existing_videos:
         if not pathlib.Path(video['video_path']).is_file():
+            deleted_any = True
             curs.execute('DELETE FROM video WHERE id = %s', (video['id'],))
-        return
+
+    if deleted_any:
+        insert_status(curs, 'Removed records of non-existent videos')
+    else:
+        insert_status(curs, 'All video records link to real files')
 
     for channel in Channel.get_where():
+        insert_status(curs, f'Searching for videos for channel {channel["name"]}')
         with db.transaction(commit=True):
             refresh_channel_videos(db, channel)

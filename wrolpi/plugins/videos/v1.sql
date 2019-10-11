@@ -34,3 +34,11 @@ CREATE TABLE video
 
 ALTER TABLE video
     ADD COLUMN channel_id INTEGER REFERENCES channel (id);
+
+DROP TABLE IF EXISTS refresh_status;
+CREATE TABLE refresh_status
+(
+    id        SERIAL PRIMARY KEY,
+    status_dt TIMESTAMP DEFAULT current_timestamp,
+    status    TEXT
+);

@@ -62,6 +62,7 @@ def update_channels(db_conn, db, oldest_date=None):
     remote_channels = list(remote_channels)
     logger.debug(f'Getting info for {len(remote_channels)} channels')
     for channel in remote_channels:
+        yield f'Getting video list for {channel["name"]}'
         info = get_channel_info(channel)
         channel['info_json'] = info
         channel['info_date'] = datetime.now()
@@ -79,7 +80,7 @@ def find_matching_video_files(directory, search_str) -> str:
 
 
 def find_missing_channel_videos(channel: Dict) -> dict:
-    info_json = json.loads(channel['info_json'])
+    info_json = channel['info_json']
     entries = info_json['entries']
     for entry in entries:
         source_id = entry['id']
@@ -238,13 +239,12 @@ def download_all_missing_videos(db_conn, db, count_limit=0):
         try:
             video_path = download_video(channel, missing_video)
         except Exception as e:
-            logger.warning(f'Failed to download {missing_video} with exception: {e}')
+            logger.warning(f'Failed to download "{missing_video["title"]}" with exception: {e}')
+            yield f'Failed to download "{missing_video["title"]}", see logs for details...'
             continue
         insert_video(db, video_path, channel, None)
+        yield f'{channel["name"]}: Downloaded: {missing_video["title"]}'
         db_conn.commit()
-    else:
-        db_conn.rollback()
-        print('No videos need to be downloaded today!')
 
 
 def main(args=None):

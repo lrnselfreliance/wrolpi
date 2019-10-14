@@ -55,17 +55,18 @@ class TestAPI(unittest.TestCase):
             bogus = Video(video_path='bar').flush()
             assert bogus['id'], 'Failed to insert a bogus video for removal'
 
+        # TODO this test is very fragile :(
         streamer = api.settings.refresh.POST()
         statuses = list(streamer)
-        self.assertIn('Verifying videos in DB exist in file system', statuses)
-        self.assertIn('Deleting video files no longer in file system', statuses)
-        self.assertIn('Checking Big Buck Bunny for new videos', statuses)
-        self.assertIn('Big Buck Bunny: Added 1 new videos, 0 already existed.', statuses)
+        self.assertIn('Verifying videos in DB exist in file system\n', statuses)
+        self.assertIn('Deleting video files no longer in file system\n', statuses)
+        self.assertIn('Checking Big Buck Bunny directory for new videos\n', statuses)
+        self.assertEqual('stream-complete\n', statuses[-1])
 
         with get_db_context() as (db_conn, db):
             Video, Channel = db['video'], db['channel']
             self.assertEqual(Channel.count(), 1)
-            self.assertEqual(Video.count(), 1)
+            self.assertGreater(Video.count(), 1)
 
     @test_db_wrapper
     def test_channel(self):

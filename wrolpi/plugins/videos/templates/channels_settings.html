@@ -46,6 +46,20 @@
                         </p>
                     </div>
                 </div>
+
+                <div class="row">
+                    <div class="col-4">
+                        <form id="refresh" action="/api/videos/settings/download">
+                            {{ post_form_button('download', 'dark', 'Download New Videos') }}
+                        </form>
+                    </div>
+                    <div class="col-8">
+                        <p>
+                            Update video list for each channel, then download any missing videos.
+                        </p>
+                    </div>
+                </div>
+
             </div>
         </div>
 

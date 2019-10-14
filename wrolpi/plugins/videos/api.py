@@ -1,14 +1,12 @@
 import json
 import pathlib
-import time
 
 import cherrypy
-import psycopg2
 from dictorm import DictDB
 
 from wrolpi.common import sanitize_link, get_db_context
 from wrolpi.plugins.videos.common import get_conflicting_channels
-from wrolpi.plugins.videos.downloader import insert_video
+from wrolpi.plugins.videos.downloader import insert_video, update_channels, download_all_missing_videos
 from wrolpi.plugins.videos.main import logger
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
     resolve_project_path, \
@@ -27,6 +25,7 @@ class SettingsAPI(object):
 
     def __init__(self):
         self.refresh = Refresh()
+        self.download = Download()
 
     def PUT(self, **form_data):
         downloader_config = get_downloader_config()
@@ -36,15 +35,41 @@ class SettingsAPI(object):
         return json.dumps({'success': 'Settings saved'})
 
 
+def newline_streamer(func):
+    def add_newlines(*a, **kw):
+        yield from (f'{i}\n' for i in func(*a, **kw))
+    return add_newlines
+
+
 @cherrypy.expose
 class Refresh(object):
 
     def POST(self):
         cherrypy.response.headers['Content-Type'] = 'text/event-stream'
 
+        @newline_streamer
         def streamer():
             with get_db_context(commit=True) as (db_conn, db):
                 yield from refresh_videos(db)
+            yield 'stream-complete'
+
+        return streamer()
+
+    POST._cp_config = {'response.stream': True}
+
+
+@cherrypy.expose
+class Download(object):
+
+    def POST(self):
+        cherrypy.response.headers['Content-Type'] = 'text/event-stream'
+
+        @newline_streamer
+        def streamer():
+            with get_db_context(commit=True) as (db_conn, db):
+                yield from update_channels(db_conn, db)
+                yield from download_all_missing_videos(db_conn, db)
+            yield 'stream-complete'
 
         return streamer()
 
@@ -214,6 +239,6 @@ def refresh_videos(db: DictDB):
         curs.execute('DELETE FROM video WHERE id = ANY(%s)', (to_delete,))
 
     for channel in Channel.get_where():
-        yield f'Checking {channel["name"]} for new videos'
+        yield f'Checking {channel["name"]} directory for new videos'
         with db.transaction(commit=True):
             yield from refresh_channel_videos(db, channel)

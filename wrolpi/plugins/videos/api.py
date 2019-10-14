@@ -19,7 +19,8 @@ well as its meta files) is relative to its Channel's directory.
             video['poster_path'] = 'foo.jpg'
             video['video_path'] = 'subdir/bar.mp4'
 
-Relative DB paths allow files to be moved without having to rebuild the entire collection.
+Relative DB paths allow files to be moved without having to rebuild the entire collection.  It also ensures that when
+a file is moved, it will not be duplicated in the DB.
 """
 import json
 import pathlib

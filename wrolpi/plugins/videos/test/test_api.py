@@ -162,7 +162,8 @@ class TestAPI(unittest.TestCase):
             description3 = pathlib.Path(channel_path / 'channel name_20000103_cdefghijklm_title.description')
             description3.touch()
 
-            # A orphan meta-file should be ignored.  This shouldn't show up anywhere.
+            # A orphan meta-file should be ignored.  This shouldn't show up anywhere.  But, it shouldn't be deleted.
+            # WROLPi should never delete a file.
             poster3 = pathlib.Path(channel_path / 'channel name_20000104_defghijklmn_title.jpg')
             poster3.touch()
 
@@ -183,3 +184,5 @@ class TestAPI(unittest.TestCase):
                 {(i['video_path'], i['poster_path'], i['description_path']) for i in channel['videos']},
                 expected
             )
+
+            assert poster3.is_file(), 'Orphan jpg file was deleted!  WROLPi should never delete files.'

@@ -130,7 +130,7 @@ class TestAPI(unittest.TestCase):
             vid2 = pathlib.Path(channel_path / 'channel name_20000102_bcdefghijkl_title.webm')
             vid2.touch()
 
-            # These files are associated with the video files above, and should be found second
+            # These files are associated with the video files above, and should be found "near" them
             poster1 = pathlib.Path(channel_path / 'channel name_20000101_abcdefghijk_title.jpg')
             poster1.touch()
             poster2 = pathlib.Path(channel_path / 'channel name_20000102_bcdefghijkl_title.jpg')
@@ -158,16 +158,22 @@ class TestAPI(unittest.TestCase):
             description3 = pathlib.Path(channel_path / 'channel name_20000103_cdefghijklm_title.description')
             description3.touch()
 
+            # A orphan meta-file should be ignored.  This shouldn't show up anywhere.
+            poster3 = pathlib.Path(channel_path / 'channel name_20000104_defghijklmn_title.jpg')
+            poster3.touch()
+
+            # Finally, call the refresh.  Again, it should remove the "foo" video, then discover this 3rd video
+            # file and it's description.
             refresh_videos(db)
 
             # Bogus file was removed
             self.assertNotIn('foo', {i['video_path'] for i in channel['videos']})
 
-            # Final structure we built
+            # Final channel video list we built
             expected = {
-                (vid1.name, poster1.name, None),
-                (vid2.name, poster2.name, None),
-                (vid3.name, None, description3.name),
+                (vid1.name, poster1.name, None),       # no description
+                (vid2.name, poster2.name, None),       # no description
+                (vid3.name, None, description3.name),  # no poster
             }
             self.assertEqual(
                 {(i['video_path'], i['poster_path'], i['description_path']) for i in channel['videos']},

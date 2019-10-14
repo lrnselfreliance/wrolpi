@@ -214,11 +214,10 @@ def refresh_channel_videos(db, channel):
 
     # A set of absolute paths that exist in the file system
     possible_new_paths = list(generate_video_paths(directory))
-    # make them relative to this channel
-    new_videos = []
-    for possible_new_path in possible_new_paths:
-        if possible_new_path.relative_to(directory) not in existing_paths:
-            new_videos.append(possible_new_path)
+
+    # Get the absolute paths who's path relative to the channel does't yet exist
+    # (paths in DB are relative, but we need to pass an absolute path)
+    new_videos = {p for p in possible_new_paths if p.relative_to(directory) not in existing_paths}
 
     for video_path in new_videos:
         logger.debug(f'{channel["name"]}: Added {video_path}')

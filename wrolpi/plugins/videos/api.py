@@ -39,24 +39,16 @@ class SettingsAPI(object):
 @cherrypy.expose
 class Refresh(object):
 
-    @cherrypy.tools.db()
-    def POST(self, db: DictDB):
-        refresh_videos(db)
-        return json.dumps({'success': 'Videos refreshed'})
-
-    def GET(self):
+    def POST(self):
         cherrypy.response.headers['Content-Type'] = 'text/event-stream'
 
         def streamer():
-            with get_db_context() as (db_conn, db):
-                Video = db['video']
-                for video in Video.get_where():
-                    yield f'{video["name"]}\n'
-                    time.sleep(0.5)
+            with get_db_context(commit=True) as (db_conn, db):
+                yield from refresh_videos(db)
 
         return streamer()
 
-    GET._cp_config = {'response.stream': True}
+    POST._cp_config = {'response.stream': True}
 
 
 @cherrypy.expose
@@ -190,34 +182,38 @@ def refresh_channel_videos(db, channel):
         logger.debug(f'{channel["name"]}: Added {video_path}')
         insert_video(db, pathlib.Path(video_path), channel)
 
-    logger.info(f'{channel["name"]}: Added {len(new_videos)} new videos, {len(existing_paths)} already existed.')
-
-
-def insert_status(curs, status):
-    curs.execute('INSERT INTO refresh_status (status) VALUES (%s);', (status,))
+    final_status = f'{channel["name"]}: Added {len(new_videos)} new videos, {len(existing_paths)} already existed.'
+    logger.info(final_status)
+    yield final_status
 
 
 def refresh_videos(db: DictDB):
+    """
+    Find any videos in the channel directories and add them to the DB.  Delete DB records of any videos not in the
+    file system.
+
+    Yields status updates to be passed to the UI.
+
+    :param db:
+    :return:
+    """
     logger.info('Refreshing video list')
     Channel = db['channel']
 
     # Remove any videos that don't exist
+    yield 'Verifying videos in DB exist in file system'
     curs = db.get_cursor()
-    insert_status(curs, 'Refreshing video list')
-    deleted_any = False
     curs.execute('SELECT id, video_path FROM video')
     existing_videos = curs.fetchall()
+    to_delete = []
     for video in existing_videos:
         if not pathlib.Path(video['video_path']).is_file():
-            deleted_any = True
-            curs.execute('DELETE FROM video WHERE id = %s', (video['id'],))
-
-    if deleted_any:
-        insert_status(curs, 'Removed records of non-existent videos')
-    else:
-        insert_status(curs, 'All video records link to real files')
+            to_delete.append(video['id'])
+    if to_delete:
+        yield 'Deleting video files no longer in file system'
+        curs.execute('DELETE FROM video WHERE id = ANY(%s)', (to_delete,))
 
     for channel in Channel.get_where():
-        insert_status(curs, f'Searching for videos for channel {channel["name"]}')
+        yield f'Checking {channel["name"]} for new videos'
         with db.transaction(commit=True):
-            refresh_channel_videos(db, channel)
+            yield from refresh_channel_videos(db, channel)

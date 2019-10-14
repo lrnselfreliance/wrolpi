@@ -47,19 +47,25 @@ class TestAPI(unittest.TestCase):
     @test_db_wrapper
     def test_refresh(self):
         api = APIRoot()
-        with get_db_context() as (db_conn, db):
-            Video, Channel, RefreshStatus = db['video'], db['channel'], db['refresh_status']
+        with get_db_context(commit=True) as (db_conn, db):
+            Video = db['video']
             import_settings_config()
 
             # Insert a bogus video, it should be removed
             bogus = Video(video_path='bar').flush()
             assert bogus['id'], 'Failed to insert a bogus video for removal'
 
-            api.settings.refresh.POST(db)
+        streamer = api.settings.refresh.POST()
+        statuses = list(streamer)
+        self.assertIn('Verifying videos in DB exist in file system', statuses)
+        self.assertIn('Deleting video files no longer in file system', statuses)
+        self.assertIn('Checking Big Buck Bunny for new videos', statuses)
+        self.assertIn('Big Buck Bunny: Added 1 new videos, 0 already existed.', statuses)
+
+        with get_db_context() as (db_conn, db):
+            Video, Channel = db['video'], db['channel']
             self.assertEqual(Channel.count(), 1)
             self.assertEqual(Video.count(), 1)
-            # Some statuses were saved
-            self.assertGreater(RefreshStatus.count(), 0)
 
     @test_db_wrapper
     def test_channel(self):
@@ -106,26 +112,3 @@ class TestAPI(unittest.TestCase):
             # Delete the new channel
             result = api.channel.DELETE('examplechannel1', db)
             self.assertIn('success', result)
-
-    @test_db_wrapper
-    def test_refresh(self):
-        # Insert some statuses
-        with get_db_context() as (db_conn, db):
-            RefreshStatus = db['refresh_status']
-            example_statuses = [
-                'Foo',
-                'Bar',
-                'Baz',
-                'Refresh complete',
-                'this should not be shown'
-            ]
-            for status in example_statuses:
-                RefreshStatus(status=status).flush()
-
-        response = self.getPage('/api/videos/settings/refresh')
-        statuses = '\n'.join([
-            'Foo',
-            'Bar',
-            'Baz',
-            'Refresh complete'
-        ])

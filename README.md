@@ -39,7 +39,8 @@ WROLPi.
 1. A WROLPi instance should be able to "factory-reset" itself without any outside services.
 1. WROLPi should function completely without any internet services.
 1. A user should have easy access to their data if WROLPi fails:
-    * For example, a user can watch their videos by navigating a short and intuitive directory structure and opening the video in
+    * For example, a user can watch their videos by navigating a short and intuitive directory structure and opening the
+      video in.
     their preferred video player.
 1. WROLPi should be self-documented.  The UI should contain a tutorial for USERS as well as the MAINTAINER.
     * If the UI isn't functional, the code should be documented such that a user can restore functionality.

@@ -1,15 +1,15 @@
 import json
+import pathlib
 import tempfile
 import unittest
 from shutil import copyfile
 
-import cherrypy
 import mock
-from cherrypy.test import helper
 
 from wrolpi.common import get_db_context
 from wrolpi.plugins.videos.api import APIRoot
 from wrolpi.plugins.videos.common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH
+from wrolpi.plugins.videos.downloader import insert_video
 from wrolpi.test.common import test_db_wrapper
 
 CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
@@ -61,9 +61,8 @@ class TestAPI(unittest.TestCase):
         self.assertEqual({'success': 'stream-complete'}, statuses.pop(-1))
 
         statuses = [s['status'] for s in statuses]
-        self.assertIn('Verifying videos in DB exist in file system', statuses)
-        self.assertIn('Deleting video files no longer in file system', statuses)
-        self.assertIn('Checking Big Buck Bunny directory for new videos', statuses)
+        # Some statuses should have been sent
+        assert statuses
 
         with get_db_context() as (db_conn, db):
             Video, Channel = db['video'], db['channel']
@@ -115,3 +114,28 @@ class TestAPI(unittest.TestCase):
             # Delete the new channel
             result = api.channel.DELETE('examplechannel1', db)
             self.assertIn('success', result)
+
+    @test_db_wrapper
+    def test_refresh_videos(self):
+        # Setup a fake channel directory
+        with get_db_context() as (db_conn, db), \
+                tempfile.TemporaryDirectory() as channel_dir:
+            channel_path = pathlib.Path(channel_dir)
+
+            Video, Channel = db['video'], db['channel']
+
+            vid1 = pathlib.Path(channel_path / 'channel name_20000101_title.mp4')
+            vid1.touch()
+            jpg1 = pathlib.Path(channel_path / 'channel name_20000101_title.jpg')
+            jpg1.touch()
+            vid2 = pathlib.Path(channel_path / 'channel name_20000102_title.webm')
+            vid2.touch()
+            jpg2 = pathlib.Path(channel_path / 'channel name_20000102_title.jpg')
+            jpg2.touch()
+
+            channel = Channel(directory=channel_dir).flush()
+            video1 = insert_video(db, vid1, channel)
+            video2 = insert_video(db, vid2, channel)
+
+            self.assertEqual(video1['poster_path'], jpg1.name)
+            self.assertEqual(video2['poster_path'], jpg2.name)

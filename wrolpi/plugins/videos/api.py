@@ -245,7 +245,11 @@ def refresh_videos(db: DictDB):
     existing_videos = curs.fetchall()
     to_keep = []
     for video in existing_videos:
-        channel_directory = resolve_project_path(video['channel_directory'])
+        try:
+            channel_directory = resolve_project_path(video['channel_directory'])
+        except TypeError:
+            # Channel directory is None?
+            continue
         video_path = resolve_project_path(channel_directory / video['video_path'])
         if video_path.is_file():
             to_keep.append(video['id'])

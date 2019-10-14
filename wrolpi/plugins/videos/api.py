@@ -35,10 +35,12 @@ class SettingsAPI(object):
         return json.dumps({'success': 'Settings saved'})
 
 
-def newline_streamer(func):
-    def add_newlines(*a, **kw):
-        yield from (f'{i}\n' for i in func(*a, **kw))
-    return add_newlines
+def json_statuses_streamer(func):
+    """Wraps status lines in JSON objects.  Adds a new line after each JSON string."""
+    def wrap(*a, **kw):
+        yield from (json.dumps({'status': i}) + '\n' for i in func(*a, **kw))
+        yield json.dumps({'success': 'stream-complete'}) + '\n'
+    return wrap
 
 
 @cherrypy.expose
@@ -47,11 +49,10 @@ class Refresh(object):
     def POST(self):
         cherrypy.response.headers['Content-Type'] = 'text/event-stream'
 
-        @newline_streamer
+        @json_statuses_streamer
         def streamer():
             with get_db_context(commit=True) as (db_conn, db):
                 yield from refresh_videos(db)
-            yield 'stream-complete'
 
         return streamer()
 
@@ -64,12 +65,11 @@ class Download(object):
     def POST(self):
         cherrypy.response.headers['Content-Type'] = 'text/event-stream'
 
-        @newline_streamer
+        @json_statuses_streamer
         def streamer():
             with get_db_context(commit=True) as (db_conn, db):
                 yield from update_channels(db_conn, db)
                 yield from download_all_missing_videos(db_conn, db)
-            yield 'stream-complete'
 
         return streamer()
 

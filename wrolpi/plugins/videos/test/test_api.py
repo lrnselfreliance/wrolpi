@@ -57,11 +57,13 @@ class TestAPI(unittest.TestCase):
 
         # TODO this test is very fragile :(
         streamer = api.settings.refresh.POST()
-        statuses = list(streamer)
-        self.assertIn('Verifying videos in DB exist in file system\n', statuses)
-        self.assertIn('Deleting video files no longer in file system\n', statuses)
-        self.assertIn('Checking Big Buck Bunny directory for new videos\n', statuses)
-        self.assertEqual('stream-complete\n', statuses[-1])
+        statuses = [json.loads(s) for s in streamer]
+        self.assertEqual({'success': 'stream-complete'}, statuses.pop(-1))
+
+        statuses = [s['status'] for s in statuses]
+        self.assertIn('Verifying videos in DB exist in file system', statuses)
+        self.assertIn('Deleting video files no longer in file system', statuses)
+        self.assertIn('Checking Big Buck Bunny directory for new videos', statuses)
 
         with get_db_context() as (db_conn, db):
             Video, Channel = db['video'], db['channel']

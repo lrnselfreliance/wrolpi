@@ -7,7 +7,7 @@ from shutil import copyfile
 import mock
 
 from wrolpi.common import get_db_context
-from wrolpi.plugins.videos.api import APIRoot
+from wrolpi.plugins.videos.api import APIRoot, refresh_videos
 from wrolpi.plugins.videos.common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH
 from wrolpi.plugins.videos.downloader import insert_video
 from wrolpi.test.common import test_db_wrapper
@@ -124,18 +124,52 @@ class TestAPI(unittest.TestCase):
 
             Video, Channel = db['video'], db['channel']
 
-            vid1 = pathlib.Path(channel_path / 'channel name_20000101_title.mp4')
+            # These are the types of files that will be found first
+            vid1 = pathlib.Path(channel_path / 'channel name_20000101_abcdefghijk_title.mp4')
             vid1.touch()
-            jpg1 = pathlib.Path(channel_path / 'channel name_20000101_title.jpg')
-            jpg1.touch()
-            vid2 = pathlib.Path(channel_path / 'channel name_20000102_title.webm')
+            vid2 = pathlib.Path(channel_path / 'channel name_20000102_bcdefghijkl_title.webm')
             vid2.touch()
-            jpg2 = pathlib.Path(channel_path / 'channel name_20000102_title.jpg')
-            jpg2.touch()
 
+            # These files are associated with the video files above, and should be found second
+            poster1 = pathlib.Path(channel_path / 'channel name_20000101_abcdefghijk_title.jpg')
+            poster1.touch()
+            poster2 = pathlib.Path(channel_path / 'channel name_20000102_bcdefghijkl_title.jpg')
+            poster2.touch()
+
+            # Create a channel, associate videos with it.
             channel = Channel(directory=channel_dir).flush()
             video1 = insert_video(db, vid1, channel)
             video2 = insert_video(db, vid2, channel)
+            self.assertEqual({i['video_path'] for i in channel['videos']}, {vid1.name, vid2.name})
 
-            self.assertEqual(video1['poster_path'], jpg1.name)
-            self.assertEqual(video2['poster_path'], jpg2.name)
+            # Poster files were found
+            self.assertEqual(video1['poster_path'], poster1.name)
+            self.assertEqual(video2['poster_path'], poster2.name)
+
+            # Add a bogus file, this should be removed during the refresh
+            self.assertNotIn('foo', {i['video_path'] for i in channel['videos']})
+            Video(video_path='foo', channel_id=channel['id']).flush()
+            self.assertIn('foo', {i['video_path'] for i in channel['videos']})
+            self.assertEqual(len(channel['videos']), 3)
+
+            # Add a video that isn't in the DB, it should be found and any meta files associated with it
+            vid3 = pathlib.Path(channel_path / 'channel name_20000103_cdefghijklm_title.flv')
+            vid3.touch()
+            description3 = pathlib.Path(channel_path / 'channel name_20000103_cdefghijklm_title.description')
+            description3.touch()
+
+            refresh_videos(db)
+
+            # Bogus file was removed
+            self.assertNotIn('foo', {i['video_path'] for i in channel['videos']})
+
+            # Final structure we built
+            expected = {
+                (vid1.name, poster1.name, None),
+                (vid2.name, poster2.name, None),
+                (vid3.name, None, description3.name),
+            }
+            self.assertEqual(
+                {(i['video_path'], i['poster_path'], i['description_path']) for i in channel['videos']},
+                expected
+            )

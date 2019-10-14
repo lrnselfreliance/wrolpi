@@ -201,7 +201,8 @@ def insert_video(db: DictDB, video_path: pathlib.Path, channel: Table, idempoten
     poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path, relative_to=channel_dir)
 
     # Video paths should be relative to the channel's directory
-    video_path = video_path.relative_to(channel_dir)
+    if video_path.is_absolute():
+        video_path = video_path.relative_to(channel_dir)
 
     name_match = NAME_PARSER.match(video_path.name)
     _ = upload_date = source_id = title = ext = None

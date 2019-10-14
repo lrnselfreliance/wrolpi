@@ -1,6 +1,6 @@
 import json
-import os
 import pathlib
+from functools import wraps
 
 import cherrypy
 from dictorm import DictDB
@@ -63,7 +63,7 @@ class Refresh(object):
         @json_statuses_streamer
         def streamer():
             with get_db_context(commit=True) as (db_conn, db):
-                yield from refresh_videos(db)
+                yield from _refresh_videos(db)
 
         return streamer()
 
@@ -204,16 +204,21 @@ def get_channel_form(form_data: dict):
 
 
 def refresh_channel_videos(db, channel):
+    # A set of paths relative to this channel's directory
     existing_paths = {i['video_path'] for i in channel['videos']}
-    directory = resolve_project_path(channel['directory'])
+    directory = resolve_project_path(channel['directory']).absolute()
     if not directory.is_dir():
         logger.warn(f'Channel {channel["name"]} directory "{directory}" does not exist, skipping...')
         logger.warn(f'Have you downloaded any videos for channel {channel["name"]}?')
         return
 
-    channel_directory = resolve_project_path(channel['directory']).absolute()
-    possible_new_paths = {str(i) for i in generate_video_paths(directory, relative_to=channel_directory)}
-    new_videos = possible_new_paths.difference(existing_paths)
+    # A set of absolute paths that exist in the file system
+    possible_new_paths = list(generate_video_paths(directory))
+    # make them relative to this channel
+    new_videos = []
+    for possible_new_path in possible_new_paths:
+        if possible_new_path.relative_to(directory) not in existing_paths:
+            new_videos.append(possible_new_path)
 
     for video_path in new_videos:
         logger.debug(f'{channel["name"]}: Added {video_path}')
@@ -224,7 +229,7 @@ def refresh_channel_videos(db, channel):
     yield final_status
 
 
-def refresh_videos(db: DictDB):
+def _refresh_videos(db: DictDB):
     """
     Find any videos in the channel directories and add them to the DB.  Delete DB records of any videos not in the
     file system.
@@ -237,7 +242,7 @@ def refresh_videos(db: DictDB):
     logger.info('Refreshing video list')
     Channel = db['channel']
 
-    # Remove any videos that don't exist
+    # Remove any duplicate videos and any videos that don't exist
     yield 'Verifying videos in DB exist in file system'
     curs = db.get_cursor()
     curs.execute('SELECT DISTINCT ON (video_path) video_path, video.id, directory AS channel_directory FROM '
@@ -265,3 +270,8 @@ def refresh_videos(db: DictDB):
         yield f'Checking {channel["name"]} directory for new videos'
         with db.transaction(commit=True):
             yield from refresh_channel_videos(db, channel)
+
+
+@wraps(_refresh_videos)
+def refresh_videos(db: DictDB):
+    return list(_refresh_videos(db))

@@ -177,8 +177,8 @@ class TestAPI(unittest.TestCase):
             # Final channel video list we built
             expected = {
                 ('subdir/' + vid1.name, 'subdir/' + poster1.name, None),  # in a subdirectory, no description
-                (vid2.name, poster2.name, None),                          # no description
-                (vid3.name, None, description3.name),                     # no poster
+                (vid2.name, poster2.name, None),  # no description
+                (vid3.name, None, description3.name),  # no poster
             }
             self.assertEqual(
                 {(i['video_path'], i['poster_path'], i['description_path']) for i in channel['videos']},

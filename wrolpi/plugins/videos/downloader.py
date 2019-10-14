@@ -1,7 +1,6 @@
 #! /usr/bin/env python3
 import glob
 import hashlib
-import json
 import logging
 import pathlib
 import re
@@ -166,7 +165,8 @@ def replace_extension(path: pathlib.Path, new_ext) -> pathlib.Path:
     return path
 
 
-def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
+def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
+    pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
     """Find all files that share a file's full path, except their extensions.  It is assumed that file with the
     same name, but different extension is related to that file.
 

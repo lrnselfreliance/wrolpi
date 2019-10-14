@@ -124,14 +124,18 @@ class TestAPI(unittest.TestCase):
 
             Video, Channel = db['video'], db['channel']
 
+            # Files in subdirectories should be found and handled properly
+            subdir = (channel_path / 'subdir')
+            subdir.mkdir()
+
             # These are the types of files that will be found first
-            vid1 = pathlib.Path(channel_path / 'channel name_20000101_abcdefghijk_title.mp4')
+            vid1 = pathlib.Path(subdir / 'channel name_20000101_abcdefghijk_title.mp4')
             vid1.touch()
             vid2 = pathlib.Path(channel_path / 'channel name_20000102_bcdefghijkl_title.webm')
             vid2.touch()
 
             # These files are associated with the video files above, and should be found "near" them
-            poster1 = pathlib.Path(channel_path / 'channel name_20000101_abcdefghijk_title.jpg')
+            poster1 = pathlib.Path(subdir / 'channel name_20000101_abcdefghijk_title.jpg')
             poster1.touch()
             poster2 = pathlib.Path(channel_path / 'channel name_20000102_bcdefghijkl_title.jpg')
             poster2.touch()
@@ -140,10 +144,10 @@ class TestAPI(unittest.TestCase):
             channel = Channel(directory=channel_dir).flush()
             video1 = insert_video(db, vid1, channel)
             video2 = insert_video(db, vid2, channel)
-            self.assertEqual({i['video_path'] for i in channel['videos']}, {vid1.name, vid2.name})
+            self.assertEqual({i['video_path'] for i in channel['videos']}, {'subdir/' + vid1.name, vid2.name})
 
             # Poster files were found
-            self.assertEqual(video1['poster_path'], poster1.name)
+            self.assertEqual(video1['poster_path'], 'subdir/' + poster1.name)
             self.assertEqual(video2['poster_path'], poster2.name)
 
             # Add a bogus file, this should be removed during the refresh
@@ -171,9 +175,9 @@ class TestAPI(unittest.TestCase):
 
             # Final channel video list we built
             expected = {
-                (vid1.name, poster1.name, None),       # no description
-                (vid2.name, poster2.name, None),       # no description
-                (vid3.name, None, description3.name),  # no poster
+                ('subdir/' + vid1.name, 'subdir/' + poster1.name, None),  # in a subdirectory, no description
+                (vid2.name, poster2.name, None),                          # no description
+                (vid3.name, None, description3.name),                     # no poster
             }
             self.assertEqual(
                 {(i['video_path'], i['poster_path'], i['description_path']) for i in channel['videos']},

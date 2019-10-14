@@ -1,3 +1,26 @@
+"""
+This module contains the CherryPy classes, as well as functions necessary to retrieve video files.  This module also
+contains functions that will search the file structure for video files, as well as cleanup the DB video records.
+
+All paths in the DB are relative.  A Channel's directory is relative to the video_root_directory.  A Video's path (as
+well as its meta files) is relative to its Channel's directory.
+
+    Example:
+        Real Paths:
+            video_root_directory = '/media/something'
+            channel['directory'] = '/media/something/the channel'
+            video['video_path'] = '/media/something/the channel/foo.mp4'
+            video['poster_path'] = '/media/something/the channel/foo.jpg'
+            video['video_path'] = '/media/something/the channel/subdir/bar.mp4'
+
+        The same paths in the DB:
+            channel['directory'] = 'the channel'
+            video['video_path'] = 'foo.mp4'
+            video['poster_path'] = 'foo.jpg'
+            video['video_path'] = 'subdir/bar.mp4'
+
+Relative DB paths allow files to be moved without having to rebuild the entire collection.
+"""
 import json
 import pathlib
 from functools import wraps
@@ -204,6 +227,9 @@ def get_channel_form(form_data: dict):
 
 
 def refresh_channel_videos(db, channel):
+    """
+    Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
+    """
     # A set of paths relative to this channel's directory
     existing_paths = {i['video_path'] for i in channel['videos']}
     directory = resolve_project_path(channel['directory']).absolute()

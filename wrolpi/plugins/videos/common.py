@@ -145,7 +145,7 @@ def any_extensions(filename: str, extensions=None):
 match_video_extensions = partial(any_extensions, extensions={'mp4', 'webm', 'flv'})
 
 
-def generate_video_paths(directory: Union[str, pathlib.Path]) -> Tuple[str, pathlib.Path]:
+def generate_video_paths(directory: Union[str, pathlib.Path], relative_to=None) -> Tuple[str, pathlib.Path]:
     """
     Generate a list of video paths in the provided directory.
     """
@@ -154,7 +154,10 @@ def generate_video_paths(directory: Union[str, pathlib.Path]) -> Tuple[str, path
     for child in directory.iterdir():
         if child.is_file() and match_video_extensions(str(child)):
             child = child.absolute()
-            yield child
+            if relative_to:
+                yield child.relative_to(relative_to)
+            else:
+                yield child
         elif child.is_dir():
             yield from generate_video_paths(child)
 

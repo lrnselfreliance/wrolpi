@@ -1,4 +1,5 @@
 import json
+import os
 import pathlib
 
 import cherrypy
@@ -36,10 +37,20 @@ class SettingsAPI(object):
 
 
 def json_statuses_streamer(func):
-    """Wraps status lines in JSON objects.  Adds a new line after each JSON string."""
+    """Wraps status lines in JSON objects.  Adds a new line after each JSON string.
+
+    Example:
+        >>> func = json_statuses_streamer(lambda : ['foo', 'bar'])
+        >>> func()
+        '{"status": "foo"}\n'
+        '{"status": "bar"}\n'
+        '{"success": "stream-complete"}\n'
+    """
+
     def wrap(*a, **kw):
         yield from (json.dumps({'status': i}) + '\n' for i in func(*a, **kw))
         yield json.dumps({'success': 'stream-complete'}) + '\n'
+
     return wrap
 
 
@@ -195,12 +206,13 @@ def get_channel_form(form_data: dict):
 def refresh_channel_videos(db, channel):
     existing_paths = {i['video_path'] for i in channel['videos']}
     directory = resolve_project_path(channel['directory'])
-    if not pathlib.Path(directory).is_dir():
+    if not directory.is_dir():
         logger.warn(f'Channel {channel["name"]} directory "{directory}" does not exist, skipping...')
         logger.warn(f'Have you downloaded any videos for channel {channel["name"]}?')
         return
 
-    possible_new_paths = {str(i) for i in generate_video_paths(directory)}
+    channel_directory = resolve_project_path(channel['directory']).absolute()
+    possible_new_paths = {str(i) for i in generate_video_paths(directory, relative_to=channel_directory)}
     new_videos = possible_new_paths.difference(existing_paths)
 
     for video_path in new_videos:
@@ -228,14 +240,21 @@ def refresh_videos(db: DictDB):
     # Remove any videos that don't exist
     yield 'Verifying videos in DB exist in file system'
     curs = db.get_cursor()
-    curs.execute('SELECT id, video_path FROM video')
+    curs.execute('SELECT DISTINCT ON (video_path) video_path, video.id, directory AS channel_directory FROM '
+                 'video LEFT JOIN channel ON video.channel_id = channel.id')
     existing_videos = curs.fetchall()
-    to_delete = []
+    to_keep = []
     for video in existing_videos:
-        if not pathlib.Path(video['video_path']).is_file():
-            to_delete.append(video['id'])
+        channel_directory = resolve_project_path(video['channel_directory'])
+        video_path = resolve_project_path(channel_directory / video['video_path'])
+        if video_path.is_file():
+            to_keep.append(video['id'])
+
+    yield 'Deleting video records no longer in file system'
+    curs.execute('SELECT id FROM video WHERE id != ALL(%s)', (to_keep,))
+    to_delete = [i for (i,) in curs.fetchall()]
     if to_delete:
-        yield 'Deleting video files no longer in file system'
+        logger.info(f'Deleting video records: {to_delete}')
         curs.execute('DELETE FROM video WHERE id = ANY(%s)', (to_delete,))
 
     for channel in Channel.get_where():

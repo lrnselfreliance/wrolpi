@@ -166,7 +166,7 @@ def replace_extension(path: pathlib.Path, new_ext) -> pathlib.Path:
     return path
 
 
-def find_meta_files(path: pathlib.Path) -> Tuple[pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
+def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
     """Find all files that share a file's full path, except their extensions.  It is assumed that file with the
     same name, but different extension is related to that file.
 
@@ -181,8 +181,13 @@ def find_meta_files(path: pathlib.Path) -> Tuple[pathlib.Path, pathlib.Path, pat
     meta_file_exts = ('.jpg', '.description', '.en.vtt', '.info.json')
     for meta_ext in meta_file_exts:
         meta_path = replace_extension(path, meta_ext)
-        meta_path = meta_path if meta_path.exists() else None
-        yield meta_path
+        if meta_path.exists():
+            if relative_to:
+                yield meta_path.relative_to(relative_to)
+            else:
+                yield meta_path
+        else:
+            yield None
 
 
 NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
@@ -190,9 +195,14 @@ NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
 
 
 def insert_video(db: DictDB, video_path: pathlib.Path, channel: Table, idempotency: str = None):
-    """Find an insert a video file's information into the DB."""
+    """Find and insert a video file's information into the DB."""
     Video = db['video']
-    poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path)
+    channel_dir = resolve_project_path(str(channel['directory'])).absolute()
+    poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path, relative_to=channel_dir)
+
+    # Video paths should be relative to the channel's directory
+    video_path = video_path.relative_to(channel_dir)
+
     name_match = NAME_PARSER.match(video_path.name)
     _ = upload_date = source_id = title = ext = None
     if name_match:

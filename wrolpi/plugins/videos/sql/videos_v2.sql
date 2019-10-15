@@ -1,4 +1,3 @@
--- Captions will be stored as a tsvector for searching
 ALTER TABLE video
     ADD COLUMN caption TEXT;
 

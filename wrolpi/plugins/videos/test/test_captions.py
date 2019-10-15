@@ -35,9 +35,9 @@ class TestCaption(unittest.TestCase):
     def test_process_captions(self):
         with get_db_context() as (db_conn, db):
             Video = db['video']
-            video1 = Video(name='foo', caption_path=self.vtt_path1).flush()
+            video1 = Video(title='scream', caption_path=self.vtt_path1).flush()
             captions.process_captions(video1)
-            video2 = Video(name='foo', caption_path=self.vtt_path2).flush()
+            video2 = Video(title='bar', caption_path=self.vtt_path2).flush()
             captions.process_captions(video2)
 
             # Get the video from the DB
@@ -50,5 +50,21 @@ class TestCaption(unittest.TestCase):
             curs = db_conn.cursor()
             curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', ('sessions',))
             self.assertEqual(curs.fetchall(), [(1,)])
+            # Matches video1.title and video2.caption
+            curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', ('scream',))
+            self.assertEqual(curs.fetchall(), [(1,), (2,)])
+            # Matches video1.title and video2.caption
+            curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', ('scream | sessions',))
+            self.assertEqual(curs.fetchall(), [(1,), (2,)])
+            # Only matches video1.title
+            curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', ('scream & sessions',))
+            self.assertEqual(curs.fetchall(), [(1,)])
+            # Matches neither
+            curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', ('scream & sess',))
+            self.assertEqual(curs.fetchall(), [])
+            # Matches video2.caption
+            curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', ('yawn | sess',))
+            self.assertEqual(curs.fetchall(), [(2,)])
+            # Matches video2.caption
             curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', ('yawn',))
             self.assertEqual(curs.fetchall(), [(2,)])

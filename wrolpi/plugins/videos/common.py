@@ -17,12 +17,6 @@ SPECIAL_CONFIG_SECTIONS = ['DEFAULT', DOWNLOADER_SECTION]
 REQUIRED_OPTIONS = ['name', 'directory']
 
 
-def get_update_sql(db_conn, db):
-    with open(MY_DIR / 'v1.sql', 'rt') as fh:
-        contents = fh.read()
-        return contents
-
-
 def get_config() -> dict:
     with open(CONFIG_PATH, 'rt') as fh:
         config = yaml.load(fh, Loader=yaml.Loader)

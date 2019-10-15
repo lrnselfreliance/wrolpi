@@ -1,6 +1,7 @@
 import functools
 import random
 import string
+from uuid import uuid1
 
 import mock
 import psycopg2
@@ -25,7 +26,9 @@ def test_db_wrapper(func):
             port=54321,
         )
 
-        TESTING_DB_NAME = 'wrolpi_testing_' + ''.join(random.choices(string.ascii_lowercase, k=20))
+        # Every test gets it's own DB
+        suffix = str(uuid1()).replace('-', '')
+        testing_db_name = f'wrolpi_testing_{suffix}'
 
         # Set isolation level such that was can copy the schema of the "wrolpi" database for testing
         with psycopg2.connect(dbname='postgres', **db_args) as db_conn:
@@ -33,13 +36,13 @@ def test_db_wrapper(func):
 
             # Cleanup the old testing db (if any), then copy the schema
             curs = db_conn.cursor()
-            drop_testing = f'DROP DATABASE IF EXISTS {TESTING_DB_NAME}'
+            drop_testing = f'DROP DATABASE IF EXISTS {testing_db_name}'
             curs.execute(drop_testing)
-            curs.execute(f'CREATE DATABASE {TESTING_DB_NAME} TEMPLATE wrolpi')
+            curs.execute(f'CREATE DATABASE {testing_db_name} TEMPLATE wrolpi')
 
         def get_db():
             testing_db_conn = psycopg2.connect(
-                dbname=TESTING_DB_NAME,  # use that new testing db!
+                dbname=testing_db_name,  # use that new testing db!
                 **db_args
             )
             testing_db = DictDB(testing_db_conn)

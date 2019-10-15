@@ -1,4 +1,6 @@
 import functools
+import random
+import string
 
 import mock
 import psycopg2
@@ -6,8 +8,6 @@ from dictorm import DictDB
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from wrolpi.common import setup_relations
-
-TESTING_DB_NAME = 'wrolpi_testing'
 
 
 def test_db_wrapper(func):
@@ -24,6 +24,8 @@ def test_db_wrapper(func):
             host='127.0.0.1',
             port=54321,
         )
+
+        TESTING_DB_NAME = 'wrolpi_testing_' + ''.join(random.choices(string.ascii_lowercase, k=20))
 
         # Set isolation level such that was can copy the schema of the "wrolpi" database for testing
         with psycopg2.connect(dbname='postgres', **db_args) as db_conn:

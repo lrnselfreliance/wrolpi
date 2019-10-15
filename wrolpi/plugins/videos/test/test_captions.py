@@ -48,23 +48,30 @@ class TestCaption(unittest.TestCase):
 
             # Search using the tsvector, "sessions" never actually appears in the text, but "session" does
             curs = db_conn.cursor()
-            curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', ('sessions',))
+
+            def select_textsearch(*args):
+                curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', args)
+
+            select_textsearch('sessions')
             self.assertEqual(curs.fetchall(), [(1,)])
             # Matches video1.title and video2.caption
-            curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', ('scream',))
+            select_textsearch('scream')
             self.assertEqual(curs.fetchall(), [(1,), (2,)])
             # Matches video1.title and video2.caption
-            curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', ('scream | sessions',))
+            select_textsearch('scream | sessions')
             self.assertEqual(curs.fetchall(), [(1,), (2,)])
             # Only matches video1.title
-            curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', ('scream & sessions',))
+            select_textsearch('scream & sessions')
             self.assertEqual(curs.fetchall(), [(1,)])
             # Matches neither
-            curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', ('scream & sess',))
+            select_textsearch('scream & sess')
             self.assertEqual(curs.fetchall(), [])
             # Matches video2.caption
-            curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', ('yawn | sess',))
+            select_textsearch('yawn | sess')
             self.assertEqual(curs.fetchall(), [(2,)])
             # Matches video2.caption
-            curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', ('yawn',))
+            select_textsearch('yawn')
+            self.assertEqual(curs.fetchall(), [(2,)])
+            # Matches video2.title
+            select_textsearch('bar')
             self.assertEqual(curs.fetchall(), [(2,)])

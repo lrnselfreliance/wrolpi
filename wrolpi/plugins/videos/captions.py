@@ -30,14 +30,15 @@ class UnknownCaptionFile(Exception):
     pass
 
 
-def process_captions(db: DictDB, video: Dict):
+def process_captions(video: Dict):
     """
     Parse and insert captions for a video record.
     """
     caption_path = video['caption_path']
     if not caption_path:
         raise UnknownCaptionFile(f'No caption file specified for video record {video["id"]}')
+
     lines = get_unique_caption_lines(caption_path)
-    text = '\n'.join(lines)
-    video['caption_tsvector'] = text
-    video.flush()
+    block = '\n'.join(lines)
+    curs = video.table.db.get_cursor()
+    curs.execute('UPDATE video SET caption = %s WHERE id=%s', (block, video['id']))

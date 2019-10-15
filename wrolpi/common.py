@@ -61,7 +61,7 @@ def get_db():
 
 
 @contextmanager
-def get_db_context(commit=False) -> Tuple[sqlite3.Connection, DictDB]:
+def get_db_context(commit=False) -> Tuple[psycopg2.connect, DictDB]:
     """Context manager that creates a DB connection as well as a DictDB object.  Commits when
     requested, otherwise it will always rollback."""
     db_conn, db = get_db()

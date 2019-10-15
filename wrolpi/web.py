@@ -2,6 +2,7 @@ import argparse
 import pathlib
 
 import cherrypy
+from dictorm import DictDB
 
 from wrolpi.api import API, API_CONFIG
 from wrolpi.common import env
@@ -29,6 +30,16 @@ class ClientRoot(object):
     def index(self):
         template = env.get_template('wrolpi/templates/index.html')
         return template.render(plugins=PLUGINS)
+
+    @cherrypy.expose
+    @cherrypy.tools.db()
+    def search(self, db: DictDB, search=None):
+        template = env.get_template('wrolpi/templates/search.html')
+        results = []
+        for plugin in PLUGINS.values():
+            result = plugin.search(search)
+            results.append(result)
+        return template.render(plugins=PLUGINS, results=results)
 
     @cherrypy.expose
     def settings(self):

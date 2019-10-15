@@ -1,0 +1,2 @@
+youtube-dl>=2019.8.13
+webvtt-py==0.4.2

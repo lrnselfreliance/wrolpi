@@ -21,7 +21,7 @@ ROOT_CONFIG = {
 class ClientRoot(object):
 
     def __init__(self):
-        # Install plugins defined in plugins.plugins
+        # Install plugins defined in user_plugins
         for name, plugin in PLUGINS.items():
             setattr(self, name, plugin.ClientRoot())
 

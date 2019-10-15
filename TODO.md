@@ -14,3 +14,5 @@ Code TODO
 =========
 1. Example plugin based off videos plugin
     1. Check that videos can be removed or renamed
+    1. Plugin has support for systemd so it can start it's own service
+    1. Plugin has support for cronjobs

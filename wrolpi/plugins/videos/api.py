@@ -71,6 +71,7 @@ def json_statuses_streamer(func):
         '{"success": "stream-complete"}\n'
     """
 
+    @wraps(func)
     def wrap(*a, **kw):
         yield from (json.dumps({'status': i}) + '\n' for i in func(*a, **kw))
         yield json.dumps({'success': 'stream-complete'}) + '\n'

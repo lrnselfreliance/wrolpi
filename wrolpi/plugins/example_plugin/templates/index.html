@@ -6,11 +6,11 @@
     <h1>Example plugin!</h1>
 
     <p>Hello {{ hello }}!</p>
-    <a href="/api/example_plugin/settings">GET Settings</a>
+    <a href="/api/{{ PLUGIN_ROOT }}/settings">GET Settings</a>
 
     <hr>
 
-    <form method="post" action="/api/example_plugin/settings">
+    <form method="post" action="/api/{{ PLUGIN_ROOT }}/settings">
         Arg: <input class="form-control" name="arg" type="text" />
         <br>
         <button class="btn btn-primary" type="submit">POST Settings</button>

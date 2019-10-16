@@ -8,7 +8,7 @@ from dictorm import DictDB
 from wrolpi.common import env
 from wrolpi.plugins.videos.common import get_downloader_config
 
-LINK = 'videos'
+PLUGIN_ROOT = 'videos'
 
 # This will be set once all plugins are loaded
 PLUGINS = None
@@ -19,27 +19,15 @@ def set_plugins(plugins):
     PLUGINS = plugins
 
 
-class UnknownVideo(Exception):
-    pass
-
-
-class UnknownFile(Exception):
-    pass
-
-
-class UnknownChannel(Exception):
-    pass
-
-
-def _get_render_items(db, **kw):
+def _get_render_kwargs(db, **kwargs):
+    """
+    Always pass at least these kwargs to the template.render
+    """
     d = dict()
-    default_plugin_render_items = {
-        'active_page': LINK,
-        'plugins': PLUGINS,
-    }
-    d.update(default_plugin_render_items)
-    d.update(kw)
+    d['PLUGINS'] = PLUGINS
+    d['PLUGIN_ROOT'] = PLUGIN_ROOT
     d['channels'] = db['channel'].get_where().order_by('LOWER(name) ASC')
+    d.update(kwargs)
     return d
 
 
@@ -55,43 +43,37 @@ class ClientRoot(object):
         This page displays a list of channels.
         """
         template = env.get_template('wrolpi/plugins/videos/templates/channels.html')
-        items = _get_render_items(db)
-        html = template.render(**items)
+        kwargs = _get_render_kwargs(db)
+        html = template.render(**kwargs)
         return html
 
     @cherrypy.expose
     @cherrypy.tools.db()
     def settings(self, db):
         """Page to list and edit channels"""
-        Channel = db['channel']
-
         downloader_config = get_downloader_config()
         video_root_directory = downloader_config['video_root_directory']
 
-        channels = Channel.get_where().order_by('LOWER(name) ASC')
-        for channel in channels:
-            if channel['directory'].startswith(video_root_directory):
-                channel['directory'] = channel['directory'][len(video_root_directory):]
         template = env.get_template('wrolpi/plugins/videos/templates/channels_settings.html')
-        items = _get_render_items(db,
-                                  video_root_directory=video_root_directory,
-                                  file_name_format=downloader_config['file_name_format'],
-                                  )
-        html = template.render(**items)
+        kwargs = _get_render_kwargs(db,
+                                    video_root_directory=video_root_directory,
+                                    file_name_format=downloader_config['file_name_format'],
+                                    )
+        html = template.render(**kwargs)
         return html
 
     @staticmethod
     def serve_file(kind, hash: str, db: DictDB, download: bool = False):
         Video = db['video']
 
-        video = Video.get_one(video_path_hash=hash)
-        if not video:
-            raise cherrypy.HTTPError(404, f"Can't find {kind} by that ID.")
-
-        path = video[kind + '_path']
         try:
+            video = Video.get_one(video_path_hash=hash)
+            path = video[kind + '_path']
             path = pathlib.Path(path)
-        except TypeError:
+            downloader_config = get_downloader_config()
+            video_root_directory = downloader_config['video_root_directory']
+            path = pathlib.Path(video_root_directory) / video['channel']['directory'] / path
+        except TypeError or KeyError:
             raise cherrypy.HTTPError(404, f"Can't find {kind} by that ID.")
 
         if download:
@@ -126,14 +108,14 @@ class ChannelHandler(object):
     def index(self, link: str = None, db: DictDB = None):
         if not link:
             # Link was not passed, probably a malformed url
-            raise cherrypy.HTTPRedirect('/videos')
+            raise cherrypy.HTTPRedirect(f'/{PLUGIN_ROOT}')
 
         Channel = db['channel']
         channel = Channel.get_one(link=link)
 
         template = env.get_template('wrolpi/plugins/videos/templates/channel_videos.html')
-        items = _get_render_items(db, link=link, linked_channel=channel)
-        html = template.render(**items)
+        kwargs = _get_render_kwargs(db, link=link, linked_channel=channel)
+        html = template.render(**kwargs)
         return html
 
 
@@ -147,7 +129,7 @@ class VideoHandler(object):
 
         video = Video.get_one(video_path_hash=hash)
         if not video:
-            raise UnknownVideo(f'No video with id {hash}')
+            raise cherrypy.HTTPError(404, f'No video with id {hash}')
 
         # Get the description from it's file, or from the video's info_json file.
         description_path = video['description_path']
@@ -157,13 +139,14 @@ class VideoHandler(object):
         if description_path:
             with open(description_path, 'rb') as fh:
                 description = fh.read()
-        elif info_json_path:
+        if info_json_path:
             with open(info_json_path, 'rb') as fh:
                 info_json = json.load(fh)
-            description = info_json.get('description')
+            if not description:
+                description = info_json.get('description')
 
         template = env.get_template('wrolpi/plugins/videos/templates/video.html')
-        items = _get_render_items(db, link=link, hash=hash, video=video, description=description,
-                                  info_json=info_json)
+        items = _get_render_kwargs(db, link=link, hash=hash, video=video, description=description,
+                                   info_json=info_json)
         html = template.render(**items)
         return html

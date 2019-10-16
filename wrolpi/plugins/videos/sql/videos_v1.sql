@@ -24,7 +24,7 @@ CREATE TABLE video
     source_id        TEXT,
     title            TEXT,
     upload_date      DATE,
-    video_path       TEXT,
+    video_path       TEXT DISTINCT,
     name             TEXT,
     caption_path     TEXT,
     idempotency      TEXT,

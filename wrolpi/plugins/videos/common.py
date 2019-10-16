@@ -1,4 +1,3 @@
-import os
 import pathlib
 from functools import partial
 from pathlib import Path
@@ -98,37 +97,23 @@ class UnknownDirectory(Exception):
     pass
 
 
-def resolve_project_path(path: str, mkdir=False) -> Path:
-    """Make a best-guess as to a file's location.
-
-    If the path is absolute, return it even if it doesn't exist.
-    First, guess that the path is relative to the project directory.
-    Second, guess that the path is relative to the video root directory.
+def get_video_root() -> Path:
     """
-    # TODO this function will allow an attacker to check if any directory exists
-    if str(path).startswith('/'):
-        return Path(path)
-
-    path = Path(path)
-
-    # First, guess that the path is relative to the project directory.
-    project_dir = MY_DIR.parents[2]  # WROLPi's top directory
-    guess = project_dir / path
-    if guess.exists():
-        return guess
-
-    # Second, guess that the path is relative to the video root directory.
+    Get video_root_directory from config.
+    """
     config = get_downloader_config()
     video_root_directory = config['video_root_directory']
-    guess = Path(video_root_directory) / path
-    if guess.exists():
-        return guess
-    elif mkdir:
-        # The path doesn't exist, make it
-        os.mkdir(guess)
-        return guess
+    video_root_directory = Path(video_root_directory)
+    return video_root_directory
 
-    raise UnknownDirectory(f'Path does not exist: {path}')
+
+def get_absolute_channel_directory(directory: str):
+    if isinstance(directory, str):
+        directory = Path(directory)
+    directory = get_video_root() / directory
+    if not directory.exists():
+        raise Exception(f'Channel directory does not exist! {directory}')
+    return directory
 
 
 def any_extensions(filename: str, extensions=None):
@@ -184,3 +169,9 @@ def get_conflicting_channels(db, id=None, url=None, name_=None, link=None, direc
             )
         )
     return list(conflicting_channels)
+
+
+def verify_config():
+    video_root_directory = get_video_root()
+    if not video_root_directory.exists() or not video_root_directory.is_absolute():
+        raise Exception(f'Video root directory is not absolute, or does not exist! {video_root_directory}')

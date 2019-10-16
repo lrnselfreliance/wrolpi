@@ -30,12 +30,11 @@ import cherrypy
 from dictorm import DictDB
 
 from wrolpi.common import sanitize_link, get_db_context
-from wrolpi.plugins.videos.common import get_conflicting_channels
+from wrolpi.plugins.videos.common import get_conflicting_channels, verify_config
 from wrolpi.plugins.videos.downloader import insert_video, update_channels, download_all_missing_videos
 from wrolpi.plugins.videos.main import logger
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
-    resolve_project_path, \
-    UnknownDirectory
+    get_absolute_channel_directory, UnknownDirectory
 
 
 class APIRoot(object):
@@ -43,6 +42,7 @@ class APIRoot(object):
     def __init__(self):
         self.settings = SettingsAPI()
         self.channel = ChannelAPI()
+        verify_config()
 
 
 @cherrypy.expose
@@ -131,7 +131,7 @@ class ChannelAPI(object):
         new_channel = get_channel_form(form_data)
 
         try:
-            new_channel['directory'] = resolve_project_path(new_channel['directory'])
+            new_channel['directory'] = get_absolute_channel_directory(new_channel['directory'])
         except UnknownDirectory:
             return json.dumps({'error': 'Unknown directory'})
 
@@ -178,8 +178,8 @@ class ChannelAPI(object):
             # Only update directory if it was empty
             if new_channel['directory'] and not existing_channel['directory']:
                 try:
-                    new_channel['directory'] = resolve_project_path(new_channel['directory'])
-                except UnknownDirectory:
+                    new_channel['directory'] = get_absolute_channel_directory(new_channel['directory'])
+                except Exception:
                     cherrypy.response.status = 400
                     return json.dumps({'error': 'Unknown directory'})
             else:
@@ -234,7 +234,7 @@ def refresh_channel_videos(db, channel):
     """
     # A set of paths relative to this channel's directory
     existing_paths = {i['video_path'] for i in channel['videos']}
-    directory = resolve_project_path(channel['directory']).absolute()
+    directory = get_absolute_channel_directory(channel['directory'])
     if not directory.is_dir():
         logger.warn(f'Channel {channel["name"]} directory "{directory}" does not exist, skipping...')
         logger.warn(f'Have you downloaded any videos for channel {channel["name"]}?')
@@ -278,11 +278,11 @@ def _refresh_videos(db: DictDB):
     to_keep = []
     for video in existing_videos:
         try:
-            channel_directory = resolve_project_path(video['channel_directory'])
+            channel_directory = get_absolute_channel_directory(video['channel_directory'])
         except TypeError:
             # Channel directory is None?
             continue
-        video_path = resolve_project_path(channel_directory / video['video_path'])
+        video_path = channel_directory / video['video_path']
         if video_path.is_file():
             to_keep.append(video['id'])
 

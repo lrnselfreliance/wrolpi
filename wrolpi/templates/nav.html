@@ -7,10 +7,10 @@
 
     <div class="collapse navbar-collapse" id="navbarsExampleDefault">
         <ul class="navbar-nav mr-auto">
-            {% for plugin in plugins.values() %}
-                {% set is_active='active' if plugin.LINK == active_page else '' %}
+            {% for plugin in PLUGINS.values() %}
+                {% set is_active='active' if plugin.LINK == PLUGIN_ROOT else '' %}
                 <li class="nav-item">
-                    <a class="nav-link {{ is_active }}" href="/{{ plugin.LINK }}">{{ plugin.PRETTY_NAME }}</a>
+                    <a class="nav-link {{ is_active }}" href="/{{ plugin.PLUGIN_ROOT }}">{{ plugin.PRETTY_NAME }}</a>
                 </li>
             {% endfor %}
         </ul>

@@ -11,7 +11,7 @@ from dictorm import DictDB, Dict, Or, Table
 from youtube_dl import YoutubeDL
 
 from wrolpi.common import get_db_context
-from wrolpi.plugins.videos.common import get_downloader_config, resolve_project_path
+from wrolpi.plugins.videos.common import get_downloader_config, get_absolute_channel_directory
 
 logger = logging.getLogger('wrolpi:downloader')
 ch = logging.StreamHandler()
@@ -136,7 +136,7 @@ def download_video(channel: dict, video: dict) -> pathlib.Path:
     # YoutubeDL expects specific options, add onto the default options
     config = get_downloader_config()
     options = dict(config)
-    directory = resolve_project_path(channel['directory'], mkdir=True)
+    directory = get_absolute_channel_directory(channel['directory'])
     options['outtmpl'] = f'{directory}/{config["file_name_format"]}'
 
     ydl = YoutubeDL(options)
@@ -197,7 +197,7 @@ NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
 def insert_video(db: DictDB, video_path: pathlib.Path, channel: Table, idempotency: str = None):
     """Find and insert a video file's information into the DB."""
     Video = db['video']
-    channel_dir = resolve_project_path(str(channel['directory'])).absolute()
+    channel_dir = get_absolute_channel_directory(channel['directory'])
     poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path, relative_to=channel_dir)
 
     # Video paths should be relative to the channel's directory

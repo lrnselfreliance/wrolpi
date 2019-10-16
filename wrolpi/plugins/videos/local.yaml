@@ -9,7 +9,7 @@ downloader:
   max_downloads_per_channel: 0
   nooverwrites: true
   quiet: false
-  video_root_directory: test/example_videos/
+  video_root_directory: /home/roland/projects/wrolpi.git/test/example_videos/
   writeautomaticsub: true
   writeinfojson: true
   writesubtitles: true

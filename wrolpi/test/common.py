@@ -8,7 +8,7 @@ import psycopg2
 from dictorm import DictDB
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
-from wrolpi.common import setup_relations
+from wrolpi.common import setup_relationships
 
 
 def test_db_wrapper(func):
@@ -46,7 +46,7 @@ def test_db_wrapper(func):
                 **db_args
             )
             testing_db = DictDB(testing_db_conn)
-            setup_relations(testing_db)
+            setup_relationships(testing_db)
             return testing_db_conn, testing_db
 
         with mock.patch('wrolpi.common.get_db', get_db):

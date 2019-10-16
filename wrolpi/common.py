@@ -55,8 +55,7 @@ def get_db():
         )
     db_conn = psycopg2.connect(**db_args)
     db = DictDB(db_conn)
-    if 'channel' in db:
-        db['channel']['videos'] = db['channel']['id'].many(db['video']['channel_id'])
+    setup_relationships(db)
     return db_conn, db
 
 
@@ -75,26 +74,18 @@ def get_db_context(commit=False) -> Tuple[psycopg2.connect, DictDB]:
         db_conn.close()
 
 
-def setup_relations(db):
-    """Assign all relations between DictORM Tables."""
+def setup_relationships(db):
+    """Assign all relationships between DictORM Tables."""
     Channel = db['channel']
     Video = db['video']
     Channel['videos'] = Channel['id'].many(Video['channel_id'])
     Video['channel'] = Video['channel_id'] == Channel['id']
 
 
-def config_values_to_booleans(section):
-    for key, value in section.items():
-        if value.lower() in {'true', 't'}:
-            section[key] = True
-        elif value.lower() in {'false', 'f'}:
-            section[key] = False
-    return section
-
-
 URL_CHARS = string.ascii_lowercase + string.digits
 
 
-def sanitize_link(link):
+def sanitize_link(link: str) -> str:
     """Remove any non-url safe characters, all will be lowercase."""
-    return ''.join(i for i in str(link).lower() if i in URL_CHARS)
+    new_link = ''.join(i for i in str(link).lower() if i in URL_CHARS)
+    return new_link

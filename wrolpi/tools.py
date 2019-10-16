@@ -2,7 +2,7 @@ import threading
 
 import cherrypy
 
-from wrolpi.common import get_db, setup_relations
+from wrolpi.common import get_db, setup_relationships
 
 
 class DBTool(cherrypy.Tool):
@@ -18,7 +18,6 @@ class DBTool(cherrypy.Tool):
     def setup_db(self):
         self.thread_id = threading.get_ident()
         self.db_conn, self.db = get_db()
-        setup_relations(self.db)
         req = cherrypy.request
         req.params['db'] = self.db
 

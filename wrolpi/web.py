@@ -29,7 +29,7 @@ class ClientRoot(object):
     @cherrypy.expose
     def index(self):
         template = env.get_template('wrolpi/templates/index.html')
-        return template.render(plugins=PLUGINS)
+        return template.render(PLUGINS=PLUGINS)
 
     @cherrypy.expose
     @cherrypy.tools.db()
@@ -39,12 +39,12 @@ class ClientRoot(object):
         for plugin in PLUGINS.values():
             result = plugin.search(search)
             results.append(result)
-        return template.render(plugins=PLUGINS, results=results)
+        return template.render(PLUGINS=PLUGINS, results=results)
 
     @cherrypy.expose
     def settings(self):
         template = env.get_template('wrolpi/templates/settings.html')
-        return template.render(plugins=PLUGINS)
+        return template.render(PLUGINS=PLUGINS)
 
 
 def start_webserver(host, port):

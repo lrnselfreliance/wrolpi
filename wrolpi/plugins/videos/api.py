@@ -233,7 +233,7 @@ def refresh_channel_videos(db, channel):
     Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
     """
     # A set of paths relative to this channel's directory
-    existing_paths = {i['video_path'] for i in channel['videos']}
+    existing_paths = {str(i['video_path']) for i in channel['videos']}
     directory = get_absolute_channel_directory(channel['directory'])
     if not directory.is_dir():
         logger.warn(f'Channel {channel["name"]} directory "{directory}" does not exist, skipping...')
@@ -245,7 +245,7 @@ def refresh_channel_videos(db, channel):
 
     # Get the absolute paths who's path relative to the channel does't yet exist
     # (paths in DB are relative, but we need to pass an absolute path)
-    new_videos = {p for p in possible_new_paths if p.relative_to(directory) not in existing_paths}
+    new_videos = {p for p in possible_new_paths if str(p.relative_to(directory)) not in existing_paths}
 
     for video_path in new_videos:
         logger.debug(f'{channel["name"]}: Added {video_path}')

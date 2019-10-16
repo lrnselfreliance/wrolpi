@@ -1,8 +1,6 @@
-import threading
-
 import cherrypy
 
-from wrolpi.common import get_db, setup_relationships
+from wrolpi.common import get_db, logger
 
 
 class DBTool(cherrypy.Tool):
@@ -10,14 +8,13 @@ class DBTool(cherrypy.Tool):
     a request."""
 
     def __init__(self):
-        self.db_conn = None
+        self.pool = None
+        self.conn = None
         self.db = None
-        self.thread_id = None
         cherrypy.Tool.__init__(self, 'before_handler', self.setup_db, priority=25)
 
     def setup_db(self):
-        self.thread_id = threading.get_ident()
-        self.db_conn, self.db = get_db()
+        self.pool, self.conn, self.db, self.key = get_db()
         req = cherrypy.request
         req.params['db'] = self.db
 
@@ -26,15 +23,8 @@ class DBTool(cherrypy.Tool):
         cherrypy.request.hooks.attach('on_end_request', self.teardown_db, priority=25)
 
     def teardown_db(self):
-        self.db_conn.close()
-
-
-TOOLS_ONCE = False
-
-
-def setup_tools():
-    global TOOLS_ONCE
-    if TOOLS_ONCE:
-        return
-    TOOLS_ONCE = True
-    cherrypy.tools.db = DBTool()
+        try:
+            self.pool.putconn(self.conn, key=self.key, close=False)
+        except KeyError:
+            # connection with this key was already closed
+            logger.debug('Failed to putconn, already closed?')

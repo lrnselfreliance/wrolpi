@@ -3,12 +3,9 @@ import argparse
 import logging
 
 from wrolpi.plugins.videos import downloader
-from wrolpi.tools import setup_tools
 
 PRETTY_NAME = 'Videos'
 logger = logging.getLogger('wrolpi')
-
-setup_tools()
 
 
 def init_parser(sub_commands):

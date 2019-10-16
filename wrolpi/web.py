@@ -4,6 +4,11 @@ import pathlib
 import cherrypy
 from dictorm import DictDB
 
+from wrolpi.tools import DBTool
+
+# Setup the tools before importing modules which rely on them
+cherrypy.tools.db = DBTool()
+
 from wrolpi.api import API, API_CONFIG
 from wrolpi.common import env
 from wrolpi.user_plugins import PLUGINS

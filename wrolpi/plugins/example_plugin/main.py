@@ -9,13 +9,10 @@ import argparse
 import logging
 
 from wrolpi.plugins.example_plugin.common import hello
-from wrolpi.tools import setup_tools
 
 # Pretty Name will be displayed when your plugin is linked to in the UI
 PRETTY_NAME = 'Example Plugin'
 logger = logging.getLogger('wrolpi')
-
-setup_tools()
 
 
 def init_parser(sub_commands):

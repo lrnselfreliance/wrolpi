@@ -16,9 +16,6 @@ import cherrypy
 from dictorm import DictDB
 
 from wrolpi.plugins.example_plugin.common import hello
-from wrolpi.tools import setup_tools
-
-setup_tools()
 
 
 # Do not change the name of this class, it is expected by wrolpi.web

@@ -18,3 +18,10 @@ services:
       - .:/opt/wrolpi
     environment:
       - DOCKER=true  # tell the python code that its dockerized
+#  openstreetmap:
+#    container_name: : openstreetmap
+#    build:
+#      context: .
+#      dockerfile: docker/openstreetmap/Dockerfile
+#    volumes:
+#      - /media/8TB/openstreetmap:/var/lib/postgresql

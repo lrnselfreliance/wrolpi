@@ -9,6 +9,7 @@ Future Features
 1. Calibre plugin
 1. Podcasts plugin
 1. Screenshot browser addon
+1. Open Street Map plugin
 
 Code TODO
 =========

@@ -74,7 +74,7 @@ def get_db():
 
     global POOL_SINGLETON
     if not POOL_SINGLETON:
-        POOL_SINGLETON = ReallyThreadedConnectionPool(5, 100, **db_args)
+        POOL_SINGLETON = ReallyThreadedConnectionPool(5, 100, **db_args, connect_timeout=5)
 
     key = str(uuid4())
     db_conn = POOL_SINGLETON.getconn(key=key)

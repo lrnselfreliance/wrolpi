@@ -167,14 +167,14 @@ def replace_extension(path: pathlib.Path, new_ext) -> pathlib.Path:
 
 def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
     pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
-    """Find all files that share a file's full path, except their extensions.  It is assumed that file with the
+    """
+    Find all files that share a file's full path, except their extensions.  It is assumed that file with the
     same name, but different extension is related to that file.
 
     Example:
         >>> foo = pathlib.Path('foo.bar')
         >>> find_meta_files(foo)
         ('foo.jpg', 'foo.en.vtt')
-
     """
     suffix = path.suffix
     name, suffix, _ = str(path.name).rpartition(suffix)
@@ -187,6 +187,7 @@ def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
                     yield meta_path.relative_to(relative_to)
                 else:
                     yield meta_path
+                continue
             else:
                 yield None
 

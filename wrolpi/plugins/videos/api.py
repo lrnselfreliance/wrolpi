@@ -25,14 +25,16 @@ a file is moved, it will not be duplicated in the DB.
 import json
 import pathlib
 from functools import wraps
+from uuid import uuid1
 
 import cherrypy
 from dictorm import DictDB
 
-from wrolpi.common import sanitize_link, get_db_context
+from wrolpi.common import sanitize_link
 from wrolpi.plugins.videos.common import get_conflicting_channels, verify_config
 from wrolpi.plugins.videos.downloader import insert_video, update_channels, download_all_missing_videos
 from wrolpi.plugins.videos.main import logger
+from wrolpi.tools import get_db_context
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
     get_absolute_channel_directory, UnknownDirectory
 
@@ -232,25 +234,36 @@ def refresh_channel_videos(db, channel):
     """
     Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
     """
-    # A set of paths relative to this channel's directory
-    existing_paths = {str(i['video_path']) for i in channel['videos']}
+    # Set the idempotency key so we can remove any videos not touched during this search
+    curs = db.get_cursor()
+    curs.execute('UPDATE video SET idempotency=NULL WHERE channel_id=%s', (channel['id'],))
+    idempotency = str(uuid1())
+
     directory = get_absolute_channel_directory(channel['directory'])
-    if not directory.is_dir():
-        logger.warn(f'Channel {channel["name"]} directory "{directory}" does not exist, skipping...')
-        logger.warn(f'Have you downloaded any videos for channel {channel["name"]}?')
-        return
 
     # A set of absolute paths that exist in the file system
-    possible_new_paths = list(generate_video_paths(directory))
+    possible_new_paths = set(generate_video_paths(directory))
 
+    # Update all videos that match the current video paths
+    query = 'UPDATE video SET idempotency = %s WHERE channel_id = %s AND video_path = ANY(%s) RETURNING video_path'
+    relative_new_paths = [str(i.relative_to(directory)) for i in possible_new_paths]
+    curs.execute(query, (idempotency, channel['id'], relative_new_paths))
+    existing_paths = {i for (i,) in curs.fetchall()}
     # Get the absolute paths who's path relative to the channel does't yet exist
     # (paths in DB are relative, but we need to pass an absolute path)
     new_videos = {p for p in possible_new_paths if str(p.relative_to(directory)) not in existing_paths}
 
     for video_path in new_videos:
         logger.debug(f'{channel["name"]}: Added {video_path}')
-        insert_video(db, pathlib.Path(video_path), channel)
+        insert_video(db, pathlib.Path(video_path), channel, idempotency=idempotency)
 
+    curs.execute('DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL RETURNING id', (channel['id'],))
+    deleted_count = curs.fetchall()
+    if deleted_count:
+        deleted_count = len(deleted_count)
+        deleted_status = f'Deleted {deleted_count} videos from channel {channel["name"]}'
+        logger.info(deleted_status)
+        yield deleted_status
     final_status = f'{channel["name"]}: Added {len(new_videos)} new videos, {len(existing_paths)} already existed.'
     logger.info(final_status)
     yield final_status
@@ -266,32 +279,8 @@ def _refresh_videos(db: DictDB):
     :param db:
     :return:
     """
-    logger.info('Refreshing video list')
+    logger.info('Refreshing video files')
     Channel = db['channel']
-
-    # Remove any duplicate videos and any videos that don't exist
-    yield 'Verifying videos in DB exist in file system'
-    curs = db.get_cursor()
-    curs.execute('SELECT DISTINCT ON (video_path) video_path, video.id, directory AS channel_directory FROM '
-                 'video LEFT JOIN channel ON video.channel_id = channel.id')
-    existing_videos = curs.fetchall()
-    to_keep = []
-    for video in existing_videos:
-        try:
-            channel_directory = get_absolute_channel_directory(video['channel_directory'])
-        except TypeError:
-            # Channel directory is None?
-            continue
-        video_path = channel_directory / video['video_path']
-        if video_path.is_file():
-            to_keep.append(video['id'])
-
-    yield 'Deleting video records no longer in file system'
-    curs.execute('SELECT id FROM video WHERE id != ALL(%s)', (to_keep,))
-    to_delete = [i for (i,) in curs.fetchall()]
-    if to_delete:
-        logger.info(f'Deleting video records: {to_delete}')
-        curs.execute('DELETE FROM video WHERE id = ANY(%s)', (to_delete,))
 
     for channel in Channel.get_where():
         yield f'Checking {channel["name"]} directory for new videos'
@@ -302,3 +291,9 @@ def _refresh_videos(db: DictDB):
 @wraps(_refresh_videos)
 def refresh_videos(db: DictDB):
     return list(_refresh_videos(db))
+
+
+@wraps(_refresh_videos)
+def refresh_videos_with_db():
+    with get_db_context(commit=True) as (db_conn, db):
+        return refresh_videos(db)

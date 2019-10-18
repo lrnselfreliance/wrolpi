@@ -10,7 +10,7 @@ from typing import Tuple
 from dictorm import DictDB, Dict, Or, Table
 from youtube_dl import YoutubeDL
 
-from wrolpi.common import get_db_context
+from wrolpi.tools import get_db_context
 from wrolpi.plugins.videos.common import get_downloader_config, get_absolute_channel_directory
 
 logger = logging.getLogger('wrolpi:downloader')

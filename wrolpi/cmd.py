@@ -1,4 +1,5 @@
-from wrolpi.common import get_db_context, logger
+from wrolpi.common import logger
+from wrolpi.tools import get_db_context
 
 
 def update_db_with_conn(plugins, db_conn, db):

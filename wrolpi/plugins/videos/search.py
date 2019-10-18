@@ -1,4 +1,4 @@
-from wrolpi.common import get_db_context
+from wrolpi.tools import get_db_context
 
 
 def search(search_str):

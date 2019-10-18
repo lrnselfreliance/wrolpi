@@ -2,7 +2,7 @@
 import argparse
 import logging
 
-from wrolpi.common import get_db_context
+from wrolpi.tools import get_db_context
 from wrolpi.plugins.videos import downloader, api
 
 PRETTY_NAME = 'Videos'
@@ -27,12 +27,8 @@ def main(args):
         downloader.main(args)
         return 0
     elif args.sub_commands and 'content' in args.sub_commands:
-        try:
-            with get_db_context(commit=True) as (db_conn, db):
-                api.refresh_videos(db)
-            return 0
-        except:
-            return 1
+        api.refresh_videos_with_db()
+        return 0
 
 
 if __name__ == '__main__':

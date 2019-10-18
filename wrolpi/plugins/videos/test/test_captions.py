@@ -1,6 +1,6 @@
 import unittest
 
-from wrolpi.common import get_db_context
+from wrolpi.tools import get_db_context
 from wrolpi.plugins.videos import captions
 from wrolpi.test.common import test_db_wrapper
 

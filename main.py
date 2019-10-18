@@ -51,10 +51,10 @@ def main():
     args = parser.parse_args()
 
     if args.verbose == 1:
-        logger.warning('Setting verbosity to INFO')
+        logger.info('Setting verbosity to INFO')
         logger.setLevel(logging.INFO)
     elif args.verbose == 2:
-        logger.warning('Setting verbosity to DEBUG')
+        logger.debug('Setting verbosity to DEBUG')
         logger.setLevel(logging.DEBUG)
 
     # Always update the DB from the configs

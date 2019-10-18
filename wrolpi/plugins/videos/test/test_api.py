@@ -6,7 +6,7 @@ from shutil import copyfile
 
 import mock
 
-from wrolpi.common import get_db_context
+from wrolpi.tools import get_db_context
 from wrolpi.plugins.videos.api import APIRoot, refresh_videos
 from wrolpi.plugins.videos.common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH
 from wrolpi.plugins.videos.downloader import insert_video

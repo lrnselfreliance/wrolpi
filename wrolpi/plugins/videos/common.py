@@ -6,7 +6,8 @@ from typing import Union, Tuple
 import yaml
 from dictorm import And, Or
 
-from wrolpi.common import get_db_context, sanitize_link
+from wrolpi.common import sanitize_link
+from wrolpi.tools import get_db_context
 
 MY_DIR = Path(__file__).parent
 CONFIG_PATH = MY_DIR / 'local.yaml'

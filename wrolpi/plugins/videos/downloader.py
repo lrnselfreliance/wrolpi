@@ -185,11 +185,12 @@ def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
             if meta_path.exists():
                 if relative_to:
                     yield meta_path.relative_to(relative_to)
+                    break
                 else:
                     yield meta_path
-                break
-            else:
-                yield None
+                    break
+        else:
+            yield None
 
 
 NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'

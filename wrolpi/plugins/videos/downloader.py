@@ -90,10 +90,15 @@ def find_missing_channel_videos(channel: Dict) -> dict:
             continue
         except StopIteration:
             pass
+
+        # No match for this entry, check if the title matches the channel regex
         if channel['match_regex'] and re.match(channel['match_regex'], entry['title']):
             yield entry
-        else:
+        elif channel['match_regex']:
             logger.debug(f'Skipping {entry}, title does not match regex.')
+        else:
+            # No matches and no regex, download it
+            yield entry
 
 
 def get_channel_video_count(channel: Dict) -> int:

@@ -187,7 +187,7 @@ def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
                     yield meta_path.relative_to(relative_to)
                 else:
                     yield meta_path
-                continue
+                break
             else:
                 yield None
 

@@ -169,12 +169,13 @@ def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
     pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
     """
     Find all files that share a file's full path, except their extensions.  It is assumed that file with the
-    same name, but different extension is related to that file.
+    same name, but different extension is related to that file.  A None will be yielded if the meta file doesn't exist.
 
     Example:
         >>> foo = pathlib.Path('foo.bar')
         >>> find_meta_files(foo)
-        ('foo.jpg', 'foo.en.vtt')
+        (pathlib.Path('foo.jpg'), pathlib.Path('foo.description'),
+        pathlib.Path('foo.jpg'), pathlib.Path('foo.info.json'))
     """
     suffix = path.suffix
     name, suffix, _ = str(path.name).rpartition(suffix)
@@ -262,6 +263,6 @@ def main(args=None):
     if args.count_limit:
         count_limit = args.count_limit
     with get_db_context(commit=True) as (db_conn, db):
-        update_channels(db_conn, db)
-        download_all_missing_videos(db_conn, db, count_limit)
+        list(update_channels(db_conn, db))
+        list(download_all_missing_videos(db_conn, db, count_limit))
     return 0

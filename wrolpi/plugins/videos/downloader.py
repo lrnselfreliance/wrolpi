@@ -78,12 +78,13 @@ def find_matching_video_files(directory, search_str) -> str:
         yield from glob.glob(f'{directory}/*{search_str}*{ext}')
 
 
-def find_missing_channel_videos(channel: Dict) -> dict:
+def find_missing_channel_videos(video_root_directory: pathlib.Path, channel: Dict) -> dict:
     info_json = channel['info_json']
     entries = info_json['entries']
+    directory = video_root_directory / channel['directory']
     for entry in entries:
         source_id = entry['id']
-        matching_video_files = find_matching_video_files(channel['directory'], source_id)
+        matching_video_files = find_matching_video_files(directory, source_id)
         try:
             next(matching_video_files)
             # Some video file was found, move onto the next
@@ -114,6 +115,8 @@ def find_all_missing_videos(db: DictDB, max_downloads_per_channel: int = None) -
     files than this number."""
     Channel = db['channel']
     channels = Channel.get_where(Channel['info_json'].IsNotNull())
+    downloader_config = get_downloader_config()
+    video_root_directory = pathlib.Path(downloader_config['video_root_directory'])
     for channel in channels:
         if max_downloads_per_channel:
             # Don't download more videos than the max limit
@@ -122,7 +125,7 @@ def find_all_missing_videos(db: DictDB, max_downloads_per_channel: int = None) -
                 continue
 
         video_count = 0
-        for missing_video in find_missing_channel_videos(channel):
+        for missing_video in find_missing_channel_videos(video_root_directory, channel):
             if max_downloads_per_channel and video_count >= max_downloads_per_channel:
                 logger.debug(f'Video count in {channel["directory"]} exceeds max downloads per channel.')
                 break

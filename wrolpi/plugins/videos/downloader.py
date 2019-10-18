@@ -178,16 +178,17 @@ def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
     """
     suffix = path.suffix
     name, suffix, _ = str(path.name).rpartition(suffix)
-    meta_file_exts = ('.jpg', '.description', '.en.vtt', '.info.json')
-    for meta_ext in meta_file_exts:
-        meta_path = replace_extension(path, meta_ext)
-        if meta_path.exists():
-            if relative_to:
-                yield meta_path.relative_to(relative_to)
+    meta_file_exts = (('.jpg',), ('.description',), ('.en.vtt', '.en.srt'), ('.info.json',))
+    for meta_exts in meta_file_exts:
+        for meta_ext in meta_exts:
+            meta_path = replace_extension(path, meta_ext)
+            if meta_path.exists():
+                if relative_to:
+                    yield meta_path.relative_to(relative_to)
+                else:
+                    yield meta_path
             else:
-                yield meta_path
-        else:
-            yield None
+                yield None
 
 
 NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'

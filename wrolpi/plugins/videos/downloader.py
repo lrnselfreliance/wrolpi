@@ -194,8 +194,8 @@ NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
                          r'(jpg|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
 
 
-def insert_video(db: DictDB, video_path: pathlib.Path, channel: Table, idempotency: str = None):
-    """Find and insert a video file's information into the DB."""
+def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotency: str = None) -> Dict:
+    """Find and insert a video into the DB.  Also, find any meta-files near the video file and store them."""
     Video = db['video']
     channel_dir = get_absolute_channel_directory(channel['directory'])
     poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path, relative_to=channel_dir)
@@ -210,17 +210,8 @@ def insert_video(db: DictDB, video_path: pathlib.Path, channel: Table, idempoten
         _, upload_date, source_id, title, ext = name_match.groups()
 
     # Hash the video's path for easy and collision-free linking
-    video_path_hash_long = hashlib.sha3_512(str(video_path).encode('UTF-8')).hexdigest()
-    video_path_hash = video_path_hash_long[:10]
-
-    # Increase video hash length until it no longer conflicts
-    conflicting_hash = Video.get_one(video_path_hash=video_path_hash)
-    while conflicting_hash:
-        try:
-            video_path_hash = video_path_hash_long[:len(video_path_hash) + 1]
-        except IndexError:
-            raise Exception("Video path hash conflicts, aren't you unlucky!")
-        conflicting_hash = Video.get_one(video_path_hash=video_path_hash)
+    video_path_hash = hashlib.sha3_512(str(video_path).encode('UTF-8')).hexdigest()
+    video_path_hash = video_path_hash[:10]
 
     video = Video(
         channel_id=channel['id'],

@@ -249,7 +249,8 @@ def refresh_channel_videos(db, channel):
     relative_new_paths = [str(i.relative_to(directory)) for i in possible_new_paths]
     curs.execute(query, (idempotency, channel['id'], relative_new_paths))
     existing_paths = {i for (i,) in curs.fetchall()}
-    # Get the absolute paths who's path relative to the channel does't yet exist
+
+    # Get the paths for any video not yet in the DB
     # (paths in DB are relative, but we need to pass an absolute path)
     new_videos = {p for p in possible_new_paths if str(p.relative_to(directory)) not in existing_paths}
 
@@ -261,10 +262,10 @@ def refresh_channel_videos(db, channel):
     deleted_count = curs.fetchall()
     if deleted_count:
         deleted_count = len(deleted_count)
-        deleted_status = f'Deleted {deleted_count} videos from channel {channel["name"]}'
+        deleted_status = f'Deleted {deleted_count} video records from channel {channel["name"]}'
         logger.info(deleted_status)
         yield deleted_status
-    final_status = f'{channel["name"]}: Added {len(new_videos)} new videos, {len(existing_paths)} already existed.'
+    final_status = f'{channel["name"]}: {len(new_videos)} new videos, {len(existing_paths)} already existed.'
     logger.info(final_status)
     yield final_status
 

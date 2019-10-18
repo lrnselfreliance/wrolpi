@@ -2,7 +2,8 @@
 import argparse
 import logging
 
-from wrolpi.plugins.videos import downloader
+from wrolpi.common import get_db_context
+from wrolpi.plugins.videos import downloader, api
 
 PRETTY_NAME = 'Videos'
 logger = logging.getLogger('wrolpi')
@@ -16,11 +17,22 @@ def init_parser(sub_commands):
     download_parser.add_argument('-c', '--count-limit', type=int, default=0,
                                  help='Download at most this many videos to each channel\'s directory.')
 
+    content_parser = sub_commands.add_parser('content')
+    content_parser.add_argument('-r', '--refresh', action='store_true', default=False,
+                                help='Search for new videos files.')
+
 
 def main(args):
     if args.sub_commands and 'download' in args.sub_commands:
         downloader.main(args)
         return 0
+    elif args.sub_commands and 'content' in args.sub_commands:
+        try:
+            with get_db_context(commit=True) as (db_conn, db):
+                api.refresh_videos(db)
+            return 0
+        except:
+            return 1
 
 
 if __name__ == '__main__':

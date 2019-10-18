@@ -263,6 +263,8 @@ def main(args=None):
     if args.count_limit:
         count_limit = args.count_limit
     with get_db_context(commit=True) as (db_conn, db):
-        list(update_channels(db_conn, db))
-        list(download_all_missing_videos(db_conn, db, count_limit))
+        for status in update_channels(db_conn, db):
+            logger.info(str(status))
+        for status in download_all_missing_videos(db_conn, db, count_limit):
+            logger.info(status)
     return 0

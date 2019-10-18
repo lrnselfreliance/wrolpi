@@ -209,6 +209,10 @@ def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
     if name_match:
         _, upload_date, source_id, title, ext = name_match.groups()
 
+    # Youtube-DL can sometimes set date to `NA`, lets use a None
+    if upload_date == 'NA':
+        upload_date = None
+
     # Hash the video's path for easy and collision-free linking
     video_path_hash = hashlib.sha3_512(str(video_path).encode('UTF-8')).hexdigest()
     video_path_hash = video_path_hash[:10]

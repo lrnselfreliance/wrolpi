@@ -108,3 +108,7 @@ venv.bak/
 
 # example videos
 test/example_videos
+
+# local configs
+*local.yaml
+*local.yml

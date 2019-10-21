@@ -1,0 +1,12 @@
+{% set title=video['title'] or video['name'] %}
+
+<a href="/videos/channel/{{ link }}/video/{{ video['video_path_hash'] }}" class="video">
+    <div class="card" style="width: 18em; margin-bottom: 1em;">
+        <img class="card-img-top"
+             src="/videos/poster/{{ video['video_path_hash'] }}"/>
+        <div class="card-body">
+            <h5 class="card-title">{{ title }}</h5>
+            <p class="card-text">Uploaded: {{ video['upload_date'] }}</p>
+        </div>
+    </div>
+</a>

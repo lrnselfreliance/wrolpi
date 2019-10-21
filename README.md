@@ -29,8 +29,8 @@ WROLPi runs in a couple Docker containers.  Lets get the prerequisites installed
     * External USB hard drive
     * Power supply and cables
     * WiFi USER device such as a phone, tablet, or laptop.
-1. A WROLPi instance should consume a minimal amount of electricity.  It is expected power will be scarce when WROLPi
-is needed most.
+1. A WROLPi instance should consume a minimal amount of electricity during WROL event.  It is expected power will be
+scarce when WROLPi is needed most.
 ## User expectations
 1. A WROLPi instance should be run and maintained by a person (MAINTAINER) with a moderate amount of Linux and
 Raspberry Pi experience.  It is expected that they should be able to do this using only the documentation on their
@@ -44,3 +44,6 @@ WROLPi.
     their preferred video player.
 1. WROLPi should be self-documented.  The UI should contain a tutorial for USERS as well as the MAINTAINER.
     * If the UI isn't functional, the code should be documented such that a user can restore functionality.
+1. WROLPi should favor pre-processing, rather than processing during a WROL event.  Such as re-encoding a video, or
+processing captions.  This is to ensure that when a user adds content during non-WROL time, the processing for optimum
+performance is already done for a WROL event.

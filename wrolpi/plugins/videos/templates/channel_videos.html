@@ -6,18 +6,8 @@
         <h4 class="h4">{{ linked_channel['name'] }}</h4>
 
         <div class="card-deck">
-            {% for video_info in linked_channel['videos'].order_by('upload_date DESC, name ASC') %}
-                {% set title=video_info['title'] or video_info['name'] %}
-                <a href="/videos/channel/{{ link }}/video/{{ video_info['video_path_hash'] }}" class="video">
-                    <div class="card" style="width: 18em; margin-bottom: 1em;">
-                        <img class="card-img-top"
-                             src="/videos/poster/{{ video_info['video_path_hash'] }}"/>
-                        <div class="card-body">
-                            <h5 class="card-title">{{ title }}</h5>
-                            <p class="card-text">Uploaded: {{ video_info['upload_date'] }}</p>
-                        </div>
-                    </div>
-                </a>
+            {% for video in linked_channel['videos'].order_by('upload_date DESC, name ASC') %}
+                {%  include "wrolpi/plugins/videos/templates/video_card.html" %}
             {% endfor %}
         </div>
     {% endif %}

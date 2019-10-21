@@ -2,7 +2,9 @@
 from typing import Generator
 
 import webvtt
-from dictorm import DictDB, Dict
+from dictorm import Dict
+
+from wrolpi.plugins.videos.common import get_absolute_channel_directory
 
 
 def get_caption_text(vtt_path: str) -> Generator:
@@ -38,6 +40,8 @@ def process_captions(video: Dict):
     if not caption_path:
         raise UnknownCaptionFile(f'No caption file specified for video record {video["id"]}')
 
+    caption_path = get_absolute_channel_directory(video['channel']['directory']) / caption_path
+    print(caption_path)
     lines = get_unique_caption_lines(caption_path)
     block = '\n'.join(lines)
     video['caption'] = block

@@ -10,6 +10,7 @@ from typing import Tuple
 from dictorm import DictDB, Dict, Or, Table
 from youtube_dl import YoutubeDL
 
+from wrolpi.plugins.videos.captions import process_captions
 from wrolpi.tools import get_db_context
 from wrolpi.plugins.videos.common import get_downloader_config, get_absolute_channel_directory
 
@@ -206,7 +207,7 @@ NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
                          r'(jpg|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
 
 
-def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotency: str = None) -> Dict:
+def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotency: str = None, skip_captions=False) -> Dict:
     """Find and insert a video into the DB.  Also, find any meta-files near the video file and store them."""
     Video = db['video']
     channel_dir = get_absolute_channel_directory(channel['directory'])
@@ -245,6 +246,11 @@ def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
         video_path_hash=video_path_hash,
     )
     video.flush()
+
+    if skip_captions is False and caption_path:
+        # Process captions only when requested
+        process_captions(video)
+
     return video
 
 

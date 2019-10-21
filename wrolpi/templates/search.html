@@ -2,5 +2,10 @@
 
 {% block body %}
     <h1>Search</h1>
-    {{ results }}
+    {% for plugin_result in results %}
+        {% for section, result in plugin_result.items() %}
+            {% set template = result['template'] %}
+            {{ template.render(items=result['items']) }}
+        {% endfor %}
+    {% endfor %}
 {% endblock %}

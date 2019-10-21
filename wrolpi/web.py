@@ -37,8 +37,7 @@ class ClientRoot(object):
         return template.render(PLUGINS=PLUGINS)
 
     @cherrypy.expose
-    @cherrypy.tools.db()
-    def search(self, db: DictDB, search=None):
+    def search(self, search=None):
         template = env.get_template('wrolpi/templates/search.html')
         results = []
         for plugin in PLUGINS.values():

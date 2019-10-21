@@ -1,8 +1,8 @@
 import unittest
 
-from wrolpi.tools import get_db_context
 from wrolpi.plugins.videos import captions
 from wrolpi.test.common import test_db_wrapper
+from wrolpi.tools import get_db_context
 
 
 class TestCaption(unittest.TestCase):

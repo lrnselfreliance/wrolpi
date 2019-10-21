@@ -40,5 +40,5 @@ def process_captions(video: Dict):
 
     lines = get_unique_caption_lines(caption_path)
     block = '\n'.join(lines)
-    curs = video.table.db.get_cursor()
-    curs.execute('UPDATE video SET caption = %s WHERE id=%s', (block, video['id']))
+    video['caption'] = block
+    video.flush()

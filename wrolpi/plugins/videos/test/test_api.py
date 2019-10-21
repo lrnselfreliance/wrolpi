@@ -5,14 +5,16 @@ import unittest
 from shutil import copyfile
 
 import mock
+import yaml
 
-from wrolpi.tools import get_db_context
 from wrolpi.plugins.videos.api import APIRoot, refresh_videos
-from wrolpi.plugins.videos.common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH
+from wrolpi.plugins.videos.common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH, get_config
 from wrolpi.plugins.videos.downloader import insert_video
 from wrolpi.test.common import test_db_wrapper
+from wrolpi.tools import get_db_context
 
 CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
+cwd = pathlib.Path(__file__).parents[4]
 
 
 @mock.patch('wrolpi.plugins.videos.common.CONFIG_PATH', CONFIG_PATH.name)
@@ -21,6 +23,11 @@ class TestAPI(unittest.TestCase):
     def setUp(self) -> None:
         # Copy the example config to test against
         copyfile(EXAMPLE_CONFIG_PATH, CONFIG_PATH.name)
+        # Setup the testing video root directory
+        config = get_config()
+        config['downloader']['video_root_directory'] = cwd / 'test'
+        with open(CONFIG_PATH.name, 'wt') as fh:
+            fh.write(yaml.dump(config))
 
     @test_db_wrapper
     def test_configs(self):
@@ -72,8 +79,10 @@ class TestAPI(unittest.TestCase):
     @test_db_wrapper
     def test_channel(self):
         api = APIRoot()
+        channel_directory = tempfile.TemporaryDirectory().name
+        pathlib.Path(channel_directory).mkdir()
         new_channel = dict(
-            directory='/tmp/channel1',
+            directory=channel_directory,
             match_regex='asdf',
             name='Example Channel 1',
             url='https://example.com/channel1',

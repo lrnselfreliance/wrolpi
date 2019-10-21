@@ -20,6 +20,7 @@ class DBTool(cherrypy.Tool):
         self.pool = None
         self.conn = None
         self.db = None
+        self.key = None
         cherrypy.Tool.__init__(self, 'before_handler', self.setup_db, priority=25)
 
     def setup_db(self):
@@ -39,6 +40,9 @@ class DBTool(cherrypy.Tool):
             logger.debug('Failed to putconn, already closed?')
 
 
+cherrypy.tools.db = DBTool()
+
+
 class SemaphoreThreadedConnectionPool(ThreadedConnectionPool):
     def __init__(self, minconn, maxconn, *args, **kwargs):
         self._semaphore = Semaphore(maxconn)
@@ -56,28 +60,22 @@ class SemaphoreThreadedConnectionPool(ThreadedConnectionPool):
 POOL_SINGLETON = None
 
 
-def get_db():
+def get_db(dbname=None):
     # Default database is local development
     db_args = dict(
-        dbname='wrolpi',
+        dbname=dbname or 'wrolpi',
         user='postgres',
         password='postgres',
         host='127.0.0.1',
         port=54321,
     )
     if os.environ.get('DOCKER', '').lower().startswith('t'):
-        # This database connection is when deployed using docker
-        db_args = dict(
-            dbname='wrolpi',
-            user='postgres',
-            password='postgres',
-            host='postgres',
-            port=5432,
-        )
+        # Deployed in docker, use the docker postgres
+        db_args['host'] = 'postgres'
 
     global POOL_SINGLETON
     if not POOL_SINGLETON:
-        POOL_SINGLETON = SemaphoreThreadedConnectionPool(5, 100, **db_args, connect_timeout=5)
+        POOL_SINGLETON = SemaphoreThreadedConnectionPool(5, 20, **db_args, connect_timeout=5)
 
     key = str(uuid4())
     db_conn = POOL_SINGLETON.getconn(key=key)
@@ -101,5 +99,16 @@ def get_db_context(commit=False) -> Tuple[psycopg2.connect, DictDB]:
     try:
         db_pool.putconn(db_conn, key=key, close=False)
     except KeyError:
-        # connection with this key was already closed
-        logger.debug('Failed to putconn, already closed?')
+        # connection with this key was already returned
+        logger.debug('Failed to putconn, already returned?')
+
+
+TOOLS_SETUP = False
+
+
+def setup_tools():
+    """Setup the cherrypy tools.  Do this only once."""
+    global TOOLS_SETUP
+    if TOOLS_SETUP is False:
+        cherrypy.tools.db = DBTool()
+        TOOLS_SETUP = True

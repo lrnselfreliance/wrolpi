@@ -1,6 +1,4 @@
 import functools
-import random
-import string
 from uuid import uuid1
 
 import mock
@@ -40,23 +38,30 @@ def test_db_wrapper(func):
             curs.execute(drop_testing)
             curs.execute(f'CREATE DATABASE {testing_db_name} TEMPLATE wrolpi')
 
-        def get_db():
+            class FakePool:
+
+                def putconn(self, conn, *a, **kw):
+                    pass
+
             testing_db_conn = psycopg2.connect(
                 dbname=testing_db_name,  # use that new testing db!
                 **db_args
             )
-            testing_db = DictDB(testing_db_conn)
-            setup_relationships(testing_db)
-            return testing_db_conn, testing_db
-
-        with mock.patch('wrolpi.common.get_db', get_db):
             try:
-                return func(*a, **kw)
+                testing_db = DictDB(testing_db_conn)
+                setup_relationships(testing_db)
+
+                def _get_db():
+                    """Get the testing db"""
+                    return FakePool(), testing_db_conn, testing_db, None
+
+                with mock.patch('wrolpi.tools.get_db', _get_db):
+                    return func(*a, **kw)
+
             finally:
-                with psycopg2.connect(dbname='postgres', **db_args) as db_conn:
-                    db_conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-                    curs = db_conn.cursor()
-                    curs.execute(drop_testing)
+                testing_db_conn.close()
+                db_conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+                curs.execute(drop_testing)
 
     functools.wraps(wrapped, func)
     return wrapped

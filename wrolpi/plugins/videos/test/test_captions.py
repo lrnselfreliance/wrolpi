@@ -40,6 +40,9 @@ class TestCaption(unittest.TestCase):
             video2 = Video(title='bar', caption_path=self.vtt_path2).flush()
             captions.process_captions(video2)
 
+            v1_id = video1['id']
+            v2_id = video2['id']
+
             # Get the video from the DB
             video1 = Video.get_one(id=video1['id'])
             self.assertIsNotNone(video1['caption'])
@@ -53,25 +56,25 @@ class TestCaption(unittest.TestCase):
                 curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', args)
 
             select_textsearch('sessions')
-            self.assertEqual(curs.fetchall(), [(1,)])
+            self.assertEqual(curs.fetchall(), [(v1_id,)])
             # Matches video1.title and video2.caption
             select_textsearch('scream')
-            self.assertEqual(curs.fetchall(), [(1,), (2,)])
+            self.assertEqual(curs.fetchall(), [(v1_id,), (v2_id,)])
             # Matches video1.title and video2.caption
             select_textsearch('scream | sessions')
-            self.assertEqual(curs.fetchall(), [(1,), (2,)])
+            self.assertEqual(curs.fetchall(), [(v1_id,), (v2_id,)])
             # Only matches video1.title
             select_textsearch('scream & sessions')
-            self.assertEqual(curs.fetchall(), [(1,)])
+            self.assertEqual(curs.fetchall(), [(v1_id,)])
             # Matches neither
             select_textsearch('scream & sess')
             self.assertEqual(curs.fetchall(), [])
             # Matches video2.caption
             select_textsearch('yawn | sess')
-            self.assertEqual(curs.fetchall(), [(2,)])
+            self.assertEqual(curs.fetchall(), [(v2_id,)])
             # Matches video2.caption
             select_textsearch('yawn')
-            self.assertEqual(curs.fetchall(), [(2,)])
+            self.assertEqual(curs.fetchall(), [(v2_id,)])
             # Matches video2.title
             select_textsearch('bar')
-            self.assertEqual(curs.fetchall(), [(2,)])
+            self.assertEqual(curs.fetchall(), [(v2_id,)])

@@ -2,27 +2,34 @@
 from typing import Generator
 
 import webvtt
+import srt
 from dictorm import Dict
 
 from wrolpi.common import logger
 from wrolpi.plugins.videos.common import get_absolute_video_caption
 
 
-def get_caption_text(vtt_path: str) -> Generator:
+def get_caption_text(caption_path: str) -> Generator:
     """
-    Return all text from each caption of a vtt file.
+    Return all text from each caption of a caption file.
     """
-    for caption in webvtt.read(vtt_path):
-        text = str(caption.text).strip()
-        yield text
+    if str(caption_path).endswith('vtt'):
+        for caption in webvtt.read(caption_path):
+            text = str(caption.text).strip()
+            yield text
+    else:
+        with open(caption_path, 'rb') as fh:
+            contents = fh.read()
+            for subtitle in srt.parse(contents):
+                yield subtitle.content
 
 
-def get_unique_caption_lines(vtt_path: str) -> Generator:
+def get_unique_caption_lines(caption_path: str) -> Generator:
     """
-    Return all unique lines from each caption of a vtt file.
+    Return all unique lines from each caption of a caption file.
     """
     last_line = None
-    for text in get_caption_text(vtt_path):
+    for text in get_caption_text(caption_path):
         for line in text.split('\n'):
             if line and line != last_line:
                 last_line = line

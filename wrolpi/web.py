@@ -43,16 +43,14 @@ class ClientRoot(object):
         template = env.get_template('wrolpi/templates/search.html')
         combined_results = []
         for plugin in PLUGINS.values():
-            result = plugin.search(search, offset, limit)
-            for sub_result in result.values():
-                if len(sub_result['items']) > limit:
-                    more = True
-                else:
-                    more = False
-                sub_result['items'] = sub_result['items'][:limit]
+            results = plugin.search(search, offset, limit)
+            # Generate pagination links for every search result
+            for child_result in results.values():
+                more = len(child_result['items']) > limit
+                child_result['items'] = child_result['items'][:limit]
                 pagination = create_pagination_dict(offset, limit, more)
-                sub_result['pagination'] = pagination
-            combined_results.append(result)
+                child_result['pagination'] = pagination
+            combined_results.append(results)
         return template.render(PLUGINS=PLUGINS, combined_results=combined_results)
 
     @cherrypy.expose

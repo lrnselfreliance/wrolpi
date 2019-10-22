@@ -48,6 +48,7 @@ def sanitize_link(link: str) -> str:
 
 
 def create_pagination_dict(offset, limit, more) -> dict:
+    """Create the dict that the pagination template needs to build the pagination links."""
     pagination = dict()
     pagination['offset'] = offset
     pagination['limit'] = limit

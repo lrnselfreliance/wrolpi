@@ -17,8 +17,9 @@ def search(search_str, offset, limit):
         if results:
             videos = [dict(i) for i in Video.get_where(Video['id'].In([i[0] for i in results]))]
 
-        result['videos'] = {
+        child_result = {
             'template': template,
             'items': videos,
         }
+        result['videos'] = child_result
     return result

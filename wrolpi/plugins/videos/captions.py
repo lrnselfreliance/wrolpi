@@ -18,7 +18,7 @@ def get_caption_text(caption_path: str) -> Generator:
             text = str(caption.text).strip()
             yield text
     else:
-        with open(caption_path, 'rb') as fh:
+        with open(caption_path, 'rt') as fh:
             contents = fh.read()
             for subtitle in srt.parse(contents):
                 yield subtitle.content

@@ -4,6 +4,7 @@ from typing import Generator
 import webvtt
 from dictorm import Dict
 
+from wrolpi.common import logger
 from wrolpi.plugins.videos.common import get_absolute_video_caption
 
 
@@ -47,4 +48,7 @@ def process_captions(video: Dict):
     except UnicodeDecodeError:
         # Failed to decode the caption file
         # TODO handle this error
-        pass
+        logger.debug(f'Failed to decode caption file {caption_path}')
+    except webvtt.errors.MalformedFileError:
+        # File format is broken
+        logger.debug(f'Failed to parse caption file {caption_path}')

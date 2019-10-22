@@ -116,16 +116,17 @@ class ChannelHandler(object):
 
     @cherrypy.expose
     @cherrypy.tools.db()
-    def index(self, link: str = None, db: DictDB = None, offset: int = None):
+    def index(self, link: str = None, db: DictDB = None, offset: int = None, limit: int = None):
         if not link:
             # Link was not passed, probably a malformed url
             raise cherrypy.HTTPRedirect(f'/{PLUGIN_ROOT}')
 
         offset = int(offset) if offset else 0
+        limit = int(limit) if limit else 20
 
         Channel = db['channel']
         channel = Channel.get_one(link=link)
-        videos, pagination = get_pagination(channel['videos'], offset)
+        videos, pagination = get_pagination(channel['videos'], offset, limit)
 
         template = env.get_template('wrolpi/plugins/videos/templates/channel_videos.html')
         kwargs = _get_render_kwargs(db, link=link, linked_channel=channel, videos=videos,

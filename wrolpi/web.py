@@ -2,7 +2,6 @@ import argparse
 import pathlib
 
 import cherrypy
-from dictorm import DictDB
 
 from wrolpi.tools import setup_tools
 
@@ -37,11 +36,12 @@ class ClientRoot(object):
         return template.render(PLUGINS=PLUGINS)
 
     @cherrypy.expose
-    def search(self, search=None):
+    def search(self, search=None, offset=None):
+        offset = int(offset) if offset else 0
         template = env.get_template('wrolpi/templates/search.html')
         results = []
         for plugin in PLUGINS.values():
-            result = plugin.search(search)
+            result = plugin.search(search, offset)
             results.append(result)
         return template.render(PLUGINS=PLUGINS, results=results)
 

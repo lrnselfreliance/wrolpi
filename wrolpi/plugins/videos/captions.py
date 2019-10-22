@@ -39,7 +39,12 @@ def process_captions(video: Dict):
     caption_path = get_absolute_video_caption(video)
     if not caption_path.exists():
         raise UnknownCaptionFile(f'No caption file for video {video["id"]}')
-    lines = get_unique_caption_lines(str(caption_path))
-    block = '\n'.join(lines)
-    video['caption'] = block
-    video.flush()
+    try:
+        lines = get_unique_caption_lines(str(caption_path))
+        block = '\n'.join(lines)
+        video['caption'] = block
+        video.flush()
+    except UnicodeDecodeError:
+        # Failed to decode the caption file
+        # TODO handle this error
+        pass

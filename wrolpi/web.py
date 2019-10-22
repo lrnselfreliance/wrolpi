@@ -9,7 +9,7 @@ from wrolpi.tools import setup_tools
 setup_tools()
 
 from wrolpi.api import API, API_CONFIG
-from wrolpi.common import env
+from wrolpi.common import env, create_pagination_dict
 from wrolpi.user_plugins import PLUGINS
 
 cwd = pathlib.Path(__file__).parent
@@ -36,14 +36,24 @@ class ClientRoot(object):
         return template.render(PLUGINS=PLUGINS)
 
     @cherrypy.expose
-    def search(self, search=None, offset=None):
+    def search(self, search=None, offset=None, limit=None):
         offset = int(offset) if offset else 0
+        limit = int(limit) if limit else 20
+
         template = env.get_template('wrolpi/templates/search.html')
-        results = []
+        combined_results = []
         for plugin in PLUGINS.values():
-            result = plugin.search(search, offset)
-            results.append(result)
-        return template.render(PLUGINS=PLUGINS, results=results)
+            result = plugin.search(search, offset, limit)
+            for sub_result in result.values():
+                if len(sub_result['items']) > limit:
+                    more = True
+                else:
+                    more = False
+                sub_result['items'] = sub_result['items'][:limit]
+                pagination = create_pagination_dict(offset, limit, more)
+                sub_result['pagination'] = pagination
+            combined_results.append(result)
+        return template.render(PLUGINS=PLUGINS, combined_results=combined_results)
 
     @cherrypy.expose
     def settings(self):

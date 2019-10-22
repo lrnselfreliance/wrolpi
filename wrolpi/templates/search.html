@@ -2,7 +2,7 @@
 
 {% block body %}
     <h1>Search</h1>
-    {% for plugin_result in results %}
+    {% for plugin_result in combined_results %}
         {% for section, result in plugin_result.items() %}
             {% set template = result['template'] %}
             {{ template.render(items=result['items'], pagination=result['pagination']) }}

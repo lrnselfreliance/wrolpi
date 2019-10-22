@@ -1,6 +1,9 @@
+from collections import OrderedDict
+from typing import Tuple
+
 import cherrypy
 from cherrypy.lib.static import serve_file
-from dictorm import DictDB
+from dictorm import DictDB, ResultsGenerator
 
 from wrolpi.common import env
 from wrolpi.plugins.videos.common import get_downloader_config, get_absolute_video_path, \
@@ -91,7 +94,8 @@ class ClientRoot(object):
         return self.serve_file('caption', hash, db, **kwargs)
 
 
-def get_pagination(results_gen, offset, limit=20):
+def get_pagination(results_gen: ResultsGenerator, offset: int, limit: int = 20) -> Tuple[list, dict]:
+    """Offset a results generator and create a pagination dict"""
     results_gen = results_gen.offset(offset)
     results = [i for (i, _) in zip(results_gen, range(limit))]
     try:
@@ -100,11 +104,24 @@ def get_pagination(results_gen, offset, limit=20):
     except StopIteration:
         more = False
 
-    pagination = dict(
-        offset=offset,
-        more=more,
-        limit=limit,
-    )
+    active_page = (offset // limit) + 1
+    pagination = dict()
+    pagination['offset'] = offset
+    pagination['limit'] = limit
+    pagination['more'] = more
+    pagination['active_page'] = active_page
+    pagination['links'] = links = [{'sub_offset': i} for i in range(0, offset + limit, limit)]
+
+    for link in links:
+        link['page'] = (link['sub_offset'] // limit) + 1
+        if link['page'] == active_page:
+            link['active'] = True
+
+    if more:
+        links.append({'sub_offset': offset + limit, 'page': 'Next'})
+    else:
+        links.append({'sub_offset': offset + limit, 'disabled': True, 'page': 'Next'})
+
     return results, pagination
 
 

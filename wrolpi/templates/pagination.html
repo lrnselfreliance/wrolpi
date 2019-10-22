@@ -1,18 +1,12 @@
 <nav aria-label="Page navigation example">
     <ul class="pagination justify-content-center">
-        {% set offset, limit, more = pagination['offset'], pagination['limit'], pagination['more'] %}
-        {% set active_page = (offset / limit) + 1 %}
-        {% for i in range(0, offset + limit, limit) %}
-            {% set page = (i / limit) + 1 %}
-            {% set active = 'active' if active_page == page else '' %}
-            {% set page = '{:,.0f}'.format(page) %}
-            <li class="page-item {{ active }}"><a class="page-link" href="?offset={{ i }}">{{ page }}</a></li>
+        {% for link in pagination['links'] %}
+            {% set sub_offset, active, disabled, page = link['sub_offset'], link['active'], link['disabled'], link['page'] %}
+            {% set active='active' if active else '' %}
+            {% set disabled='disabled' if disabled else '' %}
+            <li class="page-item {{ active }} {{ disabled }}">
+                <a class="page-link" href="?offset={{ sub_offset }}">{{ page }}</a>
+            </li>
         {% endfor %}
-
-        {% if more %}
-            <li class="page-item"><a class="page-link" href="?offset={{ offset + limit }}">Next</a></li>
-        {% else %}
-            <li class="page-item disabled" tabindex="-1" aria-disabled="true"><a class="page-link">Next</a></li>
-        {% endif %}
     </ul>
 </nav>

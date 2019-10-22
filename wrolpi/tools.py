@@ -31,13 +31,15 @@ class DBTool(cherrypy.Tool):
     def _setup(self):
         cherrypy.Tool._setup(self)
         cherrypy.request.hooks.attach('on_end_request', self.teardown_db, priority=25)
+        cherrypy.request.hooks.attach('after_error_response', self.teardown_db, priority=25)
 
     def teardown_db(self):
+        self.pool.putconn(self.conn, key=self.key, close=False)
         try:
             self.pool.putconn(self.conn, key=self.key, close=False)
         except KeyError:
             # connection with this key was already closed
-            logger.debug('Failed to putconn, already closed?')
+            logger.debug('Failed to putconn in tool, already returned?')
 
 
 cherrypy.tools.db = DBTool()
@@ -100,7 +102,7 @@ def get_db_context(commit=False) -> Tuple[psycopg2.connect, DictDB]:
         db_pool.putconn(db_conn, key=key, close=False)
     except KeyError:
         # connection with this key was already returned
-        logger.debug('Failed to putconn, already returned?')
+        logger.debug('Failed to putconn in context, already returned?')
 
 
 TOOLS_SETUP = False

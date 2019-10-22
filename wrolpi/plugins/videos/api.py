@@ -31,6 +31,7 @@ import cherrypy
 from dictorm import DictDB
 
 from wrolpi.common import sanitize_link
+from wrolpi.plugins.videos.captions import process_captions
 from wrolpi.plugins.videos.common import get_conflicting_channels, verify_config
 from wrolpi.plugins.videos.downloader import insert_video, update_channels, download_all_missing_videos
 from wrolpi.plugins.videos.main import logger
@@ -265,7 +266,18 @@ def refresh_channel_videos(db, channel):
         deleted_status = f'Deleted {deleted_count} video records from channel {channel["name"]}'
         logger.info(deleted_status)
         yield deleted_status
-    final_status = f'{channel["name"]}: {len(new_videos)} new videos, {len(existing_paths)} already existed.'
+
+    # Fill in any missing captions
+    curs.execute('SELECT id FROM video WHERE caption IS NULL AND caption_path IS NOT NULL')
+    missing_captions = [i for (i,) in curs.fetchall()]
+    Video = db['video']
+    for video_id in missing_captions:
+        video = Video.get_one(id=video_id)
+        process_captions(video)
+        yield f'Processed captions for video {video_id}'
+
+    final_status = f'{channel["name"]}: {len(new_videos)} new videos, {len(existing_paths)} already existed. ' \
+                   f'Processed {len(missing_captions)} missing captions.'
     logger.info(final_status)
     yield final_status
 

@@ -2,7 +2,7 @@
 <a href="/videos/channel/{{ link }}/video/{{ video['video_path_hash'] }}" class="video">
     <div class="card" style="width: 18em; margin-bottom: 1em;">
         {% if video['poster_path'] %}
-        {% set video_url = "/videos/poster/{{ video['video_path_hash'] }}" %}
+        {% set video_url = '/videos/poster/' + video['video_path_hash'] %}
         {% else %}
         {% set video_url = '' %}
         {% endif %}

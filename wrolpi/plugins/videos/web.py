@@ -1,4 +1,3 @@
-from collections import OrderedDict
 from typing import Tuple
 
 import cherrypy
@@ -110,17 +109,21 @@ def get_pagination(results_gen: ResultsGenerator, offset: int, limit: int = 20) 
     pagination['limit'] = limit
     pagination['more'] = more
     pagination['active_page'] = active_page
-    pagination['links'] = links = [{'sub_offset': i} for i in range(0, offset + limit, limit)]
 
-    for link in links:
-        link['page'] = (link['sub_offset'] // limit) + 1
+    links = []
+    for sub_offset in range(0, offset + limit, limit):
+        link = dict()
+        links.append(link)
+        link['sub_offset'] = sub_offset
+        link['page'] = (sub_offset // limit) + 1
         if link['page'] == active_page:
             link['active'] = True
 
-    if more:
-        links.append({'sub_offset': offset + limit, 'page': 'Next'})
-    else:
-        links.append({'sub_offset': offset + limit, 'disabled': True, 'page': 'Next'})
+    links.append({'sub_offset': offset + limit, 'page': 'Next'})
+    if not more:
+        links[-1]['disabled'] = True
+
+    pagination['links'] = links
 
     return results, pagination
 

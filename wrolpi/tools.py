@@ -1,8 +1,8 @@
 import os
+import threading
 from contextlib import contextmanager
 from threading import Semaphore
 from typing import Tuple
-from uuid import uuid4
 
 import cherrypy
 import psycopg2 as psycopg2
@@ -27,22 +27,14 @@ class DBTool(cherrypy.Tool):
         self.pool, self.conn, self.db, self.key = get_db()
         req = cherrypy.request
         req.params['db'] = self.db
-
-    def _setup(self):
-        cherrypy.Tool._setup(self)
         cherrypy.request.hooks.attach('on_end_request', self.teardown_db, priority=25)
-        cherrypy.request.hooks.attach('after_error_response', self.teardown_db, priority=25)
 
     def teardown_db(self):
-        self.pool.putconn(self.conn, key=self.key, close=False)
         try:
             self.pool.putconn(self.conn, key=self.key, close=False)
         except KeyError:
-            # connection with this key was already closed
-            logger.debug('Failed to putconn in tool, already returned?')
-
-
-cherrypy.tools.db = DBTool()
+            # Connection already returned?
+            logger.debug(f'Failed to return db connection {self.key}')
 
 
 class SemaphoreThreadedConnectionPool(ThreadedConnectionPool):
@@ -77,9 +69,9 @@ def get_db(dbname=None):
 
     global POOL_SINGLETON
     if not POOL_SINGLETON:
-        POOL_SINGLETON = SemaphoreThreadedConnectionPool(5, 20, **db_args, connect_timeout=5)
+        POOL_SINGLETON = SemaphoreThreadedConnectionPool(0, 20, **db_args, connect_timeout=5)
 
-    key = str(uuid4())
+    key = threading.get_ident()
     db_conn = POOL_SINGLETON.getconn(key=key)
 
     db = DictDB(db_conn)
@@ -98,11 +90,7 @@ def get_db_context(commit=False) -> Tuple[psycopg2.connect, DictDB]:
     else:
         db_conn.rollback()
 
-    try:
-        db_pool.putconn(db_conn, key=key, close=False)
-    except KeyError:
-        # connection with this key was already returned
-        logger.debug('Failed to putconn in context, already returned?')
+    db_pool.putconn(db_conn, key=key, close=False)
 
 
 TOOLS_SETUP = False

@@ -268,7 +268,8 @@ def refresh_channel_videos(db, channel):
         yield deleted_status
 
     # Fill in any missing captions
-    curs.execute('SELECT id FROM video WHERE caption IS NULL AND caption_path IS NOT NULL')
+    query = 'SELECT id FROM video WHERE channel_id = %s AND caption IS NULL AND caption_path IS NOT NULL'
+    curs.execute(query, (channel['id'],))
     missing_captions = [i for (i,) in curs.fetchall()]
     Video = db['video']
     for video_id in missing_captions:

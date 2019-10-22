@@ -146,7 +146,8 @@ class ChannelHandler(object):
 
         Channel = db['channel']
         channel = Channel.get_one(link=link)
-        videos, pagination = get_pagination(channel['videos'], offset, limit)
+        videos = channel['videos'].order_by('upload_date DESC, name ASC')
+        videos, pagination = get_pagination(videos, offset, limit)
 
         template = env.get_template('wrolpi/plugins/videos/templates/channel_videos.html')
         kwargs = _get_render_kwargs(db, link=link, linked_channel=channel, videos=videos,

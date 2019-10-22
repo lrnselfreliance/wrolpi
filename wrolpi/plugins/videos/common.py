@@ -1,10 +1,11 @@
+import json
 import pathlib
 from functools import partial
 from pathlib import Path
 from typing import Union, Tuple
 
 import yaml
-from dictorm import And, Or
+from dictorm import And, Or, Dict
 
 from wrolpi.common import sanitize_link
 from wrolpi.tools import get_db_context
@@ -108,13 +109,70 @@ def get_video_root() -> Path:
     return video_root_directory
 
 
-def get_absolute_channel_directory(directory: str):
-    if isinstance(directory, str):
-        directory = Path(directory)
+def get_absolute_channel_directory(directory: str) -> Path:
     directory = get_video_root() / directory
     if not directory.exists():
         raise Exception(f'Channel directory does not exist! {directory}')
     return directory
+
+
+VALID_VIDEO_KINDS = {'video', 'caption', 'poster', 'description', 'info_json'}
+
+
+class UnknownFile(Exception):
+    pass
+
+
+def get_absolute_video_path(video: Dict, kind: str = 'video') -> Path:
+    if kind not in VALID_VIDEO_KINDS:
+        raise Exception(f'Unknown video path kind {kind}')
+    directory = get_absolute_channel_directory(video['channel']['directory'])
+    path = video[kind + '_path']
+    if directory and path:
+        return directory / path
+    raise UnknownFile(f'Unknown {kind} for video {video["id"]}')
+
+
+def get_absolute_video_caption(video: Dict) -> Path:
+    return get_absolute_video_path(video, 'caption')
+
+
+def get_absolute_video_poster(video: Dict) -> Path:
+    return get_absolute_video_path(video, 'poster')
+
+
+def get_absolute_video_description(video: Dict) -> Path:
+    return get_absolute_video_path(video, 'description')
+
+
+def get_absolute_video_info_json(video: Dict) -> Path:
+    return get_absolute_video_path(video, 'info_json')
+
+
+def get_video_description(video: Dict) -> bytes:
+    """Get the description text block from a video's description meta-file.  Return an empty string if not possible."""
+    try:
+        path = get_absolute_video_description(video)
+        if path.exists():
+            with open(str(path), 'rb') as fh:
+                contents = fh.read()
+                return contents
+    except UnknownFile:
+        pass
+    return b''
+
+
+def get_video_info_json(video: Dict) -> dict:
+    """Get the info_json object from a video's meta-file.  Return an empty dict if not possible."""
+    try:
+        path = get_absolute_video_info_json(video)
+        if path.exists():
+            with open(str(path), 'rb') as fh:
+                contents = json.load(fh)
+                return contents
+    except UnknownFile:
+        pass
+    return {}
 
 
 def any_extensions(filename: str, extensions=None):

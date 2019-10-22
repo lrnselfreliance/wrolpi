@@ -1,12 +1,10 @@
-import json
-import pathlib
-
 import cherrypy
 from cherrypy.lib.static import serve_file
 from dictorm import DictDB
 
 from wrolpi.common import env
-from wrolpi.plugins.videos.common import get_downloader_config, get_absolute_channel_directory
+from wrolpi.plugins.videos.common import get_downloader_config, get_absolute_video_path, \
+    get_video_description, get_video_info_json, UnknownFile
 
 PLUGIN_ROOT = 'videos'
 
@@ -68,12 +66,8 @@ class ClientRoot(object):
 
         try:
             video = Video.get_one(video_path_hash=hash)
-            path = video[kind + '_path']
-            path = pathlib.Path(path)
-            downloader_config = get_downloader_config()
-            video_root_directory = downloader_config['video_root_directory']
-            path = pathlib.Path(video_root_directory) / video['channel']['directory'] / path
-        except TypeError or KeyError:
+            path = get_absolute_video_path(video, kind=kind)
+        except TypeError or KeyError or UnknownFile:
             raise cherrypy.HTTPError(404, f"Can't find {kind} by that ID.")
 
         if download:
@@ -132,22 +126,9 @@ class VideoHandler(object):
             raise cherrypy.HTTPError(404, f'No video with id {hash}')
 
         # Get the description from it's file, or from the video's info_json file.
-        directory = get_absolute_channel_directory(video['channel']['directory'])
-        description = ''
-        description_path = video['description_path']
-        if description_path:
-            description_path = directory / description_path
-            with open(description_path, 'rb') as fh:
-                description = fh.read()
-
-        info_json = {}
-        info_json_path = video['info_json_path']
-        if info_json_path:
-            info_json_path = directory / info_json_path
-            with open(info_json_path, 'rb') as fh:
-                info_json = json.load(fh)
-            if not description:
-                description = info_json.get('description')
+        description = get_video_description(video)
+        info_json = get_video_info_json(video)
+        description = description or info_json.get('description', '')
 
         template = env.get_template('wrolpi/plugins/videos/templates/video.html')
         items = _get_render_kwargs(db, link=link, hash=hash, video=video, description=description,

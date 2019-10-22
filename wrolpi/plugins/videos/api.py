@@ -267,8 +267,12 @@ def refresh_channel_videos(db, channel):
         logger.info(deleted_status)
         yield deleted_status
 
+    status = f'{channel["name"]}: {len(new_videos)} new videos, {len(existing_paths)} already existed. '
+    logger.info(status)
+    yield status
+
     # Fill in any missing captions
-    query = 'SELECT id FROM video WHERE channel_id = %s AND caption IS NULL AND caption_path IS NOT NULL'
+    query = 'SELECT id FROM video WHERE channel_id=%s AND caption IS NULL AND caption_path IS NOT NULL'
     curs.execute(query, (channel['id'],))
     missing_captions = [i for (i,) in curs.fetchall()]
     Video = db['video']
@@ -277,10 +281,9 @@ def refresh_channel_videos(db, channel):
         process_captions(video)
         yield f'Processed captions for video {video_id}'
 
-    final_status = f'{channel["name"]}: {len(new_videos)} new videos, {len(existing_paths)} already existed. ' \
-                   f'Processed {len(missing_captions)} missing captions.'
-    logger.info(final_status)
-    yield final_status
+    status = f'Processed {len(missing_captions)} missing captions.'
+    logger.info(status)
+    yield status
 
 
 def _refresh_videos(db: DictDB):

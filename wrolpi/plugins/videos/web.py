@@ -91,6 +91,23 @@ class ClientRoot(object):
         return self.serve_file('caption', hash, db, **kwargs)
 
 
+def get_pagination(results_gen, offset, limit=20):
+    results_gen = results_gen.offset(offset)
+    results = [i for (i, _) in zip(results_gen, range(limit))]
+    try:
+        next(results_gen)
+        more = True
+    except StopIteration:
+        more = False
+
+    pagination = dict(
+        offset=offset,
+        more=more,
+        limit=limit,
+    )
+    return results, pagination
+
+
 @cherrypy.popargs('link')
 class ChannelHandler(object):
 
@@ -99,16 +116,20 @@ class ChannelHandler(object):
 
     @cherrypy.expose
     @cherrypy.tools.db()
-    def index(self, link: str = None, db: DictDB = None):
+    def index(self, link: str = None, db: DictDB = None, offset: int = None):
         if not link:
             # Link was not passed, probably a malformed url
             raise cherrypy.HTTPRedirect(f'/{PLUGIN_ROOT}')
 
+        offset = int(offset) if offset else 0
+
         Channel = db['channel']
         channel = Channel.get_one(link=link)
+        videos, pagination = get_pagination(channel['videos'], offset)
 
         template = env.get_template('wrolpi/plugins/videos/templates/channel_videos.html')
-        kwargs = _get_render_kwargs(db, link=link, linked_channel=channel)
+        kwargs = _get_render_kwargs(db, link=link, linked_channel=channel, videos=videos,
+                                    pagination=pagination)
         html = template.render(**kwargs)
         return html
 

@@ -6,9 +6,12 @@
         <h4 class="h4">{{ linked_channel['name'] }}</h4>
 
         <div class="card-deck">
-            {% for video in linked_channel['videos'].order_by('upload_date DESC, name ASC') %}
-                {%  include "wrolpi/plugins/videos/templates/video_card.html" %}
+            {% for video in videos %}
+                {% include "wrolpi/plugins/videos/templates/video_card.html" %}
             {% endfor %}
         </div>
+        {% if pagination is defined and pagination %}
+            {% include "wrolpi/templates/pagination.html" %}
+        {% endif %}
     {% endif %}
 {% endblock %}

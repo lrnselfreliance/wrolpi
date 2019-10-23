@@ -1,6 +1,7 @@
-{% extends "wrolpi/templates/base.html" %}
+{% extends 'wrolpi/plugins/videos/templates/channels.html' %}
 
-{% block body %}
+{% block video %}
+    {{ super() }}
     <h1>Video Search Results</h1>
 
     <div class="card-deck">

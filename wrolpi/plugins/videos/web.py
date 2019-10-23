@@ -5,7 +5,6 @@ from dictorm import DictDB
 from wrolpi.common import env, get_pagination_with_generator, create_pagination_dict
 from wrolpi.plugins.videos.common import get_downloader_config, get_absolute_video_path, \
     get_video_description, get_video_info_json, UnknownFile
-from wrolpi.plugins.videos.search import video_search
 
 PLUGIN_ROOT = 'videos'
 
@@ -93,13 +92,15 @@ class ClientRoot(object):
 
     @cherrypy.expose
     @cherrypy.tools.db()
-    def search(self, search: str, db: DictDB, offset: int = None):
+    def search(self, search: str, db: DictDB, offset: int = None, link: str = None):
         offset = int(offset) if offset else 0
-        results = video_search(db, search, offset)
+        results = video_search(db, search, offset, link)
         template = env.get_template('wrolpi/plugins/videos/templates/search_video.html')
         pagination = create_pagination_dict(offset, 20, total=results['total'])
         kwargs = _get_render_kwargs(db, results=results, pagination=pagination)
-        html = template.render(**kwargs)
+        # Overwrite the channels with their respective counts
+        kwargs['channels'] = results['channels']
+        html = template.render(**kwargs, link=link)
         return html
 
 
@@ -153,3 +154,55 @@ class VideoHandler(object):
                                    info_json=info_json)
         html = template.render(**items)
         return html
+
+
+def video_search(db: DictDB, search_str, offset, link):
+    db_conn = db.conn
+    template = env.get_template('wrolpi/plugins/videos/templates/search_video.html')
+    curs = db_conn.cursor()
+
+    # Get the match count per channel
+    query = 'SELECT COUNT(*), channel_id FROM video WHERE textsearch @@ to_tsquery(%s) GROUP BY channel_id'
+    curs.execute(query, (search_str,))
+    channel_totals = {j: i for (i, j) in curs.fetchall()}
+    # Sum up all the matches for paging
+    total = sum(channel_totals.values())
+
+    # Get the names of each channel, add the counts respectively
+    query = 'SELECT id, name, link FROM channel ORDER BY LOWER(name)'
+    curs.execute(query)
+    channels = []
+    for (id_, name, link) in curs.fetchall():
+        d = {
+            'id': id_,
+            'name': f'{name} ({channel_totals[id_]})',
+            'link': link,
+            'search_link': f'/{PLUGIN_ROOT}/search?link={link}&search={search_str}',
+        }
+        channels.append(d)
+
+    # Get the search results
+    if link:
+        curs.execute('SELECT id FROM channel WHERE link = %s', (link,))
+        (channel_id,) = curs.fetchone()
+        query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)) FROM video WHERE ' \
+                'textsearch @@ to_tsquery(%s) AND channel_id=%s ORDER BY 2 OFFSET %s'
+        curs.execute(query, (search_str, search_str, channel_id, offset))
+    else:
+        query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)) FROM video WHERE ' \
+                'textsearch @@ to_tsquery(%s) ORDER BY 2 OFFSET %s'
+        curs.execute(query, (search_str, search_str, offset))
+    results = list(curs.fetchall())
+
+    videos = []
+    Video = db['video']
+    if results:
+        videos = [dict(i) for i in Video.get_where(Video['id'].In([i[0] for i in results]))]
+
+    results = {
+        'template': template,
+        'items': videos,
+        'total': total,
+        'channels': channels,
+    }
+    return results

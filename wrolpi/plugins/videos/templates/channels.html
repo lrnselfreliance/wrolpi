@@ -16,13 +16,18 @@
                     {% for channel in channels %}
                         {% set active="active" if channel['link'] == link else "" %}
                         <li class="nav-item nav-fill" style="width: 100%">
+                            {% if channel['search_link'] %}
+                                {% set link=channel['search_link'] %}
+                            {% else %}
+                                {% set link="/videos/channel/{{ channel['link'] }}" %}
+                            {% endif %}
                             <a class="nav-link {{ active }}"
-                               href="/videos/channel/{{ channel['link'] }}">{{ channel['name'] }}</a>
+                               href="{{ link }}">{{ channel['name'] }}</a>
                         </li>
                     {% endfor %}
                 </ul>
             </div>
-            <div class="col-9">
+            <div class=" col-9">
                 {% block video %}{% endblock %}
             </div>
         </div>

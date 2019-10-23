@@ -61,25 +61,25 @@ class TestCaption(unittest.TestCase):
                 curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s) ORDER BY id', args)
 
             select_textsearch('sessions')
-            self.assertEqual(curs.fetchall(), [(v1_id,)])
+            self.assertEqual(curs.fetchall(), [(1,)])
             # Matches video1.title and video2.caption
             select_textsearch('scream')
-            self.assertEqual(curs.fetchall(), [(v1_id,), (v2_id,)])
+            self.assertEqual(curs.fetchall(), [(1,), (2,)])
             # Matches video1.title and video2.caption
             select_textsearch('scream | sessions')
-            self.assertEqual(curs.fetchall(), [(v1_id,), (v2_id,)])
+            self.assertEqual(curs.fetchall(), [(1,), (2,)])
             # Only matches video1.title
             select_textsearch('scream & sessions')
-            self.assertEqual(curs.fetchall(), [(v1_id,)])
+            self.assertEqual(curs.fetchall(), [(1,)])
             # Matches neither
             select_textsearch('scream & sess')
             self.assertEqual(curs.fetchall(), [])
             # Matches video2.caption
             select_textsearch('yawn | sess')
-            self.assertEqual(curs.fetchall(), [(v2_id,)])
+            self.assertEqual(curs.fetchall(), [(2,)])
             # Matches video2.caption
             select_textsearch('yawn')
-            self.assertEqual(curs.fetchall(), [(v2_id,)])
+            self.assertEqual(curs.fetchall(), [(2,)])
             # Matches video2.title
             select_textsearch('bar')
-            self.assertEqual(curs.fetchall(), [(v2_id,)])
+            self.assertEqual(curs.fetchall(), [(2,)])

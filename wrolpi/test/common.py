@@ -48,10 +48,8 @@ def test_db_wrapper(func):
             testing_curs = testing_db_conn.cursor()
             testing_curs.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
             table_names = [i for (i,) in testing_curs.fetchall()]
-            for table in table_names:
-                testing_curs.execute(f'TRUNCATE {table} RESTART IDENTITY CASCADE')
+            testing_curs.execute('; '.join(f'TRUNCATE {table} RESTART IDENTITY CASCADE' for table in table_names))
             testing_db_conn.commit()
-            testing_curs.execute('SELECT count(*) from video')
 
             try:
                 testing_db = DictDB(testing_db_conn)

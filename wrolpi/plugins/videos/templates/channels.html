@@ -19,7 +19,7 @@
                             {% if channel['search_link'] %}
                                 {% set link=channel['search_link'] %}
                             {% else %}
-                                {% set link="/videos/channel/{{ channel['link'] }}" %}
+                                {% set link="/videos/channel/" + channel['link'] %}
                             {% endif %}
                             <a class="nav-link {{ active }}"
                                href="{{ link }}">{{ channel['name'] }}</a>

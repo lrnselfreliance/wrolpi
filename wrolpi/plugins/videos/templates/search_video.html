@@ -5,8 +5,7 @@
     <h1>Video Search Results</h1>
 
     <div class="card-deck">
-        {% set items=results['items'] %}
-        {% for video in videos %}
+        {% for video in results['videos'] %}
             {% include "wrolpi/plugins/videos/templates/video_card.html" %}
         {% endfor %}
     </div>

@@ -187,11 +187,11 @@ def video_search(db: DictDB, search_str, offset, link):
         curs.execute('SELECT id FROM channel WHERE link = %s', (link,))
         (channel_id,) = curs.fetchone()
         query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)) FROM video WHERE ' \
-                'textsearch @@ to_tsquery(%s) AND channel_id=%s ORDER BY 2 OFFSET %s'
+                'textsearch @@ to_tsquery(%s) AND channel_id=%s ORDER BY 2 OFFSET %s LIMIT 20'
         curs.execute(query, (search_str, search_str, channel_id, offset))
     else:
         query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)) FROM video WHERE ' \
-                'textsearch @@ to_tsquery(%s) ORDER BY 2 OFFSET %s'
+                'textsearch @@ to_tsquery(%s) ORDER BY 2 OFFSET %s LIMIT 20'
         curs.execute(query, (search_str, search_str, offset))
     results = list(curs.fetchall())
 

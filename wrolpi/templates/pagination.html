@@ -1,11 +1,10 @@
 <nav aria-label="Page navigation example">
     <ul class="pagination justify-content-center">
         {% for link in pagination['links'] %}
-            {% set sub_offset, active, disabled, page = link['sub_offset'], link['active'], link['disabled'], link['page'] %}
-            {% set active='active' if active else '' %}
-            {% set disabled='disabled' if disabled else '' %}
+            {% set active='active' if link['active'] else '' %}
+            {% set disabled='disabled' if link['disabled'] else '' %}
             <li class="page-item {{ active }} {{ disabled }}">
-                <a class="page-link" href="?offset={{ sub_offset }}">{{ page }}</a>
+                <a class="page-link" href="?offset={{ link['sub_offset'] }}">{{ link['page'] }}</a>
             </li>
         {% endfor %}
     </ul>

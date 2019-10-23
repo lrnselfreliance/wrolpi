@@ -4,6 +4,7 @@ import string
 import sys
 from typing import Tuple
 
+from attr import dataclass
 from dictorm import ResultsGenerator
 from jinja2 import Environment, FileSystemLoader
 
@@ -91,18 +92,22 @@ def create_pagination_pages(current_page, last_page, padding=MAX_LINKS):
     return pages
 
 
-def create_pagination_dict(offset, limit, more=None, total=None) -> dict:
+@dataclass(order=True)
+class Pagination:
+    offset: int
+    limit: int
+    more: bool
+    total: int
+    active_page: int
+    links: list
+
+
+def create_pagination_dict(offset, limit, more=None, total=None) -> Pagination:
     """Create the dict that the pagination template needs to build the pagination links."""
-    pagination = dict()
-    pagination['offset'] = offset
-    pagination['limit'] = limit
-    pagination['more'] = more
-    pagination['total'] = total
-
     current_page = (offset // limit) + 1
-    pagination['active_page'] = current_page
-
     links = []
+    pagination = Pagination(offset, limit, more, total, current_page, links)
+
     if total:
         last_page = (total // limit) + 1
     elif more is not None:
@@ -120,12 +125,11 @@ def create_pagination_dict(offset, limit, more=None, total=None) -> dict:
         if current_page == page:
             links[-1]['active'] = True
 
-    pagination['links'] = links
-
     return pagination
 
 
-def get_pagination(results_gen: ResultsGenerator, offset: int, limit: int = 20, total=None) -> Tuple[list, dict]:
+def get_pagination_with_generator(results_gen: ResultsGenerator, offset: int, limit: int = 20, total=None) \
+        -> Tuple[list, dict]:
     """Offset a results generator and create a pagination dict"""
     results_gen = results_gen.offset(offset)
     results = [i for (i, _) in zip(results_gen, range(limit))]

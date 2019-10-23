@@ -1,6 +1,6 @@
 import unittest
 
-from wrolpi.common import create_pagination_pages, create_pagination_dict
+from wrolpi.common import create_pagination_pages, create_pagination_dict, Pagination
 
 
 class TestCommon(unittest.TestCase):
@@ -38,63 +38,63 @@ class TestCommon(unittest.TestCase):
         tests = [
             (
                 # an example using `more` rather than specifying `total`
-                (0, 20, True), {'active_page': 1, 'offset': 0, 'limit': 20, 'more': True, 'total': None,
-                                'links': [
-                                    {'page': 1, 'sub_offset': 0, 'active': True},
-                                    {'page': 2, 'sub_offset': 20},
-                                ]}
+                (0, 20, True),
+                Pagination(0, 20, True, None, 1, [
+                    {'page': 1, 'sub_offset': 0, 'active': True},
+                    {'page': 2, 'sub_offset': 20},
+                ])
             ),
             (
                 # No padding on the left
-                (0, 20, False, 256), {'active_page': 1, 'offset': 0, 'limit': 20, 'more': False, 'total': 256,
-                                      'links': [
-                                          {'page': 1, 'sub_offset': 0, 'active': True},
-                                          {'page': 2, 'sub_offset': 20},
-                                          {'page': 3, 'sub_offset': 40},
-                                          {'page': 4, 'sub_offset': 60},
-                                          {'page': 5, 'sub_offset': 80},
-                                          {'page': 6, 'sub_offset': 100},
-                                          {'page': 7, 'sub_offset': 120},
-                                          {'page': 8, 'sub_offset': 140},
-                                          {'page': 9, 'sub_offset': 160},
-                                          {'page': '..', 'disabled': True},
-                                          {'page': 13, 'sub_offset': 240},
-                                      ]}
+                (0, 20, False, 256),
+                Pagination(0, 20, False, 256, 1, [
+                    {'page': 1, 'sub_offset': 0, 'active': True},
+                    {'page': 2, 'sub_offset': 20},
+                    {'page': 3, 'sub_offset': 40},
+                    {'page': 4, 'sub_offset': 60},
+                    {'page': 5, 'sub_offset': 80},
+                    {'page': 6, 'sub_offset': 100},
+                    {'page': 7, 'sub_offset': 120},
+                    {'page': 8, 'sub_offset': 140},
+                    {'page': 9, 'sub_offset': 160},
+                    {'page': '..', 'disabled': True},
+                    {'page': 13, 'sub_offset': 240},
+                ])
             ),
             (
-                (80, 20, False, 256), {'active_page': 5, 'offset': 80, 'limit': 20, 'more': False, 'total': 256,
-                                       'links': [
-                                           {'page': 1, 'sub_offset': 0},
-                                           {'page': 2, 'sub_offset': 20},
-                                           {'page': 3, 'sub_offset': 40},
-                                           {'page': 4, 'sub_offset': 60},
-                                           {'page': 5, 'sub_offset': 80, 'active': True},
-                                           {'page': 6, 'sub_offset': 100},
-                                           {'page': 7, 'sub_offset': 120},
-                                           {'page': 8, 'sub_offset': 140},
-                                           {'page': 9, 'sub_offset': 160},
-                                           {'page': '..', 'disabled': True},
-                                           {'page': 13, 'sub_offset': 240},
-                                       ]}
+                (80, 20, False, 256),
+                Pagination(80, 20, False, 256, 5, [
+                    {'page': 1, 'sub_offset': 0},
+                    {'page': 2, 'sub_offset': 20},
+                    {'page': 3, 'sub_offset': 40},
+                    {'page': 4, 'sub_offset': 60},
+                    {'page': 5, 'sub_offset': 80, 'active': True},
+                    {'page': 6, 'sub_offset': 100},
+                    {'page': 7, 'sub_offset': 120},
+                    {'page': 8, 'sub_offset': 140},
+                    {'page': 9, 'sub_offset': 160},
+                    {'page': '..', 'disabled': True},
+                    {'page': 13, 'sub_offset': 240},
+                ])
             ),
             (
                 # Padding on both sides
-                (120, 20, False, 256), {'active_page': 7, 'offset': 120, 'limit': 20, 'more': False, 'total': 256,
-                                        'links': [
-                                            {'page': 1, 'sub_offset': 0},
-                                            {'page': '..', 'disabled': True},
-                                            {'page': 3, 'sub_offset': 40},
-                                            {'page': 4, 'sub_offset': 60},
-                                            {'page': 5, 'sub_offset': 80},
-                                            {'page': 6, 'sub_offset': 100},
-                                            {'page': 7, 'sub_offset': 120, 'active': True},
-                                            {'page': 8, 'sub_offset': 140},
-                                            {'page': 9, 'sub_offset': 160},
-                                            {'page': 10, 'sub_offset': 180},
-                                            {'page': 11, 'sub_offset': 200},
-                                            {'page': '..', 'disabled': True},
-                                            {'page': 13, 'sub_offset': 240},
-                                        ]}
+                (120, 20, False, 256),
+                Pagination(120, 20, False, 256, 7, [
+                    {'page': 1, 'sub_offset': 0},
+                    {'page': '..', 'disabled': True},
+                    {'page': 3, 'sub_offset': 40},
+                    {'page': 4, 'sub_offset': 60},
+                    {'page': 5, 'sub_offset': 80},
+                    {'page': 6, 'sub_offset': 100},
+                    {'page': 7, 'sub_offset': 120, 'active': True},
+                    {'page': 8, 'sub_offset': 140},
+                    {'page': 9, 'sub_offset': 160},
+                    {'page': 10, 'sub_offset': 180},
+                    {'page': 11, 'sub_offset': 200},
+                    {'page': '..', 'disabled': True},
+                    {'page': 13, 'sub_offset': 240},
+                ])
             ),
         ]
         for args, expected in tests:

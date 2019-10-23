@@ -2,7 +2,7 @@ import cherrypy
 from cherrypy.lib.static import serve_file
 from dictorm import DictDB
 
-from wrolpi.common import env, get_pagination, create_pagination_dict
+from wrolpi.common import env, get_pagination_with_generator, create_pagination_dict
 from wrolpi.plugins.videos.common import get_downloader_config, get_absolute_video_path, \
     get_video_description, get_video_info_json, UnknownFile
 from wrolpi.plugins.videos.search import video_search
@@ -122,7 +122,7 @@ class ChannelHandler(object):
         Channel = db['channel']
         channel = Channel.get_one(link=link)
         videos = channel['videos'].order_by('upload_date DESC, name ASC')
-        videos, pagination = get_pagination(videos, offset, limit, total=len(channel['videos']))
+        videos, pagination = get_pagination_with_generator(videos, offset, limit, total=len(channel['videos']))
 
         template = env.get_template('wrolpi/plugins/videos/templates/channel_videos.html')
         kwargs = _get_render_kwargs(db, link=link, linked_channel=channel, videos=videos,

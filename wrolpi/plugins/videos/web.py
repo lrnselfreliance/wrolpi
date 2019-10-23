@@ -162,9 +162,9 @@ def video_search(db: DictDB, search_str, offset, link):
     curs = db_conn.cursor()
 
     # Get the match count per channel
-    query = 'SELECT COUNT(*), channel_id FROM video WHERE textsearch @@ to_tsquery(%s) GROUP BY channel_id'
+    query = 'SELECT channel_id, COUNT(*) FROM video WHERE textsearch @@ to_tsquery(%s) GROUP BY channel_id'
     curs.execute(query, (search_str,))
-    channel_totals = {j: i for (i, j) in curs.fetchall()}
+    channel_totals = {i: j for (i, j) in curs.fetchall()}
     # Sum up all the matches for paging
     total = sum(channel_totals.values())
 
@@ -173,9 +173,10 @@ def video_search(db: DictDB, search_str, offset, link):
     curs.execute(query)
     channels = []
     for (id_, name, link) in curs.fetchall():
+        channel_total = channel_totals[id_] if id_ in channel_totals else 0
         d = {
             'id': id_,
-            'name': f'{name} ({channel_totals[id_]})',
+            'name': f'{name} ({channel_total})',
             'link': link,
             'search_link': f'/{PLUGIN_ROOT}/search?link={link}&search={search_str}',
         }

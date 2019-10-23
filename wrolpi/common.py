@@ -136,11 +136,13 @@ def get_pagination_with_generator(results_gen: ResultsGenerator, offset: int, li
     """Offset a results generator and create a pagination dict"""
     results_gen = results_gen.offset(offset)
     results = [i for (i, _) in zip(results_gen, range(limit))]
-    try:
-        next(results_gen)
-        more = True
-    except StopIteration:
-        more = False
+    more = None
+    if not total:
+        try:
+            next(results_gen)
+            more = True
+        except StopIteration:
+            more = False
 
     pagination = create_pagination_dict(offset, limit, more, total)
 

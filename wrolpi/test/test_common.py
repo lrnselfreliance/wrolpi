@@ -104,8 +104,25 @@ class TestCommon(unittest.TestCase):
                     {'page': 13, 'sub_offset': 240},
                 ])
             ),
+            (
+                # Padding on the left
+                (240, 20, None, 256),
+                Pagination(240, 20, None, 256, 13, [
+                    {'page': 1, 'sub_offset': 0},
+                    {'page': '..', 'disabled': True},
+                    {'page': 5, 'sub_offset': 80},
+                    {'page': 6, 'sub_offset': 100},
+                    {'page': 7, 'sub_offset': 120},
+                    {'page': 8, 'sub_offset': 140},
+                    {'page': 9, 'sub_offset': 160},
+                    {'page': 10, 'sub_offset': 180},
+                    {'page': 11, 'sub_offset': 200},
+                    {'page': 12, 'sub_offset': 220},
+                    {'page': 13, 'sub_offset': 240, 'active': True},
+                ])
+            ),
         ]
         for args, expected in tests:
             result = create_pagination_dict(*args)
-            msg = f'\n\nResult: {pformat(result)}\nExpected: {pformat(expected)}'
+            msg = f'\n\nArgs: {args}\nResult: {pformat(result.links)}\nExpected: {pformat(expected.links)}'
             self.assertEqual(result, expected, msg=msg)

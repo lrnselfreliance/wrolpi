@@ -2,9 +2,10 @@ import cherrypy
 from cherrypy.lib.static import serve_file
 from dictorm import DictDB
 
-from wrolpi.common import env, get_pagination
+from wrolpi.common import env, get_pagination, create_pagination_dict
 from wrolpi.plugins.videos.common import get_downloader_config, get_absolute_video_path, \
     get_video_description, get_video_info_json, UnknownFile
+from wrolpi.plugins.videos.search import video_search
 
 PLUGIN_ROOT = 'videos'
 
@@ -90,6 +91,17 @@ class ClientRoot(object):
     def caption(self, hash: str, db: DictDB, **kwargs):
         return self.serve_file('caption', hash, db, **kwargs)
 
+    @cherrypy.expose
+    @cherrypy.tools.db()
+    def search(self, search: str, db: DictDB, offset: int = None):
+        offset = int(offset) if offset else 0
+        results = video_search(db, search, offset)
+        template = env.get_template('wrolpi/plugins/videos/templates/search_video.html')
+        pagination = create_pagination_dict(offset, 20, total=results['total'])
+        kwargs = _get_render_kwargs(db, results=results, pagination=pagination)
+        html = template.render(**kwargs)
+        return html
+
 
 @cherrypy.popargs('link')
 class ChannelHandler(object):
@@ -110,7 +122,7 @@ class ChannelHandler(object):
         Channel = db['channel']
         channel = Channel.get_one(link=link)
         videos = channel['videos'].order_by('upload_date DESC, name ASC')
-        videos, pagination = get_pagination(videos, offset, limit)
+        videos, pagination = get_pagination(videos, offset, limit, total=len(channel['videos']))
 
         template = env.get_template('wrolpi/plugins/videos/templates/channel_videos.html')
         kwargs = _get_render_kwargs(db, link=link, linked_channel=channel, videos=videos,

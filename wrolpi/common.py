@@ -47,35 +47,85 @@ def sanitize_link(link: str) -> str:
     return new_link
 
 
-def create_pagination_dict(offset, limit, more) -> dict:
+MAX_LINKS = 9
+
+
+def create_pagination_pages(current_page, last_page, padding=MAX_LINKS):
+    """Create a list of page numbers.  The current page should have an equal amount of padding pages on each side of it.
+    If the padding pages would overflow (< 1 or > last_page), pad the opposite side.  Always include first and last
+    page.  Insert '..' when page numbers are skipped.
+
+        Examples:
+            >>> create_pagination_pages(9, 20, padding=9)
+            [1, '..', 5, 6, 7, 8, 9, 10, 11, 12, 13, '..', 20]
+            ^     ^               ^                  ^     ^-- last page
+            |     |               |- current page    |
+            |     |                                  |
+            |     |----------------------------------+---- padding on both sides
+            |
+            |-------- 1 is always included
+
+            >>> create_pagination_pages(1, 5, padding=9)
+            [1, 2, 3, 4, 5]
+            >>> create_pagination_dict(1, 12, padding=9)
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, '..', 12]
+    """
+    pages = [current_page, ]
+    while len(pages) < min(padding, last_page):
+        # Add to the front and back of the pages list only when we haven't overflowed
+        if pages[0] > 1:
+            pages.insert(0, pages[0] - 1)
+        if pages[-1] < last_page:
+            pages.append(pages[-1] + 1)
+    # Always include the first and last pages
+    if pages[-1] != last_page:
+        pages.append(last_page)
+    if pages[0] != 1:
+        pages.insert(0, 1)
+
+    # Insert skips if numbers were skipped if the list is long enough
+    if len(pages) > 2 and pages[1] != 2:
+        pages.insert(1, '..')
+    if len(pages) > 2 and pages[-1] - pages[-2] > 1:
+        pages.insert(-1, '..')
+    return pages
+
+
+def create_pagination_dict(offset, limit, more=None, total=None) -> dict:
     """Create the dict that the pagination template needs to build the pagination links."""
     pagination = dict()
     pagination['offset'] = offset
     pagination['limit'] = limit
     pagination['more'] = more
+    pagination['total'] = total
 
-    active_page = (offset // limit) + 1
-    pagination['active_page'] = active_page
+    current_page = (offset // limit) + 1
+    pagination['active_page'] = current_page
 
     links = []
-    for sub_offset in range(0, offset + limit, limit):
-        link = dict()
-        links.append(link)
-        link['sub_offset'] = sub_offset
-        link['page'] = (sub_offset // limit) + 1
-        if link['page'] == active_page:
-            link['active'] = True
+    if total:
+        last_page = (total // limit) + 1
+    elif more is not None:
+        last_page = ((offset + limit) / limit) + 1
+    else:
+        raise Exception('Cannot generate pagination without at least `more` or `total`.')
 
-    links.append({'sub_offset': offset + limit, 'page': 'Next'})
-    if not more:
-        links[-1]['disabled'] = True
+    pages = create_pagination_pages(current_page, last_page, MAX_LINKS)
+    for page in pages:
+        if isinstance(page, int):
+            sub_offset = int(page * limit) - limit
+            links.append({'sub_offset': sub_offset, 'page': page})
+        else:
+            links.append({'disabled': True, 'page': page})
+        if current_page == page:
+            links[-1]['active'] = True
 
     pagination['links'] = links
 
     return pagination
 
 
-def get_pagination(results_gen: ResultsGenerator, offset: int, limit: int = 20) -> Tuple[list, dict]:
+def get_pagination(results_gen: ResultsGenerator, offset: int, limit: int = 20, total=None) -> Tuple[list, dict]:
     """Offset a results generator and create a pagination dict"""
     results_gen = results_gen.offset(offset)
     results = [i for (i, _) in zip(results_gen, range(limit))]
@@ -85,6 +135,6 @@ def get_pagination(results_gen: ResultsGenerator, offset: int, limit: int = 20) 
     except StopIteration:
         more = False
 
-    pagination = create_pagination_dict(offset, limit, more)
+    pagination = create_pagination_dict(offset, limit, more, total)
 
     return results, pagination

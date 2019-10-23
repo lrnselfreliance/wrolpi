@@ -43,10 +43,16 @@ def test_db_wrapper(func):
                 def putconn(self, conn, *a, **kw):
                     pass
 
-            testing_db_conn = psycopg2.connect(
-                dbname=testing_db_name,  # use that new testing db!
-                **db_args
-            )
+            # Connect to the new testing DB.  Reset all tables and sequences
+            testing_db_conn = psycopg2.connect(dbname=testing_db_name, **db_args)
+            testing_curs = testing_db_conn.cursor()
+            testing_curs.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+            table_names = [i for (i,) in testing_curs.fetchall()]
+            for table in table_names:
+                testing_curs.execute(f'TRUNCATE {table} RESTART IDENTITY CASCADE')
+            testing_db_conn.commit()
+            testing_curs.execute('SELECT count(*) from video')
+
             try:
                 testing_db = DictDB(testing_db_conn)
                 setup_relationships(testing_db)

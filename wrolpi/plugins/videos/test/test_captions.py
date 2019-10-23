@@ -1,4 +1,7 @@
 import unittest
+from pathlib import Path
+
+import mock
 
 from wrolpi.plugins.videos import captions
 from wrolpi.test.common import test_db_wrapper
@@ -6,8 +9,8 @@ from wrolpi.tools import get_db_context
 
 
 class TestCaption(unittest.TestCase):
-    vtt_path1 = 'test/example1.en.vtt'
-    vtt_path2 = 'test/example2.en.vtt'
+    vtt_path1 = Path('test/example1.en.vtt').absolute()
+    vtt_path2 = Path('test/example2.en.vtt').absolute()
 
     def test_example_en_vtt(self):
         expected = ['okay welcome to this session this is',
@@ -35,10 +38,12 @@ class TestCaption(unittest.TestCase):
     def test_process_captions(self):
         with get_db_context() as (db_conn, db):
             Video = db['video']
-            video1 = Video(title='scream', caption_path=self.vtt_path1).flush()
-            captions.process_captions(video1)
-            video2 = Video(title='bar', caption_path=self.vtt_path2).flush()
-            captions.process_captions(video2)
+            video1 = Video(title='scream', caption_path=str(self.vtt_path1)).flush()
+            with mock.patch('wrolpi.plugins.videos.captions.get_absolute_video_caption', lambda *a: self.vtt_path1):
+                captions.process_captions(video1)
+            video2 = Video(title='bar', caption_path=str(self.vtt_path2)).flush()
+            with mock.patch('wrolpi.plugins.videos.captions.get_absolute_video_caption', lambda *a: self.vtt_path2):
+                captions.process_captions(video2)
 
             v1_id = video1['id']
             v2_id = video2['id']
@@ -53,7 +58,7 @@ class TestCaption(unittest.TestCase):
             curs = db_conn.cursor()
 
             def select_textsearch(*args):
-                curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s)', args)
+                curs.execute('SELECT id FROM video WHERE textsearch @@ to_tsquery(%s) ORDER BY id', args)
 
             select_textsearch('sessions')
             self.assertEqual(curs.fetchall(), [(v1_id,)])

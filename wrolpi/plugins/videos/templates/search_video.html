@@ -1,9 +1,13 @@
-<h1>Video Results</h1>
+{% extends "wrolpi/templates/base.html" %}
 
-<div class="card-deck">
-{% for video in items %}
-    {% set title=video['title'] or video['name'] %}
-    {%  include "wrolpi/plugins/videos/templates/video_card.html" %}
-{% endfor %}
-</div>
-{% include "wrolpi/templates/pagination.html" %}
+{% block body %}
+    <h1>Video Search Results</h1>
+
+    <div class="card-deck">
+        {% set items=results['items'] %}
+        {% for video in items %}
+            {% include "wrolpi/plugins/videos/templates/video_card.html" %}
+        {% endfor %}
+    </div>
+    {% include "wrolpi/templates/pagination.html" %}
+{% endblock %}

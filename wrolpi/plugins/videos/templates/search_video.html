@@ -6,7 +6,7 @@
 
     <div class="card-deck">
         {% set items=results['items'] %}
-        {% for video in items %}
+        {% for video in videos %}
             {% include "wrolpi/plugins/videos/templates/video_card.html" %}
         {% endfor %}
     </div>

@@ -172,13 +172,13 @@ def video_search(db: DictDB, search_str, offset, link):
     query = 'SELECT id, name, link FROM channel ORDER BY LOWER(name)'
     curs.execute(query)
     channels = []
-    for (id_, name, link) in curs.fetchall():
+    for (id_, name, link_) in curs.fetchall():
         channel_total = channel_totals[id_] if id_ in channel_totals else 0
         d = {
             'id': id_,
             'name': f'{name} ({channel_total})',
-            'link': link,
-            'search_link': f'/{PLUGIN_ROOT}/search?link={link}&search={search_str}',
+            'link': link_,
+            'search_link': f'/{PLUGIN_ROOT}/search?link={link_}&search={search_str}',
         }
         channels.append(d)
 
@@ -202,7 +202,7 @@ def video_search(db: DictDB, search_str, offset, link):
 
     results = {
         'template': template,
-        'items': videos,
+        'videos': videos,
         'total': total,
         'channels': channels,
     }

@@ -31,7 +31,7 @@ class DBTool(cherrypy.Tool):
 
     def teardown_db(self):
         try:
-            self.pool.putconn(self.conn, key=self.key, close=False)
+            self.pool.putconn(self.conn, key=self.key, close=True)
         except KeyError:
             # Connection already returned?
             logger.debug(f'Failed to return db connection {self.key}')
@@ -90,7 +90,7 @@ def get_db_context(commit=False) -> Tuple[psycopg2.connect, DictDB]:
     else:
         db_conn.rollback()
 
-    db_pool.putconn(db_conn, key=key, close=False)
+    db_pool.putconn(db_conn, key=key, close=True)
 
 
 TOOLS_SETUP = False

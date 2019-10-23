@@ -165,8 +165,6 @@ def video_search(db: DictDB, search_str, offset, link):
     query = 'SELECT channel_id, COUNT(*) FROM video WHERE textsearch @@ to_tsquery(%s) GROUP BY channel_id'
     curs.execute(query, (search_str,))
     channel_totals = {i: j for (i, j) in curs.fetchall()}
-    # Sum up all the matches for paging
-    total = sum(channel_totals.values())
 
     # Get the names of each channel, add the counts respectively
     query = 'SELECT id, name, link FROM channel ORDER BY LOWER(name)'
@@ -184,15 +182,21 @@ def video_search(db: DictDB, search_str, offset, link):
 
     # Get the search results
     if link:
+        # The results are restricted to a single channel
         curs.execute('SELECT id FROM channel WHERE link = %s', (link,))
         (channel_id,) = curs.fetchone()
         query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)) FROM video WHERE ' \
                 'textsearch @@ to_tsquery(%s) AND channel_id=%s ORDER BY 2 OFFSET %s LIMIT 20'
         curs.execute(query, (search_str, search_str, channel_id, offset))
+        total = channel_totals[channel_id]
     else:
+        # The results are for all channels
         query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)) FROM video WHERE ' \
                 'textsearch @@ to_tsquery(%s) ORDER BY 2 OFFSET %s LIMIT 20'
         curs.execute(query, (search_str, search_str, offset))
+        # Sum up all the matches for paging
+        total = sum(channel_totals.values())
+
     results = list(curs.fetchall())
 
     videos = []

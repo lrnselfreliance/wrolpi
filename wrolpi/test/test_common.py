@@ -1,4 +1,5 @@
 import unittest
+from pprint import pformat
 
 from wrolpi.common import create_pagination_pages, create_pagination_dict, Pagination
 
@@ -45,9 +46,16 @@ class TestCommon(unittest.TestCase):
                 ])
             ),
             (
+                # more is False, should only be one link
+                (0, 20, False),
+                Pagination(0, 20, False, None, 1, [
+                    {'page': 1, 'sub_offset': 0, 'active': True},
+                ])
+            ),
+            (
                 # No padding on the left
-                (0, 20, False, 256),
-                Pagination(0, 20, False, 256, 1, [
+                (0, 20, None, 256),
+                Pagination(0, 20, None, 256, 1, [
                     {'page': 1, 'sub_offset': 0, 'active': True},
                     {'page': 2, 'sub_offset': 20},
                     {'page': 3, 'sub_offset': 40},
@@ -62,8 +70,8 @@ class TestCommon(unittest.TestCase):
                 ])
             ),
             (
-                (80, 20, False, 256),
-                Pagination(80, 20, False, 256, 5, [
+                (80, 20, None, 256),
+                Pagination(80, 20, None, 256, 5, [
                     {'page': 1, 'sub_offset': 0},
                     {'page': 2, 'sub_offset': 20},
                     {'page': 3, 'sub_offset': 40},
@@ -79,8 +87,8 @@ class TestCommon(unittest.TestCase):
             ),
             (
                 # Padding on both sides
-                (120, 20, False, 256),
-                Pagination(120, 20, False, 256, 7, [
+                (120, 20, None, 256),
+                Pagination(120, 20, None, 256, 7, [
                     {'page': 1, 'sub_offset': 0},
                     {'page': '..', 'disabled': True},
                     {'page': 3, 'sub_offset': 40},
@@ -99,4 +107,5 @@ class TestCommon(unittest.TestCase):
         ]
         for args, expected in tests:
             result = create_pagination_dict(*args)
-            self.assertEqual(result, expected)
+            msg = f'\n\nResult: {pformat(result)}\nExpected: {pformat(expected)}'
+            self.assertEqual(result, expected, msg=msg)

@@ -125,6 +125,9 @@ def create_pagination_dict(offset, limit, more=None, total=None) -> Pagination:
         if current_page == page:
             links[-1]['active'] = True
 
+    if more is False:
+        del links[-1]
+
     return pagination
 
 

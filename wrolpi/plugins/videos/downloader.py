@@ -279,6 +279,7 @@ def download_all_missing_videos(db_conn, db):
                 elif source_id:
                     channel['skip_download_videos'] = [missing_video['id'], ]
                 channel.flush()
+                db_conn.commit()
 
             yield f'Failed to download "{missing_video["title"]}", see logs for details...'
             continue

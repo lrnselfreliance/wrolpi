@@ -11,7 +11,7 @@
             <field name="2">root</field>
             <next>
               <block type="runcommand" id="K}a;=gUx%ctF3|c:^{aG">
-                <field name="1">/tmp/install.sh</field>
+                <field name="1">/tmp/install.sh | tee /tmp/install.log</field>
                 <field name="2">root</field>
               </block>
             </next>

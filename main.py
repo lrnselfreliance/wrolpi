@@ -10,7 +10,7 @@ import logging
 import sys
 
 from wrolpi import web
-from wrolpi.cmd import update_db, import_settings_configs, save_settings_configs
+from wrolpi.cmd import import_settings_configs, save_settings_configs
 from wrolpi.common import logger
 from wrolpi.user_plugins import PLUGINS
 
@@ -30,8 +30,6 @@ def main():
     parser.add_argument('-v', '--verbose', action='count')
     parser.add_argument('-c', '--config', default=CONFIG_PATH,
                         help='The config file used to start WROLPi.')
-    parser.add_argument('-d', '--db', action='store_true', default=False,
-                        help='Initialize the database (all data will be lost).')
     parser.add_argument('-s', '--save-config', action='store_const', const=CONFIG_PATH,
                         help=f'Save the settings to this config file.  DEFAULT: {CONFIG_PATH}')
 
@@ -63,9 +61,6 @@ def main():
     if args.sub_commands:
         plugin_main = choices_to_mains[args.sub_commands]
         return plugin_main(args)
-    elif args.db:
-        return_code = update_db(PLUGINS)
-        logger.info('DB updated.')
     elif args.save_config:
         return_code = save_settings_configs(PLUGINS)
         logger.info('Config written.')

@@ -83,8 +83,13 @@ def find_missing_channel_videos(channel: Dict) -> dict:
     info_json = channel['info_json']
     entries = info_json['entries']
     directory = get_absolute_channel_directory(channel['directory'])
+    skip_download_videos = channel['skip_download_videos']
     for entry in entries:
         source_id = entry['id']
+        if skip_download_videos and source_id in skip_download_videos:
+            # This video previously failed to download, skip it
+            continue
+
         matching_video_files = find_matching_video_files(directory, source_id)
         try:
             next(matching_video_files)
@@ -108,7 +113,7 @@ def get_channel_video_count(channel: Dict) -> int:
     return len(list(find_matching_video_files(channel['directory'], '')))
 
 
-def find_all_missing_videos(db: DictDB, max_downloads_per_channel: int = None) -> Tuple[Dict, dict]:
+def find_all_missing_videos(db: DictDB) -> Tuple[Dict, dict]:
     """Search recursively for each video identified in the channel's JSON package.  If a video's file can't
     be found, yield it.
 
@@ -117,17 +122,8 @@ def find_all_missing_videos(db: DictDB, max_downloads_per_channel: int = None) -
     Channel = db['channel']
     channels = Channel.get_where(Channel['info_json'].IsNotNull())
     for channel in channels:
-        if max_downloads_per_channel:
-            # Don't download more videos than the max limit
-            video_count = get_channel_video_count(channel)
-            if video_count > max_downloads_per_channel:
-                continue
-
         video_count = 0
         for missing_video in find_missing_channel_videos(channel):
-            if max_downloads_per_channel and video_count >= max_downloads_per_channel:
-                logger.debug(f'Video count in {channel["directory"]} exceeds max downloads per channel.')
-                break
             yield channel, missing_video
             video_count += 1
 
@@ -205,7 +201,8 @@ NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
                          r'(jpg|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
 
 
-def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotency: str = None, skip_captions=False) -> Dict:
+def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotency: str = None,
+                 skip_captions=False) -> Dict:
     """Find and insert a video into the DB.  Also, find any meta-files near the video file and store them."""
     Video = db['video']
     channel_dir = get_absolute_channel_directory(channel['directory'])
@@ -252,16 +249,37 @@ def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
     return video
 
 
-def download_all_missing_videos(db_conn, db, count_limit=0):
+def _skip_download(error):
+    """Return True if the error is unrecoverable and the video should be skipped in the future."""
+    if 'requires payment' in str(error):
+        return True
+    elif 'Content Warning' in str(error):
+        return True
+    elif 'Did not get any data blocks' in str(error):
+        return True
+    return False
+
+
+def download_all_missing_videos(db_conn, db):
     """Find any videos identified by the info packet that haven't yet been downloaded, download them."""
-    wrolpi_config = get_downloader_config()
-    max_downloads_per_channel = int(wrolpi_config.get('max_downloads_per_channel', count_limit))
-    missing_videos = find_all_missing_videos(db, max_downloads_per_channel=max_downloads_per_channel)
+    missing_videos = find_all_missing_videos(db)
     for channel, missing_video in missing_videos:
         try:
             video_path = download_video(channel, missing_video)
         except Exception as e:
             logger.warning(f'Failed to download "{missing_video["title"]}" with exception: {e}')
+            if _skip_download(e):
+                # The video failed to download, and the error will never be fixed.  Skip it forever.
+                skip_download_videos = channel['skip_download_videos']
+                source_id = missing_video.get('id')
+                if skip_download_videos and source_id:
+                    logger.warn(f'Adding video {source_id} to skip list for this channel.  WROLPi will not '
+                                f'attempt to download it again.')
+                    channel['skip_download_videos'].append(missing_video['id'])
+                elif source_id:
+                    channel['skip_download_videos'] = [missing_video['id'], ]
+                channel.flush()
+
             yield f'Failed to download "{missing_video["title"]}", see logs for details...'
             continue
         insert_video(db, video_path, channel, None)
@@ -271,12 +289,9 @@ def download_all_missing_videos(db_conn, db, count_limit=0):
 
 def main(args=None):
     """Find and download any missing videos.  Parse any arguments passed by the cmd-line."""
-    count_limit = 0
-    if args.count_limit:
-        count_limit = args.count_limit
     with get_db_context(commit=True) as (db_conn, db):
         for status in update_channels(db_conn, db):
             logger.info(str(status))
-        for status in download_all_missing_videos(db_conn, db, count_limit):
+        for status in download_all_missing_videos(db_conn, db):
             logger.info(status)
     return 0

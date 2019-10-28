@@ -2,22 +2,17 @@
   xmlns="http://www.w3.org/1999/xhtml">
   <block type="onfirstboot" id="2yZPK.+=j%(opJn*g%*m" x="17" y="28">
     <next>
-      <block type="packageinstall" id="PIpVUNasdaGV:a.N1j6y">
-        <field name="1">git</field>
+      <block type="downloadfile" id="v8^S[Ni8uapdh(oE+rC~">
+        <field name="1">https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/wrolpi/install.sh</field>
+        <field name="2">/tmp/install.sh</field>
         <next>
-          <block type="runcommand" id="JFB)I]kT#3Ag,dp^NZS~">
-            <field name="1">git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi</field>
+          <block type="runcommand" id="mH%LN=]^2;Z|*8meLWUC">
+            <field name="1">chmod +x /tmp/install.sh</field>
             <field name="2">root</field>
             <next>
-              <block type="runcommand" id="t.8]Z.ij]4z]zK@vZJGa">
-                <field name="1">chown -R pi:pi /opt/wrolpi</field>
+              <block type="runcommand" id="K}a;=gUx%ctF3|c:^{aG">
+                <field name="1">/tmp/install.sh</field>
                 <field name="2">root</field>
-                <next>
-                  <block type="runcommand" id="K}a;=gUx%ctF3|c:^{aG">
-                    <field name="1">/opt/wrolpi/wrolpi/install.sh</field>
-                    <field name="2">root</field>
-                  </block>
-                </next>
               </block>
             </next>
           </block>

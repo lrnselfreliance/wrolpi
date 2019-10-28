@@ -2,7 +2,7 @@
 # This script will install WROLPi to `/opt/wrolpi` on a fresh/empty Raspberry Pi.  It is expected to be run once to
 # install, and any other run will update WROLPi.  This script assumes it will be run as the `root` user.
 
-set -x
+set -e
 
 echo "Installing git"
 apt update
@@ -33,9 +33,9 @@ python3 -m venv /opt/wrolpi/venv
 
 echo "Installing python requirements files"
 shopt -s globstar nullglob
-for req in /opt/wrolpi/**/requirements.txt
+for file in /opt/wrolpi/**/requirements.txt
 do
-  pip install -r "${req}"
+  pip install -r "${file}"
 done
 
 echo "Building docker containers"

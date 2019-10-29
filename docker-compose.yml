@@ -16,8 +16,6 @@ services:
       - 8080:8080  # for local development
     volumes:
       - .:/opt/wrolpi
-    environment:
-      - DOCKER=true  # tell the python code that its dockerized
 #  openstreetmap:
 #    container_name: : openstreetmap
 #    build:

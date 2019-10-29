@@ -15,12 +15,12 @@ from wrolpi.common import logger
 from wrolpi.user_plugins import PLUGINS
 
 
-def update_choices_to_mains(sub_commands, choices_to_mains, main):
+def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):
     """Associate a sub-command with the provided main, but only if that sub-command hasn't already been claimed
-    by another main."""
+    by another main.  This is a work-around so plugins can define their down cmd-line arguments."""
     for choice in sub_commands.choices:
         if choice not in choices_to_mains:
-            choices_to_mains[choice] = main
+            choices_to_mains[choice] = sub_main
 
 
 def main():

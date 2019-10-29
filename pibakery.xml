@@ -3,7 +3,7 @@
   <block type="onfirstboot" id="2yZPK.+=j%(opJn*g%*m" x="17" y="28">
     <next>
       <block type="downloadfile" id="v8^S[Ni8uapdh(oE+rC~">
-        <field name="1">https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/wrolpi/install.sh</field>
+        <field name="1">https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/install.sh</field>
         <field name="2">/tmp/install.sh</field>
         <next>
           <block type="runcommand" id="mH%LN=]^2;Z|*8meLWUC">

@@ -2,20 +2,29 @@
 # This script will install WROLPi to `/opt/wrolpi` on a fresh/empty Raspberry Pi.  It is expected to be run once to
 # install, and any subsequent runs will update WROLPi.  This script assumes it will be run as the `root` user.
 
+# Installation steps are roughly:
+#  * Install git and kernel headers
+#  * Clone WROLPi repo
+#  * Install Python 3.7 or 3.5
+#  * Setup virtual environment
+#  * Install docker-ce and docker-compose
+#  * Build docker containers
+#  * Install and enable systemd configs
+
 set -x
 set -e
 
-# Installing git
+# Install git
 apt update
 apt install -y git raspberrypi-kernel-headers
 
-# Getting the latest WROLPi code
+# Get the latest WROLPi code
 git --version
 git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi ||
-  cd /opt/wrolpi || exit 1
+  (cd /opt/wrolpi && git pull origin master) || exit 1
 
-# Installing Python 3.7
-python3 ||
+# Install Python 3.7 or 3.5
+python3 --version ||
   apt install -y python3.7 python3.7-dev python3.7-doc python3.7-venv ||
   apt install -y python3.5 python3.5-dev python3.5-doc python3.5-venv
 
@@ -28,11 +37,8 @@ pip3 --version || (
 python3 -m venv /opt/wrolpi/venv
 . /opt/wrolpi/venv/bin/activate
 
-# Installing python requirements files
-shopt -s globstar nullglob
-for file in /opt/wrolpi/**/requirements.txt; do
-  pip install --upgrade -r "${file}"
-done
+# Install python requirements files
+find /opt/wrolpi -name requirements.txt -exec pip install --upgrade -r {} \;
 
 # Any further pip commands will be global
 deactivate
@@ -41,28 +47,21 @@ deactivate
 apt-get remove docker docker-engine docker.io containerd runc || : # ignore failures
 # Installing docker repo and keys
 [ -f /etc/apt/sources.list.d/wrolpi-docker.list ] || (
-  # Docker repo not installed, install it
+  # Docker repo not installed, install it.  Update the package list with these new repos.
   apt install -y apt-transport-https ca-certificates curl gnupg-agent software-properties-common &&
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add - &&
-    echo "deb [arch=armhf] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list
+    echo "deb [arch=armhf] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list &&
+    apt update
 )
-apt update
-# Installing docker-ce & docker-compose
+# Install docker-ce & docker-compose
 apt install -y docker-ce docker-ce-cli containerd.io
 pip3 install docker-compose
 
-# Installing docker-compose configs
-[ -f /etc/systemd/system/wrolpi.service ] || (
-  cp /opt/wrolpi/wrolpi.service /etc/systemd/system/
-)
+# Install docker-compose configs
+cp -f /opt/wrolpi/wrolpi.service /etc/systemd/system/
 
-# Link to the entire wrolpi directory so docker-compose can find the Dockerfile(s)
-if [ -d /etc/docker/compose ] && [ ! -L /etc/docker/compose/wrolpi ]; then
-  ln -s /opt/wrolpi /etc/docker/compose/wrolpi
-fi
+# Build docker containers
+docker-compose -f /opt/wrolpi/docker-compose.yml build --parallel
 
-# Building docker containers
-docker-compose -f /etc/docker/compose/wrolpi/docker-compose.yml build --parallel
-
-# Starting WROLPi
+# Enable WROLPi on startup
 systemctl enable wrolpi.service

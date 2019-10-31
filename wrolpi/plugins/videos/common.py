@@ -7,7 +7,7 @@ from typing import Union, Tuple
 import yaml
 from dictorm import And, Or, Dict
 
-from wrolpi.common import sanitize_link
+from wrolpi.common import sanitize_link, logger
 from wrolpi.tools import get_db_context
 
 MY_DIR = Path(__file__).parent
@@ -19,7 +19,12 @@ REQUIRED_OPTIONS = ['name', 'directory']
 
 
 def get_config() -> dict:
-    with open(CONFIG_PATH, 'rt') as fh:
+    config_path = CONFIG_PATH
+    if not config_path.exists():
+        logger.warn(f'No local video config file at {CONFIG_PATH}.  Copy example.yaml to local.yaml and configure it.')
+        config_path = EXAMPLE_CONFIG_PATH
+
+    with open(config_path, 'rt') as fh:
         config = yaml.load(fh, Loader=yaml.Loader)
     return config
 

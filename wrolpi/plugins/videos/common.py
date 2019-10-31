@@ -33,28 +33,28 @@ def get_downloader_config() -> dict:
 
 def get_channels_config() -> dict:
     config = get_config()
-    download_collection = config['download_collection']
-    return download_collection
+    channels = config['channels']
+    return channels
 
 
 def save_settings_config(downloader=None):
     """Save the channel settings to the config."""
     config = dict()
     config['downloader'] = downloader or get_downloader_config()
-    download_collection = config['download_collection'] = {}
+    config_channels = config['channels'] = {}
 
     # Add channel sections
     with get_db_context() as (db_conn, db):
         Channel = db['channel']
         channels = Channel.get_where().order_by('LOWER(name) ASC')
         for channel in channels:
-            section = download_collection[channel['link']] = {}
+            section = config_channels[channel['link']] = {}
             section['name'] = channel['name'] or ''
             section['url'] = channel['url'] or ''
             section['directory'] = channel['directory'] or ''
             section['match_regex'] = channel['match_regex'] or ''
 
-    with open(CONFIG_PATH, 'wt') as fh:
+    with open(str(CONFIG_PATH), 'wt') as fh:
         yaml.dump(config, fh)
     return 0
 

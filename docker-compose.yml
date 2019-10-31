@@ -19,10 +19,8 @@ services:
       # Uncomment the following line and change the drive to your drive or media directory.  Change your local.yaml
       # config to match this directory.
       # - /media/8TB:/opt/wrolpi_media
-#  openstreetmap:
-#    container_name: : openstreetmap
-#    build:
-#      context: .
-#      dockerfile: docker/openstreetmap/Dockerfile
-#    volumes:
-#      - /media/8TB/openstreetmap:/var/lib/postgresql
+  map:
+    container_name: openstreetmap
+    build:
+      context: .
+      dockerfile: docker/openstreetmap/Dockerfile

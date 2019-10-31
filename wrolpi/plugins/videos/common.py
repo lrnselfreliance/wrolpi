@@ -13,8 +13,6 @@ from wrolpi.tools import get_db_context
 MY_DIR: Path = Path(__file__).parent
 CONFIG_PATH = MY_DIR / 'local.yaml'
 EXAMPLE_CONFIG_PATH = MY_DIR / 'example.yaml'
-DOWNLOADER_SECTION = 'downloader'
-SPECIAL_CONFIG_SECTIONS = ['DEFAULT', DOWNLOADER_SECTION]
 REQUIRED_OPTIONS = ['name', 'directory']
 
 
@@ -27,7 +25,7 @@ def get_config() -> dict:
 
 def get_downloader_config() -> dict:
     config = get_config()
-    downloader = config[DOWNLOADER_SECTION]
+    downloader = config['downloader']
     return downloader
 
 

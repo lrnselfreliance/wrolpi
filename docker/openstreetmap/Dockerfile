@@ -6,22 +6,24 @@ RUN apt update
 # Install tzdata with UTC to avoid being asked for our timezone
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y tzdata
 # TODO could postgres be moved to a dedicated container?
-RUN apt install -y apache2 apache2-dev autoconf build-essential bzip2 cmake curl g++ gdal-bin git-core libagg-dev \
-  libboost-all-dev libboost-dev libboost-filesystem-dev libboost-system-dev libbz2-dev libcairo-dev libcairomm-1.0-dev \
-  libexpat1-dev libfreetype6-dev libgdal-dev libgeos-dev libgeos++-dev libgeotiff-epsg libicu-dev liblua5.1-dev \
-  liblua5.2-dev libmapnik-dev libpq-dev libproj-dev libprotobuf-c0-dev libtiff5-dev libtool libxml2-dev lua5.1 lua5.2 \
-  make mapnik-utils munin munin-node nodejs npm postgis postgresql postgresql-10-postgis-2.4 \
-  postgresql-10-postgis-scripts postgresql-contrib protobuf-c-compiler python-mapnik sudo tar ttf-unifont unzip wget \
-  zlib1g-dev
+# Install dependencies
+RUN apt install -y apache2 apache2-dev autoconf build-essential bzip2 cmake curl fonts-noto-cjk fonts-noto-hinted \
+  fonts-noto-unhinted g++ gdal-bin git-core libagg-dev libboost-all-dev libboost-dev libboost-filesystem-dev \
+  libboost-system-dev libbz2-dev libcairo-dev libcairomm-1.0-dev libexpat1-dev libfreetype6-dev libgdal-dev \
+  libgeos++-dev libgeos-dev libgeotiff-epsg libicu-dev liblua5.1-dev liblua5.2-dev libmapnik-dev libpq-dev libproj-dev \
+  libprotobuf-c0-dev libtiff5-dev libtool libxml2-dev lua5.1 lua5.2 make mapnik-utils munin munin-node nodejs npm \
+  postgis postgresql postgresql-10-postgis-2.4 postgresql-10-postgis-scripts postgresql-contrib protobuf-c-compiler \
+  python-mapnik sudo tar ttf-unifont unzip wget zlib1g-dev
 
-# Configuring the database
-RUN /etc/init.d/postgres start
+# Configure the database
+RUN sudo -iu postgres /usr/lib/postgresql/10/bin/postgres
 RUN sudo -iu postgres createuser -s renderaccount
 RUN sudo -iu postgres createdb -E UTF8 -O renderaccount gis
-RUN sudo -iu postgres psql gis postgres -c 'CREATE EXTENSION postgis; CREATE EXTENSION hstore; ALTER TABLE geometry_columns OWNER TO renderaccount; ALTER TABLE spatial_ref_sys OWNER TO renderaccount;'
-RUN useradd -m renderaccount
+RUN sudo -iu postgres psql gis postgres -c 'CREATE EXTENSION postgis; CREATE EXTENSION hstore; ALTER TABLE ' \
+  'geometry_columns OWNER TO renderaccount; ALTER TABLE spatial_ref_sys OWNER TO renderaccount;'
 
-# Switch to the new user
+# Switch to a new user
+RUN useradd -m renderaccount
 RUN sudo su - renderaccount
 
 # Install osm2pgsql

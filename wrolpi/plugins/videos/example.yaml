@@ -8,7 +8,7 @@ downloader:
   max_downloads_per_channel: 0
   nooverwrites: true
   quiet: false
-  video_root_directory: /mnt/external_drive  # this must be an absolute path!
+  video_root_directory: /opt/wrolpi_media/test/example_videos  # this must be an absolute path!
   writeautomaticsub: true
   writeinfojson: true
   writesubtitles: true

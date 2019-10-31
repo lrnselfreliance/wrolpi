@@ -25,7 +25,7 @@ class TestAPI(unittest.TestCase):
         copyfile(EXAMPLE_CONFIG_PATH, CONFIG_PATH.name)
         # Setup the testing video root directory
         config = get_config()
-        config['downloader']['video_root_directory'] = cwd / 'test'
+        config['downloader']['video_root_directory'] = cwd / 'test/example_videos'
         with open(CONFIG_PATH.name, 'wt') as fh:
             fh.write(yaml.dump(config))
 

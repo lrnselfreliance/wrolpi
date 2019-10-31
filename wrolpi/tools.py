@@ -1,4 +1,3 @@
-import os
 import threading
 from contextlib import contextmanager
 from threading import Semaphore
@@ -9,7 +8,7 @@ import psycopg2 as psycopg2
 from dictorm import DictDB
 from psycopg2.pool import ThreadedConnectionPool
 
-from wrolpi.common import logger, setup_relationships
+from wrolpi.common import logger, setup_relationships, DOCKERIZED
 
 
 class DBTool(cherrypy.Tool):
@@ -63,9 +62,10 @@ def get_db(dbname=None):
         host='127.0.0.1',
         port=54321,
     )
-    if os.environ.get('DOCKER', '').lower().startswith('t'):
+    if DOCKERIZED:
         # Deployed in docker, use the docker postgres
         db_args['host'] = 'postgres'
+        db_args['port'] = 5432
 
     global POOL_SINGLETON
     if not POOL_SINGLETON:

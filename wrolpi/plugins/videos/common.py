@@ -7,10 +7,10 @@ from typing import Union, Tuple
 import yaml
 from dictorm import And, Or, Dict
 
-from wrolpi.common import sanitize_link, logger
+from wrolpi.common import sanitize_link, DOCKERIZED
 from wrolpi.tools import get_db_context
 
-MY_DIR = Path(__file__).parent
+MY_DIR: Path = Path(__file__).parent
 CONFIG_PATH = MY_DIR / 'local.yaml'
 EXAMPLE_CONFIG_PATH = MY_DIR / 'example.yaml'
 DOWNLOADER_SECTION = 'downloader'
@@ -19,12 +19,8 @@ REQUIRED_OPTIONS = ['name', 'directory']
 
 
 def get_config() -> dict:
-    config_path = CONFIG_PATH
-    if not config_path.exists():
-        logger.warn(f'No local video config file at {CONFIG_PATH}.  Copy example.yaml to local.yaml and configure it.')
-        config_path = EXAMPLE_CONFIG_PATH
-
-    with open(config_path, 'rt') as fh:
+    config_path = CONFIG_PATH if Path(CONFIG_PATH).exists() else EXAMPLE_CONFIG_PATH
+    with open(str(config_path), 'rt') as fh:
         config = yaml.load(fh, Loader=yaml.Loader)
     return config
 
@@ -238,4 +234,8 @@ def get_conflicting_channels(db, id=None, url=None, name_=None, link=None, direc
 def verify_config():
     video_root_directory = get_video_root()
     if not video_root_directory.exists() or not video_root_directory.is_absolute():
-        raise Exception(f'Video root directory is not absolute, or does not exist! {video_root_directory}')
+        if DOCKERIZED:
+            raise Exception(f'Video root directory is not absolute, or does not exist! {video_root_directory}  '
+                            f'Have you mounted your media directory in docker-compose.yml?')
+        raise Exception(f'Video root directory is not absolute, or does not exist! {video_root_directory}  '
+                        f'Have you updated your local.yaml with the video_root_directory?')

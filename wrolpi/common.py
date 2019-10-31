@@ -1,5 +1,6 @@
 import configparser
 import logging
+import os
 import string
 import sys
 from typing import Tuple
@@ -19,6 +20,7 @@ env = Environment(loader=FileSystemLoader('.'))
 
 CONFIG_PATH = 'config.cfg'
 WROLPI_CONFIG_SECTION = 'WROLPi'
+DOCKERIZED = True if os.environ.get('DOCKER', '').startswith('t') else False
 
 
 def get_wrolpi_config():

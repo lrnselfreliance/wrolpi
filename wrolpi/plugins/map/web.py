@@ -9,7 +9,7 @@ from dictorm import DictDB
 
 from wrolpi.common import env
 # This is your link suffix.  It will be used to link to your web classes here.
-from wrolpi.plugins.map.common import get_config
+from wrolpi.plugins.map.common import get_downloads
 
 PLUGIN_ROOT = 'map'
 # Your plugin can be hidden on the navbar
@@ -42,7 +42,7 @@ class ClientRoot(object):
     @cherrypy.tools.db()
     def index(self, db: DictDB):
         template = env.get_template('wrolpi/plugins/map/templates/instructions.html')
-        map_config = get_config()
+        map_config = get_downloads()
         kwargs = _get_render_kwargs(map_config=map_config)
         html = template.render(**kwargs)
         return html

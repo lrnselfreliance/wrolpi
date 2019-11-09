@@ -1,0 +1,47 @@
+{% extends 'wrolpi/templates/base.html' %}
+{% set title=title or 'OpenStreetMap' %}
+
+{% block body %}
+    <div class="container">
+        <h1>Welcome to the OpenStreetMap plugin!</h1>
+        <p class="lead">Your offline map isn't quite ready. Follow the steps below to download and setup your
+            map.</p>
+
+        <h2>Setup instructions</h2>
+        <p>You will first need to download your free map data. This can be a single state, an entire sub-region, or even
+            the entire planet.</p>
+        <form action="/api/{{ PLUGIN_ROOT }}/pbf" method="post">
+            <ol>
+                <li>Proceed to <a href="https://download.geofabrik.de/">this external website</a> and choose one of
+                    their
+                    free
+                    PBF files. Copy it's URL.
+                    <ul>
+                        <li>Beware! This map will be stored on your WROLPi's hard drive in a docker container; don't
+                            choose
+                            a
+                            file that is larger than your drive.
+                        </li>
+                        <li>For example, I could paste
+                            <pre>https://download.geofabrik.de/north-america/us-west-latest.osm.pbf</pre>
+                            into the form below, and I would have a map for the entire US West Coast.
+                        </li>
+                    </ul>
+                </li>
+                <li>Paste the PBF file's URL here:
+                    <input type="text" name="pbf_url">
+                </li>
+                <li>
+                    <button class="btn btn-primary" type="submit">Submit</button>
+                    this form to download and import your chosen map data!
+                    <ul>
+                        <li>If you're re-submitting your chosen file, the download will continue from where it left off.
+                        </li>
+                    </ul>
+                </li>
+            </ol>
+            <p>This will take quite some time (several hours if you've chosen a large file). Come back later and try out
+                your shiny offline map!</p>
+        </form>
+    </div>
+{% endblock %}

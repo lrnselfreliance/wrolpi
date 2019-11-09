@@ -8,10 +8,12 @@ from collections import OrderedDict
 
 # from wrolpi.plugins import example_plugin
 from wrolpi.plugins import videos
+from wrolpi.plugins import map
 
 PLUGINS = [
-    videos,
     # example_plugin,
+    videos,
+    map,
 ]
 
 # Share this list of plugins with every plugin

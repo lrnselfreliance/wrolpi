@@ -21,9 +21,9 @@ services:
       # - /media/8TB:/opt/wrolpi_media
   map:
     container_name: openstreetmap
-      build:
-        context: .
-        dockerfile: docker/osm/Dockerfile
+    build:
+      context: .
+      dockerfile: docker/map/Dockerfile
   map_db:
     container_name: map_db
     build:

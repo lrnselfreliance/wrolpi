@@ -1,0 +1,11 @@
+{% extends 'wrolpi/templates/base.html' %}
+{% set title=title or 'OpenStreetMap' %}
+
+{% block body %}
+    <h1>Welcome to the OpenStreetMap plugin!</h1>
+
+    <p>Hello {{ hello }}!</p>
+    <a href="/api/{{ PLUGIN_ROOT }}/settings">GET Settings</a>
+
+    <hr>
+{% endblock %}

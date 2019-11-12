@@ -4,7 +4,6 @@ from urllib.parse import urlparse
 
 import cherrypy
 
-from wrolpi.common import put_async_download
 from wrolpi.tools import setup_ctx
 
 setup_ctx()

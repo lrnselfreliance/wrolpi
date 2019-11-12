@@ -1,9 +1,9 @@
-import cherrypy
-from cherrypy.lib.static import serve_file
 from dictorm import DictDB
 from sanic import Blueprint, response
+from sanic.exceptions import abort
+from sanic.request import Request
 
-from wrolpi.common import env, get_pagination_with_generator, create_pagination_dict
+from wrolpi.common import env, get_pagination_with_generator, create_pagination_dict, boolean_arg
 from wrolpi.plugins.videos.common import get_downloader_config, get_absolute_video_path, \
     get_video_description, get_video_info_json, UnknownFile
 
@@ -34,7 +34,7 @@ client_bp = Blueprint('content_video', url_prefix='/videos')
 
 
 @client_bp.route('/')
-def index(request):
+async def index(request):
     """
     This page displays a list of channels.
     """
@@ -46,8 +46,9 @@ def index(request):
 
 
 @client_bp.route('/settings')
-def settings(request, db):
+async def settings(request):
     """Page to list and edit channels"""
+    db = request.ctx.db
     downloader_config = get_downloader_config()
     video_root_directory = downloader_config['video_root_directory']
 
@@ -57,107 +58,85 @@ def settings(request, db):
                                 file_name_format=downloader_config['file_name_format'],
                                 )
     html = template.render(**kwargs)
-    return html
+    return response.html(html)
 
-#
-# @staticmethod
-# def serve_file(kind, hash: str, db: DictDB, download: bool = False):
-#     Video = db['video']
-#
-#     try:
-#         video = Video.get_one(video_path_hash=hash)
-#         path = get_absolute_video_path(video, kind=kind)
-#     except TypeError or KeyError or UnknownFile:
-#         raise cherrypy.HTTPError(404, f"Can't find {kind} by that ID.")
-#
-#     if download:
-#         return serve_file(str(path), 'application/x-download', 'attachment')
-#     else:
-#         return serve_file(str(path))
-#
-#
-# @cherrypy.expose
-# @cherrypy.tools.db()
-# def video(self, hash: str, db: DictDB, **kwargs):
-#     return self.serve_file('video', hash, db, **kwargs)
-#
-#
-# @cherrypy.expose
-# @cherrypy.tools.db()
-# def poster(self, hash: str, db: DictDB, **kwargs):
-#     return self.serve_file('poster', hash, db, **kwargs)
-#
-#
-# @cherrypy.expose
-# @cherrypy.tools.db()
-# def caption(self, hash: str, db: DictDB, **kwargs):
-#     return self.serve_file('caption', hash, db, **kwargs)
-#
-#
-# @cherrypy.expose
-# @cherrypy.tools.db()
-# def search(self, search: str, db: DictDB, offset: int = None, link: str = None):
-#     offset = int(offset) if offset else 0
-#     results = video_search(db, search, offset, link)
-#     template = env.get_template('wrolpi/plugins/videos/templates/search_video.html')
-#     pagination = create_pagination_dict(offset, 20, total=results['total'])
-#     kwargs = _get_render_kwargs(db, results=results, pagination=pagination)
-#     # Overwrite the channels with their respective counts
-#     kwargs['channels'] = results['channels']
-#     html = template.render(**kwargs, link=link)
-#     return html
-#
-#
-# @cherrypy.popargs('link')
-# class ChannelHandler(object):
-#
-#     def __init__(self):
-#         self.video = VideoHandler()
-#
-#     @cherrypy.expose
-#     @cherrypy.tools.db()
-#     def index(self, link: str = None, db: DictDB = None, offset: int = None, limit: int = None):
-#         if not link:
-#             # Link was not passed, probably a malformed url
-#             raise cherrypy.HTTPRedirect(f'/{PLUGIN_ROOT}')
-#
-#         offset = int(offset) if offset else 0
-#         limit = int(limit) if limit else 20
-#
-#         Channel = db['channel']
-#         channel = Channel.get_one(link=link)
-#         videos = channel['videos'].order_by('upload_date DESC, name ASC')
-#         videos, pagination = get_pagination_with_generator(videos, offset, limit, total=len(channel['videos']))
-#
-#         template = env.get_template('wrolpi/plugins/videos/templates/channel_videos.html')
-#         kwargs = _get_render_kwargs(db, link=link, linked_channel=channel, videos=videos,
-#                                     pagination=pagination)
-#         html = template.render(**kwargs)
-#         return html
-#
-#
-# @cherrypy.popargs('hash')
-# class VideoHandler(object):
-#
-#     @cherrypy.expose
-#     @cherrypy.tools.db()
-#     def index(self, link: str = None, hash: str = None, db: DictDB = None):
-#         Video = db['video']
-#
-#         video = Video.get_one(video_path_hash=hash)
-#         if not video:
-#             raise cherrypy.HTTPError(404, f'No video with id {hash}')
-#
-#         # Get the description from it's file, or from the video's info_json file.
-#         description = get_video_description(video)
-#         info_json = get_video_info_json(video)
-#         description = description or info_json.get('description', '')
-#
-#         template = env.get_template('wrolpi/plugins/videos/templates/video.html')
-#         items = _get_render_kwargs(db, link=link, hash=hash, video=video, description=description,
-#                                    info_json=info_json)
-#         html = template.render(**items)
-#         return html
+
+@client_bp.route('/video/<hash:string>')
+@client_bp.route('/poster/<hash:string>')
+@client_bp.route('/caption/<hash:string>')
+async def media_file(request: Request, hash: str):
+    db = request.ctx.db
+    download = boolean_arg(request, 'download')
+    Video = db['video']
+    kind = str(request.path).split('/')[2]
+
+    try:
+        video = Video.get_one(video_path_hash=hash)
+        path = get_absolute_video_path(video, kind=kind)
+        if download:
+            return await response.file_stream(str(path), filename=path.name)
+        else:
+            return await response.file_stream(str(path))
+
+    except TypeError or KeyError or UnknownFile:
+        abort(404, f"Can't find {kind} by that ID.")
+
+
+@client_bp.route('/search')
+def search(request, search: str, offset: int = None, link: str = None):
+    db = request.ctx.db
+    offset = int(offset) if offset else 0
+    results = video_search(db, search, offset, link)
+    template = env.get_template('wrolpi/plugins/videos/templates/search_video.html')
+    pagination = create_pagination_dict(offset, 20, total=results['total'])
+    kwargs = _get_render_kwargs(db, results=results, pagination=pagination)
+    # Overwrite the channels with their respective counts
+    kwargs['channels'] = results['channels']
+    html = template.render(**kwargs, link=link)
+    return response.html(html)
+
+
+@client_bp.route('/channel/<link:string>')
+def channel_index(request, link: str = None, offset: int = None, limit: int = None):
+    db = request.ctx.db
+    if not link:
+        # Link was not passed, probably a malformed url
+        raise cherrypy.HTTPRedirect(f'/{PLUGIN_ROOT}')
+
+    offset = int(offset) if offset else 0
+    limit = int(limit) if limit else 20
+
+    Channel = db['channel']
+    channel = Channel.get_one(link=link)
+    videos = channel['videos'].order_by('upload_date DESC, name ASC')
+    videos, pagination = get_pagination_with_generator(videos, offset, limit, total=len(channel['videos']))
+
+    template = env.get_template('wrolpi/plugins/videos/templates/channel_videos.html')
+    kwargs = _get_render_kwargs(db, link=link, linked_channel=channel, videos=videos,
+                                pagination=pagination)
+    html = template.render(**kwargs)
+    return response.html(html)
+
+
+@client_bp.route('/channel/<link:string>/video/<hash:string>')
+def video_index(request, link: str, hash: str):
+    db = request.ctx.db
+    Video = db['video']
+
+    video = Video.get_one(video_path_hash=hash)
+    if not video:
+        raise cherrypy.HTTPError(404, f'No video with id {hash}')
+
+    # Get the description from it's file, or from the video's info_json file.
+    description = get_video_description(video)
+    info_json = get_video_info_json(video)
+    description = description or info_json.get('description', '')
+
+    template = env.get_template('wrolpi/plugins/videos/templates/video.html')
+    items = _get_render_kwargs(db, link=link, hash=hash, video=video, description=description,
+                               info_json=info_json)
+    html = template.render(**items)
+    return response.html(html)
 
 
 def video_search(db: DictDB, search_str, offset, link):

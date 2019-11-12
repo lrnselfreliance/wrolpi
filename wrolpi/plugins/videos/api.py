@@ -28,7 +28,7 @@ from functools import wraps
 from uuid import uuid1
 
 from dictorm import DictDB
-from sanic import Blueprint
+from sanic import Blueprint, response
 
 from wrolpi.common import sanitize_link
 from wrolpi.plugins.videos.captions import process_captions
@@ -70,14 +70,11 @@ def json_statuses_streamer(func):
     return wrap
 
 
-@api_bp.route('/refresh', methods=['POST'])
-def refresh_post(request):
-    @json_statuses_streamer
-    def streamer():
-        with get_db_context(commit=True) as (db_conn, db):
-            yield from _refresh_videos(db)
-
-    return streamer()
+@api_bp.route('/settings/refresh', methods=['POST'])
+async def refresh_post(request):
+    db = request.ctx.db
+    refresh_videos(db)
+    return response.json({'success': 'stream-complete'})
 
 
 # TODO POST._cp_config = {'response.stream': True}

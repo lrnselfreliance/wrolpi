@@ -1,10 +1,8 @@
-import asyncio
 import configparser
 import logging
 import os
 import string
 import sys
-from multiprocessing import Queue
 from typing import Tuple
 
 import sanic
@@ -161,9 +159,7 @@ def get_pagination_with_generator(results_gen: ResultsGenerator, offset: int, li
     return results, pagination
 
 
-downloads = Queue()
-progress = Queue()
-
-
-def put_async_download(url):
-    pass
+def boolean_arg(request, arg_name):
+    """Return True only if the specified query arg is equal to 'true'"""
+    value = request.args.get(arg_name)
+    return value == 'true'

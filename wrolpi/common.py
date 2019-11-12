@@ -1,13 +1,19 @@
+import asyncio
 import configparser
 import logging
 import os
 import string
 import sys
+from multiprocessing import Queue
 from typing import Tuple
 
+import sanic
 from attr import dataclass
 from dictorm import ResultsGenerator
 from jinja2 import Environment, FileSystemLoader
+from sanic import Sanic
+
+sanic_app = Sanic()
 
 logger = logging.getLogger('wrolpi')
 ch = logging.StreamHandler()
@@ -21,6 +27,10 @@ env = Environment(loader=FileSystemLoader('.'))
 CONFIG_PATH = 'config.cfg'
 WROLPI_CONFIG_SECTION = 'WROLPi'
 DOCKERIZED = True if os.environ.get('DOCKER', '').startswith('t') else False
+
+
+def get_loop():
+    return sanic.Sanic.loop
 
 
 def get_wrolpi_config():
@@ -113,7 +123,7 @@ def create_pagination_dict(offset, limit, more=None, total=None) -> Pagination:
     if total:
         last_page = (total // limit) + 1
     elif more is not None:
-        last_page = ((offset + limit) / limit) + 1
+        last_page = ((offset + limit) // limit) + 1
     else:
         raise Exception('Cannot generate pagination without at least `more` or `total`.')
 
@@ -149,3 +159,11 @@ def get_pagination_with_generator(results_gen: ResultsGenerator, offset: int, li
     pagination = create_pagination_dict(offset, limit, more, total)
 
     return results, pagination
+
+
+downloads = Queue()
+progress = Queue()
+
+
+def put_async_download(url):
+    pass

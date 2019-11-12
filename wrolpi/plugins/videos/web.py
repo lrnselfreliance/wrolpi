@@ -1,6 +1,7 @@
 import cherrypy
 from cherrypy.lib.static import serve_file
 from dictorm import DictDB
+from sanic import Blueprint
 
 from wrolpi.common import env, get_pagination_with_generator, create_pagination_dict
 from wrolpi.plugins.videos.common import get_downloader_config, get_absolute_video_path, \
@@ -29,79 +30,81 @@ def _get_render_kwargs(db, **kwargs):
     return d
 
 
-class ClientRoot(object):
+client_bp = Blueprint('content_video', url_prefix='/videos')
 
-    def __init__(self):
-        self.channel = ChannelHandler()
 
-    @cherrypy.expose
-    @cherrypy.tools.db()
-    def index(self, db):
-        """
-        This page displays a list of channels.
-        """
-        template = env.get_template('wrolpi/plugins/videos/templates/channels.html')
-        kwargs = _get_render_kwargs(db)
-        html = template.render(**kwargs)
-        return html
+@client_bp.route('/')
+def index(request, db):
+    """
+    This page displays a list of channels.
+    """
+    template = env.get_template('wrolpi/plugins/videos/templates/channels.html')
+    kwargs = _get_render_kwargs(db)
+    html = template.render(**kwargs)
+    return html
 
-    @cherrypy.expose
-    @cherrypy.tools.db()
-    def settings(self, db):
-        """Page to list and edit channels"""
-        downloader_config = get_downloader_config()
-        video_root_directory = downloader_config['video_root_directory']
 
-        template = env.get_template('wrolpi/plugins/videos/templates/channels_settings.html')
-        kwargs = _get_render_kwargs(db,
-                                    video_root_directory=video_root_directory,
-                                    file_name_format=downloader_config['file_name_format'],
-                                    )
-        html = template.render(**kwargs)
-        return html
+@client_bp.route('/settings')
+def settings(request, db):
+    """Page to list and edit channels"""
+    downloader_config = get_downloader_config()
+    video_root_directory = downloader_config['video_root_directory']
 
-    @staticmethod
-    def serve_file(kind, hash: str, db: DictDB, download: bool = False):
-        Video = db['video']
+    template = env.get_template('wrolpi/plugins/videos/templates/channels_settings.html')
+    kwargs = _get_render_kwargs(db,
+                                video_root_directory=video_root_directory,
+                                file_name_format=downloader_config['file_name_format'],
+                                )
+    html = template.render(**kwargs)
+    return html
 
-        try:
-            video = Video.get_one(video_path_hash=hash)
-            path = get_absolute_video_path(video, kind=kind)
-        except TypeError or KeyError or UnknownFile:
-            raise cherrypy.HTTPError(404, f"Can't find {kind} by that ID.")
 
-        if download:
-            return serve_file(str(path), 'application/x-download', 'attachment')
-        else:
-            return serve_file(str(path))
+@staticmethod
+def serve_file(kind, hash: str, db: DictDB, download: bool = False):
+    Video = db['video']
 
-    @cherrypy.expose
-    @cherrypy.tools.db()
-    def video(self, hash: str, db: DictDB, **kwargs):
-        return self.serve_file('video', hash, db, **kwargs)
+    try:
+        video = Video.get_one(video_path_hash=hash)
+        path = get_absolute_video_path(video, kind=kind)
+    except TypeError or KeyError or UnknownFile:
+        raise cherrypy.HTTPError(404, f"Can't find {kind} by that ID.")
 
-    @cherrypy.expose
-    @cherrypy.tools.db()
-    def poster(self, hash: str, db: DictDB, **kwargs):
-        return self.serve_file('poster', hash, db, **kwargs)
+    if download:
+        return serve_file(str(path), 'application/x-download', 'attachment')
+    else:
+        return serve_file(str(path))
 
-    @cherrypy.expose
-    @cherrypy.tools.db()
-    def caption(self, hash: str, db: DictDB, **kwargs):
-        return self.serve_file('caption', hash, db, **kwargs)
 
-    @cherrypy.expose
-    @cherrypy.tools.db()
-    def search(self, search: str, db: DictDB, offset: int = None, link: str = None):
-        offset = int(offset) if offset else 0
-        results = video_search(db, search, offset, link)
-        template = env.get_template('wrolpi/plugins/videos/templates/search_video.html')
-        pagination = create_pagination_dict(offset, 20, total=results['total'])
-        kwargs = _get_render_kwargs(db, results=results, pagination=pagination)
-        # Overwrite the channels with their respective counts
-        kwargs['channels'] = results['channels']
-        html = template.render(**kwargs, link=link)
-        return html
+@cherrypy.expose
+@cherrypy.tools.db()
+def video(self, hash: str, db: DictDB, **kwargs):
+    return self.serve_file('video', hash, db, **kwargs)
+
+
+@cherrypy.expose
+@cherrypy.tools.db()
+def poster(self, hash: str, db: DictDB, **kwargs):
+    return self.serve_file('poster', hash, db, **kwargs)
+
+
+@cherrypy.expose
+@cherrypy.tools.db()
+def caption(self, hash: str, db: DictDB, **kwargs):
+    return self.serve_file('caption', hash, db, **kwargs)
+
+
+@cherrypy.expose
+@cherrypy.tools.db()
+def search(self, search: str, db: DictDB, offset: int = None, link: str = None):
+    offset = int(offset) if offset else 0
+    results = video_search(db, search, offset, link)
+    template = env.get_template('wrolpi/plugins/videos/templates/search_video.html')
+    pagination = create_pagination_dict(offset, 20, total=results['total'])
+    kwargs = _get_render_kwargs(db, results=results, pagination=pagination)
+    # Overwrite the channels with their respective counts
+    kwargs['channels'] = results['channels']
+    html = template.render(**kwargs, link=link)
+    return html
 
 
 @cherrypy.popargs('link')

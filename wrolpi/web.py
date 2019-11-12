@@ -1,16 +1,16 @@
 import argparse
 import pathlib
 
-import cherrypy
+from sanic import Blueprint, Sanic, response
 
 from wrolpi.tools import setup_tools
 
 # Setup the tools before importing modules which rely on them
 setup_tools()
 
-from wrolpi.api import API, API_CONFIG
-from wrolpi.common import env, create_pagination_dict
+from wrolpi.common import env
 from wrolpi.user_plugins import PLUGINS
+from wrolpi.api import api_group
 
 cwd = pathlib.Path(__file__).parent
 static_dir = (cwd / 'static').absolute()
@@ -22,36 +22,37 @@ ROOT_CONFIG = {
     },
 }
 
-
-class ClientRoot(object):
-
-    def __init__(self):
-        # Install plugins defined in user_plugins
-        for name, plugin in PLUGINS.items():
-            setattr(self, name, plugin.ClientRoot())
-
-    @cherrypy.expose
-    def index(self):
-        template = env.get_template('wrolpi/templates/index.html')
-        return template.render(PLUGINS=PLUGINS)
-
-    @cherrypy.expose
-    def settings(self):
-        template = env.get_template('wrolpi/templates/settings.html')
-        return template.render(PLUGINS=PLUGINS)
+root_client = Blueprint('root')
 
 
-def start_webserver(host, port):
-    cherrypy.config.update({
-        'server.socket_host': host,
-        'server.socket_port': port,
-    })
+@root_client.route('/')
+async def index(request):
+    template = env.get_template('wrolpi/templates/index.html')
+    html = template.render(PLUGINS=PLUGINS)
+    return response.html(html)
 
-    cherrypy.tree.mount(ClientRoot(), '/', config=ROOT_CONFIG)
-    cherrypy.tree.mount(API(), '/api', config=API_CONFIG)
 
-    cherrypy.engine.start()
-    cherrypy.engine.block()
+@root_client.route('/settings')
+async def settings(request):
+    template = env.get_template('wrolpi/templates/settings.html')
+    html = template.render(PLUGINS=PLUGINS)
+    return response.html(html)
+
+
+def start_webserver(host: str, port: int):
+    app = Sanic()
+    # /static/*
+    app.static('/static', './wrolpi/static')
+
+    # routes: /*
+    client_bps = [i.client_bp for i in PLUGINS.values()]
+    client_group = Blueprint.group(client_bps, root_client)
+    # routes: /*/*
+    app.blueprint(client_group)
+    # routes: /api/*
+    app.blueprint(api_group)
+
+    app.run(host, port)
 
 
 def init_parser(parser):

@@ -8,8 +8,6 @@ import cherrypy
 from dictorm import DictDB
 
 from wrolpi.common import env
-# This is your link suffix.  It will be used to link to your web classes here.
-from wrolpi.plugins.map.common import get_downloads
 
 PLUGIN_ROOT = 'map'
 # Your plugin can be hidden on the navbar

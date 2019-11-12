@@ -13,7 +13,7 @@ from wrolpi.plugins import map
 PLUGINS = [
     # example_plugin,
     videos,
-    map,
+    # map,
 ]
 
 # Share this list of plugins with every plugin

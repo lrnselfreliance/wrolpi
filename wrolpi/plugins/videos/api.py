@@ -29,6 +29,7 @@ from uuid import uuid1
 
 import cherrypy
 from dictorm import DictDB
+from sanic import Blueprint
 
 from wrolpi.common import sanitize_link
 from wrolpi.plugins.videos.captions import process_captions
@@ -38,6 +39,9 @@ from wrolpi.plugins.videos.main import logger
 from wrolpi.tools import get_db_context
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
     get_absolute_channel_directory, UnknownDirectory
+
+
+api_bp = Blueprint('api_video', url_prefix='/videos')
 
 
 class APIRoot(object):

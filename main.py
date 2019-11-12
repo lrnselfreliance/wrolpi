@@ -6,12 +6,13 @@ WROLPi is intended to be run on a Raspberry Pi with an optional external drive a
 network so that any person with a laptop/tablet/phone can connect and use the data previously collected by the user.
 """
 import argparse
+import asyncio
 import logging
 import sys
 
 from wrolpi import web
 from wrolpi.cmd import import_settings_configs, save_settings_configs
-from wrolpi.common import logger
+from wrolpi.common import logger, get_loop
 from wrolpi.user_plugins import PLUGINS
 
 
@@ -60,7 +61,7 @@ def main():
 
     if args.sub_commands:
         plugin_main = choices_to_mains[args.sub_commands]
-        return plugin_main(args)
+        return_code = plugin_main(args)
     elif args.save_config:
         return_code = save_settings_configs(PLUGINS)
         logger.info('Config written.')

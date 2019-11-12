@@ -7,3 +7,4 @@ mock>=3.0.5
 psycopg2-binary>=2.8.3
 pyyaml>=5.1.2
 pytest>=5.2.1
+sanic

@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 import cherrypy
 
-from wrolpi.plugins.map.common import get_downloads, save_downloads
+from wrolpi.common import put_async_download
 from wrolpi.tools import setup_tools
 
 setup_tools()
@@ -25,11 +25,7 @@ class PBFApi(object):
         if not parsed.scheme or not parsed.netloc or not parsed.path:
             raise Exception('Invalid PBF url')
 
-        downloads = get_downloads()
-        downloads = add_pbf_url_to_config(pbf_url, downloads)
-        save_downloads(downloads)
-
-        # TODO start downloads from file.  Do it asynchronously and without conflict
+        put_async_download(pbf_url)
 
 
 def get_http_file_size(url):

@@ -1,4 +1,5 @@
 import cherrypy
+from sanic import Blueprint
 
 from wrolpi.user_plugins import PLUGINS
 
@@ -9,10 +10,6 @@ API_CONFIG = {
     },
 }
 
-
-@cherrypy.expose
-class API(object):
-
-    def __init__(self):
-        for name, plugin in PLUGINS.items():
-            setattr(self, name, plugin.APIRoot())
+root_api_bp = Blueprint('root_api')
+blueprints = [i.api_bp for i in PLUGINS.values()]
+api_group = root_api_bp.group(*blueprints, url_prefix='/api')

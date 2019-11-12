@@ -93,12 +93,11 @@ def get_db_context(commit=False) -> Tuple[psycopg2.connect, DictDB]:
     db_pool.putconn(db_conn, key=key, close=True)
 
 
-TOOLS_SETUP = False
+CTX_SETUP = False
 
 
-def setup_tools():
-    """Setup the cherrypy tools.  Do this only once."""
-    global TOOLS_SETUP
-    if TOOLS_SETUP is False:
-        cherrypy.tools.db = DBTool()
-        TOOLS_SETUP = True
+def setup_ctx():
+    """Setup the Sanic ctx.  Do this only once."""
+    global CTX_SETUP
+    if CTX_SETUP is False:
+        CTX_SETUP = True

@@ -8,8 +8,6 @@ Required: PRETTY_NAME, init_parser, main
 import argparse
 import logging
 
-from wrolpi.plugins.example_plugin.common import hello
-
 # Pretty Name will be displayed when your plugin is linked to in the UI
 PRETTY_NAME = 'Map'
 logger = logging.getLogger('wrolpi')

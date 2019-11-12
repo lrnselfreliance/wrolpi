@@ -4,7 +4,6 @@ should NEVER make changes to the DB, do that in your API methods.
 
 Required: PLUGIN_ROOT, PLUGINS, set_plugins, ClientRoot
 """
-import cherrypy
 from dictorm import DictDB
 
 from wrolpi.common import env
@@ -36,8 +35,6 @@ def _get_render_kwargs(**kwargs):
 
 class ClientRoot(object):
 
-    @cherrypy.expose
-    @cherrypy.tools.db()
     def index(self, db: DictDB):
         template = env.get_template('wrolpi/plugins/map/templates/instructions.html')
         map_config = get_downloads()

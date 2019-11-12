@@ -2,27 +2,42 @@ import argparse
 import pathlib
 
 from sanic import Blueprint, Sanic, response
+from sanic.request import Request
 
-from wrolpi.tools import setup_tools
+from wrolpi.tools import setup_ctx, get_db
 
 # Setup the tools before importing modules which rely on them
-setup_tools()
+setup_ctx()
 
-from wrolpi.common import env
+from wrolpi.common import env, logger
 from wrolpi.user_plugins import PLUGINS
-from wrolpi.api import api_group
 
 cwd = pathlib.Path(__file__).parent
 static_dir = (cwd / 'static').absolute()
 
-ROOT_CONFIG = {
-    '/static': {
-        'tools.staticdir.on': True,
-        'tools.staticdir.dir': str(static_dir),
-    },
-}
+webapp = Sanic()
 
+# All client paths will derive from this root path
 root_client = Blueprint('root')
+
+
+# Add DB middleware
+@webapp.middleware('request')
+def setup_db_context(request):
+    pool, conn, db, key = get_db()
+    request.ctx.pool = pool
+    request.ctx.conn = conn
+    request.ctx.db = db
+    request.ctx.key = key
+
+
+@webapp.middleware('response')
+def teardown_db_context(request, response):
+    pool, conn, key = request.ctx.pool, request.ctx.conn, request.ctx.key
+    try:
+        pool.putconn(conn, key=key, close=True)
+    except KeyError:
+        logger.debug(f'Failed to return db connection {key}')
 
 
 @root_client.route('/')
@@ -39,20 +54,29 @@ async def settings(request):
     return response.html(html)
 
 
+echo_bp = Blueprint('echo_api_bp')
+
+
+@echo_bp.route('/echo', methods=['GET', 'POST', 'PUT', 'DELETE'])
+async def echo(request: Request):
+    return response.json({'request_json': request.json, 'method': request.method})
+
+
 def start_webserver(host: str, port: int):
-    app = Sanic()
-    # /static/*
-    app.static('/static', './wrolpi/static')
+    # routes: /static/*
+    webapp.static('/static', str(static_dir))
 
     # routes: /*
     client_bps = [i.client_bp for i in PLUGINS.values()]
     client_group = Blueprint.group(client_bps, root_client)
-    # routes: /*/*
-    app.blueprint(client_group)
-    # routes: /api/*
-    app.blueprint(api_group)
+    webapp.blueprint(client_group)
 
-    app.run(host, port)
+    # routes: /api/*
+    blueprints = [i.api_bp for i in PLUGINS.values()]
+    api_group = Blueprint.group(*blueprints, echo_bp, url_prefix='/api')
+    webapp.blueprint(api_group)
+
+    webapp.run(host, port)
 
 
 def init_parser(parser):

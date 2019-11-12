@@ -27,44 +27,28 @@ import pathlib
 from functools import wraps
 from uuid import uuid1
 
-import cherrypy
 from dictorm import DictDB
 from sanic import Blueprint
 
 from wrolpi.common import sanitize_link
 from wrolpi.plugins.videos.captions import process_captions
-from wrolpi.plugins.videos.common import get_conflicting_channels, verify_config
+from wrolpi.plugins.videos.common import get_conflicting_channels
 from wrolpi.plugins.videos.downloader import insert_video, update_channels, download_all_missing_videos
 from wrolpi.plugins.videos.main import logger
 from wrolpi.tools import get_db_context
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
     get_absolute_channel_directory, UnknownDirectory
 
-
 api_bp = Blueprint('api_video', url_prefix='/videos')
 
 
-class APIRoot(object):
-
-    def __init__(self):
-        self.settings = SettingsAPI()
-        self.channel = ChannelAPI()
-        verify_config()
-
-
-@cherrypy.expose
-class SettingsAPI(object):
-
-    def __init__(self):
-        self.refresh = Refresh()
-        self.download = Download()
-
-    def PUT(self, **form_data):
-        downloader_config = get_downloader_config()
-        downloader_config['video_root_directory'] = form_data['video_root_directory']
-        downloader_config['file_name_format'] = form_data['file_name_format']
-        save_settings_config(downloader_config)
-        return json.dumps({'success': 'Settings saved'})
+@api_bp.route('/settings', methods=['PUT'])
+def settings_put(request, **form_data):
+    downloader_config = get_downloader_config()
+    downloader_config['video_root_directory'] = form_data['video_root_directory']
+    downloader_config['file_name_format'] = form_data['file_name_format']
+    save_settings_config(downloader_config)
+    return json.dumps({'success': 'Settings saved'})
 
 
 def json_statuses_streamer(func):
@@ -86,142 +70,140 @@ def json_statuses_streamer(func):
     return wrap
 
 
-@cherrypy.expose
-class Refresh(object):
+@api_bp.route('/refresh', methods=['POST'])
+def refresh_post(request):
+    @json_statuses_streamer
+    def streamer():
+        with get_db_context(commit=True) as (db_conn, db):
+            yield from _refresh_videos(db)
 
-    def POST(self):
-        cherrypy.response.headers['Content-Type'] = 'text/event-stream'
-
-        @json_statuses_streamer
-        def streamer():
-            with get_db_context(commit=True) as (db_conn, db):
-                yield from _refresh_videos(db)
-
-        return streamer()
-
-    POST._cp_config = {'response.stream': True}
+    return streamer()
 
 
-@cherrypy.expose
-class Download(object):
-
-    def POST(self):
-        cherrypy.response.headers['Content-Type'] = 'text/event-stream'
-
-        @json_statuses_streamer
-        def streamer():
-            with get_db_context(commit=True) as (db_conn, db):
-                yield from update_channels(db_conn, db)
-                yield from download_all_missing_videos(db_conn, db)
-
-        return streamer()
-
-    POST._cp_config = {'response.stream': True}
+# TODO POST._cp_config = {'response.stream': True}
 
 
-@cherrypy.expose
-class ChannelAPI(object):
+@api_bp.route('/download', methods=['POST'])
+def download_post(self):
+    @json_statuses_streamer
+    def streamer():
+        with get_db_context(commit=True) as (db_conn, db):
+            yield from update_channels(db_conn, db)
+            yield from download_all_missing_videos(db_conn, db)
 
-    @cherrypy.tools.db()
-    def GET(self, link, db: DictDB):
-        Channel = db['channel']
-        channel = Channel.get_one(link=link)
-        if not channel:
+    return streamer()
+
+
+# TODO POST._cp_config = {'response.stream': True}
+
+
+@api_bp.route('/channel', methods=['GET'])
+def channel_get(request, link):
+    db = request.ctx.db
+    Channel = db['channel']
+    channel = Channel.get_one(link=link)
+    if not channel:
+        return json.dumps({'error': 'Unknown channel'})
+    return json.dumps({'channel': channel})
+
+
+@api_bp.route('/channel', methods=['POST'])
+def channel_post(request, **form_data):
+    """Create a new channel"""
+    db = request.ctx.db
+    Channel = db['channel']
+
+    new_channel = get_channel_form(form_data)
+
+    try:
+        new_channel['directory'] = get_absolute_channel_directory(new_channel['directory'])
+    except UnknownDirectory:
+        return json.dumps({'error': 'Unknown directory'})
+
+    # Verify that the URL/Name/Link aren't taken
+    conflicting_channels = get_conflicting_channels(
+        db,
+        url=new_channel['url'],
+        name_=new_channel['name'],
+        link=new_channel['link'],
+    )
+    if conflicting_channels:
+        # TODO cherrypy.response.status = 400
+        return json.dumps({'error': 'Channel Name or URL already taken'})
+
+    if not new_channel['name'] or not new_channel['url']:
+        # TODO cherrypy.response.status = 400
+        return json.dumps({'error': 'Channels require a URL and Name'})
+
+    with db.transaction(commit=True):
+        channel = Channel(
+            name=new_channel['name'],
+            url=new_channel['url'],
+            match=new_channel['match_regex'],
+            link=new_channel['link'],
+        )
+        channel.flush()
+
+    return json.dumps({'success': 'Channel created successfully'})
+
+
+@api_bp.route('/channel', methods=['PUT'])
+def channel_put(request, link, **form_data):
+    """Update an existing channel"""
+    db = request.ctx.db
+    Channel = db['channel']
+
+    new_channel = get_channel_form(form_data)
+
+    with db.transaction(commit=True):
+        existing_channel = Channel.get_one(link=link)
+
+        if not existing_channel:
+            # TODO cherrypy.response.status = 400
             return json.dumps({'error': 'Unknown channel'})
-        return json.dumps({'channel': channel})
 
-    @cherrypy.tools.db()
-    def POST(self, db: DictDB, **form_data):
-        """Create a new channel"""
-        Channel = db['channel']
-
-        new_channel = get_channel_form(form_data)
-
-        try:
-            new_channel['directory'] = get_absolute_channel_directory(new_channel['directory'])
-        except UnknownDirectory:
-            return json.dumps({'error': 'Unknown directory'})
+        # Only update directory if it was empty
+        if new_channel['directory'] and not existing_channel['directory']:
+            try:
+                new_channel['directory'] = get_absolute_channel_directory(new_channel['directory'])
+            except Exception:
+                # TODO cherrypy.response.status = 400
+                return json.dumps({'error': 'Unknown directory'})
+        else:
+            new_channel['directory'] = existing_channel['directory']
+        new_channel['directory'] = str(new_channel['directory'])
 
         # Verify that the URL/Name/Link aren't taken
         conflicting_channels = get_conflicting_channels(
-            db,
+            db=db,
+            id=existing_channel['id'],
             url=new_channel['url'],
             name_=new_channel['name'],
             link=new_channel['link'],
+            directory=new_channel['directory'],
         )
-        if conflicting_channels:
-            cherrypy.response.status = 400
+        if list(conflicting_channels):
             return json.dumps({'error': 'Channel Name or URL already taken'})
 
-        if not new_channel['name'] or not new_channel['url']:
-            cherrypy.response.status = 400
-            return json.dumps({'error': 'Channels require a URL and Name'})
+        existing_channel['url'] = new_channel['url']
+        existing_channel['name'] = new_channel['name']
+        existing_channel['directory'] = new_channel['directory']
+        existing_channel['match_regex'] = new_channel['match_regex']
+        existing_channel.flush()
 
-        with db.transaction(commit=True):
-            channel = Channel(
-                name=new_channel['name'],
-                url=new_channel['url'],
-                match=new_channel['match_regex'],
-                link=new_channel['link'],
-            )
-            channel.flush()
+    return json.dumps({'success': 'The channel was updated successfully.'})
 
-        return json.dumps({'success': 'Channel created successfully'})
 
-    @cherrypy.tools.db()
-    def PUT(self, link, db: DictDB, **form_data):
-        """Update an existing channel"""
-        Channel = db['channel']
-
-        new_channel = get_channel_form(form_data)
-
-        with db.transaction(commit=True):
-            existing_channel = Channel.get_one(link=link)
-
-            if not existing_channel:
-                cherrypy.response.status = 400
-                return json.dumps({'error': 'Unknown channel'})
-
-            # Only update directory if it was empty
-            if new_channel['directory'] and not existing_channel['directory']:
-                try:
-                    new_channel['directory'] = get_absolute_channel_directory(new_channel['directory'])
-                except Exception:
-                    cherrypy.response.status = 400
-                    return json.dumps({'error': 'Unknown directory'})
-            else:
-                new_channel['directory'] = existing_channel['directory']
-            new_channel['directory'] = str(new_channel['directory'])
-
-            # Verify that the URL/Name/Link aren't taken
-            conflicting_channels = get_conflicting_channels(
-                db=db,
-                id=existing_channel['id'],
-                url=new_channel['url'],
-                name_=new_channel['name'],
-                link=new_channel['link'],
-                directory=new_channel['directory'],
-            )
-            if list(conflicting_channels):
-                return json.dumps({'error': 'Channel Name or URL already taken'})
-
-            existing_channel['url'] = new_channel['url']
-            existing_channel['name'] = new_channel['name']
-            existing_channel['directory'] = new_channel['directory']
-            existing_channel['match_regex'] = new_channel['match_regex']
-            existing_channel.flush()
-
-        return json.dumps({'success': 'The channel was updated successfully.'})
-
-    @cherrypy.tools.db()
-    def DELETE(self, link, db: DictDB):
-        Channel = db['channel']
-        channel = Channel.get_one(link=link)
-        if not channel:
-            return json.dumps({'error': 'Unknown channel'})
-        with db.transaction(commit=True):
-            channel.delete()
-        return json.dumps({'success': 'Channel deleted'})
+@api_bp.route('/channel', methods=['DELETE'])
+def channel_delete(request, link):
+    db = request.ctx.db
+    Channel = db['channel']
+    channel = Channel.get_one(link=link)
+    if not channel:
+        return json.dumps({'error': 'Unknown channel'})
+    with db.transaction(commit=True):
+        channel.delete()
+    return json.dumps({'success': 'Channel deleted'})
 
 
 def get_channel_form(form_data: dict):

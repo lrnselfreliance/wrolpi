@@ -22,17 +22,21 @@ well as its meta files) is relative to its Channel's directory.
 Relative DB paths allow files to be moved without having to rebuild the entire collection.  It also ensures that when
 a file is moved, it will not be duplicated in the DB.
 """
+import asyncio
 import json
 import pathlib
 from functools import wraps
+from multiprocessing import Queue
 from uuid import uuid1
 
 from dictorm import DictDB
 from sanic import Blueprint, response
+from sanic.exceptions import abort
+from sanic.request import Request
 
-from wrolpi.common import sanitize_link
+from wrolpi.common import sanitize_link, boolean_arg
 from wrolpi.plugins.videos.captions import process_captions
-from wrolpi.plugins.videos.common import get_conflicting_channels
+from wrolpi.plugins.videos.common import get_conflicting_channels, get_absolute_video_path, UnknownFile
 from wrolpi.plugins.videos.downloader import insert_video, update_channels, download_all_missing_videos
 from wrolpi.plugins.videos.main import logger
 from wrolpi.tools import get_db_context
@@ -48,26 +52,7 @@ def settings_put(request, **form_data):
     downloader_config['video_root_directory'] = form_data['video_root_directory']
     downloader_config['file_name_format'] = form_data['file_name_format']
     save_settings_config(downloader_config)
-    return json.dumps({'success': 'Settings saved'})
-
-
-def json_statuses_streamer(func):
-    """Wraps status lines in JSON objects.  Adds a new line after each JSON string.
-
-    Example:
-        >>> func = json_statuses_streamer(lambda : ['foo', 'bar'])
-        >>> func()
-        '{"status": "foo"}\n'
-        '{"status": "bar"}\n'
-        '{"success": "stream-complete"}\n'
-    """
-
-    @wraps(func)
-    def wrap(*a, **kw):
-        yield from (json.dumps({'status': i}) + '\n' for i in func(*a, **kw))
-        yield json.dumps({'success': 'stream-complete'}) + '\n'
-
-    return wrap
+    return response.json({'success': 'Settings saved'})
 
 
 @api_bp.route('/settings/refresh', methods=['POST'])
@@ -77,21 +62,40 @@ async def refresh_post(request):
     return response.json({'success': 'stream-complete'})
 
 
-# TODO POST._cp_config = {'response.stream': True}
+download_queue = Queue()
 
 
-@api_bp.route('/download', methods=['POST'])
-def download_post(self):
-    @json_statuses_streamer
-    def streamer():
+@api_bp.route('/settings/download', methods=['POST'])
+async def download_post(request):
+    download_queue.put('stream-started')
+
+    async def perform_download():
+        logger.info('perform_download: download started')
+        download_queue.put('download-started')
         with get_db_context(commit=True) as (db_conn, db):
-            yield from update_channels(db_conn, db)
-            yield from download_all_missing_videos(db_conn, db)
+            for msg in update_channels(db_conn, db):
+                download_queue.put(msg)
+            for msg in download_all_missing_videos(db_conn, db):
+                download_queue.put(msg)
+        download_queue.put('download-complete')
+        download_queue.put('stream-complete')
 
-    return streamer()
+    coro = perform_download()
+    asyncio.ensure_future(coro)
+    return response.json(
+        {'success': 'stream-started', 'stream-url': 'ws://127.0.0.1:8080/api/videos/feeds/download'})
 
 
-# TODO POST._cp_config = {'response.stream': True}
+@api_bp.websocket('/feeds/download')
+async def download_feed(request, ws):
+    await ws.send('stream-connect')
+    while True:
+        msg = download_queue.get()
+        if msg == 'stream-complete':
+            break
+        logger.debug(f'{type(msg)} msg={msg}')
+        await ws.send(msg)
+    await ws.send('stream-complete')
 
 
 @api_bp.route('/channel', methods=['GET'])
@@ -125,12 +129,10 @@ def channel_post(request, **form_data):
         link=new_channel['link'],
     )
     if conflicting_channels:
-        # TODO cherrypy.response.status = 400
-        return json.dumps({'error': 'Channel Name or URL already taken'})
+        return response.json({'error': 'Channel Name or URL already taken'}, 404)
 
     if not new_channel['name'] or not new_channel['url']:
-        # TODO cherrypy.response.status = 400
-        return json.dumps({'error': 'Channels require a URL and Name'})
+        return response.json({'error': 'Channels require a URL and Name'}, 404)
 
     with db.transaction(commit=True):
         channel = Channel(
@@ -156,16 +158,14 @@ def channel_put(request, link, **form_data):
         existing_channel = Channel.get_one(link=link)
 
         if not existing_channel:
-            # TODO cherrypy.response.status = 400
-            return json.dumps({'error': 'Unknown channel'})
+            return response.json({'error': 'Unknown channel'}, 404)
 
         # Only update directory if it was empty
         if new_channel['directory'] and not existing_channel['directory']:
             try:
                 new_channel['directory'] = get_absolute_channel_directory(new_channel['directory'])
             except Exception:
-                # TODO cherrypy.response.status = 400
-                return json.dumps({'error': 'Unknown directory'})
+                return response.json({'error': 'Unknown directory'}, 404)
         else:
             new_channel['directory'] = existing_channel['directory']
         new_channel['directory'] = str(new_channel['directory'])
@@ -180,7 +180,7 @@ def channel_put(request, link, **form_data):
             directory=new_channel['directory'],
         )
         if list(conflicting_channels):
-            return json.dumps({'error': 'Channel Name or URL already taken'})
+            return response.json({'error': 'Channel Name or URL already taken'}, 400)
 
         existing_channel['url'] = new_channel['url']
         existing_channel['name'] = new_channel['name']
@@ -188,7 +188,7 @@ def channel_put(request, link, **form_data):
         existing_channel['match_regex'] = new_channel['match_regex']
         existing_channel.flush()
 
-    return json.dumps({'success': 'The channel was updated successfully.'})
+    return response.json({'success': 'The channel was updated successfully.'})
 
 
 @api_bp.route('/channel', methods=['DELETE'])
@@ -197,10 +197,30 @@ def channel_delete(request, link):
     Channel = db['channel']
     channel = Channel.get_one(link=link)
     if not channel:
-        return json.dumps({'error': 'Unknown channel'})
+        response.json({'error': 'Unknown channel'}, 404)
     with db.transaction(commit=True):
         channel.delete()
-    return json.dumps({'success': 'Channel deleted'})
+    return response.json({'success': 'Channel deleted'})
+
+
+@api_bp.route('/video/<hash:string>')
+@api_bp.route('/poster/<hash:string>')
+@api_bp.route('/caption/<hash:string>')
+async def media_file(request: Request, hash: str):
+    db = request.ctx.db
+    download = boolean_arg(request, 'download')
+    Video = db['video']
+    kind = str(request.path).split('/')[3]
+
+    try:
+        video = Video.get_one(video_path_hash=hash)
+        path = get_absolute_video_path(video, kind=kind)
+        if download:
+            return await response.file_stream(str(path), filename=path.name)
+        else:
+            return await response.file_stream(str(path))
+    except TypeError or KeyError or UnknownFile:
+        abort(404, f"Can't find {kind} by that ID.")
 
 
 def get_channel_form(form_data: dict):

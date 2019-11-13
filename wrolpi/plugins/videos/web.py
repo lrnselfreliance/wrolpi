@@ -1,11 +1,9 @@
 from dictorm import DictDB
 from sanic import Blueprint, response
 from sanic.exceptions import abort
-from sanic.request import Request
 
-from wrolpi.common import env, get_pagination_with_generator, create_pagination_dict, boolean_arg
-from wrolpi.plugins.videos.common import get_downloader_config, get_absolute_video_path, \
-    get_video_description, get_video_info_json, UnknownFile
+from wrolpi.common import env, get_pagination_with_generator, create_pagination_dict
+from wrolpi.plugins.videos.common import get_downloader_config, get_video_description, get_video_info_json
 
 PLUGIN_ROOT = 'videos'
 
@@ -61,27 +59,6 @@ async def settings(request):
     return response.html(html)
 
 
-@client_bp.route('/video/<hash:string>')
-@client_bp.route('/poster/<hash:string>')
-@client_bp.route('/caption/<hash:string>')
-async def media_file(request: Request, hash: str):
-    db = request.ctx.db
-    download = boolean_arg(request, 'download')
-    Video = db['video']
-    kind = str(request.path).split('/')[2]
-
-    try:
-        video = Video.get_one(video_path_hash=hash)
-        path = get_absolute_video_path(video, kind=kind)
-        if download:
-            return await response.file_stream(str(path), filename=path.name)
-        else:
-            return await response.file_stream(str(path))
-
-    except TypeError or KeyError or UnknownFile:
-        abort(404, f"Can't find {kind} by that ID.")
-
-
 @client_bp.route('/search')
 def search(request, search: str, offset: int = None, link: str = None):
     db = request.ctx.db
@@ -101,7 +78,7 @@ def channel_index(request, link: str = None, offset: int = None, limit: int = No
     db = request.ctx.db
     if not link:
         # Link was not passed, probably a malformed url
-        raise cherrypy.HTTPRedirect(f'/{PLUGIN_ROOT}')
+        raise response.redirect(f'/{PLUGIN_ROOT}')
 
     offset = int(offset) if offset else 0
     limit = int(limit) if limit else 20
@@ -125,7 +102,7 @@ def video_index(request, link: str, hash: str):
 
     video = Video.get_one(video_path_hash=hash)
     if not video:
-        raise cherrypy.HTTPError(404, f'No video with id {hash}')
+        abort(404, f'No video with id {hash}')
 
     # Get the description from it's file, or from the video's info_json file.
     description = get_video_description(video)

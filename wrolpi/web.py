@@ -57,7 +57,7 @@ async def settings(request):
 echo_bp = Blueprint('echo_api_bp')
 
 
-@echo_bp.route('/echo', methods=['GET', 'POST', 'PUT', 'DELETE'])
+@echo_bp.route('/echo', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
 async def echo(request: Request):
     return response.json({'request_json': request.json, 'method': request.method})
 
@@ -76,7 +76,7 @@ def start_webserver(host: str, port: int):
     api_group = Blueprint.group(*blueprints, echo_bp, url_prefix='/api')
     webapp.blueprint(api_group)
 
-    webapp.run(host, port)
+    webapp.run(host, port, workers=4)
 
 
 def init_parser(parser):

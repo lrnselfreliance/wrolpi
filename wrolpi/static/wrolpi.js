@@ -44,9 +44,26 @@ function hide_checkmark(elem) {
     checkmark.hide();
 }
 
+function attach_feed(elem, stream_url) {
+    console.log('attach-feed');
+    let form = $(elem).parents('form:first');
+    let stream_pre = form.find('pre.stream-feed');
+    let socket = new WebSocket(stream_url, 'protocolOne');
+    console.log(socket);
+    socket.onmessage = function(event) {
+        console.log(event.data);
+        stream_pre.text = event.data;
+    }
+}
+
+
 form_response_handler = function (button, response) {
     console.log(response);
     hide_spinner(button);
+    console.log('stream-url', response['stream-url']);
+    if (response.hasOwnProperty('stream-url') && response["stream-url"]) {
+        attach_feed(button, response["stream-url"])
+    }
     if (response.hasOwnProperty('success')) {
         console.log('success');
         hide_xmark(button);

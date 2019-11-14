@@ -74,50 +74,44 @@ class TestAPI(unittest.TestCase):
             url='https://example.com/channel1',
         )
 
-        with get_db_context() as (db_conn, db):
-            Channel = db['channel']
+        # Channel doesn't exist
+        request, response = webapp.test_client.get('/api/videos/channel/examplechannel1')
+        assert response.status_code == HTTPStatus.NOT_FOUND, f'Channel exists: {response.json}'
 
-            # Channel doesn't exist
-            request, response = webapp.test_client.get('/api/videos/channel/examplechannel1')
-            assert response.status_code == HTTPStatus.NOT_FOUND, f'Channel exists: {response.json}'
+        # Create it
+        request, response = webapp.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.CREATED
+        location = response.headers['Location']
+        request, response = webapp.test_client.get(location)
+        created = response.json['channel']
+        self.assertIsNotNone(created)
+        self.assertIsNotNone(created['id'])
 
-            # Create it
-            request, response = webapp.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
-            assert response.status_code == HTTPStatus.CREATED
-            location = response.headers['Location']
-            request, response = webapp.test_client.get(location)
-            created = response.json['channel']
-            self.assertIsNotNone(created)
-            self.assertIsNotNone(created['id'])
+        # Get the link that was decided
+        new_channel['link'] = response.json['channel']['link']
+        assert new_channel['link']
 
-            # Get the link that was decided
-            new_channel['link'] = response.json['channel']['link']
-            assert new_channel['link']
+        # Can't create it again
+        request, response = webapp.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.BAD_REQUEST
 
-            # Can't create it again
-            request, response = webapp.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
-            assert response.status_code == HTTPStatus.BAD_REQUEST
+        # Update it
+        new_channel['name'] = 'Example Channel 2'
+        new_channel['directory'] = str(new_channel['directory'])
+        request, response = webapp.test_client.put(location, data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.OK, response.status_code
 
-            # Update it
-            new_channel['name'] = 'Example Channel 2'
-            new_channel['directory'] = str(new_channel['directory'])
-            request, response = webapp.test_client.put(location, data=json.dumps(new_channel))
-            assert response.status_code == HTTPStatus.OK, response.status_code
-            updated = Channel.get_one(link='examplechannel1')
-            self.assertIsNotNone(updated['id'])
-            self.assertEqual(updated['name'], new_channel['name'])
+        # Can't update channel that doesn't exist
+        request, response = webapp.test_client.put('/api/videos/channel/doesnt_exist', data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
-            # Can't update channel that doesn't exist
-            request, response = webapp.test_client.put('/api/videos/channel/doesnt_exist', data=json.dumps(new_channel))
-            assert response.status_code == HTTPStatus.NOT_FOUND
+        # Delete the new channel
+        request, response = webapp.test_client.delete(location)
+        assert response.status_code == HTTPStatus.OK
 
-            # Delete the new channel
-            request, response = webapp.test_client.delete(location)
-            assert response.status_code == HTTPStatus.OK
-
-            # Cant delete it again
-            request, response = webapp.test_client.delete(location)
-            assert response.status_code == HTTPStatus.NOT_FOUND
+        # Cant delete it again
+        request, response = webapp.test_client.delete(location)
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
     @test_db_wrapper
     def test_refresh_videos(self):
@@ -173,7 +167,7 @@ class TestAPI(unittest.TestCase):
 
             # Finally, call the refresh.  Again, it should remove the "foo" video, then discover this 3rd video
             # file and it's description.
-            api.refresh_videos(db)
+            request, response = webapp.test_client.post('/api/videos/settings/refresh')
 
             # Bogus file was removed
             self.assertNotIn('foo', {i['video_path'] for i in channel['videos']})

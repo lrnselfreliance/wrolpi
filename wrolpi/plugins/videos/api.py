@@ -73,7 +73,6 @@ async def refresh(request: Request):
         refresh_queue.put('refresh-complete')
         refresh_logger.info('refresh complete')
         refresh_queue.put('stream-complete')
-        refresh_queue.close()
 
     refresh_queue.put('stream-started')
     coro = do_refresh()
@@ -113,7 +112,6 @@ async def download_post(request: Request):
         download_queue.put('download-complete')
         dl_logger.info('download complete')
         download_queue.put('stream-complete')
-        download_queue.close()
 
     download_queue.put('stream-started')
     coro = do_download()

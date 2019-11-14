@@ -2,16 +2,17 @@ import json
 import pathlib
 import tempfile
 import unittest
+from http import HTTPStatus
 from shutil import copyfile
 
 import mock
 import yaml
 
-from wrolpi.plugins.videos.api import APIRoot, refresh_videos
 from wrolpi.plugins.videos.common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH, get_config
 from wrolpi.plugins.videos.downloader import insert_video
 from wrolpi.test.common import test_db_wrapper
 from wrolpi.tools import get_db_context
+from wrolpi.web import webapp
 
 CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
 cwd = pathlib.Path(__file__).parents[4]
@@ -35,41 +36,27 @@ class TestAPI(unittest.TestCase):
         self.assertNotEqual(original['video_root_directory'], 'foo')
         self.assertNotEqual(original['file_name_format'], 'bar')
 
-        api = APIRoot()
-        form_data = {
-            'video_root_directory': 'foo',
-            'file_name_format': 'bar',
-        }
-        api.settings.PUT(**form_data)
+        data = {'video_root_directory': 'foo', 'file_name_format': 'bar'}
+        webapp.test_client.put('/api/videos/settings', data=json.dumps(data))
 
         self.assertEqual(import_settings_config(), 0)
         updated = get_downloader_config()
         diff = set(updated.items()).difference(set(original.items()))
-        self.assertEqual(diff,
-                         {
-                             ('video_root_directory', 'foo'),
-                             ('file_name_format', 'bar'),
-                         })
+        expected = {('video_root_directory', 'foo'), ('file_name_format', 'bar')}
+        self.assertEqual(diff, expected)
 
     @test_db_wrapper
     def test_refresh(self):
-        api = APIRoot()
         with get_db_context(commit=True) as (db_conn, db):
             Video = db['video']
             import_settings_config()
 
             # Insert a bogus video, it should be removed
             bogus = Video(video_path='bar').flush()
-            assert bogus['id'], 'Failed to insert a bogus video for removal'
+            assert bogus and bogus['id'], 'Failed to insert a bogus video for removal'
 
         # TODO this test is very fragile :(
-        streamer = api.settings.refresh.POST()
-        statuses = [json.loads(s) for s in streamer]
-        self.assertEqual({'success': 'stream-complete'}, statuses.pop(-1))
-
-        statuses = [s['status'] for s in statuses]
-        # Some statuses should have been sent
-        assert statuses
+        webapp.test_client.post('/api/videos/settings/refresh')
 
         with get_db_context() as (db_conn, db):
             Video, Channel = db['video'], db['channel']
@@ -78,7 +65,6 @@ class TestAPI(unittest.TestCase):
 
     @test_db_wrapper
     def test_channel(self):
-        api = APIRoot()
         channel_directory = tempfile.TemporaryDirectory().name
         pathlib.Path(channel_directory).mkdir()
         new_channel = dict(
@@ -92,37 +78,46 @@ class TestAPI(unittest.TestCase):
             Channel = db['channel']
 
             # Channel doesn't exist
-            existing = api.channel.GET('examplechannel1', db)
-            self.assertIn('error', existing)
+            request, response = webapp.test_client.get('/api/videos/channel/examplechannel1')
+            assert response.status_code == HTTPStatus.NOT_FOUND, f'Channel exists: {response.json}'
 
             # Create it
-            result = api.channel.POST(db, **new_channel)
-            self.assertIn('success', result)
-            response = api.channel.GET('examplechannel1', db)
-            created = json.loads(response)['channel']
+            request, response = webapp.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
+            assert response.status_code == HTTPStatus.CREATED
+            location = response.headers['Location']
+            request, response = webapp.test_client.get(location)
+            created = response.json['channel']
             self.assertIsNotNone(created)
             self.assertIsNotNone(created['id'])
 
+            # Get the link that was decided
+            new_channel['link'] = response.json['channel']['link']
+            assert new_channel['link']
+
             # Can't create it again
-            result = api.channel.POST(db, **new_channel)
-            self.assertIn('error', result)
+            request, response = webapp.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
+            assert response.status_code == HTTPStatus.BAD_REQUEST
 
             # Update it
             new_channel['name'] = 'Example Channel 2'
             new_channel['directory'] = str(new_channel['directory'])
-            result = api.channel.PUT('examplechannel1', db, **new_channel)
-            self.assertIn('success', result)
+            request, response = webapp.test_client.put(location, data=json.dumps(new_channel))
+            assert response.status_code == HTTPStatus.OK, response.status_code
             updated = Channel.get_one(link='examplechannel1')
             self.assertIsNotNone(updated['id'])
             self.assertEqual(updated['name'], new_channel['name'])
 
             # Can't update channel that doesn't exist
-            result = api.channel.PUT('DoesntExist', db, **new_channel)
-            self.assertIn('error', result)
+            request, response = webapp.test_client.put('/api/videos/channel/doesnt_exist', data=json.dumps(new_channel))
+            assert response.status_code == HTTPStatus.NOT_FOUND
 
             # Delete the new channel
-            result = api.channel.DELETE('examplechannel1', db)
-            self.assertIn('success', result)
+            request, response = webapp.test_client.delete(location)
+            assert response.status_code == HTTPStatus.OK
+
+            # Cant delete it again
+            request, response = webapp.test_client.delete(location)
+            assert response.status_code == HTTPStatus.NOT_FOUND
 
     @test_db_wrapper
     def test_refresh_videos(self):
@@ -178,7 +173,7 @@ class TestAPI(unittest.TestCase):
 
             # Finally, call the refresh.  Again, it should remove the "foo" video, then discover this 3rd video
             # file and it's description.
-            refresh_videos(db)
+            api.refresh_videos(db)
 
             # Bogus file was removed
             self.assertNotIn('foo', {i['video_path'] for i in channel['videos']})

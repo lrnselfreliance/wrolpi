@@ -4,14 +4,16 @@ import os
 import string
 import sys
 from functools import wraps
+from http import HTTPStatus
 from typing import Tuple
 
 import sanic
 from attr import dataclass
 from dictorm import ResultsGenerator
 from jinja2 import Environment, FileSystemLoader
-from marshmallow import Schema
+from marshmallow import Schema, ValidationError
 from sanic import Sanic
+from sanic.exceptions import abort, InvalidUsage
 from sanic.request import Request
 
 sanic_app = Sanic()
@@ -168,19 +170,30 @@ def boolean_arg(request, arg_name):
     return value == 'true'
 
 
+ls_logger = logger.getChild('load_schema')
+
+
 def load_schema(schema: Schema):
-    """Load form data from Sanic Request into the provided Schema"""
+    """Load JSON data from Sanic Request into the provided Schema"""
 
     def _load_schema(func):
         @wraps(func)
         def wrapped(request: Request, *a, **kw):
-            logger.debug(f'form data: {request.form}')
-            form = schema.load(request.form)
-            if 'form' in kw:
-                raise KeyError('`form` keyword already provided')
-            kw['form'] = form
-            results = func(request, *a, **kw)
-            return results
+            try:
+                # TODO do this intelligently
+                raw_data = request.json
+                ls_logger.debug(f'request json: {request.json}')
+            except InvalidUsage:
+                raw_data = request.form
+                ls_logger.debug(f'request form: {request.form}')
+
+            try:
+                data = schema.load(raw_data)
+            except ValidationError as e:
+                abort(HTTPStatus.BAD_REQUEST, str(e))
+
+            response = func(request, *a, **kw, data=data)
+            return response
 
         return wrapped
 

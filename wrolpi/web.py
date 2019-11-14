@@ -1,5 +1,6 @@
 import argparse
 import pathlib
+from functools import wraps
 
 from sanic import Blueprint, Sanic, response
 from sanic.request import Request
@@ -20,20 +21,29 @@ root_client = Blueprint('root')
 # Add DB middleware
 @webapp.middleware('request')
 def setup_db_context(request):
-    pool, conn, db, key = get_db()
-    request.ctx.pool = pool
-    request.ctx.conn = conn
-    request.ctx.db = db
-    request.ctx.key = key
+    @wraps(get_db)
+    def _get_db():
+        pool, conn, db, key = get_db()
+        request.ctx.pool = pool
+        request.ctx.conn = conn
+        request.ctx.db = db
+        request.ctx.key = key
+        return db
+
+    request.ctx.get_db = _get_db
 
 
 @webapp.middleware('response')
 def teardown_db_context(request, response):
-    pool, conn, key = request.ctx.pool, request.ctx.conn, request.ctx.key
     try:
-        pool.putconn(conn, key=key, close=True)
-    except KeyError:
-        logger.debug(f'Failed to return db connection {key}')
+        pool, conn, key = request.ctx.pool, request.ctx.conn, request.ctx.key
+        try:
+            pool.putconn(conn, key=key, close=True)
+        except KeyError:
+            logger.debug(f'Failed to return db connection {key}')
+    except AttributeError:
+        # get_db was never called
+        pass
 
 
 @root_client.route('/')
@@ -57,21 +67,21 @@ echo_bp = Blueprint('echo_api_bp')
 async def echo(request: Request):
     return response.json({'request_json': request.json, 'method': request.method})
 
+# routes: /static/*
+webapp.static('/static', str(static_dir))
+
+# routes: /*
+client_bps = [i.client_bp for i in PLUGINS.values()]
+client_group = Blueprint.group(client_bps, root_client)
+webapp.blueprint(client_group)
+
+# routes: /api/*
+blueprints = [i.api_bp for i in PLUGINS.values()]
+api_group = Blueprint.group(*blueprints, echo_bp, url_prefix='/api')
+webapp.blueprint(api_group)
+
 
 def run_webserver(host: str, port: int):
-    # routes: /static/*
-    webapp.static('/static', str(static_dir))
-
-    # routes: /*
-    client_bps = [i.client_bp for i in PLUGINS.values()]
-    client_group = Blueprint.group(client_bps, root_client)
-    webapp.blueprint(client_group)
-
-    # routes: /api/*
-    blueprints = [i.api_bp for i in PLUGINS.values()]
-    api_group = Blueprint.group(*blueprints, echo_bp, url_prefix='/api')
-    webapp.blueprint(api_group)
-
     webapp.run(host, port, workers=4)
 
 

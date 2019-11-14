@@ -36,7 +36,7 @@ async def index(request):
     """
     This page displays a list of channels.
     """
-    db = request.ctx.db
+    db: DictDB = request.ctx.get_db()
     template = env.get_template('wrolpi/plugins/videos/templates/channels.html')
     kwargs = _get_render_kwargs(db)
     html = template.render(**kwargs)
@@ -46,7 +46,7 @@ async def index(request):
 @client_bp.route('/settings')
 async def settings(request):
     """Page to list and edit channels"""
-    db = request.ctx.db
+    db: DictDB = request.ctx.get_db()
     downloader_config = get_downloader_config()
     video_root_directory = downloader_config['video_root_directory']
 
@@ -61,7 +61,7 @@ async def settings(request):
 
 @client_bp.route('/search')
 def search(request, search: str, offset: int = None, link: str = None):
-    db = request.ctx.db
+    db: DictDB = request.ctx.get_db()
     offset = int(offset) if offset else 0
     results = video_search(db, search, offset, link)
     template = env.get_template('wrolpi/plugins/videos/templates/search_video.html')
@@ -75,7 +75,7 @@ def search(request, search: str, offset: int = None, link: str = None):
 
 @client_bp.route('/channel/<link:string>')
 def channel_index(request, link: str = None, offset: int = None, limit: int = None):
-    db = request.ctx.db
+    db: DictDB = request.ctx.get_db()
     if not link:
         # Link was not passed, probably a malformed url
         raise response.redirect(f'/{PLUGIN_ROOT}')
@@ -97,7 +97,7 @@ def channel_index(request, link: str = None, offset: int = None, limit: int = No
 
 @client_bp.route('/channel/<link:string>/video/<hash:string>')
 def video_index(request, link: str, hash: str):
-    db = request.ctx.db
+    db: DictDB = request.ctx.get_db()
     Video = db['video']
 
     video = Video.get_one(video_path_hash=hash)

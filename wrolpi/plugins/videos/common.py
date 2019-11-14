@@ -111,7 +111,7 @@ def get_video_root() -> Path:
 def get_absolute_channel_directory(directory: str) -> Path:
     directory = get_video_root() / directory
     if not directory.exists():
-        raise Exception(f'Channel directory does not exist! {directory}')
+        raise UnknownDirectory(f'Channel directory does not exist! {directory}')
     return directory
 
 

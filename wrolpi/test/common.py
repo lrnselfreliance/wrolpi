@@ -59,7 +59,8 @@ def test_db_wrapper(func):
                     """Get the testing db"""
                     return FakePool(), testing_db_conn, testing_db, None
 
-                with mock.patch('wrolpi.tools.get_db', _get_db):
+                with mock.patch('wrolpi.tools.get_db', _get_db), \
+                     mock.patch('wrolpi.web.get_db', _get_db):
                     return func(*a, **kw)
 
             finally:

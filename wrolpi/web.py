@@ -4,12 +4,8 @@ import pathlib
 from sanic import Blueprint, Sanic, response
 from sanic.request import Request
 
-from wrolpi.tools import setup_ctx, get_db
-
-# Setup the tools before importing modules which rely on them
-setup_ctx()
-
 from wrolpi.common import env, logger
+from wrolpi.tools import get_db
 from wrolpi.user_plugins import PLUGINS
 
 cwd = pathlib.Path(__file__).parent
@@ -62,7 +58,7 @@ async def echo(request: Request):
     return response.json({'request_json': request.json, 'method': request.method})
 
 
-def start_webserver(host: str, port: int):
+def run_webserver(host: str, port: int):
     # routes: /static/*
     webapp.static('/static', str(static_dir))
 
@@ -86,7 +82,7 @@ def init_parser(parser):
 
 
 def main(args):
-    start_webserver(args.host, args.port)
+    run_webserver(args.host, args.port)
     return 0
 
 
@@ -94,5 +90,4 @@ if __name__ == '__main__':
     # If run directly, we'll make our own parser
     parser = argparse.ArgumentParser()
     init_parser(parser)
-    args = parser.parse_args()
-    main(args)
+    main(parser.parse_args())

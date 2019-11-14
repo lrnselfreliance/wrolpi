@@ -3,37 +3,11 @@ from contextlib import contextmanager
 from threading import Semaphore
 from typing import Tuple
 
-import cherrypy
 import psycopg2 as psycopg2
 from dictorm import DictDB
 from psycopg2.pool import ThreadedConnectionPool
 
-from wrolpi.common import logger, setup_relationships, DOCKERIZED
-
-
-class DBTool(cherrypy.Tool):
-    """Setup and attach a DB to a request before the handler gets it.  Teardown the DB after
-    a request."""
-
-    def __init__(self):
-        self.pool = None
-        self.conn = None
-        self.db = None
-        self.key = None
-        cherrypy.Tool.__init__(self, 'before_handler', self.setup_db, priority=25)
-
-    def setup_db(self):
-        self.pool, self.conn, self.db, self.key = get_db()
-        req = cherrypy.request
-        req.params['db'] = self.db
-        cherrypy.request.hooks.attach('on_end_request', self.teardown_db, priority=25)
-
-    def teardown_db(self):
-        try:
-            self.pool.putconn(self.conn, key=self.key, close=True)
-        except KeyError:
-            # Connection already returned?
-            logger.debug(f'Failed to return db connection {self.key}')
+from wrolpi.common import setup_relationships, DOCKERIZED
 
 
 class SemaphoreThreadedConnectionPool(ThreadedConnectionPool):
@@ -91,13 +65,3 @@ def get_db_context(commit=False) -> Tuple[psycopg2.connect, DictDB]:
         db_conn.rollback()
 
     db_pool.putconn(db_conn, key=key, close=True)
-
-
-CTX_SETUP = False
-
-
-def setup_ctx():
-    """Setup the Sanic ctx.  Do this only once."""
-    global CTX_SETUP
-    if CTX_SETUP is False:
-        CTX_SETUP = True

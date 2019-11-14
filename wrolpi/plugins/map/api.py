@@ -2,29 +2,19 @@ import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
 
-import cherrypy
+from sanic import Blueprint
 
-from wrolpi.tools import setup_ctx
-
-setup_ctx()
+client_bp = Blueprint('content_map', url_prefix='/map')
 
 
-class APIRoot(object):
+@client_bp.route('/pbf', methods=['POST'])
+def pbf_post(self, **form_data):
+    pbf_url = form_data.get('pbf_url')
+    parsed = urlparse(pbf_url)
+    if not parsed.scheme or not parsed.netloc or not parsed.path:
+        raise Exception('Invalid PBF url')
 
-    def __init__(self):
-        self.pbf = PBFApi()
-
-
-@cherrypy.expose
-class PBFApi(object):
-
-    def POST(self, **form_data):
-        pbf_url = form_data.get('pbf_url')
-        parsed = urlparse(pbf_url)
-        if not parsed.scheme or not parsed.netloc or not parsed.path:
-            raise Exception('Invalid PBF url')
-
-        put_async_download(pbf_url)
+    put_async_download(pbf_url)
 
 
 def get_http_file_size(url):

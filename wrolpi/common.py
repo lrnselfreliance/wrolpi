@@ -3,13 +3,16 @@ import logging
 import os
 import string
 import sys
+from functools import wraps
 from typing import Tuple
 
 import sanic
 from attr import dataclass
 from dictorm import ResultsGenerator
 from jinja2 import Environment, FileSystemLoader
+from marshmallow import Schema
 from sanic import Sanic
+from sanic.request import Request
 
 sanic_app = Sanic()
 
@@ -163,3 +166,22 @@ def boolean_arg(request, arg_name):
     """Return True only if the specified query arg is equal to 'true'"""
     value = request.args.get(arg_name)
     return value == 'true'
+
+
+def load_schema(schema: Schema):
+    """Load form data from Sanic Request into the provided Schema"""
+
+    def _load_schema(func):
+        @wraps(func)
+        def wrapped(request: Request, *a, **kw):
+            logger.debug(f'form data: {request.form}')
+            form = schema.load(request.form)
+            if 'form' in kw:
+                raise KeyError('`form` keyword already provided')
+            kw['form'] = form
+            results = func(request, *a, **kw)
+            return results
+
+        return wrapped
+
+    return _load_schema

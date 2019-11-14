@@ -6,10 +6,11 @@ under you?
 """
 import unittest
 
-from wrolpi.tools import get_db_context
 from wrolpi.plugins.example_plugin.api import APIRoot
 from wrolpi.plugins.example_plugin.common import hello
+
 from wrolpi.test.common import test_db_wrapper
+from wrolpi.tools import get_db_context
 
 
 class TestAPI(unittest.TestCase):

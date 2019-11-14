@@ -2,7 +2,6 @@
 import argparse
 import logging
 
-from wrolpi.tools import get_db_context
 from wrolpi.plugins.videos import downloader, api
 
 PRETTY_NAME = 'Videos'

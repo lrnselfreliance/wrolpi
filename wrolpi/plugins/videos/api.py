@@ -1,5 +1,5 @@
 """
-This module contains the CherryPy classes, as well as functions necessary to retrieve video files.  This module also
+This module contains the Sanic routes, as well as functions necessary to retrieve video files.  This module also
 contains functions that will search the file structure for video files, as well as cleanup the DB video records.
 
 All paths in the DB are relative.  A Channel's directory is relative to the video_root_directory.  A Video's path (as
@@ -26,15 +26,17 @@ import asyncio
 import json
 import pathlib
 from functools import wraps
+from http import HTTPStatus
 from multiprocessing import Queue
 from uuid import uuid1
 
 from dictorm import DictDB
+from marshmallow import Schema, fields
 from sanic import Blueprint, response
 from sanic.exceptions import abort
 from sanic.request import Request
 
-from wrolpi.common import sanitize_link, boolean_arg
+from wrolpi.common import sanitize_link, boolean_arg, load_schema
 from wrolpi.plugins.videos.captions import process_captions
 from wrolpi.plugins.videos.common import get_conflicting_channels, get_absolute_video_path, UnknownFile
 from wrolpi.plugins.videos.downloader import insert_video, update_channels, download_all_missing_videos
@@ -47,7 +49,7 @@ api_bp = Blueprint('api_video', url_prefix='/videos')
 
 
 @api_bp.route('/settings', methods=['PUT'])
-def settings_put(request, **form_data):
+def settings_put(request: Request, **form_data):
     downloader_config = get_downloader_config()
     downloader_config['video_root_directory'] = form_data['video_root_directory']
     downloader_config['file_name_format'] = form_data['file_name_format']
@@ -56,50 +58,66 @@ def settings_put(request, **form_data):
 
 
 @api_bp.route('/settings/refresh', methods=['POST'])
-async def refresh_post(request):
+async def refresh_post(request: Request):
     db = request.ctx.db
     refresh_videos(db)
     return response.json({'success': 'stream-complete'})
 
 
+# Used to send websocket messages to the frontend
 download_queue = Queue()
 
 
 @api_bp.route('/settings/download', methods=['POST'])
-async def download_post(request):
-    download_queue.put('stream-started')
+async def download_post(request: Request):
+    dl_logger = logger.getChild('download')
 
-    async def perform_download():
-        logger.info('perform_download: download started')
-        download_queue.put('download-started')
+    async def do_download():
+        dl_logger.info('download started')
         with get_db_context(commit=True) as (db_conn, db):
             for msg in update_channels(db_conn, db):
                 download_queue.put(msg)
             for msg in download_all_missing_videos(db_conn, db):
                 download_queue.put(msg)
         download_queue.put('download-complete')
+        dl_logger.info('download complete')
         download_queue.put('stream-complete')
+        download_queue.close()
 
-    coro = perform_download()
+    download_queue.put('stream-started')
+    coro = do_download()
     asyncio.ensure_future(coro)
+    dl_logger.debug('do_download scheduled')
     return response.json(
         {'success': 'stream-started', 'stream-url': 'ws://127.0.0.1:8080/api/videos/feeds/download'})
 
 
 @api_bp.websocket('/feeds/download')
-async def download_feed(request, ws):
-    await ws.send('stream-connect')
+async def download_feed(request: Request, ws):
+    df_logger = logger.getChild('download_feed')
+    await ws.send('client-connected')
     while True:
         msg = download_queue.get()
         if msg == 'stream-complete':
             break
-        logger.debug(f'{type(msg)} msg={msg}')
+        df_logger.debug(f'msg={msg}')
         await ws.send(msg)
     await ws.send('stream-complete')
 
 
-@api_bp.route('/channel', methods=['GET'])
-def channel_get(request, link):
+class ChannelSchema(Schema):
+    url = fields.Str()
+    name = fields.Str()
+    match_regex = fields.Str()
+    link = fields.Str()
+    directory = fields.Str()
+
+
+channel_schema = ChannelSchema()
+
+
+@api_bp.route('/channel/<link:string>', methods=['GET'])
+def channel_get(request: Request, link: str):
     db = request.ctx.db
     Channel = db['channel']
     channel = Channel.get_one(link=link)
@@ -109,49 +127,50 @@ def channel_get(request, link):
 
 
 @api_bp.route('/channel', methods=['POST'])
-def channel_post(request, **form_data):
+@load_schema(channel_schema)
+def channel_post(request: Request, form):
     """Create a new channel"""
     db = request.ctx.db
     Channel = db['channel']
 
-    new_channel = get_channel_form(form_data)
+    if not form['name']:
+        return response.json({'error': 'Channels require a Name'}, HTTPStatus.BAD_REQUEST)
 
     try:
-        new_channel['directory'] = get_absolute_channel_directory(new_channel['directory'])
+        form['directory'] = get_absolute_channel_directory(form['directory'])
     except UnknownDirectory:
         return json.dumps({'error': 'Unknown directory'})
 
     # Verify that the URL/Name/Link aren't taken
     conflicting_channels = get_conflicting_channels(
         db,
-        url=new_channel['url'],
-        name_=new_channel['name'],
-        link=new_channel['link'],
+        url=form['url'],
+        name_=form['name'],
+        link=form['link'],
     )
     if conflicting_channels:
-        return response.json({'error': 'Channel Name or URL already taken'}, 404)
-
-    if not new_channel['name'] or not new_channel['url']:
-        return response.json({'error': 'Channels require a URL and Name'}, 404)
+        return response.json({'error': 'Channel Name or URL already taken'}, HTTPStatus.NOT_FOUND)
 
     with db.transaction(commit=True):
         channel = Channel(
-            name=new_channel['name'],
-            url=new_channel['url'],
-            match=new_channel['match_regex'],
-            link=new_channel['link'],
+            name=form['name'],
+            url=form['url'],
+            match=form['match_regex'],
+            link=form['link'],
         )
         channel.flush()
 
-    return json.dumps({'success': 'Channel created successfully'})
+    return response.json({'success': 'Channel created successfully'}, HTTPStatus.CREATED,
+                         {'Location': f'/api/videos/channel/{channel["id"]}'})
 
 
-@api_bp.route('/channel', methods=['PUT'])
-def channel_put(request, link, **form_data):
+@api_bp.route('/channel/<link:string>', methods=['PUT'])
+def channel_put(request: Request, link: str):
     """Update an existing channel"""
     db = request.ctx.db
     Channel = db['channel']
 
+    form_data = request.parsed_form
     new_channel = get_channel_form(form_data)
 
     with db.transaction(commit=True):
@@ -191,8 +210,8 @@ def channel_put(request, link, **form_data):
     return response.json({'success': 'The channel was updated successfully.'})
 
 
-@api_bp.route('/channel', methods=['DELETE'])
-def channel_delete(request, link):
+@api_bp.route('/channel/<link:string>', methods=['DELETE'])
+def channel_delete(request, link: str):
     db = request.ctx.db
     Channel = db['channel']
     channel = Channel.get_one(link=link)

@@ -1,8 +1,8 @@
 #! /usr/bin/env python3
 from typing import Generator
 
-import webvtt
 import srt
+import webvtt
 from dictorm import Dict
 
 from wrolpi.common import logger

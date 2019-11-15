@@ -11,7 +11,7 @@ import yaml
 from wrolpi.plugins.videos.common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH, get_config
 from wrolpi.plugins.videos.downloader import insert_video
 from wrolpi.test.common import wrap_test_db
-from wrolpi.tools import get_db_context
+from wrolpi.db import get_db_context
 from wrolpi.web import webapp, attach_routes
 
 CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)

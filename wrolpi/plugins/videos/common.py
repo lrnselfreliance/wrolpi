@@ -9,7 +9,7 @@ from dictorm import And, Or, Dict
 
 from wrolpi.common import sanitize_link
 from wrolpi.vars import DOCKERIZED
-from wrolpi.tools import get_db_context
+from wrolpi.db import get_db_context
 
 MY_DIR: Path = Path(__file__).parent
 CONFIG_PATH = MY_DIR / 'local.yaml'

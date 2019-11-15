@@ -5,7 +5,7 @@ import mock
 
 from wrolpi.plugins.videos import captions
 from wrolpi.test.common import wrap_test_db
-from wrolpi.tools import get_db_context
+from wrolpi.db import get_db_context
 
 
 class TestCaption(unittest.TestCase):

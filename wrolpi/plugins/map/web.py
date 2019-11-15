@@ -5,11 +5,12 @@ should NEVER make changes to the DB, do that in your API methods.
 Required: PLUGIN_ROOT, PLUGINS, set_plugins, ClientRoot
 """
 from dictorm import DictDB
+from sanic import Blueprint, response
+from sanic.request import Request
 
 from wrolpi.common import env
 
 PLUGIN_ROOT = 'map'
-# Your plugin can be hidden on the navbar
 HIDDEN = False
 
 # This will be set once all plugins are loaded
@@ -33,11 +34,12 @@ def _get_render_kwargs(**kwargs):
     return d
 
 
-class ClientRoot(object):
+client_bp = Blueprint('content_map', url_prefix='/map')
 
-    def index(self, db: DictDB):
-        template = env.get_template('wrolpi/plugins/map/templates/instructions.html')
-        map_config = get_downloads()
-        kwargs = _get_render_kwargs(map_config=map_config)
-        html = template.render(**kwargs)
-        return html
+
+@client_bp.get('/')
+def index(request: Request):
+    template = env.get_template('wrolpi/plugins/map/templates/instructions.html')
+    kwargs = _get_render_kwargs()
+    html = template.render(**kwargs)
+    return response.html(html)

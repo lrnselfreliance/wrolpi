@@ -1,10 +1,10 @@
 import configparser
 import logging
 import string
+import subprocess
 import sys
 from functools import wraps
 from http import HTTPStatus
-from pathlib import Path
 from typing import Tuple
 
 import sanic
@@ -196,3 +196,25 @@ def load_schema(schema: Schema):
         return wrapped
 
     return _load_schema
+
+
+def get_http_file_info(url):
+    """Call a wget subprocess to get information about a file"""
+    size = None
+    filename = str(url).rfind('/')[-1]
+    proc = subprocess.run(['/usr/bin/wget', '--spider', '--timeout=10', url], stdin=subprocess.PIPE,
+                          stderr=subprocess.PIPE)
+    stderr = proc.stderr
+    for line in stderr.split(b'\n'):
+        if line.startswith(b'Length:'):
+            line = line.decode()
+            size = line.partition('Length: ')[2].split(' ')[0]
+            return size, filename
+        # TODO get content-disposition for filename
+        # TODO handle non-zero exits
+    else:
+        raise LookupError(f'Unable to get length of {url}')
+
+
+async def download_file(url: str, size: int, destination: str):
+    pass

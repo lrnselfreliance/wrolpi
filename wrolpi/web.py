@@ -6,7 +6,7 @@ from sanic import Blueprint, Sanic, response
 from sanic.request import Request
 
 from wrolpi.common import env, logger
-from wrolpi.tools import get_db
+from wrolpi.db import get_db
 from wrolpi.user_plugins import PLUGINS
 from wrolpi.vars import STATIC_DIR
 

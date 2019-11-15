@@ -40,7 +40,7 @@ from wrolpi.plugins.videos.common import get_conflicting_channels, get_absolute_
 from wrolpi.plugins.videos.downloader import insert_video, update_channels, download_all_missing_videos
 from wrolpi.plugins.videos.main import logger
 from wrolpi.plugins.videos.schema import channel_schema, downloader_config_schema
-from wrolpi.tools import get_db_context
+from wrolpi.db import get_db_context
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
     get_absolute_channel_directory, UnknownDirectory
 

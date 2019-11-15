@@ -12,7 +12,7 @@ from youtube_dl import YoutubeDL
 
 from wrolpi.plugins.videos.captions import process_captions
 from wrolpi.plugins.videos.common import get_downloader_config, get_absolute_channel_directory
-from wrolpi.tools import get_db_context
+from wrolpi.db import get_db_context
 
 logger = logging.getLogger('wrolpi:downloader')
 ch = logging.StreamHandler()

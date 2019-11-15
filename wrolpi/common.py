@@ -4,6 +4,7 @@ import string
 import sys
 from functools import wraps
 from http import HTTPStatus
+from pathlib import Path
 from typing import Tuple
 
 import sanic
@@ -15,7 +16,7 @@ from sanic import Sanic
 from sanic.exceptions import abort, InvalidUsage
 from sanic.request import Request
 
-from wrolpi.vars import CONFIG_PATH, WROLPI_CONFIG_SECTION
+from wrolpi.vars import CONFIG_PATH, WROLPI_CONFIG_SECTION, PROJECT_DIR
 
 sanic_app = Sanic()
 
@@ -26,7 +27,7 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 # Jinja2 environment
-env = Environment(loader=FileSystemLoader('.'))
+env = Environment(loader=FileSystemLoader(str(PROJECT_DIR.absolute())))
 
 
 def get_loop():

@@ -1,6 +1,9 @@
+from pathlib import Path
+
 from dictorm import DictDB
 from sanic import Blueprint, response
 from sanic.exceptions import abort
+from sanic.request import Request
 
 from wrolpi.common import env, get_pagination_with_generator, create_pagination_dict
 from wrolpi.plugins.videos.common import get_downloader_config, get_video_description, get_video_info_json
@@ -16,14 +19,18 @@ def set_plugins(plugins):
     PLUGINS = plugins
 
 
-def _get_render_kwargs(db, **kwargs):
+CWD = Path(__file__).parent
+TEMPLATES = CWD / 'templates'
+
+
+def _get_render_kwargs(db, channels=None, **kwargs):
     """
     Always pass at least these kwargs to the template.render
     """
     d = dict()
     d['PLUGINS'] = PLUGINS
     d['PLUGIN_ROOT'] = PLUGIN_ROOT
-    d['channels'] = db['channel'].get_where().order_by('LOWER(name) ASC')
+    d['channels'] = channels or db['channel'].get_where().order_by('LOWER(name) ASC')
     d.update(kwargs)
     return d
 
@@ -60,15 +67,20 @@ async def settings(request):
 
 
 @client_bp.route('/search')
-def search(request, search: str, offset: int = None, link: str = None):
-    db: DictDB = request.ctx.get_db()
+def search(request: Request):
+    query_args = request.args
+    search = query_args.get('search')
+    offset = query_args.get('offset')
     offset = int(offset) if offset else 0
+    link = query_args.get('link')
+
+    db: DictDB = request.ctx.get_db()
+
     results = video_search(db, search, offset, link)
     template = env.get_template('wrolpi/plugins/videos/templates/search_video.html')
     pagination = create_pagination_dict(offset, 20, total=results['total'])
-    kwargs = _get_render_kwargs(db, results=results, pagination=pagination)
+    kwargs = _get_render_kwargs(db, results=results, pagination=pagination, channels=results['channels'], SEARCH=search)
     # Overwrite the channels with their respective counts
-    kwargs['channels'] = results['channels']
     html = template.render(**kwargs, link=link)
     return response.html(html)
 

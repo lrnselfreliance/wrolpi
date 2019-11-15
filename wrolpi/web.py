@@ -48,14 +48,14 @@ root_client = Blueprint('root')
 
 @root_client.route('/')
 async def index(request):
-    template = env.get_template('wrolpi/templates/index.html')
+    template = env.get_template('templates/index.html')
     html = template.render(PLUGINS=PLUGINS)
     return response.html(html)
 
 
 @root_client.route('/settings')
 async def settings(request):
-    template = env.get_template('wrolpi/templates/settings.html')
+    template = env.get_template('templates/settings.html')
     html = template.render(PLUGINS=PLUGINS)
     return response.html(html)
 
@@ -70,7 +70,7 @@ async def echo(request: Request):
 
 def attach_routes(app):
     """
-    Attach all default and plug routes to the provided app.
+    Attach all default and plugin routes to the provided app.
     """
     # routes: /static/*
     app.static('/static', str(STATIC_DIR))

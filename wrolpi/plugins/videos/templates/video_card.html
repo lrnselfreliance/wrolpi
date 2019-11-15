@@ -7,11 +7,11 @@
         {% set video_url = '' %}
         {% endif %}
         <img class="card-img-top"
-             src="{{ video_url }}" alt="{{ title }}"/>
+             src="{{ video_url }}" alt="{{ title|escape }}"/>
         <div class="card-body">
-            <h5 class="card-title">{{ title }}</h5>
+            <h5 class="card-title">{{ title|escape }}</h5>
             {% if video['upload_date'] %}
-            <p class="card-text">Uploaded: {{ video['upload_date'] }}</p>
+            <p class="card-text">Uploaded: {{ video['upload_date']|escape }}</p>
             {% endif %}
         </div>
     </div>

@@ -14,9 +14,6 @@ cwd = pathlib.Path(__file__).parent
 
 webapp = Sanic()
 
-# All client paths will derive from this root path
-root_client = Blueprint('root')
-
 
 # Add DB middleware
 @webapp.middleware('request')
@@ -46,6 +43,9 @@ def teardown_db_context(request, response):
         pass
 
 
+root_client = Blueprint('root')
+
+
 @root_client.route('/')
 async def index(request):
     template = env.get_template('wrolpi/templates/index.html')
@@ -68,21 +68,26 @@ async def echo(request: Request):
     return response.json({'request_json': request.json, 'method': request.method})
 
 
-# routes: /static/*
-webapp.static('/static', str(STATIC_DIR))
+def attach_routes(app):
+    """
+    Attach all default and plug routes to the provided app.
+    """
+    # routes: /static/*
+    app.static('/static', str(STATIC_DIR))
 
-# routes: /*
-client_bps = [i.client_bp for i in PLUGINS.values()]
-client_group = Blueprint.group(client_bps, root_client)
-webapp.blueprint(client_group)
+    # routes: /*
+    client_bps = [i.client_bp for i in PLUGINS.values()]
+    client_group = Blueprint.group(client_bps, root_client)
+    app.blueprint(client_group)
 
-# routes: /api/*
-blueprints = [i.api_bp for i in PLUGINS.values()]
-api_group = Blueprint.group(*blueprints, echo_bp, url_prefix='/api')
-webapp.blueprint(api_group)
+    # routes: /api/*
+    blueprints = [i.api_bp for i in PLUGINS.values()]
+    api_group = Blueprint.group(*blueprints, echo_bp, url_prefix='/api')
+    app.blueprint(api_group)
 
 
 def run_webserver(host: str, port: int):
+    attach_routes(webapp)
     webapp.run(host, port, workers=4)
 
 

@@ -12,10 +12,13 @@ from wrolpi.plugins.videos.common import import_settings_config, get_downloader_
 from wrolpi.plugins.videos.downloader import insert_video
 from wrolpi.test.common import wrap_test_db
 from wrolpi.tools import get_db_context
-from wrolpi.web import webapp
+from wrolpi.web import webapp, attach_routes
 
 CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
 cwd = pathlib.Path(__file__).parents[4]
+
+# Attach the default routes
+attach_routes(webapp)
 
 
 @mock.patch('wrolpi.plugins.videos.common.CONFIG_PATH', CONFIG_PATH.name)

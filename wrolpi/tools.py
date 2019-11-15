@@ -7,7 +7,8 @@ import psycopg2 as psycopg2
 from dictorm import DictDB
 from psycopg2.pool import ThreadedConnectionPool
 
-from wrolpi.common import setup_relationships, DOCKERIZED
+from wrolpi.common import setup_relationships
+from wrolpi.vars import DOCKERIZED
 
 
 class SemaphoreThreadedConnectionPool(ThreadedConnectionPool):

@@ -7,7 +7,8 @@ from typing import Union, Tuple
 import yaml
 from dictorm import And, Or, Dict
 
-from wrolpi.common import sanitize_link, DOCKERIZED
+from wrolpi.common import sanitize_link
+from wrolpi.vars import DOCKERIZED
 from wrolpi.tools import get_db_context
 
 MY_DIR: Path = Path(__file__).parent

@@ -25,7 +25,7 @@ def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):
 
 
 def main():
-    from wrolpi.common import CONFIG_PATH
+    from wrolpi.vars import CONFIG_PATH
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='count')

@@ -58,7 +58,7 @@ def settings(request: Request, data: dict):
 
 
 # Used to send websocket messages to the frontend
-refresh_queue = Queue()
+refresh_queue = Queue(maxsize=1000)
 
 
 @api_bp.post('/settings/refresh')
@@ -95,7 +95,7 @@ async def refresh_feed(request: Request, ws):
 
 
 # Used to send websocket messages to the frontend
-download_queue = Queue()
+download_queue = Queue(maxsize=1000)
 
 
 @api_bp.post('/settings/download')

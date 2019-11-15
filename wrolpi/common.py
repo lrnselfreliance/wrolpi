@@ -1,6 +1,5 @@
 import configparser
 import logging
-import os
 import string
 import sys
 from functools import wraps
@@ -16,6 +15,8 @@ from sanic import Sanic
 from sanic.exceptions import abort, InvalidUsage
 from sanic.request import Request
 
+from wrolpi.vars import CONFIG_PATH, WROLPI_CONFIG_SECTION
+
 sanic_app = Sanic()
 
 logger = logging.getLogger('wrolpi')
@@ -26,10 +27,6 @@ logger.addHandler(ch)
 
 # Jinja2 environment
 env = Environment(loader=FileSystemLoader('.'))
-
-CONFIG_PATH = 'config.cfg'
-WROLPI_CONFIG_SECTION = 'WROLPi'
-DOCKERIZED = True if os.environ.get('DOCKER', '').startswith('t') else False
 
 
 def get_loop():

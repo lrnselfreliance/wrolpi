@@ -10,7 +10,7 @@ from wrolpi.tools import get_db
 from wrolpi.user_plugins import PLUGINS
 
 cwd = pathlib.Path(__file__).parent
-static_dir = (cwd / 'static').absolute()
+static_dir = (cwd.parent / 'static').absolute()
 
 webapp = Sanic()
 

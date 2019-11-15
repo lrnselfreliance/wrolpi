@@ -8,9 +8,9 @@ from sanic.request import Request
 from wrolpi.common import env, logger
 from wrolpi.tools import get_db
 from wrolpi.user_plugins import PLUGINS
+from wrolpi.vars import STATIC_DIR
 
 cwd = pathlib.Path(__file__).parent
-static_dir = (cwd.parent / 'static').absolute()
 
 webapp = Sanic()
 
@@ -67,8 +67,9 @@ echo_bp = Blueprint('echo_api_bp')
 async def echo(request: Request):
     return response.json({'request_json': request.json, 'method': request.method})
 
+
 # routes: /static/*
-webapp.static('/static', str(static_dir))
+webapp.static('/static', str(STATIC_DIR))
 
 # routes: /*
 client_bps = [i.client_bp for i in PLUGINS.values()]

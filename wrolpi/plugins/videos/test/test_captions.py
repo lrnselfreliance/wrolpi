@@ -4,7 +4,7 @@ from pathlib import Path
 import mock
 
 from wrolpi.plugins.videos import captions
-from wrolpi.test.common import test_db_wrapper
+from wrolpi.test.common import wrap_test_db
 from wrolpi.tools import get_db_context
 
 
@@ -34,7 +34,7 @@ class TestCaption(unittest.TestCase):
                     'company called le code from finland and']
         self.assertEqual(list(captions.get_unique_caption_lines(self.vtt_path1)), expected)
 
-    @test_db_wrapper
+    @wrap_test_db
     def test_process_captions(self):
         with get_db_context() as (db_conn, db):
             Video = db['video']

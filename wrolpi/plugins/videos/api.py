@@ -68,7 +68,7 @@ async def refresh(request: Request):
     async def do_refresh():
         refresh_logger.info('refresh started')
         with get_db_context(commit=True) as (db_conn, db):
-            for msg in refresh_videos(db):
+            for msg in _refresh_videos(db):
                 refresh_queue.put(msg)
         refresh_queue.put('refresh-complete')
         refresh_logger.info('refresh complete')

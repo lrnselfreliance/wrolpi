@@ -9,7 +9,7 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from wrolpi.common import setup_relationships
 
 
-def test_db_wrapper(func):
+def wrap_test_db(func):
     """
     Wrap a test so that when calling wrolpi.common.get_db, it returns a testing database cloned from the wrolpi
     template.

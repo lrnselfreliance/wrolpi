@@ -10,7 +10,7 @@ import yaml
 
 from wrolpi.plugins.videos.common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH, get_config
 from wrolpi.plugins.videos.downloader import insert_video
-from wrolpi.test.common import test_db_wrapper
+from wrolpi.test.common import wrap_test_db
 from wrolpi.tools import get_db_context
 from wrolpi.web import webapp
 
@@ -30,7 +30,7 @@ class TestAPI(unittest.TestCase):
         with open(CONFIG_PATH.name, 'wt') as fh:
             fh.write(yaml.dump(config))
 
-    @test_db_wrapper
+    @wrap_test_db
     def test_configs(self):
         original = get_downloader_config()
         self.assertNotEqual(original['video_root_directory'], 'foo')
@@ -45,7 +45,7 @@ class TestAPI(unittest.TestCase):
         expected = {('video_root_directory', 'foo'), ('file_name_format', 'bar')}
         self.assertEqual(diff, expected)
 
-    @test_db_wrapper
+    @wrap_test_db
     def test_refresh(self):
         with get_db_context(commit=True) as (db_conn, db):
             Video = db['video']
@@ -55,15 +55,15 @@ class TestAPI(unittest.TestCase):
             bogus = Video(video_path='bar').flush()
             assert bogus and bogus['id'], 'Failed to insert a bogus video for removal'
 
-        # TODO this test is very fragile :(
-        webapp.test_client.post('/api/videos/settings/refresh')
+        request, response = webapp.test_client.post('/api/videos/settings/refresh')
+        assert response.status_code == HTTPStatus.OK
 
         with get_db_context() as (db_conn, db):
             Video, Channel = db['video'], db['channel']
             self.assertEqual(Channel.count(), 1)
             self.assertGreater(Video.count(), 1)
 
-    @test_db_wrapper
+    @wrap_test_db
     def test_channel(self):
         channel_directory = tempfile.TemporaryDirectory().name
         pathlib.Path(channel_directory).mkdir()
@@ -113,7 +113,7 @@ class TestAPI(unittest.TestCase):
         request, response = webapp.test_client.delete(location)
         assert response.status_code == HTTPStatus.NOT_FOUND
 
-    @test_db_wrapper
+    @wrap_test_db
     def test_refresh_videos(self):
         # Setup a fake channel directory
         with get_db_context() as (db_conn, db), \

@@ -2,16 +2,16 @@
 <a href="/videos/channel/{{ link }}/video/{{ video['video_path_hash'] }}" class="video">
     <div class="card" style="width: 18em; margin-bottom: 1em;">
         {% if video['poster_path'] %}
-        {% set video_url = '/api/videos/poster/' + video['video_path_hash'] %}
+            {% set video_url = '/api/videos/poster/' + video['video_path_hash'] %}
         {% else %}
-        {% set video_url = '' %}
+            {% set video_url = '' %}
         {% endif %}
         <img class="card-img-top"
              src="{{ video_url }}" alt="{{ title|escape }}"/>
         <div class="card-body">
             <h5 class="card-title">{{ title|escape }}</h5>
             {% if video['upload_date'] %}
-            <p class="card-text">Uploaded: {{ video['upload_date']|escape }}</p>
+                <p class="card-text">Uploaded: {{ video['upload_date']|escape }}</p>
             {% endif %}
         </div>
     </div>

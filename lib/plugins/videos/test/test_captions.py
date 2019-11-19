@@ -3,9 +3,9 @@ from pathlib import Path
 
 import mock
 
+from lib.db import get_db_context
 from lib.plugins.videos import captions
 from lib.test.common import wrap_test_db
-from lib.db import get_db_context
 
 
 class TestCaption(unittest.TestCase):

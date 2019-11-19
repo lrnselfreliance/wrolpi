@@ -35,12 +35,12 @@ from sanic.exceptions import abort
 from sanic.request import Request
 
 from lib.common import sanitize_link, boolean_arg, load_schema
+from lib.db import get_db_context
 from lib.plugins.videos.captions import process_captions
 from lib.plugins.videos.common import get_conflicting_channels, get_absolute_video_path, UnknownFile
 from lib.plugins.videos.downloader import insert_video, update_channels, download_all_missing_videos
 from lib.plugins.videos.main import logger
 from lib.plugins.videos.schema import channel_schema, downloader_config_schema
-from lib.db import get_db_context
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
     get_absolute_channel_directory, UnknownDirectory
 

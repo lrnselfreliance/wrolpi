@@ -10,9 +10,9 @@ from typing import Tuple
 from dictorm import DictDB, Dict, Or
 from youtube_dl import YoutubeDL
 
+from lib.db import get_db_context
 from lib.plugins.videos.captions import process_captions
 from lib.plugins.videos.common import get_downloader_config, get_absolute_channel_directory
-from lib.db import get_db_context
 
 logger = logging.getLogger('lib:downloader')
 ch = logging.StreamHandler()

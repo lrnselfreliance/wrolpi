@@ -8,10 +8,10 @@ from shutil import copyfile
 import mock
 import yaml
 
+from lib.db import get_db_context
 from lib.plugins.videos.common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH, get_config
 from lib.plugins.videos.downloader import insert_video
 from lib.test.common import wrap_test_db
-from lib.db import get_db_context
 from lib.web import webapp, attach_routes
 
 CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)

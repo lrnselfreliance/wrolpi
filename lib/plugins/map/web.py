@@ -4,7 +4,6 @@ should NEVER make changes to the DB, do that in your API methods.
 
 Required: PLUGIN_ROOT, PLUGINS, set_plugins, ClientRoot
 """
-from dictorm import DictDB
 from sanic import Blueprint, response
 from sanic.request import Request
 

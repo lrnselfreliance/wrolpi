@@ -5,6 +5,6 @@ ALTER TABLE video
 ALTER TABLE video
     ADD COLUMN textsearch TSVECTOR
         GENERATED ALWAYS AS (
-            to_tsvector('english', COALESCE (title, '') || ' ' || COALESCE (caption, ''))
+            to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(caption, ''))
             ) STORED;
 CREATE INDEX textsearch_idx ON video USING GIN (textsearch);

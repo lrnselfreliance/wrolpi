@@ -8,8 +8,8 @@ import yaml
 from dictorm import And, Or, Dict
 
 from lib.common import sanitize_link
-from lib.vars import DOCKERIZED
 from lib.db import get_db_context
+from lib.vars import DOCKERIZED
 
 MY_DIR: Path = Path(__file__).parent
 CONFIG_PATH = MY_DIR / 'local.yaml'

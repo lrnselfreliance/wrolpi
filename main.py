@@ -9,10 +9,10 @@ import argparse
 import logging
 import sys
 
-from wrolpi import web
-from wrolpi.cmd import import_settings_configs, save_settings_configs
-from wrolpi.common import logger
-from wrolpi.user_plugins import PLUGINS
+from lib import web
+from lib.cmd import import_settings_configs, save_settings_configs
+from lib.common import logger
+from lib.user_plugins import PLUGINS
 
 
 def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):
@@ -24,7 +24,7 @@ def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):
 
 
 def main():
-    from wrolpi.vars import CONFIG_PATH
+    from lib.vars import CONFIG_PATH
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='count')

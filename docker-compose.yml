@@ -1,12 +1,19 @@
 version: '3'
 services:
-  postgres:
-    container_name: wrolpi_postgres
+  db:
+    container_name: wrolpi_db
     build:
       context: .
-      dockerfile: docker/postgres/Dockerfile
+      dockerfile: docker/db/Dockerfile
     ports:
       - 54321:5432  # for local development
+  app:
+    container_name: wrolpi_app
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    volumes:
+      - './app:/app'
   web:
     container_name: wrolpi_web
     build:

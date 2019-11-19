@@ -18,8 +18,8 @@ def wrap_test_db(func):
     def wrapped(*a, **kw):
         # This is the Docker db container
         db_args = dict(
-            user='db',
-            password='db',
+            user='postgres',
+            password='postgres',
             host='127.0.0.1',
             port=54321,
         )
@@ -29,14 +29,14 @@ def wrap_test_db(func):
         testing_db_name = f'wrolpi_testing_{suffix}'
 
         # Set isolation level such that was can copy the schema of the "lib" database for testing
-        with psycopg2.connect(dbname='db', **db_args) as db_conn:
+        with psycopg2.connect(dbname='postgres', **db_args) as db_conn:
             db_conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
 
             # Cleanup the old testing db (if any), then copy the schema
             curs = db_conn.cursor()
             drop_testing = f'DROP DATABASE IF EXISTS {testing_db_name}'
             curs.execute(drop_testing)
-            curs.execute(f'CREATE DATABASE {testing_db_name} TEMPLATE lib')
+            curs.execute(f'CREATE DATABASE {testing_db_name} TEMPLATE wrolpi')
 
             class FakePool:
 
@@ -59,7 +59,7 @@ def wrap_test_db(func):
                     """Get the testing db"""
                     return FakePool(), testing_db_conn, testing_db, None
 
-                with mock.patch('lib.tools.get_db', _get_db), \
+                with mock.patch('lib.db.get_db', _get_db), \
                      mock.patch('lib.web.get_db', _get_db):
                     return func(*a, **kw)
 

@@ -1,5 +1,5 @@
 #! /usr/bin/env bash
-# This script will install WROLPi to `/opt/lib` on a fresh/empty Raspberry Pi.  It is expected to be run once to
+# This script will install WROLPi to `/opt/wrolpi` on a fresh/empty Raspberry Pi.  It is expected to be run once to
 # install, and any subsequent runs will update WROLPi.  This script assumes it will be run as the `root` user.
 
 # Installation steps are roughly:

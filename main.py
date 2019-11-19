@@ -24,14 +24,8 @@ def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):
 
 
 def main():
-    from lib.vars import CONFIG_PATH
-
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='count')
-    parser.add_argument('-c', '--config', default=CONFIG_PATH,
-                        help='The config file used to start WROLPi.')
-    parser.add_argument('-s', '--save-config', action='store_const', const=CONFIG_PATH,
-                        help=f'Save the settings to this config file.  DEFAULT: {CONFIG_PATH}')
 
     sub_commands = parser.add_subparsers(title='sub-commands', dest='sub_commands')
 

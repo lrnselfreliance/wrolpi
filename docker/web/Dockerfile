@@ -3,7 +3,9 @@ ENV DOCKER=true
 
 # Copy minimal directories/files
 COPY main.py requirements.txt /opt/wrolpi/
-COPY wrolpi /opt/wrolpi/wrolpi
+COPY static /opt/wrolpi/static
+COPY templates /opt/wrolpi/templates
+COPY lib /opt/wrolpi/lib
 # Install dependencies
 RUN find /opt/wrolpi -name requirements.txt -exec pip install --upgrade -r {} \;
 

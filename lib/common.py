@@ -16,7 +16,7 @@ from sanic import Sanic
 from sanic.exceptions import abort, InvalidUsage
 from sanic.request import Request
 
-from lib.vars import CONFIG_PATH, WROLPI_CONFIG_SECTION, PROJECT_DIR
+from lib.vars import PROJECT_DIR
 
 sanic_app = Sanic()
 
@@ -32,16 +32,6 @@ env = Environment(loader=FileSystemLoader(str(PROJECT_DIR.absolute())))
 
 def get_loop():
     return sanic.Sanic.loop
-
-
-def get_wrolpi_config():
-    config = configparser.RawConfigParser()
-    config.read(CONFIG_PATH)
-    try:
-        return config[WROLPI_CONFIG_SECTION]
-    except KeyError:
-        logger.fatal('Cannot load WROLPi.cfg config!')
-        sys.exit(1)
 
 
 def setup_relationships(db):

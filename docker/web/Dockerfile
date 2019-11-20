@@ -2,9 +2,7 @@ FROM python:3.8
 ENV DOCKER=true
 
 # Copy minimal directories/files
-COPY main.py requirements.txt /opt/wrolpi/
-COPY static /opt/wrolpi/static
-COPY templates /opt/wrolpi/templates
+COPY requirements.txt /opt/wrolpi/
 COPY lib /opt/wrolpi/lib
 # Install dependencies
 RUN find /opt/wrolpi -name requirements.txt -exec pip install --upgrade -r {} \;

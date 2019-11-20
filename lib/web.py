@@ -4,6 +4,7 @@ from functools import wraps
 
 from sanic import Blueprint, Sanic, response
 from sanic.request import Request
+from sanic_cors import CORS
 
 from lib.common import env, logger
 from lib.db import get_db
@@ -13,6 +14,7 @@ from lib.vars import STATIC_DIR
 cwd = pathlib.Path(__file__).parent
 
 webapp = Sanic()
+CORS(webapp)
 
 
 # Add DB middleware
@@ -60,12 +62,26 @@ async def settings(request):
     return response.html(html)
 
 
-echo_bp = Blueprint('echo_api_bp')
+root_api = Blueprint('echo_api_bp')
 
 
-@echo_bp.route('/echo', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
+@root_api.route('/echo', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
 async def echo(request: Request):
     return response.json({'request_json': request.json, 'method': request.method})
+
+
+@root_api.route('/plugins')
+async def plugins(request: Request):
+    """Create a list of plugin links for the frontend.
+
+    Example:
+        [
+            ('/videos', 'Videos'),
+            ('/map', 'Map'),
+        ]
+    """
+    request_plugins = [('/' + i.PLUGIN_ROOT, i.PRETTY_NAME) for i in PLUGINS.values()]
+    return response.json(request_plugins)
 
 
 def attach_routes(app):
@@ -82,7 +98,7 @@ def attach_routes(app):
 
     # routes: /api/*
     blueprints = [i.api_bp for i in PLUGINS.values()]
-    api_group = Blueprint.group(*blueprints, echo_bp, url_prefix='/api')
+    api_group = Blueprint.group(*blueprints, root_api, url_prefix='/api')
     app.blueprint(api_group)
 
 

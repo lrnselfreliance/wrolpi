@@ -1,10 +1,11 @@
-import React from 'react';
+import React, {useState} from 'react';
 import './App.css';
-import {Navbar} from "react-bootstrap";
+import {Button, Col, Container, Form, FormControl, Navbar} from "react-bootstrap";
 import Nav from "react-bootstrap/Nav";
 import NavLink from "react-bootstrap/NavLink";
+import Row from "react-bootstrap/Row";
 
-const API = 'http://localhost:8080/api';
+const API_URL = 'http://localhost:8080/api';
 
 function Plugin(props) {
     return (
@@ -21,37 +22,89 @@ class PluginList extends React.Component {
     }
 
     async componentDidMount() {
-        let response = await fetch(API + '/plugins');
+        let response = await fetch(API_URL + '/plugins');
         let data = await response.json();
         this.setState({'plugins': data});
     }
 
     render() {
-        return this.state.plugins.map((plugin) => <Plugin key={plugin[0]} href={plugin[0]} name={plugin[1]}/>)
+        return this.state.plugins.map(
+            (plugin) => <Plugin key={plugin[0]} href={plugin[0]} name={plugin[1]}/>
+            )
     }
+}
+
+function Settings() {
+    return (
+        <Nav className="navbar-nav ml-auto">
+            <NavLink className="nav-link" href="/settings">Settings</NavLink>
+        </Nav>
+    )
+}
+
+function NavSearch() {
+    const [inputText, setInputText] = useState('');
+
+    function handleChange(event) {
+        setInputText(event.target.value);
+    }
+
+    function handleSubmit(event) {
+        event.preventDefault();
+    }
+
+    return (
+        <Form inline>
+            <FormControl
+                type="text"
+                className="mr-sm-2"
+                placeholder="Search"
+                onChange={handleChange}
+                onSubmit={handleSubmit}
+            />
+            <Button type="submit" variant="outline-success">Search</Button>
+        </Form>
+    )
 }
 
 function NavBar() {
     return (
-        <Navbar bg="dark" expand="lg">
+        <Navbar bg="light" expand="lg">
             <Navbar.Brand href="/">WROLPi</Navbar.Brand>
             <Navbar.Toggle aria-controls="basic-navbar-nav"/>
             <Navbar.Collapse id="basic-navbar-nav">
                 <Nav className="mr-auto">
                     <PluginList/>
                 </Nav>
+                <NavSearch/>
+                <Nav className="ml-auto">
+                    <Settings/>
+                </Nav>
             </Navbar.Collapse>
         </Navbar>
     )
 }
 
+function Body() {
+    return (
+        <Container id="body">
+            <Row>
+                <Col>
+                    <h1>Welcome to WROLPi!</h1>
+                </Col>
+            </Row>
+        </Container>
+    )
+}
+
 function App() {
     return (
-        <div className="App">
-            <header className="App-header">
+        <>
+            <header>
                 <NavBar/>
             </header>
-        </div>
+            <Body/>
+        </>
     );
 }
 

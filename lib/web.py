@@ -65,9 +65,18 @@ async def settings(request):
 root_api = Blueprint('echo_api_bp')
 
 
-@root_api.route('/echo', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH'])
+@root_api.route('/echo', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
 async def echo(request: Request):
-    return response.json({'request_json': request.json, 'method': request.method})
+    """
+    Returns a JSON object containing details about the request sent to me.
+    """
+    ret = dict(
+        form=request.form,
+        headers=request.headers,
+        json=request.json,
+        method=request.method,
+    )
+    return response.json(ret)
 
 
 @root_api.route('/plugins')

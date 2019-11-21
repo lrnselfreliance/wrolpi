@@ -235,6 +235,16 @@ def channel_delete(request, link: str):
     return response.json({'success': 'Channel deleted'})
 
 
+@api_bp.get('/channel/<link:string>/videos')
+def channel_videos(request, link: str):
+    db: DictDB = request.ctx.get_db()
+    Channel = db['channel']
+    channel = Channel.get_one(link=link)
+    if not channel:
+        return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
+    return response.json({'videos': list(channel['videos'])})
+
+
 @api_bp.route('/video/<hash:string>')
 @api_bp.route('/poster/<hash:string>')
 @api_bp.route('/caption/<hash:string>')

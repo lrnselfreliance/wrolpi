@@ -42,6 +42,7 @@ function NavSettings() {
 
 function NavSearch() {
     const [inputText, setInputText] = useState('');
+    console.log(inputText);
 
     function handleChange(event) {
         setInputText(event.target.value);
@@ -71,7 +72,7 @@ export function NavBar() {
             <NavLink
                 className="navbar-brand"
                 to="/"
-                exact="true"
+                exact={true}
                 activeClassName="active"
             >
                 WROLPi

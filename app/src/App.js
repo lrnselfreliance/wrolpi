@@ -35,7 +35,7 @@ function App() {
             </header>
             <div className="container">
                 <Switch>
-                    <Route path="/" exact="true" component={Welcome}/>
+                    <Route path="/" exact={true} component={Welcome}/>
                     <Route path="/videos" component={Videos}/>
                     <Route path="/map" component={Map_}/>
                     <Route path="/settings" component={Settings}/>

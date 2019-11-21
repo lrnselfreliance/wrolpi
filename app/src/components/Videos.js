@@ -1,18 +1,32 @@
-import React from 'react';
+import React, {useState} from 'react';
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import Nav from "react-bootstrap/Nav";
 import {Link, NavLink, Route, Switch} from "react-router-dom";
-import {Button, Form} from "react-bootstrap";
+import {Button, Container, Form} from "react-bootstrap";
 import Modal from "react-bootstrap/Modal";
+import Card from "react-bootstrap/Card";
 
+class ChannelsNav extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            'channels': [],
+        };
+    }
 
-const channels = [
-    {'link': 'bigbuckbunny', 'name': 'Big Buck Bunny'},
-];
+    async getChannels() {
+        let url = 'http://127.0.0.1:8080/api/videos/channels';
+        let response = await fetch(url);
+        let data = await response.json();
+        this.setState({channels: data['channels']})
+    }
 
-function ChannelsNav() {
-    function channelRoute(channel) {
+    async componentDidMount() {
+        await this.getChannels();
+    }
+
+    channelRoute(channel) {
         return (
             <Nav.Item key={channel.link}>
                 <NavLink className="nav-link" to={'/videos/' + channel['link']}>
@@ -22,11 +36,13 @@ function ChannelsNav() {
         )
     }
 
-    return (
-        <Nav variant="pills" className="flex-column">
-            {channels.map(channelRoute)}
-        </Nav>
-    )
+    render() {
+        return (
+            <Nav variant="pills" className="flex-column">
+                {this.state['channels'].map(this.channelRoute)}
+            </Nav>
+        )
+    }
 }
 
 function ChannelVideo(props) {
@@ -37,17 +53,36 @@ function ChannelVideo(props) {
     )
 }
 
+function VideoCard(props) {
+    let video = props.video;
+    return (
+        <Link to={video}>
+            <Card style={{'width': '18em', 'margin-bottom': '1em'}}>
+                <Card.Img
+                    variant="top"
+                    src={"http://127.0.0.1:8080/api/videos/poster/" + video.video_path_hash}
+                />
+                <Card.Body>
+                    <h5>{video.title}</h5>
+                    <Card.Text>
+                        {video.upload_date}
+                    </Card.Text>
+                </Card.Body>
+            </Card>
+        </Link>
+    )
+}
 
 async function getChannel(link) {
     let response = await fetch('http://127.0.0.1:8080/api/videos/channel/' + link);
     let data = await response.json();
-    return data;
+    return data['channel'];
 }
 
 async function getVideos(link) {
     let response = await fetch(`http://127.0.0.1:8080/api/videos/channel/${link}/videos`);
     let data = await response.json();
-    return data;
+    return data['videos'];
 }
 
 class ChannelVideoPager extends React.Component {
@@ -64,7 +99,7 @@ class ChannelVideoPager extends React.Component {
     }
 
     async getVideos(link) {
-        this.setState({'channel': await getVideos(link)})
+        this.setState({'videos': await getVideos(link)})
     }
 
     async componentDidMount() {
@@ -81,9 +116,8 @@ class ChannelVideoPager extends React.Component {
 
     render() {
         return (
-            <div>
-                {console.log('pager', this.state.link)}
-                <Link to={this.state.link + '/bar'}>asdf</Link>
+            <div className="card-deck">
+                {this.state['videos'].map((v) => (<VideoCard key={v['id']} video={v}/>))}
             </div>
         )
     }
@@ -94,7 +128,7 @@ function AddChannelForm(props) {
         <Form id="add_channel" ref={props.reference} onSubmit={props.onSubmit}>
             <Form.Group controlId="name">
                 <Form.Label column="">Name</Form.Label>
-                <Form.Control type="text" placeholder="Short Name" required/>
+                <Form.Control name="name" type="text" placeholder="Short Name" required/>
             </Form.Group>
 
             <Form.Group controlId="url">
@@ -104,7 +138,7 @@ function AddChannelForm(props) {
 
             <Form.Group controlId="directory">
                 <Form.Label column="">Directory</Form.Label>
-                <Form.Control type="directory" placeholder="prepping/something" required/>
+                <Form.Control name="directory" type="directory" placeholder="prepping/something" required/>
                 <Form.Text className="text-muted">
                     This will be appended to the root video directory in the config, unless its an absolute path.
                 </Form.Text>
@@ -112,10 +146,10 @@ function AddChannelForm(props) {
 
             <Form.Group controlId="match_regex">
                 <Form.Label column="">Title Match Regex</Form.Label>
-                <Form.Control type="match_regex" placeholder=".*(prepper|prepping).*"/>
+                <Form.Control name="match_regex" type="text" placeholder=".*(prepper|prepping).*"/>
                 <Form.Text className="text-muted">
                     The title of the video will be compared to this Regular Expression. If you don't input this,
-                    all videos will be downloaded
+                    all videos will be downloaded.
                 </Form.Text>
             </Form.Group>
         </Form>
@@ -123,15 +157,14 @@ function AddChannelForm(props) {
 }
 
 function AddChannel() {
-    const [show, setShow] = React.useState(false);
     const form = React.useRef();
 
+    const [show, setShow] = useState(false);
     const handleClose = () => setShow(false);
     const handleShow = () => setShow(true);
 
     function handleSubmit(event) {
         event.preventDefault();
-        console.log(event);
     }
 
     return (
@@ -158,7 +191,49 @@ function AddChannel() {
     )
 }
 
-function Channels() {
+function ManageContent() {
+    const [show, setShow] = useState(false);
+    const handleClose = () => setShow(false);
+    const handleShow = () => setShow(true);
+
+    async function refreshContent() {
+        let url = 'http://127.0.0.1:8080/api/videos/settings/refresh';
+        let response = await fetch(url, {'method': 'POST'});
+    }
+
+    return (
+        <>
+            <Button
+                id="manage_content"
+                className="btn-secondary"
+                onClick={handleShow}
+                style={{'margin-bottom': '0.5em'}}
+            >
+                Manage Content
+            </Button>
+
+            <Modal show={show} onHide={handleClose}>
+                <Modal.Header>
+                    <Modal.Title>Manage Channel Content</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    <Row>
+                        <Col>
+                            <Button onClick={refreshContent}>Refresh Content</Button>
+                        </Col>
+                    </Row>
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={handleClose}>
+                        Close
+                    </Button>
+                </Modal.Footer>
+            </Modal>
+        </>
+    )
+}
+
+function Videos() {
     return (
         <Row style={{'margin-top': '1.5em'}}>
             <Col className="col-3">
@@ -174,21 +249,26 @@ function Channels() {
                         </div>
                     </Col>
                 </Row>
-                <ChannelsNav/>
+                <Row>
+                    <Col>
+                        <ManageContent/>
+                    </Col>
+                </Row>
+                <Row>
+                    <Col>
+                        <ChannelsNav/>
+                    </Col>
+                </Row>
             </Col>
             <Col className="col-9">
-                <Switch>
-                    <Route path="/videos/:channel_link/:video_id" component={ChannelVideo}/>
-                    <Route path="/videos/:channel_link" component={ChannelVideoPager}/>
-                </Switch>
+                <Container>
+                    <Switch>
+                        <Route path="/videos/:channel_link/:video_id" component={ChannelVideo}/>
+                        <Route path="/videos/:channel_link" component={ChannelVideoPager}/>
+                    </Switch>
+                </Container>
             </Col>
         </Row>
-    )
-}
-
-function Videos() {
-    return (
-        <Channels/>
     )
 }
 

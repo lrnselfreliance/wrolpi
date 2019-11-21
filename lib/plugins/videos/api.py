@@ -57,6 +57,15 @@ def settings(request: Request, data: dict):
     return response.json({'success': 'Settings saved'})
 
 
+@api_bp.get('/channels')
+def get_channels(request: Request):
+    db: DictDB = request.ctx.get_db()
+    Channel = db['channel']
+    channels = Channel.get_where().order_by('name DESC')
+    channels = list(channels)
+    return response.json({'channels': channels})
+
+
 # Used to send websocket messages to the frontend
 refresh_queue = Queue(maxsize=1000)
 

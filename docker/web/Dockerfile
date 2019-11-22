@@ -9,4 +9,4 @@ RUN find /opt/wrolpi -name requirements.txt -exec pip install --upgrade -r {} \;
 
 # Run the webserver
 WORKDIR /opt/wrolpi
-CMD [ "python3", "/opt/wrolpi/main.py", "-v", "web", "--host", "0.0.0.0" ]
+CMD [ "python3", "/opt/wrolpi/main.py", "-vv", "web", "--host", "0.0.0.0" ]

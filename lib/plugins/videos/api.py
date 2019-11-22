@@ -33,6 +33,7 @@ from dictorm import DictDB
 from sanic import Blueprint, response
 from sanic.exceptions import abort
 from sanic.request import Request
+from websocket import WebSocket
 
 from lib.common import sanitize_link, boolean_arg, load_schema
 from lib.db import get_db_context
@@ -87,13 +88,17 @@ async def refresh(request: Request):
     coro = do_refresh()
     asyncio.ensure_future(coro)
     refresh_logger.debug('do_refresh scheduled')
-    return response.json({'success': 'stream-complete'})
+    return response.json({'success': 'stream-started', 'stream-url': 'ws://127.0.0.1:8080/api/videos/feeds/refresh'})
 
 
 @api_bp.websocket('/feeds/refresh')
-async def refresh_feed(request: Request, ws):
+async def refresh_feed(request: Request, ws: WebSocket):
     rf_logger = logger.getChild('refresh_feed')
-    await ws.send('client-connected')
+    rf_logger.warn('client connected')
+    import json
+    await ws.send(json.dumps({'message': 'client-connected'}))
+    await ws.send({'message': 'client-connected'})
+    rf_logger.warn('message sent')
     while True:
         msg = download_queue.get()
         if msg == 'stream-complete':

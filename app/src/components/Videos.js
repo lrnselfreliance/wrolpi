@@ -6,6 +6,9 @@ import {Link, NavLink, Route, Switch} from "react-router-dom";
 import {Button, Container, Form} from "react-bootstrap";
 import Modal from "react-bootstrap/Modal";
 import Card from "react-bootstrap/Card";
+import '../static/external/fontawesome-free/css/all.min.css';
+
+const VIDEOS_API = 'http://127.0.0.1:8080/api/videos';
 
 class ChannelsNav extends React.Component {
     constructor(props) {
@@ -16,7 +19,7 @@ class ChannelsNav extends React.Component {
     }
 
     async getChannels() {
-        let url = 'http://127.0.0.1:8080/api/videos/channels';
+        let url = `${VIDEOS_API}/channels`;
         let response = await fetch(url);
         let data = await response.json();
         this.setState({channels: data['channels']})
@@ -53,17 +56,18 @@ function ChannelVideo(props) {
     )
 }
 
-function VideoCard(props) {
-    let video = props.video;
+function VideoCard({video, channel}) {
+    let video_url = "/videos/" + channel.link + "/" + video.video_path_hash;
+    let poster_url = video.poster_path ? `${VIDEOS_API}/poster/${video.video_path_hash}` : null;
     return (
-        <Link to={video}>
+        <Link to={video_url}>
             <Card style={{'width': '18em', 'margin-bottom': '1em'}}>
                 <Card.Img
                     variant="top"
-                    src={"http://127.0.0.1:8080/api/videos/poster/" + video.video_path_hash}
+                    src={poster_url}
                 />
                 <Card.Body>
-                    <h5>{video.title}</h5>
+                    <h5>{video.title || video.video_path}</h5>
                     <Card.Text>
                         {video.upload_date}
                     </Card.Text>
@@ -74,13 +78,13 @@ function VideoCard(props) {
 }
 
 async function getChannel(link) {
-    let response = await fetch('http://127.0.0.1:8080/api/videos/channel/' + link);
+    let response = await fetch(`${VIDEOS_API}/channel/${link}`);
     let data = await response.json();
     return data['channel'];
 }
 
 async function getVideos(link) {
-    let response = await fetch(`http://127.0.0.1:8080/api/videos/channel/${link}/videos`);
+    let response = await fetch(`${VIDEOS_API}/${link}/videos`);
     let data = await response.json();
     return data['videos'];
 }
@@ -117,7 +121,7 @@ class ChannelVideoPager extends React.Component {
     render() {
         return (
             <div className="card-deck">
-                {this.state['videos'].map((v) => (<VideoCard key={v['id']} video={v}/>))}
+                {this.state['videos'].map((v) => (<VideoCard key={v['id']} video={v} channel={this.state.channel}/>))}
             </div>
         )
     }
@@ -169,7 +173,9 @@ function AddChannel() {
 
     return (
         <>
-            <Button className="btn-success" onClick={handleShow}>+</Button>
+            <Button className="btn-success" onClick={handleShow}>
+                <span className="fas fa-plus"/>
+            </Button>
 
             <Modal show={show} onHide={handleClose}>
                 <Modal.Header closeButton>
@@ -191,53 +197,106 @@ function AddChannel() {
     )
 }
 
-function ManageContent() {
-    const [show, setShow] = useState(false);
-    const handleClose = () => setShow(false);
-    const handleShow = () => setShow(true);
+class ManageContent extends React.Component {
 
-    async function refreshContent() {
-        let url = 'http://127.0.0.1:8080/api/videos/settings/refresh';
-        let response = await fetch(url, {'method': 'POST'});
+    ws = new WebSocket('ws://127.0.0.1:8080/api/videos/feeds/refresh');
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            show: false,
+            message: 'Search channel directories for video and meta files. Process any captions.',
+        };
+        this.handleClose = this.handleClose.bind(this);
+        this.handleShow = this.handleShow.bind(this);
+        this.refreshContent = this.refreshContent.bind(this);
+
+        this.ws.addEventListener("message", function (e) {
+            console.log(e);
+        });
     }
 
-    return (
-        <>
-            <Button
-                id="manage_content"
-                className="btn-secondary"
-                onClick={handleShow}
-                style={{'margin-bottom': '0.5em'}}
-            >
-                Manage Content
-            </Button>
+    componentDidMount() {
+        this.ws.onopen = () => {
+            console.log('connected');
+        };
+        this.ws.onmessage = event => {
+            console.log('onmessage', event);
+            let message = JSON.parse(event.data);
+            console.log('message', message);
+        };
+        this.ws.onclose = () => {
+            console.log('disconnected');
+        }
+    }
 
-            <Modal show={show} onHide={handleClose}>
-                <Modal.Header>
-                    <Modal.Title>Manage Channel Content</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                    <Row>
-                        <Col>
-                            <Button onClick={refreshContent}>Refresh Content</Button>
-                        </Col>
-                    </Row>
-                </Modal.Body>
-                <Modal.Footer>
-                    <Button variant="secondary" onClick={handleClose}>
-                        Close
-                    </Button>
-                </Modal.Footer>
-            </Modal>
-        </>
-    )
+    handleData(data) {
+        console.log('data', data);
+        let result = JSON.parse(data);
+        this.setState({'message': result});
+    }
+
+    handleClose() {
+        this.setState({'show': false});
+    }
+
+    handleShow() {
+        this.setState({'show': true});
+    }
+
+    async refreshContent() {
+        let url = `${VIDEOS_API}/settings/refresh`;
+        await fetch(url, {'method': 'POST'});
+    }
+
+    render() {
+        return (<>
+                <Button
+                    id="manage_content"
+                    className="btn-secondary"
+                    onClick={this.handleShow}
+                    style={{'marginBottom': '0.5em'}}
+                >
+                    Manage Content
+                    &nbsp;
+                    <span className="fas fa-cog"/>
+                </Button>
+
+                <Modal show={this.state.show} onHide={this.handleClose}>
+                    <Modal.Header>
+                        <Modal.Title>Manage Video Content</Modal.Title>
+                    </Modal.Header>
+                    <Modal.Body>
+                        <Row>
+                            <Col className="col-5">
+                                <Button onClick={this.refreshContent}>Refresh Content</Button>
+                            </Col>
+                            <Col className="col-7">
+                                {this.state.message}
+                                <Row websocket={this.ws}>
+                                    <Col>
+                                        Hi
+                                    </Col>
+                                </Row>
+                            </Col>
+                        </Row>
+                    </Modal.Body>
+                    <Modal.Footer>
+                        <Button variant="secondary" onClick={this.handleClose}>
+                            Close
+                        </Button>
+                    </Modal.Footer>
+                </Modal>
+            </>
+        )
+    }
 }
 
 function Videos() {
     return (
-        <Row style={{'margin-top': '1.5em'}}>
+        <Row style={{'marginTop': '1.5em'}}>
             <Col className="col-3">
-                <Row style={{'margin-bottom': '1.5em'}}>
+                <Row style={{'marginBottom': '1.5em'}}>
                     <Col className="col-9">
                         <h4>
                             Channels

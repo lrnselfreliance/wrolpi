@@ -113,7 +113,7 @@ def attach_routes(app):
 
 def run_webserver(host: str, port: int):
     attach_routes(webapp)
-    webapp.run(host, port, workers=4)
+    webapp.run(host, port, workers=8)
 
 
 def init_parser(parser):

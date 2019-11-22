@@ -42,7 +42,6 @@ function NavSettings() {
 
 function NavSearch() {
     const [inputText, setInputText] = useState('');
-    console.log(inputText);
 
     function handleChange(event) {
         setInputText(event.target.value);
@@ -61,7 +60,9 @@ function NavSearch() {
                 onChange={handleChange}
                 onSubmit={handleSubmit}
             />
-            <Button type="submit" variant="outline-success">Search</Button>
+            <Button type="submit" variant="outline-success">
+                <span className="fas fa-search"/>
+            </Button>
         </Form>
     )
 }

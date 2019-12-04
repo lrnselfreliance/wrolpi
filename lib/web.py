@@ -111,19 +111,20 @@ def attach_routes(app):
     app.blueprint(api_group)
 
 
-def run_webserver(host: str, port: int):
+def run_webserver(host: str, port: int, workers: int = 8):
     attach_routes(webapp)
-    webapp.run(host, port, workers=8)
+    webapp.run(host, port, workers=workers)
 
 
 def init_parser(parser):
     # Called by WROLPI's main() function
     parser.add_argument('-H', '--host', default='127.0.0.1', help='What network interface to connect webserver')
     parser.add_argument('-p', '--port', default=8080, type=int, help='What port to connect webserver')
+    parser.add_argument('-w', '--workers', default=4, type=int, help='How many web workers to run')
 
 
 def main(args):
-    run_webserver(args.host, args.port)
+    run_webserver(args.host, args.port, args.workers)
     return 0
 
 

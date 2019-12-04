@@ -6,14 +6,14 @@ from sanic import Blueprint, Sanic, response
 from sanic.request import Request
 from sanic_cors import CORS
 
-from lib.common import env, logger
+from lib.common import logger
 from lib.db import get_db
 from lib.user_plugins import PLUGINS
-from lib.vars import STATIC_DIR
 
 cwd = pathlib.Path(__file__).parent
 
 webapp = Sanic()
+# TODO Allow all requests to this webapp during development.  This should be restricted later.
 CORS(webapp)
 
 
@@ -43,23 +43,6 @@ def teardown_db_context(request, response):
     except AttributeError:
         # get_db was never called
         pass
-
-
-root_client = Blueprint('root')
-
-
-@root_client.route('/')
-async def index(request):
-    template = env.get_template('templates/index.html')
-    html = template.render(PLUGINS=PLUGINS)
-    return response.html(html)
-
-
-@root_client.route('/settings')
-async def settings(request):
-    template = env.get_template('templates/settings.html')
-    html = template.render(PLUGINS=PLUGINS)
-    return response.html(html)
 
 
 root_api = Blueprint('echo_api_bp')
@@ -97,14 +80,6 @@ def attach_routes(app):
     """
     Attach all default and plugin routes to the provided app.
     """
-    # routes: /static/*
-    app.static('/static', str(STATIC_DIR))
-
-    # routes: /*
-    client_bps = [i.client_bp for i in PLUGINS.values()]
-    client_group = Blueprint.group(client_bps, root_client)
-    app.blueprint(client_group)
-
     # routes: /api/*
     blueprints = [i.api_bp for i in PLUGINS.values()]
     api_group = Blueprint.group(*blueprints, root_api, url_prefix='/api')

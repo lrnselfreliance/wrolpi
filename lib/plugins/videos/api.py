@@ -23,6 +23,7 @@ Relative DB paths allow files to be moved without having to rebuild the entire c
 a file is moved, it will not be duplicated in the DB.
 """
 import asyncio
+import json
 import pathlib
 from functools import wraps
 from http import HTTPStatus
@@ -35,15 +36,23 @@ from sanic.exceptions import abort
 from sanic.request import Request
 from websocket import WebSocket
 
-from lib.common import sanitize_link, boolean_arg, load_schema
+from lib.common import sanitize_link, boolean_arg, load_schema, env
 from lib.db import get_db_context
 from lib.plugins.videos.captions import process_captions
 from lib.plugins.videos.common import get_conflicting_channels, get_absolute_video_path, UnknownFile
-from lib.plugins.videos.downloader import insert_video, update_channels, download_all_missing_videos
+from lib.plugins.videos.downloader import insert_video
 from lib.plugins.videos.main import logger
 from lib.plugins.videos.schema import channel_schema, downloader_config_schema
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
     get_absolute_channel_directory, UnknownDirectory
+
+PLUGIN_ROOT = 'videos'
+
+
+def set_plugins(plugins):
+    global PLUGIN_ROOT
+    PLUGIN_ROOT = plugins
+
 
 api_bp = Blueprint('api_video', url_prefix='/videos')
 
@@ -67,24 +76,24 @@ def get_channels(request: Request):
     return response.json({'channels': channels})
 
 
-# Used to send websocket messages to the frontend
 refresh_queue = Queue(maxsize=1000)
 
 
 @api_bp.post('/settings/refresh')
-async def refresh(request: Request):
+async def refresh(_):
     refresh_logger = logger.getChild('refresh')
 
     async def do_refresh():
         refresh_logger.info('refresh started')
+
         with get_db_context(commit=True) as (db_conn, db):
             for msg in _refresh_videos(db):
                 refresh_queue.put(msg)
+
         refresh_queue.put('refresh-complete')
         refresh_logger.info('refresh complete')
         refresh_queue.put('stream-complete')
 
-    refresh_queue.put('stream-started')
     coro = do_refresh()
     asyncio.ensure_future(coro)
     refresh_logger.debug('do_refresh scheduled')
@@ -92,60 +101,12 @@ async def refresh(request: Request):
 
 
 @api_bp.websocket('/feeds/refresh')
-async def refresh_feed(request: Request, ws: WebSocket):
-    rf_logger = logger.getChild('refresh_feed')
-    rf_logger.warn('client connected')
-    import json
-    await ws.send(json.dumps({'message': 'client-connected'}))
-    await ws.send({'message': 'client-connected'})
-    rf_logger.warn('message sent')
+async def refresh_websocket(request: Request, ws: WebSocket):
     while True:
-        msg = download_queue.get()
-        if msg == 'stream-complete':
-            break
-        rf_logger.debug(f'msg={msg}')
-        await ws.send(msg)
-    await ws.send('stream-complete')
-
-
-# Used to send websocket messages to the frontend
-download_queue = Queue(maxsize=1000)
-
-
-@api_bp.post('/settings/download')
-async def download_post(request: Request):
-    dl_logger = logger.getChild('download')
-
-    async def do_download():
-        dl_logger.info('download started')
-        with get_db_context(commit=True) as (db_conn, db):
-            for msg in update_channels(db_conn, db):
-                download_queue.put(msg)
-            for msg in download_all_missing_videos(db_conn, db):
-                download_queue.put(msg)
-        download_queue.put('download-complete')
-        dl_logger.info('download complete')
-        download_queue.put('stream-complete')
-
-    download_queue.put('stream-started')
-    coro = do_download()
-    asyncio.ensure_future(coro)
-    dl_logger.debug('do_download scheduled')
-    return response.json(
-        {'success': 'stream-started', 'stream-url': 'ws://127.0.0.1:8080/api/videos/feeds/download'})
-
-
-@api_bp.websocket('/feeds/download')
-async def download_feed(request: Request, ws):
-    df_logger = logger.getChild('download_feed')
-    await ws.send('client-connected')
-    while True:
-        msg = download_queue.get()
-        if msg == 'stream-complete':
-            break
-        df_logger.debug(f'msg={msg}')
-        await ws.send(msg)
-    await ws.send('stream-complete')
+        msg = refresh_queue.get()
+        dump = json.dumps({'message': msg})
+        await ws.send(dump)
+        await ws.recv()
 
 
 @api_bp.get('/channel/<link:string>')
@@ -373,3 +334,60 @@ def refresh_videos(db: DictDB):
 def refresh_videos_with_db():
     with get_db_context(commit=True) as (db_conn, db):
         return refresh_videos(db)
+
+
+def video_search(db: DictDB, search_str, offset, link):
+    db_conn = db.conn
+    template = env.get_template('lib/plugins/videos/templates/search_video.html')
+    curs = db_conn.cursor()
+
+    # Get the match count per channel
+    query = 'SELECT channel_id, COUNT(*) FROM video WHERE textsearch @@ to_tsquery(%s) GROUP BY channel_id'
+    curs.execute(query, (search_str,))
+    channel_totals = {i: j for (i, j) in curs.fetchall()}
+
+    # Get the names of each channel, add the counts respectively
+    query = 'SELECT id, name, link FROM channel ORDER BY LOWER(name)'
+    curs.execute(query)
+    channels = []
+    for (id_, name, link_) in curs.fetchall():
+        channel_total = channel_totals[id_] if id_ in channel_totals else 0
+        d = {
+            'id': id_,
+            'name': f'{name} ({channel_total})',
+            'link': link_,
+            'search_link': f'/{PLUGIN_ROOT}/search?link={link_}&search={search_str}',
+        }
+        channels.append(d)
+
+    # Get the search results
+    if link:
+        # The results are restricted to a single channel
+        curs.execute('SELECT id FROM channel WHERE link = %s', (link,))
+        (channel_id,) = curs.fetchone()
+        query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)) FROM video WHERE ' \
+                'textsearch @@ to_tsquery(%s) AND channel_id=%s ORDER BY 2 OFFSET %s LIMIT 20'
+        curs.execute(query, (search_str, search_str, channel_id, offset))
+        total = channel_totals[channel_id]
+    else:
+        # The results are for all channels
+        query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)) FROM video WHERE ' \
+                'textsearch @@ to_tsquery(%s) ORDER BY 2 OFFSET %s LIMIT 20'
+        curs.execute(query, (search_str, search_str, offset))
+        # Sum up all the matches for paging
+        total = sum(channel_totals.values())
+
+    results = list(curs.fetchall())
+
+    videos = []
+    Video = db['video']
+    if results:
+        videos = [dict(i) for i in Video.get_where(Video['id'].In([i[0] for i in results]))]
+
+    results = {
+        'template': template,
+        'videos': videos,
+        'total': total,
+        'channels': channels,
+    }
+    return results

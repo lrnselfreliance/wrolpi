@@ -217,23 +217,16 @@ class ManageContent extends React.Component {
     }
 
     componentDidMount() {
-        this.ws.onopen = () => {
-            console.log('connected');
-        };
         this.ws.onmessage = event => {
-            console.log('onmessage', event);
-            let message = JSON.parse(event.data);
-            console.log('message', message);
+            this.handleData(event.data);
+            this.ws.send('received');
         };
-        this.ws.onclose = () => {
-            console.log('disconnected');
-        }
     }
 
     handleData(data) {
-        console.log('data', data);
         let result = JSON.parse(data);
-        this.setState({'message': result});
+        console.log(result);
+        this.setState({'message': result['message']});
     }
 
     handleClose() {

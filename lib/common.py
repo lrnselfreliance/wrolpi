@@ -18,7 +18,7 @@ from lib.vars import PROJECT_DIR
 
 sanic_app = Sanic()
 
-logger = logging.getLogger('lib')
+logger = logging.getLogger('wrolpi')
 ch = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 ch.setFormatter(formatter)

@@ -1,8 +1,10 @@
+import json
 import logging
 import string
 import subprocess
 from functools import wraps
 from http import HTTPStatus
+from multiprocessing import Event, Queue
 from typing import Tuple
 
 import sanic
@@ -10,9 +12,10 @@ from attr import dataclass
 from dictorm import ResultsGenerator
 from jinja2 import Environment, FileSystemLoader
 from marshmallow import Schema, ValidationError
-from sanic import Sanic
+from sanic import Sanic, Blueprint
 from sanic.exceptions import abort, InvalidUsage
 from sanic.request import Request
+from websocket import WebSocket
 
 from lib.vars import PROJECT_DIR
 
@@ -206,3 +209,30 @@ def get_http_file_info(url):
 
 async def download_file(url: str, size: int, destination: str):
     pass
+
+
+def attach_websocket_with_queue(uri: str, maxsize: int, blueprint: Blueprint):
+    """
+    Build the objects needed to run a websocket which will pass on messages from a multiprocessing.Queue.
+
+    :param uri: the Sanic URI that the websocket will listen on
+    :param maxsize: the maximum size of the Queue
+    :param blueprint: the Sanic Blueprint to attach the websocket to
+    :return:
+    """
+    q = Queue(maxsize=maxsize)
+    event = Event()
+
+    @blueprint.websocket(uri)
+    async def local_websocket(_: Request, ws: WebSocket):
+        while q.qsize() or event.is_set():
+            # Pass along messages from the queue until its empty, or the event is cleared.  Give up after 1 second so
+            # the worker can take another request.
+            msg = q.get(timeout=1)
+            dump = json.dumps({'message': msg})
+            await ws.send(dump)
+
+        # No messages left, stream is complete
+        await ws.send(json.dumps({'message': 'stream-complete'}))
+
+    return q, event

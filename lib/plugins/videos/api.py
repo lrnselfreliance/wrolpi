@@ -23,21 +23,17 @@ Relative DB paths allow files to be moved without having to rebuild the entire c
 a file is moved, it will not be duplicated in the DB.
 """
 import asyncio
-import json
 import pathlib
-import queue
 from functools import wraps
 from http import HTTPStatus
-from multiprocessing import Queue, Event
 from uuid import uuid1
 
 from dictorm import DictDB
 from sanic import Blueprint, response
 from sanic.exceptions import abort
 from sanic.request import Request
-from websocket import WebSocket
 
-from lib.common import sanitize_link, boolean_arg, load_schema, env
+from lib.common import sanitize_link, boolean_arg, load_schema, env, attach_websocket_with_queue
 from lib.db import get_db_context
 from lib.plugins.videos.captions import process_captions
 from lib.plugins.videos.common import get_conflicting_channels, get_absolute_video_path, UnknownFile
@@ -77,34 +73,7 @@ def get_channels(request: Request):
     return response.json({'channels': channels})
 
 
-def attach_websocket_with_queue(uri: str, maxsize: int, blueprint: Blueprint = api_bp):
-    """
-    Build the objects needed to run a websocket which will pass on messages from a multiprocessing.Queue.
-
-    :param uri: the Sanic URI that the websocket will listen on
-    :param maxsize: the maximum size of the Queue
-    :param blueprint: the Sanic Blueprint to attach the websocket to
-    :return:
-    """
-    q = Queue(maxsize=maxsize)
-    event = Event()
-
-    @blueprint.websocket(uri)
-    async def refresh_websocket(request: Request, ws: WebSocket):
-        while q.qsize() or event.is_set():
-            # Pass along messages from the queue until its empty, or the event is cleared.  Give up after 1 second so
-            # the worker can take another request.
-            msg = q.get(timeout=1)
-            dump = json.dumps({'message': msg})
-            await ws.send(dump)
-
-        # No messages left, stream is complete
-        await ws.send(json.dumps({'message': 'stream-complete'}))
-
-    return q, event
-
-
-refresh_queue, refresh_event = attach_websocket_with_queue('/feeds/refresh', 1000)
+refresh_queue, refresh_event = attach_websocket_with_queue('/feeds/refresh', 1000, api_bp)
 
 
 @api_bp.post('/settings/refresh')

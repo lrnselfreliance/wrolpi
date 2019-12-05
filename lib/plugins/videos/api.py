@@ -92,16 +92,19 @@ async def refresh(_):
     refresh_queue.put('refresh-started')
 
     async def do_refresh():
-        refresh_logger.info('refresh started')
+        try:
+            refresh_logger.info('refresh started')
 
-        with get_db_context(commit=True) as (db_conn, db):
-            for msg in _refresh_videos(db):
-                refresh_queue.put(msg)
+            with get_db_context(commit=True) as (db_conn, db):
+                for msg in _refresh_videos(db):
+                    refresh_queue.put(msg)
 
-        refresh_queue.put('refresh-complete')
-        refresh_logger.info('refresh complete')
-
-        refresh_event.clear()
+            refresh_logger.info('refresh complete')
+        except Exception as e:
+            refresh_queue.put({'error': 'Refresh failed.  See server logs.'})
+            raise
+        finally:
+            refresh_event.clear()
 
     coro = do_refresh()
     asyncio.ensure_future(coro)
@@ -129,18 +132,21 @@ async def download(_):
     download_queue.put('download-started')
 
     async def do_download():
-        download_logger.info('download started')
+        try:
+            download_logger.info('download started')
 
-        with get_db_context(commit=True) as (db_conn, db):
-            for msg in update_channels(db_conn, db):
-                download_queue.put(msg)
-            for msg in download_all_missing_videos(db_conn, db):
-                download_queue.put(msg)
+            with get_db_context(commit=True) as (db_conn, db):
+                for msg in update_channels(db_conn, db):
+                    download_queue.put(msg)
+                for msg in download_all_missing_videos(db_conn, db):
+                    download_queue.put(msg)
 
-        download_queue.put('download-complete')
-        download_logger.info('download complete')
-
-        download_event.clear()
+            download_logger.info('download complete')
+        except Exception as e:
+            download_queue.put({'error': 'Download failed.  See server logs.'})
+            raise
+        finally:
+            download_event.clear()
 
     coro = do_download()
     asyncio.ensure_future(coro)

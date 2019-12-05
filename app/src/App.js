@@ -12,7 +12,7 @@ function Welcome() {
         <Jumbotron>
             <h1 className="display-4">Welcome to WROLPi!</h1>
             <p className="lead">
-                Bring your personal internet, offline.
+                Bring your personal internet, off-grid.
             </p>
         </Jumbotron>
     )

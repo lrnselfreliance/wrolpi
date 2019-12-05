@@ -1,5 +1,6 @@
 import json
 import logging
+import queue
 import string
 import subprocess
 from collections import namedtuple
@@ -230,7 +231,11 @@ def attach_websocket_with_queue(uri: str, maxsize: int, blueprint: Blueprint):
         while q.qsize() or event.is_set():
             # Pass along messages from the queue until its empty, or the event is cleared.  Give up after 1 second so
             # the worker can take another request.
-            msg = q.get(timeout=1)
+            try:
+                msg = q.get(timeout=1)
+            except queue.Empty:
+                # No more messages
+                break
             dump = json.dumps(msg)
             await ws.send(dump)
 

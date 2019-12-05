@@ -1,9 +1,9 @@
-import React, {useState} from 'react';
+import React, {useRef, useState} from 'react';
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import Nav from "react-bootstrap/Nav";
 import {Link, NavLink, Route, Switch} from "react-router-dom";
-import {Button, Container, Form, ProgressBar} from "react-bootstrap";
+import {Button, ButtonGroup, Container, Form, ProgressBar} from "react-bootstrap";
 import Modal from "react-bootstrap/Modal";
 import Card from "react-bootstrap/Card";
 import Video from "./VideoPlayer";
@@ -121,48 +121,40 @@ class ChannelVideoPager extends React.Component {
     }
 }
 
-function AddChannelForm(props) {
-    return (
-        <Form id="add_channel" ref={props.reference} onSubmit={props.onSubmit}>
-            <Form.Group controlId="name">
-                <Form.Label column="">Name</Form.Label>
-                <Form.Control name="name" type="text" placeholder="Short Name" required/>
-            </Form.Group>
-
-            <Form.Group controlId="url">
-                <Form.Label column="">URL</Form.Label>
-                <Form.Control type="url" placeholder="https://example.com/some-channel"/>
-            </Form.Group>
-
-            <Form.Group controlId="directory">
-                <Form.Label column="">Directory</Form.Label>
-                <Form.Control name="directory" type="directory" placeholder="prepping/something" required/>
-                <Form.Text className="text-muted">
-                    This will be appended to the root video directory in the config, unless its an absolute path.
-                </Form.Text>
-            </Form.Group>
-
-            <Form.Group controlId="match_regex">
-                <Form.Label column="">Title Match Regex</Form.Label>
-                <Form.Control name="match_regex" type="text" placeholder=".*(prepper|prepping).*"/>
-                <Form.Text className="text-muted">
-                    The title of the video will be compared to this Regular Expression. If you don't input this,
-                    all videos will be downloaded.
-                </Form.Text>
-            </Form.Group>
-        </Form>
-    )
-}
-
 function AddChannel() {
-    const form = React.useRef();
+    const name = useRef();
+    const url = useRef();
+    const directory = useRef();
+    const matchRegex = useRef();
 
     const [show, setShow] = useState(false);
     const handleClose = () => setShow(false);
     const handleShow = () => setShow(true);
+    const [error, setError] = useState(false);
+    const [message, setMessage] = useState();
 
-    function handleSubmit(event) {
+    async function handleSubmit(event) {
         event.preventDefault();
+        let post_url = `${VIDEOS_API}/channel`;
+        let form_data = {
+            name: name.current.value,
+            url: url.current.value,
+            directory: directory.current.value,
+            match_regex: matchRegex.current.value,
+        };
+        let response = await fetch(post_url, {
+            method: 'POST',
+            body: JSON.stringify(form_data),
+        });
+
+        let data = await response.json();
+        if (data['success']) {
+            setMessage(data['success']);
+            setError(false);
+        } else if (data['error']) {
+            setMessage(data['error']);
+            setError(true);
+        }
     }
 
     return (
@@ -176,15 +168,50 @@ function AddChannel() {
                     <Modal.Title>Add New Channel</Modal.Title>
                 </Modal.Header>
                 <Modal.Body>
-                    <AddChannelForm reference={form} onSubmit={handleSubmit}/>
+                    <Form id="add_channel" onSubmit={handleSubmit}>
+                        <Form.Group controlId="name">
+                            <Form.Label column="">Name</Form.Label>
+                            <Form.Control name="name" type="text" placeholder="Short Name" required ref={name}/>
+                        </Form.Group>
+
+                        <Form.Group controlId="url">
+                            <Form.Label column="">URL</Form.Label>
+                            <Form.Control type="url" placeholder="https://example.com/some-channel" ref={url}/>
+                        </Form.Group>
+
+                        <Form.Group controlId="directory">
+                            <Form.Label column="">Directory</Form.Label>
+                            <Form.Control name="directory" type="directory" placeholder="prepping/something" required
+                                          ref={directory}/>
+                            <Form.Text className="text-muted">
+                                This will be appended to the root video directory in the config.
+                            </Form.Text>
+                        </Form.Group>
+
+                        <Form.Group controlId="match_regex">
+                            <Form.Label column="">Title Match Regex</Form.Label>
+                            <Form.Control name="match_regex" type="text" placeholder=".*(prepper|prepping).*"
+                                          ref={matchRegex}/>
+                            <Form.Text className="text-muted">
+                                The title of the video will be compared to this Regular Expression. If you don't input
+                                this,
+                                all videos will be downloaded.
+                            </Form.Text>
+                        </Form.Group>
+                    </Form>
                 </Modal.Body>
                 <Modal.Footer>
-                    <Button variant="secondary" onClick={handleClose}>
-                        Close
-                    </Button>
-                    <Button type="submit" variant="primary" form="add_channel">
-                        Add
-                    </Button>
+                    <Alert variant={(error ? 'danger' : 'success')} hidden={(!message)}>
+                        {message}
+                    </Alert>
+                    <ButtonGroup>
+                        <Button variant="secondary" onClick={handleClose}>
+                            Close
+                        </Button>
+                        <Button type="submit" variant="primary" form="add_channel">
+                            Add
+                        </Button>
+                    </ButtonGroup>
                 </Modal.Footer>
             </Modal>
         </>
@@ -217,7 +244,8 @@ class ManageContent extends React.Component {
     componentWillUnmount() {
         let i = 0;
         while (this.state.websockets[i]) {
-            this.state.websockets[i].close();
+            let ws = this.state.websockets[i];
+            ws.close();
             i++;
         }
     }
@@ -249,9 +277,10 @@ class ManageContent extends React.Component {
             }
             if (data['error']) {
                 setError(true);
+                setMessage(data['error']);
             }
         };
-        this.setState({'websockets': this.state.websockets + [ws]});
+        this.setState({'websockets': [ws].concat(this.state.websockets)});
     }
 
     async refreshContent() {

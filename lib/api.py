@@ -12,13 +12,13 @@ from lib.user_plugins import PLUGINS
 
 cwd = pathlib.Path(__file__).parent
 
-webapp = Sanic()
+api_app = Sanic()
 # TODO Allow all requests to this webapp during development.  This should be restricted later.
-CORS(webapp)
+CORS(api_app)
 
 
 # Add DB middleware
-@webapp.middleware('request')
+@api_app.middleware('request')
 def setup_db_context(request):
     @wraps(get_db)
     def _get_db():
@@ -32,7 +32,7 @@ def setup_db_context(request):
     request.ctx.get_db = _get_db
 
 
-@webapp.middleware('response')
+@api_app.middleware('response')
 def teardown_db_context(request, response):
     try:
         pool, conn, key = request.ctx.pool, request.ctx.conn, request.ctx.key
@@ -43,6 +43,19 @@ def teardown_db_context(request, response):
     except AttributeError:
         # get_db was never called
         pass
+
+
+@api_app.route('/')
+def index(request):
+    html = '''
+    <html>
+    <body>
+    <p>
+        This is the WROLPi API.  You can test it using <a href="/api/echo">/api/echo</a>
+    </p>
+    </body>
+    </html>'''
+    return response.html(html)
 
 
 root_api = Blueprint('echo_api_bp')
@@ -87,9 +100,9 @@ def attach_routes(app):
 
 
 def run_webserver(host: str, port: int, workers: int = 8):
-    attach_routes(webapp)
+    attach_routes(api_app)
     set_sanic_url_parts(host, port)
-    webapp.run(host, port, workers=workers)
+    api_app.run(host, port, workers=workers)
 
 
 def init_parser(parser):

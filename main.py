@@ -9,7 +9,7 @@ import argparse
 import logging
 import sys
 
-from lib import web
+from lib import api
 from lib.cmd import import_settings_configs, save_settings_configs
 from lib.common import logger
 from lib.user_plugins import PLUGINS
@@ -29,11 +29,11 @@ def main():
 
     sub_commands = parser.add_subparsers(title='sub-commands', dest='sub_commands')
 
-    # Web parser is always present
-    web_parser = sub_commands.add_parser('web')
+    # API parser is always present
+    api_parser = sub_commands.add_parser('api')
     # This dict keeps track of which main will be called for each sub-command
-    choices_to_mains = {'web': web.main}
-    web.init_parser(web_parser)
+    choices_to_mains = {'api': api.main}
+    api.init_parser(api_parser)
 
     # Setup the plugins' sub-commands
     for plugin_name, plugin in PLUGINS.items():

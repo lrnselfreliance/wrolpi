@@ -7,9 +7,9 @@ WROLPi is intended to be run on a Raspberry Pi with an optional external drive a
 network so that any person with a laptop/tablet/phone can connect and use the data previously collected by the user.
 
 
-# Install
+# Minimal Install
 WROLPi runs in a couple Docker containers.  Lets get the prerequisites installed...
-1. [Install docker-ce](https://docs.docker.com/install/linux/docker-ce/ubuntu/) and
+1. [Install docker-ce](https://docs.docker.com/install/linux/docker-ce/debian/) and
     [docker-compose](https://docs.docker.com/compose/install/)
 1. Copy the latest WROLPi code
     * `git clone git@github.com:lrnselfreliance/wrolpi.git`
@@ -42,8 +42,7 @@ WROLPi.
 1. WROLPi should function completely without any internet services.
 1. A user should have easy access to their data if WROLPi fails:
     * For example, a user can watch their videos by navigating a short and intuitive directory structure and opening the
-      video in.
-    their preferred video player.
+      video in their preferred video player.
 1. WROLPi should be self-documented.  The UI should contain a tutorial for USERS as well as the MAINTAINER.
     * If the UI isn't functional, the code should be documented such that a user can restore functionality.
 1. WROLPi should favor pre-processing, rather than processing during a WROL event.  Such as re-encoding a video, or

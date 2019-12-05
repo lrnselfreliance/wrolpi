@@ -7,25 +7,13 @@ services:
       dockerfile: docker/db/Dockerfile
     ports:
       - 54321:5432  # for local development
-  app:
-    container_name: wrolpi_app
-    depends_on:
-      - db
-      - web
-    build:
-      context: .
-      dockerfile: docker/app/Dockerfile
-    ports:
-      - 3000:3000
-    volumes:
-      - './app:/app'
-  web:
-    container_name: wrolpi_web
+  api:
+    container_name: wrolpi_api
     depends_on:
       - db
     build:
       context: .
-      dockerfile: docker/web/Dockerfile
+      dockerfile: docker/api/Dockerfile
     ports:
       - 8080:8080  # for local development
     volumes:
@@ -33,15 +21,26 @@ services:
       # Uncomment the following line and change the drive to your drive or media directory.  Change your local.yaml
       # config to match this directory.
       # - /media/8TB:/opt/wrolpi_media
+  app:
+    container_name: wrolpi_app
+    depends_on:
+      - api
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    ports:
+      - 3000:3000
+    volumes:
+      - './app:/app'
   map:
-    container_name: openstreetmap
+    container_name: wrolpi_openstreetmap
     depends_on:
       - map_db
     build:
       context: .
       dockerfile: docker/map/Dockerfile
   map_db:
-    container_name: map_db
+    container_name: wrolpi_map_db
     build:
       context: .
       dockerfile: docker/map_db/Dockerfile

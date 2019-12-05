@@ -1,4 +1,6 @@
 # WROLPi
+**Bring your personal internet, off-grid.**
+
 WROLPi is a self-contained collection of software to help you survive the world Without Rule of Law.
 
 WROLPi is intended to be run on a Raspberry Pi with an optional external drive attached.  It serves up it's own wifi
@@ -15,10 +17,10 @@ WROLPi runs in a couple Docker containers.  Lets get the prerequisites installed
     * `cd wrolpi`
 1. Build the docker containers
     * `docker-compose build --parallel`
-1. Start the docker containers
-    * `docker-compose up`
+1. Start the minimum docker containers
+    * `docker-compose up app`
 1. Navigate to WROLPi
-    * https://127.0.0.1:8080
+    * https://127.0.0.1:3000
 
 
 # Charter

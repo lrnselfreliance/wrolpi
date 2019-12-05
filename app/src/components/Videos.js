@@ -353,7 +353,7 @@ class ManageContent extends React.Component {
                                 >
                                     {this.state.refreshMessage}
                                 </Alert>
-                                <ProgressBar striped variant={(this.state.refreshError ? 'danger': 'info')}
+                                <ProgressBar striped variant={(this.state.refreshError ? 'danger' : 'info')}
                                              now={this.state.refreshProgress}
                                              hidden={(this.state.refreshProgress == null)}
                                 />
@@ -375,7 +375,7 @@ class ManageContent extends React.Component {
                                 >
                                     {this.state.downloadMessage}
                                 </Alert>
-                                <ProgressBar striped variant={(this.state.downloadError ? 'danger': 'info')}
+                                <ProgressBar striped variant={(this.state.downloadError ? 'danger' : 'info')}
                                              now={this.state.downloadProgress}
                                              hidden={(this.state.downloadProgress == null)}
                                 />

@@ -277,8 +277,8 @@ def download_all_missing_videos(db_conn, db):
                 # The video failed to download, and the error will never be fixed.  Skip it forever.
                 skip_download_videos = channel['skip_download_videos']
                 source_id = missing_video.get('id')
-                logger.warn(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
-                            f'attempt to download it again.')
+                logger.warning(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
+                               f'attempt to download it again.')
                 if skip_download_videos and source_id:
                     channel['skip_download_videos'].append(missing_video['id'])
                 elif source_id:

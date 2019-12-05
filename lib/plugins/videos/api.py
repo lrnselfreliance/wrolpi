@@ -33,7 +33,8 @@ from sanic import Blueprint, response
 from sanic.exceptions import abort
 from sanic.request import Request
 
-from lib.common import sanitize_link, boolean_arg, load_schema, env, attach_websocket_with_queue, get_sanic_url
+from lib.common import sanitize_link, boolean_arg, load_schema, env, attach_websocket_with_queue, get_sanic_url, \
+    make_progress_calculator
 from lib.db import get_db_context
 from lib.plugins.videos.captions import process_captions
 from lib.plugins.videos.common import get_conflicting_channels, get_absolute_video_path, UnknownFile
@@ -358,11 +359,9 @@ def _refresh_videos(db: DictDB):
     logger.info('Refreshing video files')
     Channel = db['channel']
 
-    total_channels = Channel.count()
-
+    calc_progress = make_progress_calculator(Channel.count())
     for idx, channel in enumerate(Channel.get_where()):
-        progress = int((idx / total_channels) * 100)
-        yield {'progress': progress, 'message': f'Checking {channel["name"]} directory for new videos'}
+        yield {'progress': calc_progress(idx), 'message': f'Checking {channel["name"]} directory for new videos'}
         with db.transaction(commit=True):
             for msg in refresh_channel_videos(db, channel):
                 yield {'message': msg}

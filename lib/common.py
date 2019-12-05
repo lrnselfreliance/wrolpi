@@ -265,3 +265,13 @@ def get_sanic_url(scheme: str = 'http', path: str = None, query: list = None, fr
                                 query=query, fragment=fragment)
     unparsed = str(urlunsplit(components))
     return unparsed
+
+
+def make_progress_calculator(total):
+    """
+    Create a function that calculates the percentage of completion.
+    """
+    def progress_calculator(current):
+        return int((current / total) * 100)
+
+    return progress_calculator

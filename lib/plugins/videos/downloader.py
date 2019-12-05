@@ -10,6 +10,7 @@ from typing import Tuple
 from dictorm import DictDB, Dict, Or
 from youtube_dl import YoutubeDL
 
+from lib.common import make_progress_calculator
 from lib.db import get_db_context
 from lib.plugins.videos.captions import process_captions
 from lib.plugins.videos.common import get_downloader_config, get_absolute_channel_directory
@@ -61,9 +62,9 @@ def update_channels(db_conn, db, oldest_date=None):
     )
     remote_channels = list(remote_channels)
     logger.debug(f'Getting info for {len(remote_channels)} channels')
+    progress_calc = make_progress_calculator(len(remote_channels))
     for idx, channel in enumerate(remote_channels):
-        progress = int((idx / len(remote_channels)) * 100)
-        yield {'progress': progress, 'message': f'Getting video list for {channel["name"]}'}
+        yield {'progress': calc_progress(idx), 'message': f'Getting video list for {channel["name"]}'}
         info = get_channel_info(channel)
         channel['info_json'] = info
         channel['info_date'] = datetime.now()
@@ -267,7 +268,7 @@ def download_all_missing_videos(db_conn, db):
     """Find any videos identified by the info packet that haven't yet been downloaded, download them."""
     yield {'progress': 0, 'message': 'Comparing local videos to available videos...'}
     missing_videos = list(find_all_missing_videos(db))
-    total_missing_videos = len(missing_videos)
+    progress_calc = make_progress_calculator(len(missing_videos))
     for idx, (channel, missing_video) in enumerate(missing_videos):
         try:
             video_path = download_video(channel, missing_video)
@@ -289,8 +290,7 @@ def download_all_missing_videos(db_conn, db):
             yield f'Failed to download "{missing_video["title"]}", see logs...'
             continue
         insert_video(db, video_path, channel, None)
-        progress = int((idx / total_missing_videos) * 100)
-        yield {'progress': progress, 'message': f'{channel["name"]}: Downloaded: {missing_video["title"]}'}
+        yield {'progress': calc_progress(idx), 'message': f'{channel["name"]}: Downloaded: {missing_video["title"]}'}
         db_conn.commit()
 
     yield {'progress': 100, 'message': 'All videos are downloaded'}

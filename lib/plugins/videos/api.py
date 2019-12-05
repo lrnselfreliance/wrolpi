@@ -43,7 +43,7 @@ from lib.plugins.videos.captions import process_captions
 from lib.plugins.videos.common import get_conflicting_channels, get_absolute_video_path, UnknownFile
 from lib.plugins.videos.downloader import insert_video
 from lib.plugins.videos.main import logger
-from lib.plugins.videos.schema import channel_schema, downloader_config_schema
+from lib.plugins.videos.schema import downloader_config_schema, channel_schema
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
     get_absolute_channel_directory, UnknownDirectory
 
@@ -77,9 +77,34 @@ def get_channels(request: Request):
     return response.json({'channels': channels})
 
 
-refresh_queue = Queue(maxsize=1000)
-refresh_event = Event()
-refresh_event.clear()
+def attach_websocket_with_queue(uri: str, maxsize: int, blueprint: Blueprint = api_bp):
+    """
+    Build the objects needed to run a websocket which will pass on messages from a multiprocessing.Queue.
+
+    :param uri: the Sanic URI that the websocket will listen on
+    :param maxsize: the maximum size of the Queue
+    :param blueprint: the Sanic Blueprint to attach the websocket to
+    :return:
+    """
+    q = Queue(maxsize=maxsize)
+    event = Event()
+
+    @blueprint.websocket(uri)
+    async def refresh_websocket(request: Request, ws: WebSocket):
+        while q.qsize() or event.is_set():
+            # Pass along messages from the queue until its empty, or the event is cleared.  Give up after 1 second so
+            # the worker can take another request.
+            msg = q.get(timeout=1)
+            dump = json.dumps({'message': msg})
+            await ws.send(dump)
+
+        # No messages left, stream is complete
+        await ws.send(json.dumps({'message': 'stream-complete'}))
+
+    return q, event
+
+
+refresh_queue, refresh_event = attach_websocket_with_queue('/feeds/refresh', 1000)
 
 
 @api_bp.post('/settings/refresh')
@@ -91,7 +116,7 @@ async def refresh(_):
         return response.json({'error': 'Refresh already running'}, HTTPStatus.BAD_REQUEST)
 
     refresh_event.set()
-    refresh_queue.put('stream-started')
+    refresh_queue.put('refresh-started')
 
     async def do_refresh():
         refresh_logger.info('refresh started')
@@ -109,24 +134,6 @@ async def refresh(_):
     asyncio.ensure_future(coro)
     refresh_logger.debug('do_refresh scheduled')
     return response.json({'success': 'stream-started', 'stream-url': 'ws://127.0.0.1:8080/api/videos/feeds/refresh'})
-
-
-@api_bp.websocket('/feeds/refresh')
-async def refresh_websocket(request: Request, ws: WebSocket):
-    while True:
-        # Pass along messages from the queue, unless its empty and a refresh isn't running
-        try:
-            msg = refresh_queue.get(timeout=1)
-            dump = json.dumps({'message': msg})
-            await ws.send(dump)
-        except queue.Empty:
-            refresh_running = refresh_event.is_set()
-            if not refresh_running:
-                # No messages in queue, and no refresh running.
-                break
-
-    # No messages left, stream is complete
-    await ws.send(json.dumps({'message': 'stream-complete'}))
 
 
 @api_bp.get('/channel/<link:string>')

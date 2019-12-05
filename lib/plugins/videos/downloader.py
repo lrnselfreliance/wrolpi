@@ -61,13 +61,16 @@ def update_channels(db_conn, db, oldest_date=None):
     )
     remote_channels = list(remote_channels)
     logger.debug(f'Getting info for {len(remote_channels)} channels')
-    for channel in remote_channels:
-        yield f'Getting video list for {channel["name"]}'
+    for idx, channel in enumerate(remote_channels):
+        progress = int((idx / len(remote_channels)) * 100)
+        yield {'progress': progress, 'message': f'Getting video list for {channel["name"]}'}
         info = get_channel_info(channel)
         channel['info_json'] = info
         channel['info_date'] = datetime.now()
         channel.flush()
         db_conn.commit()
+
+    yield {'progress': 100, 'message': 'All video lists updated.'}
 
 
 VIDEO_EXTENSIONS = ['mp4', 'webm', 'flv']
@@ -262,8 +265,10 @@ def _skip_download(error):
 
 def download_all_missing_videos(db_conn, db):
     """Find any videos identified by the info packet that haven't yet been downloaded, download them."""
-    missing_videos = find_all_missing_videos(db)
-    for channel, missing_video in missing_videos:
+    yield {'progress': 0, 'message': 'Comparing local videos to available videos...'}
+    missing_videos = list(find_all_missing_videos(db))
+    total_missing_videos = len(missing_videos)
+    for idx, (channel, missing_video) in enumerate(missing_videos):
         try:
             video_path = download_video(channel, missing_video)
         except Exception as e:
@@ -281,11 +286,14 @@ def download_all_missing_videos(db_conn, db):
                 channel.flush()
                 db_conn.commit()
 
-            yield f'Failed to download "{missing_video["title"]}", see logs for details...'
+            yield f'Failed to download "{missing_video["title"]}", see logs...'
             continue
         insert_video(db, video_path, channel, None)
-        yield f'{channel["name"]}: Downloaded: {missing_video["title"]}'
+        progress = int((idx / total_missing_videos) * 100)
+        yield {'progress': progress, 'message': f'{channel["name"]}: Downloaded: {missing_video["title"]}'}
         db_conn.commit()
+
+    yield {'progress': 100, 'message': 'All videos are downloaded'}
 
 
 def main(args=None):

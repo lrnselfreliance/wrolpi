@@ -33,11 +33,11 @@ from sanic import Blueprint, response
 from sanic.exceptions import abort
 from sanic.request import Request
 
-from lib.common import sanitize_link, boolean_arg, load_schema, env, attach_websocket_with_queue
+from lib.common import sanitize_link, boolean_arg, load_schema, env, attach_websocket_with_queue, get_sanic_url
 from lib.db import get_db_context
 from lib.plugins.videos.captions import process_captions
 from lib.plugins.videos.common import get_conflicting_channels, get_absolute_video_path, UnknownFile
-from lib.plugins.videos.downloader import insert_video
+from lib.plugins.videos.downloader import insert_video, update_channels, download_all_missing_videos
 from lib.plugins.videos.main import logger
 from lib.plugins.videos.schema import downloader_config_schema, channel_schema
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
@@ -78,6 +78,9 @@ refresh_queue, refresh_event = attach_websocket_with_queue('/feeds/refresh', 100
 
 @api_bp.post('/settings/refresh')
 async def refresh(_):
+    """
+    Search for videos that have previously been downloaded and stored.
+    """
     refresh_logger = logger.getChild('refresh')
 
     # Only one refresh can run at a time
@@ -102,7 +105,47 @@ async def refresh(_):
     coro = do_refresh()
     asyncio.ensure_future(coro)
     refresh_logger.debug('do_refresh scheduled')
-    return response.json({'success': 'stream-started', 'stream-url': 'ws://127.0.0.1:8080/api/videos/feeds/refresh'})
+    stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/refresh')
+    return response.json({'success': 'stream-started', 'stream-url': stream_url})
+
+
+download_queue, download_event = attach_websocket_with_queue('/feeds/download', 1000, api_bp)
+
+
+@api_bp.post('/settings/download')
+async def download(_):
+    """
+    Compare previously downloaded videos with newly updated catalogs.  If any videos are missing, download them.
+    :return:
+    """
+    download_logger = logger.getChild('download')
+
+    # Only one download can run at a time
+    if download_event.is_set():
+        return response.json({'error': 'download already running'}, HTTPStatus.BAD_REQUEST)
+
+    download_event.set()
+    download_queue.put('download-started')
+
+    async def do_download():
+        download_logger.info('download started')
+
+        with get_db_context(commit=True) as (db_conn, db):
+            for msg in update_channels(db_conn, db):
+                download_queue.put(msg)
+            for msg in download_all_missing_videos(db_conn, db):
+                download_queue.put(msg)
+
+        download_queue.put('download-complete')
+        download_logger.info('download complete')
+
+        download_event.clear()
+
+    coro = do_download()
+    asyncio.ensure_future(coro)
+    download_logger.debug('do_download scheduled')
+    stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/download')
+    return response.json({'success': 'stream-started', 'stream-url': stream_url})
 
 
 @api_bp.get('/channel/<link:string>')
@@ -315,10 +358,15 @@ def _refresh_videos(db: DictDB):
     logger.info('Refreshing video files')
     Channel = db['channel']
 
-    for channel in Channel.get_where():
-        yield f'Checking {channel["name"]} directory for new videos'
+    total_channels = Channel.count()
+
+    for idx, channel in enumerate(Channel.get_where()):
+        progress = int((idx / total_channels) * 100)
+        yield {'progress': progress, 'message': f'Checking {channel["name"]} directory for new videos'}
         with db.transaction(commit=True):
-            yield from refresh_channel_videos(db, channel)
+            for msg in refresh_channel_videos(db, channel):
+                yield {'message': msg}
+    yield {'progress': 100, 'message': 'All videos refreshed.'}
 
 
 @wraps(_refresh_videos)

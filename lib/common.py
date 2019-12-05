@@ -2,10 +2,12 @@ import json
 import logging
 import string
 import subprocess
+from collections import namedtuple
 from functools import wraps
 from http import HTTPStatus
 from multiprocessing import Event, Queue
 from typing import Tuple
+from urllib.parse import urlunsplit
 
 import sanic
 from attr import dataclass
@@ -229,10 +231,37 @@ def attach_websocket_with_queue(uri: str, maxsize: int, blueprint: Blueprint):
             # Pass along messages from the queue until its empty, or the event is cleared.  Give up after 1 second so
             # the worker can take another request.
             msg = q.get(timeout=1)
-            dump = json.dumps({'message': msg})
+            dump = json.dumps(msg)
             await ws.send(dump)
 
         # No messages left, stream is complete
         await ws.send(json.dumps({'message': 'stream-complete'}))
 
     return q, event
+
+
+# The following code is used to consistently construct URLs that will reference this service.
+SANIC_HOST = None
+SANIC_PORT = None
+URL_COMPONENTS = namedtuple('Components', ['scheme', 'netloc', 'path', 'query', 'fragment'])
+
+
+def set_sanic_url_parts(host, port):
+    """
+    Set the global parts of this service's URL.  This is used to consistently construct URLs that will reference this
+    service.
+    """
+    global SANIC_HOST
+    global SANIC_PORT
+    SANIC_HOST = host
+    SANIC_PORT = port
+
+
+def get_sanic_url(scheme: str = 'http', path: str = None, query: list = None, fragment: str = None):
+    """
+    Build a URL with the provided parts that references this running service.
+    """
+    components = URL_COMPONENTS(scheme=scheme, netloc=f'{SANIC_HOST}:{SANIC_PORT}', path=path,
+                                query=query, fragment=fragment)
+    unparsed = str(urlunsplit(components))
+    return unparsed

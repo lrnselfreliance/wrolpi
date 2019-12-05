@@ -6,7 +6,7 @@ from sanic import Blueprint, Sanic, response
 from sanic.request import Request
 from sanic_cors import CORS
 
-from lib.common import logger
+from lib.common import logger, set_sanic_url_parts
 from lib.db import get_db
 from lib.user_plugins import PLUGINS
 
@@ -88,6 +88,7 @@ def attach_routes(app):
 
 def run_webserver(host: str, port: int, workers: int = 8):
     attach_routes(webapp)
+    set_sanic_url_parts(host, port)
     webapp.run(host, port, workers=workers)
 
 

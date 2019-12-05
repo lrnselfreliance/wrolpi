@@ -25,9 +25,10 @@ a file is moved, it will not be duplicated in the DB.
 import asyncio
 import json
 import pathlib
+import queue
 from functools import wraps
 from http import HTTPStatus
-from multiprocessing import Queue
+from multiprocessing import Queue, Event
 from uuid import uuid1
 
 from dictorm import DictDB
@@ -77,11 +78,20 @@ def get_channels(request: Request):
 
 
 refresh_queue = Queue(maxsize=1000)
+refresh_event = Event()
+refresh_event.clear()
 
 
 @api_bp.post('/settings/refresh')
 async def refresh(_):
     refresh_logger = logger.getChild('refresh')
+
+    # Only one refresh can run at a time
+    if refresh_event.is_set():
+        return response.json({'error': 'Refresh already running'}, HTTPStatus.BAD_REQUEST)
+
+    refresh_event.set()
+    refresh_queue.put('stream-started')
 
     async def do_refresh():
         refresh_logger.info('refresh started')
@@ -92,7 +102,8 @@ async def refresh(_):
 
         refresh_queue.put('refresh-complete')
         refresh_logger.info('refresh complete')
-        refresh_queue.put('stream-complete')
+
+        refresh_event.clear()
 
     coro = do_refresh()
     asyncio.ensure_future(coro)
@@ -103,10 +114,19 @@ async def refresh(_):
 @api_bp.websocket('/feeds/refresh')
 async def refresh_websocket(request: Request, ws: WebSocket):
     while True:
-        msg = refresh_queue.get()
-        dump = json.dumps({'message': msg})
-        await ws.send(dump)
-        await ws.recv()
+        # Pass along messages from the queue, unless its empty and a refresh isn't running
+        try:
+            msg = refresh_queue.get(timeout=1)
+            dump = json.dumps({'message': msg})
+            await ws.send(dump)
+        except queue.Empty:
+            refresh_running = refresh_event.is_set()
+            if not refresh_running:
+                # No messages in queue, and no refresh running.
+                break
+
+    # No messages left, stream is complete
+    await ws.send(json.dumps({'message': 'stream-complete'}))
 
 
 @api_bp.get('/channel/<link:string>')

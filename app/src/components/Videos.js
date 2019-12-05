@@ -6,6 +6,7 @@ import {Link, NavLink, Route, Switch} from "react-router-dom";
 import {Button, Container, Form} from "react-bootstrap";
 import Modal from "react-bootstrap/Modal";
 import Card from "react-bootstrap/Card";
+import Video from "./VideoPlayer";
 import '../static/external/fontawesome-free/css/all.min.css';
 
 const VIDEOS_API = 'http://127.0.0.1:8080/api/videos';
@@ -48,20 +49,12 @@ class ChannelsNav extends React.Component {
     }
 }
 
-function ChannelVideo(props) {
-    return (
-        <div>
-            {console.log('video', props.match.params.channel_link, props.match.params.video_id)}
-        </div>
-    )
-}
-
 function VideoCard({video, channel}) {
     let video_url = "/videos/" + channel.link + "/" + video.video_path_hash;
     let poster_url = video.poster_path ? `${VIDEOS_API}/poster/${video.video_path_hash}` : null;
     return (
         <Link to={video_url}>
-            <Card style={{'width': '18em', 'margin-bottom': '1em'}}>
+            <Card style={{'width': '18em', 'marginBottom': '1em'}}>
                 <Card.Img
                     variant="top"
                     src={poster_url}
@@ -84,7 +77,7 @@ async function getChannel(link) {
 }
 
 async function getVideos(link) {
-    let response = await fetch(`${VIDEOS_API}/${link}/videos`);
+    let response = await fetch(`${VIDEOS_API}/channel/${link}/videos`);
     let data = await response.json();
     return data['videos'];
 }
@@ -199,8 +192,6 @@ function AddChannel() {
 
 class ManageContent extends React.Component {
 
-    ws = new WebSocket('ws://127.0.0.1:8080/api/videos/feeds/refresh');
-
     constructor(props) {
         super(props);
         this.state = {
@@ -210,10 +201,19 @@ class ManageContent extends React.Component {
         this.handleClose = this.handleClose.bind(this);
         this.handleShow = this.handleShow.bind(this);
         this.refreshContent = this.refreshContent.bind(this);
+        this.ws = new WebSocket('ws://127.0.0.1:8080/api/videos/feeds/refresh');
+        window.onbeforeunload = (e) => {
+            this.closeWs();
+        };
+        this.ws.onclose = (e) => {
+            console.log('closed');
+        }
+    }
 
-        this.ws.addEventListener("message", function (e) {
-            console.log(e);
-        });
+    closeWs() {
+        console.log('closing websocket');
+        this.ws.close(1000, 'for fun');
+        delete this.ws;
     }
 
     componentDidMount() {
@@ -221,6 +221,10 @@ class ManageContent extends React.Component {
             this.handleData(event.data);
             this.ws.send('received');
         };
+    }
+
+    componentWillUnmount() {
+        this.closeWs();
     }
 
     handleData(data) {
@@ -243,7 +247,8 @@ class ManageContent extends React.Component {
     }
 
     render() {
-        return (<>
+        return (
+            <>
                 <Button
                     id="manage_content"
                     className="btn-secondary"
@@ -315,7 +320,7 @@ function Videos() {
             <Col className="col-9">
                 <Container>
                     <Switch>
-                        <Route path="/videos/:channel_link/:video_id" component={ChannelVideo}/>
+                        <Route path="/videos/:channel_link/:video_id" component={Video}/>
                         <Route path="/videos/:channel_link" component={ChannelVideoPager}/>
                     </Switch>
                 </Container>

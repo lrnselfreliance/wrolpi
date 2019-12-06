@@ -6,18 +6,9 @@ from urllib.parse import urlparse
 from sanic import Blueprint, response
 
 from lib.common import get_http_file_info, download_file, load_schema
-from lib.plugins.map.schema import pbf_post_schema
+from .schema import pbf_post_schema
 
-PLUGIN_ROOT = 'map'
-
-# This will be set once all plugins are loaded
-PLUGINS = None
-
-
-def set_plugins(plugins):
-    global PLUGINS
-    PLUGINS = plugins
-
+NAME = 'map'
 
 api_bp = Blueprint('api_map', url_prefix='/map')
 

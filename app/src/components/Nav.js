@@ -3,12 +3,12 @@ import {Button, Form, FormControl, Navbar} from "react-bootstrap";
 import Nav from "react-bootstrap/Nav";
 import {NavLink} from "react-router-dom";
 
-const Plugins = [
+const Modules = [
     {href: '/videos', name: 'Videos'},
     {href: '/map', name: 'Map'}
 ];
 
-function Plugin(props) {
+function Module(props) {
     return (
         <NavLink
             className="nav-link"
@@ -20,9 +20,9 @@ function Plugin(props) {
     )
 }
 
-function PluginList(props) {
+function ModuleList(props) {
     return props.plugins.map(
-        (plugin) => <Plugin key={plugin['href']} {...plugin}/>
+        (plugin) => <Module key={plugin['href']} {...plugin}/>
     )
 }
 
@@ -81,7 +81,7 @@ export function NavBar() {
             <Navbar.Toggle aria-controls="basic-navbar-nav"/>
             <Navbar.Collapse id="basic-navbar-nav">
                 <Nav className="mr-auto">
-                    <PluginList plugins={Plugins}/>
+                    <ModuleList plugins={Modules}/>
                 </Nav>
                 <NavSearch/>
                 <Nav className="ml-auto">

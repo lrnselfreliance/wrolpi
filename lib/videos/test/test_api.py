@@ -9,19 +9,19 @@ import mock
 import yaml
 
 from lib.db import get_db_context
-from lib.plugins.videos.common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH, get_config
-from lib.plugins.videos.downloader import insert_video
+from ..common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH, get_config
+from ..downloader import insert_video
 from lib.test.common import wrap_test_db
 from lib.api import api_app, attach_routes
 
 CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
-cwd = pathlib.Path(__file__).parents[4]
+cwd = pathlib.Path(__file__).parents[3]
 
 # Attach the default routes
 attach_routes(api_app)
 
 
-@mock.patch('lib.plugins.videos.common.CONFIG_PATH', CONFIG_PATH.name)
+@mock.patch('lib.videos.common.CONFIG_PATH', CONFIG_PATH.name)
 class TestAPI(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -63,7 +63,7 @@ class TestAPI(unittest.TestCase):
 
         with get_db_context() as (db_conn, db):
             Video, Channel = db['video'], db['channel']
-            self.assertEqual(Channel.count(), 1)
+            self.assertEqual(Channel.count(), 4)
             self.assertGreater(Video.count(), 1)
 
     @wrap_test_db

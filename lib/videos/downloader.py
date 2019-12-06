@@ -12,8 +12,8 @@ from youtube_dl import YoutubeDL
 
 from lib.common import make_progress_calculator
 from lib.db import get_db_context
-from lib.plugins.videos.captions import process_captions
-from lib.plugins.videos.common import get_downloader_config, get_absolute_channel_directory
+from .captions import process_captions
+from .common import get_downloader_config, get_absolute_channel_directory
 
 logger = logging.getLogger('lib:downloader')
 ch = logging.StreamHandler()
@@ -212,6 +212,10 @@ def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
     channel_dir = get_absolute_channel_directory(channel['directory'])
     poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path, relative_to=channel_dir)
 
+    # Hash the video's path for easy and collision-free linking
+    video_path_hash = hashlib.sha3_512(str(video_path).encode('UTF-8')).hexdigest()
+    video_path_hash = video_path_hash[:10]
+
     # Video paths should be relative to the channel's directory
     if video_path.is_absolute():
         video_path = video_path.relative_to(channel_dir)
@@ -224,10 +228,6 @@ def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
     # Youtube-DL can sometimes set date to `NA`, lets use a None
     if upload_date == 'NA':
         upload_date = None
-
-    # Hash the video's path for easy and collision-free linking
-    video_path_hash = hashlib.sha3_512(str(video_path).encode('UTF-8')).hexdigest()
-    video_path_hash = video_path_hash[:10]
 
     video = Video(
         channel_id=channel['id'],

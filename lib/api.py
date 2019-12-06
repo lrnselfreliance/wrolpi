@@ -8,7 +8,7 @@ from sanic_cors import CORS
 
 from lib.common import logger, set_sanic_url_parts
 from lib.db import get_db
-from lib.user_plugins import PLUGINS
+from lib.modules import MODULES
 
 cwd = pathlib.Path(__file__).parent
 
@@ -75,26 +75,12 @@ async def echo(request: Request):
     return response.json(ret)
 
 
-@root_api.route('/plugins')
-async def plugins(request: Request):
-    """Create a list of plugin links for the frontend.
-
-    Example:
-        [
-            ('/videos', 'Videos'),
-            ('/map', 'Map'),
-        ]
-    """
-    request_plugins = [('/' + i.PLUGIN_ROOT, i.PRETTY_NAME) for i in PLUGINS.values()]
-    return response.json(request_plugins)
-
-
 def attach_routes(app):
     """
-    Attach all default and plugin routes to the provided app.
+    Attach all default and module routes to the provided app.
     """
     # routes: /api/*
-    blueprints = [i.api_bp for i in PLUGINS.values()]
+    blueprints = [i.api_bp for i in MODULES.values()]
     api_group = Blueprint.group(*blueprints, root_api, url_prefix='/api')
     app.blueprint(api_group)
 

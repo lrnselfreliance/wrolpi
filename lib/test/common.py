@@ -60,8 +60,9 @@ def wrap_test_db(func):
                     return FakePool(), testing_db_conn, testing_db, None
 
                 with mock.patch('lib.db.get_db', _get_db), \
-                     mock.patch('lib.web.get_db', _get_db):
-                    return func(*a, **kw)
+                     mock.patch('lib.api.get_db', _get_db):
+                    result = func(*a, **kw)
+                    return result
 
             finally:
                 testing_db_conn.close()

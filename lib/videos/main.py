@@ -1,11 +1,9 @@
 #! /usr/bin/env python3
 import argparse
-import logging
 
-from lib.plugins.videos import downloader, api
+from . import downloader, api
 
 PRETTY_NAME = 'Videos'
-logger = logging.getLogger('lib')
 
 
 def init_parser(sub_commands):

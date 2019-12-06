@@ -139,7 +139,7 @@ def create_pagination_dict(offset, limit, more=None, total=None) -> Pagination:
 
 
 def get_pagination_with_generator(results_gen: ResultsGenerator, offset: int, limit: int = 20, total=None) \
-        -> Tuple[list, dict]:
+        -> Tuple[list, Pagination]:
     """Offset a results generator and create a pagination dict"""
     results_gen = results_gen.offset(offset)
     results = [i for (i, _) in zip(results_gen, range(limit))]
@@ -214,13 +214,16 @@ async def download_file(url: str, size: int, destination: str):
     pass
 
 
-def attach_websocket_with_queue(uri: str, maxsize: int, blueprint: Blueprint):
+DEFAULT_QUEUE_SIZE = 1000
+
+
+def attach_websocket_with_queue(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT_QUEUE_SIZE):
     """
     Build the objects needed to run a websocket which will pass on messages from a multiprocessing.Queue.
 
     :param uri: the Sanic URI that the websocket will listen on
-    :param maxsize: the maximum size of the Queue
     :param blueprint: the Sanic Blueprint to attach the websocket to
+    :param maxsize: the maximum size of the Queue
     :return:
     """
     q = Queue(maxsize=maxsize)
@@ -276,6 +279,7 @@ def make_progress_calculator(total):
     """
     Create a function that calculates the percentage of completion.
     """
+
     def progress_calculator(current):
         return int((current / total) * 100)
 

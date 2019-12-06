@@ -12,12 +12,12 @@ import sys
 from lib import api
 from lib.cmd import import_settings_configs, save_settings_configs
 from lib.common import logger
-from lib.user_plugins import PLUGINS
+from lib.modules import MODULES
 
 
 def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):
     """Associate a sub-command with the provided main, but only if that sub-command hasn't already been claimed
-    by another main.  This is a work-around so plugins can define their down cmd-line arguments."""
+    by another main.  This is a work-around so modules can define their down cmd-line arguments."""
     for choice in sub_commands.choices:
         if choice not in choices_to_mains:
             choices_to_mains[choice] = sub_main
@@ -35,10 +35,10 @@ def main():
     choices_to_mains = {'api': api.main}
     api.init_parser(api_parser)
 
-    # Setup the plugins' sub-commands
-    for plugin_name, plugin in PLUGINS.items():
-        plugin.init_parser(sub_commands)
-        update_choices_to_mains(sub_commands, choices_to_mains, plugin.main.main)
+    # Setup the modules' sub-commands
+    for module_name, module in MODULES.items():
+        module.init_parser(sub_commands)
+        update_choices_to_mains(sub_commands, choices_to_mains, module.main.main)
 
     args = parser.parse_args()
 
@@ -50,13 +50,13 @@ def main():
         logger.setLevel(logging.DEBUG)
 
     # Always update the DB from the configs
-    import_settings_configs(PLUGINS)
+    import_settings_configs(MODULES)
 
     if args.sub_commands:
-        plugin_main = choices_to_mains[args.sub_commands]
-        return_code = plugin_main(args)
+        module_main = choices_to_mains[args.sub_commands]
+        return_code = module_main(args)
     elif args.save_config:
-        return_code = save_settings_configs(PLUGINS)
+        return_code = save_settings_configs(MODULES)
         logger.info('Config written.')
     else:
         parser.print_help()

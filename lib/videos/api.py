@@ -36,20 +36,13 @@ from sanic.request import Request
 from lib.common import sanitize_link, boolean_arg, load_schema, env, attach_websocket_with_queue, get_sanic_url, \
     make_progress_calculator
 from lib.db import get_db_context
-from lib.plugins.videos.captions import process_captions
-from lib.plugins.videos.common import get_conflicting_channels, get_absolute_video_path, UnknownFile
-from lib.plugins.videos.downloader import insert_video, update_channels, download_all_missing_videos
-from lib.plugins.videos.main import logger
-from lib.plugins.videos.schema import downloader_config_schema, channel_schema
+from .captions import process_captions
+from .common import get_conflicting_channels, get_absolute_video_path, UnknownFile
+from .downloader import insert_video, update_channels, download_all_missing_videos
+from .common import logger
+from .schema import downloader_config_schema, channel_schema
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
     get_absolute_channel_directory, UnknownDirectory
-
-PLUGIN_ROOT = 'videos'
-
-
-def set_plugins(plugins):
-    global PLUGIN_ROOT
-    PLUGIN_ROOT = plugins
 
 
 api_bp = Blueprint('api_video', url_prefix='/videos')
@@ -74,7 +67,7 @@ def get_channels(request: Request):
     return response.json({'channels': channels})
 
 
-refresh_queue, refresh_event = attach_websocket_with_queue('/feeds/refresh', 1000, api_bp)
+refresh_queue, refresh_event = attach_websocket_with_queue('/feeds/refresh', api_bp)
 
 
 @api_bp.post('/settings/refresh')
@@ -113,7 +106,7 @@ async def refresh(_):
     return response.json({'success': 'stream-started', 'stream-url': stream_url})
 
 
-download_queue, download_event = attach_websocket_with_queue('/feeds/download', 1000, api_bp)
+download_queue, download_event = attach_websocket_with_queue('/feeds/download', api_bp)
 
 
 @api_bp.post('/settings/download')
@@ -405,7 +398,7 @@ def video_search(db: DictDB, search_str, offset, link):
             'id': id_,
             'name': f'{name} ({channel_total})',
             'link': link_,
-            'search_link': f'/{PLUGIN_ROOT}/search?link={link_}&search={search_str}',
+            'search_link': f'/{NAME}/search?link={link_}&search={search_str}',
         }
         channels.append(d)
 

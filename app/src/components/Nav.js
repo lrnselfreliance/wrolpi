@@ -1,4 +1,4 @@
-import React, {useState} from "react";
+import React from "react";
 import {Button, Form, FormControl, Navbar} from "react-bootstrap";
 import Nav from "react-bootstrap/Nav";
 import {NavLink} from "react-router-dom";
@@ -41,11 +41,6 @@ function NavSettings() {
 }
 
 function NavSearch() {
-    const [inputText, setInputText] = useState('');
-
-    function handleChange(event) {
-        setInputText(event.target.value);
-    }
 
     function handleSubmit(event) {
         event.preventDefault();
@@ -57,7 +52,6 @@ function NavSearch() {
                 type="text"
                 className="mr-sm-2"
                 placeholder="Search"
-                onChange={handleChange}
                 onSubmit={handleSubmit}
             />
             <Button type="submit" variant="outline-success">

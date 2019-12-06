@@ -8,11 +8,11 @@ from shutil import copyfile
 import mock
 import yaml
 
+from lib.api import api_app, attach_routes
 from lib.db import get_db_context
+from lib.test.common import wrap_test_db
 from ..common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH, get_config
 from ..downloader import insert_video
-from lib.test.common import wrap_test_db
-from lib.api import api_app, attach_routes
 
 CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
 cwd = pathlib.Path(__file__).parents[3]

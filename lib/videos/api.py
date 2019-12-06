@@ -37,13 +37,12 @@ from lib.common import sanitize_link, boolean_arg, load_schema, env, attach_webs
     make_progress_calculator
 from lib.db import get_db_context
 from .captions import process_captions
-from .common import get_conflicting_channels, get_absolute_video_path, UnknownFile
-from .downloader import insert_video, update_channels, download_all_missing_videos
-from .common import logger
-from .schema import downloader_config_schema, channel_schema
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
     get_absolute_channel_directory, UnknownDirectory
-
+from .common import get_conflicting_channels, get_absolute_video_path, UnknownFile
+from .common import logger
+from .downloader import insert_video, update_channels, download_all_missing_videos
+from .schema import downloader_config_schema, channel_schema
 
 api_bp = Blueprint('api_video', url_prefix='/videos')
 

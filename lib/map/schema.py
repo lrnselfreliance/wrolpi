@@ -1,8 +1,9 @@
-from marshmallow import Schema, fields
+from sanic_openapi import doc
 
 
-class PBFPost(Schema):
-    pbf = fields.Str()
+class PBFPostRequest:
+    pbf_url = doc.String()
 
 
-pbf_post_schema = PBFPost()
+class PBFPostResponse:
+    success = doc.String()

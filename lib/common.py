@@ -9,18 +9,17 @@ from http import HTTPStatus
 from multiprocessing import Event, Queue
 from typing import Tuple
 from urllib.parse import urlunsplit
+from uuid import UUID
 
 import sanic
 from attr import dataclass
 from dictorm import ResultsGenerator
-from jinja2 import Environment, FileSystemLoader
 from marshmallow import Schema, ValidationError
-from sanic import Sanic, Blueprint
+from sanic import Sanic, Blueprint, response
 from sanic.exceptions import abort, InvalidUsage
 from sanic.request import Request
+from sanic_openapi import doc
 from websocket import WebSocket
-
-from lib.vars import PROJECT_DIR
 
 sanic_app = Sanic()
 
@@ -29,9 +28,6 @@ ch = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 ch.setFormatter(formatter)
 logger.addHandler(ch)
-
-# Jinja2 environment
-env = Environment(loader=FileSystemLoader(str(PROJECT_DIR.absolute())))
 
 
 def get_loop():
@@ -284,3 +280,66 @@ def make_progress_calculator(total):
         return int((current / total) * 100)
 
     return progress_calculator
+
+
+def validate_data(model, data):
+    new_data = {}
+    # Get the public attributes of the model
+    attrs = [i for i in dir(model) if not str(i).startswith('__')]
+    # Convert each json value to it's respective doc field
+    error = None
+    for attr in attrs:
+        field = getattr(model, attr)
+        if isinstance(field, doc.String):
+            new_data[attr] = str(data.pop(attr))
+        elif isinstance(field, doc.Integer):
+            new_data[attr] = int(data.pop(attr))
+        elif isinstance(field, doc.Tuple):
+            new_data[attr] = tuple(data.pop(attr))
+        elif isinstance(field, doc.UUID):
+            new_data[attr] = UUID(data.pop(attr))
+        elif isinstance(field, doc.Boolean):
+            new_data[attr] = bool(data.pop(attr))
+        elif isinstance(field, doc.Float):
+            new_data[attr] = float(data.pop(attr))
+        elif isinstance(field, doc.Dictionary):
+            new_data[attr] = dict(data.pop(attr))
+        elif isinstance(field, doc.List):
+            new_data[attr] = list(data.pop(attr))
+        else:
+            error = {'error': 'Invalid field type', 'field': attr}
+
+    if data:
+        # Excess JSON keys
+        error = {'error': 'Excess JSON keys', 'keys': [data.keys()]}
+
+    if not error:
+        return new_data
+    return response.json(error, HTTPStatus.BAD_REQUEST)
+
+
+def validate_doc(summary: str = None, consumes=None, produces=None):
+    """
+    Apply Sanic OpenAPI docs to the wrapped route.  Perform validation on requests.
+    """
+
+    def wrapper(func):
+        @wraps(func)
+        def wrapped(request, *a, **kw):
+            if consumes:
+                data = validate_data(consumes, request.json)
+                return func(request, data, *a, **kw)
+            return func(request, *a, *kw)
+
+        # Apply the docs to the wrapped function so sanic-openapi can find the wrapped function when
+        # building the schema.  If these docs are applied to `func`, sanic-openapi won't be able to lookup `wrapped`
+        if summary:
+            wrapped = doc.summary(summary)(wrapped)
+        if consumes:
+            wrapped = doc.consumes(consumes, location='body')(wrapped)
+        if produces:
+            wrapped = doc.produces(produces)(wrapped)
+
+        return wrapped
+
+    return wrapper

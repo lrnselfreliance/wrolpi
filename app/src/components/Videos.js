@@ -3,7 +3,7 @@ import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import Nav from "react-bootstrap/Nav";
 import {Link, NavLink, Route, Switch} from "react-router-dom";
-import {Button, ButtonGroup, Container, Form, ProgressBar} from "react-bootstrap";
+import {Button, ButtonGroup, Container, Form, FormControl, ProgressBar} from "react-bootstrap";
 import Modal from "react-bootstrap/Modal";
 import Card from "react-bootstrap/Card";
 import Video from "./VideoPlayer";
@@ -285,7 +285,7 @@ class ManageContent extends React.Component {
 
     async refreshContent() {
         this.setState({'refreshDisabled': true});
-        let url = `${VIDEOS_API}/settings/refresh`;
+        let url = `${VIDEOS_API}/settings:refresh`;
         let response = await fetch(url, {'method': 'POST'});
         try {
             let data = await response.json();
@@ -316,7 +316,7 @@ class ManageContent extends React.Component {
 
     async downloadVideos() {
         this.setState({'downloadDisabled': true});
-        let url = `${VIDEOS_API}/settings/download`;
+        let url = `${VIDEOS_API}/settings:download`;
         let response = await fetch(url, {'method': 'POST'});
         try {
             let data = await response.json();
@@ -354,8 +354,6 @@ class ManageContent extends React.Component {
                     onClick={this.handleShow}
                     style={{'marginBottom': '0.5em'}}
                 >
-                    Manage Content
-                    &nbsp;
                     <span className="fas fa-cog"/>
                 </Button>
 
@@ -422,6 +420,54 @@ class ManageContent extends React.Component {
     }
 }
 
+class VideoAPI {
+    constructor() {
+    }
+}
+
+class VideoSearch extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            searchStr: '',
+        };
+        this.searchApi = `${VIDEOS_API}/search`;
+    }
+
+    async handleOnChange(e, searchApi) {
+        let value = e.target.value;
+        let form_data = {
+            'search_str': e.target.value,
+            'offset': 0,
+        };
+        if (value.length > 2) {
+            let response = await fetch(searchApi, {
+                method: 'POST',
+                body: JSON.stringify(form_data),
+            });
+            let data = await response.json();
+            console.log(data);
+        }
+    }
+
+    render() {
+        return (
+            <Form inline>
+                <FormControl
+                    type="text"
+                    className="mr-sm-2"
+                    placeholder="Search"
+                    onChange={(e) => this.handleOnChange(e, this.searchApi)}
+                />
+                <Button type="submit" variant="outline-info">
+                    <span className="fas fa-search"/>
+                </Button>
+            </Form>
+        )
+    }
+}
+
 function Videos() {
     return (
         <Row style={{'marginTop': '1.5em'}}>
@@ -434,13 +480,9 @@ function Videos() {
                     </Col>
                     <Col className="col-3">
                         <div className="ml-auto">
+                            <ManageContent/>
                             <AddChannel/>
                         </div>
-                    </Col>
-                </Row>
-                <Row>
-                    <Col>
-                        <ManageContent/>
                     </Col>
                 </Row>
                 <Row>
@@ -451,6 +493,7 @@ function Videos() {
             </Col>
             <Col className="col-9">
                 <Container>
+                    <VideoSearch/>
                     <Switch>
                         <Route path="/videos/:channel_link/:video_id" component={Video}/>
                         <Route path="/videos/:channel_link" component={ChannelVideoPager}/>

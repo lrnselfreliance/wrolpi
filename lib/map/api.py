@@ -5,8 +5,8 @@ from urllib.parse import urlparse
 
 from sanic import Blueprint, response
 
-from lib.common import get_http_file_info, download_file, load_schema
-from .schema import pbf_post_schema
+from lib.common import get_http_file_info, download_file, validate_doc
+from lib.map.schema import PBFPostRequest, PBFPostResponse
 
 NAME = 'map'
 
@@ -14,12 +14,16 @@ api_bp = Blueprint('api_map', url_prefix='/map')
 
 
 @api_bp.route('/pbf', methods=['POST'])
-@load_schema(pbf_post_schema)
+@validate_doc(
+    summary='Queue a PBF file for download and processing',
+    consumes=PBFPostRequest,
+    produces=PBFPostResponse,
+)
 def pbf_post(request, data: dict):
     pbf_url = data.get('pbf_url')
     parsed = urlparse(pbf_url)
     if not parsed.scheme or not parsed.netloc or not parsed.path:
-        raise Exception('Invalid PBF url')
+        return response.json({'error': 'Invalid PBF url'}, HTTPStatus.BAD_REQUEST)
 
     # Get the size of the PBF file.  Also, check that it is accessible.
     try:

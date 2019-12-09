@@ -33,7 +33,7 @@ from sanic import Blueprint, response
 from sanic.exceptions import abort
 from sanic.request import Request
 
-from lib.common import sanitize_link, boolean_arg, load_schema, env, attach_websocket_with_queue, get_sanic_url, \
+from lib.common import sanitize_link, boolean_arg, load_schema, attach_websocket_with_queue, get_sanic_url, \
     make_progress_calculator
 from lib.db import get_db_context
 from .captions import process_captions
@@ -379,7 +379,6 @@ def refresh_videos_with_db():
 
 def video_search(db: DictDB, search_str, offset, link):
     db_conn = db.conn
-    template = env.get_template('lib/plugins/videos/templates/search_video.html')
     curs = db_conn.cursor()
 
     # Get the match count per channel
@@ -397,7 +396,7 @@ def video_search(db: DictDB, search_str, offset, link):
             'id': id_,
             'name': f'{name} ({channel_total})',
             'link': link_,
-            'search_link': f'/{NAME}/search?link={link_}&search={search_str}',
+            'search_link': f'/videos/search?link={link_}&search={search_str}',
         }
         channels.append(d)
 
@@ -426,7 +425,6 @@ def video_search(db: DictDB, search_str, offset, link):
         videos = [dict(i) for i in Video.get_where(Video['id'].In([i[0] for i in results]))]
 
     results = {
-        'template': template,
         'videos': videos,
         'total': total,
         'channels': channels,

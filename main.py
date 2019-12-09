@@ -49,6 +49,9 @@ def main():
         logger.debug('Setting verbosity to DEBUG')
         logger.setLevel(logging.DEBUG)
 
+    # Always warn about the log level so we know what will be logged
+    logger.warning(f'Logging level: {logger.getEffectiveLevel()}')
+
     # Always update the DB from the configs
     import_settings_configs(MODULES)
 

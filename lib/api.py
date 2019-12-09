@@ -5,6 +5,7 @@ from functools import wraps
 from sanic import Blueprint, Sanic, response
 from sanic.request import Request
 from sanic_cors import CORS
+from sanic_openapi import swagger_blueprint
 
 from lib.common import logger, set_sanic_url_parts
 from lib.db import get_db
@@ -15,6 +16,9 @@ cwd = pathlib.Path(__file__).parent
 api_app = Sanic()
 # TODO Allow all requests to this webapp during development.  This should be restricted later.
 CORS(api_app)
+
+# Attach the Sanic OpenAPI blueprint to the API App.  This will generate our API docs.
+api_app.blueprint(swagger_blueprint)
 
 
 # Add DB middleware
@@ -51,7 +55,11 @@ def index(request):
     <html>
     <body>
     <p>
-        This is the WROLPi API.  You can test it using <a href="/api/echo">/api/echo</a>
+        This is the WROLPi API.
+        <ul>
+            <li>You can test it at this endpoint <a href="/api/echo">/api/echo</a></li>
+            <li>You can view the docs at <a href="/swagger">/swagger</a></li>
+        </ul>
     </p>
     </body>
     </html>'''
@@ -68,7 +76,7 @@ async def echo(request: Request):
     """
     ret = dict(
         form=request.form,
-        headers=request.headers,
+        headers=dict(request.headers),
         json=request.json,
         method=request.method,
     )

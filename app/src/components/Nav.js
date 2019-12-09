@@ -1,5 +1,5 @@
 import React from "react";
-import {Button, Form, FormControl, Navbar} from "react-bootstrap";
+import {Navbar} from "react-bootstrap";
 import Nav from "react-bootstrap/Nav";
 import {NavLink} from "react-router-dom";
 
@@ -40,27 +40,6 @@ function NavSettings() {
     )
 }
 
-function NavSearch() {
-
-    function handleSubmit(event) {
-        event.preventDefault();
-    }
-
-    return (
-        <Form inline>
-            <FormControl
-                type="text"
-                className="mr-sm-2"
-                placeholder="Search"
-                onSubmit={handleSubmit}
-            />
-            <Button type="submit" variant="outline-success">
-                <span className="fas fa-search"/>
-            </Button>
-        </Form>
-    )
-}
-
 export function NavBar() {
     return (
         <Navbar bg="light" expand="lg">
@@ -77,7 +56,6 @@ export function NavBar() {
                 <Nav className="mr-auto">
                     <ModuleList plugins={Modules}/>
                 </Nav>
-                <NavSearch/>
                 <Nav className="ml-auto">
                     <NavSettings/>
                 </Nav>

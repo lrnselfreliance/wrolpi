@@ -9,10 +9,12 @@ class ChannelSchema(Schema):
     directory = fields.Str()
 
 
+channel_schema = ChannelSchema()
+
+
 class DownloaderConfig(Schema):
     video_root_directory = fields.Str(required=True)
     file_name_format = fields.Str(required=True)
 
 
-channel_schema = ChannelSchema()
 downloader_config_schema = DownloaderConfig()

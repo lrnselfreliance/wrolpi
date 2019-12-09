@@ -33,7 +33,7 @@ from sanic import Blueprint, response
 from sanic.exceptions import abort
 from sanic.request import Request
 
-from lib.common import sanitize_link, boolean_arg, load_schema, attach_websocket_with_queue, get_sanic_url, \
+from lib.common import sanitize_link, boolean_arg, attach_websocket_with_queue, get_sanic_url, \
     make_progress_calculator, validate_doc
 from lib.db import get_db_context
 from .captions import process_captions
@@ -42,18 +42,19 @@ from .common import generate_video_paths, save_settings_config, get_downloader_c
 from .common import get_conflicting_channels, get_absolute_video_path, UnknownFile
 from .common import logger
 from .downloader import insert_video, update_channels, download_all_missing_videos
-from .schema import DownloaderConfig, ChannelRequest, ChannelsModel, SettingsResponse, StreamResponse, \
+from .schema import DownloaderConfig, ChannelRequest, ChannelsModel, SuccessResponse, StreamResponse, \
     JSONErrorResponse, \
-    ChannelResponse, ChannelPostResponse
+    ChannelResponse, ChannelPostResponse, ChannelVideosResponse
 
-api_bp = Blueprint('api_video', url_prefix='/videos')
+api_bp = Blueprint('Video', url_prefix='/videos')
 
 
 @api_bp.put('/settings')
 @validate_doc(
     summary='Update video settings config',
     consumes=DownloaderConfig,
-    produces=SettingsResponse,
+    produces=SuccessResponse,
+    tag='Video Content',
 )
 def settings(request: Request, data: dict):
     downloader_config = get_downloader_config()
@@ -67,6 +68,7 @@ def settings(request: Request, data: dict):
 @validate_doc(
     summary='Get a list of all Channels',
     produces=ChannelsModel,
+    tag='Channel',
 )
 def get_channels(request: Request):
     db: DictDB = request.ctx.get_db()
@@ -86,6 +88,7 @@ refresh_queue, refresh_event = attach_websocket_with_queue('/feeds/refresh', api
     responses=[
         (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
     ],
+    tag='Video Content',
 )
 async def refresh(_):
     refresh_logger = logger.getChild('refresh')
@@ -129,6 +132,7 @@ download_queue, download_event = attach_websocket_with_queue('/feeds/download', 
     responses=[
         (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
     ],
+    tag='Video Content',
 )
 async def download(_):
     download_logger = logger.getChild('download')
@@ -170,7 +174,8 @@ async def download(_):
     produces=ChannelResponse,
     responses=(
             (HTTPStatus.NOT_FOUND, JSONErrorResponse),
-    )
+    ),
+    tag='Channel',
 )
 def channel_get(request: Request, link: str):
     db: DictDB = request.ctx.get_db()
@@ -187,7 +192,8 @@ def channel_get(request: Request, link: str):
     responses=(
             (HTTPStatus.CREATED, ChannelPostResponse),
             (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
-    )
+    ),
+    tag='Channel',
 )
 def channel_post(request: Request, data: dict):
     """Create a new channel"""
@@ -223,7 +229,12 @@ def channel_post(request: Request, data: dict):
 
 
 @api_bp.put('/channel/<link:string>')
-@load_schema(ChannelRequest)
+@validate_doc(
+    summary='Update a Channel',
+    consumes=ChannelRequest,
+    produces=SuccessResponse,
+    tag='Channel',
+)
 def channel_put(request: Request, link: str, data: dict):
     """Update an existing channel"""
     db: DictDB = request.ctx.get_db()
@@ -267,6 +278,14 @@ def channel_put(request: Request, link: str, data: dict):
 
 
 @api_bp.delete('/channel/<link:string>')
+@validate_doc(
+    summary='Delete a Channel',
+    produces=SuccessResponse,
+    responses=(
+            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
+    ),
+    tag='Channel',
+)
 def channel_delete(request, link: str):
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']
@@ -279,6 +298,14 @@ def channel_delete(request, link: str):
 
 
 @api_bp.get('/channel/<link:string>/videos')
+@validate_doc(
+    summary='Get Channel Videos',
+    produces=ChannelVideosResponse,
+    responses=(
+            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
+    ),
+    tag='Videos',
+)
 def channel_videos(request, link: str):
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']
@@ -291,6 +318,10 @@ def channel_videos(request, link: str):
 @api_bp.route('/video/<hash:string>')
 @api_bp.route('/poster/<hash:string>')
 @api_bp.route('/caption/<hash:string>')
+@validate_doc(
+    summary='Get a video/poster/caption file',
+    tag='Videos',
+)
 async def media_file(request: Request, hash: str):
     db: DictDB = request.ctx.get_db()
     download = boolean_arg(request, 'download')
@@ -306,17 +337,6 @@ async def media_file(request: Request, hash: str):
             return await response.file_stream(str(path))
     except TypeError or KeyError or UnknownFile:
         abort(404, f"Can't find {kind} by that ID.")
-
-
-def get_channel_form(form_data: dict):
-    channel = dict(
-        url=form_data.get('url'),
-        name=form_data['name'],
-        match_regex=form_data.get('match_regex'),
-        link=sanitize_link(form_data['name']),
-        directory=form_data.get('directory'),
-    )
-    return channel
 
 
 def refresh_channel_videos(db, channel):

@@ -9,12 +9,17 @@ class ChannelRequest:
     directory = doc.String()
 
 
-class SettingsResponse:
+class SuccessResponse:
     success = doc.String()
 
 
 class ChannelModel:
     id = doc.Integer()
+    url = doc.String()
+    name = doc.String()
+    match_regex = doc.String()
+    link = doc.String()
+    directory = doc.String()
 
 
 class ChannelResponse:
@@ -41,3 +46,11 @@ class JSONErrorResponse:
 class StreamResponse:
     success = doc.String()
     stream_url = doc.String()
+
+
+class Video:
+    id = doc.Integer()
+
+
+class ChannelVideosResponse:
+    videos = doc.List(Video)

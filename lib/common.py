@@ -14,9 +14,7 @@ from uuid import UUID
 import sanic
 from attr import dataclass
 from dictorm import ResultsGenerator
-from marshmallow import Schema, ValidationError
 from sanic import Sanic, Blueprint, response
-from sanic.exceptions import abort, InvalidUsage
 from sanic.request import Request
 from sanic_openapi import doc
 from websocket import WebSocket
@@ -158,36 +156,6 @@ def boolean_arg(request, arg_name):
     return value == 'true'
 
 
-ls_logger = logger.getChild('load_schema')
-
-
-def load_schema(schema: Schema):
-    """Load JSON data from Sanic Request into the provided Schema"""
-
-    def _load_schema(func):
-        @wraps(func)
-        def wrapped(request: Request, *a, **kw):
-            try:
-                # TODO do this intelligently
-                raw_data = request.json
-                ls_logger.debug(f'request json: {request.json}')
-            except InvalidUsage:
-                raw_data = request.form
-                ls_logger.debug(f'request form: {request.form}')
-
-            try:
-                data = schema.load(raw_data)
-            except ValidationError as e:
-                abort(HTTPStatus.BAD_REQUEST, str(e))
-
-            response = func(request, *a, **kw, data=data)
-            return response
-
-        return wrapped
-
-    return _load_schema
-
-
 def get_http_file_info(url):
     """Call a wget subprocess to get information about a file"""
     size = None
@@ -318,9 +286,9 @@ def validate_data(model, data):
     return response.json(error, HTTPStatus.BAD_REQUEST)
 
 
-def validate_doc(summary: str = None, consumes=None, produces=None, responses=()):
+def validate_doc(summary: str = None, consumes=None, produces=None, responses=(), tag: str = None):
     """
-    Apply Sanic OpenAPI docs to the wrapped route.  Perform validation on requests.
+    Apply Sanic OpenAPI docs to the wrapped route.  Perform simple validation on requests.
     """
 
     def wrapper(func):
@@ -341,6 +309,8 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
             wrapped = doc.produces(produces)(wrapped)
         for resp in responses:
             wrapped = doc.response(*resp)(wrapped)
+        if tag:
+            wrapped = doc.tag(tag)(wrapped)
 
         return wrapped
 

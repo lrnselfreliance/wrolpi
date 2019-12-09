@@ -5,12 +5,14 @@ from urllib.parse import urlparse
 
 from sanic import Blueprint, response
 
-from lib.common import get_http_file_info, download_file, validate_doc
+from lib.common import get_http_file_info, download_file, validate_doc, attach_websocket_with_queue
 from lib.map.schema import PBFPostRequest, PBFPostResponse
 
 NAME = 'map'
 
-api_bp = Blueprint('api_map', url_prefix='/map')
+api_bp = Blueprint('Map', url_prefix='/map')
+
+download_queue, download_event = attach_websocket_with_queue('/feeds/pbf_progress', api_bp)
 
 
 @api_bp.route('/pbf', methods=['POST'])
@@ -37,8 +39,3 @@ def pbf_post(request, data: dict):
     coro = download_file(pbf_url, size, destination)
     asyncio.ensure_future(coro)
     return response.json({'success': 'File download started'})
-
-
-@api_bp.websocket('/pbf_progress')
-def pbf_progress(request, ws):
-    pass

@@ -5,9 +5,9 @@ from functools import wraps
 from sanic import Blueprint, Sanic, response
 from sanic.request import Request
 from sanic_cors import CORS
-from sanic_openapi import swagger_blueprint
+from sanic_openapi import swagger_blueprint, doc
 
-from lib.common import logger, set_sanic_url_parts
+from lib.common import logger, set_sanic_url_parts, validate_doc
 from lib.db import get_db
 from lib.modules import MODULES
 
@@ -69,7 +69,19 @@ def index(request):
 root_api = Blueprint('echo_api_bp')
 
 
+class EchoResponse:
+    form = doc.Dictionary()
+    headers = doc.Dictionary()
+    json = doc.String()
+    method = doc.String()
+
+
 @root_api.route('/echo', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
+@validate_doc(
+    summary='Echo whatever is sent to this',
+    produces=EchoResponse,
+    tag='Testing',
+)
 async def echo(request: Request):
     """
     Returns a JSON object containing details about the request sent to me.

@@ -34,7 +34,7 @@ from sanic.exceptions import abort
 from sanic.request import Request
 
 from lib.common import sanitize_link, boolean_arg, load_schema, attach_websocket_with_queue, get_sanic_url, \
-    make_progress_calculator
+    make_progress_calculator, validate_doc
 from lib.db import get_db_context
 from .captions import process_captions
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
@@ -42,13 +42,19 @@ from .common import generate_video_paths, save_settings_config, get_downloader_c
 from .common import get_conflicting_channels, get_absolute_video_path, UnknownFile
 from .common import logger
 from .downloader import insert_video, update_channels, download_all_missing_videos
-from .schema import downloader_config_schema, channel_schema
+from .schema import DownloaderConfig, ChannelRequest, ChannelsModel, SettingsResponse, StreamResponse, \
+    JSONErrorResponse, \
+    ChannelResponse, ChannelPostResponse
 
 api_bp = Blueprint('api_video', url_prefix='/videos')
 
 
 @api_bp.put('/settings')
-@load_schema(downloader_config_schema)
+@validate_doc(
+    summary='Update video settings config',
+    consumes=DownloaderConfig,
+    produces=SettingsResponse,
+)
 def settings(request: Request, data: dict):
     downloader_config = get_downloader_config()
     downloader_config['video_root_directory'] = data['video_root_directory']
@@ -58,6 +64,10 @@ def settings(request: Request, data: dict):
 
 
 @api_bp.get('/channels')
+@validate_doc(
+    summary='Get a list of all Channels',
+    produces=ChannelsModel,
+)
 def get_channels(request: Request):
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']
@@ -70,10 +80,14 @@ refresh_queue, refresh_event = attach_websocket_with_queue('/feeds/refresh', api
 
 
 @api_bp.post('/settings/refresh')
+@validate_doc(
+    summary='Search for videos that have previously been downloaded and stored.',
+    produces=StreamResponse,
+    responses=[
+        (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
+    ],
+)
 async def refresh(_):
-    """
-    Search for videos that have previously been downloaded and stored.
-    """
     refresh_logger = logger.getChild('refresh')
 
     # Only one refresh can run at a time
@@ -102,18 +116,21 @@ async def refresh(_):
     asyncio.ensure_future(coro)
     refresh_logger.debug('do_refresh scheduled')
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/refresh')
-    return response.json({'success': 'stream-started', 'stream-url': stream_url})
+    return response.json({'success': 'stream-started', 'stream_url': stream_url})
 
 
 download_queue, download_event = attach_websocket_with_queue('/feeds/download', api_bp)
 
 
 @api_bp.post('/settings/download')
+@validate_doc(
+    summary='Update channel catalogs, download any missing videos',
+    produces=StreamResponse,
+    responses=[
+        (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
+    ],
+)
 async def download(_):
-    """
-    Compare previously downloaded videos with newly updated catalogs.  If any videos are missing, download them.
-    :return:
-    """
     download_logger = logger.getChild('download')
 
     # Only one download can run at a time
@@ -144,10 +161,17 @@ async def download(_):
     asyncio.ensure_future(coro)
     download_logger.debug('do_download scheduled')
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/download')
-    return response.json({'success': 'stream-started', 'stream-url': stream_url})
+    return response.json({'success': 'stream-started', 'stream_url': stream_url})
 
 
 @api_bp.get('/channel/<link:string>')
+@validate_doc(
+    summary='Get a Channel',
+    produces=ChannelResponse,
+    responses=(
+            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
+    )
+)
 def channel_get(request: Request, link: str):
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']
@@ -158,7 +182,13 @@ def channel_get(request: Request, link: str):
 
 
 @api_bp.post('/channel')
-@load_schema(channel_schema)
+@validate_doc(
+    summary='Insert a Channel',
+    responses=(
+            (HTTPStatus.CREATED, ChannelPostResponse),
+            (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
+    )
+)
 def channel_post(request: Request, data: dict):
     """Create a new channel"""
     try:
@@ -193,7 +223,7 @@ def channel_post(request: Request, data: dict):
 
 
 @api_bp.put('/channel/<link:string>')
-@load_schema(channel_schema)
+@load_schema(ChannelRequest)
 def channel_put(request: Request, link: str, data: dict):
     """Update an existing channel"""
     db: DictDB = request.ctx.get_db()

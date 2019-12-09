@@ -1,20 +1,43 @@
-from marshmallow import Schema, fields
+from sanic_openapi import doc
 
 
-class ChannelSchema(Schema):
-    url = fields.Str()
-    name = fields.Str(required=True)
-    match_regex = fields.Str()
-    link = fields.Str()
-    directory = fields.Str()
+class ChannelRequest:
+    url = doc.String()
+    name = doc.String()
+    match_regex = doc.String()
+    link = doc.String()
+    directory = doc.String()
 
 
-channel_schema = ChannelSchema()
+class SettingsResponse:
+    success = doc.String()
 
 
-class DownloaderConfig(Schema):
-    video_root_directory = fields.Str(required=True)
-    file_name_format = fields.Str(required=True)
+class ChannelModel:
+    id = doc.Integer()
 
 
-downloader_config_schema = DownloaderConfig()
+class ChannelResponse:
+    channel = ChannelModel
+
+
+class ChannelPostResponse:
+    success = doc.String()
+
+
+class ChannelsModel:
+    channels = doc.List(doc.Object(ChannelModel))
+
+
+class DownloaderConfig:
+    video_root_directory = doc.String()
+    file_name_format = doc.String()
+
+
+class JSONErrorResponse:
+    error = doc.String()
+
+
+class StreamResponse:
+    success = doc.String()
+    stream_url = doc.String()

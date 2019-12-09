@@ -290,7 +290,7 @@ class ManageContent extends React.Component {
         try {
             let data = await response.json();
             if (data.hasOwnProperty('success')) {
-                let stream_url = data['stream-url'];
+                let stream_url = data['stream_url'];
                 this.setState({'refreshError': false});
                 await this.handleStream(
                     stream_url,
@@ -321,7 +321,7 @@ class ManageContent extends React.Component {
         try {
             let data = await response.json();
             if (data.hasOwnProperty('success')) {
-                let stream_url = data['stream-url'];
+                let stream_url = data['stream_url'];
                 this.setState({'downloadError': false});
                 await this.handleStream(
                     stream_url,

@@ -318,7 +318,7 @@ def validate_data(model, data):
     return response.json(error, HTTPStatus.BAD_REQUEST)
 
 
-def validate_doc(summary: str = None, consumes=None, produces=None):
+def validate_doc(summary: str = None, consumes=None, produces=None, responses=()):
     """
     Apply Sanic OpenAPI docs to the wrapped route.  Perform validation on requests.
     """
@@ -339,6 +339,8 @@ def validate_doc(summary: str = None, consumes=None, produces=None):
             wrapped = doc.consumes(consumes, location='body')(wrapped)
         if produces:
             wrapped = doc.produces(produces)(wrapped)
+        for resp in responses:
+            wrapped = doc.response(*resp)(wrapped)
 
         return wrapped
 

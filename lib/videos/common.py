@@ -1,5 +1,4 @@
 import json
-import logging
 import pathlib
 from functools import partial
 from pathlib import Path
@@ -8,11 +7,11 @@ from typing import Union, Tuple
 import yaml
 from dictorm import And, Or, Dict
 
-from lib.common import sanitize_link
+from lib.common import sanitize_link, logger
 from lib.db import get_db_context
 from lib.vars import DOCKERIZED
 
-logger = logging.getLogger('lib')
+logger = logger.getChild('videos')
 
 MY_DIR: Path = Path(__file__).parent
 CONFIG_PATH = MY_DIR / 'local.yaml'

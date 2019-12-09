@@ -23,7 +23,7 @@ sanic_app = Sanic()
 
 logger = logging.getLogger('wrolpi')
 ch = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
@@ -254,7 +254,8 @@ def validate_data(model, data):
     new_data = {}
     # Get the public attributes of the model
     attrs = [i for i in dir(model) if not str(i).startswith('__')]
-    # Convert each json value to it's respective doc field
+    # Convert each json value to it's respective doc field's python type
+    #  i.e. doc.String -> str
     error = None
     for attr in attrs:
         field = getattr(model, attr)
@@ -296,8 +297,11 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
         def wrapped(request, *a, **kw):
             if consumes:
                 data = validate_data(consumes, request.json)
+                if isinstance(data, sanic.response.HTTPResponse):
+                    # Error in validation
+                    return data
                 return func(request, data, *a, **kw)
-            return func(request, *a, *kw)
+            return func(request, *a, **kw)
 
         # Apply the docs to the wrapped function so sanic-openapi can find the wrapped function when
         # building the schema.  If these docs are applied to `func`, sanic-openapi won't be able to lookup `wrapped`

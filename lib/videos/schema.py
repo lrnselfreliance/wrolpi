@@ -17,9 +17,12 @@ class ChannelModel:
     id = doc.Integer()
     url = doc.String()
     name = doc.String()
+    idempotency = doc.String()
     match_regex = doc.String()
     link = doc.String()
     directory = doc.String()
+    info_json = doc.Dictionary
+    info_date = doc.Date()
 
 
 class ChannelResponse:
@@ -30,7 +33,7 @@ class ChannelPostResponse:
     success = doc.String()
 
 
-class ChannelsModel:
+class ChannelsResponse:
     channels = doc.List(doc.Object(ChannelModel))
 
 
@@ -50,7 +53,29 @@ class StreamResponse:
 
 class Video:
     id = doc.Integer()
+    description_path = doc.String()
+    ext = doc.String()
+    poster_path = doc.String()
+    source_id = doc.String()
+    title = doc.String()
+    upload_date = doc.Date()
+    video_path = doc.String()
+    name = doc.String()
+    caption_path = doc.String()
+    idempotency = doc.String()
+    info_json_path = doc.String()
+    video_path_hash = doc.String()
+    channel_id = doc.Integer()
 
 
 class ChannelVideosResponse:
+    videos = doc.List(Video)
+
+
+class VideoSearchRequest:
+    search_str = doc.String()
+    offset = doc.Integer()
+
+
+class VideoSearchResponse:
     videos = doc.List(Video)

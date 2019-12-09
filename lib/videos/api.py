@@ -42,11 +42,11 @@ from .common import generate_video_paths, save_settings_config, get_downloader_c
 from .common import get_conflicting_channels, get_absolute_video_path, UnknownFile
 from .common import logger
 from .downloader import insert_video, update_channels, download_all_missing_videos
-from .schema import DownloaderConfig, ChannelRequest, ChannelsModel, SuccessResponse, StreamResponse, \
+from .schema import DownloaderConfig, ChannelRequest, ChannelsResponse, SuccessResponse, StreamResponse, \
     JSONErrorResponse, \
-    ChannelResponse, ChannelPostResponse, ChannelVideosResponse
+    ChannelResponse, ChannelPostResponse, ChannelVideosResponse, VideoSearchRequest, VideoSearchResponse
 
-api_bp = Blueprint('Video', url_prefix='/videos')
+api_bp = Blueprint('Videos', url_prefix='/videos')
 
 
 @api_bp.put('/settings')
@@ -67,7 +67,7 @@ def settings(request: Request, data: dict):
 @api_bp.get('/channels')
 @validate_doc(
     summary='Get a list of all Channels',
-    produces=ChannelsModel,
+    produces=ChannelsResponse,
     tag='Channel',
 )
 def get_channels(request: Request):
@@ -81,12 +81,12 @@ def get_channels(request: Request):
 refresh_queue, refresh_event = attach_websocket_with_queue('/feeds/refresh', api_bp)
 
 
-@api_bp.post('/settings/refresh')
+@api_bp.post('/settings:refresh')
 @validate_doc(
     summary='Search for videos that have previously been downloaded and stored.',
     produces=StreamResponse,
     responses=[
-        (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
+        (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
     ],
     tag='Video Content',
 )
@@ -125,7 +125,7 @@ async def refresh(_):
 download_queue, download_event = attach_websocket_with_queue('/feeds/download', api_bp)
 
 
-@api_bp.post('/settings/download')
+@api_bp.post('/settings:download')
 @validate_doc(
     summary='Update channel catalogs, download any missing videos',
     produces=StreamResponse,
@@ -151,6 +151,7 @@ async def download(_):
             with get_db_context(commit=True) as (db_conn, db):
                 for msg in update_channels(db_conn, db):
                     download_queue.put(msg)
+                download_logger.info('Updated all channel catalogs')
                 for msg in download_all_missing_videos(db_conn, db):
                     download_queue.put(msg)
 
@@ -181,6 +182,7 @@ def channel_get(request: Request, link: str):
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']
     channel = Channel.get_one(link=link)
+    logger.debug(f'channel_get.channel: {channel}')
     if not channel:
         return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
     return response.json({'channel': channel})
@@ -304,7 +306,6 @@ def channel_delete(request, link: str):
     responses=(
             (HTTPStatus.NOT_FOUND, JSONErrorResponse),
     ),
-    tag='Videos',
 )
 def channel_videos(request, link: str):
     db: DictDB = request.ctx.get_db()
@@ -320,7 +321,6 @@ def channel_videos(request, link: str):
 @api_bp.route('/caption/<hash:string>')
 @validate_doc(
     summary='Get a video/poster/caption file',
-    tag='Videos',
 )
 async def media_file(request: Request, hash: str):
     db: DictDB = request.ctx.get_db()
@@ -343,15 +343,16 @@ def refresh_channel_videos(db, channel):
     """
     Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
     """
+    yield {'progress2': 0}
     # Set the idempotency key so we can remove any videos not touched during this search
     curs = db.get_cursor()
     curs.execute('UPDATE video SET idempotency=NULL WHERE channel_id=%s', (channel['id'],))
     idempotency = str(uuid1())
-
     directory = get_absolute_channel_directory(channel['directory'])
 
     # A set of absolute paths that exist in the file system
     possible_new_paths = set(generate_video_paths(directory))
+    yield {'message': 'Found all possible video files'}
 
     # Update all videos that match the current video paths
     query = 'UPDATE video SET idempotency = %s WHERE channel_id = %s AND video_path = ANY(%s) RETURNING video_path'
@@ -367,31 +368,34 @@ def refresh_channel_videos(db, channel):
         logger.debug(f'{channel["name"]}: Added {video_path}')
         insert_video(db, pathlib.Path(video_path), channel, idempotency=idempotency)
 
+    yield {'message': 'Matched all existing video files'}
+
     curs.execute('DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL RETURNING id', (channel['id'],))
     deleted_count = curs.fetchall()
     if deleted_count:
         deleted_count = len(deleted_count)
         deleted_status = f'Deleted {deleted_count} video records from channel {channel["name"]}'
         logger.info(deleted_status)
-        yield deleted_status
+        yield {'message': deleted_status}
 
     status = f'{channel["name"]}: {len(new_videos)} new videos, {len(existing_paths)} already existed. '
     logger.info(status)
-    yield status
+    yield {'message': status}
 
     # Fill in any missing captions
     query = 'SELECT id FROM video WHERE channel_id=%s AND caption IS NULL AND caption_path IS NOT NULL'
     curs.execute(query, (channel['id'],))
     missing_captions = [i for (i,) in curs.fetchall()]
+    calc_progress = make_progress_calculator(missing_captions)
     Video = db['video']
-    for video_id in missing_captions:
+    for idx, video_id in enumerate(missing_captions):
         video = Video.get_one(id=video_id)
         process_captions(video)
-        yield f'Processed captions for video {video_id}'
+        yield {'message': f'Processed captions for video {video_id}', 'progress2': calc_progress(idx)}
 
     status = f'Processed {len(missing_captions)} missing captions.'
     logger.info(status)
-    yield status
+    yield {'message': status, 'progress2': 100}
 
 
 def _refresh_videos(db: DictDB):
@@ -409,11 +413,10 @@ def _refresh_videos(db: DictDB):
 
     calc_progress = make_progress_calculator(Channel.count())
     for idx, channel in enumerate(Channel.get_where()):
-        yield {'progress': calc_progress(idx), 'message': f'Checking {channel["name"]} directory for new videos'}
+        yield {'progress1': calc_progress(idx), 'message': f'Checking {channel["name"]} directory for new videos'}
         with db.transaction(commit=True):
-            for msg in refresh_channel_videos(db, channel):
-                yield {'message': msg}
-    yield {'progress': 100, 'message': 'All videos refreshed.'}
+            yield from refresh_channel_videos(db, channel)
+    yield {'progress1': 100, 'message': 'All videos refreshed.'}
 
 
 @wraps(_refresh_videos)
@@ -427,56 +430,49 @@ def refresh_videos_with_db():
         return refresh_videos(db)
 
 
-def video_search(db: DictDB, search_str, offset, link):
-    db_conn = db.conn
+def video_search(db_conn, db: DictDB, search_str: str, offset: int):
     curs = db_conn.cursor()
 
-    # Get the match count per channel
-    query = 'SELECT channel_id, COUNT(*) FROM video WHERE textsearch @@ to_tsquery(%s) GROUP BY channel_id'
-    curs.execute(query, (search_str,))
-    channel_totals = {i: j for (i, j) in curs.fetchall()}
+    query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)) FROM video WHERE ' \
+            'textsearch @@ to_tsquery(%s) ORDER BY 2 OFFSET %s LIMIT 20'
+    curs.execute(query, (search_str, search_str, offset))
+    ranked_ids = [i[0] for i in curs.fetchall()]
 
-    # Get the names of each channel, add the counts respectively
-    query = 'SELECT id, name, link FROM channel ORDER BY LOWER(name)'
-    curs.execute(query)
-    channels = []
-    for (id_, name, link_) in curs.fetchall():
-        channel_total = channel_totals[id_] if id_ in channel_totals else 0
-        d = {
-            'id': id_,
-            'name': f'{name} ({channel_total})',
-            'link': link_,
-            'search_link': f'/videos/search?link={link_}&search={search_str}',
-        }
-        channels.append(d)
-
-    # Get the search results
-    if link:
-        # The results are restricted to a single channel
-        curs.execute('SELECT id FROM channel WHERE link = %s', (link,))
-        (channel_id,) = curs.fetchone()
-        query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)) FROM video WHERE ' \
-                'textsearch @@ to_tsquery(%s) AND channel_id=%s ORDER BY 2 OFFSET %s LIMIT 20'
-        curs.execute(query, (search_str, search_str, channel_id, offset))
-        total = channel_totals[channel_id]
-    else:
-        # The results are for all channels
-        query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)) FROM video WHERE ' \
-                'textsearch @@ to_tsquery(%s) ORDER BY 2 OFFSET %s LIMIT 20'
-        curs.execute(query, (search_str, search_str, offset))
-        # Sum up all the matches for paging
-        total = sum(channel_totals.values())
-
-    results = list(curs.fetchall())
-
-    videos = []
-    Video = db['video']
-    if results:
-        videos = [dict(i) for i in Video.get_where(Video['id'].In([i[0] for i in results]))]
-
-    results = {
-        'videos': videos,
-        'total': total,
-        'channels': channels,
-    }
+    results = []
+    if ranked_ids:
+        Video = db['video']
+        results = Video.get_where(Video['id'].In(ranked_ids))
+        results = list(results)
     return results
+
+
+def channel_search(db_conn, db: DictDB, search_str: str, offset: int):
+    curs = db_conn.cursor()
+
+    query = 'SELECT id FROM channel WHERE name ILIKE %s ORDER BY LOWER(name) DESC OFFSET %s LIMIT 20'
+    curs.execute(query, (f'%{search_str}%', offset))
+    ids = [i[0] for i in curs.fetchall()]
+
+    results = []
+    if ids:
+        Channel = db['channel']
+        results = Channel.get_where(Channel['id'].In(ids))
+        results = list(results)
+    return results
+
+
+@api_bp.post('/search')
+@validate_doc(
+    summary='Search Video titles and captions, search Channel titles.',
+    consumes=VideoSearchRequest,
+    produces=VideoSearchResponse,
+)
+def search(request: Request, data: dict):
+    search_str = data['search_str']
+    offset = data.get('offset')
+
+    with get_db_context() as (db_conn, db):
+        videos = video_search(db_conn, db, search_str, offset)
+        channels = channel_search(db_conn, db, search_str, offset)
+
+    return response.json({'videos': videos, 'channels': channels, 'search_str': search_str})

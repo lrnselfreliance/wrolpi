@@ -62,7 +62,7 @@ def update_channels(db_conn, db, oldest_date=None):
     )
     remote_channels = list(remote_channels)
     logger.debug(f'Getting info for {len(remote_channels)} channels')
-    progress_calc = make_progress_calculator(len(remote_channels))
+    calc_progress = make_progress_calculator(len(remote_channels))
     for idx, channel in enumerate(remote_channels):
         yield {'progress': calc_progress(idx), 'message': f'Getting video list for {channel["name"]}'}
         info = get_channel_info(channel)

@@ -226,7 +226,8 @@ class ManageContent extends React.Component {
             show: false,
             refreshMessage: '',
             refreshError: false,
-            refreshProgress: null,
+            refreshProgress1: null,
+            refreshProgress2: null,
             refreshDisabled: false,
             downloadMessage: '',
             downloadError: false,
@@ -264,7 +265,7 @@ class ManageContent extends React.Component {
         }
     }
 
-    handleStream(stream_url, setMessage, setProgress, setError) {
+    handleStream(stream_url, setMessage, setProgress, setError, setProgress1, setProgress2) {
         let ws = new WebSocket(stream_url);
         window.onbeforeunload = (e) => (ws.close);
         ws.onmessage = (message) => {
@@ -274,6 +275,12 @@ class ManageContent extends React.Component {
             }
             if (Number.isInteger(data['progress'])) {
                 setProgress(data['progress']);
+            }
+            if (Number.isInteger(data['progress1'])) {
+                setProgress1(data['progress1']);
+            }
+            if (Number.isInteger(data['progress2'])) {
+                setProgress2(data['progress2']);
             }
             if (data['error']) {
                 setError(true);
@@ -295,8 +302,10 @@ class ManageContent extends React.Component {
                 await this.handleStream(
                     stream_url,
                     (v) => (this.setState({'refreshMessage': v})),
-                    (v) => (this.setState({'refreshProgress': v})),
+                    null,
                     (v) => (this.setState({'refreshError': v})),
+                    (v) => (this.setState({'refreshProgress1': v})),
+                    (v) => (this.setState({'refreshProgress2': v})),
                 );
             } else {
                 this.setState({
@@ -380,9 +389,13 @@ class ManageContent extends React.Component {
                                 >
                                     {this.state.refreshMessage}
                                 </Alert>
+                                <ProgressBar striped variant={(this.state.refreshError ? 'danger' : 'primary')}
+                                             now={this.state.refreshProgress1}
+                                             hidden={(this.state.refreshProgress1 == null)}
+                                />
                                 <ProgressBar striped variant={(this.state.refreshError ? 'danger' : 'info')}
-                                             now={this.state.refreshProgress}
-                                             hidden={(this.state.refreshProgress == null)}
+                                             now={this.state.refreshProgress2}
+                                             hidden={(this.state.refreshProgress2 == null)}
                                 />
                             </Col>
                         </Row>
@@ -453,7 +466,7 @@ class VideoSearch extends React.Component {
 
     render() {
         return (
-            <Form inline>
+            <Form inline style={{'margin-bottom': '1em'}}>
                 <FormControl
                     type="text"
                     className="mr-sm-2"

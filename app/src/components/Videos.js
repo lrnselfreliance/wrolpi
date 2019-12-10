@@ -622,7 +622,7 @@ class Videos extends React.Component {
                     <Container>
                         {this.breadcrumbs()}
                         <Switch>
-                            <Route path="/videos/:channel_link/:video_id" component={Video}/>
+                            <Route path="/videos/:channel_link/:video_hash" component={Video}/>
                             <Route
                                 path="/videos/:channel_link"
                                 component={ChannelVideoPager}

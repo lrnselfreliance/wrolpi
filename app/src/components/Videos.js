@@ -3,12 +3,13 @@ import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import Nav from "react-bootstrap/Nav";
 import {Link, NavLink, Route, Switch} from "react-router-dom";
-import {Breadcrumb, Button, ButtonGroup, Container, Form, FormControl, ProgressBar} from "react-bootstrap";
+import {Button, ButtonGroup, Container, Form, FormControl, ProgressBar} from "react-bootstrap";
 import Modal from "react-bootstrap/Modal";
 import Card from "react-bootstrap/Card";
 import Video from "./VideoPlayer";
 import '../static/external/fontawesome-free/css/all.min.css';
 import Alert from "react-bootstrap/Alert";
+import Breadcrumb from "react-bootstrap/Breadcrumb";
 
 const VIDEOS_API = 'http://127.0.0.1:8080/api/videos';
 
@@ -50,8 +51,8 @@ class ChannelsNav extends React.Component {
     }
 }
 
-function VideoCard({video, channel}) {
-    let video_url = "/videos/" + channel.link + "/" + video.video_path_hash;
+function VideoCard({video, channel_link}) {
+    let video_url = "/videos/" + channel_link + "/" + video.video_path_hash;
     let poster_url = video.poster_path ? `${VIDEOS_API}/poster/${video.video_path_hash}` : null;
     return (
         <Link to={video_url}>
@@ -87,14 +88,9 @@ class ChannelVideoPager extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            'channel': null,
             'videos': [],
         };
         this.setVideos = this.setVideos.bind(this);
-    }
-
-    async getChannel(link) {
-        this.setState({'channel': await getChannel(link)})
     }
 
     async getVideos(link) {
@@ -106,13 +102,11 @@ class ChannelVideoPager extends React.Component {
     }
 
     async componentDidMount() {
-        await this.getChannel(this.props.match.params.channel_link);
         await this.getVideos(this.props.match.params.channel_link);
     }
 
     async componentDidUpdate(prevProps, prevState) {
         if (this.props.match.params.channel_link !== prevProps.match.params.channel_link) {
-            await this.getChannel(this.props.match.params.channel_link);
             await this.getVideos(this.props.match.params.channel_link);
         }
     }
@@ -123,7 +117,7 @@ class ChannelVideoPager extends React.Component {
                 <VideoSearch setVideos={this.setVideos}/>
                 <div className="card-deck">
                     {this.state['videos'].map((v) => (
-                        <VideoCard key={v['id']} video={v} channel={this.state.channel}/>))}
+                        <VideoCard key={v['id']} video={v} channel_link={this.props.match.params.channel_link}/>))}
                 </div>
             </>
         )
@@ -504,39 +498,121 @@ class VideoSearch extends React.Component {
     }
 }
 
-function Videos() {
-    return (
-        <Row style={{'marginTop': '1.5em'}}>
-            <Col className="col-3">
-                <Row style={{'marginBottom': '1.5em'}}>
-                    <Col className="col-9">
-                        <h4>
-                            Channels
-                        </h4>
-                    </Col>
-                    <Col className="col-3">
-                        <div className="ml-auto">
-                            <ManageContent/>
-                            <AddChannel/>
-                        </div>
-                    </Col>
-                </Row>
-                <Row>
-                    <Col>
-                        <ChannelsNav/>
-                    </Col>
-                </Row>
-            </Col>
-            <Col className="col-9">
-                <Container>
-                    <Switch>
-                        <Route path="/videos/:channel_link/:video_id" component={Video}/>
-                        <Route path="/videos/:channel_link" component={ChannelVideoPager}/>
-                    </Switch>
-                </Container>
-            </Col>
-        </Row>
-    )
+class ChannelBreadcrumb extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            'channel': null,
+        }
+    }
+
+    async componentWillMount() {
+        this.setState({'channel': await getChannel(this.props.match.params.channel_link)});
+    }
+
+    async componentDidUpdate(prevProps, prevState) {
+        if (this.props.match.params.channel_link !== prevProps.match.params.channel_link) {
+            this.setState({'channel': await getChannel(this.props.match.params.channel_link)});
+        }
+    }
+
+    getBreadcrumb() {
+        if (this.state.channel) {
+            return (
+                <Breadcrumb.Item>
+                    <Link to={this.state.channel['link']}>
+                        {this.state.channel['name']}
+                    </Link>
+                </Breadcrumb.Item>
+            )
+        }
+        return (<></>)
+    }
+
+    render() {
+        return (
+            this.getBreadcrumb()
+        )
+    }
+}
+
+class Videos extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            'channel': null,
+            'video': null,
+        }
+    }
+
+    setChannelLink(channel_link) {
+        let channel = getChannel(channel_link);
+        this.setState({'channel': channel})
+    }
+
+    channelBreadcrumb() {
+        let channel = this.state.channel;
+        if (channel) {
+            return (
+                <Breadcrumb.Item>
+                    <Link to={channel.link}>
+                        {channel.name}
+                    </Link>
+                </Breadcrumb.Item>
+            )
+        }
+    }
+
+    breadcrumbs() {
+        return (
+            <Breadcrumb>
+                <Breadcrumb.Item>
+                    <Link to='/videos'>Videos</Link>
+                </Breadcrumb.Item>
+                <Route path='/videos/:channel_link' component={ChannelBreadcrumb}/>
+            </Breadcrumb>
+        )
+    }
+
+    render() {
+        return (
+            <Row style={{'marginTop': '1.5em'}}>
+                <Col className="col-3">
+                    <Row style={{'marginBottom': '1.5em'}}>
+                        <Col className="col-9">
+                            <h4>
+                                Channels
+                            </h4>
+                        </Col>
+                        <Col className="col-3">
+                            <div className="ml-auto">
+                                <ManageContent/>
+                                <AddChannel/>
+                            </div>
+                        </Col>
+                    </Row>
+                    <Row>
+                        <Col>
+                            <ChannelsNav/>
+                        </Col>
+                    </Row>
+                </Col>
+                <Col className="col-9">
+                    <Container>
+                        {this.breadcrumbs()}
+                        <Switch>
+                            <Route path="/videos/:channel_link/:video_id" component={Video}/>
+                            <Route
+                                path="/videos/:channel_link"
+                                component={ChannelVideoPager}
+                            />
+                        </Switch>
+                    </Container>
+                </Col>
+            </Row>
+        )
+    }
 }
 
 export default Videos;

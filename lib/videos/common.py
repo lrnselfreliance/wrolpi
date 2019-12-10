@@ -203,32 +203,23 @@ def generate_video_paths(directory: Union[str, pathlib.Path], relative_to=None) 
 
 
 def get_conflicting_channels(db, id=None, url=None, name_=None, link=None, directory=None):
-    """Return all channels that have any of to provided values"""
+    """Return all channels that have any of the provided values"""
     if not any([id, url, name_, link, directory]):
         raise Exception('Cannot search for channel with no arguments')
 
     Channel = db['channel']
+    inner_or = Or(
+        Channel['url'] == url,
+        Channel['name'] == name_,
+        Channel['link'] == link,
+        Channel['directory'] == directory,
+    )
     if id:
         conflicting_channels = Channel.get_where(
-            And(
-                Or(
-                    Channel['url'] == url,
-                    Channel['name'] == name_,
-                    Channel['link'] == link,
-                    Channel['directory'] == directory,
-                ),
-                Channel['id'] != id,
-            )
+            And(inner_or, Channel['id'] != id)
         )
     else:
-        conflicting_channels = Channel.get_where(
-            Or(
-                Channel['url'] == url,
-                Channel['name'] == name_,
-                Channel['link'] == link,
-                Channel['directory'] == directory,
-            )
-        )
+        conflicting_channels = Channel.get_where(inner_or)
     return list(conflicting_channels)
 
 

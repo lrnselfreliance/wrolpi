@@ -259,24 +259,28 @@ def validate_data(model, data):
     error = None
     for attr in attrs:
         field = getattr(model, attr)
-        if isinstance(field, doc.String):
-            new_data[attr] = str(data.pop(attr))
-        elif isinstance(field, doc.Integer):
-            new_data[attr] = int(data.pop(attr))
-        elif isinstance(field, doc.Tuple):
-            new_data[attr] = tuple(data.pop(attr))
-        elif isinstance(field, doc.UUID):
-            new_data[attr] = UUID(data.pop(attr))
-        elif isinstance(field, doc.Boolean):
-            new_data[attr] = bool(data.pop(attr))
-        elif isinstance(field, doc.Float):
-            new_data[attr] = float(data.pop(attr))
-        elif isinstance(field, doc.Dictionary):
-            new_data[attr] = dict(data.pop(attr))
-        elif isinstance(field, doc.List):
-            new_data[attr] = list(data.pop(attr))
-        else:
-            error = {'error': 'Invalid field type', 'field': attr}
+        try:
+            if isinstance(field, doc.String):
+                new_data[attr] = str(data.pop(attr))
+            elif isinstance(field, doc.Integer):
+                new_data[attr] = int(data.pop(attr))
+            elif isinstance(field, doc.Tuple):
+                new_data[attr] = tuple(data.pop(attr))
+            elif isinstance(field, doc.UUID):
+                new_data[attr] = UUID(data.pop(attr))
+            elif isinstance(field, doc.Boolean):
+                new_data[attr] = bool(data.pop(attr))
+            elif isinstance(field, doc.Float):
+                new_data[attr] = float(data.pop(attr))
+            elif isinstance(field, doc.Dictionary):
+                new_data[attr] = dict(data.pop(attr))
+            elif isinstance(field, doc.List):
+                new_data[attr] = list(data.pop(attr))
+            else:
+                error = {'error': 'Invalid field type', 'field': attr}
+        except KeyError:
+            if field.required:
+                error = {'error': f'Required field is not present', 'field': attr}
 
     if data:
         # Excess JSON keys

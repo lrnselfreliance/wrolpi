@@ -3,9 +3,9 @@ from sanic_openapi import doc
 
 class ChannelPostRequest:
     url = doc.String()
-    name = doc.String()
+    name = doc.String(required=True)
     match_regex = doc.String()
-    directory = doc.String()
+    directory = doc.String(required=True)
 
 
 class ChannelPutRequest:

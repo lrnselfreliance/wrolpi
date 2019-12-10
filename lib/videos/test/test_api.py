@@ -142,6 +142,51 @@ class TestAPI(ExtendedTestCase):
         assert response.status_code == HTTPStatus.NOT_FOUND
 
     @wrap_test_db
+    def test_channel_post(self):
+        channel_directory = tempfile.TemporaryDirectory().name
+        pathlib.Path(channel_directory).mkdir()
+
+        new_channel = {}
+
+        # name is required
+        request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json == {'error': f'Required field is not present', 'field': 'name'}
+
+        # directory is required
+        new_channel['name'] = 'Fooz'
+        request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json == {'error': f'Required field is not present', 'field': 'directory'}
+
+        # All required fields are present
+        new_channel['directory'] = channel_directory
+        request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.CREATED, response.json
+
+    @wrap_test_db
+    def test_channel_empty_url_doesnt_conflict(self):
+        """Two channels with empty URLs shouldn't conflict"""
+        channel_directory = tempfile.TemporaryDirectory().name
+        pathlib.Path(channel_directory).mkdir()
+
+        new_channel = {
+            'name': 'Fooz',
+            'directory': channel_directory,
+        }
+        request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.CREATED, response.json
+        location = response.headers['Location']
+
+        new_channel = {
+            'name': 'Barz',
+            'directory': channel_directory,
+        }
+        request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.CREATED, response.json
+        assert location != response.headers['Location']
+
+    @wrap_test_db
     def test_refresh_videos(self):
         # There should be no messages until a refresh is called
         pytest.raises(Empty, refresh_queue.get_nowait)

@@ -212,7 +212,7 @@ def channel_post(request: Request, data: dict):
     # Verify that the URL/Name/Link aren't taken
     conflicting_channels = get_conflicting_channels(
         db,
-        url=data['url'],
+        url=data.get('url'),
         name_=data['name'],
         link=sanitize_link(data['name']),
     )
@@ -222,8 +222,8 @@ def channel_post(request: Request, data: dict):
     with db.transaction(commit=True):
         channel = Channel(
             name=data['name'],
-            url=data['url'],
-            match=data['match_regex'],
+            url=data.get('url'),
+            match=data.get('match_regex'),
             link=sanitize_link(data['name']),
         )
         channel.flush()

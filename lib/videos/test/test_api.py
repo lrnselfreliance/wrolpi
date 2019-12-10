@@ -3,14 +3,17 @@ import pathlib
 import tempfile
 import unittest
 from http import HTTPStatus
+from queue import Empty
 from shutil import copyfile
 
 import mock
+import pytest
 import yaml
 
 from lib.api import api_app, attach_routes
 from lib.db import get_db_context
-from lib.test.common import wrap_test_db
+from lib.test.common import wrap_test_db, get_all_messages_in_queue
+from lib.videos.api import refresh_queue
 from ..common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH, get_config
 from ..downloader import insert_video
 
@@ -50,6 +53,9 @@ class TestAPI(unittest.TestCase):
 
     @wrap_test_db
     def test_refresh(self):
+        # There should be no messages until a refresh is called
+        pytest.raises(Empty, refresh_queue.get_nowait)
+
         with get_db_context(commit=True) as (db_conn, db):
             Video = db['video']
             import_settings_config()
@@ -65,6 +71,9 @@ class TestAPI(unittest.TestCase):
             Video, Channel = db['video'], db['channel']
             self.assertEqual(Channel.count(), 4)
             self.assertGreater(Video.count(), 1)
+
+        messages = get_all_messages_in_queue(refresh_queue)
+        assert 'refresh-started' in messages
 
     @wrap_test_db
     def test_channel(self):
@@ -118,6 +127,9 @@ class TestAPI(unittest.TestCase):
 
     @wrap_test_db
     def test_refresh_videos(self):
+        # There should be no messages until a refresh is called
+        pytest.raises(Empty, refresh_queue.get_nowait)
+
         # Setup a fake channel directory
         with get_db_context() as (db_conn, db), \
                 tempfile.TemporaryDirectory() as channel_dir:
@@ -187,3 +199,7 @@ class TestAPI(unittest.TestCase):
             )
 
             assert poster3.is_file(), 'Orphan jpg file was deleted!  WROLPi should never delete files.'
+
+        # During the refresh process, messages are pushed to a queue, make sure there are messages there
+        messages = get_all_messages_in_queue(refresh_queue)
+        assert 'refresh-started' in messages

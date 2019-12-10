@@ -1,4 +1,4 @@
-import functools
+from queue import Empty
 from uuid import uuid1
 
 import mock
@@ -69,5 +69,15 @@ def wrap_test_db(func):
                 db_conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
                 curs.execute(drop_testing)
 
-    functools.wraps(wrapped, func)
     return wrapped
+
+
+def get_all_messages_in_queue(q):
+    messages = []
+    while True:
+        try:
+            msg = q.get_nowait()
+            messages.append(msg)
+        except Empty:
+            break
+    return messages

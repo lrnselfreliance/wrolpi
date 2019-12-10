@@ -1,7 +1,6 @@
 import json
 import pathlib
 import tempfile
-import unittest
 from http import HTTPStatus
 from queue import Empty
 from shutil import copyfile
@@ -12,7 +11,7 @@ import yaml
 
 from lib.api import api_app, attach_routes
 from lib.db import get_db_context
-from lib.test.common import wrap_test_db, get_all_messages_in_queue
+from lib.test.common import wrap_test_db, get_all_messages_in_queue, ExtendedTestCase
 from lib.videos.api import refresh_queue
 from ..common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH, get_config
 from ..downloader import insert_video
@@ -25,7 +24,7 @@ attach_routes(api_app)
 
 
 @mock.patch('lib.videos.common.CONFIG_PATH', CONFIG_PATH.name)
-class TestAPI(unittest.TestCase):
+class TestAPI(ExtendedTestCase):
 
     def setUp(self) -> None:
         # Copy the example config to test against
@@ -74,6 +73,23 @@ class TestAPI(unittest.TestCase):
 
         messages = get_all_messages_in_queue(refresh_queue)
         assert 'refresh-started' in messages
+
+    @wrap_test_db
+    def test_get_channels(self):
+        # No channels exist yet
+        request, response = api_app.test_client.get('/api/videos/channels')
+        assert response.status_code == HTTPStatus.OK
+        assert response.json == {'channels': []}
+
+        with get_db_context(commit=True) as (db_conn, db):
+            Channel = db['channel']
+            Channel(name='Foo').flush()
+            Channel(name='Bar').flush()
+
+        request, response = api_app.test_client.get('/api/videos/channels')
+        assert response.status_code == HTTPStatus.OK
+        self.assertDictContains(response.json['channels'][0], {'id': 1, 'name': 'Foo'})
+        self.assertDictContains(response.json['channels'][1], {'id': 2, 'name': 'Bar'})
 
     @wrap_test_db
     def test_channel(self):

@@ -97,7 +97,7 @@ async def echo(request: Request):
 
 def attach_routes(app):
     """
-    Attach all default and module routes to the provided app.
+    Attach all module routes to the provided app.
     """
     # routes: /api/*
     blueprints = [i.api_bp for i in MODULES.values()]

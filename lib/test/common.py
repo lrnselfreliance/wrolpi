@@ -1,3 +1,4 @@
+import unittest
 from queue import Empty
 from uuid import uuid1
 
@@ -73,6 +74,7 @@ def wrap_test_db(func):
 
 
 def get_all_messages_in_queue(q):
+    """Get all messages in a Queue without waiting."""
     messages = []
     while True:
         try:
@@ -81,3 +83,10 @@ def get_all_messages_in_queue(q):
         except Empty:
             break
     return messages
+
+
+class ExtendedTestCase(unittest.TestCase):
+
+    @staticmethod
+    def assertDictContains(d1: dict, d2: dict):
+        assert set(d2.items()).issubset(set(d1.items()))

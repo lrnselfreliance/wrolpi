@@ -268,7 +268,7 @@ def download_all_missing_videos(db_conn, db):
     """Find any videos identified by the info packet that haven't yet been downloaded, download them."""
     yield {'progress': 0, 'message': 'Comparing local videos to available videos...'}
     missing_videos = list(find_all_missing_videos(db))
-    progress_calc = make_progress_calculator(len(missing_videos))
+    calc_progress = make_progress_calculator(len(missing_videos))
     for idx, (channel, missing_video) in enumerate(missing_videos):
         try:
             video_path = download_video(channel, missing_video)

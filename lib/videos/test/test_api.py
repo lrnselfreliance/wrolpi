@@ -58,7 +58,7 @@ class TestAPI(unittest.TestCase):
             bogus = Video(video_path='bar').flush()
             assert bogus and bogus['id'], 'Failed to insert a bogus video for removal'
 
-        request, response = api_app.test_client.post('/api/videos/settings/refresh')
+        request, response = api_app.test_client.post('/api/videos/settings:refresh')
         assert response.status_code == HTTPStatus.OK
 
         with get_db_context() as (db_conn, db):
@@ -170,7 +170,7 @@ class TestAPI(unittest.TestCase):
 
             # Finally, call the refresh.  Again, it should remove the "foo" video, then discover this 3rd video
             # file and it's description.
-            request, response = api_app.test_client.post('/api/videos/settings/refresh')
+            request, response = api_app.test_client.post('/api/videos/settings:refresh')
 
             # Bogus file was removed
             self.assertNotIn('foo', {i['video_path'] for i in channel['videos']})

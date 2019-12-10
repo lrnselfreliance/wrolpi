@@ -1,7 +1,14 @@
 from sanic_openapi import doc
 
 
-class ChannelRequest:
+class ChannelPostRequest:
+    url = doc.String()
+    name = doc.String()
+    match_regex = doc.String()
+    directory = doc.String()
+
+
+class ChannelPutRequest:
     url = doc.String()
     name = doc.String()
     match_regex = doc.String()

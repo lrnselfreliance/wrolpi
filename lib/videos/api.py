@@ -42,10 +42,10 @@ from .common import generate_video_paths, save_settings_config, get_downloader_c
 from .common import get_conflicting_channels, get_absolute_video_path, UnknownFile
 from .common import logger
 from .downloader import insert_video, update_channels, download_all_missing_videos
-from .schema import DownloaderConfig, ChannelRequest, ChannelsResponse, SuccessResponse, StreamResponse, \
+from .schema import DownloaderConfig, ChannelPutRequest, ChannelsResponse, SuccessResponse, StreamResponse, \
     JSONErrorResponse, \
     ChannelResponse, ChannelPostResponse, ChannelVideosResponse, VideoSearchRequest, VideoSearchResponse, \
-    ChannelVideoResponse
+    ChannelVideoResponse, ChannelPostRequest
 
 api_bp = Blueprint('Videos', url_prefix='/videos')
 
@@ -192,6 +192,7 @@ def channel_get(request: Request, link: str):
 @api_bp.post('/channel')
 @validate_doc(
     summary='Insert a Channel',
+    consumes=ChannelPostRequest,
     responses=(
             (HTTPStatus.CREATED, ChannelPostResponse),
             (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
@@ -234,11 +235,11 @@ def channel_post(request: Request, data: dict):
 @api_bp.put('/channel/<link:string>')
 @validate_doc(
     summary='Update a Channel',
-    consumes=ChannelRequest,
+    consumes=ChannelPutRequest,
     produces=SuccessResponse,
     tag='Channel',
 )
-def channel_put(request: Request, link: str, data: dict):
+def channel_put(request: Request, data: dict, link: str):
     """Update an existing channel"""
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']

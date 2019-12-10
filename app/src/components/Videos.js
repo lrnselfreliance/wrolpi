@@ -3,7 +3,7 @@ import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import Nav from "react-bootstrap/Nav";
 import {Link, NavLink, Route, Switch} from "react-router-dom";
-import {Button, ButtonGroup, Container, Form, FormControl, ProgressBar} from "react-bootstrap";
+import {Breadcrumb, Button, ButtonGroup, Container, Form, FormControl, ProgressBar} from "react-bootstrap";
 import Modal from "react-bootstrap/Modal";
 import Card from "react-bootstrap/Card";
 import Video from "./VideoPlayer";
@@ -87,9 +87,10 @@ class ChannelVideoPager extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            'channel': [],
+            'channel': null,
             'videos': [],
         };
+        this.setVideos = this.setVideos.bind(this);
     }
 
     async getChannel(link) {
@@ -98,6 +99,10 @@ class ChannelVideoPager extends React.Component {
 
     async getVideos(link) {
         this.setState({'videos': await getVideos(link)})
+    }
+
+    setVideos(videos) {
+        this.setState({'videos': videos})
     }
 
     async componentDidMount() {
@@ -114,9 +119,13 @@ class ChannelVideoPager extends React.Component {
 
     render() {
         return (
-            <div className="card-deck">
-                {this.state['videos'].map((v) => (<VideoCard key={v['id']} video={v} channel={this.state.channel}/>))}
-            </div>
+            <>
+                <VideoSearch setVideos={this.setVideos}/>
+                <div className="card-deck">
+                    {this.state['videos'].map((v) => (
+                        <VideoCard key={v['id']} video={v} channel={this.state.channel}/>))}
+                </div>
+            </>
         )
     }
 }
@@ -433,11 +442,6 @@ class ManageContent extends React.Component {
     }
 }
 
-class VideoAPI {
-    constructor() {
-    }
-}
-
 class VideoSearch extends React.Component {
 
     constructor(props) {
@@ -448,30 +452,49 @@ class VideoSearch extends React.Component {
         this.searchApi = `${VIDEOS_API}/search`;
     }
 
-    async handleOnChange(e, searchApi) {
+    async handleSubmitSearch(e) {
+        e.preventDefault();
+        // TODO hardcoded to first input, surely there is a better way?
+        let value = e.target[0].value;
+        await this.handleSearch(e, value)
+    }
+
+    async handleChangeSearch(e) {
         let value = e.target.value;
+        await this.handleSearch(e, value)
+    }
+
+    async handleSearch(e, value) {
         let form_data = {
-            'search_str': e.target.value,
+            'search_str': value,
             'offset': 0,
         };
         if (value.length > 2) {
-            let response = await fetch(searchApi, {
+            let response = await fetch(this.searchApi, {
                 method: 'POST',
                 body: JSON.stringify(form_data),
             });
             let data = await response.json();
-            console.log(data);
+            if (data['videos']) {
+                await this.handleResults(data);
+            }
         }
+    }
+
+    async handleResults(results) {
+        let videos = results['videos'];
+        this.props.setVideos(videos);
     }
 
     render() {
         return (
-            <Form inline style={{'margin-bottom': '1em'}}>
+            <Form inline style={{'margin-bottom': '1em'}}
+                  onSubmit={(e) => this.handleSubmitSearch(e)}>
                 <FormControl
                     type="text"
                     className="mr-sm-2"
                     placeholder="Search"
-                    onChange={(e) => this.handleOnChange(e, this.searchApi)}
+                    onChange={(e) => this.handleChangeSearch(e)}
                 />
                 <Button type="submit" variant="outline-info">
                     <span className="fas fa-search"/>
@@ -506,7 +529,6 @@ function Videos() {
             </Col>
             <Col className="col-9">
                 <Container>
-                    <VideoSearch/>
                     <Switch>
                         <Route path="/videos/:channel_link/:video_id" component={Video}/>
                         <Route path="/videos/:channel_link" component={ChannelVideoPager}/>

@@ -239,8 +239,7 @@ def channel_post(request: Request, data: dict):
     produces=SuccessResponse,
     tag='Channel',
 )
-def channel_put(request: Request, data: dict, link: str):
-    """Update an existing channel"""
+def channel_put(request: Request, link: str, data: dict):
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']
 

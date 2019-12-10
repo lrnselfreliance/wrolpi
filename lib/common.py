@@ -296,11 +296,14 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
         @wraps(func)
         def wrapped(request, *a, **kw):
             if consumes:
+                if 'data' in kw:
+                    raise ValueError(f'data kwarg already being passed to {func}')
+
                 data = validate_data(consumes, request.json)
                 if isinstance(data, sanic.response.HTTPResponse):
                     # Error in validation
                     return data
-                return func(request, data, *a, **kw)
+                return func(request, *a, **kw, data=data)
             return func(request, *a, **kw)
 
         # Apply the docs to the wrapped function so sanic-openapi can find the wrapped function when

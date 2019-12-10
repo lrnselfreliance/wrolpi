@@ -277,7 +277,7 @@ def validate_data(model, data):
             elif isinstance(field, doc.List):
                 new_data[attr] = list(data.pop(attr))
             else:
-                return response.json({'error': 'Invalid field type', 'field': attr}, HTTPStatus.BAD_REQUEST)
+                raise Exception(f'Bad field type {field} specified in the API model!')
         except KeyError:
             if field.required:
                 missing_fields.append(attr)

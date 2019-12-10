@@ -277,7 +277,7 @@ def validate_data(model, data):
             elif isinstance(field, doc.List):
                 new_data[attr] = list(data.pop(attr))
             else:
-                error = {'error': 'Invalid field type', 'field': attr}
+                return response.json({'error': 'Invalid field type', 'field': attr}, HTTPStatus.BAD_REQUEST)
         except KeyError:
             if field.required:
                 missing_fields.append(attr)
@@ -287,7 +287,7 @@ def validate_data(model, data):
 
     if data:
         # Excess JSON keys
-        return response.json({'error': 'Excess JSON keys', 'keys': [data.keys()]}, HTTPStatus.BAD_REQUEST)
+        return response.json({'error': 'Excess JSON fields', 'fields': data.keys()}, HTTPStatus.BAD_REQUEST)
 
     return new_data
 

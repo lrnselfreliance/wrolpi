@@ -164,6 +164,12 @@ class TestAPI(ExtendedTestCase):
         request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.CREATED, response.json
 
+        # All required fields are present
+        new_channel['extra'] = "this shouldn't be here"
+        request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.BAD_REQUEST, response.json
+        assert set(response.json['fields']) == {'extra'}
+
     @wrap_test_db
     def test_channel_empty_url_doesnt_conflict(self):
         """Two channels with empty URLs shouldn't conflict"""

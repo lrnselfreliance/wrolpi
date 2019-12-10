@@ -219,3 +219,31 @@ class TestAPI(ExtendedTestCase):
         # During the refresh process, messages are pushed to a queue, make sure there are messages there
         messages = get_all_messages_in_queue(refresh_queue)
         assert 'refresh-started' in messages
+
+    @wrap_test_db
+    def test_get_channel_videos(self):
+        with get_db_context(commit=True) as (db_conn, db):
+            Channel, Video = db['channel'], db['video']
+            channel1 = Channel(name='Foo', link='foo').flush()
+            channel2 = Channel(name='Bar', link='bar').flush()
+
+        # Channels don't have videos yet
+        request, response = api_app.test_client.get(f'/api/videos/channel/{channel1["link"]}/videos')
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.json['videos']) == 0
+
+        with get_db_context(commit=True) as (db_conn, db):
+            Channel, Video = db['channel'], db['video']
+            Video(title='vid1', channel_id=channel2['id']).flush()
+            Video(title='vid2', channel_id=channel1['id']).flush()
+
+        # Videos are gotten by their respective channels
+        request, response = api_app.test_client.get(f'/api/videos/channel/{channel1["link"]}/videos')
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.json['videos']) == 1
+        self.assertDictContains(response.json['videos'][0], dict(id=2, title='vid2', channel_id=channel1['id']))
+
+        request, response = api_app.test_client.get(f'/api/videos/channel/{channel2["link"]}/videos')
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.json['videos']) == 1
+        self.assertDictContains(response.json['videos'][0], dict(id=1, title='vid1', channel_id=channel2['id']))

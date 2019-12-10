@@ -33,7 +33,7 @@ from sanic import Blueprint, response
 from sanic.exceptions import abort
 from sanic.request import Request
 
-from lib.common import sanitize_link, boolean_arg, attach_websocket_with_queue, get_sanic_url, \
+from lib.common import sanitize_link, boolean_arg, create_websocket_feed, get_sanic_url, \
     make_progress_calculator, validate_doc
 from lib.db import get_db_context
 from .captions import process_captions
@@ -79,7 +79,7 @@ def get_channels(request: Request):
     return response.json({'channels': channels})
 
 
-refresh_queue, refresh_event = attach_websocket_with_queue('/feeds/refresh', api_bp)
+refresh_queue, refresh_event = create_websocket_feed('/feeds/refresh', api_bp)
 
 
 @api_bp.post('/settings:refresh')
@@ -123,7 +123,7 @@ async def refresh(_):
     return response.json({'success': 'stream-started', 'stream_url': stream_url})
 
 
-download_queue, download_event = attach_websocket_with_queue('/feeds/download', api_bp)
+download_queue, download_event = create_websocket_feed('/feeds/download', api_bp)
 
 
 @api_bp.post('/settings:download')

@@ -10,3 +10,7 @@ Future Features
 1. Podcasts module
 1. Screenshot browser addon
 1. Open Street Map module
+
+Physical Properties
+===================
+1. Which Raspberry Pi's can reliably run WROLPi?

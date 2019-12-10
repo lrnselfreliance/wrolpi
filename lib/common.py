@@ -181,7 +181,7 @@ async def download_file(url: str, size: int, destination: str):
 DEFAULT_QUEUE_SIZE = 1000
 
 
-def attach_websocket_with_queue(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT_QUEUE_SIZE):
+def create_websocket_feed(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT_QUEUE_SIZE):
     """
     Build the objects needed to run a websocket which will pass on messages from a multiprocessing.Queue.
 

@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React from 'react';
 import Button from "react-bootstrap/Button";
 
 function Video(props) {
@@ -14,7 +14,7 @@ function Video(props) {
         <>
             <video poster={poster_url} id="player" playsinline controls style={{'maxWidth': '100%'}}>
                 <source src={video_url} type="video/mp4"/>
-                <track kind="captions" label="English captions" src={captions_url} srcLang="en" default />
+                <track kind="captions" label="English captions" src={captions_url} srcLang="en" default/>
             </video>
 
             <a href={video_download_url}>

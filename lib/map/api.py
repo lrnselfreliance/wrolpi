@@ -5,14 +5,14 @@ from urllib.parse import urlparse
 
 from sanic import Blueprint, response
 
-from lib.common import get_http_file_info, download_file, validate_doc, attach_websocket_with_queue
+from lib.common import get_http_file_info, download_file, validate_doc, create_websocket_feed
 from lib.map.schema import PBFPostRequest, PBFPostResponse
 
 NAME = 'map'
 
 api_bp = Blueprint('Map', url_prefix='/map')
 
-download_queue, download_event = attach_websocket_with_queue('/feeds/pbf_progress', api_bp)
+download_queue, download_event = create_websocket_feed('/feeds/pbf_progress', api_bp)
 
 
 @api_bp.route('/pbf', methods=['POST'])

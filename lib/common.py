@@ -256,7 +256,7 @@ def validate_data(model, data):
     attrs = [i for i in dir(model) if not str(i).startswith('__')]
     # Convert each json value to it's respective doc field's python type
     #  i.e. doc.String -> str
-    error = None
+    missing_fields = []
     for attr in attrs:
         field = getattr(model, attr)
         try:
@@ -280,15 +280,16 @@ def validate_data(model, data):
                 error = {'error': 'Invalid field type', 'field': attr}
         except KeyError:
             if field.required:
-                error = {'error': f'Required field is not present', 'field': attr}
+                missing_fields.append(attr)
+
+    if missing_fields:
+        return response.json({'error': 'Missing required fields', 'fields': missing_fields}, HTTPStatus.BAD_REQUEST)
 
     if data:
         # Excess JSON keys
-        error = {'error': 'Excess JSON keys', 'keys': [data.keys()]}
+        return response.json({'error': 'Excess JSON keys', 'keys': [data.keys()]}, HTTPStatus.BAD_REQUEST)
 
-    if not error:
-        return new_data
-    return response.json(error, HTTPStatus.BAD_REQUEST)
+    return new_data
 
 
 def validate_doc(summary: str = None, consumes=None, produces=None, responses=(), tag: str = None):

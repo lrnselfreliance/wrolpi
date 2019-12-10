@@ -151,13 +151,13 @@ class TestAPI(ExtendedTestCase):
         # name is required
         request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.BAD_REQUEST
-        assert response.json == {'error': f'Required field is not present', 'field': 'name'}
+        assert set(response.json['fields']) == {'directory', 'name'}
 
         # directory is required
         new_channel['name'] = 'Fooz'
         request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.BAD_REQUEST
-        assert response.json == {'error': f'Required field is not present', 'field': 'directory'}
+        assert set(response.json['fields']) == {'directory'}
 
         # All required fields are present
         new_channel['directory'] = channel_directory

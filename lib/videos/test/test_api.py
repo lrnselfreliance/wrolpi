@@ -247,3 +247,32 @@ class TestAPI(ExtendedTestCase):
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 1
         self.assertDictContains(response.json['videos'][0], dict(id=1, title='vid1', channel_id=channel2['id']))
+
+    @wrap_test_db
+    def test_get_channel_videos_pagination(self):
+        with get_db_context(commit=True) as (db_conn, db):
+            Channel, Video = db['channel'], db['video']
+            channel1 = Channel(name='Foo', link='foo').flush()
+
+            for i in range(50):
+                Video(title=f'Foo.Video{i}', channel_id=channel1['id']).flush()
+
+            channel2 = Channel(name='Bar', link='bar').flush()
+            Video(title='vid2', channel_id=channel2['id']).flush()
+
+        # Get first, second, third, and empty pages of videos.
+        tests = [
+            # (offset, video_count)
+            (0, 20),
+            (20, 20),
+            (40, 10),
+            (50, 0),
+        ]
+        last_ids = []
+        for offset, video_count in tests:
+            _, response = api_app.test_client.get(f'/api/videos/channel/{channel1["link"]}/videos?offset={offset}')
+            assert response.status_code == HTTPStatus.OK
+            assert len(response.json['videos']) == video_count
+            current_ids = [i['id'] for i in response.json['videos']]
+            assert current_ids != last_ids
+            last_ids = current_ids

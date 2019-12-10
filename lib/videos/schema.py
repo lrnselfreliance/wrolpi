@@ -90,3 +90,7 @@ class VideoSearchRequest:
 
 class VideoSearchResponse:
     videos = doc.List(Video)
+
+
+class PaginationQuery:
+    offset = doc.Integer()

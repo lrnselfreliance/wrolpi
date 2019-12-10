@@ -72,6 +72,10 @@ class ChannelVideosResponse:
     videos = doc.List(Video)
 
 
+class ChannelVideoResponse:
+    video = Video
+
+
 class VideoSearchRequest:
     search_str = doc.String()
     offset = doc.Integer()

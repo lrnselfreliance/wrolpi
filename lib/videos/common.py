@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Union, Tuple
 
 import yaml
-from dictorm import And, Or, Dict
+from dictorm import And, Or, Dict, DictDB
 
 from lib.common import sanitize_link, logger
 from lib.db import get_db_context
@@ -240,3 +240,17 @@ def verify_config():
                             f'Have you mounted your media directory in docker-compose.yml?')
         raise Exception(f'Video root directory is not absolute, or does not exist! {video_root_directory}  '
                         f'Have you updated your local.yaml with the video_root_directory?')
+
+
+class UnknownChannel(Exception):
+    pass
+
+
+def get_channel_videos(db: DictDB, link: str, offset: int = 0):
+    Channel, Video = db['channel'], db['video']
+    channel = Channel.get_one(link=link)
+    if not channel:
+        raise UnknownChannel('Unknown Channel')
+    videos = Video.get_where(channel_id=channel['id']).order_by(
+        'upload_date DESC, LOWER(title) DESC, LOWER(video_path) DESC').limit(20).offset(offset)
+    return videos

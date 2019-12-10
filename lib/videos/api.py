@@ -38,13 +38,14 @@ from lib.common import sanitize_link, boolean_arg, attach_websocket_with_queue, 
 from lib.db import get_db_context
 from .captions import process_captions
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
-    get_absolute_channel_directory, UnknownDirectory
+    get_absolute_channel_directory, UnknownDirectory, get_channel_videos, UnknownChannel
 from .common import get_conflicting_channels, get_absolute_video_path, UnknownFile
 from .common import logger
 from .downloader import insert_video, update_channels, download_all_missing_videos
 from .schema import DownloaderConfig, ChannelRequest, ChannelsResponse, SuccessResponse, StreamResponse, \
     JSONErrorResponse, \
-    ChannelResponse, ChannelPostResponse, ChannelVideosResponse, VideoSearchRequest, VideoSearchResponse
+    ChannelResponse, ChannelPostResponse, ChannelVideosResponse, VideoSearchRequest, VideoSearchResponse, \
+    ChannelVideoResponse
 
 api_bp = Blueprint('Videos', url_prefix='/videos')
 
@@ -309,11 +310,29 @@ def channel_delete(request, link: str):
 )
 def channel_videos(request, link: str):
     db: DictDB = request.ctx.get_db()
-    Channel = db['channel']
-    channel = Channel.get_one(link=link)
-    if not channel:
+    try:
+        videos = get_channel_videos(db, link)
+    except UnknownChannel:
         return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
-    return response.json({'videos': list(channel['videos'])})
+
+    return response.json({'videos': list(videos)})
+
+
+@api_bp.get('/channel/<link:string>/<video_hash:string>')
+@validate_doc(
+    summary='Get Video information',
+    produces=ChannelVideoResponse,
+    responses=(
+            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
+    ),
+)
+def channel_video(request, link: str, video_hash: str):
+    db: DictDB = request.ctx.get_db()
+    Video = db['video']
+    video = Video.get_one(video_path_hash=video_hash)
+    if not video:
+        return response.json({'error': 'Unknown video'}, HTTPStatus.NOT_FOUND)
+    return response.json({'video': video})
 
 
 @api_bp.route('/video/<hash:string>')

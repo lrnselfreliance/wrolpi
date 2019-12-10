@@ -84,6 +84,12 @@ async function getVideos(link) {
     return data['videos'];
 }
 
+async function getVideo(link, video_hash) {
+    let response = await fetch(`${VIDEOS_API}/channel/${link}/${video_hash}`);
+    let data = await response.json();
+    return data['video'];
+}
+
 class ChannelVideoPager extends React.Component {
     constructor(props) {
         super(props);
@@ -498,33 +504,64 @@ class VideoSearch extends React.Component {
     }
 }
 
-class ChannelBreadcrumb extends React.Component {
+class VideoBreadcrumb extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
+            'video': null,
             'channel': null,
         }
     }
 
+    async getChannelAndVideo() {
+        let channel_link = this.props.match.params.channel_link;
+        this.setState({'channel': await getChannel(channel_link)});
+        let video_hash = this.props.match.params.video_hash;
+        this.setState({'video': await getVideo(channel_link, video_hash)});
+    }
+
     async componentWillMount() {
-        this.setState({'channel': await getChannel(this.props.match.params.channel_link)});
+        await this.getChannelAndVideo();
     }
 
     async componentDidUpdate(prevProps, prevState) {
-        if (this.props.match.params.channel_link !== prevProps.match.params.channel_link) {
-            this.setState({'channel': await getChannel(this.props.match.params.channel_link)});
+        if (this.props.match.params.video_hash !== prevProps.match.params.video_hash ||
+            this.props.match.params.channel_link !== prevProps.match.params.channel_link) {
+            await this.getChannelAndVideo();
         }
     }
 
-    getBreadcrumb() {
+    getChannelBreadcrumb() {
         if (this.state.channel) {
             return (
                 <Breadcrumb.Item>
-                    <Link to={this.state.channel['link']}>
+                    <Link to={'/videos/' + this.props.match.params.channel_link}>
                         {this.state.channel['name']}
                     </Link>
                 </Breadcrumb.Item>
             )
+        }
+    }
+
+    getBreadcrumb() {
+        // If video: Channel Name / Video Title
+        // else if channel: Channel Name
+        if (this.state.video) {
+            return (
+                <>
+                    {this.getChannelBreadcrumb()}
+                    <Breadcrumb.Item>
+                        <Link
+                            to={'/videos/' +
+                            this.props.match.params.channel_link + '/' +
+                            this.props.match.params.video_hash}>
+                            {this.state.video['title'] || this.state.video['video_path']}
+                        </Link>
+                    </Breadcrumb.Item>
+                </>
+            )
+        } else if (this.state.channel) {
+            return this.getChannelBreadcrumb()
         }
         return (<></>)
     }
@@ -546,31 +583,14 @@ class Videos extends React.Component {
         }
     }
 
-    setChannelLink(channel_link) {
-        let channel = getChannel(channel_link);
-        this.setState({'channel': channel})
-    }
-
-    channelBreadcrumb() {
-        let channel = this.state.channel;
-        if (channel) {
-            return (
-                <Breadcrumb.Item>
-                    <Link to={channel.link}>
-                        {channel.name}
-                    </Link>
-                </Breadcrumb.Item>
-            )
-        }
-    }
-
     breadcrumbs() {
         return (
             <Breadcrumb>
                 <Breadcrumb.Item>
                     <Link to='/videos'>Videos</Link>
                 </Breadcrumb.Item>
-                <Route path='/videos/:channel_link' component={ChannelBreadcrumb}/>
+                <Route path='/videos/:channel_link' exact="true" component={VideoBreadcrumb}/>
+                <Route path='/videos/:channel_link/:video_hash' exact="true" component={VideoBreadcrumb}/>
             </Breadcrumb>
         )
     }

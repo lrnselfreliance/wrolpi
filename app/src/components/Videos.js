@@ -53,7 +53,7 @@ class ChannelsNav extends React.Component {
 
 function VideoCard({video, channel_link}) {
     let video_url = "/videos/" + channel_link + "/" + video.video_path_hash;
-    let poster_url = video.poster_path ? `${VIDEOS_API}/poster/${video.video_path_hash}` : null;
+    let poster_url = video.poster_path ? `${VIDEOS_API}/static/poster/${video.video_path_hash}` : null;
     return (
         <Link to={video_url}>
             <Card style={{'width': '18em', 'marginBottom': '1em'}}>
@@ -84,8 +84,8 @@ async function getVideos(link) {
     return data['videos'];
 }
 
-async function getVideo(link, video_hash) {
-    let response = await fetch(`${VIDEOS_API}/channel/${link}/${video_hash}`);
+async function getVideo(video_hash) {
+    let response = await fetch(`${VIDEOS_API}/video/${video_hash}`);
     let data = await response.json();
     return data['video'];
 }
@@ -517,7 +517,7 @@ class VideoBreadcrumb extends React.Component {
         let channel_link = this.props.match.params.channel_link;
         this.setState({'channel': await getChannel(channel_link)});
         let video_hash = this.props.match.params.video_hash;
-        this.setState({'video': await getVideo(channel_link, video_hash)});
+        this.setState({'video': await getVideo(video_hash)});
     }
 
     async componentWillMount() {

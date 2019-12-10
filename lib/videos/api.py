@@ -307,6 +307,7 @@ def channel_delete(request, link: str):
     responses=(
             (HTTPStatus.NOT_FOUND, JSONErrorResponse),
     ),
+    tag='Channel',
 )
 def channel_videos(request, link: str):
     db: DictDB = request.ctx.get_db()
@@ -318,7 +319,7 @@ def channel_videos(request, link: str):
     return response.json({'videos': list(videos)})
 
 
-@api_bp.get('/channel/<link:string>/<video_hash:string>')
+@api_bp.get('/video/<video_hash:string>')
 @validate_doc(
     summary='Get Video information',
     produces=ChannelVideoResponse,
@@ -326,7 +327,7 @@ def channel_videos(request, link: str):
             (HTTPStatus.NOT_FOUND, JSONErrorResponse),
     ),
 )
-def channel_video(request, link: str, video_hash: str):
+def video(request, video_hash: str):
     db: DictDB = request.ctx.get_db()
     Video = db['video']
     video = Video.get_one(video_path_hash=video_hash)
@@ -335,9 +336,9 @@ def channel_video(request, link: str, video_hash: str):
     return response.json({'video': video})
 
 
-@api_bp.route('/video/<hash:string>')
-@api_bp.route('/poster/<hash:string>')
-@api_bp.route('/caption/<hash:string>')
+@api_bp.route('/static/video/<hash:string>')
+@api_bp.route('/static/poster/<hash:string>')
+@api_bp.route('/static/caption/<hash:string>')
 @validate_doc(
     summary='Get a video/poster/caption file',
 )
@@ -345,7 +346,7 @@ async def media_file(request: Request, hash: str):
     db: DictDB = request.ctx.get_db()
     download = boolean_arg(request, 'download')
     Video = db['video']
-    kind = str(request.path).split('/')[3]
+    kind = str(request.path).split('/')[4]
 
     try:
         video = Video.get_one(video_path_hash=hash)

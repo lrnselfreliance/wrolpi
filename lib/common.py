@@ -150,10 +150,14 @@ def get_pagination_with_generator(results_gen: ResultsGenerator, offset: int, li
     return results, pagination
 
 
+def string_to_boolean(s: str) -> bool:
+    return str(s).lower() in {'true', 't', '1'}
+
+
 def boolean_arg(request, arg_name):
-    """Return True only if the specified query arg is equal to 'true'"""
+    """Return True only if the specified query arg is truthy"""
     value = request.args.get(arg_name)
-    return value == 'true'
+    return string_to_boolean(value)
 
 
 def get_http_file_info(url):
@@ -251,6 +255,9 @@ def make_progress_calculator(total):
 
 
 def validate_data(model, data):
+    if not data:
+        return response.json({'error': 'No data found in body'}, HTTPStatus.BAD_REQUEST)
+
     new_data = {}
     # Get the public attributes of the model
     attrs = [i for i in dir(model) if not str(i).startswith('__')]
@@ -269,7 +276,7 @@ def validate_data(model, data):
             elif isinstance(field, doc.UUID):
                 new_data[attr] = UUID(data.pop(attr))
             elif isinstance(field, doc.Boolean):
-                new_data[attr] = bool(data.pop(attr))
+                new_data[attr] = string_to_boolean(data.pop(attr))
             elif isinstance(field, doc.Float):
                 new_data[attr] = float(data.pop(attr))
             elif isinstance(field, doc.Dictionary):

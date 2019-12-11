@@ -3,8 +3,8 @@ from sanic_openapi import doc
 
 class ChannelPostRequest:
     url = doc.String()
-    name = doc.String(required=True)
-    match_regex = doc.String()
+    name = doc.String(description='A short readable name', required=True)
+    match_regex = doc.String(description='Regex that the video title will have to match')
     directory = doc.String(required=True)
 
 

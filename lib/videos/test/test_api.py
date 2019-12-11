@@ -142,35 +142,6 @@ class TestAPI(ExtendedTestCase):
         assert response.status_code == HTTPStatus.NOT_FOUND
 
     @wrap_test_db
-    def test_channel_post(self):
-        channel_directory = tempfile.TemporaryDirectory().name
-        pathlib.Path(channel_directory).mkdir()
-
-        new_channel = {}
-
-        # name is required
-        request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.BAD_REQUEST
-        assert set(response.json['fields']) == {'directory', 'name'}
-
-        # directory is required
-        new_channel['name'] = 'Fooz'
-        request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.BAD_REQUEST
-        assert set(response.json['fields']) == {'directory'}
-
-        # All required fields are present
-        new_channel['directory'] = channel_directory
-        request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.CREATED, response.json
-
-        # All required fields are present
-        new_channel['extra'] = "this shouldn't be here"
-        request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.BAD_REQUEST, response.json
-        assert set(response.json['fields']) == {'extra'}
-
-    @wrap_test_db
     def test_channel_empty_url_doesnt_conflict(self):
         """Two channels with empty URLs shouldn't conflict"""
         channel_directory = tempfile.TemporaryDirectory().name

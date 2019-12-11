@@ -99,6 +99,9 @@ def get_all_messages_in_queue(q):
 
 
 class ExtendedTestCase(unittest.TestCase):
+    """
+    Add any specialized test methods to this class.
+    """
 
     @staticmethod
     def assertDictContains(d1: dict, d2: dict):

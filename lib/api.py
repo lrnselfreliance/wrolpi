@@ -96,10 +96,17 @@ async def echo(request: Request):
     return response.json(ret)
 
 
+ROUTES_ATTACHED = False
+
+
 def attach_routes(app):
     """
     Attach all module routes to the provided app.
     """
+    global ROUTES_ATTACHED
+    if ROUTES_ATTACHED:
+        return
+    ROUTES_ATTACHED = True
     # routes: /api/*
     blueprints = [i.api_bp for i in MODULES.values()]
     api_group = Blueprint.group(*blueprints, root_api, url_prefix='/api')

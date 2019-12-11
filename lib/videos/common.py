@@ -254,7 +254,7 @@ class TemporaryVideo:
     Contextmanager that creates a real mp4 file that contains 1000 bytes of sample video data.
     """
 
-    def __init__(self, ):
+    def __init__(self):
         self.temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
         self.name = self.temp_file.name
         with open(str(TEST_VIDEO_PATH), 'rb') as fh1, open(self.name, 'wb') as fh2:

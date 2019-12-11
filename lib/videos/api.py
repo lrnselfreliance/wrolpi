@@ -453,10 +453,11 @@ def refresh_videos_with_db():
 
 
 def video_search(db_conn, db: DictDB, search_str: str, offset: int):
+    offset = offset or 0
     curs = db_conn.cursor()
 
     query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)) FROM video WHERE ' \
-            'textsearch @@ to_tsquery(%s) ORDER BY 2 OFFSET %s LIMIT 20'
+            'textsearch @@ to_tsquery(%s) ORDER BY 2 DESC OFFSET %s LIMIT 20'
     curs.execute(query, (search_str, search_str, offset))
     ranked_ids = [i[0] for i in curs.fetchall()]
 
@@ -464,7 +465,7 @@ def video_search(db_conn, db: DictDB, search_str: str, offset: int):
     if ranked_ids:
         Video = db['video']
         results = Video.get_where(Video['id'].In(ranked_ids))
-        results = list(results)
+        results = sorted(results, key=lambda r: ranked_ids.index(r['id']))
     return results
 
 
@@ -492,6 +493,12 @@ def channel_search(db_conn, db: DictDB, search_str: str, offset: int):
 def search(request: Request, data: dict):
     search_str = data['search_str']
     offset = data.get('offset')
+
+    if not search_str:
+        return response.json({'error': 'search_str must have contents'})
+
+    # ts_query accepts a pipe | as an "or" between keywords, we'll just assume any spaces mean "or"
+    search_str = '|'.join(search_str.split(' '))
 
     with get_db_context() as (db_conn, db):
         videos = video_search(db_conn, db, search_str, offset)

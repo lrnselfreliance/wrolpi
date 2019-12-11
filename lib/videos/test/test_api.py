@@ -2,6 +2,7 @@ import json
 import pathlib
 import tempfile
 from http import HTTPStatus
+from itertools import zip_longest
 from queue import Empty
 
 import mock
@@ -304,3 +305,61 @@ class TestVideoAPI(TestAPI):
             current_ids = [i['id'] for i in response.json['videos']]
             assert current_ids != last_ids
             last_ids = current_ids
+
+    @wrap_test_db
+    def test_video_search(self):
+        """
+        Test that videos can be searched and that their order is by their textsearch rank.
+        """
+        # These captions have repeated letters so they will be higher in the ranking
+        videos = [
+            ('1', 'b b b b e d d'),
+            ('2', '2 b b b d'),
+            ('3', 'b b'),
+            ('4', 'b e e'),
+            ('5', ''),
+        ]
+        with get_db_context(commit=True) as (db_conn, db):
+            Video = db['video']
+            for title, caption in videos:
+                Video(title=title, caption=caption).flush()
+
+        def do_search(search_str):
+            d = json.dumps({'search_str': search_str})
+            _, resp = api_app.test_client.post('/api/videos/search', data=d)
+            return resp
+
+        def search_is_as_expected(response, expected):
+            assert response.status_code == HTTPStatus.OK
+            for resp_vid, exp_id in zip_longest(response.json['videos'], expected):
+                assert resp_vid['id'] == exp_id
+
+        # No search_str, get an error
+        response = do_search('')
+        assert response.json == {'error': 'search_str must have contents'}
+
+        # Repeated runs should return the same result
+        for _ in range(2):
+            # Only videos with a b are returned, ordered by the amount of b's
+            response = do_search('b')
+            search_is_as_expected(response, [1, 2, 3, 4])
+
+        # Only two captions have e
+        response = do_search('e')
+        search_is_as_expected(response, [4, 1])
+
+        # Only two captions have d
+        response = do_search('d')
+        search_is_as_expected(response, [1, 2])
+
+        # 5 can be gotten by it's title
+        response = do_search('5')
+        search_is_as_expected(response, [5])
+
+        # Two videos don't have to be identical
+        response = do_search('3 5')
+        search_is_as_expected(response, [3, 5])
+
+        # enough '2' in video 2 that it ranks higher than video 1
+        response = do_search('2 b')
+        search_is_as_expected(response, [2, 1, 3, 4])

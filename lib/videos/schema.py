@@ -84,7 +84,7 @@ class ChannelVideoResponse:
 
 
 class VideoSearchRequest:
-    search_str = doc.String()
+    search_str = doc.String(required=True)
     offset = doc.Integer()
 
 

@@ -254,7 +254,7 @@ class TestVideoAPI(TestAPI):
         self.assertDictContains(response.json['video'], {'title': 'vidd'})
 
         with TemporaryVideo() as video_ctx, \
-                mock.patch('lib.videos.api.get_absolute_video_path', lambda *a, **kw: video_ctx.name):
+                mock.patch('lib.videos.api.get_absolute_video_path', lambda *a, **kw: video_ctx):
             # Get the contents of the video file
             _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}')
             assert response.status_code == HTTPStatus.OK
@@ -264,8 +264,6 @@ class TestVideoAPI(TestAPI):
             self.assertIsInstance(response.body, bytes)
             assert len(response.body) > 10
 
-        with TemporaryVideo() as video_ctx, \
-                mock.patch('lib.videos.api.get_absolute_video_path', lambda *a, **kw: video_ctx):
             # The user can download the video file
             _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}?download=true')
             assert response.status_code == HTTPStatus.OK

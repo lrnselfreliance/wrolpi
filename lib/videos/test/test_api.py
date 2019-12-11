@@ -233,6 +233,30 @@ class TestVideoAPI(TestAPI):
         self.assertDictContains(response.json['videos'][0], dict(id=1, title='vid1', channel_id=channel2['id']))
 
     @wrap_test_db
+    def test_get_video(self):
+        """
+        Test that you get can information about a video.  Test that video file can be gotten.
+        """
+        with get_db_context(commit=True) as (db_conn, db):
+            Channel, Video = db['channel'], db['video']
+            channel = Channel(name='Foo', link='foo').flush()
+            video = Video(title='vidd', channel_id=channel['id'], video_path_hash='hashy').flush()
+
+        _, response = api_app.test_client.get('/api/videos/video/hashy')
+        assert response.status_code == HTTPStatus.OK, response.json
+        self.assertDictContains(response.json['video'], {'title': 'vidd'})
+
+        with tempfile.NamedTemporaryFile(delete=True) as temp_file:
+            with open(temp_file.name, 'wb') as fh:
+                fh.write(b'video contents')
+
+            with mock.patch('lib.videos.api.get_absolute_video_path', lambda *a, **kw: temp_file.name):
+                # Get the contents of the video file
+                _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}')
+                assert response.status_code == HTTPStatus.OK
+                assert response.body == b'video contents'
+
+    @wrap_test_db
     def test_get_channel_videos_pagination(self):
         with get_db_context(commit=True) as (db_conn, db):
             Channel, Video = db['channel'], db['video']

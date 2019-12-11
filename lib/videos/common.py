@@ -267,3 +267,6 @@ class TemporaryVideo:
         # Always remove the temp file
         self.temp_file.close()
         os.remove(self.name)
+
+    def __str__(self):
+        return self.name

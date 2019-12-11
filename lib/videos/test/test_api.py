@@ -243,6 +243,12 @@ class TestVideoAPI(TestAPI):
             channel = Channel(name='Foo', link='foo').flush()
             video = Video(title='vidd', channel_id=channel['id'], video_path_hash='hashy').flush()
 
+        # Test that a 404 is returned when no video exists
+        _, response = api_app.test_client.get('/api/videos/video/BAD_HASH')
+        assert response.status_code == HTTPStatus.NOT_FOUND, response.json
+        assert 'error' in response.json
+
+        # Get the video info we inserted
         _, response = api_app.test_client.get('/api/videos/video/hashy')
         assert response.status_code == HTTPStatus.OK, response.json
         self.assertDictContains(response.json['video'], {'title': 'vidd'})
@@ -253,6 +259,21 @@ class TestVideoAPI(TestAPI):
             _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}')
             assert response.status_code == HTTPStatus.OK
             self.assertDictContains(response.headers, {'content-type': 'video/mp4'})
+            assert 'content-disposition' not in response.headers
+            # The body should have some bytes
+            self.assertIsInstance(response.body, bytes)
+            assert len(response.body) > 10
+
+        with TemporaryVideo() as video_ctx, \
+                mock.patch('lib.videos.api.get_absolute_video_path', lambda *a, **kw: video_ctx):
+            # The user can download the video file
+            _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}?download=true')
+            assert response.status_code == HTTPStatus.OK
+            expected = {
+                'content-type': 'video/mp4',
+                'content-disposition': f'attachment; filename="{video_ctx.name}"',
+            }
+            self.assertDictContains(response.headers, expected)
             # The body should have some bytes
             self.assertIsInstance(response.body, bytes)
             assert len(response.body) > 10

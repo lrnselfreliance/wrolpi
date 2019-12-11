@@ -50,8 +50,9 @@ class TestVideoAPI(TestAPI):
 
         request, response = api_app.test_client.get('/api/videos/channels')
         assert response.status_code == HTTPStatus.OK
-        self.assertDictContains(response.json['channels'][0], {'id': 1, 'name': 'Foo'})
-        self.assertDictContains(response.json['channels'][1], {'id': 2, 'name': 'Bar'})
+        # Channels are sorted by name
+        self.assertDictContains(response.json['channels'][0], {'id': 2, 'name': 'Bar'})
+        self.assertDictContains(response.json['channels'][1], {'id': 1, 'name': 'Foo'})
 
     @wrap_test_db
     def test_channel(self):

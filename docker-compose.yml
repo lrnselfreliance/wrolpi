@@ -16,9 +16,6 @@ services:
       dockerfile: docker/api/Dockerfile
     ports:
       - 8080:8080  # for local development
-    env:
-      API_HOST: ${API_HOST}
-      API_PORT: ${API_PORT}
     volumes:
       - .:/opt/wrolpi
       # Uncomment the following line and change the drive to your drive or media directory.  Change your local.yaml
@@ -33,9 +30,6 @@ services:
       dockerfile: docker/app/Dockerfile
     ports:
       - 3000:3000
-    env:
-      API_HOST: ${API_HOST}
-      API_PORT: ${API_PORT}
     volumes:
       - './app:/app'
   map:

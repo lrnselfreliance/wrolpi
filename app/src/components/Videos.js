@@ -11,7 +11,7 @@ import '../static/external/fontawesome-free/css/all.min.css';
 import Alert from "react-bootstrap/Alert";
 import Breadcrumb from "react-bootstrap/Breadcrumb";
 
-const VIDEOS_API = 'http://127.0.0.1:8080/api/videos';
+const VIDEOS_API = '/api/videos';
 
 class ChannelsNav extends React.Component {
     constructor(props) {

@@ -11,7 +11,7 @@ from lib.api import api_app, attach_routes
 from lib.db import get_db_context
 from lib.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI, TEST_CONFIG_PATH
 from lib.videos.api import refresh_queue
-from lib.videos.common import get_downloader_config, import_settings_config
+from lib.videos.common import get_downloader_config, import_settings_config, TemporaryVideo
 from ..downloader import insert_video
 
 # Attach the default routes
@@ -247,15 +247,15 @@ class TestVideoAPI(TestAPI):
         assert response.status_code == HTTPStatus.OK, response.json
         self.assertDictContains(response.json['video'], {'title': 'vidd'})
 
-        with tempfile.NamedTemporaryFile(delete=True) as temp_file:
-            with open(temp_file.name, 'wb') as fh:
-                fh.write(b'video contents')
-
-            with mock.patch('lib.videos.api.get_absolute_video_path', lambda *a, **kw: temp_file.name):
-                # Get the contents of the video file
-                _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}')
-                assert response.status_code == HTTPStatus.OK
-                assert response.body == b'video contents'
+        with TemporaryVideo() as video_ctx, \
+                mock.patch('lib.videos.api.get_absolute_video_path', lambda *a, **kw: video_ctx.name):
+            # Get the contents of the video file
+            _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}')
+            assert response.status_code == HTTPStatus.OK
+            self.assertDictContains(response.headers, {'content-type': 'video/mp4'})
+            # The body should have some bytes
+            self.assertIsInstance(response.body, bytes)
+            assert len(response.body) > 10
 
     @wrap_test_db
     def test_get_channel_videos_pagination(self):

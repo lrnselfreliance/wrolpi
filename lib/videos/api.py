@@ -74,7 +74,7 @@ def settings(request: Request, data: dict):
 def get_channels(request: Request):
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']
-    channels = Channel.get_where().order_by('name DESC')
+    channels = Channel.get_where().order_by('LOWER(name) ASC')
     channels = list(channels)
     return response.json({'channels': channels})
 

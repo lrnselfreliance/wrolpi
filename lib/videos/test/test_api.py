@@ -3,37 +3,23 @@ import pathlib
 import tempfile
 from http import HTTPStatus
 from queue import Empty
-from shutil import copyfile
 
 import mock
 import pytest
-import yaml
 
 from lib.api import api_app, attach_routes
 from lib.db import get_db_context
-from lib.test.common import wrap_test_db, get_all_messages_in_queue, ExtendedTestCase
+from lib.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI, TEST_CONFIG_PATH
 from lib.videos.api import refresh_queue
-from ..common import import_settings_config, get_downloader_config, EXAMPLE_CONFIG_PATH, get_config
+from lib.videos.common import get_downloader_config, import_settings_config
 from ..downloader import insert_video
-
-CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
-cwd = pathlib.Path(__file__).parents[3]
 
 # Attach the default routes
 attach_routes(api_app)
 
 
-@mock.patch('lib.videos.common.CONFIG_PATH', CONFIG_PATH.name)
-class TestAPI(ExtendedTestCase):
-
-    def setUp(self) -> None:
-        # Copy the example config to test against
-        copyfile(EXAMPLE_CONFIG_PATH, CONFIG_PATH.name)
-        # Setup the testing video root directory
-        config = get_config()
-        config['downloader']['video_root_directory'] = cwd / 'test/example_videos'
-        with open(CONFIG_PATH.name, 'wt') as fh:
-            fh.write(yaml.dump(config))
+@mock.patch('lib.videos.common.CONFIG_PATH', TEST_CONFIG_PATH.name)
+class TestVideoAPI(TestAPI):
 
     @wrap_test_db
     def test_configs(self):
@@ -49,30 +35,6 @@ class TestAPI(ExtendedTestCase):
         diff = set(updated.items()).difference(set(original.items()))
         expected = {('video_root_directory', 'foo'), ('file_name_format', 'bar')}
         self.assertEqual(diff, expected)
-
-    @wrap_test_db
-    def test_refresh(self):
-        # There should be no messages until a refresh is called
-        pytest.raises(Empty, refresh_queue.get_nowait)
-
-        with get_db_context(commit=True) as (db_conn, db):
-            Video = db['video']
-            import_settings_config()
-
-            # Insert a bogus video, it should be removed
-            bogus = Video(video_path='bar').flush()
-            assert bogus and bogus['id'], 'Failed to insert a bogus video for removal'
-
-        request, response = api_app.test_client.post('/api/videos/settings:refresh')
-        assert response.status_code == HTTPStatus.OK
-
-        with get_db_context() as (db_conn, db):
-            Video, Channel = db['video'], db['channel']
-            self.assertEqual(Channel.count(), 4)
-            self.assertGreater(Video.count(), 1)
-
-        messages = get_all_messages_in_queue(refresh_queue)
-        assert 'refresh-started' in messages
 
     @wrap_test_db
     def test_get_channels(self):

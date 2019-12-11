@@ -1,13 +1,26 @@
+import pathlib
+import tempfile
 import unittest
 from queue import Empty
+from shutil import copyfile
 from uuid import uuid1
 
 import mock
 import psycopg2
+import yaml
 from dictorm import DictDB
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
+from lib.api import api_app, attach_routes
 from lib.common import setup_relationships
+from lib.videos.api import refresh_queue, download_queue
+from lib.videos.common import EXAMPLE_CONFIG_PATH, get_config
+
+# Attach the default routes
+attach_routes(api_app)
+
+TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
+cwd = pathlib.Path(__file__).parents[3]
 
 
 def wrap_test_db(func):
@@ -90,3 +103,23 @@ class ExtendedTestCase(unittest.TestCase):
     @staticmethod
     def assertDictContains(d1: dict, d2: dict):
         assert set(d2.items()).issubset(set(d1.items()))
+
+
+class TestAPI(ExtendedTestCase):
+
+    def setUp(self) -> None:
+        self.patch = mock.patch('lib.videos.common.CONFIG_PATH', TEST_CONFIG_PATH.name)
+        self.patch.start()
+        # Copy the example config to test against
+        copyfile(str(EXAMPLE_CONFIG_PATH), TEST_CONFIG_PATH.name)
+        # Setup the testing video root directory
+        config = get_config()
+        config['downloader']['video_root_directory'] = cwd / 'test/example_videos'
+        with open(TEST_CONFIG_PATH.name, 'wt') as fh:
+            fh.write(yaml.dump(config))
+
+    def tearDown(self) -> None:
+        self.patch.stop()
+        # Clear out any messages in queues
+        get_all_messages_in_queue(refresh_queue)
+        get_all_messages_in_queue(download_queue)

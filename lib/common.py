@@ -7,7 +7,7 @@ from collections import namedtuple
 from functools import wraps
 from http import HTTPStatus
 from multiprocessing import Event, Queue
-from typing import Tuple
+from typing import Tuple, Union
 from urllib.parse import urlunsplit
 from uuid import UUID
 
@@ -254,7 +254,12 @@ def make_progress_calculator(total):
     return progress_calculator
 
 
-def validate_data(model, data):
+def validate_data(model: type, data: dict):
+    """
+    Convert a JSON object to the model's specification.  If the JSON object matches the model's specification, this
+    function will return a python dict of that data.  If it doesn't match, this will return a Sanic response object
+    containing an error.
+    """
     if not data:
         return response.json({'error': 'No data found in body'}, HTTPStatus.BAD_REQUEST)
 
@@ -262,7 +267,7 @@ def validate_data(model, data):
     # Get the public attributes of the model
     attrs = [i for i in dir(model) if not str(i).startswith('__')]
     # Convert each json value to it's respective doc field's python type
-    #  i.e. doc.String -> str
+    #  i.e. "json value" -> doc.String -> str
     missing_fields = []
     for attr in attrs:
         field = getattr(model, attr)
@@ -309,7 +314,7 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
         def wrapped(request, *a, **kw):
             if consumes:
                 if 'data' in kw:
-                    raise ValueError(f'data kwarg already being passed to {func}')
+                    raise OverflowError(f'data kwarg already being passed to {func}')
 
                 data = validate_data(consumes, request.json)
                 if isinstance(data, sanic.response.HTTPResponse):

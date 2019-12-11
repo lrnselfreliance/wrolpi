@@ -66,7 +66,7 @@ def index(request):
     return response.html(html)
 
 
-root_api = Blueprint('echo_api_bp')
+root_api = Blueprint('Root API')
 
 
 class EchoResponse:
@@ -91,6 +91,7 @@ async def echo(request: Request):
         headers=dict(request.headers),
         json=request.json,
         method=request.method,
+        args=request.args,
     )
     return response.json(ret)
 

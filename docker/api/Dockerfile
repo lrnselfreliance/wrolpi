@@ -5,7 +5,7 @@ ENV DOCKER=true
 COPY requirements.txt /opt/wrolpi/
 COPY lib /opt/wrolpi/lib
 # Install dependencies
-RUN find /opt/wrolpi -name requirements.txt -exec pip install --upgrade -r {} \;
+RUN find /opt/wrolpi -name requirements.txt -exec pip install --upgrade -q -r {} \;
 
 # Run the webserver
 WORKDIR /opt/wrolpi

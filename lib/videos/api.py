@@ -408,7 +408,7 @@ def refresh_channel_videos(db, channel):
     query = 'SELECT id FROM video WHERE channel_id=%s AND caption IS NULL AND caption_path IS NOT NULL'
     curs.execute(query, (channel['id'],))
     missing_captions = [i for (i,) in curs.fetchall()]
-    calc_progress = make_progress_calculator(missing_captions)
+    calc_progress = make_progress_calculator(len(missing_captions))
     Video = db['video']
     for idx, video_id in enumerate(missing_captions):
         video = Video.get_one(id=video_id)

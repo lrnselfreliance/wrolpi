@@ -199,16 +199,16 @@ def create_websocket_feed(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT
 
     @blueprint.websocket(uri)
     async def local_websocket(_: Request, ws: WebSocket):
-        while q.qsize() or event.is_set():
+        while event.is_set():
             # Pass along messages from the queue until its empty, or the event is cleared.  Give up after 1 second so
             # the worker can take another request.
             try:
                 msg = q.get(timeout=1)
+                dump = json.dumps(msg)
+                await ws.send(dump)
             except queue.Empty:
-                # No more messages
-                break
-            dump = json.dumps(msg)
-            await ws.send(dump)
+                # No messages yet, try again while event is set
+                pass
 
         # No messages left, stream is complete
         await ws.send(json.dumps({'message': 'stream-complete'}))

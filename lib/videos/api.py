@@ -26,15 +26,16 @@ import asyncio
 import pathlib
 from functools import wraps
 from http import HTTPStatus
+from multiprocessing import Queue
 from uuid import uuid1
 
-from dictorm import DictDB
+from dictorm import DictDB, Dict
 from sanic import Blueprint, response
 from sanic.exceptions import abort
 from sanic.request import Request
 
 from lib.common import sanitize_link, boolean_arg, create_websocket_feed, get_sanic_url, \
-    make_progress_calculator, validate_doc
+    make_progress_calculator, validate_doc, FeedReporter
 from lib.db import get_db_context
 from .captions import process_captions
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
@@ -99,15 +100,13 @@ async def refresh(_):
         return response.json({'error': 'Refresh already running'}, HTTPStatus.BAD_REQUEST)
 
     refresh_event.set()
-    refresh_queue.put('refresh-started')
 
     async def do_refresh():
         try:
             refresh_logger.info('refresh started')
 
             with get_db_context(commit=True) as (db_conn, db):
-                for msg in _refresh_videos(db):
-                    refresh_queue.put(msg)
+                _refresh_videos(db, refresh_queue)
 
             refresh_logger.info('refresh complete')
         except Exception as e:
@@ -361,11 +360,12 @@ async def media_file(request: Request, hash: str):
         abort(404, f"Can't find {kind} by that ID.")
 
 
-def refresh_channel_videos(db, channel):
+def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
     """
     Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
     """
-    yield {'progress2': 0}
+    reporter.set_progress(1, 0)
+
     # Set the idempotency key so we can remove any videos not touched during this search
     curs = db.get_cursor()
     curs.execute('UPDATE video SET idempotency=NULL WHERE channel_id=%s', (channel['id'],))
@@ -374,7 +374,7 @@ def refresh_channel_videos(db, channel):
 
     # A set of absolute paths that exist in the file system
     possible_new_paths = set(generate_video_paths(directory))
-    yield {'message': 'Found all possible video files'}
+    reporter.message('Found all possible video files')
 
     # Update all videos that match the current video paths
     query = 'UPDATE video SET idempotency = %s WHERE channel_id = %s AND video_path = ANY(%s) RETURNING video_path'
@@ -390,7 +390,7 @@ def refresh_channel_videos(db, channel):
         logger.debug(f'{channel["name"]}: Added {video_path}')
         insert_video(db, pathlib.Path(video_path), channel, idempotency=idempotency)
 
-    yield {'message': 'Matched all existing video files'}
+    reporter.message('Matched all existing video files')
 
     curs.execute('DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL RETURNING id', (channel['id'],))
     deleted_count = curs.fetchall()
@@ -398,29 +398,29 @@ def refresh_channel_videos(db, channel):
         deleted_count = len(deleted_count)
         deleted_status = f'Deleted {deleted_count} video records from channel {channel["name"]}'
         logger.info(deleted_status)
-        yield {'message': deleted_status}
+        reporter.message(deleted_status)
 
     status = f'{channel["name"]}: {len(new_videos)} new videos, {len(existing_paths)} already existed. '
     logger.info(status)
-    yield {'message': status}
+    reporter.message(status)
 
     # Fill in any missing captions
     query = 'SELECT id FROM video WHERE channel_id=%s AND caption IS NULL AND caption_path IS NOT NULL'
     curs.execute(query, (channel['id'],))
     missing_captions = [i for (i,) in curs.fetchall()]
-    calc_progress = make_progress_calculator(len(missing_captions))
+    reporter.set_progress_total(1, len(missing_captions))
     Video = db['video']
     for idx, video_id in enumerate(missing_captions):
         video = Video.get_one(id=video_id)
         process_captions(video)
-        yield {'message': f'Processed captions for video {video_id}', 'progress2': calc_progress(idx)}
+        reporter.set_progress(1, idx, f'Processed captions for video {video_id}')
 
     status = f'Processed {len(missing_captions)} missing captions.'
     logger.info(status)
-    yield {'message': status, 'progress2': 100}
+    reporter.set_progress(1, len(missing_captions), status)
 
 
-def _refresh_videos(db: DictDB):
+def _refresh_videos(db: DictDB, q: Queue):
     """
     Find any videos in the channel directories and add them to the DB.  Delete DB records of any videos not in the
     file system.
@@ -433,12 +433,14 @@ def _refresh_videos(db: DictDB):
     logger.info('Refreshing video files')
     Channel = db['channel']
 
-    calc_progress = make_progress_calculator(Channel.count())
+    reporter = FeedReporter(q, 2)
+    reporter.set_progress_total(0, Channel.count())
+
     for idx, channel in enumerate(Channel.get_where()):
-        yield {'progress1': calc_progress(idx), 'message': f'Checking {channel["name"]} directory for new videos'}
+        reporter.set_progress(0, idx, f'Checking {channel["name"]} directory for new videos')
         with db.transaction(commit=True):
-            yield from refresh_channel_videos(db, channel)
-    yield {'progress1': 100, 'message': 'All videos refreshed.'}
+            refresh_channel_videos(db, channel, reporter)
+    reporter.set_progress(0, 100, 'All videos refreshed.')
 
 
 @wraps(_refresh_videos)

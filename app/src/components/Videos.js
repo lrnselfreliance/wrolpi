@@ -227,37 +227,153 @@ function AddChannel() {
     )
 }
 
+const streamMessages = [
+    'no-messages',
+    'stream-complete',
+    'stream-started',
+];
+
+function handleStream(stream_url, setAlertVariant, setAlertMessage, progresses) {
+    function setMessage(message) {
+        setAlertMessage(message);
+    }
+
+    function setProgresses(progresses_msg) {
+        for (let i = 0; i < progresses_msg.length; i++) {
+            // setProgressNow(now)
+            progresses[i](progresses_msg[i]['now']);
+        }
+    }
+
+    function setError(message) {
+        setAlertVariant('danger');
+        setAlertMessage(message);
+    }
+
+    function handleMessage(message) {
+        let data = JSON.parse(message.data);
+        if (data['error']) {
+            setError(data['error']);
+        } else if (data['message'] && !streamMessages.includes(data['message'])) {
+            setAlertVariant('success');
+            setMessage(data['message']);
+        }
+        if (data['progresses']) {
+            setProgresses(data['progresses'])
+        }
+    }
+
+    let ws = new WebSocket(stream_url);
+    window.onbeforeunload = (e) => (ws.close);
+    ws.onmessage = handleMessage;
+
+    return ws;
+}
+
+function AlertProgress(props) {
+
+    return (
+        <Row style={{'marginBottom': '1em'}}>
+            <Col className="col-5">
+                <Button onClick={props.onClick}>
+                    {props.buttonValue}
+                </Button>
+            </Col>
+            <Col className="col-7">
+                {props.description}
+                <Alert variant={props.alertVariant} show={props.alertMessage !== ''}
+                       style={{'marginTop': '1em'}}>
+                    {props.alertMessage}
+                </Alert>
+                <ProgressBar hidden={props.progressNow1 == null} now={props.progressNow1}/>
+                <ProgressBar hidden={props.progressNow2 == null} now={props.progressNow2}/>
+                <ProgressBar hidden={props.progressNow3 == null} now={props.progressNow3}/>
+            </Col>
+        </Row>
+    )
+}
+
+class RefreshContent extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            alertVariant: 'success',
+            alertMessage: '',
+            progressNow1: null,
+            progressNow2: null,
+            progressNow3: null,
+            websocket: null,
+        };
+
+        this.setAlertVariant = this.setAlertVariant.bind(this);
+        this.setAlertMessage = this.setAlertMessage.bind(this);
+        this.setProgressNow1 = this.setProgressNow1.bind(this);
+        this.setProgressNow2 = this.setProgressNow2.bind(this);
+        this.setProgressNow3 = this.setProgressNow3.bind(this);
+        this.onClick = this.onClick.bind(this);
+    }
+
+    componentWillUnmount() {
+        if (this.state.websocket) {
+            this.state.websocket.close();
+        }
+    }
+
+    setAlertVariant(variant) {
+        this.setState({'alertVariant': variant});
+    }
+
+    setAlertMessage(message) {
+        this.setState({'alertMessage': message});
+    }
+
+    setProgressNow1(key, now) {
+        this.setState({'progressNow1': now});
+    }
+
+    setProgressNow2(key, now) {
+        this.setState({'progressNow2': now});
+    }
+
+    setProgressNow3(key, now) {
+        this.setState({'progressNow3': now});
+    }
+
+    async onClick() {
+        let response = await fetch(`${VIDEOS_API}/settings:refresh`, {'method': 'POST'});
+        let data = await response.json();
+        if (data['success']) {
+            let stream_url = data['stream_url'];
+            let progresses = [this.setProgressNow1, this.setProgressNow3];
+            handleStream(stream_url, this.setAlertVariant, this.setAlertMessage, progresses);
+        }
+    }
+
+    render() {
+        return (
+            <AlertProgress
+                onClick={this.onClick}
+                buttonValue="Refresh Content"
+                description="Find and process all videos stored on this WROLPi."
+                progressNow1={this.state.progressNow1}
+                progressNow2={this.state.progressNow2}
+                progressNow3={this.state.progressNow3}
+            />
+        )
+    }
+}
+
 class ManageContent extends React.Component {
 
     constructor(props) {
         super(props);
         this.state = {
             show: false,
-            refreshMessage: '',
-            refreshError: false,
-            refreshProgress1: null,
-            refreshProgress2: null,
-            refreshDisabled: false,
-            downloadMessage: '',
-            downloadError: false,
-            downloadProgress: null,
-            downloadDisabled: false,
-            websockets: [],
         };
 
         this.handleClose = this.handleClose.bind(this);
         this.handleShow = this.handleShow.bind(this);
-        this.refreshContent = this.refreshContent.bind(this);
-        this.downloadVideos = this.downloadVideos.bind(this);
-    }
-
-    componentWillUnmount() {
-        let i = 0;
-        while (this.state.websockets[i]) {
-            let ws = this.state.websockets[i];
-            ws.close();
-            i++;
-        }
     }
 
     handleClose() {
@@ -266,101 +382,6 @@ class ManageContent extends React.Component {
 
     handleShow() {
         this.setState({'show': true});
-    }
-
-    handleStreamMessage(message, setMessage) {
-        if (message !== 'stream-complete') {
-            setMessage(message);
-        }
-    }
-
-    handleStream(stream_url, setMessage, setProgress, setError, setProgress1, setProgress2) {
-        let ws = new WebSocket(stream_url);
-        window.onbeforeunload = (e) => (ws.close);
-        ws.onmessage = (message) => {
-            let data = JSON.parse(message.data);
-            if (data['message']) {
-                this.handleStreamMessage(data['message'], setMessage);
-            }
-            if (Number.isInteger(data['progress'])) {
-                setProgress(data['progress']);
-            }
-            if (Number.isInteger(data['progress1'])) {
-                setProgress1(data['progress1']);
-            }
-            if (Number.isInteger(data['progress2'])) {
-                setProgress2(data['progress2']);
-            }
-            if (data['error']) {
-                setError(true);
-                setMessage(data['error']);
-            }
-        };
-        this.setState({'websockets': [ws].concat(this.state.websockets)});
-    }
-
-    async refreshContent() {
-        this.setState({'refreshDisabled': true});
-        let url = `${VIDEOS_API}/settings:refresh`;
-        let response = await fetch(url, {'method': 'POST'});
-        try {
-            let data = await response.json();
-            if (data.hasOwnProperty('success')) {
-                let stream_url = data['stream_url'];
-                this.setState({'refreshError': false});
-                await this.handleStream(
-                    stream_url,
-                    (v) => (this.setState({'refreshMessage': v})),
-                    null,
-                    (v) => (this.setState({'refreshError': v})),
-                    (v) => (this.setState({'refreshProgress1': v})),
-                    (v) => (this.setState({'refreshProgress2': v})),
-                );
-            } else {
-                this.setState({
-                    'refreshMessage': 'Failed to refresh content, see server logs.',
-                    'refreshError': true
-                })
-            }
-        } catch (e) {
-            this.setState({
-                'refreshMessage': 'Server did not respond as expected, see server logs.',
-                'refreshError': true,
-            });
-            throw e;
-        }
-        this.setState({'refreshDisabled': false});
-    }
-
-    async downloadVideos() {
-        this.setState({'downloadDisabled': true});
-        let url = `${VIDEOS_API}/settings:download`;
-        let response = await fetch(url, {'method': 'POST'});
-        try {
-            let data = await response.json();
-            if (data.hasOwnProperty('success')) {
-                let stream_url = data['stream_url'];
-                this.setState({'downloadError': false});
-                await this.handleStream(
-                    stream_url,
-                    (v) => (this.setState({'downloadMessage': v})),
-                    (v) => (this.setState({'downloadProgress': v})),
-                    (v) => (this.setState({'downloadError': v})),
-                );
-            } else {
-                this.setState({
-                    'downloadMessage': 'Failed to download videos, see server logs.',
-                    'downloadError': true
-                })
-            }
-        } catch (e) {
-            this.setState({
-                'downloadMessage': 'Server did not respond as expected, see server logs.',
-                'downloadError': true,
-            });
-            throw e;
-        }
-        this.setState({'downloadDisabled': false});
     }
 
     render() {
@@ -380,56 +401,7 @@ class ManageContent extends React.Component {
                         <Modal.Title>Manage Video Content</Modal.Title>
                     </Modal.Header>
                     <Modal.Body>
-                        <Row style={{'marginBottom': '1em'}}>
-                            <Col className="col-5">
-                                <Button onClick={this.refreshContent} disabled={this.state.refreshDisabled}>
-                                    Refresh Content
-                                </Button>
-                            </Col>
-                            <Col className="col-7">
-                                <Row websocket={this.ws}>
-                                    <Col>
-                                        Find and process all videos stored on this WROLPi.
-                                    </Col>
-                                </Row>
-                                <Alert
-                                    variant={(this.state.refreshError ? 'danger' : 'success')}
-                                    hidden={(!this.state.refreshMessage)}
-                                >
-                                    {this.state.refreshMessage}
-                                </Alert>
-                                <ProgressBar striped variant={(this.state.refreshError ? 'danger' : 'primary')}
-                                             now={this.state.refreshProgress1}
-                                             hidden={(this.state.refreshProgress1 == null)}
-                                />
-                                <ProgressBar striped variant={(this.state.refreshError ? 'danger' : 'info')}
-                                             now={this.state.refreshProgress2}
-                                             hidden={(this.state.refreshProgress2 == null)}
-                                />
-                            </Col>
-                        </Row>
-                        <Row style={{'marginBottom': '1em'}}>
-                            <Col className="col-5">
-                                <Button onClick={this.downloadVideos}>Download Videos</Button>
-                            </Col>
-                            <Col className="col-7">
-                                <Row websocket={this.ws}>
-                                    <Col>
-                                        Update channel catalogs and download all videos not yet downloaded.
-                                    </Col>
-                                </Row>
-                                <Alert
-                                    variant={(this.state.downloadError ? 'danger' : 'success')}
-                                    hidden={(!this.state.downloadMessage)}
-                                >
-                                    {this.state.downloadMessage}
-                                </Alert>
-                                <ProgressBar striped variant={(this.state.downloadError ? 'danger' : 'info')}
-                                             now={this.state.downloadProgress}
-                                             hidden={(this.state.downloadProgress == null)}
-                                />
-                            </Col>
-                        </Row>
+                        <RefreshContent/>
                     </Modal.Body>
                     <Modal.Footer>
                         <Button variant="secondary" onClick={this.handleClose}>
@@ -586,11 +558,12 @@ class Videos extends React.Component {
     breadcrumbs() {
         return (
             <Breadcrumb>
-                <Breadcrumb.Item>
+                {/* use li so we can link with a */}
+                <li className="breadcrumb-item">
                     <Link to='/videos'>Videos</Link>
-                </Breadcrumb.Item>
-                <Route path='/videos/:channel_link' exact="true" component={VideoBreadcrumb}/>
-                <Route path='/videos/:channel_link/:video_hash' exact="true" component={VideoBreadcrumb}/>
+                </li>
+                <Route path='/videos/:channel_link' exact={true} component={VideoBreadcrumb}/>
+                <Route path='/videos/:channel_link/:video_hash' exact={true} component={VideoBreadcrumb}/>
             </Breadcrumb>
         )
     }

@@ -7,7 +7,7 @@ from collections import namedtuple
 from functools import wraps
 from http import HTTPStatus
 from multiprocessing import Event, Queue
-from typing import Tuple, Union
+from typing import Tuple
 from urllib.parse import urlunsplit
 from uuid import UUID
 
@@ -204,11 +204,13 @@ def create_websocket_feed(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT
     async def local_websocket(_: Request, ws: WebSocket):
         feed_logger.info(f'client connected to {ws}')
         feed_logger.debug(f'event.is_set: {event.is_set()}')
-        while event.is_set():
+        any_messages = False
+        while q.qsize() or event.is_set():
             # Pass along messages from the queue until its empty, or the event is cleared.  Give up after 1 second so
             # the worker can take another request.
             try:
                 msg = q.get(timeout=QUEUE_TIMEOUT)
+                any_messages = True
                 feed_logger.debug(f'got message {msg}')
                 dump = json.dumps(msg)
                 await ws.send(dump)
@@ -217,6 +219,9 @@ def create_websocket_feed(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT
                 feed_logger.debug(f'no messages in queue')
                 pass
         feed_logger.debug(f'loop complete')
+
+        if any_messages is False:
+            await ws.send(json.dumps({'message': 'no-messages'}))
 
         # No messages left, stream is complete
         await ws.send(json.dumps({'message': 'stream-complete'}))
@@ -256,7 +261,10 @@ def make_progress_calculator(total):
     Create a function that calculates the percentage of completion.
     """
 
-    def progress_calculator(current):
+    def progress_calculator(current) -> int:
+        if current >= total:
+            # Progress doesn't make sense, just return 100
+            return 100
         return int((current / total) * 100)
 
     return progress_calculator
@@ -347,3 +355,30 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
         return wrapped
 
     return wrapper
+
+
+class FeedReporter:
+    """
+    I am used to consistently send messages and progress(s) to a Websocket Feed.
+    """
+
+    def __init__(self, q: Queue, progress_count: int = 1):
+        self.queue: Queue = q
+        self.progresses = [{'now': 0, 'total': 0} for _ in range(progress_count)]
+        self.calculators = [lambda _: None for _ in range(progress_count)]
+
+    def message(self, msg: str):
+        msg = {'message': msg, 'progresses': self.progresses}
+        self.queue.put(msg)
+
+    def error(self, msg: str):
+        msg = {'error': msg, 'progresses': self.progresses}
+        self.queue.put(msg)
+
+    def set_progress_total(self, idx: int, total: int):
+        self.progresses[idx]['total'] = total
+        self.calculators[idx] = make_progress_calculator(total)
+
+    def set_progress(self, idx: int, progress: int, message: str = None):
+        self.progresses[idx]['now'] = self.calculators[idx](progress)
+        self.queue.put({'progresses': self.progresses, 'message': message})

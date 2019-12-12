@@ -453,7 +453,6 @@ def refresh_videos_with_db():
 
 
 def video_search(db_conn, db: DictDB, search_str: str, offset: int):
-    offset = offset or 0
     curs = db_conn.cursor()
 
     query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)) FROM video WHERE ' \
@@ -492,13 +491,13 @@ def channel_search(db_conn, db: DictDB, search_str: str, offset: int):
 )
 def search(request: Request, data: dict):
     search_str = data['search_str']
-    offset = data.get('offset')
+    offset = int(data.get('offset', 0))
 
     if not search_str:
         return response.json({'error': 'search_str must have contents'})
 
     # ts_query accepts a pipe & as an "and" between keywords, we'll just assume any spaces mean "and"
-    tsquery = '&'.join(search_str.split(' '))
+    tsquery = ' & '.join(search_str.split(' '))
 
     with get_db_context() as (db_conn, db):
         videos = video_search(db_conn, db, tsquery, offset)

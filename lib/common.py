@@ -184,6 +184,8 @@ async def download_file(url: str, size: int, destination: str):
 
 DEFAULT_QUEUE_SIZE = 1000
 
+feed_logger = logger.getChild('feeds')
+
 
 def create_websocket_feed(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT_QUEUE_SIZE):
     """
@@ -199,16 +201,21 @@ def create_websocket_feed(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT
 
     @blueprint.websocket(uri)
     async def local_websocket(_: Request, ws: WebSocket):
+        feed_logger.info(f'client connected to {ws}')
+        feed_logger.debug(f'event.is_set: {event.is_set()}')
         while event.is_set():
             # Pass along messages from the queue until its empty, or the event is cleared.  Give up after 1 second so
             # the worker can take another request.
             try:
                 msg = q.get(timeout=1)
+                feed_logger.debug(f'got message {msg}')
                 dump = json.dumps(msg)
                 await ws.send(dump)
             except queue.Empty:
                 # No messages yet, try again while event is set
+                feed_logger.debug(f'no messages in queue')
                 pass
+        feed_logger.debug(f'loop complete')
 
         # No messages left, stream is complete
         await ws.send(json.dumps({'message': 'stream-complete'}))

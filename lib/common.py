@@ -183,6 +183,7 @@ async def download_file(url: str, size: int, destination: str):
 
 
 DEFAULT_QUEUE_SIZE = 1000
+QUEUE_TIMEOUT = 10
 
 feed_logger = logger.getChild('feeds')
 
@@ -207,7 +208,7 @@ def create_websocket_feed(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT
             # Pass along messages from the queue until its empty, or the event is cleared.  Give up after 1 second so
             # the worker can take another request.
             try:
-                msg = q.get(timeout=1)
+                msg = q.get(timeout=QUEUE_TIMEOUT)
                 feed_logger.debug(f'got message {msg}')
                 dump = json.dumps(msg)
                 await ws.send(dump)

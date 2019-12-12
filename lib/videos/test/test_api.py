@@ -332,6 +332,7 @@ class TestVideoAPI(TestAPI):
             assert resp.status_code == HTTPStatus.OK
             response_ids = [i['id'] for i in resp.json['videos']]
             assert response_ids == expected
+            assert resp.json['totals']['videos'] == len(expected)
 
         # No search_str, get an error
         response = do_search('')
@@ -362,3 +363,9 @@ class TestVideoAPI(TestAPI):
         # video 1 and 4 have b and e, but 1 has more
         response = do_search('b e')
         search_is_as_expected(response, [1, 4])
+
+        # Check totals are correct even with a limit
+        with mock.patch('lib.videos.api.VIDEO_QUERY_LIMIT', 2):
+            response = do_search('b')
+            assert [i['id'] for i in response.json['videos']] == [1, 2]
+            assert response.json['totals']['videos'] == 4

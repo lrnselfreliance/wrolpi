@@ -20,6 +20,8 @@ CONFIG_PATH = MY_DIR / 'local.yaml'
 EXAMPLE_CONFIG_PATH = MY_DIR / 'example.yaml'
 REQUIRED_OPTIONS = ['name', 'directory']
 
+VIDEO_QUERY_LIMIT = 20
+
 
 def get_config() -> dict:
     config_path = CONFIG_PATH if Path(CONFIG_PATH).exists() else EXAMPLE_CONFIG_PATH
@@ -245,7 +247,7 @@ def get_channel_videos(db: DictDB, link: str, offset: int = 0):
     if not channel:
         raise UnknownChannel('Unknown Channel')
     videos = Video.get_where(channel_id=channel['id']).order_by(
-        'upload_date DESC, LOWER(title) DESC, LOWER(video_path) DESC').limit(20).offset(offset)
+        'upload_date DESC, LOWER(title) DESC, LOWER(video_path) DESC').limit(VIDEO_QUERY_LIMIT).offset(offset)
     return videos
 
 

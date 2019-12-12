@@ -38,7 +38,7 @@ from lib.common import sanitize_link, boolean_arg, create_websocket_feed, get_sa
 from lib.db import get_db_context
 from .captions import process_captions
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
-    get_absolute_channel_directory, UnknownDirectory, get_channel_videos, UnknownChannel
+    get_absolute_channel_directory, UnknownDirectory, get_channel_videos, UnknownChannel, VIDEO_QUERY_LIMIT
 from .common import get_conflicting_channels, get_absolute_video_path, UnknownFile
 from .common import logger
 from .downloader import insert_video, update_channels, download_all_missing_videos
@@ -452,35 +452,40 @@ def refresh_videos_with_db():
         return refresh_videos(db)
 
 
-def video_search(db_conn, db: DictDB, search_str: str, offset: int):
+async def video_search(db_conn, db: DictDB, search_str: str, offset: int):
     curs = db_conn.cursor()
 
-    query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)) FROM video WHERE ' \
-            'textsearch @@ to_tsquery(%s) ORDER BY 2 DESC OFFSET %s LIMIT 20'
+    query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)), COUNT(*) OVER() AS total ' \
+            f'FROM video WHERE textsearch @@ to_tsquery(%s) ORDER BY 2 DESC OFFSET %s LIMIT {VIDEO_QUERY_LIMIT}'
     curs.execute(query, (search_str, search_str, offset))
-    ranked_ids = [i[0] for i in curs.fetchall()]
+    results = list(curs.fetchall())
+    total = results[0][2] if results else 0
+    ranked_ids = [i[0] for i in results]
 
     results = []
     if ranked_ids:
         Video = db['video']
         results = Video.get_where(Video['id'].In(ranked_ids))
         results = sorted(results, key=lambda r: ranked_ids.index(r['id']))
-    return results
+    return results, total
 
 
-def channel_search(db_conn, db: DictDB, search_str: str, offset: int):
+async def channel_search(db_conn, db: DictDB, search_str: str, offset: int):
     curs = db_conn.cursor()
 
-    query = 'SELECT id FROM channel WHERE name ILIKE %s ORDER BY LOWER(name) DESC OFFSET %s LIMIT 20'
+    query = 'SELECT id, COUNT(*) OVER() as total ' \
+            f'FROM channel WHERE name ILIKE %s ORDER BY LOWER(name) DESC OFFSET %s LIMIT {VIDEO_QUERY_LIMIT}'
     curs.execute(query, (f'%{search_str}%', offset))
-    ids = [i[0] for i in curs.fetchall()]
+    results = list(curs.fetchall())
+    total = results[0][1] if results else 0
+    ids = [i[0] for i in results]
 
     results = []
     if ids:
         Channel = db['channel']
         results = Channel.get_where(Channel['id'].In(ids))
         results = list(results)
-    return results
+    return results, total
 
 
 @api_bp.post('/search')
@@ -489,7 +494,7 @@ def channel_search(db_conn, db: DictDB, search_str: str, offset: int):
     consumes=VideoSearchRequest,
     produces=VideoSearchResponse,
 )
-def search(request: Request, data: dict):
+async def search(request: Request, data: dict):
     search_str = data['search_str']
     offset = int(data.get('offset', 0))
 
@@ -500,7 +505,10 @@ def search(request: Request, data: dict):
     tsquery = ' & '.join(search_str.split(' '))
 
     with get_db_context() as (db_conn, db):
-        videos = video_search(db_conn, db, tsquery, offset)
-        channels = channel_search(db_conn, db, tsquery, offset)
+        videos_coro = video_search(db_conn, db, tsquery, offset)
+        channels_coro = channel_search(db_conn, db, tsquery, offset)
+        (videos, videos_total), (channels, channels_total) = await asyncio.gather(videos_coro, channels_coro)
 
-    return response.json({'videos': videos, 'channels': channels, 'tsquery': tsquery})
+    ret = {'videos': videos, 'channels': channels, 'tsquery': tsquery,
+           'totals': {'videos': videos_total, 'channels': channels_total}}
+    return response.json(ret)

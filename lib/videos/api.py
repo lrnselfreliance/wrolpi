@@ -497,8 +497,8 @@ def search(request: Request, data: dict):
     if not search_str:
         return response.json({'error': 'search_str must have contents'})
 
-    # ts_query accepts a pipe | as an "or" between keywords, we'll just assume any spaces mean "or"
-    search_str = '|'.join(search_str.split(' '))
+    # ts_query accepts a pipe & as an "and" between keywords, we'll just assume any spaces mean "and"
+    search_str = '&'.join(search_str.split(' '))
 
     with get_db_context() as (db_conn, db):
         videos = video_search(db_conn, db, search_str, offset)

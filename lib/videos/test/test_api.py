@@ -331,8 +331,8 @@ class TestVideoAPI(TestAPI):
 
         def search_is_as_expected(response, expected):
             assert response.status_code == HTTPStatus.OK
-            for resp_vid, exp_id in zip_longest(response.json['videos'], expected):
-                assert resp_vid['id'] == exp_id
+            response_ids = [i['id'] for i in response.json['videos']]
+            assert response_ids == expected
 
         # No search_str, get an error
         response = do_search('')
@@ -356,10 +356,10 @@ class TestVideoAPI(TestAPI):
         response = do_search('5')
         search_is_as_expected(response, [5])
 
-        # Two videos don't have to be identical
-        response = do_search('3 5')
-        search_is_as_expected(response, [3, 5])
+        # only video 1 has e and d
+        response = do_search('e d')
+        search_is_as_expected(response, [1])
 
-        # enough '2' in video 2 that it ranks higher than video 1
-        response = do_search('2 b')
-        search_is_as_expected(response, [2, 1, 3, 4])
+        # video 1 and 4 have b and e, but 1 has more
+        response = do_search('b e')
+        search_is_as_expected(response, [1, 4])

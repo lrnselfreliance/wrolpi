@@ -2,7 +2,6 @@ import json
 import pathlib
 import tempfile
 from http import HTTPStatus
-from itertools import zip_longest
 from queue import Empty
 
 import mock
@@ -184,7 +183,7 @@ class TestVideoAPI(TestAPI):
 
             # Finally, call the refresh.  Again, it should remove the "foo" video, then discover this 3rd video
             # file and it's description.
-            request, response = api_app.test_client.post('/api/videos/settings:refresh')
+            api_app.test_client.post('/api/videos/settings:refresh')
 
             # Bogus file was removed
             self.assertNotIn('foo', {i['video_path'] for i in channel['videos']})
@@ -329,9 +328,9 @@ class TestVideoAPI(TestAPI):
             _, resp = api_app.test_client.post('/api/videos/search', data=d)
             return resp
 
-        def search_is_as_expected(response, expected):
-            assert response.status_code == HTTPStatus.OK
-            response_ids = [i['id'] for i in response.json['videos']]
+        def search_is_as_expected(resp, expected):
+            assert resp.status_code == HTTPStatus.OK
+            response_ids = [i['id'] for i in resp.json['videos']]
             assert response_ids == expected
 
         # No search_str, get an error

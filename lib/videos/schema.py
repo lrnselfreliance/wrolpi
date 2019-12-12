@@ -90,6 +90,8 @@ class VideoSearchRequest:
 
 class VideoSearchResponse:
     videos = doc.List(Video)
+    channels = doc.List(ChannelModel)
+    tsquery = doc.String()
 
 
 class PaginationQuery:

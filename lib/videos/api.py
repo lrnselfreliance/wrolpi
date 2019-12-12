@@ -486,7 +486,7 @@ def channel_search(db_conn, db: DictDB, search_str: str, offset: int):
 
 @api_bp.post('/search')
 @validate_doc(
-    summary='Search Video titles and captions, search Channel titles.',
+    summary='Search Video titles and captions, search Channel names.',
     consumes=VideoSearchRequest,
     produces=VideoSearchResponse,
 )
@@ -498,10 +498,10 @@ def search(request: Request, data: dict):
         return response.json({'error': 'search_str must have contents'})
 
     # ts_query accepts a pipe & as an "and" between keywords, we'll just assume any spaces mean "and"
-    search_str = '&'.join(search_str.split(' '))
+    tsquery = '&'.join(search_str.split(' '))
 
     with get_db_context() as (db_conn, db):
-        videos = video_search(db_conn, db, search_str, offset)
-        channels = channel_search(db_conn, db, search_str, offset)
+        videos = video_search(db_conn, db, tsquery, offset)
+        channels = channel_search(db_conn, db, tsquery, offset)
 
-    return response.json({'videos': videos, 'channels': channels, 'search_str': search_str})
+    return response.json({'videos': videos, 'channels': channels, 'tsquery': tsquery})

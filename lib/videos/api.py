@@ -35,7 +35,7 @@ from sanic.exceptions import abort
 from sanic.request import Request
 
 from lib.common import sanitize_link, boolean_arg, create_websocket_feed, get_sanic_url, \
-    make_progress_calculator, validate_doc, FeedReporter
+    validate_doc, FeedReporter
 from lib.db import get_db_context
 from .captions import process_captions
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
@@ -236,6 +236,10 @@ def channel_post(request: Request, data: dict):
     summary='Update a Channel',
     consumes=ChannelPutRequest,
     produces=SuccessResponse,
+    responses=(
+            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
+            (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
+    ),
     tag='Channel',
 )
 def channel_put(request: Request, link: str, data: dict):
@@ -246,14 +250,14 @@ def channel_put(request: Request, link: str, data: dict):
         existing_channel = Channel.get_one(link=link)
 
         if not existing_channel:
-            return response.json({'error': 'Unknown channel'}, 404)
+            return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
 
         # Only update directory if it was empty
         if data['directory'] and not existing_channel['directory']:
             try:
                 data['directory'] = get_absolute_channel_directory(data['directory'])
             except UnknownDirectory:
-                return response.json({'error': 'Unknown directory'}, 404)
+                return response.json({'error': 'Unknown directory'}, HTTPStatus.NOT_FOUND)
         else:
             data['directory'] = existing_channel['directory']
         data['directory'] = str(data['directory'])
@@ -268,7 +272,7 @@ def channel_put(request: Request, link: str, data: dict):
             directory=data['directory'],
         )
         if list(conflicting_channels):
-            return response.json({'error': 'Channel Name or URL already taken'}, 400)
+            return response.json({'error': 'Channel Name or URL already taken'}, HTTPStatus.BAD_REQUEST)
 
         existing_channel['url'] = data['url']
         existing_channel['name'] = data['name']
@@ -296,7 +300,7 @@ def channel_delete(request, link: str):
         return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
     with db.transaction(commit=True):
         channel.delete()
-    return response.json({'success': 'Channel deleted'})
+    return response.raw(None, HTTPStatus.NO_CONTENT)
 
 
 @api_bp.get('/channel/<link:string>/videos')

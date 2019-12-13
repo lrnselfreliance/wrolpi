@@ -98,7 +98,7 @@ class TestVideoAPI(TestAPI):
 
         # Delete the new channel
         request, response = api_app.test_client.delete(location)
-        assert response.status_code == HTTPStatus.OK
+        assert response.status_code == HTTPStatus.NO_CONTENT
 
         # Cant delete it again
         request, response = api_app.test_client.delete(location)

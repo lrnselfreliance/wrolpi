@@ -13,6 +13,7 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from lib.api import api_app, attach_routes
 from lib.common import setup_relationships
+from lib.vars import DOCKERIZED
 from lib.videos.api import refresh_queue, download_queue
 from lib.videos.common import EXAMPLE_CONFIG_PATH, get_config
 
@@ -37,6 +38,10 @@ def wrap_test_db(func):
             host='127.0.0.1',
             port=54321,
         )
+
+        if DOCKERIZED:
+            db_args['host'] = 'db'
+            db_args['port'] = 5432
 
         # Every test gets it's own DB
         suffix = str(uuid1()).replace('-', '')

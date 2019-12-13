@@ -1,14 +1,12 @@
 version: '3'
 services:
   db:
-    container_name: wrolpi_db
     build:
       context: .
       dockerfile: docker/db/Dockerfile
     ports:
       - 54321:5432  # for local development
   api:
-    container_name: wrolpi_api
     depends_on:
       - db
     build:
@@ -23,7 +21,6 @@ services:
       # config to match this directory.
       # - /media/8TB:/opt/wrolpi_media
   app:
-    container_name: wrolpi_app
     depends_on:
       - api
     build:
@@ -34,14 +31,12 @@ services:
     volumes:
       - './app:/app'
   map:
-    container_name: wrolpi_openstreetmap
     depends_on:
       - map_db
     build:
       context: .
       dockerfile: docker/map/Dockerfile
   map_db:
-    container_name: wrolpi_map_db
     build:
       context: .
       dockerfile: docker/map_db/Dockerfile

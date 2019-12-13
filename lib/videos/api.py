@@ -434,6 +434,7 @@ def _refresh_videos(db: DictDB, q: Queue):
     Channel = db['channel']
 
     reporter = FeedReporter(q, 2)
+    reporter.message('refresh-started')
     reporter.set_progress_total(0, Channel.count())
 
     for idx, channel in enumerate(Channel.get_where()):

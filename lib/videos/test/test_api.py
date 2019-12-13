@@ -203,7 +203,7 @@ class TestVideoAPI(TestAPI):
 
         # During the refresh process, messages are pushed to a queue, make sure there are messages there
         messages = get_all_messages_in_queue(refresh_queue)
-        assert 'refresh-started' in messages
+        assert 'refresh-started' in [i['message'] for i in messages]
 
     @wrap_test_db
     def test_get_channel_videos(self):

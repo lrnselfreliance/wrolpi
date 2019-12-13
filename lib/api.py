@@ -109,11 +109,8 @@ def attach_routes(app):
     ROUTES_ATTACHED = True
     # routes: /api/*
     blueprints = []
-    for module in MODULES.values():
-        if hasattr(module, 'api_bp_group'):
-            blueprints.append(module.api_bp_group)
-        else:
-            blueprints.append(module.api_bp)
+    # module.api_bp can be a Blueprint or BlueprintGroup
+    blueprints = [module.api_bp for module in MODULES.values()]
     api_group = Blueprint.group(*blueprints, root_api, url_prefix='/api')
     app.blueprint(api_group)
 

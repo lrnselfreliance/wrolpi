@@ -47,10 +47,10 @@ from .schema import DownloaderConfig, SuccessResponse, StreamResponse, \
     JSONErrorResponse
 
 content_bp = Blueprint('Video Content')
-api_bp_group = Blueprint('Videos').group(
+api_bp = Blueprint('Videos').group(
+    content_bp,  # view and manage video content and settings
     channel_bp,  # view and manage channels
     video_bp,    # view videos
-    content_bp,  # view and manage video content and settings
     url_prefix='/videos')
 
 

@@ -13,7 +13,7 @@ services:
       context: .
       dockerfile: docker/api/Dockerfile
     ports:
-      - 8080:8080  # for local development
+      - ${API_HOST}:${API_PORT}:8080  # for local development
     volumes:
       - .:/opt/wrolpi
       - .:/opt/wrolpi_media
@@ -27,7 +27,7 @@ services:
       context: .
       dockerfile: docker/app/Dockerfile
     ports:
-      - 3000:3000
+      - ${APP_HOST}:${APP_PORT}:3000
     volumes:
       - './app:/app'
   map:

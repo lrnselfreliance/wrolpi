@@ -100,7 +100,7 @@ ROUTES_ATTACHED = False
 
 
 def attach_routes(app):
-    """
+    """F
     Attach all module routes to the provided app.
     """
     global ROUTES_ATTACHED
@@ -108,7 +108,12 @@ def attach_routes(app):
         return
     ROUTES_ATTACHED = True
     # routes: /api/*
-    blueprints = [i.api_bp for i in MODULES.values()]
+    blueprints = []
+    for module in MODULES.values():
+        if hasattr(module, 'api_bp_group'):
+            blueprints.append(module.api_bp_group)
+        else:
+            blueprints.append(module.api_bp)
     api_group = Blueprint.group(*blueprints, root_api, url_prefix='/api')
     app.blueprint(api_group)
 

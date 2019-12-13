@@ -254,7 +254,7 @@ class TestVideoAPI(TestAPI):
         self.assertDictContains(response.json['video'], {'title': 'vidd'})
 
         with TemporaryVideo() as video_ctx, \
-                mock.patch('lib.videos.api.get_absolute_video_path', lambda *a, **kw: video_ctx):
+                mock.patch('lib.videos.video.get_absolute_video_path', lambda *a, **kw: video_ctx):
             # Get the contents of the video file
             _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}')
             assert response.status_code == HTTPStatus.OK
@@ -365,7 +365,7 @@ class TestVideoAPI(TestAPI):
         search_is_as_expected(response, [1, 4])
 
         # Check totals are correct even with a limit
-        with mock.patch('lib.videos.api.VIDEO_QUERY_LIMIT', 2):
+        with mock.patch('lib.videos.video.VIDEO_QUERY_LIMIT', 2):
             response = do_search('b')
             assert [i['id'] for i in response.json['videos']] == [1, 2]
             assert response.json['totals']['videos'] == 4

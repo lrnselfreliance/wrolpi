@@ -31,32 +31,34 @@ from uuid import uuid1
 
 from dictorm import DictDB, Dict
 from sanic import Blueprint, response
-from sanic.exceptions import abort
 from sanic.request import Request
 
-from lib.common import sanitize_link, boolean_arg, create_websocket_feed, get_sanic_url, \
+from lib.common import create_websocket_feed, get_sanic_url, \
     validate_doc, FeedReporter
 from lib.db import get_db_context
+from lib.videos.channel import channel_bp
+from lib.videos.video import video_bp
 from .captions import process_captions
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
-    get_absolute_channel_directory, UnknownDirectory, get_channel_videos, UnknownChannel, VIDEO_QUERY_LIMIT
-from .common import get_conflicting_channels, get_absolute_video_path, UnknownFile
+    get_absolute_channel_directory
 from .common import logger
 from .downloader import insert_video, update_channels, download_all_missing_videos
-from .schema import DownloaderConfig, ChannelPutRequest, ChannelsResponse, SuccessResponse, StreamResponse, \
-    JSONErrorResponse, \
-    ChannelResponse, ChannelPostResponse, ChannelVideosResponse, VideoSearchRequest, VideoSearchResponse, \
-    ChannelVideoResponse, ChannelPostRequest
+from .schema import DownloaderConfig, SuccessResponse, StreamResponse, \
+    JSONErrorResponse
 
-api_bp = Blueprint('Videos', url_prefix='/videos')
+content_bp = Blueprint('Video Content')
+api_bp_group = Blueprint('Videos').group(
+    channel_bp,  # view and manage channels
+    video_bp,    # view videos
+    content_bp,  # view and manage video content and settings
+    url_prefix='/videos')
 
 
-@api_bp.put('/settings')
+@content_bp.put('/settings')
 @validate_doc(
     summary='Update video settings config',
     consumes=DownloaderConfig,
     produces=SuccessResponse,
-    tag='Video Content',
 )
 def settings(request: Request, data: dict):
     downloader_config = get_downloader_config()
@@ -66,31 +68,16 @@ def settings(request: Request, data: dict):
     return response.json({'success': 'Settings saved'})
 
 
-@api_bp.get('/channels')
-@validate_doc(
-    summary='Get a list of all Channels',
-    produces=ChannelsResponse,
-    tag='Channel',
-)
-def get_channels(request: Request):
-    db: DictDB = request.ctx.get_db()
-    Channel = db['channel']
-    channels = Channel.get_where().order_by('LOWER(name) ASC')
-    channels = list(channels)
-    return response.json({'channels': channels})
+refresh_queue, refresh_event = create_websocket_feed('/feeds/refresh', content_bp)
 
 
-refresh_queue, refresh_event = create_websocket_feed('/feeds/refresh', api_bp)
-
-
-@api_bp.post('/settings:refresh')
+@content_bp.post('/settings:refresh')
 @validate_doc(
     summary='Search for videos that have previously been downloaded and stored.',
     produces=StreamResponse,
     responses=[
         (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
     ],
-    tag='Video Content',
 )
 async def refresh(_):
     refresh_logger = logger.getChild('refresh')
@@ -122,17 +109,16 @@ async def refresh(_):
     return response.json({'success': 'stream-started', 'stream_url': stream_url})
 
 
-download_queue, download_event = create_websocket_feed('/feeds/download', api_bp)
+download_queue, download_event = create_websocket_feed('/feeds/download', content_bp)
 
 
-@api_bp.post('/settings:download')
+@content_bp.post('/settings:download')
 @validate_doc(
     summary='Update channel catalogs, download any missing videos',
     produces=StreamResponse,
     responses=[
         (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
     ],
-    tag='Video Content',
 )
 async def download(_):
     download_logger = logger.getChild('download')
@@ -167,201 +153,6 @@ async def download(_):
     download_logger.debug('do_download scheduled')
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/download')
     return response.json({'success': 'stream-started', 'stream_url': stream_url})
-
-
-@api_bp.get('/channel/<link:string>')
-@validate_doc(
-    summary='Get a Channel',
-    produces=ChannelResponse,
-    responses=(
-            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
-    ),
-    tag='Channel',
-)
-def channel_get(request: Request, link: str):
-    db: DictDB = request.ctx.get_db()
-    Channel = db['channel']
-    channel = Channel.get_one(link=link)
-    logger.debug(f'channel_get.channel: {channel}')
-    if not channel:
-        return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
-    return response.json({'channel': channel})
-
-
-@api_bp.post('/channel')
-@validate_doc(
-    summary='Insert a Channel',
-    consumes=ChannelPostRequest,
-    responses=(
-            (HTTPStatus.CREATED, ChannelPostResponse),
-            (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
-    ),
-    tag='Channel',
-)
-def channel_post(request: Request, data: dict):
-    """Create a new channel"""
-    try:
-        data['directory'] = get_absolute_channel_directory(data['directory'])
-    except UnknownDirectory:
-        return response.json({'error': 'Unknown directory'}, HTTPStatus.BAD_REQUEST)
-
-    db: DictDB = request.ctx.get_db()
-    Channel = db['channel']
-
-    # Verify that the URL/Name/Link aren't taken
-    conflicting_channels = get_conflicting_channels(
-        db,
-        url=data.get('url'),
-        name_=data['name'],
-        link=sanitize_link(data['name']),
-    )
-    if conflicting_channels:
-        return response.json({'error': 'Channel Name or URL already taken'}, HTTPStatus.BAD_REQUEST)
-
-    with db.transaction(commit=True):
-        channel = Channel(
-            name=data['name'],
-            url=data.get('url'),
-            match=data.get('match_regex'),
-            link=sanitize_link(data['name']),
-        )
-        channel.flush()
-
-    return response.json({'success': 'Channel created successfully'}, HTTPStatus.CREATED,
-                         {'Location': f'/api/videos/channel/{channel["link"]}'})
-
-
-@api_bp.put('/channel/<link:string>')
-@validate_doc(
-    summary='Update a Channel',
-    consumes=ChannelPutRequest,
-    produces=SuccessResponse,
-    responses=(
-            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
-            (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
-    ),
-    tag='Channel',
-)
-def channel_put(request: Request, link: str, data: dict):
-    db: DictDB = request.ctx.get_db()
-    Channel = db['channel']
-
-    with db.transaction(commit=True):
-        existing_channel = Channel.get_one(link=link)
-
-        if not existing_channel:
-            return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
-
-        # Only update directory if it was empty
-        if data['directory'] and not existing_channel['directory']:
-            try:
-                data['directory'] = get_absolute_channel_directory(data['directory'])
-            except UnknownDirectory:
-                return response.json({'error': 'Unknown directory'}, HTTPStatus.NOT_FOUND)
-        else:
-            data['directory'] = existing_channel['directory']
-        data['directory'] = str(data['directory'])
-
-        # Verify that the URL/Name/Link aren't taken
-        conflicting_channels = get_conflicting_channels(
-            db=db,
-            id=existing_channel['id'],
-            url=data['url'],
-            name_=data['name'],
-            link=data['link'],
-            directory=data['directory'],
-        )
-        if list(conflicting_channels):
-            return response.json({'error': 'Channel Name or URL already taken'}, HTTPStatus.BAD_REQUEST)
-
-        existing_channel['url'] = data['url']
-        existing_channel['name'] = data['name']
-        existing_channel['directory'] = data['directory']
-        existing_channel['match_regex'] = data['match_regex']
-        existing_channel.flush()
-
-    return response.json({'success': 'The channel was updated successfully.'})
-
-
-@api_bp.delete('/channel/<link:string>')
-@validate_doc(
-    summary='Delete a Channel',
-    produces=SuccessResponse,
-    responses=(
-            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
-    ),
-    tag='Channel',
-)
-def channel_delete(request, link: str):
-    db: DictDB = request.ctx.get_db()
-    Channel = db['channel']
-    channel = Channel.get_one(link=link)
-    if not channel:
-        return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
-    with db.transaction(commit=True):
-        channel.delete()
-    return response.raw(None, HTTPStatus.NO_CONTENT)
-
-
-@api_bp.get('/channel/<link:string>/videos')
-@validate_doc(
-    summary='Get Channel Videos',
-    produces=ChannelVideosResponse,
-    responses=(
-            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
-    ),
-    tag='Channel',
-)
-def channel_videos(request, link: str):
-    offset = int(request.args.get('offset', 0))
-    db: DictDB = request.ctx.get_db()
-    try:
-        videos = get_channel_videos(db, link, offset)
-    except UnknownChannel:
-        return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
-
-    return response.json({'videos': list(videos)})
-
-
-@api_bp.get('/video/<video_hash:string>')
-@validate_doc(
-    summary='Get Video information',
-    produces=ChannelVideoResponse,
-    responses=(
-            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
-    ),
-)
-def video(request, video_hash: str):
-    db: DictDB = request.ctx.get_db()
-    Video = db['video']
-    video = Video.get_one(video_path_hash=video_hash)
-    if not video:
-        return response.json({'error': 'Unknown video'}, HTTPStatus.NOT_FOUND)
-    return response.json({'video': video})
-
-
-@api_bp.route('/static/video/<hash:string>')
-@api_bp.route('/static/poster/<hash:string>')
-@api_bp.route('/static/caption/<hash:string>')
-@validate_doc(
-    summary='Get a video/poster/caption file',
-)
-async def media_file(request: Request, hash: str):
-    db: DictDB = request.ctx.get_db()
-    download = boolean_arg(request, 'download')
-    Video = db['video']
-    # kind is enforced by the Sanic routes defined for this function
-    kind = str(request.path).split('/')[4]
-
-    try:
-        video = Video.get_one(video_path_hash=hash)
-        path = get_absolute_video_path(video, kind=kind)
-        if download:
-            return await response.file_stream(str(path), filename=path.name)
-        else:
-            return await response.file_stream(str(path))
-    except TypeError or KeyError or UnknownFile:
-        abort(404, f"Can't find {kind} by that ID.")
 
 
 def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
@@ -450,72 +241,10 @@ def _refresh_videos(db: DictDB, q: Queue):
 
 @wraps(_refresh_videos)
 def refresh_videos(db: DictDB):
-    return list(_refresh_videos(db))
+    return _refresh_videos(db, refresh_queue)
 
 
 @wraps(_refresh_videos)
 def refresh_videos_with_db():
     with get_db_context(commit=True) as (db_conn, db):
         return refresh_videos(db)
-
-
-async def video_search(db_conn, db: DictDB, search_str: str, offset: int):
-    curs = db_conn.cursor()
-
-    query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)), COUNT(*) OVER() AS total ' \
-            f'FROM video WHERE textsearch @@ to_tsquery(%s) ORDER BY 2 DESC OFFSET %s LIMIT {VIDEO_QUERY_LIMIT}'
-    curs.execute(query, (search_str, search_str, offset))
-    results = list(curs.fetchall())
-    total = results[0][2] if results else 0
-    ranked_ids = [i[0] for i in results]
-
-    results = []
-    if ranked_ids:
-        Video = db['video']
-        results = Video.get_where(Video['id'].In(ranked_ids))
-        results = sorted(results, key=lambda r: ranked_ids.index(r['id']))
-    return results, total
-
-
-async def channel_search(db_conn, db: DictDB, search_str: str, offset: int):
-    curs = db_conn.cursor()
-
-    query = 'SELECT id, COUNT(*) OVER() as total ' \
-            f'FROM channel WHERE name ILIKE %s ORDER BY LOWER(name) DESC OFFSET %s LIMIT {VIDEO_QUERY_LIMIT}'
-    curs.execute(query, (f'%{search_str}%', offset))
-    results = list(curs.fetchall())
-    total = results[0][1] if results else 0
-    ids = [i[0] for i in results]
-
-    results = []
-    if ids:
-        Channel = db['channel']
-        results = Channel.get_where(Channel['id'].In(ids))
-        results = list(results)
-    return results, total
-
-
-@api_bp.post('/search')
-@validate_doc(
-    summary='Search Video titles and captions, search Channel names.',
-    consumes=VideoSearchRequest,
-    produces=VideoSearchResponse,
-)
-async def search(request: Request, data: dict):
-    search_str = data['search_str']
-    offset = int(data.get('offset', 0))
-
-    if not search_str:
-        return response.json({'error': 'search_str must have contents'})
-
-    # ts_query accepts a pipe & as an "and" between keywords, we'll just assume any spaces mean "and"
-    tsquery = ' & '.join(search_str.split(' '))
-
-    with get_db_context() as (db_conn, db):
-        videos_coro = video_search(db_conn, db, tsquery, offset)
-        channels_coro = channel_search(db_conn, db, tsquery, offset)
-        (videos, videos_total), (channels, channels_total) = await asyncio.gather(videos_coro, channels_coro)
-
-    ret = {'videos': videos, 'channels': channels, 'tsquery': tsquery,
-           'totals': {'videos': videos_total, 'channels': channels_total}}
-    return response.json(ret)

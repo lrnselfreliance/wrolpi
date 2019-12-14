@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import queue
@@ -221,10 +222,10 @@ def create_websocket_feed(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT
         feed_logger.debug(f'loop complete')
 
         if any_messages is False:
-            await ws.send(json.dumps({'message': 'no-messages'}))
+            await ws.send(json.dumps({'code': 'no-messages'}))
 
         # No messages left, stream is complete
-        await ws.send(json.dumps({'message': 'stream-complete'}))
+        await ws.send(json.dumps({'code': 'stream-complete'}))
 
     return q, event
 
@@ -368,11 +369,15 @@ class FeedReporter:
         self.calculators = [lambda _: None for _ in range(progress_count)]
 
     def message(self, msg: str):
-        msg = {'message': msg, 'progresses': self.progresses}
+        msg = dict(message=msg, progresses=self.progresses)
         self.queue.put(msg)
 
     def error(self, msg: str):
-        msg = {'error': msg, 'progresses': self.progresses}
+        msg = dict(code='error', error=msg, progresses=self.progresses)
+        self.queue.put(msg)
+
+    def code(self, code: str):
+        msg = dict(code=code, progresses=self.progresses)
         self.queue.put(msg)
 
     def set_progress_total(self, idx: int, total: int):

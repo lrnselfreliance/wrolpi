@@ -106,7 +106,7 @@ async def refresh(_):
     asyncio.ensure_future(coro)
     refresh_logger.debug('do_refresh scheduled')
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/refresh')
-    return response.json({'success': 'stream-started', 'stream_url': stream_url})
+    return response.json({'code': 'stream-started', 'stream_url': stream_url})
 
 
 download_queue, download_event = create_websocket_feed('/feeds/download', content_bp)
@@ -152,7 +152,7 @@ async def download(_):
     asyncio.ensure_future(coro)
     download_logger.debug('do_download scheduled')
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/download')
-    return response.json({'success': 'stream-started', 'stream_url': stream_url})
+    return response.json({'code': 'stream-started', 'stream_url': stream_url})
 
 
 def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
@@ -229,7 +229,7 @@ def _refresh_videos(db: DictDB, q: Queue):
     Channel = db['channel']
 
     reporter = FeedReporter(q, 2)
-    reporter.message('refresh-started')
+    reporter.code('refresh-started')
     reporter.set_progress_total(0, Channel.count())
 
     for idx, channel in enumerate(Channel.get_where()):
@@ -237,6 +237,7 @@ def _refresh_videos(db: DictDB, q: Queue):
         with db.transaction(commit=True):
             refresh_channel_videos(db, channel, reporter)
     reporter.set_progress(0, 100, 'All videos refreshed.')
+    reporter.code('refresh-complete')
 
 
 @wraps(_refresh_videos)

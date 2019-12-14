@@ -227,11 +227,6 @@ function AddChannel() {
     )
 }
 
-const streamMessages = [
-    'no-messages',
-    'stream-complete',
-    'stream-started',
-];
 
 function handleStream(stream_url, setAlertVariant, setAlertMessage, setProgress) {
     function setMessage(message) {
@@ -247,7 +242,7 @@ function handleStream(stream_url, setAlertVariant, setAlertMessage, setProgress)
         let data = JSON.parse(message.data);
         if (data['error']) {
             setError(data['error']);
-        } else if (data['message'] && !streamMessages.includes(data['message'])) {
+        } else if (data['message']) {
             setAlertVariant('success');
             setMessage(data['message']);
         }
@@ -344,12 +339,12 @@ class ButtonProgressGroup extends React.Component {
         try {
             let response = await fetch(url, {'method': 'POST'});
             let data = await response.json();
-            if (data['success']) {
+            if (data['code'] === 'stream-started') {
                 let stream_url = data['stream_url'];
                 let ws = handleStream(stream_url, this.setAlertVariant, this.setAlertMessage, this.setProgress);
                 this.setState({'websocket': ws});
             } else if (data['error']) {
-                this.setState({alertMessage: 'Server responded with an error', alertVarient: 'danger'});
+                this.setState({alertMessage: 'Server responded with an error', alertVariant: 'danger'});
             }
 
         } catch (e) {

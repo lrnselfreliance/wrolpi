@@ -274,7 +274,7 @@ function AlertProgress(props) {
     return (
         <Row style={{'marginBottom': '1em'}}>
             <Col className="col-5">
-                <Button onClick={props.onClick}>
+                <Button onClick={props.onClick} disabled={props.buttonDisabled}>
                     {props.buttonValue}
                 </Button>
             </Col>
@@ -299,6 +299,7 @@ class ButtonProgressGroup extends React.Component {
         this.state = {
             alertVariant: 'success',
             alertMessage: '',
+            buttonDisabled: false,
             progresses: [{'now': null}, {'now': null}, {'now': null}],
             websocket: null,
         };
@@ -322,6 +323,14 @@ class ButtonProgressGroup extends React.Component {
         this.setState({'alertMessage': message}, this.logState);
     }
 
+    disableButton() {
+        this.setState({buttonDisabled: true});
+    }
+
+    enableButton() {
+        this.setState({buttonDisabled: false});
+    }
+
     setProgress(progresses) {
         let new_progresses = [{'now': null}, {'now': null}, {'now': null}];
         for (let i = 0; i < progresses.length; i++) {
@@ -331,6 +340,7 @@ class ButtonProgressGroup extends React.Component {
     }
 
     async fetchAndHandle(url) {
+        this.disableButton();
         try {
             let response = await fetch(url, {'method': 'POST'});
             let data = await response.json();
@@ -345,12 +355,14 @@ class ButtonProgressGroup extends React.Component {
         } catch (e) {
             this.setState({alertMessage: 'Server did not respond as expected', alertVariant: 'danger'});
         }
+        this.enableButton();
     }
 
     render() {
         return (
             <AlertProgress
                 onClick={this.props.onClick}
+                buttonDisabled={this.props.buttonDisabled}
                 buttonValue={this.props.buttonValue}
                 description={this.props.description}
                 alertMessage={this.props.alertMessage}
@@ -377,6 +389,7 @@ class RefreshContent extends ButtonProgressGroup {
         return (
             <ButtonProgressGroup
                 onClick={this.onClick}
+                buttonDisabled={this.state.buttonDisabled}
                 buttonValue="Refresh Content"
                 description="Find and process all videos stored on this WROLPi."
                 alertMessage={this.state.alertMessage}

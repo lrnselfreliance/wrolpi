@@ -330,6 +330,23 @@ class ButtonProgressGroup extends React.Component {
         this.setState({'progresses': new_progresses});
     }
 
+    async fetchAndHandle(url) {
+        try {
+            let response = await fetch(url, {'method': 'POST'});
+            let data = await response.json();
+            if (data['success']) {
+                let stream_url = data['stream_url'];
+                let ws = handleStream(stream_url, this.setAlertVariant, this.setAlertMessage, this.setProgress);
+                this.setState({'websocket': ws});
+            } else if (data['error']) {
+                this.setState({alertMessage: 'Server responded with an error', alertVarient: 'danger'});
+            }
+
+        } catch (e) {
+            this.setState({alertMessage: 'Server did not respond as expected', alertVariant: 'danger'});
+        }
+    }
+
     render() {
         return (
             <AlertProgress
@@ -352,13 +369,8 @@ class RefreshContent extends ButtonProgressGroup {
     }
 
     async onClick() {
-        let response = await fetch(`${VIDEOS_API}/settings:refresh`, {'method': 'POST'});
-        let data = await response.json();
-        if (data['success']) {
-            let stream_url = data['stream_url'];
-            let ws = handleStream(stream_url, this.setAlertVariant, this.setAlertMessage, this.setProgress);
-            this.setState({'websocket': ws});
-        }
+        let url = `${VIDEOS_API}/settings:refresh`;
+        await this.fetchAndHandle(url);
     }
 
     render() {
@@ -367,6 +379,32 @@ class RefreshContent extends ButtonProgressGroup {
                 onClick={this.onClick}
                 buttonValue="Refresh Content"
                 description="Find and process all videos stored on this WROLPi."
+                alertMessage={this.state.alertMessage}
+                alertVariant={this.state.alertVariant}
+                progresses={this.state.progresses}
+            />
+        )
+    }
+}
+
+class DownloadVideos extends ButtonProgressGroup {
+
+    constructor(props) {
+        super(props);
+        this.onClick = this.onClick.bind(this);
+    }
+
+    async onClick() {
+        let url = `${VIDEOS_API}/settings:download`;
+        await this.fetchAndHandle(url);
+    }
+
+    render() {
+        return (
+            <ButtonProgressGroup
+                onClick={this.onClick}
+                buttonValue="Download Videos"
+                description="Update channel catalogs, then download any missing videos."
                 alertMessage={this.state.alertMessage}
                 alertVariant={this.state.alertVariant}
                 progresses={this.state.progresses}
@@ -413,6 +451,7 @@ class ManageContent extends React.Component {
                     </Modal.Header>
                     <Modal.Body>
                         <RefreshContent/>
+                        <DownloadVideos/>
                     </Modal.Body>
                     <Modal.Footer>
                         <Button variant="secondary" onClick={this.handleClose}>

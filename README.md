@@ -15,8 +15,8 @@ WROLPi runs in a couple Docker containers.  Lets get the prerequisites installed
     * `git clone git@github.com:lrnselfreliance/wrolpi.git`
 1. Change directory into the code base
     * `cd wrolpi`
-1. Build the docker containers
-    * `docker-compose build --parallel`
+1. Build the minimum docker containers
+    * `docker-compose build db api app --parallel`
 1. Start the minimum docker containers
     * `docker-compose up app`
 1. Navigate to WROLPi

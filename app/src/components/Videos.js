@@ -233,16 +233,9 @@ const streamMessages = [
     'stream-started',
 ];
 
-function handleStream(stream_url, setAlertVariant, setAlertMessage, progresses) {
+function handleStream(stream_url, setAlertVariant, setAlertMessage, setProgress) {
     function setMessage(message) {
         setAlertMessage(message);
-    }
-
-    function setProgresses(progresses_msg) {
-        for (let i = 0; i < progresses_msg.length; i++) {
-            // setProgressNow(now)
-            progresses[i](progresses_msg[i]['now']);
-        }
     }
 
     function setError(message) {
@@ -259,7 +252,7 @@ function handleStream(stream_url, setAlertVariant, setAlertMessage, progresses) 
             setMessage(data['message']);
         }
         if (data['progresses']) {
-            setProgresses(data['progresses'])
+            setProgress(data['progresses']);
         }
     }
 
@@ -268,6 +261,12 @@ function handleStream(stream_url, setAlertVariant, setAlertMessage, progresses) 
     ws.onmessage = handleMessage;
 
     return ws;
+}
+
+function StripedProgressBar(props) {
+    return (
+        <ProgressBar striped={true} style={{'marginTop': '0.5em'}} {...props}/>
+    )
 }
 
 function AlertProgress(props) {
@@ -285,33 +284,28 @@ function AlertProgress(props) {
                        style={{'marginTop': '1em'}}>
                     {props.alertMessage}
                 </Alert>
-                <ProgressBar hidden={props.progressNow1 == null} now={props.progressNow1}/>
-                <ProgressBar hidden={props.progressNow2 == null} now={props.progressNow2}/>
-                <ProgressBar hidden={props.progressNow3 == null} now={props.progressNow3}/>
+                <StripedProgressBar hidden={props.progresses[0]['now'] == null} now={props.progresses[0]['now']}/>
+                <StripedProgressBar hidden={props.progresses[1]['now'] == null} now={props.progresses[1]['now']}/>
+                <StripedProgressBar hidden={props.progresses[2]['now'] == null} now={props.progresses[2]['now']}/>
             </Col>
         </Row>
     )
 }
 
-class RefreshContent extends React.Component {
+class ButtonProgressGroup extends React.Component {
 
     constructor(props) {
         super(props);
         this.state = {
             alertVariant: 'success',
             alertMessage: '',
-            progressNow1: null,
-            progressNow2: null,
-            progressNow3: null,
+            progresses: [{'now': null}, {'now': null}, {'now': null}],
             websocket: null,
         };
 
         this.setAlertVariant = this.setAlertVariant.bind(this);
         this.setAlertMessage = this.setAlertMessage.bind(this);
-        this.setProgressNow1 = this.setProgressNow1.bind(this);
-        this.setProgressNow2 = this.setProgressNow2.bind(this);
-        this.setProgressNow3 = this.setProgressNow3.bind(this);
-        this.onClick = this.onClick.bind(this);
+        this.setProgress = this.setProgress.bind(this);
     }
 
     componentWillUnmount() {
@@ -325,19 +319,36 @@ class RefreshContent extends React.Component {
     }
 
     setAlertMessage(message) {
-        this.setState({'alertMessage': message});
+        this.setState({'alertMessage': message}, this.logState);
     }
 
-    setProgressNow1(key, now) {
-        this.setState({'progressNow1': now});
+    setProgress(progresses) {
+        let new_progresses = [{'now': null}, {'now': null}, {'now': null}];
+        for (let i = 0; i < progresses.length; i++) {
+            new_progresses[i]['now'] = progresses[i]['now'];
+        }
+        this.setState({'progresses': new_progresses});
     }
 
-    setProgressNow2(key, now) {
-        this.setState({'progressNow2': now});
+    render() {
+        return (
+            <AlertProgress
+                onClick={this.props.onClick}
+                buttonValue={this.props.buttonValue}
+                description={this.props.description}
+                alertMessage={this.props.alertMessage}
+                alertVariant={this.props.alertVariant}
+                progresses={this.props.progresses}
+            />
+        )
     }
+}
 
-    setProgressNow3(key, now) {
-        this.setState({'progressNow3': now});
+class RefreshContent extends ButtonProgressGroup {
+
+    constructor(props) {
+        super(props);
+        this.onClick = this.onClick.bind(this);
     }
 
     async onClick() {
@@ -345,20 +356,20 @@ class RefreshContent extends React.Component {
         let data = await response.json();
         if (data['success']) {
             let stream_url = data['stream_url'];
-            let progresses = [this.setProgressNow1, this.setProgressNow3];
-            handleStream(stream_url, this.setAlertVariant, this.setAlertMessage, progresses);
+            let ws = handleStream(stream_url, this.setAlertVariant, this.setAlertMessage, this.setProgress);
+            this.setState({'websocket': ws});
         }
     }
 
     render() {
         return (
-            <AlertProgress
+            <ButtonProgressGroup
                 onClick={this.onClick}
                 buttonValue="Refresh Content"
                 description="Find and process all videos stored on this WROLPi."
-                progressNow1={this.state.progressNow1}
-                progressNow2={this.state.progressNow2}
-                progressNow3={this.state.progressNow3}
+                alertMessage={this.state.alertMessage}
+                alertVariant={this.state.alertVariant}
+                progresses={this.state.progresses}
             />
         )
     }
@@ -460,7 +471,7 @@ class VideoSearch extends React.Component {
 
     render() {
         return (
-            <Form inline style={{'margin-bottom': '1em'}}
+            <Form inline style={{'marginBottom': '1em'}}
                   onSubmit={(e) => this.handleSubmitSearch(e)}>
                 <FormControl
                     type="text"
@@ -492,7 +503,7 @@ class VideoBreadcrumb extends React.Component {
         this.setState({'video': await getVideo(video_hash)});
     }
 
-    async componentWillMount() {
+    async componentDidMount() {
         await this.getChannelAndVideo();
     }
 
@@ -506,11 +517,11 @@ class VideoBreadcrumb extends React.Component {
     getChannelBreadcrumb() {
         if (this.state.channel) {
             return (
-                <Breadcrumb.Item>
+                <li className="breadcrumb-item">
                     <Link to={'/videos/' + this.props.match.params.channel_link}>
                         {this.state.channel['name']}
                     </Link>
-                </Breadcrumb.Item>
+                </li>
             )
         }
     }
@@ -522,14 +533,14 @@ class VideoBreadcrumb extends React.Component {
             return (
                 <>
                     {this.getChannelBreadcrumb()}
-                    <Breadcrumb.Item>
+                    <li className="breadcrumb-item">
                         <Link
                             to={'/videos/' +
                             this.props.match.params.channel_link + '/' +
                             this.props.match.params.video_hash}>
                             {this.state.video['title'] || this.state.video['video_path']}
                         </Link>
-                    </Breadcrumb.Item>
+                    </li>
                 </>
             )
         } else if (this.state.channel) {

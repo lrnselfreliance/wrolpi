@@ -1,6 +1,5 @@
 import React from 'react';
 import Button from "react-bootstrap/Button";
-
 const VIDEOS_API = '/api/videos/';
 
 function Video(props) {
@@ -13,7 +12,7 @@ function Video(props) {
 
     return (
         <>
-            <video poster={poster_url} id="player" playsinline controls style={{'maxWidth': '100%'}}>
+            <video poster={poster_url} id="player" playsInline={true} controls style={{'maxWidth': '100%'}}>
                 <source src={video_url} type="video/mp4"/>
                 <track kind="captions" label="English captions" src={captions_url} srcLang="en" default/>
             </video>

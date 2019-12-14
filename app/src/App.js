@@ -1,6 +1,6 @@
 import React from 'react';
 import './App.css';
-import {Jumbotron} from "react-bootstrap";
+import {Container, Jumbotron} from "react-bootstrap";
 import {NavBar} from "./components/Nav";
 import {Route, Switch} from "react-router-dom";
 import Videos from "./components/Videos";
@@ -33,7 +33,7 @@ function App() {
             <header>
                 <NavBar/>
             </header>
-            <div className="container">
+            <Container fluid={true}>
                 <Switch>
                     <Route path="/" exact={true} component={Welcome}/>
                     <Route path="/videos" component={Videos}/>
@@ -41,7 +41,7 @@ function App() {
                     <Route path="/settings" component={Settings}/>
                     <Route component={PageNotFound}/>
                 </Switch>
-            </div>
+            </Container>
         </>
     );
 }

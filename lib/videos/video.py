@@ -38,8 +38,9 @@ def video(request, video_hash: str):
     summary='Get a video/poster/caption file',
 )
 async def media_file(request: Request, hash: str):
-    db: DictDB = request.ctx.get_db()
     download = boolean_arg(request, 'download')
+
+    db: DictDB = request.ctx.get_db()
     Video = db['video']
     # kind is enforced by the Sanic routes defined for this function
     kind = str(request.path).split('/')[4]

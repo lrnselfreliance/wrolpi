@@ -90,7 +90,15 @@ class TestVideoAPI(TestAPI):
         new_channel['name'] = 'Example Channel 2'
         new_channel['directory'] = str(new_channel['directory'])
         request, response = api_app.test_client.put(location, data=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.OK, response.status_code
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
+
+        # Patch it
+        patch = {'name': 'new name'}
+        request, response = api_app.test_client.patch(location, data=json.dumps(patch))
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
+        request, response = api_app.test_client.get(location)
+        assert response.status_code == HTTPStatus.OK
+        assert response.json['channel']['name'] == 'new name'
 
         # Can't update channel that doesn't exist
         request, response = api_app.test_client.put('/api/videos/channels/doesnt_exist', data=json.dumps(new_channel))

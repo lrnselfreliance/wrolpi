@@ -87,6 +87,7 @@ def channel_post(request: Request, data: dict):
 
 
 @channel_bp.put('/channels/<link:string>')
+@channel_bp.patch('/channels/<link:string>')
 @validate_doc(
     summary='Update a Channel',
     consumes=ChannelPutRequest,
@@ -96,45 +97,45 @@ def channel_post(request: Request, data: dict):
             (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
     ),
 )
-def channel_put(request: Request, link: str, data: dict):
+def channel_update(request: Request, link: str, data: dict):
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']
 
     with db.transaction(commit=True):
-        existing_channel = Channel.get_one(link=link)
+        channel = Channel.get_one(link=link)
 
-        if not existing_channel:
+        if not channel:
             return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
 
         # Only update directory if it was empty
-        if data['directory'] and not existing_channel['directory']:
+        if data.get('directory') and not channel['directory']:
             try:
                 data['directory'] = get_absolute_channel_directory(data['directory'])
             except UnknownDirectory:
                 return response.json({'error': 'Unknown directory'}, HTTPStatus.NOT_FOUND)
-        else:
-            data['directory'] = existing_channel['directory']
-        data['directory'] = str(data['directory'])
+
+        if 'directory' in data:
+            data['directory'] = str(data['directory'])
 
         # Verify that the URL/Name/Link aren't taken
         conflicting_channels = get_conflicting_channels(
             db=db,
-            id=existing_channel['id'],
-            url=data['url'],
-            name_=data['name'],
-            link=data['link'],
-            directory=data['directory'],
+            id=channel.get('id'),
+            url=data.get('url'),
+            name_=data.get('name'),
+            link=data.get('link'),
+            directory=data.get('directory'),
         )
-        if list(conflicting_channels):
+        if conflicting_channels:
             return response.json({'error': 'Channel Name or URL already taken'}, HTTPStatus.BAD_REQUEST)
 
-        existing_channel['url'] = data['url']
-        existing_channel['name'] = data['name']
-        existing_channel['directory'] = data['directory']
-        existing_channel['match_regex'] = data['match_regex']
-        existing_channel.flush()
+        # Apply the changes now that we've OK'd them
+        channel.update(data)
+        print(channel)
+        channel.flush()
 
-    return response.json({'success': 'The channel was updated successfully.'})
+    return response.raw('', HTTPStatus.NO_CONTENT,
+                        headers={'Location': f'/api/videos/channels/{channel["link"]}'})
 
 
 @channel_bp.delete('/channels/<link:string>')

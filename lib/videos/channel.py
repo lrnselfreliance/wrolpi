@@ -131,7 +131,6 @@ def channel_update(request: Request, link: str, data: dict):
 
         # Apply the changes now that we've OK'd them
         channel.update(data)
-        print(channel)
         channel.flush()
 
     return response.raw('', HTTPStatus.NO_CONTENT,

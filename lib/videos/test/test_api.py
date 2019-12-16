@@ -91,6 +91,15 @@ class TestVideoAPI(TestAPI):
         new_channel['directory'] = str(new_channel['directory'])
         request, response = api_app.test_client.put(location, data=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
+        request, response = api_app.test_client.get(location)
+        assert response.status_code == HTTPStatus.OK
+        self.assertDictContains(response.json['channel'], {
+            'id': 1,
+            'name': 'Example Channel 2',
+            'directory': channel_directory,
+            'match_regex': 'asdf',
+            'url': 'https://example.com/channel1',
+        })
 
         # Patch it
         patch = {'name': 'new name'}
@@ -98,7 +107,13 @@ class TestVideoAPI(TestAPI):
         assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
         request, response = api_app.test_client.get(location)
         assert response.status_code == HTTPStatus.OK
-        assert response.json['channel']['name'] == 'new name'
+        self.assertDictContains(response.json['channel'], {
+            'id': 1,
+            'name': 'new name',
+            'directory': channel_directory,
+            'match_regex': 'asdf',
+            'url': 'https://example.com/channel1',
+        })
 
         # Can't update channel that doesn't exist
         request, response = api_app.test_client.put('/api/videos/channels/doesnt_exist', data=json.dumps(new_channel))

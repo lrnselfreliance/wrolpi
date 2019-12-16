@@ -230,6 +230,7 @@ function AddChannel() {
 
 function handleStream(stream_url, setAlertVariant, setAlertMessage, setProgress) {
     function setMessage(message) {
+        setAlertVariant('success');
         setAlertMessage(message);
     }
 
@@ -314,8 +315,16 @@ class ButtonProgressGroup extends React.Component {
         this.setState({'alertVariant': variant});
     }
 
+    setError(message) {
+        this.setState({alertMessage: message, alertVariant: 'danger'});
+    }
+
     setAlertMessage(message) {
         this.setState({'alertMessage': message}, this.logState);
+    }
+
+    reset() {
+        this.setState({alertMessage: '', alertVariant: 'success', buttonDisabled: false});
     }
 
     disableButton() {
@@ -335,20 +344,22 @@ class ButtonProgressGroup extends React.Component {
     }
 
     async fetchAndHandle(url) {
+        this.reset();
         this.disableButton();
         try {
             let response = await fetch(url, {'method': 'POST'});
             let data = await response.json();
-            if (data['code'] === 'stream-started') {
+            if (data['stream_url']) {
                 let stream_url = data['stream_url'];
                 let ws = handleStream(stream_url, this.setAlertVariant, this.setAlertMessage, this.setProgress);
                 this.setState({'websocket': ws});
-            } else if (data['error']) {
-                this.setState({alertMessage: 'Server responded with an error', alertVariant: 'danger'});
+            }
+            if (data['error']) {
+                this.setError('Server responded with an error');
             }
 
         } catch (e) {
-            this.setState({alertMessage: 'Server did not respond as expected', alertVariant: 'danger'});
+            this.setError('Server did not respond as expected');
         }
         this.enableButton();
     }

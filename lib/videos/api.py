@@ -85,7 +85,7 @@ async def refresh(_):
 
     # Only one refresh can run at a time
     if refresh_event.is_set():
-        return response.json({'error': 'Refresh already running', 'stream_url': stream_url}, HTTPStatus.BAD_REQUEST)
+        return response.json({'error': 'Refresh already running', 'stream_url': stream_url}, HTTPStatus.CONFLICT)
 
     refresh_event.set()
 
@@ -126,7 +126,7 @@ async def download(_):
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/download')
     # Only one download can run at a time
     if download_event.is_set():
-        return response.json({'error': 'download already running', 'stream_url': stream_url}, HTTPStatus.BAD_REQUEST)
+        return response.json({'error': 'download already running', 'stream_url': stream_url}, HTTPStatus.CONFLICT)
 
     download_event.set()
     download_queue.put('download-started')

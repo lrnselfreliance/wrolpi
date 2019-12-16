@@ -1,4 +1,5 @@
 import argparse
+import logging
 import pathlib
 from functools import wraps
 
@@ -100,7 +101,7 @@ ROUTES_ATTACHED = False
 
 
 def attach_routes(app):
-    """F
+    """
     Attach all module routes to the provided app.
     """
     global ROUTES_ATTACHED
@@ -118,7 +119,10 @@ def attach_routes(app):
 def run_webserver(host: str, port: int, workers: int = 8):
     attach_routes(api_app)
     set_sanic_url_parts(host, port)
-    api_app.run(host, port, workers=workers)
+    # Enable debugging output
+    debug = logger.level <= logging.DEBUG
+    # TODO remove the auto reload when development is stable
+    api_app.run(host, port, workers=workers, debug=debug, auto_reload=True)
 
 
 def init_parser(parser):

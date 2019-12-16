@@ -26,7 +26,7 @@ def get_channels(request: Request):
     return response.json({'channels': channels})
 
 
-@channel_bp.get('/channel/<link:string>')
+@channel_bp.get('/channels/<link:string>')
 @validate_doc(
     summary='Get a Channel',
     produces=ChannelResponse,
@@ -44,7 +44,7 @@ def channel_get(request: Request, link: str):
     return response.json({'channel': channel})
 
 
-@channel_bp.post('/channel')
+@channel_bp.post('/channels')
 @validate_doc(
     summary='Insert a Channel',
     consumes=ChannelPostRequest,
@@ -83,10 +83,10 @@ def channel_post(request: Request, data: dict):
         channel.flush()
 
     return response.json({'success': 'Channel created successfully'}, HTTPStatus.CREATED,
-                         {'Location': f'/api/videos/channel/{channel["link"]}'})
+                         {'Location': f'/api/videos/channels/{channel["link"]}'})
 
 
-@channel_bp.put('/channel/<link:string>')
+@channel_bp.put('/channels/<link:string>')
 @validate_doc(
     summary='Update a Channel',
     consumes=ChannelPutRequest,
@@ -137,7 +137,7 @@ def channel_put(request: Request, link: str, data: dict):
     return response.json({'success': 'The channel was updated successfully.'})
 
 
-@channel_bp.delete('/channel/<link:string>')
+@channel_bp.delete('/channels/<link:string>')
 @validate_doc(
     summary='Delete a Channel',
     produces=SuccessResponse,
@@ -156,7 +156,7 @@ def channel_delete(request, link: str):
     return response.raw(None, HTTPStatus.NO_CONTENT)
 
 
-@channel_bp.get('/channel/<link:string>/videos')
+@channel_bp.get('/channels/<link:string>/videos')
 @validate_doc(
     summary='Get Channel Videos',
     produces=ChannelVideosResponse,

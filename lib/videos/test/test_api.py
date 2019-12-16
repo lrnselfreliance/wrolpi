@@ -66,11 +66,11 @@ class TestVideoAPI(TestAPI):
         )
 
         # Channel doesn't exist
-        request, response = api_app.test_client.get('/api/videos/channel/examplechannel1')
+        request, response = api_app.test_client.get('/api/videos/channels/examplechannel1')
         assert response.status_code == HTTPStatus.NOT_FOUND, f'Channel exists: {response.json}'
 
         # Create it
-        request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
+        request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.CREATED
         location = response.headers['Location']
         request, response = api_app.test_client.get(location)
@@ -83,7 +83,7 @@ class TestVideoAPI(TestAPI):
         assert new_channel['link']
 
         # Can't create it again
-        request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
+        request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.BAD_REQUEST
 
         # Update it
@@ -93,7 +93,7 @@ class TestVideoAPI(TestAPI):
         assert response.status_code == HTTPStatus.OK, response.status_code
 
         # Can't update channel that doesn't exist
-        request, response = api_app.test_client.put('/api/videos/channel/doesnt_exist', data=json.dumps(new_channel))
+        request, response = api_app.test_client.put('/api/videos/channels/doesnt_exist', data=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.NOT_FOUND
 
         # Delete the new channel
@@ -114,7 +114,7 @@ class TestVideoAPI(TestAPI):
             'name': 'Fooz',
             'directory': channel_directory,
         }
-        request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
+        request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.CREATED, response.json
         location = response.headers['Location']
 
@@ -122,7 +122,7 @@ class TestVideoAPI(TestAPI):
             'name': 'Barz',
             'directory': channel_directory,
         }
-        request, response = api_app.test_client.post('/api/videos/channel', data=json.dumps(new_channel))
+        request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.CREATED, response.json
         assert location != response.headers['Location']
 
@@ -203,7 +203,7 @@ class TestVideoAPI(TestAPI):
 
         # During the refresh process, messages are pushed to a queue, make sure there are messages there
         messages = get_all_messages_in_queue(refresh_queue)
-        assert 'refresh-started' in [i['message'] for i in messages]
+        assert 'refresh-started' in [i.get('code') for i in messages]
 
     @wrap_test_db
     def test_get_channel_videos(self):
@@ -213,7 +213,7 @@ class TestVideoAPI(TestAPI):
             channel2 = Channel(name='Bar', link='bar').flush()
 
         # Channels don't have videos yet
-        request, response = api_app.test_client.get(f'/api/videos/channel/{channel1["link"]}/videos')
+        request, response = api_app.test_client.get(f'/api/videos/channels/{channel1["link"]}/videos')
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 0
 
@@ -223,12 +223,12 @@ class TestVideoAPI(TestAPI):
             Video(title='vid2', channel_id=channel1['id']).flush()
 
         # Videos are gotten by their respective channels
-        request, response = api_app.test_client.get(f'/api/videos/channel/{channel1["link"]}/videos')
+        request, response = api_app.test_client.get(f'/api/videos/channels/{channel1["link"]}/videos')
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 1
         self.assertDictContains(response.json['videos'][0], dict(id=2, title='vid2', channel_id=channel1['id']))
 
-        request, response = api_app.test_client.get(f'/api/videos/channel/{channel2["link"]}/videos')
+        request, response = api_app.test_client.get(f'/api/videos/channels/{channel2["link"]}/videos')
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 1
         self.assertDictContains(response.json['videos'][0], dict(id=1, title='vid1', channel_id=channel2['id']))
@@ -298,7 +298,7 @@ class TestVideoAPI(TestAPI):
         ]
         last_ids = []
         for offset, video_count in tests:
-            _, response = api_app.test_client.get(f'/api/videos/channel/{channel1["link"]}/videos?offset={offset}')
+            _, response = api_app.test_client.get(f'/api/videos/channels/{channel1["link"]}/videos?offset={offset}')
             assert response.status_code == HTTPStatus.OK
             assert len(response.json['videos']) == video_count
             current_ids = [i['id'] for i in response.json['videos']]

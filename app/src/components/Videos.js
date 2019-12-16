@@ -73,13 +73,13 @@ function VideoCard({video, channel_link}) {
 }
 
 async function getChannel(link) {
-    let response = await fetch(`${VIDEOS_API}/channel/${link}`);
+    let response = await fetch(`${VIDEOS_API}/channels/${link}`);
     let data = await response.json();
     return data['channel'];
 }
 
 async function getVideos(link) {
-    let response = await fetch(`${VIDEOS_API}/channel/${link}/videos`);
+    let response = await fetch(`${VIDEOS_API}/channels/${link}/videos`);
     let data = await response.json();
     return data['videos'];
 }
@@ -144,7 +144,7 @@ function AddChannel() {
 
     async function handleSubmit(event) {
         event.preventDefault();
-        let post_url = `${VIDEOS_API}/channel`;
+        let post_url = `${VIDEOS_API}/channels`;
         let form_data = {
             name: name.current.value,
             url: url.current.value,

@@ -81,10 +81,11 @@ refresh_queue, refresh_event = create_websocket_feed('/feeds/refresh', content_b
 )
 async def refresh(_):
     refresh_logger = logger.getChild('refresh')
+    stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/refresh')
 
     # Only one refresh can run at a time
     if refresh_event.is_set():
-        return response.json({'error': 'Refresh already running'}, HTTPStatus.BAD_REQUEST)
+        return response.json({'error': 'Refresh already running', 'stream_url': stream_url}, HTTPStatus.BAD_REQUEST)
 
     refresh_event.set()
 
@@ -105,7 +106,6 @@ async def refresh(_):
     coro = do_refresh()
     asyncio.ensure_future(coro)
     refresh_logger.debug('do_refresh scheduled')
-    stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/refresh')
     return response.json({'code': 'stream-started', 'stream_url': stream_url})
 
 
@@ -123,9 +123,10 @@ download_queue, download_event = create_websocket_feed('/feeds/download', conten
 async def download(_):
     download_logger = logger.getChild('download')
 
+    stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/download')
     # Only one download can run at a time
     if download_event.is_set():
-        return response.json({'error': 'download already running'}, HTTPStatus.BAD_REQUEST)
+        return response.json({'error': 'download already running', 'stream_url': stream_url}, HTTPStatus.BAD_REQUEST)
 
     download_event.set()
     download_queue.put('download-started')
@@ -151,7 +152,6 @@ async def download(_):
     coro = do_download()
     asyncio.ensure_future(coro)
     download_logger.debug('do_download scheduled')
-    stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/download')
     return response.json({'code': 'stream-started', 'stream_url': stream_url})
 
 

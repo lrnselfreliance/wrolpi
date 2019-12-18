@@ -168,8 +168,8 @@ def channel_videos(request, link: str):
     offset = int(request.args.get('offset', 0))
     db: DictDB = request.ctx.get_db()
     try:
-        videos = get_channel_videos(db, link, offset)
+        videos, total = get_channel_videos(db, link, offset)
     except UnknownChannel:
         return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
 
-    return response.json({'videos': list(videos)})
+    return response.json({'videos': list(videos), 'total': total})

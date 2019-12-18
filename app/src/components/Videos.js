@@ -10,6 +10,7 @@ import Video from "./VideoPlayer";
 import '../static/external/fontawesome-free/css/all.min.css';
 import Alert from "react-bootstrap/Alert";
 import Breadcrumb from "react-bootstrap/Breadcrumb";
+import Paginator from "./Common"
 
 const VIDEOS_API = '/api/videos';
 
@@ -78,10 +79,10 @@ async function getChannel(link) {
     return data['channel'];
 }
 
-async function getVideos(link) {
-    let response = await fetch(`${VIDEOS_API}/channels/${link}/videos`);
+async function getVideos(link, offset, limit) {
+    let response = await fetch(`${VIDEOS_API}/channels/${link}/videos?offset=${offset}&limit=${limit}`);
     let data = await response.json();
-    return data['videos'];
+    return [data['videos'], data['total']];
 }
 
 async function getVideo(video_hash) {
@@ -90,30 +91,35 @@ async function getVideo(video_hash) {
     return data['video'];
 }
 
-class ChannelVideoPager extends React.Component {
+class ChannelVideoPager extends Paginator {
     constructor(props) {
         super(props);
         this.state = {
             'videos': [],
+            'limit': 20,
+            'offset': 0,
+            'total': null,
         };
         this.setVideos = this.setVideos.bind(this);
     }
 
-    async getVideos(link) {
-        this.setState({'videos': await getVideos(link)})
+    async getVideos(link, offset, limit) {
+        let [videos, total] = await getVideos(link, offset, limit);
+        this.setVideos(videos, total);
     }
 
-    setVideos(videos) {
-        this.setState({'videos': videos})
+    setVideos(videos, total) {
+        this.setState({'videos': videos, 'total': total});
     }
 
     async componentDidMount() {
-        await this.getVideos(this.props.match.params.channel_link);
+        await this.getVideos(this.props.match.params.channel_link, this.state.offset, this.state.limit);
     }
 
     async componentDidUpdate(prevProps, prevState) {
-        if (this.props.match.params.channel_link !== prevProps.match.params.channel_link) {
-            await this.getVideos(this.props.match.params.channel_link);
+        if (this.props.match.params.channel_link !== prevProps.match.params.channel_link ||
+                this.state.offset !== prevState.offset) {
+            await this.getVideos(this.props.match.params.channel_link, this.state.offset, this.state.limit);
         }
     }
 
@@ -125,6 +131,7 @@ class ChannelVideoPager extends React.Component {
                     {this.state['videos'].map((v) => (
                         <VideoCard key={v['id']} video={v} channel_link={this.props.match.params.channel_link}/>))}
                 </div>
+                {this.getPagination()}
             </>
         )
     }
@@ -524,7 +531,8 @@ class VideoSearch extends React.Component {
 
     async handleResults(results) {
         let videos = results['videos'];
-        this.props.setVideos(videos);
+        let total = results['totals']['videos'];
+        this.props.setVideos(videos, total);
     }
 
     render() {

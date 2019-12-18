@@ -249,6 +249,7 @@ class TestVideoAPI(TestAPI):
         request, response = api_app.test_client.get(f'/api/videos/channels/{channel1["link"]}/videos')
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 1
+        assert response.json['total'] == 1
         self.assertDictContains(response.json['videos'][0], dict(id=2, title='vid2', channel_id=channel1['id']))
 
         request, response = api_app.test_client.get(f'/api/videos/channels/{channel2["link"]}/videos')

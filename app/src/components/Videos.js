@@ -14,32 +14,92 @@ import Paginator from "./Common"
 
 const VIDEOS_API = '/api/videos';
 
+async function updateChannel(channel, name_ref, url_ref, directory_ref, matchRegex_ref) {
+    let name = name_ref.current.value;
+    let url = url_ref.current.value;
+    let directory = directory_ref.current.value;
+    let matchRegex = matchRegex_ref.current.value;
+    let data = {name, url, directory, match_regex: matchRegex};
+    let response = await fetch(`${VIDEOS_API}/channels/${channel['link']}`, {method: 'PUT', body: JSON.stringify(data)});
+}
+
 class ChannelsNav extends React.Component {
+
     constructor(props) {
         super(props);
         this.state = {
             'channels': [],
+            show: false,
+            message: null,
+            error: false,
+            channel: null,
         };
+
+        this.name = React.createRef();
+        this.url = React.createRef();
+        this.directory = React.createRef();
+        this.matchRegex = React.createRef();
+
+        this.channelRoute = this.channelRoute.bind(this);
+        this.setShow = this.setShow.bind(this);
+        this.setError = this.setError.bind(this);
+        this.setMessage = this.setMessage.bind(this);
+        this.handleSubmit = this.handleSubmit.bind(this);
     }
 
     async getChannels() {
         let url = `${VIDEOS_API}/channels`;
         let response = await fetch(url);
         let data = await response.json();
-        this.setState({channels: data['channels']})
+        this.setState({channels: data['channels']});
+    }
+
+    async handleSubmit(e) {
+        e.preventDefault();
+        await updateChannel(this.state.channel, this.name, this.url, this.directory, this.matchRegex);
     }
 
     async componentDidMount() {
         await this.getChannels();
     }
 
+    setShow(val) {
+        this.setState({'show': val});
+    }
+
+    setChannel(channel) {
+        this.name.current.value = channel.name || '';
+        this.url.current.value = channel.url || '';
+        this.directory.current.value = channel.directory || '';
+        this.matchRegex.current.value = channel.matchRegex || '';
+    }
+
+    showModalWithChannel(channel) {
+        this.setState({show: true, channel: channel}, () => this.setChannel(channel));
+    }
+
+    setError(message) {
+        this.setState({'error': true, 'message': message});
+    }
+
+    setMessage(message) {
+        this.setState({'error': false, 'message': message});
+    }
+
     channelRoute(channel) {
         return (
-            <Nav.Item key={channel.link}>
-                <NavLink className="nav-link" to={'/videos/' + channel['link']}>
-                    {channel.name}
-                </NavLink>
-            </Nav.Item>
+            <Row>
+                <Col className='col-10'>
+                    <Nav.Item key={channel.link} style={{'flexDirection': 'row'}}>
+                        <NavLink className="nav-link" to={'/videos/' + channel['link']}>
+                            {channel.name}
+                        </NavLink>
+                    </Nav.Item>
+                </Col>
+                <Col className='col-2'>
+                    <span className="fa fa-ellipsis-v" onClick={() => this.showModalWithChannel(channel)}/>
+                </Col>
+            </Row>
         )
     }
 
@@ -47,6 +107,19 @@ class ChannelsNav extends React.Component {
         return (
             <Nav variant="pills" className="flex-column">
                 {this.state['channels'].map(this.channelRoute)}
+                <ChannelModal
+                    modalTitle="Edit Channel"
+                    form_id="edit_channel"
+                    handleSubmit={this.handleSubmit}
+                    name={this.name}
+                    url={this.url}
+                    directory={this.directory}
+                    matchRegex={this.matchRegex}
+                    show={this.state.show}
+                    setShow={this.setShow}
+                    message={this.state.message}
+                    error={this.state.error}
+                />
             </Nav>
         )
     }
@@ -118,7 +191,7 @@ class ChannelVideoPager extends Paginator {
 
     async componentDidUpdate(prevProps, prevState) {
         if (this.props.match.params.channel_link !== prevProps.match.params.channel_link ||
-                this.state.offset !== prevState.offset) {
+            this.state.offset !== prevState.offset) {
             await this.getVideos(this.props.match.params.channel_link, this.state.offset, this.state.limit);
         }
     }
@@ -137,6 +210,64 @@ class ChannelVideoPager extends Paginator {
     }
 }
 
+function ChannelModal(props) {
+    const hide = () => props.setShow(false);
+
+    return (
+        <Modal show={props.show} onHide={hide}>
+            <Modal.Header closeButton>
+                <Modal.Title>{props.modalTitle}</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+                <Form id={props.form_id} onSubmit={props.handleSubmit}>
+                    <Form.Group controlId="name">
+                        <Form.Label column="">Name</Form.Label>
+                        <Form.Control name="name" type="text" placeholder="Short Name" required ref={props.name}/>
+                    </Form.Group>
+
+                    <Form.Group controlId="url">
+                        <Form.Label column="">URL</Form.Label>
+                        <Form.Control type="url" placeholder="https://example.com/some-channel" ref={props.url}/>
+                    </Form.Group>
+
+                    <Form.Group controlId="directory">
+                        <Form.Label column="">Directory</Form.Label>
+                        <Form.Control name="directory" type="directory" placeholder="prepping/something" required
+                                      ref={props.directory}/>
+                        <Form.Text className="text-muted">
+                            This will be appended to the root video directory in the config.
+                        </Form.Text>
+                    </Form.Group>
+
+                    <Form.Group controlId="match_regex">
+                        <Form.Label column="">Title Match Regex</Form.Label>
+                        <Form.Control name="match_regex" type="text" placeholder=".*(prepper|prepping).*"
+                                      ref={props.matchRegex}/>
+                        <Form.Text className="text-muted">
+                            The title of the video will be compared to this Regular Expression. If you don't input
+                            this,
+                            all videos will be downloaded.
+                        </Form.Text>
+                    </Form.Group>
+                </Form>
+            </Modal.Body>
+            <Modal.Footer>
+                <Alert variant={(props.error ? 'danger' : 'success')} hidden={(!props.message)}>
+                    {props.message}
+                </Alert>
+                <ButtonGroup>
+                    <Button variant="secondary" onClick={hide}>
+                        Close
+                    </Button>
+                    <Button type="submit" variant={props.submitBtnVariant || 'primary'} form={props.form_id}>
+                        Save
+                    </Button>
+                </ButtonGroup>
+            </Modal.Footer>
+        </Modal>
+    )
+}
+
 function AddChannel() {
     const name = useRef();
     const url = useRef();
@@ -144,10 +275,8 @@ function AddChannel() {
     const matchRegex = useRef();
 
     const [show, setShow] = useState(false);
-    const handleClose = () => setShow(false);
-    const handleShow = () => setShow(true);
-    const [error, setError] = useState(false);
     const [message, setMessage] = useState();
+    const [error, setError] = useState(false);
 
     async function handleSubmit(event) {
         event.preventDefault();
@@ -175,61 +304,22 @@ function AddChannel() {
 
     return (
         <>
-            <Button className="btn-success" onClick={handleShow}>
+            <Button className="btn-success" onClick={() => setShow(true)}>
                 <span className="fas fa-plus"/>
             </Button>
-
-            <Modal show={show} onHide={handleClose}>
-                <Modal.Header closeButton>
-                    <Modal.Title>Add New Channel</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                    <Form id="add_channel" onSubmit={handleSubmit}>
-                        <Form.Group controlId="name">
-                            <Form.Label column="">Name</Form.Label>
-                            <Form.Control name="name" type="text" placeholder="Short Name" required ref={name}/>
-                        </Form.Group>
-
-                        <Form.Group controlId="url">
-                            <Form.Label column="">URL</Form.Label>
-                            <Form.Control type="url" placeholder="https://example.com/some-channel" ref={url}/>
-                        </Form.Group>
-
-                        <Form.Group controlId="directory">
-                            <Form.Label column="">Directory</Form.Label>
-                            <Form.Control name="directory" type="directory" placeholder="prepping/something" required
-                                          ref={directory}/>
-                            <Form.Text className="text-muted">
-                                This will be appended to the root video directory in the config.
-                            </Form.Text>
-                        </Form.Group>
-
-                        <Form.Group controlId="match_regex">
-                            <Form.Label column="">Title Match Regex</Form.Label>
-                            <Form.Control name="match_regex" type="text" placeholder=".*(prepper|prepping).*"
-                                          ref={matchRegex}/>
-                            <Form.Text className="text-muted">
-                                The title of the video will be compared to this Regular Expression. If you don't input
-                                this,
-                                all videos will be downloaded.
-                            </Form.Text>
-                        </Form.Group>
-                    </Form>
-                </Modal.Body>
-                <Modal.Footer>
-                    <Alert variant={(error ? 'danger' : 'success')} hidden={(!message)}>
-                        {message}
-                    </Alert>
-                    <ButtonGroup>
-                        <Button variant="secondary" onClick={handleClose}>
-                            Close
-                        </Button>
-                        <Button type="submit" variant="primary" form="add_channel">
-                            Add
-                        </Button>
-                    </ButtonGroup>
-                </Modal.Footer>
-            </Modal>
+            <ChannelModal
+                modalTitle="Add New Channel"
+                form_id="add_channel"
+                handleSubmit={handleSubmit}
+                name={name}
+                url={url}
+                directory={directory}
+                matchRegex={matchRegex}
+                show={show}
+                setShow={setShow}
+                message={message}
+                error={error}
+            />
         </>
     )
 }

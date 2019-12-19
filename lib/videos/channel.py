@@ -5,8 +5,8 @@ from sanic import response, Blueprint
 from sanic.request import Request
 
 from lib.common import validate_doc, sanitize_link
-from lib.errors import UnknownChannel, UnknownDirectory
-from lib.videos.common import logger, get_absolute_channel_directory, get_conflicting_channels, \
+from lib.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
+from lib.videos.common import logger, get_absolute_channel_directory, check_for_channel_conflicts, \
     get_channel_videos
 from lib.videos.schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
     ChannelPostResponse, ChannelPutRequest, SuccessResponse, ChannelVideosResponse
@@ -65,14 +65,16 @@ def channel_post(request: Request, data: dict):
     Channel = db['channel']
 
     # Verify that the URL/Name/Link aren't taken
-    conflicting_channels = get_conflicting_channels(
-        db,
-        url=data.get('url'),
-        name_=data['name'],
-        link=sanitize_link(data['name']),
-    )
-    if conflicting_channels:
-        return response.json({'error': 'Channel Name or URL already taken'}, HTTPStatus.BAD_REQUEST)
+    try:
+        check_for_channel_conflicts(
+            db,
+            url=data.get('url'),
+            name=data['name'],
+            link=sanitize_link(data['name']),
+            directory=str(data['directory']),
+        )
+    except APIError as e:
+        raise ValidationError from e
 
     with db.transaction(commit=True):
         channel = Channel(
@@ -80,6 +82,7 @@ def channel_post(request: Request, data: dict):
             url=data.get('url'),
             match=data.get('match_regex'),
             link=sanitize_link(data['name']),
+            directory=str(data['directory']),
         )
         channel.flush()
 
@@ -119,16 +122,14 @@ def channel_update(request: Request, link: str, data: dict):
             data['directory'] = str(data['directory'])
 
         # Verify that the URL/Name/Link aren't taken
-        conflicting_channels = get_conflicting_channels(
+        check_for_channel_conflicts(
             db=db,
             id=channel.get('id'),
             url=data.get('url'),
-            name_=data.get('name'),
+            name=data.get('name'),
             link=data.get('link'),
             directory=data.get('directory'),
         )
-        if conflicting_channels:
-            return response.json({'error': 'Channel Name or URL already taken'}, HTTPStatus.BAD_REQUEST)
 
         # Apply the changes now that we've OK'd them
         channel.update(data)
@@ -184,7 +185,7 @@ def channel_videos(request, link: str):
 )
 def channel_conflict(request, data: dict):
     db: DictDB = request.ctx.get_db()
-    conflicts = get_conflicting_channels(db, url=data.get('url'), name_=data.get('name'),
-                                         directory=data.get('directory'))
+    check_for_channel_conflicts(db, url=data.get('url'), name=data.get('name'),
+                                directory=data.get('directory'))
 
-    return response.json({'channels': conflicts})
+    return response.raw('', HTTPStatus.NO_CONTENT)

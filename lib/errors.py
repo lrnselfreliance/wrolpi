@@ -41,6 +41,30 @@ class UnknownCaptionFile(APIError):
     pass
 
 
+class ValidationError(APIError):
+    pass
+
+
+class ChannelLinkConflict(APIError):
+    pass
+
+
+class BadFieldType(APIError):
+    pass
+
+
+class MissingRequiredField(APIError):
+    pass
+
+
+class ExcessJSONFields(APIError):
+    pass
+
+
+class NoBodyContents(APIError):
+    pass
+
+
 def error_code_generator():
     code = 0
     while True:
@@ -95,5 +119,35 @@ API_ERRORS = {
         'code': next(error_codes),
         'message': 'The caption file could not be found',
         'status': HTTPStatus.NOT_FOUND,
+    },
+    ValidationError: {
+        'code': next(error_codes),
+        'message': 'Could not validate the contents of the request',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    ChannelLinkConflict: {
+        'code': next(error_codes),
+        'message': 'Channel link already used by another channel',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    BadFieldType: {
+        'code': next(error_codes),
+        'message': 'Field could not be converted to the required type',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    MissingRequiredField: {
+        'code': next(error_codes),
+        'message': 'Missing required field',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    ExcessJSONFields: {
+        'code': next(error_codes),
+        'message': 'Extra fields in request',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    NoBodyContents: {
+        'code': next(error_codes),
+        'message': 'No content in the body of the request',
+        'status': HTTPStatus.BAD_REQUEST,
     },
 }

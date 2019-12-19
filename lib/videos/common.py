@@ -7,11 +7,12 @@ from pathlib import Path
 from typing import Union, Tuple
 
 import yaml
-from dictorm import And, Or, Dict, DictDB
+from dictorm import Dict, DictDB
 
 from lib.common import sanitize_link, logger
 from lib.db import get_db_context
-from lib.errors import UnknownFile, UnknownChannel, UnknownDirectory
+from lib.errors import UnknownFile, UnknownChannel, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
+    ChannelLinkConflict, ChannelDirectoryConflict
 from lib.vars import DOCKERIZED, TEST_VIDEO_PATH
 
 logger = logger.getChild('videos')
@@ -81,16 +82,12 @@ def import_settings_config():
             name, directory = config[section]['name'], config[section]['directory']
 
             link = sanitize_link(name)
-            conflicting_channels = list(get_conflicting_channels(db, link=link, name_=name))
             Channel = db['channel']
-            if not conflicting_channels:
-                # Channel added to config, create it in the db
+            channel = Channel.get_one(link=link)
+
+            if not channel:
+                # Channel not yet in the DB, add it
                 channel = Channel(link=link)
-            elif len(conflicting_channels) == 1:
-                # Channel already exists, update it
-                channel = conflicting_channels[0]
-            else:
-                raise Exception('Too many channels match this section.')
 
             # Only name and directory are required
             channel['name'] = config[section]['name']
@@ -199,25 +196,38 @@ def generate_video_paths(directory: Union[str, pathlib.Path], relative_to=None) 
             yield from generate_video_paths(child)
 
 
-def get_conflicting_channels(db, id=None, url=None, name_=None, link=None, directory=None):
-    """Return all channels that have any of the provided values"""
-    if not any([id, url, name_, link, directory]):
+def check_for_channel_conflicts(db, id=None, url=None, name=None, link=None, directory=None):
+    """
+    Search for any channels that conflict with the provided args, raise a relevant exception if any conflicts are found.
+    """
+    if not any([id, url, name, link, directory]):
         raise Exception('Cannot search for channel with no arguments')
 
+    logger.debug(f'Checking for channel conflicts: id={id} url={url} name={name} link={link} directory={directory}')
+
     Channel = db['channel']
-    inner_or = Or(
-        Channel['url'] == url,
-        Channel['name'] == name_,
-        Channel['link'] == link,
-        Channel['directory'] == directory,
-    )
+    # A channel can't conflict with itself
     if id:
-        conflicting_channels = Channel.get_where(
-            And(inner_or, Channel['id'] != id)
-        )
+        base_where = Channel.get_where(Channel['id'] != id)
     else:
-        conflicting_channels = Channel.get_where(inner_or)
-    return list(conflicting_channels)
+        base_where = Channel.get_where()
+
+    if url:
+        conflicts = base_where.refine(Channel['url'] == url)
+        if list(conflicts):
+            raise ChannelURLConflict()
+    if name:
+        conflicts = base_where.refine(Channel['name'] == name)
+        if list(conflicts):
+            raise ChannelNameConflict()
+    if link:
+        conflicts = base_where.refine(Channel['link'] == link)
+        if list(conflicts):
+            raise ChannelLinkConflict()
+    if directory:
+        conflicts = base_where.refine(Channel['directory'] == directory)
+        if list(conflicts):
+            raise ChannelDirectoryConflict()
 
 
 def verify_config():

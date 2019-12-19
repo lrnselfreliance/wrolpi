@@ -8,7 +8,7 @@ from sanic.request import Request
 
 from lib.common import validate_doc, boolean_arg
 from lib.db import get_db_context
-from lib.errors import UnknownVideo, UnknownFile
+from lib.errors import UnknownVideo, UnknownFile, SearchEmpty, ValidationError
 from lib.videos.common import get_absolute_video_path, VIDEO_QUERY_LIMIT
 from lib.videos.schema import ChannelVideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse
 
@@ -57,7 +57,7 @@ async def media_file(request: Request, hash: str):
         abort(404, f"Can't find {kind} by that ID.")
 
 
-async def video_search(db_conn, db: DictDB, search_str: str, offset: int):
+def video_search(db_conn, db: DictDB, search_str: str, offset: int):
     curs = db_conn.cursor()
 
     query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)), COUNT(*) OVER() AS total ' \
@@ -75,7 +75,7 @@ async def video_search(db_conn, db: DictDB, search_str: str, offset: int):
     return results, total
 
 
-async def channel_search(db_conn, db: DictDB, search_str: str, offset: int):
+def channel_search(db_conn, db: DictDB, search_str: str, offset: int):
     curs = db_conn.cursor()
 
     query = 'SELECT id, COUNT(*) OVER() as total ' \
@@ -99,20 +99,19 @@ async def channel_search(db_conn, db: DictDB, search_str: str, offset: int):
     consumes=VideoSearchRequest,
     produces=VideoSearchResponse,
 )
-async def search(request: Request, data: dict):
+def search(request: Request, data: dict):
     search_str = data['search_str']
     offset = int(data.get('offset', 0))
 
     if not search_str:
-        return response.json({'error': 'search_str must have contents'})
+        raise ValidationError() from SearchEmpty()
 
     # ts_query accepts a pipe & as an "and" between keywords, we'll just assume any spaces mean "and"
     tsquery = ' & '.join(search_str.split(' '))
 
     with get_db_context() as (db_conn, db):
-        videos_coro = video_search(db_conn, db, tsquery, offset)
-        channels_coro = channel_search(db_conn, db, tsquery, offset)
-        (videos, videos_total), (channels, channels_total) = await asyncio.gather(videos_coro, channels_coro)
+        videos, videos_total = video_search(db_conn, db, tsquery, offset)
+        channels, channels_total = channel_search(db_conn, db, tsquery, offset)
 
     ret = {'videos': videos, 'channels': channels, 'tsquery': tsquery,
            'totals': {'videos': videos_total, 'channels': channels_total}}

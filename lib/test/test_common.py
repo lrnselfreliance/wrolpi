@@ -1,12 +1,11 @@
-import json
 import unittest
 from pprint import pformat
 
 import pytest
 from sanic_openapi import doc
-from sanic_openapi.api import Response
 
 from lib.common import create_pagination_pages, create_pagination_dict, Pagination, validate_data
+from lib.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
 
 
 class TestCommon(unittest.TestCase):
@@ -184,22 +183,11 @@ def test_validate_doc(data, expected):
 @pytest.mark.parametrize(
     'data,expected',
     (
-            (
-                    dict(),
-                    {'error': 'No data found in body'}
-            ),
-            (
-                    dict(name='foo'),
-                    {'error': 'Missing required fields', 'fields': ['count']}
-            ),
-            (
-                    dict(name='foo', count=10, extra='too many'),
-                    {'error': 'Excess JSON fields', 'fields': ['extra']}
-            ),
+            (dict(), NoBodyContents),
+            (dict(name='foo'), MissingRequiredField),
+            (dict(name='foo', count=10, extra='too many'), ExcessJSONFields),
     )
 )
 def test_validate_doc_errors(data, expected):
     model = Model()
-    response = validate_data(model, data)
-    response: Response
-    assert json.loads(response.body) == expected
+    pytest.raises(expected, validate_data, model, data)

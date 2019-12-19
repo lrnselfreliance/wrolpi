@@ -77,6 +77,7 @@ class TestVideoAPI(TestAPI):
         created = response.json['channel']
         self.assertIsNotNone(created)
         self.assertIsNotNone(created['id'])
+        self.assertIsNotNone(created['directory'])
 
         # Get the link that was decided
         new_channel['link'] = response.json['channel']['link']
@@ -128,6 +129,71 @@ class TestVideoAPI(TestAPI):
         assert response.status_code == HTTPStatus.NOT_FOUND
 
     @wrap_test_db
+    def test_channel_conflicts(self):
+        channel_directory = tempfile.TemporaryDirectory().name
+        pathlib.Path(channel_directory).mkdir()
+        new_channel = dict(
+            directory=channel_directory,
+            match_regex='asdf',
+            name='Example Channel 1',
+            url='https://example.com/channel1',
+        )
+
+        def post_channel(channel):
+            return api_app.test_client.post('/api/videos/channels', data=json.dumps(channel))
+
+        # Create it
+        request, response = post_channel(new_channel)
+        assert response.status_code == HTTPStatus.CREATED
+
+        # Name is an exact match
+        channel_directory2 = tempfile.TemporaryDirectory().name
+        pathlib.Path(channel_directory2).mkdir()
+        new_channel = dict(
+            directory=channel_directory2,
+            name='Example Channel 1',
+        )
+        request, response = post_channel(new_channel)
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
+                                 'cause': {'error': 'The channel name is already taken.', 'code': 5}}
+
+        # Name matches when converted to link
+        channel_directory2 = tempfile.TemporaryDirectory().name
+        pathlib.Path(channel_directory2).mkdir()
+        new_channel = dict(
+            directory=channel_directory2,
+            name='Example channel 1',
+        )
+        request, response = post_channel(new_channel)
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
+                                 'cause': {'code': 11, 'error': 'Channel link already used by another channel'}}
+
+        # Directory was already used
+        new_channel = dict(
+            directory=channel_directory,
+            name='name is fine',
+        )
+        request, response = post_channel(new_channel)
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
+                                 'cause': {'code': 7, 'error': 'The directory is already used by another channel.'}}
+
+        # URL is already used
+        channel_directory3 = tempfile.TemporaryDirectory().name
+        pathlib.Path(channel_directory3).mkdir()
+        new_channel = dict(
+            directory=channel_directory3,
+            name='name is fine',
+            url='https://example.com/channel1',
+        )
+        request, response = post_channel(new_channel)
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
+                                 'cause': {'code': 6, 'error': 'The URL is already used by another channel.'}}
+
+    @wrap_test_db
     def test_channel_empty_url_doesnt_conflict(self):
         """Two channels with empty URLs shouldn't conflict"""
         channel_directory = tempfile.TemporaryDirectory().name
@@ -141,9 +207,11 @@ class TestVideoAPI(TestAPI):
         assert response.status_code == HTTPStatus.CREATED, response.json
         location = response.headers['Location']
 
+        channel_directory2 = tempfile.TemporaryDirectory().name
+        pathlib.Path(channel_directory2).mkdir()
         new_channel = {
             'name': 'Barz',
-            'directory': channel_directory,
+            'directory': channel_directory2,
         }
         request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.CREATED, response.json
@@ -270,7 +338,7 @@ class TestVideoAPI(TestAPI):
         # Test that a 404 is returned when no video exists
         _, response = api_app.test_client.get('/api/videos/video/BAD_HASH')
         assert response.status_code == HTTPStatus.NOT_FOUND, response.json
-        assert 'error' in response.json
+        assert response.json == {'code': 1, 'error': 'The video could not be found.'}
 
         # Get the video info we inserted
         _, response = api_app.test_client.get('/api/videos/video/hashy')
@@ -360,7 +428,12 @@ class TestVideoAPI(TestAPI):
 
         # No search_str, get an error
         response = do_search('')
-        assert response.json == {'error': 'search_str must have contents'}
+        assert response.json == {
+            'cause': {'code': 8,
+                      'error': 'Search is empty, search_str must have content.'},
+            'code': 10,
+            'error': 'Could not validate the contents of the request',
+        }
 
         # Repeated runs should return the same result
         for _ in range(2):

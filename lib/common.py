@@ -1,4 +1,3 @@
-import asyncio
 import json
 import logging
 import queue
@@ -20,7 +19,7 @@ from sanic.request import Request
 from sanic_openapi import doc
 from websocket import WebSocket
 
-from lib.errors import APIError, API_ERRORS
+from lib.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents
 
 sanic_app = Sanic()
 
@@ -280,7 +279,7 @@ def validate_data(model: type, data: dict):
     containing an error.
     """
     if not data:
-        return response.json({'error': 'No data found in body'}, HTTPStatus.BAD_REQUEST)
+        raise NoBodyContents()
 
     new_data = {}
     # Get the public attributes of the model
@@ -308,17 +307,16 @@ def validate_data(model: type, data: dict):
             elif isinstance(field, doc.List):
                 new_data[attr] = list(data.pop(attr))
             else:
-                raise Exception(f'Bad field type {field} specified in the API model!')
+                raise ValidationError(f'Bad field type {field} specified in the API model!')
         except KeyError:
             if field.required:
                 missing_fields.append(attr)
 
     if missing_fields:
-        return response.json({'error': 'Missing required fields', 'fields': missing_fields}, HTTPStatus.BAD_REQUEST)
+        raise MissingRequiredField(f'Missing fields: {missing_fields}')
 
     if data:
-        # Excess JSON keys
-        return response.json({'error': 'Excess JSON fields', 'fields': data.keys()}, HTTPStatus.BAD_REQUEST)
+        raise ExcessJSONFields(f'Extra fields: {data.keys()}')
 
     return new_data
 
@@ -340,8 +338,19 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
                     if isinstance(data, sanic.response.HTTPResponse):
                         # Error in validation
                         return data
-                    return func(request, *a, **kw, data=data)
+                    result = func(request, *a, **kw, data=data)
+                    return result
                 return func(request, *a, **kw)
+            except ValidationError as e:
+                error = API_ERRORS[type(e)]
+                cause = API_ERRORS[type(e.__cause__)]
+                body = {
+                    'error': error['message'],
+                    'code': error['code'],
+                    'cause': {'error': cause['message'], 'code': cause['code']}
+                }
+                r = response.json(body, error['status'])
+                return r
             except APIError as e:
                 # The endpoint returned a standardized APIError, convert it to a json response
                 error = API_ERRORS[type(e)]

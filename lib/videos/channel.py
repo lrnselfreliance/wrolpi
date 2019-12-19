@@ -5,8 +5,9 @@ from sanic import response, Blueprint
 from sanic.request import Request
 
 from lib.common import validate_doc, sanitize_link
-from lib.videos.common import logger, get_absolute_channel_directory, UnknownDirectory, get_conflicting_channels, \
-    get_channel_videos, UnknownChannel
+from lib.errors import UnknownChannel, UnknownDirectory
+from lib.videos.common import logger, get_absolute_channel_directory, get_conflicting_channels, \
+    get_channel_videos
 from lib.videos.schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
     ChannelPostResponse, ChannelPutRequest, SuccessResponse, ChannelVideosResponse
 
@@ -40,7 +41,7 @@ def channel_get(request: Request, link: str):
     channel = Channel.get_one(link=link)
     logger.debug(f'channel_get.channel: {channel}')
     if not channel:
-        return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
+        raise UnknownChannel()
     return response.json({'channel': channel})
 
 
@@ -58,7 +59,7 @@ def channel_post(request: Request, data: dict):
     try:
         data['directory'] = get_absolute_channel_directory(data['directory'])
     except UnknownDirectory:
-        return response.json({'error': 'Unknown directory'}, HTTPStatus.BAD_REQUEST)
+        raise UnknownDirectory()
 
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']
@@ -105,14 +106,14 @@ def channel_update(request: Request, link: str, data: dict):
         channel = Channel.get_one(link=link)
 
         if not channel:
-            return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
+            raise UnknownChannel()
 
         # Only update directory if it was empty
         if data.get('directory') and not channel['directory']:
             try:
                 data['directory'] = get_absolute_channel_directory(data['directory'])
             except UnknownDirectory:
-                return response.json({'error': 'Unknown directory'}, HTTPStatus.NOT_FOUND)
+                raise
 
         if 'directory' in data:
             data['directory'] = str(data['directory'])
@@ -150,7 +151,7 @@ def channel_delete(request, link: str):
     Channel = db['channel']
     channel = Channel.get_one(link=link)
     if not channel:
-        return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
+        raise UnknownChannel()
     with db.transaction(commit=True):
         channel.delete()
     return response.raw(None, HTTPStatus.NO_CONTENT)
@@ -170,6 +171,20 @@ def channel_videos(request, link: str):
     try:
         videos, total = get_channel_videos(db, link, offset)
     except UnknownChannel:
-        return response.json({'error': 'Unknown channel'}, HTTPStatus.NOT_FOUND)
+        raise
 
     return response.json({'videos': list(videos), 'total': total})
+
+
+@channel_bp.post('/channels/conflict')
+@validate_doc(
+    summary='Get any channels that conflict with the properties provided.',
+    consumes=ChannelPutRequest,
+    produces=ChannelsResponse,
+)
+def channel_conflict(request, data: dict):
+    db: DictDB = request.ctx.get_db()
+    conflicts = get_conflicting_channels(db, url=data.get('url'), name_=data.get('name'),
+                                         directory=data.get('directory'))
+
+    return response.json({'channels': conflicts})

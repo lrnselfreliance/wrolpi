@@ -19,8 +19,14 @@ async function updateChannel(channel, name_ref, url_ref, directory_ref, matchReg
     let url = url_ref.current.value;
     let directory = directory_ref.current.value;
     let matchRegex = matchRegex_ref.current.value;
-    let data = {name, url, directory, match_regex: matchRegex};
-    let response = await fetch(`${VIDEOS_API}/channels/${channel['link']}`, {method: 'PUT', body: JSON.stringify(data)});
+    let body = {name, url, directory, match_regex: matchRegex};
+
+    let response = await fetch(`${VIDEOS_API}/channels/${channel['link']}`,
+        {method: 'PUT', body: JSON.stringify(body)});
+
+    if (response.status !== 204) {
+        throw Error('Failed to update channel.  See browser logs.');
+    }
 }
 
 class ChannelsNav extends React.Component {
@@ -56,7 +62,14 @@ class ChannelsNav extends React.Component {
 
     async handleSubmit(e) {
         e.preventDefault();
-        await updateChannel(this.state.channel, this.name, this.url, this.directory, this.matchRegex);
+        try {
+            this.reset();
+            await updateChannel(this.state.channel, this.name, this.url, this.directory, this.matchRegex);
+            await this.getChannels();
+            this.setShow(false);
+        } catch (e) {
+            this.setError(e.message);
+        }
     }
 
     async componentDidMount() {
@@ -76,6 +89,10 @@ class ChannelsNav extends React.Component {
 
     showModalWithChannel(channel) {
         this.setState({show: true, channel: channel}, () => this.setChannel(channel));
+    }
+
+    reset() {
+        this.setState({error: false, message: null})
     }
 
     setError(message) {

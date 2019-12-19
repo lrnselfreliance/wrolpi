@@ -11,6 +11,7 @@ from dictorm import And, Or, Dict, DictDB
 
 from lib.common import sanitize_link, logger
 from lib.db import get_db_context
+from lib.errors import UnknownFile, UnknownChannel, UnknownDirectory
 from lib.vars import DOCKERIZED, TEST_VIDEO_PATH
 
 logger = logger.getChild('videos')
@@ -101,10 +102,6 @@ def import_settings_config():
     return 0
 
 
-class UnknownDirectory(Exception):
-    pass
-
-
 def get_video_root() -> Path:
     """
     Get video_root_directory from config.
@@ -123,10 +120,6 @@ def get_absolute_channel_directory(directory: str) -> Path:
 
 
 VALID_VIDEO_KINDS = {'video', 'caption', 'poster', 'description', 'info_json'}
-
-
-class UnknownFile(Exception):
-    pass
 
 
 def get_absolute_video_path(video: Dict, kind: str = 'video') -> Path:
@@ -235,10 +228,6 @@ def verify_config():
                             f'Have you mounted your media directory in docker-compose.yml?')
         raise Exception(f'Video root directory is not absolute, or does not exist! {video_root_directory}  '
                         f'Have you updated your local.yaml with the video_root_directory?')
-
-
-class UnknownChannel(Exception):
-    pass
 
 
 def get_channel_videos(db: DictDB, link: str, offset: int = 0):

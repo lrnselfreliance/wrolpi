@@ -20,6 +20,8 @@ from sanic.request import Request
 from sanic_openapi import doc
 from websocket import WebSocket
 
+from lib.errors import APIError, API_ERRORS
+
 sanic_app = Sanic()
 
 logger = logging.getLogger('wrolpi')
@@ -329,16 +331,22 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
     def wrapper(func):
         @wraps(func)
         def wrapped(request, *a, **kw):
-            if consumes:
-                if 'data' in kw:
-                    raise OverflowError(f'data kwarg already being passed to {func}')
+            try:
+                if consumes:
+                    if 'data' in kw:
+                        raise OverflowError(f'data kwarg already being passed to {func}')
 
-                data = validate_data(consumes, request.json)
-                if isinstance(data, sanic.response.HTTPResponse):
-                    # Error in validation
-                    return data
-                return func(request, *a, **kw, data=data)
-            return func(request, *a, **kw)
+                    data = validate_data(consumes, request.json)
+                    if isinstance(data, sanic.response.HTTPResponse):
+                        # Error in validation
+                        return data
+                    return func(request, *a, **kw, data=data)
+                return func(request, *a, **kw)
+            except APIError as e:
+                # The endpoint returned a standardized APIError, convert it to a json response
+                error = API_ERRORS[type(e)]
+                r = response.json({'error': error['message'], 'code': error['code']}, error['status'])
+                return r
 
         # Apply the docs to the wrapped function so sanic-openapi can find the wrapped function when
         # building the schema.  If these docs are applied to `func`, sanic-openapi won't be able to lookup `wrapped`

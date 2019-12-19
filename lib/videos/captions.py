@@ -7,6 +7,7 @@ from dictorm import Dict
 
 from lib.common import logger
 from .common import get_absolute_video_caption
+from lib.errors import UnknownCaptionFile
 
 
 def get_caption_text(caption_path: str) -> Generator:
@@ -36,17 +37,13 @@ def get_unique_caption_lines(caption_path: str) -> Generator:
                 yield line
 
 
-class UnknownCaptionFile(Exception):
-    pass
-
-
 def process_captions(video: Dict):
     """
     Parse and insert captions for a video record.
     """
     caption_path = get_absolute_video_caption(video)
     if not caption_path.exists():
-        raise UnknownCaptionFile(f'No caption file for video {video["id"]}')
+        raise UnknownCaptionFile()
     try:
         lines = get_unique_caption_lines(str(caption_path))
         block = '\n'.join(lines)

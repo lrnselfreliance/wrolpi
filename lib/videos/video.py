@@ -8,7 +8,8 @@ from sanic.request import Request
 
 from lib.common import validate_doc, boolean_arg
 from lib.db import get_db_context
-from lib.videos.common import get_absolute_video_path, UnknownFile, VIDEO_QUERY_LIMIT
+from lib.errors import UnknownVideo, UnknownFile
+from lib.videos.common import get_absolute_video_path, VIDEO_QUERY_LIMIT
 from lib.videos.schema import ChannelVideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse
 
 video_bp = Blueprint('Video')
@@ -27,7 +28,7 @@ def video(request, video_hash: str):
     Video = db['video']
     video = Video.get_one(video_path_hash=video_hash)
     if not video:
-        return response.json({'error': 'Unknown video'}, HTTPStatus.NOT_FOUND)
+        raise UnknownVideo()
     return response.json({'video': video})
 
 

@@ -2,7 +2,6 @@ from http import HTTPStatus
 
 from dictorm import DictDB
 from sanic import response, Blueprint
-from sanic.exceptions import abort
 from sanic.request import Request
 
 from lib.common import validate_doc, boolean_arg
@@ -53,7 +52,7 @@ async def media_file(request: Request, hash: str):
         else:
             return await response.file_stream(str(path))
     except TypeError or KeyError or UnknownFile:
-        abort(404, f"Can't find {kind} by that ID.")
+        raise UnknownFile()
 
 
 def video_search(db_conn, db: DictDB, search_str: str, offset: int):

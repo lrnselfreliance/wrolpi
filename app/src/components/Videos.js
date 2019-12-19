@@ -29,6 +29,14 @@ async function updateChannel(channel, name_ref, url_ref, directory_ref, matchReg
     }
 }
 
+async function deleteChannel(channel) {
+    let response = await fetch(`${VIDEOS_API}/channels/${channel['link']}`, {method: 'DELETE'});
+
+    if (response.status !== 204) {
+        throw Error('Failed to delete channel.  See browser logs.');
+    }
+}
+
 class ChannelsNav extends React.Component {
 
     constructor(props) {
@@ -51,6 +59,7 @@ class ChannelsNav extends React.Component {
         this.setError = this.setError.bind(this);
         this.setMessage = this.setMessage.bind(this);
         this.handleSubmit = this.handleSubmit.bind(this);
+        this.handleDelete = this.handleDelete.bind(this);
     }
 
     async getChannels() {
@@ -91,6 +100,11 @@ class ChannelsNav extends React.Component {
         this.setState({show: true, channel: channel}, () => this.setChannel(channel));
     }
 
+    async handleDelete() {
+        await deleteChannel(this.state.channel);
+        this.setShow(false);
+    }
+
     reset() {
         this.setState({error: false, message: null})
     }
@@ -105,7 +119,7 @@ class ChannelsNav extends React.Component {
 
     channelRoute(channel) {
         return (
-            <Row>
+            <Row key={channel['link']}>
                 <Col className='col-10'>
                     <Nav.Item key={channel.link} style={{'flexDirection': 'row'}}>
                         <NavLink className="nav-link" to={'/videos/' + channel['link']}>
@@ -136,6 +150,7 @@ class ChannelsNav extends React.Component {
                     setShow={this.setShow}
                     message={this.state.message}
                     error={this.state.error}
+                    onDelete={this.handleDelete}
                 />
             </Nav>
         )
@@ -171,8 +186,12 @@ async function getChannel(link) {
 
 async function getVideos(link, offset, limit) {
     let response = await fetch(`${VIDEOS_API}/channels/${link}/videos?offset=${offset}&limit=${limit}`);
-    let data = await response.json();
-    return [data['videos'], data['total']];
+    if (response.status === 200) {
+        let data = await response.json();
+        return [data['videos'], data['total']];
+    } else {
+        throw Error('Unable to fetch videos for channel');
+    }
 }
 
 async function getVideo(video_hash) {
@@ -194,8 +213,13 @@ class ChannelVideoPager extends Paginator {
     }
 
     async getVideos(link, offset, limit) {
-        let [videos, total] = await getVideos(link, offset, limit);
-        this.setVideos(videos, total);
+        try {
+            let [videos, total] = await getVideos(link, offset, limit);
+            this.setVideos(videos, total);
+        } catch (e) {
+            // Couldn't fetch channel videos, could be a bad channel link?
+        }
+
     }
 
     setVideos(videos, total) {
@@ -272,6 +296,11 @@ function ChannelModal(props) {
                 <Alert variant={(props.error ? 'danger' : 'success')} hidden={(!props.message)}>
                     {props.message}
                 </Alert>
+                {props.onDelete &&
+                <Button variant="danger" onClick={props.onDelete}>
+                    Delete
+                </Button>
+                }
                 <ButtonGroup>
                     <Button variant="secondary" onClick={hide}>
                         Close

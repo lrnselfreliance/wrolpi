@@ -112,7 +112,7 @@ def get_video_root() -> Path:
 def get_absolute_channel_directory(directory: str) -> Path:
     directory = get_video_root() / directory
     if not directory.exists():
-        raise UnknownDirectory(f'Channel directory does not exist! {directory}')
+        raise UnknownDirectory()
     return directory
 
 
@@ -126,7 +126,7 @@ def get_absolute_video_path(video: Dict, kind: str = 'video') -> Path:
     path = video[kind + '_path']
     if directory and path:
         return directory / path
-    raise UnknownFile(f'Unknown {kind} for video {video["id"]}')
+    raise UnknownFile()
 
 
 def get_absolute_video_caption(video: Dict) -> Path:

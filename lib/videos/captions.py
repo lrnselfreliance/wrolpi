@@ -6,8 +6,8 @@ import webvtt
 from dictorm import Dict
 
 from lib.common import logger
-from .common import get_absolute_video_caption
 from lib.errors import UnknownCaptionFile
+from .common import get_absolute_video_caption
 
 
 def get_caption_text(caption_path: str) -> Generator:

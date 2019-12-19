@@ -1,4 +1,3 @@
-import asyncio
 from http import HTTPStatus
 
 from dictorm import DictDB
@@ -106,7 +105,7 @@ def search(request: Request, data: dict):
     if not search_str:
         raise ValidationError() from SearchEmpty()
 
-    # ts_query accepts a pipe & as an "and" between keywords, we'll just assume any spaces mean "and"
+    # ts_query accepts a & as an "and" between keywords, we'll just assume any spaces mean "and"
     tsquery = ' & '.join(search_str.split(' '))
 
     with get_db_context() as (db_conn, db):

@@ -50,7 +50,7 @@ content_bp = Blueprint('Video Content')
 api_bp = Blueprint('Videos').group(
     content_bp,  # view and manage video content and settings
     channel_bp,  # view and manage channels
-    video_bp,    # view videos
+    video_bp,  # view videos
     url_prefix='/videos')
 
 

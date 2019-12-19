@@ -2,15 +2,17 @@ import React, {useRef, useState} from 'react';
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import Nav from "react-bootstrap/Nav";
-import {Link, NavLink, Route, Switch} from "react-router-dom";
-import {Button, ButtonGroup, Container, Form, FormControl, ProgressBar} from "react-bootstrap";
+import {Link, NavLink, Route} from "react-router-dom";
+import {Button, ButtonGroup, Form, FormControl, ProgressBar} from "react-bootstrap";
 import Modal from "react-bootstrap/Modal";
 import Card from "react-bootstrap/Card";
-import Video from "./VideoPlayer";
 import '../static/external/fontawesome-free/css/all.min.css';
 import Alert from "react-bootstrap/Alert";
 import Breadcrumb from "react-bootstrap/Breadcrumb";
 import Paginator from "./Common"
+import Container from "react-bootstrap/Container";
+import Switch from "react-bootstrap/cjs/Switch";
+import Video from "./VideoPlayer";
 
 const VIDEOS_API = '/api/videos';
 
@@ -54,7 +56,7 @@ class ChannelsNav extends React.Component {
         this.directory = React.createRef();
         this.matchRegex = React.createRef();
 
-        this.channelRoute = this.channelRoute.bind(this);
+        this.channelNavLink = this.channelNavLink.bind(this);
         this.setShow = this.setShow.bind(this);
         this.setError = this.setError.bind(this);
         this.setMessage = this.setMessage.bind(this);
@@ -93,7 +95,7 @@ class ChannelsNav extends React.Component {
         this.name.current.value = channel.name || '';
         this.url.current.value = channel.url || '';
         this.directory.current.value = channel.directory || '';
-        this.matchRegex.current.value = channel.matchRegex || '';
+        this.matchRegex.current.value = channel.match_regex || '';
     }
 
     showModalWithChannel(channel) {
@@ -117,27 +119,26 @@ class ChannelsNav extends React.Component {
         this.setState({'error': false, 'message': message});
     }
 
-    channelRoute(channel) {
+    channelNavLink(channel) {
         return (
-            <Row key={channel['link']}>
-                <Col className='col-10'>
-                    <Nav.Item key={channel.link} style={{'flexDirection': 'row'}}>
-                        <NavLink className="nav-link" to={'/videos/' + channel['link']}>
-                            {channel.name}
-                        </NavLink>
-                    </Nav.Item>
-                </Col>
-                <Col className='col-2'>
-                    <span className="fa fa-ellipsis-v" onClick={() => this.showModalWithChannel(channel)}/>
-                </Col>
-            </Row>
+            <div className="d-flex flex-row" key={channel['link']}>
+                <div className="nav nav-item d-flex flex-row flex-fill align-items-center" key={channel.link}
+                     style={{'padding': '0.5em'}}>
+                    <NavLink className="nav-link flex-fill" to={'/videos/' + channel['link']}
+                             style={{'margin': '0.5em'}}>
+                        {channel.name}
+                    </NavLink>
+                    <span className="fa fa-ellipsis-v channel-edit fill"
+                          onClick={() => this.showModalWithChannel(channel)}/>
+                </div>
+            </div>
         )
     }
 
     render() {
         return (
             <Nav variant="pills" className="flex-column">
-                {this.state['channels'].map(this.channelRoute)}
+                {this.state['channels'].map(this.channelNavLink)}
                 <ChannelModal
                     modalTitle="Edit Channel"
                     form_id="edit_channel"
@@ -158,6 +159,10 @@ class ChannelsNav extends React.Component {
 }
 
 function VideoCard({video, channel_link}) {
+    let upload_date = video.upload_date ? new Date(video.upload_date * 1000) : null;
+    if (upload_date) {
+        upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth()}-${upload_date.getDay()}`;
+    }
     let video_url = "/videos/" + channel_link + "/" + video.video_path_hash;
     let poster_url = video.poster_path ? `${VIDEOS_API}/static/poster/${video.video_path_hash}` : null;
     return (
@@ -170,7 +175,7 @@ function VideoCard({video, channel_link}) {
                 <Card.Body>
                     <h5>{video.title || video.video_path}</h5>
                     <Card.Text>
-                        {video.upload_date}
+                        {upload_date}
                     </Card.Text>
                 </Card.Body>
             </Card>
@@ -239,14 +244,20 @@ class ChannelVideoPager extends Paginator {
 
     render() {
         return (
-            <>
-                <VideoSearch setVideos={this.setVideos}/>
-                <div className="card-deck">
-                    {this.state['videos'].map((v) => (
-                        <VideoCard key={v['id']} video={v} channel_link={this.props.match.params.channel_link}/>))}
+            <div className="d-flex flex-column">
+                <div className="d-flex flex-row">
+                    <VideoSearch setVideos={this.setVideos}/>
                 </div>
-                {this.getPagination()}
-            </>
+                <div className="d-flex flex-row">
+                    <div className="card-deck">
+                        {this.state['videos'].map((v) => (
+                            <VideoCard key={v['id']} video={v} channel_link={this.props.match.params.channel_link}/>))}
+                    </div>
+                </div>
+                <div className="d-flex flex-row justify-content-center">
+                    {this.getPagination()}
+                </div>
+            </div>
         )
     }
 }
@@ -293,22 +304,30 @@ function ChannelModal(props) {
                 </Form>
             </Modal.Body>
             <Modal.Footer>
-                <Alert variant={(props.error ? 'danger' : 'success')} hidden={(!props.message)}>
-                    {props.message}
-                </Alert>
-                {props.onDelete &&
-                <Button variant="danger" onClick={props.onDelete}>
-                    Delete
-                </Button>
-                }
-                <ButtonGroup>
-                    <Button variant="secondary" onClick={hide}>
-                        Close
-                    </Button>
-                    <Button type="submit" variant={props.submitBtnVariant || 'primary'} form={props.form_id}>
-                        Save
-                    </Button>
-                </ButtonGroup>
+                <div className="d-flex flex-row flex-fill">
+                    <div className="d-flex flex-column align-content-start">
+                        {props.onDelete &&
+                        <Button variant="danger" onClick={props.onDelete}>
+                            Delete
+                        </Button>
+                        }
+                    </div>
+                    <div className="d-flex flex-column flex-fill">
+                        <Alert variant={(props.error ? 'danger' : 'success')} hidden={(!props.message)}>
+                            {props.message}
+                        </Alert>
+                    </div>
+                    <div className="d-flex flex-column align-content-end">
+                        <ButtonGroup>
+                            <Button variant="secondary" onClick={hide}>
+                                Close
+                            </Button>
+                            <Button type="submit" variant={props.submitBtnVariant || 'primary'} form={props.form_id}>
+                                Save
+                            </Button>
+                        </ButtonGroup>
+                    </div>
+                </div>
             </Modal.Footer>
         </Modal>
     )
@@ -602,7 +621,6 @@ class ManageContent extends React.Component {
                     id="manage_content"
                     className="btn-secondary"
                     onClick={this.handleShow}
-                    style={{'marginBottom': '0.5em'}}
                 >
                     <span className="fas fa-cog"/>
                 </Button>
@@ -768,45 +786,31 @@ class Videos extends React.Component {
         }
     }
 
-    breadcrumbs() {
-        return (
-            <Breadcrumb>
-                {/* use li so we can link with a */}
-                <li className="breadcrumb-item">
-                    <Link to='/videos'>Videos</Link>
-                </li>
-                <Route path='/videos/:channel_link' exact={true} component={VideoBreadcrumb}/>
-                <Route path='/videos/:channel_link/:video_hash' exact={true} component={VideoBreadcrumb}/>
-            </Breadcrumb>
-        )
-    }
-
     render() {
         return (
-            <Row style={{'marginTop': '1.5em'}}>
-                <Col className="col-3">
-                    <Row style={{'marginBottom': '1.5em'}}>
-                        <Col className="col-9">
-                            <h4>
-                                Channels
-                            </h4>
-                        </Col>
-                        <Col className="col-3">
-                            <div className="ml-auto">
-                                <ManageContent/>
-                                <AddChannel/>
-                            </div>
-                        </Col>
-                    </Row>
-                    <Row>
-                        <Col>
-                            <ChannelsNav/>
-                        </Col>
-                    </Row>
-                </Col>
-                <Col className="col-9">
-                    <Container>
-                        {this.breadcrumbs()}
+            <div className="d-flex flex-row">
+                <div className="d-flex flex-column w-25">
+                    <div className="d-flex flex-row" style={{'margin': '1em'}}>
+                        <h4 className="flex-fill">Channels</h4>
+                        <ButtonGroup>
+                            <ManageContent/>
+                            <AddChannel/>
+                        </ButtonGroup>
+                    </div>
+                    <div className="d-flex flex-column">
+                        <ChannelsNav/>
+                    </div>
+                </div>
+                <div className="d-flex flex-column w-75">
+                    <Container fluid={true} style={{'padding': '1em'}}>
+                        <Breadcrumb>
+                            {/* use li so we can link with a */}
+                            <li className="breadcrumb-item">
+                                <Link to='/videos'>Videos</Link>
+                            </li>
+                            <Route path='/videos/:channel_link' exact={true} component={VideoBreadcrumb}/>
+                            <Route path='/videos/:channel_link/:video_hash' exact={true} component={VideoBreadcrumb}/>
+                        </Breadcrumb>
                         <Switch>
                             <Route path="/videos/:channel_link/:video_hash" component={Video}/>
                             <Route
@@ -815,8 +819,8 @@ class Videos extends React.Component {
                             />
                         </Switch>
                     </Container>
-                </Col>
-            </Row>
+                </div>
+            </div>
         )
     }
 }

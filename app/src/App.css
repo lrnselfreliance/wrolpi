@@ -1,0 +1,9 @@
+.channel-edit {
+    border-radius: 3px;
+    margin: 0.25em;
+    padding: 0.75em;
+}
+.channel-edit:hover {
+    background-color: #7abaff;
+    cursor: pointer;
+}

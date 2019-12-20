@@ -3,7 +3,18 @@
     margin: 0.25em;
     padding: 0.75em;
 }
+
 .channel-edit:hover {
     background-color: #7abaff;
     cursor: pointer;
+}
+
+::-ms-clear {
+  display: none;
+}
+
+.form-control-clear {
+  z-index: 10;
+  pointer-events: auto;
+  cursor: pointer;
 }

@@ -215,11 +215,12 @@ class ChannelVideoPager extends Paginator {
             'total': null,
         };
         this.setVideos = this.setVideos.bind(this);
+        this.reset = this.reset.bind(this);
     }
 
-    async getVideos(link, offset, limit) {
+    async getVideos() {
         try {
-            let [videos, total] = await getVideos(link, offset, limit);
+            let [videos, total] = await getVideos(this.props.match.params.channel_link, this.state.offset, this.state.limit);
             this.setVideos(videos, total);
         } catch (e) {
             // Couldn't fetch channel videos, could be a bad channel link?
@@ -228,11 +229,15 @@ class ChannelVideoPager extends Paginator {
     }
 
     setVideos(videos, total) {
-        this.setState({'videos': videos, 'total': total});
+        this.setState({videos: videos, total: total});
+    }
+
+    async reset() {
+        this.setState({offset: 0, limit: 20}, this.getVideos);
     }
 
     async componentDidMount() {
-        await this.getVideos(this.props.match.params.channel_link, this.state.offset, this.state.limit);
+        await this.getVideos();
     }
 
     async componentDidUpdate(prevProps, prevState) {
@@ -246,7 +251,7 @@ class ChannelVideoPager extends Paginator {
         return (
             <div className="d-flex flex-column">
                 <div className="d-flex flex-row">
-                    <VideoSearch setVideos={this.setVideos}/>
+                    <VideoSearch setVideos={this.setVideos} clear={this.reset}/>
                 </div>
                 <div className="d-flex flex-row">
                     <div className="card-deck">
@@ -648,10 +653,9 @@ class VideoSearch extends React.Component {
 
     constructor(props) {
         super(props);
-        this.state = {
-            searchStr: '',
-        };
         this.searchApi = `${VIDEOS_API}/search`;
+        this.searchInput = React.createRef();
+        this.clear = this.clear.bind(this);
     }
 
     async handleSubmitSearch(e) {
@@ -664,6 +668,11 @@ class VideoSearch extends React.Component {
     async handleChangeSearch(e) {
         let value = e.target.value;
         await this.handleSearch(e, value)
+    }
+
+    clear() {
+        this.searchInput.current.value = '';
+        this.props.clear();
     }
 
     async handleSearch(e, value) {
@@ -694,14 +703,20 @@ class VideoSearch extends React.Component {
             <Form inline style={{'marginBottom': '1em'}}
                   onSubmit={(e) => this.handleSubmitSearch(e)}>
                 <FormControl
+                    ref={this.searchInput}
                     type="text"
                     className="mr-sm-2"
                     placeholder="Search"
                     onChange={(e) => this.handleChangeSearch(e)}
                 />
-                <Button type="submit" variant="outline-info">
-                    <span className="fas fa-search"/>
-                </Button>
+                <ButtonGroup>
+                    <Button type="submit" variant="info">
+                        <span className="fas fa-search"/>
+                    </Button>
+                    <Button onClick={this.clear} variant="secondary">
+                        <span className="fas fa-window-close"/>
+                    </Button>
+                </ButtonGroup>
             </Form>
         )
     }

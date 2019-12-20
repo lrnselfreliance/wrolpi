@@ -38,7 +38,6 @@ class Paginator extends React.Component {
         items = items.slice(start, start + item_count);
 
         return (
-            /* TODO this should be centered */
             <Pagination>
                 {/* first and last should always be present */}
                 {items[0] !== 0 && <Pagination.First onClick={() => this.setOffset(0)}/>}

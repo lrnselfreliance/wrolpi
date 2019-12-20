@@ -2,14 +2,6 @@ import React from "react";
 import Pagination from "react-bootstrap/Pagination";
 
 class Paginator extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            'limit': 20,
-            'offset': 0,
-            'total': null,
-        };
-    }
 
     setOffset(offset) {
         this.setState({'offset': offset});

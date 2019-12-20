@@ -189,7 +189,7 @@ async function getChannel(link) {
     return data['channel'];
 }
 
-async function getVideos(link, offset, limit) {
+async function getChannelVideos(link, offset, limit) {
     let response = await fetch(`${VIDEOS_API}/channels/${link}/videos?offset=${offset}&limit=${limit}`);
     if (response.status === 200) {
         let data = await response.json();
@@ -214,26 +214,52 @@ class ChannelVideoPager extends Paginator {
             'offset': 0,
             'total': null,
         };
+        this.searchInput = React.createRef();
+        this.searchApi = `${VIDEOS_API}/search`;
+
+        this.handleSearch = this.handleSearch.bind(this);
+        this.clear = this.clear.bind(this);
         this.setVideos = this.setVideos.bind(this);
-        this.reset = this.reset.bind(this);
+    }
+
+    async handleSearch(e) {
+        if (e !== undefined) {
+            e.preventDefault();
+        }
+        let value = this.searchInput.current.value;
+        let offset = this.state.offset;
+        let form_data = {search_str: value, offset};
+        let response = await fetch(this.searchApi, {
+            method: 'POST',
+            body: JSON.stringify(form_data),
+        });
+        let data = await response.json();
+        if (data['videos']) {
+            let videos = data['videos'];
+            let total = data['totals']['videos'];
+            this.setVideos(videos, total);
+        }
     }
 
     async getVideos() {
-        try {
-            let [videos, total] = await getVideos(this.props.match.params.channel_link, this.state.offset, this.state.limit);
+        let videos;
+        let total;
+        if (!this.searchInput.current.value) {
+            [videos, total] = await getChannelVideos(this.props.match.params.channel_link, this.state.offset, this.state.limit);
             this.setVideos(videos, total);
-        } catch (e) {
-            // Couldn't fetch channel videos, could be a bad channel link?
+        } else {
+            await this.handleSearch();
         }
 
     }
 
-    setVideos(videos, total) {
-        this.setState({videos: videos, total: total});
+    clear() {
+        this.searchInput.current.value = '';
+        this.setState({offset: 0, limit: 20}, this.getVideos);
     }
 
-    async reset() {
-        this.setState({offset: 0, limit: 20}, this.getVideos);
+    setVideos(videos, total) {
+        this.setState({videos: videos, total: total});
     }
 
     async componentDidMount() {
@@ -243,7 +269,7 @@ class ChannelVideoPager extends Paginator {
     async componentDidUpdate(prevProps, prevState) {
         if (this.props.match.params.channel_link !== prevProps.match.params.channel_link ||
             this.state.offset !== prevState.offset) {
-            await this.getVideos(this.props.match.params.channel_link, this.state.offset, this.state.limit);
+            await this.getVideos();
         }
     }
 
@@ -251,7 +277,23 @@ class ChannelVideoPager extends Paginator {
         return (
             <div className="d-flex flex-column">
                 <div className="d-flex flex-row">
-                    <VideoSearch setVideos={this.setVideos} clear={this.reset}/>
+                    <Form inline style={{'marginBottom': '1em'}}
+                          onSubmit={this.handleSearch}>
+                        <FormControl
+                            ref={this.searchInput}
+                            type="text"
+                            className="mr-sm-2"
+                            placeholder="Search"
+                        />
+                        <ButtonGroup>
+                            <Button type="submit" variant="info">
+                                <span className="fas fa-search"/>
+                            </Button>
+                            <Button onClick={this.clear} variant="secondary">
+                                <span className="fas fa-window-close"/>
+                            </Button>
+                        </ButtonGroup>
+                    </Form>
                 </div>
                 <div className="d-flex flex-row">
                     <div className="card-deck">
@@ -696,29 +738,6 @@ class VideoSearch extends React.Component {
         let videos = results['videos'];
         let total = results['totals']['videos'];
         this.props.setVideos(videos, total);
-    }
-
-    render() {
-        return (
-            <Form inline style={{'marginBottom': '1em'}}
-                  onSubmit={(e) => this.handleSubmitSearch(e)}>
-                <FormControl
-                    ref={this.searchInput}
-                    type="text"
-                    className="mr-sm-2"
-                    placeholder="Search"
-                    onChange={(e) => this.handleChangeSearch(e)}
-                />
-                <ButtonGroup>
-                    <Button type="submit" variant="info">
-                        <span className="fas fa-search"/>
-                    </Button>
-                    <Button onClick={this.clear} variant="secondary">
-                        <span className="fas fa-window-close"/>
-                    </Button>
-                </ButtonGroup>
-            </Form>
-        )
     }
 }
 

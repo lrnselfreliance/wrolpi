@@ -1,11 +1,16 @@
 import json
 import logging
+import os
 import queue
 import string
 import subprocess
 from collections import namedtuple
+from datetime import datetime
 from functools import wraps
+from http import HTTPStatus
 from multiprocessing import Event, Queue
+from pathlib import Path
+from typing import Union
 from urllib.parse import urlunsplit
 from uuid import UUID
 
@@ -299,3 +304,50 @@ class FeedReporter:
     def set_progress(self, idx: int, progress: int, message: str = None):
         self.progresses[idx]['now'] = self.calculators[idx](progress)
         self.queue.put({'progresses': self.progresses, 'message': message})
+
+
+LAST_MODIFIED_FORMAT = '%a, %d %b %Y %H:%M:%S GMT'
+
+
+class FileNotModified(Exception):
+    pass
+
+
+def handle_FileNotModified(func):
+    """
+    A wrapper that simply returns a 304 Not Modified response if the wrapped function raises a FileNotModified
+    """
+
+    @wraps(func)
+    async def wrapped(*a, **kw):
+        try:
+            result = await func(*a, **kw)
+            return result
+        except FileNotModified:
+            return response.raw('', status=HTTPStatus.NOT_MODIFIED)
+
+    return wrapped
+
+
+def get_modified_time(path: Union[Path, str]) -> datetime:
+    modified = datetime.utcfromtimestamp(os.path.getmtime(str(path)))
+    return modified
+
+
+def get_last_modified_headers(request_headers: dict, path: Union[Path, str]) -> dict:
+    """
+    Get a dict containing the Last-Modified header for the provided path.  If If-Modified-Since is in the provided
+    request headers, then this will raise a FileNotModified exception, which should be handled by
+    `handle_FileNotModified`.
+    """
+    last_modified = get_modified_time(path)
+
+    modified_since = request_headers.get('If-Modified-Since')
+    if modified_since:
+        modified_since = datetime.strptime(modified_since, '%Y-%m-%d %H:%M:%S.%f')
+        if last_modified >= modified_since:
+            raise FileNotModified()
+
+    last_modified = last_modified.strftime(LAST_MODIFIED_FORMAT)
+    headers = {'Last-Modified': last_modified}
+    return headers

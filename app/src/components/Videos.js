@@ -702,9 +702,13 @@ class VideoBreadcrumb extends React.Component {
 
     async getChannelAndVideo() {
         let channel_link = this.props.match.params.channel_link;
-        this.setState({'channel': await getChannel(channel_link)});
+        if (channel_link) {
+            this.setState({'channel': await getChannel(channel_link)});
+        }
         let video_hash = this.props.match.params.video_hash;
-        this.setState({'video': await getVideo(video_hash)});
+        if (video_hash) {
+            this.setState({'video': await getVideo(video_hash)});
+        }
     }
 
     async componentDidMount() {

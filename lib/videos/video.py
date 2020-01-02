@@ -4,13 +4,15 @@ from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from lib.common import validate_doc, boolean_arg
+from lib.common import validate_doc, boolean_arg, logger, handle_FileNotModified, get_last_modified_headers
 from lib.db import get_db_context
 from lib.errors import UnknownVideo, UnknownFile, SearchEmpty, ValidationError
 from lib.videos.common import get_absolute_video_path, VIDEO_QUERY_LIMIT
 from lib.videos.schema import ChannelVideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse
 
 video_bp = Blueprint('Video')
+
+logger = logger.getChild('video')
 
 
 @video_bp.get('/video/<video_hash:string>')
@@ -36,6 +38,7 @@ def video(request, video_hash: str):
 @validate_doc(
     summary='Get a video/poster/caption file',
 )
+@handle_FileNotModified
 async def media_file(request: Request, hash: str):
     download = boolean_arg(request, 'download')
 
@@ -47,10 +50,12 @@ async def media_file(request: Request, hash: str):
     try:
         video = Video.get_one(video_path_hash=hash)
         path = get_absolute_video_path(video, kind=kind)
+        headers = get_last_modified_headers(request.headers, path)
+
         if download:
-            return await response.file_stream(str(path), filename=path.name)
+            return await response.file_stream(str(path), filename=path.name, headers=headers)
         else:
-            return await response.file_stream(str(path))
+            return await response.file_stream(str(path), headers=headers)
     except TypeError or KeyError or UnknownFile:
         raise UnknownFile()
 

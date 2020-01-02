@@ -65,14 +65,7 @@ class NoBodyContents(APIError):
     pass
 
 
-def error_code_generator():
-    code = 0
-    while True:
-        code += 1
-        yield code
-
-
-error_codes = error_code_generator()
+error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
     UnknownVideo: {

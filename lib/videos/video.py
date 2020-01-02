@@ -4,7 +4,8 @@ from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from lib.common import validate_doc, boolean_arg, logger, handle_FileNotModified, get_last_modified_headers
+from lib.common import validate_doc, boolean_arg, logger, get_last_modified_headers, \
+    FileNotModified
 from lib.db import get_db_context
 from lib.errors import UnknownVideo, UnknownFile, SearchEmpty, ValidationError
 from lib.videos.common import get_absolute_video_path, VIDEO_QUERY_LIMIT
@@ -38,7 +39,6 @@ def video(request, video_hash: str):
 @validate_doc(
     summary='Get a video/poster/caption file',
 )
-@handle_FileNotModified
 async def media_file(request: Request, hash: str):
     download = boolean_arg(request, 'download')
 
@@ -50,7 +50,11 @@ async def media_file(request: Request, hash: str):
     try:
         video = Video.get_one(video_path_hash=hash)
         path = get_absolute_video_path(video, kind=kind)
-        headers = get_last_modified_headers(request.headers, path)
+
+        try:
+            headers = get_last_modified_headers(request.headers, path)
+        except FileNotModified:
+            return response.raw('', status=HTTPStatus.NOT_MODIFIED)
 
         if download:
             return await response.file_stream(str(path), filename=path.name, headers=headers)
@@ -102,7 +106,7 @@ def channel_search(db_conn, db: DictDB, search_str: str, offset: int):
     consumes=VideoSearchRequest,
     produces=VideoSearchResponse,
 )
-def search(request: Request, data: dict):
+def search(_: Request, data: dict):
     search_str = data['search_str']
     offset = int(data.get('offset', 0))
 

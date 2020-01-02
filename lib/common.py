@@ -307,29 +307,17 @@ class FeedReporter:
 
 
 LAST_MODIFIED_FORMAT = '%a, %d %b %Y %H:%M:%S GMT'
+IF_MODIFIED_SINCE_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 
 
 class FileNotModified(Exception):
     pass
 
 
-def handle_FileNotModified(func):
-    """
-    A wrapper that simply returns a 304 Not Modified response if the wrapped function raises a FileNotModified
-    """
-
-    @wraps(func)
-    async def wrapped(*a, **kw):
-        try:
-            result = await func(*a, **kw)
-            return result
-        except FileNotModified:
-            return response.raw('', status=HTTPStatus.NOT_MODIFIED)
-
-    return wrapped
-
-
 def get_modified_time(path: Union[Path, str]) -> datetime:
+    """
+    Return a datetime object containing the os modification time of the provided path.
+    """
     modified = datetime.utcfromtimestamp(os.path.getmtime(str(path)))
     return modified
 
@@ -344,7 +332,7 @@ def get_last_modified_headers(request_headers: dict, path: Union[Path, str]) -> 
 
     modified_since = request_headers.get('If-Modified-Since')
     if modified_since:
-        modified_since = datetime.strptime(modified_since, '%Y-%m-%d %H:%M:%S.%f')
+        modified_since = datetime.strptime(modified_since, IF_MODIFIED_SINCE_FORMAT)
         if last_modified >= modified_since:
             raise FileNotModified()
 

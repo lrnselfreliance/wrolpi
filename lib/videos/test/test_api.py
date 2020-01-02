@@ -373,14 +373,14 @@ class TestVideoAPI(TestAPI):
             # Get the file using the If-Modified-Since header, the file wasn't modified, so it should return a 304
             last_modified = response.headers['Last-Modified']
             last_modified = datetime.strptime(last_modified, LAST_MODIFIED_FORMAT)
-            headers = {'If-Modified-Since': last_modified.strftime(IF_MODIFIED_SINCE_FORMAT)}
+            headers = {'If-Modified-Since': last_modified.strftime(LAST_MODIFIED_FORMAT)}
             _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}',
                                                   headers=headers)
             assert response.status_code == HTTPStatus.NOT_MODIFIED
 
             # Get the file using the If-Modified-Since header, the date is wrong, so the API thinks its changed
             last_modified += timedelta(days=1)
-            headers = {'If-Modified-Since': last_modified.strftime(IF_MODIFIED_SINCE_FORMAT)}
+            headers = {'If-Modified-Since': last_modified.strftime(LAST_MODIFIED_FORMAT)}
             _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}',
                                                   headers=headers)
             assert response.status_code == HTTPStatus.OK

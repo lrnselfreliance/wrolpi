@@ -23,7 +23,9 @@ def get_channels(request: Request):
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']
     channels = Channel.get_where().order_by('LOWER(name) ASC')
-    channels = list(channels)
+    # Minimize the data returned when getting all channels
+    keys = {'id', 'name', 'link'}
+    channels = [{k: c[k] for k in keys} for c in channels]
     return response.json({'channels': channels})
 
 
@@ -39,9 +41,11 @@ def channel_get(request: Request, link: str):
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']
     channel = Channel.get_one(link=link)
-    logger.debug(f'channel_get.channel: {channel}')
     if not channel:
         raise UnknownChannel()
+    # Remove the info_json stuff
+    channel = dict(channel)
+    channel.pop('info_json')
     return response.json({'channel': channel})
 
 

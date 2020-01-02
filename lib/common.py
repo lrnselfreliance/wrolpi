@@ -331,7 +331,7 @@ def get_last_modified_headers(request_headers: dict, path: Union[Path, str]) -> 
 
     modified_since = request_headers.get('If-Modified-Since')
     if modified_since:
-        modified_since = datetime.strptime(modified_since, IF_MODIFIED_SINCE_FORMAT)
+        modified_since = datetime.strptime(modified_since, LAST_MODIFIED_FORMAT)
         if last_modified >= modified_since:
             raise FileNotModified()
 

@@ -24,12 +24,9 @@ class ChannelModel:
     id = doc.Integer()
     url = doc.String()
     name = doc.String()
-    idempotency = doc.String()
     match_regex = doc.String()
     link = doc.String()
     directory = doc.String()
-    info_json = doc.Dictionary
-    info_date = doc.Date()
 
 
 class ChannelResponse:
@@ -40,8 +37,14 @@ class ChannelPostResponse:
     success = doc.String()
 
 
+class ChannelsChannelModel:
+    id = doc.Integer()
+    name = doc.String()
+    link = doc.String()
+
+
 class ChannelsResponse:
-    channels = doc.List(doc.Object(ChannelModel))
+    channels = doc.List(doc.Object(ChannelsChannelModel))
 
 
 class DownloaderConfig:

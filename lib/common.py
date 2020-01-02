@@ -7,7 +7,6 @@ import subprocess
 from collections import namedtuple
 from datetime import datetime
 from functools import wraps
-from http import HTTPStatus
 from multiprocessing import Event, Queue
 from pathlib import Path
 from typing import Union

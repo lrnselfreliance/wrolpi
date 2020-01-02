@@ -358,9 +358,6 @@ class TestVideoAPI(TestAPI):
             self.assertIsInstance(response.body, bytes)
             assert len(response.body) > 10
 
-            last_modified = response.headers['Last-Modified']
-            last_modified = datetime.strptime(last_modified, LAST_MODIFIED_FORMAT)
-
             # The user can download the video file
             _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}?download=true')
             assert response.status_code == HTTPStatus.OK
@@ -374,6 +371,8 @@ class TestVideoAPI(TestAPI):
             assert len(response.body) > 10
 
             # Get the file using the If-Modified-Since header, the file wasn't modified, so it should return a 304
+            last_modified = response.headers['Last-Modified']
+            last_modified = datetime.strptime(last_modified, LAST_MODIFIED_FORMAT)
             headers = {'If-Modified-Since': last_modified.strftime(IF_MODIFIED_SINCE_FORMAT)}
             _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}',
                                                   headers=headers)

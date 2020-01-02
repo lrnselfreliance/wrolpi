@@ -691,63 +691,13 @@ class ManageContent extends React.Component {
     }
 }
 
-class VideoSearch extends React.Component {
-
-    constructor(props) {
-        super(props);
-        this.searchApi = `${VIDEOS_API}/search`;
-        this.searchInput = React.createRef();
-        this.clear = this.clear.bind(this);
-    }
-
-    async handleSubmitSearch(e) {
-        e.preventDefault();
-        // TODO hardcoded to first input, surely there is a better way?
-        let value = e.target[0].value;
-        await this.handleSearch(e, value)
-    }
-
-    async handleChangeSearch(e) {
-        let value = e.target.value;
-        await this.handleSearch(e, value)
-    }
-
-    clear() {
-        this.searchInput.current.value = '';
-        this.props.clear();
-    }
-
-    async handleSearch(e, value) {
-        let form_data = {
-            'search_str': value,
-            'offset': 0,
-        };
-        if (value.length > 2) {
-            let response = await fetch(this.searchApi, {
-                method: 'POST',
-                body: JSON.stringify(form_data),
-            });
-            let data = await response.json();
-            if (data['videos']) {
-                await this.handleResults(data);
-            }
-        }
-    }
-
-    async handleResults(results) {
-        let videos = results['videos'];
-        let total = results['totals']['videos'];
-        this.props.setVideos(videos, total);
-    }
-}
-
 class VideoBreadcrumb extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
             'video': null,
             'channel': null,
-        }
+        };
     }
 
     async getChannelAndVideo() {
@@ -768,25 +718,24 @@ class VideoBreadcrumb extends React.Component {
         }
     }
 
-    getChannelBreadcrumb() {
-        if (this.state.channel) {
-            return (
+    render() {
+        return (
+            <Breadcrumb>
+                {/* Always include the /videos breadcrumb */}
                 <li className="breadcrumb-item">
-                    <Link to={'/videos/' + this.props.match.params.channel_link}>
-                        {this.state.channel['name']}
-                    </Link>
+                    <Link to='/videos'>Videos</Link>
                 </li>
-            )
-        }
-    }
-
-    getBreadcrumb() {
-        // If video: Channel Name / Video Title
-        // else if channel: Channel Name
-        if (this.state.video) {
-            return (
-                <>
-                    {this.getChannelBreadcrumb()}
+                {/* Show the channel only when its set */}
+                {
+                    this.state.channel &&
+                    <li className="breadcrumb-item">
+                        <Link to={'/videos/' + this.props.match.params.channel_link}>
+                            {this.state.channel['name']}
+                        </Link>
+                    </li>}
+                {/* Show the video when the video is set */}
+                {
+                    this.state.video &&
                     <li className="breadcrumb-item">
                         <Link
                             to={'/videos/' +
@@ -794,18 +743,8 @@ class VideoBreadcrumb extends React.Component {
                             this.props.match.params.video_hash}>
                             {this.state.video['title'] || this.state.video['video_path']}
                         </Link>
-                    </li>
-                </>
-            )
-        } else if (this.state.channel) {
-            return this.getChannelBreadcrumb()
-        }
-        return (<></>)
-    }
-
-    render() {
-        return (
-            this.getBreadcrumb()
+                    </li>}
+            </Breadcrumb>
         )
     }
 }
@@ -837,20 +776,10 @@ class Videos extends React.Component {
                 </div>
                 <div className="d-flex flex-column w-75">
                     <Container fluid={true} style={{'padding': '1em'}}>
-                        <Breadcrumb>
-                            {/* use li so we can link with a */}
-                            <li className="breadcrumb-item">
-                                <Link to='/videos'>Videos</Link>
-                            </li>
-                            <Route path='/videos/:channel_link' exact={true} component={VideoBreadcrumb}/>
-                            <Route path='/videos/:channel_link/:video_hash' exact={true} component={VideoBreadcrumb}/>
-                        </Breadcrumb>
+                        <Route path='/videos/:channel_link?/:video_hash?' component={VideoBreadcrumb}/>
                         <Switch>
-                            <Route path="/videos/:channel_link/:video_hash" component={Video}/>
-                            <Route
-                                path="/videos/:channel_link"
-                                component={ChannelVideoPager}
-                            />
+                            <Route path="/videos/:channel_link/:video_hash" exact component={Video}/>
+                            <Route path="/videos/:channel_link" exact component={ChannelVideoPager}/>
                         </Switch>
                     </Container>
                 </div>

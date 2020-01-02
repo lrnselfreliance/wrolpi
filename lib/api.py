@@ -38,7 +38,7 @@ def setup_db_context(request):
 
 
 @api_app.middleware('response')
-def teardown_db_context(request, response):
+def teardown_db_context(request, _):
     try:
         pool, conn, key = request.ctx.pool, request.ctx.conn, request.ctx.key
         try:
@@ -108,8 +108,6 @@ def attach_routes(app):
     if ROUTES_ATTACHED:
         return
     ROUTES_ATTACHED = True
-    # routes: /api/*
-    blueprints = []
     # module.api_bp can be a Blueprint or BlueprintGroup
     blueprints = [module.api_bp for module in MODULES.values()]
     api_group = Blueprint.group(*blueprints, root_api, url_prefix='/api')
@@ -139,6 +137,6 @@ def main(args):
 
 if __name__ == '__main__':
     # If run directly, we'll make our own parser
-    parser = argparse.ArgumentParser()
-    init_parser(parser)
-    main(parser.parse_args())
+    p = argparse.ArgumentParser()
+    init_parser(p)
+    main(p.parse_args())

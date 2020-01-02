@@ -9,5 +9,6 @@ sanic-cors>=0.9.9.post3
 sanic-openapi>=0.6.0
 sanic>=19.9.0
 srt==3.0.0
+websockets>=8.1
 webvtt-py==0.4.2
 youtube-dl>=2019.8.13

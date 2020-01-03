@@ -1,16 +1,19 @@
 import React from 'react';
 import Button from "react-bootstrap/Button";
-
-const API_URI = process.env.REACT_APP_API ? process.env.REACT_APP_API : '127.0.0.1:8081';
-const VIDEOS_API = `http://${API_URI}/api/videos/`;
+import {VIDEOS_API} from "./Common";
 
 function Video(props) {
-    let params = props.match.params;
-    let video_hash = params.video_hash;
+    let video_hash = props.video.video_path_hash;
 
-    let poster_url = VIDEOS_API + 'static/poster/' + video_hash;
-    let video_url = VIDEOS_API + 'static/video/' + video_hash;
-    let captions_url = VIDEOS_API + 'static/caption/' + video_hash;
+    let description = '';
+    if (props.video.info_json) {
+        let info_json = JSON.parse(props.video.info_json);
+        description = info_json['description'];
+    }
+
+    let poster_url = VIDEOS_API + '/static/poster/' + video_hash;
+    let video_url = VIDEOS_API + '/static/video/' + video_hash;
+    let captions_url = VIDEOS_API + '/static/caption/' + video_hash;
 
     let video_download_url = video_url + '?download=true';
 
@@ -21,9 +24,16 @@ function Video(props) {
                 <track kind="captions" label="English captions" src={captions_url} srcLang="en" default/>
             </video>
 
-            <a href={video_download_url}>
-                <Button>Download</Button>
-            </a>
+            <p>
+                <a href={video_download_url}>
+                    <Button>Download</Button>
+                </a>
+            </p>
+
+            <h4>Description</h4>
+            <pre>
+                {description}
+            </pre>
         </>
     )
 }

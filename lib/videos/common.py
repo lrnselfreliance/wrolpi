@@ -17,7 +17,6 @@ from lib.vars import DOCKERIZED, TEST_VIDEO_PATH, PROJECT_DIR
 
 logger = logger.getChild('videos')
 
-MY_DIR: Path = Path(__file__).parent
 CONFIG_PATH = PROJECT_DIR / 'local.yaml'
 EXAMPLE_CONFIG_PATH = PROJECT_DIR / 'example.yaml'
 REQUIRED_OPTIONS = ['name', 'directory']

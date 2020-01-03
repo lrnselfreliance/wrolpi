@@ -1,10 +1,7 @@
 # base image
 FROM node:13-buster
 
-# set working directory
 WORKDIR /app
-
-# add `/app/node_modules/.bin` to $PATH
 ENV PATH /app/node_modules/.bin:$PATH
 
 # install and cache app dependencies
@@ -16,5 +13,5 @@ RUN npm install react-scripts@3.3.0 -g --silent
 RUN yarn run build
 RUN yarn global add serve
 
-# start app
+# Run the production build
 CMD ["serve", "-s", "build"]

@@ -9,13 +9,10 @@ import Card from "react-bootstrap/Card";
 import '../static/external/fontawesome-free/css/all.min.css';
 import Alert from "react-bootstrap/Alert";
 import Breadcrumb from "react-bootstrap/Breadcrumb";
-import Paginator from "./Common"
+import Paginator, {VIDEOS_API} from "./Common"
 import Container from "react-bootstrap/Container";
 import Switch from "react-bootstrap/cjs/Switch";
 import Video from "./VideoPlayer";
-
-const API_URI = process.env.REACT_APP_API ? process.env.REACT_APP_API : '127.0.0.1:8081';
-const VIDEOS_API = `http://${API_URI}/api/videos`;
 
 async function updateChannel(channel, name_ref, url_ref, directory_ref, matchRegex_ref) {
     let name = name_ref.current.value;
@@ -758,6 +755,35 @@ class VideoBreadcrumb extends React.Component {
     }
 }
 
+class VideoWrapper extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            video: null,
+        };
+    }
+
+    async componentDidMount() {
+        if (this.props.match.params.video_hash) {
+            let video = await getVideo(this.props.match.params.video_hash);
+            this.setState({video});
+        }
+    }
+
+    getVideo() {
+        if (this.state.video) {
+            return <Video video={this.state.video}/>
+        }
+    }
+
+    render() {
+        return (
+            this.getVideo() || <></>
+        )
+    }
+}
+
 class Videos extends React.Component {
 
     constructor(props) {
@@ -787,7 +813,7 @@ class Videos extends React.Component {
                     <Container fluid={true} style={{'padding': '1em'}}>
                         <Route path='/videos/:channel_link?/:video_hash?' component={VideoBreadcrumb}/>
                         <Switch>
-                            <Route path="/videos/:channel_link/:video_hash" exact component={Video}/>
+                            <Route path="/videos/:channel_link/:video_hash" exact component={VideoWrapper}/>
                             <Route path="/videos/:channel_link" exact component={ChannelVideoPager}/>
                         </Switch>
                     </Container>

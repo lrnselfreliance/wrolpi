@@ -82,8 +82,12 @@ class ChannelVideosResponse:
     videos = doc.List(Video)
 
 
-class ChannelVideoResponse:
-    video = Video
+class ExtendedVideo(Video):
+    info_json = doc.Object(dict)
+
+
+class VideoResponse:
+    video = ExtendedVideo
 
 
 class VideoSearchRequest:

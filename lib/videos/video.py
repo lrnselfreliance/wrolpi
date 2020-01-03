@@ -8,8 +8,8 @@ from lib.common import validate_doc, boolean_arg, logger, get_last_modified_head
     FileNotModified
 from lib.db import get_db_context
 from lib.errors import UnknownVideo, UnknownFile, SearchEmpty, ValidationError
-from lib.videos.common import get_absolute_video_path, VIDEO_QUERY_LIMIT
-from lib.videos.schema import ChannelVideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse
+from lib.videos.common import get_absolute_video_path, VIDEO_QUERY_LIMIT, get_absolute_video_info_json
+from lib.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse
 
 video_bp = Blueprint('Video')
 
@@ -19,7 +19,7 @@ logger = logger.getChild('video')
 @video_bp.get('/video/<video_hash:string>')
 @validate_doc(
     summary='Get Video information',
-    produces=ChannelVideoResponse,
+    produces=VideoResponse,
     responses=(
             (HTTPStatus.NOT_FOUND, JSONErrorResponse),
     ),
@@ -30,6 +30,16 @@ def video(request, video_hash: str):
     video = Video.get_one(video_path_hash=video_hash)
     if not video:
         raise UnknownVideo()
+
+    try:
+        path = get_absolute_video_info_json(video)
+        video = dict(video)
+        with open(str(path), 'rt') as fh:
+            video['info_json'] = fh.read()
+    except UnknownFile:
+        video = dict(video)
+        video['info_json'] = None
+
     return response.json({'video': video})
 
 

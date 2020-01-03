@@ -1,6 +1,9 @@
 import React from "react";
 import Pagination from "react-bootstrap/Pagination";
 
+const API_URI = process.env.REACT_APP_API ? process.env.REACT_APP_API : '127.0.0.1:8081';
+const VIDEOS_API = `http://${API_URI}/api/videos`;
+
 class Paginator extends React.Component {
 
     setOffset(offset) {
@@ -48,3 +51,4 @@ class Paginator extends React.Component {
 }
 
 export default Paginator;
+export {VIDEOS_API};

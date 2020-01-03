@@ -1,4 +1,5 @@
-# If you wish to change these settings, override them in docker-compose.override.yml
+# If you wish to change these settings, override them in docker-compose.override.yml.  If that override files does not
+# exist, create it.
 
 version: '3'
 services:

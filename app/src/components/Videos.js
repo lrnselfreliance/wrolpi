@@ -14,7 +14,8 @@ import Container from "react-bootstrap/Container";
 import Switch from "react-bootstrap/cjs/Switch";
 import Video from "./VideoPlayer";
 
-const VIDEOS_API = '/api/videos';
+const API_URI = process.env.REACT_APP_API ? process.env.REACT_APP_API : '127.0.0.1:8081';
+const VIDEOS_API = `http://${API_URI}/api/videos`;
 
 async function updateChannel(channel, name_ref, url_ref, directory_ref, matchRegex_ref) {
     let name = name_ref.current.value;
@@ -92,6 +93,7 @@ class ChannelsNav extends React.Component {
     }
 
     setChannel(channel) {
+        console.log(channel);
         this.name.current.value = channel.name || '';
         this.url.current.value = channel.url || '';
         this.directory.current.value = channel.directory || '';
@@ -343,9 +345,8 @@ function ChannelModal(props) {
                         <Form.Control name="match_regex" type="text" placeholder=".*(prepper|prepping).*"
                                       ref={props.matchRegex}/>
                         <Form.Text className="text-muted">
-                            The title of the video will be compared to this Regular Expression. If you don't input
-                            this,
-                            all videos will be downloaded.
+                            The title of the video will be compared to this Regular Expression.
+                            <b>If you don't input this, all videos will be downloaded.</b>
                         </Form.Text>
                     </Form.Group>
                 </Form>
@@ -704,10 +705,14 @@ class VideoBreadcrumb extends React.Component {
         let channel_link = this.props.match.params.channel_link;
         if (channel_link) {
             this.setState({'channel': await getChannel(channel_link)});
+        } else {
+            this.setState({'channel': null});
         }
         let video_hash = this.props.match.params.video_hash;
         if (video_hash) {
             this.setState({'video': await getVideo(video_hash)});
+        } else {
+            this.setState({'video': null});
         }
     }
 

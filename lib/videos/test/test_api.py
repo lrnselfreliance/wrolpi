@@ -9,14 +9,14 @@ import mock
 import pytest
 
 from lib.api import api_app, attach_routes
+from lib.common import LAST_MODIFIED_FORMAT
 from lib.db import get_db_context
 from lib.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI, TEST_CONFIG_PATH
 from lib.videos.api import refresh_queue
 from lib.videos.common import get_downloader_config, import_settings_config, TemporaryVideo
-from ..downloader import insert_video
-# Attach the default routes
-from ...common import LAST_MODIFIED_FORMAT, IF_MODIFIED_SINCE_FORMAT
+from lib.videos.downloader import insert_video
 
+# Attach the default routes
 attach_routes(api_app)
 
 

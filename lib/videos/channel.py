@@ -6,7 +6,7 @@ from sanic.request import Request
 
 from lib.common import validate_doc, sanitize_link
 from lib.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
-from lib.videos.common import logger, get_absolute_channel_directory, check_for_channel_conflicts, \
+from lib.videos.common import get_absolute_channel_directory, check_for_channel_conflicts, \
     get_channel_videos
 from lib.videos.schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
     ChannelPostResponse, ChannelPutRequest, SuccessResponse, ChannelVideosResponse
@@ -24,12 +24,12 @@ def get_channels(request: Request):
     Channel = db['channel']
     channels = Channel.get_where().order_by('LOWER(name) ASC')
     # Minimize the data returned when getting all channels
-    keys = {'id', 'name', 'link'}
+    keys = {'id', 'name', 'link', 'directory', 'match_regex', 'url'}
     channels = [{k: c[k] for k in keys} for c in channels]
     return response.json({'channels': channels})
 
 
-@channel_bp.get('/channels/<link:string>')
+@channel_bp.route('/channels/<link:string>', methods=['GET', 'OPTIONS'])
 @validate_doc(
     summary='Get a Channel',
     produces=ChannelResponse,

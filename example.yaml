@@ -1,3 +1,5 @@
+# This is the configuration for the WROLPI API service.
+
 downloader:
   continue_dl: true
   dateafter: 19900101
@@ -8,7 +10,7 @@ downloader:
   max_downloads_per_channel: 0
   nooverwrites: true
   quiet: false
-  video_root_directory: /opt/wrolpi_media/test/example_videos  # this must be an absolute path!
+  video_root_directory: ./test/example_videos/  # This should be an absolute path!
   writeautomaticsub: true
   writeinfojson: true
   writesubtitles: true
@@ -18,7 +20,7 @@ downloader:
 channels:
   # These are channels or playlists that will be downloaded
   bigbuckbunny:
-    directory: blender  # relative to the `downloader.video_root_directory`
-    match_regex: .*b?Bunny.*  # only download the video if the title matches this regex
     name: Big Buck Bunny # the pretty name for the channel
     url: https://www.youtube.com/user/BlenderFoundation/videos
+    directory: blender  # relative to the `downloader.video_root_directory`
+    match_regex: .*b?Bunny.*  # only download the video if the title matches this regex

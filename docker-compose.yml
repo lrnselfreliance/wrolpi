@@ -1,3 +1,5 @@
+# If you wish to change these settings, override them in docker-compose.override.yml
+
 version: '3'
 services:
   db:
@@ -5,7 +7,7 @@ services:
       context: .
       dockerfile: docker/db/Dockerfile
     ports:
-      - 54321:5432  # for local development
+      - 54321:5432  # allows access for the python api when running locally
   api:
     depends_on:
       - db
@@ -13,13 +15,10 @@ services:
       context: .
       dockerfile: docker/api/Dockerfile
     ports:
-      - ${API_HOST-127.0.0.1}:${API_PORT-8080}:8080  # for local development
+      - ${REACT_APP_API-127.0.0.1:8081}:8081
     volumes:
       - .:/opt/wrolpi
       - .:/opt/wrolpi_media
-      # Uncomment the following line and change the drive to your drive or media directory.  Change your local.yaml
-      # config to match this directory.
-      # - /media/8TB:/opt/wrolpi_media
   app:
     depends_on:
       - api
@@ -27,9 +26,7 @@ services:
       context: .
       dockerfile: docker/app/Dockerfile
     ports:
-      - ${APP_HOST-127.0.0.1}:${APP_PORT-3000}:3000
-    volumes:
-      - './app:/app'
+      - ${APP_HOST-127.0.0.1}:${APP_PORT-5000}:5000
   map_db:
     build:
       context: .

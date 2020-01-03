@@ -13,13 +13,13 @@ from lib.common import sanitize_link, logger
 from lib.db import get_db_context
 from lib.errors import UnknownFile, UnknownChannel, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
-from lib.vars import DOCKERIZED, TEST_VIDEO_PATH
+from lib.vars import DOCKERIZED, TEST_VIDEO_PATH, PROJECT_DIR
 
 logger = logger.getChild('videos')
 
 MY_DIR: Path = Path(__file__).parent
-CONFIG_PATH = MY_DIR / 'local.yaml'
-EXAMPLE_CONFIG_PATH = MY_DIR / 'example.yaml'
+CONFIG_PATH = PROJECT_DIR / 'local.yaml'
+EXAMPLE_CONFIG_PATH = PROJECT_DIR / 'example.yaml'
 REQUIRED_OPTIONS = ['name', 'directory']
 
 VIDEO_QUERY_LIMIT = 20
@@ -105,7 +105,7 @@ def get_video_root() -> Path:
     """
     config = get_downloader_config()
     video_root_directory = config['video_root_directory']
-    video_root_directory = Path(video_root_directory)
+    video_root_directory = Path(video_root_directory).absolute()
     return video_root_directory
 
 

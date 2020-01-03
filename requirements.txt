@@ -4,10 +4,11 @@ mock>=3.0.5
 psycopg2-binary>=2.8.3
 pytest-cov>=2.8.1
 pytest>=5.2.1
+python-dotenv>=0.10.3
 pyyaml>=5.1.2
 sanic-cors>=0.9.9.post3
 sanic-openapi>=0.6.0
-sanic>=19.9.0
+sanic==19.9.0
 srt==3.0.0
 websockets>=8.1
 webvtt-py==0.4.2

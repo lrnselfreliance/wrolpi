@@ -306,7 +306,6 @@ class FeedReporter:
 
 
 LAST_MODIFIED_FORMAT = '%a, %d %b %Y %H:%M:%S GMT'
-IF_MODIFIED_SINCE_FORMAT = '%Y-%m-%d %H:%M:%S.%f'
 
 
 class FileNotModified(Exception):

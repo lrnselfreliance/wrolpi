@@ -16,11 +16,11 @@ WROLPi runs in a couple Docker containers.  Lets get the prerequisites installed
 1. Change directory into the code base
     * `cd wrolpi`
 1. Build the minimum docker containers
-    * `docker-compose build --parallel db api app`
+    * `docker-compose build --parallel db api app web`
 1. Start the minimum docker containers
-    * `docker-compose up db api app`
+    * `docker-compose up web`
 1. Navigate to WROLPi
-    * https://127.0.0.1:3000
+    * https://127.0.0.1:8080
 
 
 # Charter

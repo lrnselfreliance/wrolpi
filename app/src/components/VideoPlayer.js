@@ -2,10 +2,12 @@ import React from 'react';
 import Button from "react-bootstrap/Button";
 import {VIDEOS_API} from "./Common";
 
+const MEDIA_PATH = '/media';
+
 function Video(props) {
     let video_hash = props.video.video_path_hash;
 
-    let poster_url = VIDEOS_API + '/static/poster/' + video_hash;
+    let poster_url = MEDIA_PATH + props.video.poster_path;
     let video_url = VIDEOS_API + '/static/video/' + video_hash;
     let captions_url = VIDEOS_API + '/static/caption/' + video_hash;
 

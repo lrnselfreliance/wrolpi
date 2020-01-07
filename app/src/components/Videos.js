@@ -163,7 +163,7 @@ function VideoCard({video, channel_link}) {
         upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth()}-${upload_date.getDay()}`;
     }
     let video_url = "/videos/" + channel_link + "/" + video.video_path_hash;
-    let poster_url = video.poster_path ? `${VIDEOS_API}/static/poster/${video.video_path_hash}` : null;
+    let poster_url = video.poster_path ? `/media/${video.poster_path}` : null;
     return (
         <Link to={video_url}>
             <Card style={{'width': '18em', 'marginBottom': '1em'}}>
@@ -761,10 +761,15 @@ class VideoWrapper extends React.Component {
         super(props);
         this.state = {
             video: null,
+            channel: null,
         };
     }
 
     async componentDidMount() {
+        if (this.props.match.params.channel_link) {
+            let channel = await getChannel(this.props.match.params.channel_link);
+            this.setState({channel});
+        }
         if (this.props.match.params.video_hash) {
             let video = await getVideo(this.props.match.params.video_hash);
             this.setState({video});
@@ -772,8 +777,8 @@ class VideoWrapper extends React.Component {
     }
 
     getVideo() {
-        if (this.state.video) {
-            return <Video video={this.state.video}/>
+        if (this.state.channel && this.state.video) {
+            return <Video channel={this.state.channel} video={this.state.video}/>
         }
     }
 

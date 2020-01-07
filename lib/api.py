@@ -58,6 +58,7 @@ def teardown_db_context(request, _):
 
 
 @api_app.route('/')
+@api_app.route('/api')
 def index(request):
     html = '''
     <html>

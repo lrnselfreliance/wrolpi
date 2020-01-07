@@ -1,0 +1,36 @@
+# Development containers, these should only be used if you are developing.
+version: '3'
+services:
+  db:
+    build:
+      context: .
+      dockerfile: docker/db/Dockerfile
+    ports:
+      - 54321:5432
+  api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    volumes:
+      - .:/opt/wrolpi
+      - .:/opt/wrolpi_media
+    ports:
+      - ${REACT_APP_API-127.0.0.1:8081}:8081
+  app:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    environment:
+      - DANGEROUSLY_DISABLE_HOST_CHECK=true
+    ports:
+      - "3000:3000"
+    command: yarn start
+    volumes:
+      - "./app:/app"
+  web:
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
+    volumes:
+      - "./nginx.dev.conf:/etc/nginx/nginx.conf"
+      - "./test/example_videos:/opt/media"

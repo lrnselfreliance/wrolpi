@@ -1,7 +1,6 @@
 import json
 import pathlib
 import tempfile
-from datetime import datetime, timedelta
 from http import HTTPStatus
 from queue import Empty
 
@@ -9,11 +8,11 @@ import mock
 import pytest
 
 from lib.api import api_app, attach_routes
-from lib.common import LAST_MODIFIED_FORMAT
 from lib.db import get_db_context
+from lib.errors import UnknownFile
 from lib.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI, TEST_CONFIG_PATH
 from lib.videos.api import refresh_queue
-from lib.videos.common import get_downloader_config, import_settings_config, TemporaryVideo
+from lib.videos.common import get_downloader_config, import_settings_config
 from lib.videos.downloader import insert_video
 
 # Attach the default routes
@@ -332,58 +331,24 @@ class TestVideoAPI(TestAPI):
         """
         Test that you get can information about a video.  Test that video file can be gotten.
         """
-        with get_db_context(commit=True) as (db_conn, db):
+        def raise_unknown_file(_):
+            raise UnknownFile()
+
+        with get_db_context(commit=True) as (db_conn, db), \
+                mock.patch('lib.videos.video.get_absolute_video_info_json', raise_unknown_file):
             Channel, Video = db['channel'], db['video']
             channel = Channel(name='Foo', link='foo').flush()
-            video = Video(title='vidd', channel_id=channel['id'], video_path_hash='hashy').flush()
+            Video(title='vidd', channel_id=channel['id'], video_path_hash='hashy').flush()
 
-        # Test that a 404 is returned when no video exists
-        _, response = api_app.test_client.get('/api/videos/video/BAD_HASH')
-        assert response.status_code == HTTPStatus.NOT_FOUND, response.json
-        assert response.json == {'code': 1, 'error': 'The video could not be found.'}
+            # Test that a 404 is returned when no video exists
+            _, response = api_app.test_client.get('/api/videos/video/BAD_HASH')
+            assert response.status_code == HTTPStatus.NOT_FOUND, response.json
+            assert response.json == {'code': 1, 'error': 'The video could not be found.'}
 
-        # Get the video info we inserted
-        _, response = api_app.test_client.get('/api/videos/video/hashy')
-        assert response.status_code == HTTPStatus.OK, response.json
-        self.assertDictContains(response.json['video'], {'title': 'vidd'})
-
-        with TemporaryVideo() as video_ctx, \
-                mock.patch('lib.videos.video.get_absolute_video_path', lambda *a, **kw: video_ctx):
-            # Get the contents of the video file
-            _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}')
-            assert response.status_code == HTTPStatus.OK
-            self.assertDictContains(response.headers, {'content-type': 'video/mp4'})
-            assert 'content-disposition' not in response.headers
-            # The body should have some bytes
-            self.assertIsInstance(response.body, bytes)
-            assert len(response.body) > 10
-
-            # The user can download the video file
-            _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}?download=true')
-            assert response.status_code == HTTPStatus.OK
-            expected = {
-                'content-type': 'video/mp4',
-                'content-disposition': f'attachment; filename="{video_ctx.name}"',
-            }
-            self.assertDictContains(response.headers, expected)
-            # The body should have some bytes
-            self.assertIsInstance(response.body, bytes)
-            assert len(response.body) > 10
-
-            # Get the file using the If-Modified-Since header, the file wasn't modified, so it should return a 304
-            last_modified = response.headers['Last-Modified']
-            last_modified = datetime.strptime(last_modified, LAST_MODIFIED_FORMAT)
-            headers = {'If-Modified-Since': last_modified.strftime(LAST_MODIFIED_FORMAT)}
-            _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}',
-                                                  headers=headers)
-            assert response.status_code == HTTPStatus.NOT_MODIFIED
-
-            # Get the file using the If-Modified-Since header, the date is wrong, so the API thinks its changed
-            last_modified += timedelta(days=1)
-            headers = {'If-Modified-Since': last_modified.strftime(LAST_MODIFIED_FORMAT)}
-            _, response = api_app.test_client.get(f'/api/videos/static/video/{video["video_path_hash"]}',
-                                                  headers=headers)
-            assert response.status_code == HTTPStatus.OK
+            # Get the video info we inserted
+            _, response = api_app.test_client.get('/api/videos/video/hashy')
+            assert response.status_code == HTTPStatus.OK, response.json
+            self.assertDictContains(response.json['video'], {'title': 'vidd'})
 
     @wrap_test_db
     def test_get_channel_videos_pagination(self):

@@ -248,26 +248,3 @@ def get_channel_videos(db: DictDB, link: str, offset: int = 0):
     videos = Video.get_where(channel_id=channel['id']).order_by(
         'upload_date DESC, LOWER(title) ASC, LOWER(video_path) ASC').limit(VIDEO_QUERY_LIMIT).offset(offset)
     return videos, total
-
-
-class TemporaryVideo:
-    """
-    Contextmanager that creates a real mp4 file that contains 1000 bytes of sample video data.
-    """
-
-    def __init__(self):
-        self.temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-        self.name = self.temp_file.name
-        with open(str(TEST_VIDEO_PATH), 'rb') as fh1, open(self.name, 'wb') as fh2:
-            fh2.write(fh1.read(1000))
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        # Always remove the temp file
-        self.temp_file.close()
-        os.remove(self.name)
-
-    def __str__(self):
-        return self.name

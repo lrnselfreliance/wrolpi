@@ -1,17 +1,12 @@
 import React from 'react';
 import Button from "react-bootstrap/Button";
-import {VIDEOS_API} from "./Common";
 
 const MEDIA_PATH = '/media';
 
 function Video(props) {
-    let video_hash = props.video.video_path_hash;
-
-    let poster_url = MEDIA_PATH + props.video.poster_path;
-    let video_url = VIDEOS_API + '/static/video/' + video_hash;
-    let captions_url = VIDEOS_API + '/static/caption/' + video_hash;
-
-    let video_download_url = video_url + '?download=true';
+    let poster_url = `${MEDIA_PATH}/${props.channel.directory}/${encodeURIComponent(props.video.poster_path)}`;
+    let video_url = `${MEDIA_PATH}/${props.channel.directory}/${encodeURIComponent(props.video.video_path)}`;
+    let captions_url = `${MEDIA_PATH}/${props.channel.directory}/${encodeURIComponent(props.video.caption_path)}`;
 
     let description = 'No description available.';
     if (props.video.info_json) {
@@ -27,7 +22,7 @@ function Video(props) {
             </video>
 
             <p>
-                <a href={video_download_url}>
+                <a href={video_url}>
                     <Button>Download</Button>
                 </a>
             </p>

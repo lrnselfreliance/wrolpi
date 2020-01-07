@@ -157,13 +157,15 @@ class ChannelsNav extends React.Component {
     }
 }
 
-function VideoCard({video, channel_link}) {
-    let upload_date = video.upload_date ? new Date(video.upload_date * 1000) : null;
-    if (upload_date) {
+function VideoCard({video, channel}) {
+    let upload_date = null;
+    if (video.upload_date) {
+        upload_date = new Date(video.upload_date * 1000);
         upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth()}-${upload_date.getDay()}`;
     }
-    let video_url = "/videos/" + channel_link + "/" + video.video_path_hash;
-    let poster_url = video.poster_path ? `/media/${video.poster_path}` : null;
+    let video_url = "/videos/" + channel.link + "/" + video.video_path_hash;
+    let poster_url = video.poster_path ?
+        `/media/${channel.directory}/${encodeURIComponent(video.poster_path)}` : null;
     return (
         <Link to={video_url}>
             <Card style={{'width': '18em', 'marginBottom': '1em'}}>
@@ -208,10 +210,11 @@ class ChannelVideoPager extends Paginator {
     constructor(props) {
         super(props);
         this.state = {
-            'videos': [],
-            'limit': 20,
-            'offset': 0,
-            'total': null,
+            videos: [],
+            limit: 20,
+            offset: 0,
+            total: null,
+            channel: null,
         };
         this.searchInput = React.createRef();
         this.searchApi = `${VIDEOS_API}/search`;
@@ -262,6 +265,7 @@ class ChannelVideoPager extends Paginator {
     }
 
     async componentDidMount() {
+        this.setState({channel: await getChannel(this.props.match.params.channel_link)});
         await this.getVideos();
     }
 
@@ -297,7 +301,7 @@ class ChannelVideoPager extends Paginator {
                 <div className="d-flex flex-row">
                     <div className="card-deck">
                         {this.state['videos'].map((v) => (
-                            <VideoCard key={v['id']} video={v} channel_link={this.props.match.params.channel_link}/>))}
+                            <VideoCard key={v['id']} video={v} channel={this.state.channel}/>))}
                     </div>
                 </div>
                 <div className="d-flex flex-row justify-content-center">
@@ -700,12 +704,13 @@ class VideoBreadcrumb extends React.Component {
 
     async getChannelAndVideo() {
         let channel_link = this.props.match.params.channel_link;
+        let video_hash = this.props.match.params.video_hash;
+
         if (channel_link) {
             this.setState({'channel': await getChannel(channel_link)});
         } else {
             this.setState({'channel': null});
         }
-        let video_hash = this.props.match.params.video_hash;
         if (video_hash) {
             this.setState({'video': await getVideo(video_hash)});
         } else {

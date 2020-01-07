@@ -43,37 +43,6 @@ def video(request, video_hash: str):
     return response.json({'video': video})
 
 
-@video_bp.route('/static/video/<hash:string>')
-@video_bp.route('/static/poster/<hash:string>')
-@video_bp.route('/static/caption/<hash:string>')
-@validate_doc(
-    summary='Get a video/poster/caption file',
-)
-async def media_file(request: Request, hash: str):
-    download = boolean_arg(request, 'download')
-
-    db: DictDB = request.ctx.get_db()
-    Video = db['video']
-    # kind is enforced by the Sanic routes defined for this function
-    kind = str(request.path).split('/')[4]
-
-    try:
-        video = Video.get_one(video_path_hash=hash)
-        path = get_absolute_video_path(video, kind=kind)
-
-        try:
-            headers = get_last_modified_headers(request.headers, path)
-        except FileNotModified:
-            return response.raw('', status=HTTPStatus.NOT_MODIFIED)
-
-        if download:
-            return await response.file_stream(str(path), filename=path.name, headers=headers)
-        else:
-            return await response.file_stream(str(path), headers=headers)
-    except TypeError or KeyError or UnknownFile:
-        raise UnknownFile()
-
-
 def video_search(db_conn, db: DictDB, search_str: str, offset: int):
     curs = db_conn.cursor()
 

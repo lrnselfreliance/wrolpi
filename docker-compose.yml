@@ -7,18 +7,13 @@ services:
     build:
       context: .
       dockerfile: docker/db/Dockerfile
-    ports:
-      - 54321:5432  # allows access for the python api when running locally
   api:
     depends_on:
       - db
     build:
       context: .
       dockerfile: docker/api/Dockerfile
-    ports:
-      - ${REACT_APP_API-127.0.0.1:8081}:8081
     volumes:
-      - .:/opt/wrolpi
       - .:/opt/wrolpi_media
   app:
     depends_on:
@@ -47,28 +42,3 @@ services:
     build:
       context: .
       dockerfile: docker/map/Dockerfile
-
-  # Development containers, these should only be used if you are developing.
-  appdev:
-    depends_on:
-      - api
-    build:
-      context: .
-      dockerfile: docker/appdev/Dockerfile
-    environment:
-      - DANGEROUSLY_DISABLE_HOST_CHECK=true
-    ports:
-      - "3000:3000"
-    volumes:
-      - "./app:/app"
-  webdev:
-    depends_on:
-      - appdev
-    build:
-      context: .
-      dockerfile: docker/web/Dockerfile
-    ports:
-      - ${WEB_HOST-127.0.0.1}:${WEB_PORT-8080}:80
-    volumes:
-      - "./nginx.dev.conf:/etc/nginx/nginx.conf"
-      - "./test/example_videos:/opt/media"

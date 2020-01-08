@@ -1,7 +1,5 @@
 import json
-import os
 import pathlib
-import tempfile
 from functools import partial
 from pathlib import Path
 from typing import Union, Tuple
@@ -13,7 +11,7 @@ from lib.common import sanitize_link, logger
 from lib.db import get_db_context
 from lib.errors import UnknownFile, UnknownChannel, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
-from lib.vars import DOCKERIZED, TEST_VIDEO_PATH, PROJECT_DIR
+from lib.vars import DOCKERIZED, PROJECT_DIR
 
 logger = logger.getChild('videos')
 

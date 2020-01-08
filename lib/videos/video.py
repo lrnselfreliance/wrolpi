@@ -4,11 +4,10 @@ from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from lib.common import validate_doc, boolean_arg, logger, get_last_modified_headers, \
-    FileNotModified
+from lib.common import validate_doc, logger
 from lib.db import get_db_context
 from lib.errors import UnknownVideo, UnknownFile, SearchEmpty, ValidationError
-from lib.videos.common import get_absolute_video_path, VIDEO_QUERY_LIMIT, get_absolute_video_info_json
+from lib.videos.common import VIDEO_QUERY_LIMIT, get_absolute_video_info_json
 from lib.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse
 
 video_bp = Blueprint('Video')

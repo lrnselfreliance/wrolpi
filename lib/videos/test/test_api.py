@@ -331,6 +331,7 @@ class TestVideoAPI(TestAPI):
         """
         Test that you get can information about a video.  Test that video file can be gotten.
         """
+
         def raise_unknown_file(_):
             raise UnknownFile()
 

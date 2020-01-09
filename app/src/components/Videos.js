@@ -137,8 +137,7 @@ class ChannelsNav extends React.Component {
             <div className="d-flex flex-row" key={channel['link']}>
                 <div className="nav nav-item d-flex flex-row flex-fill align-items-center" key={channel.link}
                      style={{'padding': '0.5em'}}>
-                    <NavLink className="nav-link flex-fill" to={'/videos/' + channel['link']}
-                             style={{'margin': '0.5em'}}>
+                    <NavLink className="nav-link flex-fill" to={'/videos/' + channel['link']}>
                         {channel.name}
                     </NavLink>
                     <span className="fa fa-ellipsis-v channel-edit fill"
@@ -204,11 +203,17 @@ class ChannelVideoPager extends Paginator {
         super(props);
         this.searchInput = createRef();
         this.handleSearch = this.handleSearch.bind(this);
+        this.clear = this.clear.bind(this);
     }
 
     handleSearch(e) {
         e.preventDefault();
         this.props.setSearch(this.searchInput.current.value);
+    }
+
+    clear() {
+        this.searchInput.current.value = '';
+        this.props.setSearch(null);
     }
 
     render() {
@@ -652,12 +657,12 @@ class VideoBreadcrumb extends React.Component {
                         <Link
                             to={'/videos/' +
                             this.props.channel['link'] + '/' +
-                            this.props.video['hash']}>
+                            this.props.video['video_path_hash']}>
                             {this.props.video['title'] || this.props.video['video_path']}
                         </Link>
                     </li>}
                 {
-                    this.props.search_str &&
+                    !this.props.video && this.props.search_str &&
                     <li className="breadcrumb-item">
                         Search: {this.props.search_str}
                     </li>
@@ -717,6 +722,7 @@ class Videos extends React.Component {
     async componentDidMount() {
         await this.resetChannels();
         await this.setChannel();
+        await this.setVideo();
     }
 
     async setChannel() {
@@ -725,8 +731,8 @@ class Videos extends React.Component {
         if (channel_link) {
             channel = await getChannel(channel_link);
         }
-        this.setState({channel, offset: 0, total: null});
-        await this.setChannelVideos();
+        this.setState({channel: channel, offset: 0, total: null, videos: [], video: null, search_str: null},
+            this.setChannelVideos);
     }
 
     async setChannelVideos() {
@@ -748,23 +754,29 @@ class Videos extends React.Component {
 
     async componentDidUpdate(prevProps, prevState, snapshot) {
         if (this.props.match.params.video_hash !== prevProps.match.params.video_hash) {
-            this.setVideo();
-        }
-
-        if (
-            this.state.search_str !== prevState.search_str ||
-            (this.state.search_str && this.state.offset !== prevState.offset)
-        ) {
-            // search_str changed, or search_str is set and offset changed
-            await this.handleSearch(this.state.search_str);
-            return;
+            await this.setVideo();
         }
 
         if (this.props.match.params.channel_link !== prevProps.match.params.channel_link) {
-            this.setChannel();
+            await this.setChannel();
         }
+
         if (this.state.offset !== prevState.offset) {
-            await this.setChannelVideos();
+            if (this.state.search_str) {
+                await this.handleSearch(this.state.search_str);
+            } else {
+                await this.setChannelVideos();
+            }
+        }
+
+        if (this.state.search_str !== prevState.search_str) {
+            if (this.state.search_str) {
+                await this.handleSearch(this.state.search_str);
+            } else {
+                this.setState({offset: 0}); // send the client back to the first page when clearing search
+                await this.setChannelVideos();
+                await this.resetChannels();
+            }
         }
     }
 

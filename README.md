@@ -1,4 +1,6 @@
 # WROLPi
+[![Build Status](https://travis-ci.org/lrnselfreliance/wrolpi.svg?branch=master)](https://travis-ci.org/lrnselfreliance/wrolpi)
+
 **Bring your personal internet, off-grid.**
 
 WROLPi is a self-contained collection of software (on a Raspberry Pi) to help you survive the world Without Rule of Law.

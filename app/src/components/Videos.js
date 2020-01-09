@@ -378,7 +378,6 @@ function AddChannel() {
     )
 }
 
-
 function handleStream(stream_url, setAlertVariant, setAlertMessage, setProgress) {
     function setMessage(message) {
         setAlertVariant('success');

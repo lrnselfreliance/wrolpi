@@ -7,11 +7,11 @@ from typing import Union, Tuple
 import yaml
 from dictorm import Dict, DictDB
 
-from lib.common import sanitize_link, logger
-from lib.db import get_db_context
-from lib.errors import UnknownFile, UnknownChannel, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
+from api.common import sanitize_link, logger
+from api.db import get_db_context
+from api.errors import UnknownFile, UnknownChannel, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
-from lib.vars import DOCKERIZED, PROJECT_DIR
+from api.vars import DOCKERIZED, PROJECT_DIR
 
 logger = logger.getChild('videos')
 

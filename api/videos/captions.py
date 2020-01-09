@@ -5,8 +5,8 @@ import srt
 import webvtt
 from dictorm import Dict
 
-from lib.common import logger
-from lib.errors import UnknownCaptionFile
+from api.common import logger
+from api.errors import UnknownCaptionFile
 from .common import get_absolute_video_caption
 
 

@@ -10,18 +10,18 @@ from typing import Tuple
 from dictorm import DictDB, Dict, Or
 from youtube_dl import YoutubeDL
 
-from lib.common import make_progress_calculator
-from lib.db import get_db_context
+from api.common import make_progress_calculator
+from api.db import get_db_context
 from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_directory
 
-logger = logging.getLogger('lib:downloader')
+logger = logging.getLogger('api:downloader')
 ch = logging.StreamHandler()
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
-ydl_logger = logging.getLogger('lib:ydl')
+ydl_logger = logging.getLogger('api:ydl')
 
 
 def get_channel_info(channel: Dict) -> dict:

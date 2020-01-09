@@ -10,9 +10,9 @@ from sanic.request import Request
 from sanic_cors import CORS
 from sanic_openapi import swagger_blueprint, doc
 
-from lib.common import logger, set_sanic_url_parts, validate_doc
-from lib.db import get_db
-from lib.modules import MODULES
+from api.common import logger, set_sanic_url_parts, validate_doc
+from api.db import get_db
+from api.modules import MODULES
 
 cwd = pathlib.Path(__file__).parent
 

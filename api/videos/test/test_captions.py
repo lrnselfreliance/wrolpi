@@ -3,9 +3,9 @@ from pathlib import Path
 
 import mock
 
-from lib.db import get_db_context
-from lib.test.common import wrap_test_db
-from lib.videos import captions
+from api.db import get_db_context
+from api.test.common import wrap_test_db
+from api.videos import captions
 
 
 class TestCaption(unittest.TestCase):
@@ -39,10 +39,10 @@ class TestCaption(unittest.TestCase):
         with get_db_context() as (db_conn, db):
             Video = db['video']
             video1 = Video(title='scream', caption_path=str(self.vtt_path1)).flush()
-            with mock.patch('lib.videos.captions.get_absolute_video_caption', lambda *a: self.vtt_path1):
+            with mock.patch('api.videos.captions.get_absolute_video_caption', lambda *a: self.vtt_path1):
                 captions.process_captions(video1)
             video2 = Video(title='bar', caption_path=str(self.vtt_path2)).flush()
-            with mock.patch('lib.videos.captions.get_absolute_video_caption', lambda *a: self.vtt_path2):
+            with mock.patch('api.videos.captions.get_absolute_video_caption', lambda *a: self.vtt_path2):
                 captions.process_captions(video2)
 
             v1_id = video1['id']

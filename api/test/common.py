@@ -11,11 +11,11 @@ import yaml
 from dictorm import DictDB
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
-from lib.api import api_app, attach_routes
-from lib.common import setup_relationships
-from lib.vars import DOCKERIZED
-from lib.videos.api import refresh_queue, download_queue
-from lib.videos.common import EXAMPLE_CONFIG_PATH, get_config
+from api.api import api_app, attach_routes
+from api.common import setup_relationships
+from api.vars import DOCKERIZED
+from api.videos.api import refresh_queue, download_queue
+from api.videos.common import EXAMPLE_CONFIG_PATH, get_config
 
 # Attach the default routes
 attach_routes(api_app)
@@ -26,7 +26,7 @@ cwd = pathlib.Path(__file__).parents[3]
 
 def wrap_test_db(func):
     """
-    Wrap a test so that when calling lib.common.get_db, it returns a testing database cloned from the lib
+    Wrap a test so that when calling api.common.get_db, it returns a testing database cloned from the api
     template.
     """
 
@@ -47,7 +47,7 @@ def wrap_test_db(func):
         suffix = str(uuid1()).replace('-', '')
         testing_db_name = f'wrolpi_testing_{suffix}'
 
-        # Set isolation level such that was can copy the schema of the "lib" database for testing
+        # Set isolation level such that was can copy the schema of the "api" database for testing
         with psycopg2.connect(dbname='postgres', **db_args) as db_conn:
             db_conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
 
@@ -78,8 +78,8 @@ def wrap_test_db(func):
                     """Get the testing db"""
                     return FakePool(), testing_db_conn, testing_db, None
 
-                with mock.patch('lib.db.get_db', _get_db), \
-                     mock.patch('lib.api.get_db', _get_db):
+                with mock.patch('api.db.get_db', _get_db), \
+                     mock.patch('api.api.get_db', _get_db):
                     result = func(*a, **kw)
                     return result
 
@@ -118,7 +118,7 @@ class ExtendedTestCase(unittest.TestCase):
 class TestAPI(ExtendedTestCase):
 
     def setUp(self) -> None:
-        self.patch = mock.patch('lib.videos.common.CONFIG_PATH', TEST_CONFIG_PATH.name)
+        self.patch = mock.patch('api.videos.common.CONFIG_PATH', TEST_CONFIG_PATH.name)
         self.patch.start()
         # Copy the example config to test against
         copyfile(str(EXAMPLE_CONFIG_PATH), TEST_CONFIG_PATH.name)

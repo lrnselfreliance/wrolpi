@@ -19,7 +19,7 @@ from sanic.request import Request
 from sanic_openapi import doc
 from websocket import WebSocket
 
-from lib.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents
+from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents
 
 sanic_app = Sanic()
 

@@ -1,4 +1,4 @@
-from lib.common import logger
+from api.common import logger
 
 
 def import_settings_configs(modules):

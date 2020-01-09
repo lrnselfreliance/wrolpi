@@ -1,8 +1,8 @@
 import json
 from http import HTTPStatus
 
-from lib.api import api_app
-from lib.test.common import TestAPI
+from api.api import api_app
+from api.test.common import TestAPI
 
 
 class TestRootAPI(TestAPI):

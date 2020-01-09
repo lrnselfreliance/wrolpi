@@ -7,19 +7,19 @@ from queue import Empty
 import mock
 import pytest
 
-from lib.api import api_app, attach_routes
-from lib.db import get_db_context
-from lib.errors import UnknownFile
-from lib.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI, TEST_CONFIG_PATH
-from lib.videos.api import refresh_queue
-from lib.videos.common import get_downloader_config, import_settings_config
-from lib.videos.downloader import insert_video
+from api.api import api_app, attach_routes
+from api.db import get_db_context
+from api.errors import UnknownFile
+from api.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI, TEST_CONFIG_PATH
+from api.videos.api import refresh_queue
+from api.videos.common import get_downloader_config, import_settings_config
+from api.videos.downloader import insert_video
 
 # Attach the default routes
 attach_routes(api_app)
 
 
-@mock.patch('lib.videos.common.CONFIG_PATH', TEST_CONFIG_PATH.name)
+@mock.patch('api.videos.common.CONFIG_PATH', TEST_CONFIG_PATH.name)
 class TestVideoAPI(TestAPI):
 
     @wrap_test_db
@@ -58,7 +58,7 @@ class TestVideoAPI(TestAPI):
     @wrap_test_db
     def test_channel(self):
         with tempfile.TemporaryDirectory() as media_dir, \
-                mock.patch('lib.videos.common.get_video_directory', lambda: pathlib.Path(media_dir)):
+                mock.patch('api.videos.common.get_video_directory', lambda: pathlib.Path(media_dir)):
             channel_directory = tempfile.TemporaryDirectory(dir=media_dir).name
             pathlib.Path(channel_directory).mkdir()
             new_channel = dict(
@@ -138,7 +138,7 @@ class TestVideoAPI(TestAPI):
     @wrap_test_db
     def test_channel_conflicts(self):
         with tempfile.TemporaryDirectory() as media_dir, \
-                mock.patch('lib.videos.common.get_video_directory', lambda: pathlib.Path(media_dir)):
+                mock.patch('api.videos.common.get_video_directory', lambda: pathlib.Path(media_dir)):
             channel_directory = tempfile.TemporaryDirectory(dir=media_dir).name
             pathlib.Path(channel_directory).mkdir()
             new_channel = dict(
@@ -206,7 +206,7 @@ class TestVideoAPI(TestAPI):
     def test_channel_empty_url_doesnt_conflict(self):
         """Two channels with empty URLs shouldn't conflict"""
         with tempfile.TemporaryDirectory() as media_dir, \
-                mock.patch('lib.videos.common.get_video_directory', lambda: pathlib.Path(media_dir)):
+                mock.patch('api.videos.common.get_video_directory', lambda: pathlib.Path(media_dir)):
             channel_directory = tempfile.TemporaryDirectory(dir=media_dir).name
             pathlib.Path(channel_directory).mkdir()
 
@@ -346,7 +346,7 @@ class TestVideoAPI(TestAPI):
             raise UnknownFile()
 
         with get_db_context(commit=True) as (db_conn, db), \
-                mock.patch('lib.videos.video.get_absolute_video_info_json', raise_unknown_file):
+                mock.patch('api.videos.video.get_absolute_video_info_json', raise_unknown_file):
             Channel, Video = db['channel'], db['video']
             channel = Channel(name='Foo', link='foo').flush()
             Video(title='vidd', channel_id=channel['id'], video_path_hash='hashy').flush()
@@ -455,7 +455,7 @@ class TestVideoAPI(TestAPI):
         search_is_as_expected(response, [1, 4])
 
         # Check totals are correct even with a limit
-        with mock.patch('lib.videos.video.VIDEO_QUERY_LIMIT', 2):
+        with mock.patch('api.videos.video.VIDEO_QUERY_LIMIT', 2):
             response = do_search('b')
             assert [i['id'] for i in response.json['videos']] == [1, 2]
             assert response.json['totals']['videos'] == 4

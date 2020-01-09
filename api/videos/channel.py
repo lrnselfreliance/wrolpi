@@ -4,11 +4,11 @@ from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from lib.common import validate_doc, sanitize_link
-from lib.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
-from lib.videos.common import check_for_channel_conflicts, \
+from api.common import validate_doc, sanitize_link
+from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
+from api.videos.common import check_for_channel_conflicts, \
     get_channel_videos, get_relative_media_directory
-from lib.videos.schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
+from api.videos.schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
     ChannelPostResponse, ChannelPutRequest, SuccessResponse, ChannelVideosResponse
 
 channel_bp = Blueprint('Channel')

@@ -5,8 +5,8 @@ from urllib.parse import urlparse
 
 from sanic import Blueprint, response
 
-from lib.common import get_http_file_info, download_file, validate_doc, create_websocket_feed
-from lib.map.schema import PBFPostRequest, PBFPostResponse
+from api.common import get_http_file_info, download_file, validate_doc, create_websocket_feed
+from api.map.schema import PBFPostRequest, PBFPostResponse
 
 NAME = 'map'
 

@@ -3,7 +3,7 @@ ENV DOCKER=true
 
 # Copy minimal directories/files
 COPY main.py requirements.txt example.yaml *local.yaml /opt/wrolpi/
-COPY lib /opt/wrolpi/lib
+COPY api /opt/wrolpi/api
 # Install dependencies
 RUN find /opt/wrolpi -name requirements.txt -exec pip install --upgrade -q -r {} \;
 

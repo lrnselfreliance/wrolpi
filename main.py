@@ -9,10 +9,10 @@ import argparse
 import logging
 import sys
 
-from lib import api
-from lib.cmd import import_settings_configs, save_settings_configs
-from lib.common import logger
-from lib.modules import MODULES
+from api import api
+from api.cmd import import_settings_configs, save_settings_configs
+from api.common import logger
+from api.modules import MODULES
 
 
 def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):

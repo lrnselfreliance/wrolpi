@@ -1,8 +1,8 @@
 import pytest
 from sanic_openapi import doc
 
-from lib.common import validate_data
-from lib.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
+from api.common import validate_data
+from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
 
 
 class Model:

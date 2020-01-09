@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 """
-This module will be the entry-point for your plugin.  The lib.main will expect these basic functions to be here.  Add
+This module will be the entry-point for your plugin.  The api.main will expect these basic functions to be here.  Add
 onto them to build your plugin.
 
 Required: PRETTY_NAME, init_parser, main
@@ -10,7 +10,7 @@ import logging
 
 # Pretty Name will be displayed when your plugin is linked to in the UI
 PRETTY_NAME = 'Map'
-logger = logging.getLogger('lib')
+logger = logging.getLogger('api')
 
 
 def init_parser(sub_commands):
@@ -39,7 +39,7 @@ def save_settings_config():
 
 
 if __name__ == '__main__':
-    # If run directly, we'll make our own parser in the same form that lib.main does
+    # If run directly, we'll make our own parser in the same form that api.main does
     parser = argparse.ArgumentParser()
     sub_commands = parser.add_subparsers(title='sub-commands', dest='sub_commands')
     init_parser(sub_commands)

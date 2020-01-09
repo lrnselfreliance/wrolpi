@@ -33,11 +33,11 @@ from dictorm import DictDB, Dict
 from sanic import Blueprint, response
 from sanic.request import Request
 
-from lib.common import create_websocket_feed, get_sanic_url, \
+from api.common import create_websocket_feed, get_sanic_url, \
     validate_doc, FeedReporter
-from lib.db import get_db_context
-from lib.videos.channel import channel_bp
-from lib.videos.video import video_bp
+from api.db import get_db_context
+from api.videos.channel import channel_bp
+from api.videos.video import video_bp
 from .captions import process_captions
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
     get_absolute_media_directory

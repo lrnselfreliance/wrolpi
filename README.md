@@ -1,5 +1,5 @@
 # WROLPi
-[![Build Status](https://travis-ci.org/lrnselfreliance/wrolpi.svg?branch=master)](https://travis-ci.org/lrnselfreliance/wrolpi)
+[![Build Status](https://img.shields.io/travis/lrnselfreliance/wrolpi?style=flat-square)](https://travis-ci.org/lrnselfreliance/wrolpi)
 
 **Bring your personal internet, off-grid.**
 

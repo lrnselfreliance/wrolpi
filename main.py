@@ -13,6 +13,7 @@ from api import api
 from api.cmd import import_settings_configs, save_settings_configs
 from api.common import logger
 from api.modules import MODULES
+from api.videos.common import verify_config
 
 
 def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):
@@ -26,6 +27,8 @@ def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='count')
+    parser.add_argument('--verify-config', action='store_true', default=False,
+                        help='Verify the local.yaml, then exit.')
 
     sub_commands = parser.add_subparsers(title='sub-commands', dest='sub_commands')
 
@@ -41,6 +44,10 @@ def main():
         update_choices_to_mains(sub_commands, choices_to_mains, module.main.main)
 
     args = parser.parse_args()
+
+    if args.verify_config:
+        verify_config()
+        return 0
 
     if args.verbose == 1:
         logger.info('Setting verbosity to INFO')

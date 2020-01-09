@@ -246,13 +246,16 @@ def check_for_channel_conflicts(db, id=None, url=None, name=None, link=None, dir
 
 
 def verify_config():
-    video_root_directory = get_video_directory()
-    if not video_root_directory.exists() or not video_root_directory.is_absolute():
+    if not pathlib.Path(CONFIG_PATH).exists():
+        raise Exception(f'local.yaml does not exist, looked here: {CONFIG_PATH}')
+
+    media_directory = get_media_directory()
+    if not media_directory.exists() or not media_directory.is_absolute():
         if DOCKERIZED:
-            raise Exception(f'Video root directory is not absolute, or does not exist! {video_root_directory}  '
+            raise Exception(f'Video root directory is not absolute, or does not exist! {media_directory}  '
                             f'Have you mounted your media directory in docker-compose.yml?')
-        raise Exception(f'Video root directory is not absolute, or does not exist! {video_root_directory}  '
-                        f'Have you updated your local.yaml with the video_root_directory?')
+        raise Exception(f'Video root directory is not absolute, or does not exist! {media_directory}  '
+                        f'Have you updated your local.yaml with the media_directory?')
 
 
 def get_channel_videos(db: DictDB, link: str, offset: int = 0):

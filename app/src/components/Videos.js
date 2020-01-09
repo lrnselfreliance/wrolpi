@@ -671,19 +671,11 @@ class VideoBreadcrumb extends React.Component {
     }
 }
 
-class VideoWrapper extends React.Component {
+function VideoWrapper(props) {
 
-    getVideo() {
-        if (this.props.channel && this.props.video) {
-            return <Video channel={this.props.channel} video={this.props.video}/>
-        }
-    }
-
-    render() {
-        return (
-            this.getVideo() || <></>
-        )
-    }
+    return (
+        (props.channel && props.video) ? <Video channel={props.channel} video={props.video}/> : <></>
+    )
 }
 
 class Videos extends React.Component {

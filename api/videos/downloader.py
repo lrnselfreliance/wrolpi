@@ -13,7 +13,7 @@ from youtube_dl import YoutubeDL
 from api.common import make_progress_calculator
 from api.db import get_db_context
 from .captions import process_captions
-from .common import get_downloader_config, get_absolute_media_directory
+from .common import get_downloader_config, get_absolute_media_path
 
 logger = logging.getLogger('api:downloader')
 ch = logging.StreamHandler()
@@ -86,7 +86,7 @@ def find_matching_video_files(directory, search_str) -> str:
 def find_missing_channel_videos(channel: Dict) -> dict:
     info_json = channel['info_json']
     entries = info_json['entries']
-    directory = get_absolute_media_directory(channel['directory'])
+    directory = get_absolute_media_path(channel['directory'])
     skip_download_videos = channel['skip_download_videos']
     for entry in entries:
         source_id = entry['id']
@@ -143,7 +143,7 @@ def download_video(channel: dict, video: dict) -> pathlib.Path:
     # YoutubeDL expects specific options, add onto the default options
     config = get_downloader_config()
     options = dict(config)
-    directory = get_absolute_media_directory(channel['directory'])
+    directory = get_absolute_media_path(channel['directory'])
     options['outtmpl'] = f'{directory}/{config["file_name_format"]}'
 
     ydl = YoutubeDL(options)
@@ -209,7 +209,7 @@ def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
                  skip_captions=False) -> Dict:
     """Find and insert a video into the DB.  Also, find any meta-files near the video file and store them."""
     Video = db['video']
-    channel_dir = get_absolute_media_directory(channel['directory'])
+    channel_dir = get_absolute_media_path(channel['directory'])
     poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path, relative_to=channel_dir)
 
     # Hash the video's path for easy and collision-free linking

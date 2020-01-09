@@ -10,8 +10,7 @@ function Video(props) {
 
     let description = 'No description available.';
     if (props.video.info_json) {
-        let info_json = JSON.parse(props.video.info_json);
-        description = info_json['description'];
+        description = props.video.info_json['description'];
     }
 
     return (

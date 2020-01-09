@@ -106,7 +106,7 @@ venv.bak/
 .idea/
 
 # example videos
-test/example_videos
+test/videos
 
 # local configs
 *local.yaml

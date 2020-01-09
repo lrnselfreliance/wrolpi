@@ -58,7 +58,7 @@ class TestVideoAPI(TestAPI):
     @wrap_test_db
     def test_channel(self):
         with tempfile.TemporaryDirectory() as media_dir, \
-                mock.patch('api.videos.common.get_video_directory', lambda: pathlib.Path(media_dir)):
+                mock.patch('api.videos.common.get_media_directory', lambda: pathlib.Path(media_dir)):
             channel_directory = tempfile.TemporaryDirectory(dir=media_dir).name
             pathlib.Path(channel_directory).mkdir()
             new_channel = dict(
@@ -85,7 +85,7 @@ class TestVideoAPI(TestAPI):
             assert not pathlib.Path(created['directory']).is_absolute(), \
                 f'Channel directory is absolute: {created["directory"]}'
 
-            # Get the link that was decided
+            # Get the link that was computed
             new_channel['link'] = response.json['channel']['link']
             assert new_channel['link']
 
@@ -138,7 +138,7 @@ class TestVideoAPI(TestAPI):
     @wrap_test_db
     def test_channel_conflicts(self):
         with tempfile.TemporaryDirectory() as media_dir, \
-                mock.patch('api.videos.common.get_video_directory', lambda: pathlib.Path(media_dir)):
+                mock.patch('api.videos.common.get_media_directory', lambda: pathlib.Path(media_dir)):
             channel_directory = tempfile.TemporaryDirectory(dir=media_dir).name
             pathlib.Path(channel_directory).mkdir()
             new_channel = dict(
@@ -206,7 +206,7 @@ class TestVideoAPI(TestAPI):
     def test_channel_empty_url_doesnt_conflict(self):
         """Two channels with empty URLs shouldn't conflict"""
         with tempfile.TemporaryDirectory() as media_dir, \
-                mock.patch('api.videos.common.get_video_directory', lambda: pathlib.Path(media_dir)):
+                mock.patch('api.videos.common.get_media_directory', lambda: pathlib.Path(media_dir)):
             channel_directory = tempfile.TemporaryDirectory(dir=media_dir).name
             pathlib.Path(channel_directory).mkdir()
 

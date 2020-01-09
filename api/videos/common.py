@@ -101,34 +101,22 @@ def get_media_directory() -> Path:
     config = get_config()
     media_directory = config['media_directory']
     media_directory = Path(media_directory)
-    return media_directory
+    return media_directory.absolute()
 
 
-@lru_cache(maxsize=1)
-def get_video_directory() -> Path:
-    """
-    Get video directory from config by combining media_directory / downloader.video_directory.
-    """
+def get_absolute_media_path(path: str) -> Path:
     media_directory = get_media_directory()
-    config = get_downloader_config()
-    video_directory = media_directory / config['video_directory']
-    video_directory = Path(video_directory).absolute()
-    return video_directory
+    if not path:
+        raise ValueError(f'Cannot combine empty path with {media_directory}')
+    path = media_directory / path
+    if not path.exists():
+        raise UnknownDirectory(f'path={path}')
+    return path
 
 
-def get_absolute_media_directory(directory: str) -> Path:
-    video_directory = get_video_directory()
-    if not directory:
-        raise ValueError(f'Cannot combine empty directory with {video_directory}')
-    directory = video_directory / directory
-    if not directory.exists():
-        raise UnknownDirectory(f'directory={directory}')
-    return directory
-
-
-def get_relative_media_directory(directory: str) -> Path:
-    absolute = get_absolute_media_directory(directory)
-    return absolute.relative_to(get_video_directory())
+def get_relative_to_media_directory(directory: str) -> Path:
+    absolute = get_absolute_media_path(directory)
+    return absolute.relative_to(get_media_directory())
 
 
 VALID_VIDEO_KINDS = {'video', 'caption', 'poster', 'description', 'info_json'}
@@ -137,7 +125,7 @@ VALID_VIDEO_KINDS = {'video', 'caption', 'poster', 'description', 'info_json'}
 def get_absolute_video_path(video: Dict, kind: str = 'video') -> Path:
     if kind not in VALID_VIDEO_KINDS:
         raise Exception(f'Unknown video path kind {kind}')
-    directory = get_absolute_media_directory(video['channel']['directory'])
+    directory = get_absolute_media_path(video['channel']['directory'])
     path = video[kind + '_path']
     if directory and path:
         return directory / path

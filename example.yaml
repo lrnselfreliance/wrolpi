@@ -1,7 +1,9 @@
-# This is the configuration for the WROLPI API service.
-media_directory: ./test
+# This is an example config for your WROLPi.  Do NOT modify this file, rather, copy this file to local.yaml and
+# modify that file.
+media_directory: ./test  # this should be an absolute directory, for example, /media/8TB
 
 downloader:
+  # Most of these names were decided by Youtube-DL project, we pass these to any calls to that project.
   continue_dl: true
   dateafter: 19900101
   embedsubtitles: true
@@ -11,7 +13,6 @@ downloader:
   max_downloads_per_channel: 0
   nooverwrites: true
   quiet: false
-  video_directory: videos  # relative to `media_directory`
   writeautomaticsub: true
   writeinfojson: true
   writesubtitles: true
@@ -19,9 +20,9 @@ downloader:
   youtube_include_dash_manifest: false
 
 channels:
-  # These are channels or playlists that will be downloaded
+  # These are channels or playlists that will be downloaded.  You can configure them in the UI, or in your local.yaml.
   bigbuckbunny:
     name: Big Buck Bunny # the pretty name for the channel
     url: https://www.youtube.com/user/BlenderFoundation/videos
-    directory: blender  # relative to the `downloader.video_root_directory`
+    directory: videos/blender  # relative to `media_directory`
     match_regex: .*b?Bunny.*  # only download the video if the title matches this regex

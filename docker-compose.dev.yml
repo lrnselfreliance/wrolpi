@@ -33,4 +33,4 @@ services:
       dockerfile: docker/web/Dockerfile
     volumes:
       - "./nginx.dev.conf:/etc/nginx/nginx.conf"
-      - "./test/example_videos:/opt/media"
+      - "./test:/opt/media"

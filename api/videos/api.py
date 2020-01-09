@@ -40,7 +40,7 @@ from api.videos.channel import channel_bp
 from api.videos.video import video_bp
 from .captions import process_captions
 from .common import generate_video_paths, save_settings_config, get_downloader_config, \
-    get_absolute_media_directory
+    get_absolute_media_path
 from .common import logger
 from .downloader import insert_video, update_channels, download_all_missing_videos
 from .schema import DownloaderConfig, SuccessResponse, StreamResponse, \
@@ -165,7 +165,7 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
     curs = db.get_cursor()
     curs.execute('UPDATE video SET idempotency=NULL WHERE channel_id=%s', (channel['id'],))
     idempotency = str(uuid1())
-    directory = get_absolute_media_directory(channel['directory'])
+    directory = get_absolute_media_path(channel['directory'])
 
     # A set of absolute paths that exist in the file system
     possible_new_paths = set(generate_video_paths(directory))

@@ -7,7 +7,7 @@ from sanic.request import Request
 from api.common import validate_doc, sanitize_link
 from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.videos.common import check_for_channel_conflicts, \
-    get_channel_videos, get_relative_media_directory
+    get_channel_videos, get_relative_to_media_directory
 from api.videos.schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
     ChannelPostResponse, ChannelPutRequest, SuccessResponse, ChannelVideosResponse
 
@@ -61,7 +61,7 @@ def channel_get(request: Request, link: str):
 def channel_post(request: Request, data: dict):
     """Create a new channel"""
     try:
-        data['directory'] = get_relative_media_directory(data['directory'])
+        data['directory'] = get_relative_to_media_directory(data['directory'])
     except UnknownDirectory:
         raise UnknownDirectory()
 
@@ -118,7 +118,7 @@ def channel_update(request: Request, link: str, data: dict):
         # Only update directory if it was empty
         if data.get('directory') and not channel['directory']:
             try:
-                data['directory'] = get_relative_media_directory(data['directory'])
+                data['directory'] = get_relative_to_media_directory(data['directory'])
             except UnknownDirectory:
                 raise
 

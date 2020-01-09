@@ -6,17 +6,13 @@ const VIDEOS_API = `http://${API_URI}/api/videos`;
 
 class Paginator extends React.Component {
 
-    setOffset(offset) {
-        this.setState({'offset': offset});
-    }
-
     getPagination() {
         // The amount of items that will be shown
         let item_count = 8;
 
-        let total = this.state.total;
-        let limit = this.state.limit;
-        let offset = this.state.offset;
+        let total = this.props.total;
+        let limit = this.props.limit;
+        let offset = this.props.offset;
 
         // Generate all offsets that can exist
         let items = [];
@@ -40,7 +36,7 @@ class Paginator extends React.Component {
                     <Pagination.Item
                         active={i === offset}
                         key={i}
-                        onClick={() => this.setOffset(i)}
+                        onClick={() => this.props.setOffset(i)}
                     >
                         {(i / limit) + 1}
                     </Pagination.Item>)}

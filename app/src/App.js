@@ -3,7 +3,7 @@ import './App.css';
 import {Container, Jumbotron} from "react-bootstrap";
 import {NavBar} from "./components/Nav";
 import {Route, Switch} from "react-router-dom";
-import Videos from "./components/Videos";
+import VideosRoute from "./components/Videos";
 import Map_ from "./components/Map";
 import Settings from "./components/Settings";
 
@@ -36,7 +36,7 @@ function App() {
             <Container fluid={true}>
                 <Switch>
                     <Route path="/" exact={true} component={Welcome}/>
-                    <Route path="/videos" component={Videos}/>
+                    <Route path="/videos" component={VideosRoute}/>
                     <Route path="/map" component={Map_}/>
                     <Route path="/settings" component={Settings}/>
                     <Route component={PageNotFound}/>

@@ -113,6 +113,11 @@ def get_absolute_channel_directory(directory: str) -> Path:
     return directory
 
 
+def get_relative_channel_directory(directory: str) -> Path:
+    absolute = get_absolute_channel_directory(directory)
+    return absolute.relative_to(get_video_root())
+
+
 VALID_VIDEO_KINDS = {'video', 'caption', 'poster', 'description', 'info_json'}
 
 

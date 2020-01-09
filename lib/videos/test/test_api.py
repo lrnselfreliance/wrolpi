@@ -57,166 +57,176 @@ class TestVideoAPI(TestAPI):
 
     @wrap_test_db
     def test_channel(self):
-        channel_directory = tempfile.TemporaryDirectory().name
-        pathlib.Path(channel_directory).mkdir()
-        new_channel = dict(
-            directory=channel_directory,
-            match_regex='asdf',
-            name='Example Channel 1',
-            url='https://example.com/channel1',
-        )
+        with tempfile.TemporaryDirectory() as media_dir, \
+                mock.patch('lib.videos.common.get_video_root', lambda: pathlib.Path(media_dir)):
+            channel_directory = tempfile.TemporaryDirectory(dir=media_dir).name
+            pathlib.Path(channel_directory).mkdir()
+            new_channel = dict(
+                directory=channel_directory,
+                match_regex='asdf',
+                name='Example Channel 1',
+                url='https://example.com/channel1',
+            )
 
-        # Channel doesn't exist
-        request, response = api_app.test_client.get('/api/videos/channels/examplechannel1')
-        assert response.status_code == HTTPStatus.NOT_FOUND, f'Channel exists: {response.json}'
+            # Channel doesn't exist
+            request, response = api_app.test_client.get('/api/videos/channels/examplechannel1')
+            assert response.status_code == HTTPStatus.NOT_FOUND, f'Channel exists: {response.json}'
 
-        # Create it
-        request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.CREATED
-        location = response.headers['Location']
-        request, response = api_app.test_client.get(location)
-        created = response.json['channel']
-        self.assertIsNotNone(created)
-        self.assertIsNotNone(created['id'])
-        self.assertIsNotNone(created['directory'])
+            # Create it
+            request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
+            assert response.status_code == HTTPStatus.CREATED
+            location = response.headers['Location']
+            request, response = api_app.test_client.get(location)
+            created = response.json['channel']
+            self.assertIsNotNone(created)
+            self.assertIsNotNone(created['id'])
 
-        # Get the link that was decided
-        new_channel['link'] = response.json['channel']['link']
-        assert new_channel['link']
+            # Channel directory should be relative to the media directory
+            assert not pathlib.Path(created['directory']).is_absolute(), \
+                f'Channel directory is absolute: {created["directory"]}'
 
-        # Can't create it again
-        request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.BAD_REQUEST
+            # Get the link that was decided
+            new_channel['link'] = response.json['channel']['link']
+            assert new_channel['link']
 
-        # Update it
-        new_channel['name'] = 'Example Channel 2'
-        new_channel['directory'] = str(new_channel['directory'])
-        request, response = api_app.test_client.put(location, data=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
-        request, response = api_app.test_client.get(location)
-        assert response.status_code == HTTPStatus.OK
-        self.assertDictContains(response.json['channel'], {
-            'id': 1,
-            'name': 'Example Channel 2',
-            'directory': channel_directory,
-            'match_regex': 'asdf',
-            'url': 'https://example.com/channel1',
-        })
+            # Can't create it again
+            request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
+            assert response.status_code == HTTPStatus.BAD_REQUEST
 
-        # Patch it
-        patch = {'name': 'new name'}
-        request, response = api_app.test_client.patch(location, data=json.dumps(patch))
-        assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
-        request, response = api_app.test_client.get(location)
-        assert response.status_code == HTTPStatus.OK
-        self.assertDictContains(response.json['channel'], {
-            'id': 1,
-            'name': 'new name',
-            'directory': channel_directory,
-            'match_regex': 'asdf',
-            'url': 'https://example.com/channel1',
-        })
+            # Update it
+            new_channel['name'] = 'Example Channel 2'
+            new_channel['directory'] = str(new_channel['directory'])
+            request, response = api_app.test_client.put(location, data=json.dumps(new_channel))
+            assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
+            request, response = api_app.test_client.get(location)
+            assert response.status_code == HTTPStatus.OK
+            self.assertDictContains(response.json['channel'], {
+                'id': 1,
+                'name': 'Example Channel 2',
+                'directory': channel_directory,
+                'match_regex': 'asdf',
+                'url': 'https://example.com/channel1',
+            })
 
-        # Can't update channel that doesn't exist
-        request, response = api_app.test_client.put('/api/videos/channels/doesnt_exist', data=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.NOT_FOUND
+            # Patch it
+            patch = {'name': 'new name'}
+            request, response = api_app.test_client.patch(location, data=json.dumps(patch))
+            assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
+            request, response = api_app.test_client.get(location)
+            assert response.status_code == HTTPStatus.OK
+            self.assertDictContains(response.json['channel'], {
+                'id': 1,
+                'name': 'new name',
+                'directory': channel_directory,
+                'match_regex': 'asdf',
+                'url': 'https://example.com/channel1',
+            })
 
-        # Delete the new channel
-        request, response = api_app.test_client.delete(location)
-        assert response.status_code == HTTPStatus.NO_CONTENT
+            # Can't update channel that doesn't exist
+            request, response = api_app.test_client.put('/api/videos/channels/doesnt_exist',
+                                                        data=json.dumps(new_channel))
+            assert response.status_code == HTTPStatus.NOT_FOUND
 
-        # Cant delete it again
-        request, response = api_app.test_client.delete(location)
-        assert response.status_code == HTTPStatus.NOT_FOUND
+            # Delete the new channel
+            request, response = api_app.test_client.delete(location)
+            assert response.status_code == HTTPStatus.NO_CONTENT
+
+            # Cant delete it again
+            request, response = api_app.test_client.delete(location)
+            assert response.status_code == HTTPStatus.NOT_FOUND
 
     @wrap_test_db
     def test_channel_conflicts(self):
-        channel_directory = tempfile.TemporaryDirectory().name
-        pathlib.Path(channel_directory).mkdir()
-        new_channel = dict(
-            directory=channel_directory,
-            match_regex='asdf',
-            name='Example Channel 1',
-            url='https://example.com/channel1',
-        )
+        with tempfile.TemporaryDirectory() as media_dir, \
+                mock.patch('lib.videos.common.get_video_root', lambda: pathlib.Path(media_dir)):
+            channel_directory = tempfile.TemporaryDirectory(dir=media_dir).name
+            pathlib.Path(channel_directory).mkdir()
+            new_channel = dict(
+                directory=channel_directory,
+                match_regex='asdf',
+                name='Example Channel 1',
+                url='https://example.com/channel1',
+            )
 
-        def post_channel(channel):
-            return api_app.test_client.post('/api/videos/channels', data=json.dumps(channel))
+            def _post_channel(channel):
+                return api_app.test_client.post('/api/videos/channels', data=json.dumps(channel))
 
-        # Create it
-        request, response = post_channel(new_channel)
-        assert response.status_code == HTTPStatus.CREATED
+            # Create it
+            request, response = _post_channel(new_channel)
+            assert response.status_code == HTTPStatus.CREATED
 
-        # Name is an exact match
-        channel_directory2 = tempfile.TemporaryDirectory().name
-        pathlib.Path(channel_directory2).mkdir()
-        new_channel = dict(
-            directory=channel_directory2,
-            name='Example Channel 1',
-        )
-        request, response = post_channel(new_channel)
-        assert response.status_code == HTTPStatus.BAD_REQUEST
-        assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
-                                 'cause': {'error': 'The channel name is already taken.', 'code': 5}}
+            # Name is an exact match
+            channel_directory2 = tempfile.TemporaryDirectory(dir=media_dir).name
+            pathlib.Path(channel_directory2).mkdir()
+            new_channel = dict(
+                directory=channel_directory2,
+                name='Example Channel 1',
+            )
+            request, response = _post_channel(new_channel)
+            assert response.status_code == HTTPStatus.BAD_REQUEST
+            assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
+                                     'cause': {'error': 'The channel name is already taken.', 'code': 5}}
 
-        # Name matches when converted to link
-        channel_directory2 = tempfile.TemporaryDirectory().name
-        pathlib.Path(channel_directory2).mkdir()
-        new_channel = dict(
-            directory=channel_directory2,
-            name='Example channel 1',
-        )
-        request, response = post_channel(new_channel)
-        assert response.status_code == HTTPStatus.BAD_REQUEST
-        assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
-                                 'cause': {'code': 11, 'error': 'Channel link already used by another channel'}}
+            # Name matches when converted to link
+            channel_directory2 = tempfile.TemporaryDirectory(dir=media_dir).name
+            pathlib.Path(channel_directory2).mkdir()
+            new_channel = dict(
+                directory=channel_directory2,
+                name='Example channel 1',
+            )
+            request, response = _post_channel(new_channel)
+            assert response.status_code == HTTPStatus.BAD_REQUEST
+            assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
+                                     'cause': {'code': 11, 'error': 'Channel link already used by another channel'}}
 
-        # Directory was already used
-        new_channel = dict(
-            directory=channel_directory,
-            name='name is fine',
-        )
-        request, response = post_channel(new_channel)
-        assert response.status_code == HTTPStatus.BAD_REQUEST
-        assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
-                                 'cause': {'code': 7, 'error': 'The directory is already used by another channel.'}}
+            # Directory was already used
+            new_channel = dict(
+                directory=channel_directory,
+                name='name is fine',
+            )
+            request, response = _post_channel(new_channel)
+            assert response.status_code == HTTPStatus.BAD_REQUEST
+            assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
+                                     'cause': {'code': 7, 'error': 'The directory is already used by another channel.'}}
 
-        # URL is already used
-        channel_directory3 = tempfile.TemporaryDirectory().name
-        pathlib.Path(channel_directory3).mkdir()
-        new_channel = dict(
-            directory=channel_directory3,
-            name='name is fine',
-            url='https://example.com/channel1',
-        )
-        request, response = post_channel(new_channel)
-        assert response.status_code == HTTPStatus.BAD_REQUEST
-        assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
-                                 'cause': {'code': 6, 'error': 'The URL is already used by another channel.'}}
+            # URL is already used
+            channel_directory3 = tempfile.TemporaryDirectory(dir=media_dir).name
+            pathlib.Path(channel_directory3).mkdir()
+            new_channel = dict(
+                directory=channel_directory3,
+                name='name is fine',
+                url='https://example.com/channel1',
+            )
+            request, response = _post_channel(new_channel)
+            assert response.status_code == HTTPStatus.BAD_REQUEST
+            assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
+                                     'cause': {'code': 6, 'error': 'The URL is already used by another channel.'}}
 
     @wrap_test_db
     def test_channel_empty_url_doesnt_conflict(self):
         """Two channels with empty URLs shouldn't conflict"""
-        channel_directory = tempfile.TemporaryDirectory().name
-        pathlib.Path(channel_directory).mkdir()
+        with tempfile.TemporaryDirectory() as media_dir, \
+                mock.patch('lib.videos.common.get_video_root', lambda: pathlib.Path(media_dir)):
+            channel_directory = tempfile.TemporaryDirectory(dir=media_dir).name
+            pathlib.Path(channel_directory).mkdir()
 
-        new_channel = {
-            'name': 'Fooz',
-            'directory': channel_directory,
-        }
-        request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.CREATED, response.json
-        location = response.headers['Location']
+            new_channel = {
+                'name': 'Fooz',
+                'directory': channel_directory,
+            }
+            request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
+            assert response.status_code == HTTPStatus.CREATED, response.json
+            location = response.headers['Location']
 
-        channel_directory2 = tempfile.TemporaryDirectory().name
-        pathlib.Path(channel_directory2).mkdir()
-        new_channel = {
-            'name': 'Barz',
-            'directory': channel_directory2,
-        }
-        request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.CREATED, response.json
-        assert location != response.headers['Location']
+            channel_directory2 = tempfile.TemporaryDirectory(dir=media_dir).name
+            pathlib.Path(channel_directory2).mkdir()
+            new_channel = {
+                'name': 'Barz',
+                'directory': channel_directory2,
+            }
+            request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
+            assert response.status_code == HTTPStatus.CREATED, response.json
+            assert location != response.headers['Location']
 
     @wrap_test_db
     def test_refresh_videos(self):

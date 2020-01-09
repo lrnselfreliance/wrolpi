@@ -1,0 +1,9 @@
+os: linux
+services:
+  - docker
+language: python
+before_install:
+  - docker-compose -f docker-compose.yml -f docker-compose.dev.yml build --parallel db api app
+  - docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d db api
+script:
+  - docker-compose -f docker-compose.yml -f docker-compose.dev.yml exec api pytest lib

@@ -160,7 +160,7 @@ def get_absolute_video_info_json(video: Dict) -> Path:
     return get_absolute_video_path(video, 'info_json')
 
 
-def get_video_info_json(video: Dict) -> dict:
+def get_video_info_json(video: Dict) -> Union[dict, None]:
     """Get the info_json object from a video's meta-file.  Return an empty dict if not possible."""
     if not video['channel']['directory']:
         return

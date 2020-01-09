@@ -98,6 +98,9 @@ def import_settings_config():
 
 @lru_cache(maxsize=1)
 def get_media_directory() -> Path:
+    """
+    Get the media directory configured in local.yaml.
+    """
     config = get_config()
     media_directory = config['media_directory']
     media_directory = Path(media_directory)
@@ -105,6 +108,16 @@ def get_media_directory() -> Path:
 
 
 def get_absolute_media_path(path: str) -> Path:
+    """
+    Get the absolute path of file/directory within the config media directory.
+
+    >>> get_media_directory()
+    Path('/media')
+    >>> get_absolute_media_path('videos/blender')
+    Path('/media/videos/blender')
+
+    :raises UnknownDirectory: the directory/path doesn't exist
+    """
     media_directory = get_media_directory()
     if not path:
         raise ValueError(f'Cannot combine empty path with {media_directory}')
@@ -114,8 +127,18 @@ def get_absolute_media_path(path: str) -> Path:
     return path
 
 
-def get_relative_to_media_directory(directory: str) -> Path:
-    absolute = get_absolute_media_path(directory)
+def get_relative_to_media_directory(path: str) -> Path:
+    """
+    Get the path for a file/directory relative to the config media directory.
+
+    >>> get_media_directory()
+    Path('/media')
+    >>> get_relative_to_media_directory('/media/videos/blender')
+    Path('videos/blender')
+
+    :raises UnknownDirectory: the directory/path doesn't exist
+    """
+    absolute = get_absolute_media_path(path)
     return absolute.relative_to(get_media_directory())
 
 

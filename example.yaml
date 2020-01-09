@@ -1,4 +1,5 @@
 # This is the configuration for the WROLPI API service.
+media_directory: ./test
 
 downloader:
   continue_dl: true
@@ -10,7 +11,7 @@ downloader:
   max_downloads_per_channel: 0
   nooverwrites: true
   quiet: false
-  video_root_directory: ./test/example_videos/  # This should be an absolute path!
+  video_directory: videos  # relative to `media_directory`
   writeautomaticsub: true
   writeinfojson: true
   writesubtitles: true

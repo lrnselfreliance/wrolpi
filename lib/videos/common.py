@@ -1,6 +1,6 @@
 import json
 import pathlib
-from functools import partial
+from functools import partial, lru_cache
 from pathlib import Path
 from typing import Union, Tuple
 
@@ -96,26 +96,39 @@ def import_settings_config():
     return 0
 
 
-def get_video_root() -> Path:
+@lru_cache(maxsize=1)
+def get_media_directory() -> Path:
+    config = get_config()
+    media_directory = config['media_directory']
+    media_directory = Path(media_directory)
+    return media_directory
+
+
+@lru_cache(maxsize=1)
+def get_video_directory() -> Path:
     """
-    Get video_root_directory from config.
+    Get video directory from config by combining media_directory / downloader.video_directory.
     """
+    media_directory = get_media_directory()
     config = get_downloader_config()
-    video_root_directory = config['video_root_directory']
-    video_root_directory = Path(video_root_directory).absolute()
-    return video_root_directory
+    video_directory = media_directory / config['video_directory']
+    video_directory = Path(video_directory).absolute()
+    return video_directory
 
 
-def get_absolute_channel_directory(directory: str) -> Path:
-    directory = get_video_root() / directory
+def get_absolute_media_directory(directory: str) -> Path:
+    video_directory = get_video_directory()
+    if not directory:
+        raise ValueError(f'Cannot combine empty directory with {video_directory}')
+    directory = video_directory / directory
     if not directory.exists():
         raise UnknownDirectory(f'directory={directory}')
     return directory
 
 
-def get_relative_channel_directory(directory: str) -> Path:
-    absolute = get_absolute_channel_directory(directory)
-    return absolute.relative_to(get_video_root())
+def get_relative_media_directory(directory: str) -> Path:
+    absolute = get_absolute_media_directory(directory)
+    return absolute.relative_to(get_video_directory())
 
 
 VALID_VIDEO_KINDS = {'video', 'caption', 'poster', 'description', 'info_json'}
@@ -124,7 +137,7 @@ VALID_VIDEO_KINDS = {'video', 'caption', 'poster', 'description', 'info_json'}
 def get_absolute_video_path(video: Dict, kind: str = 'video') -> Path:
     if kind not in VALID_VIDEO_KINDS:
         raise Exception(f'Unknown video path kind {kind}')
-    directory = get_absolute_channel_directory(video['channel']['directory'])
+    directory = get_absolute_media_directory(video['channel']['directory'])
     path = video[kind + '_path']
     if directory and path:
         return directory / path
@@ -147,21 +160,11 @@ def get_absolute_video_info_json(video: Dict) -> Path:
     return get_absolute_video_path(video, 'info_json')
 
 
-def get_video_description(video: Dict) -> bytes:
-    """Get the description text block from a video's description meta-file.  Return an empty string if not possible."""
-    try:
-        path = get_absolute_video_description(video)
-        if path.exists():
-            with open(str(path), 'rb') as fh:
-                contents = fh.read()
-                return contents
-    except UnknownFile:
-        pass
-    return b''
-
-
 def get_video_info_json(video: Dict) -> dict:
     """Get the info_json object from a video's meta-file.  Return an empty dict if not possible."""
+    if not video['channel']['directory']:
+        return
+
     try:
         path = get_absolute_video_info_json(video)
         if path.exists():
@@ -169,8 +172,7 @@ def get_video_info_json(video: Dict) -> dict:
                 contents = json.load(fh)
                 return contents
     except UnknownFile:
-        pass
-    return {}
+        return
 
 
 def any_extensions(filename: str, extensions=None):
@@ -233,7 +235,7 @@ def check_for_channel_conflicts(db, id=None, url=None, name=None, link=None, dir
 
 
 def verify_config():
-    video_root_directory = get_video_root()
+    video_root_directory = get_video_directory()
     if not video_root_directory.exists() or not video_root_directory.is_absolute():
         if DOCKERIZED:
             raise Exception(f'Video root directory is not absolute, or does not exist! {video_root_directory}  '

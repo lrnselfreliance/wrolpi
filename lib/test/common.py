@@ -110,7 +110,9 @@ class ExtendedTestCase(unittest.TestCase):
 
     @staticmethod
     def assertDictContains(d1: dict, d2: dict):
-        assert set(d2.items()).issubset(set(d1.items()))
+        for k2 in d2.keys():
+            assert k2 in d1, f'dict 1 does not contain {k2}'
+            assert d1[k2] == d2[k2], f'{k2} does not equal {d2[k2]} in dict 1'
 
 
 class TestAPI(ExtendedTestCase):

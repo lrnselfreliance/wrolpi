@@ -22,7 +22,7 @@ WROLPi runs in a couple Docker containers.  Lets get the prerequisites installed
 1. Start the minimum docker containers
     * `docker-compose up web`
 1. Navigate to WROLPi
-    * https://127.0.0.1:8080
+    * https://0.0.0.0:8080
 
 
 # Charter

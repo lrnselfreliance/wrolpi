@@ -28,7 +28,7 @@ services:
       context: .
       dockerfile: docker/web/Dockerfile
     ports:
-      - ${WEB_HOST-127.0.0.1}:${WEB_PORT-8080}:80
+      - ${WEB_HOST-0.0.0.0}:${WEB_PORT-8080}:80
     volumes:
       - "./nginx.conf:/etc/nginx/nginx.conf"
       - "./test:/opt/media"

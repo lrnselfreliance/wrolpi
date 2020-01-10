@@ -12,7 +12,6 @@ from api.db import get_db_context
 from api.errors import UnknownFile
 from api.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI, TEST_CONFIG_PATH
 from api.videos.api import refresh_queue
-from api.videos.common import get_downloader_config, import_settings_config
 from api.videos.downloader import insert_video
 
 # Attach the default routes
@@ -21,21 +20,6 @@ attach_routes(api_app)
 
 @mock.patch('api.videos.common.CONFIG_PATH', TEST_CONFIG_PATH.name)
 class TestVideoAPI(TestAPI):
-
-    @wrap_test_db
-    def test_configs(self):
-        original = get_downloader_config()
-        self.assertNotEqual(original['video_root_directory'], 'foo')
-        self.assertNotEqual(original['file_name_format'], 'bar')
-
-        data = {'video_root_directory': 'foo', 'file_name_format': 'bar'}
-        api_app.test_client.put('/api/videos/settings', data=json.dumps(data))
-
-        self.assertEqual(import_settings_config(), 0)
-        updated = get_downloader_config()
-        diff = set(updated.items()).difference(set(original.items()))
-        expected = {('video_root_directory', 'foo'), ('file_name_format', 'bar')}
-        self.assertEqual(diff, expected)
 
     @wrap_test_db
     def test_get_channels(self):
@@ -346,7 +330,7 @@ class TestVideoAPI(TestAPI):
             raise UnknownFile()
 
         with get_db_context(commit=True) as (db_conn, db), \
-                mock.patch('api.videos.video.get_absolute_video_info_json', raise_unknown_file):
+                mock.patch('api.videos.common.get_absolute_video_info_json', raise_unknown_file):
             Channel, Video = db['channel'], db['video']
             channel = Channel(name='Foo', link='foo').flush()
             Video(title='vidd', channel_id=channel['id'], video_path_hash='hashy').flush()

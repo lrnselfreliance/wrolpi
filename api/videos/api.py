@@ -31,7 +31,6 @@ from uuid import uuid1
 
 from dictorm import DictDB, Dict
 from sanic import Blueprint, response
-from sanic.request import Request
 
 from api.common import create_websocket_feed, get_sanic_url, \
     validate_doc, FeedReporter
@@ -39,11 +38,10 @@ from api.db import get_db_context
 from api.videos.channel import channel_bp
 from api.videos.video import video_bp
 from .captions import process_captions
-from .common import generate_video_paths, get_downloader_config, \
-    get_absolute_media_path
+from .common import generate_video_paths, get_absolute_media_path
 from .common import logger
 from .downloader import insert_video, update_channels, download_all_missing_videos
-from .schema import DownloaderConfig, SuccessResponse, StreamResponse, \
+from .schema import StreamResponse, \
     JSONErrorResponse
 
 content_bp = Blueprint('Video Content')
@@ -52,7 +50,6 @@ api_bp = Blueprint('Videos').group(
     channel_bp,  # view and manage channels
     video_bp,  # view videos
     url_prefix='/videos')
-
 
 refresh_queue, refresh_event = create_websocket_feed('/feeds/refresh', content_bp)
 

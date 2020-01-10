@@ -47,11 +47,6 @@ class ChannelsResponse:
     channels = doc.List(doc.Object(ChannelsChannelModel))
 
 
-class DownloaderConfig:
-    video_root_directory = doc.String()
-    file_name_format = doc.String()
-
-
 class JSONErrorResponse:
     error = doc.String()
 

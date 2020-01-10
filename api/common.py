@@ -14,12 +14,15 @@ from urllib.parse import urlunsplit
 from uuid import UUID
 
 import sanic
+import yaml
 from sanic import Sanic, Blueprint, response
 from sanic.request import Request
 from sanic_openapi import doc
 from websocket import WebSocket
 
+from api.db import get_db_context
 from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents
+from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH
 
 sanic_app = Sanic()
 
@@ -32,14 +35,6 @@ logger.addHandler(ch)
 
 def get_loop():
     return sanic.Sanic.loop
-
-
-def setup_relationships(db):
-    """Assign all relationships between DictORM Tables."""
-    Channel = db['channel']
-    Video = db['video']
-    Channel['videos'] = Channel['id'].many(Video['channel_id'])
-    Video['channel'] = Video['channel_id'] == Channel['id']
 
 
 URL_CHARS = string.ascii_lowercase + string.digits
@@ -337,3 +332,31 @@ def get_last_modified_headers(request_headers: dict, path: Union[Path, str]) -> 
     last_modified = last_modified.strftime(LAST_MODIFIED_FORMAT)
     headers = {'Last-Modified': last_modified}
     return headers
+
+
+def get_config() -> dict:
+    config_path = CONFIG_PATH if Path(CONFIG_PATH).exists() else EXAMPLE_CONFIG_PATH
+    with open(str(config_path), 'rt') as fh:
+        config = yaml.load(fh, Loader=yaml.Loader)
+    return config
+
+
+def save_settings_config(config):
+    """Save new settings to local.yaml, overwriting what is there."""
+    old_config = dict(get_config())
+    new_config = {}
+
+    # Add channel sections
+    with get_db_context() as (db_conn, db):
+        Channel = db['channel']
+        channels = Channel.get_where().order_by('LOWER(name) ASC')
+        for channel in channels:
+            section = config_channels[channel['link']] = {}
+            section['name'] = channel['name'] or ''
+            section['url'] = channel['url'] or ''
+            section['directory'] = channel['directory'] or ''
+            section['match_regex'] = channel['match_regex'] or ''
+
+    with open(str(CONFIG_PATH), 'wt') as fh:
+        yaml.dump(config, fh)
+    return 0

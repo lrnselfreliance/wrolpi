@@ -7,7 +7,6 @@ import psycopg2 as psycopg2
 from dictorm import DictDB
 from psycopg2.pool import ThreadedConnectionPool
 
-from api.common import setup_relationships
 from api.vars import DOCKERIZED
 
 
@@ -66,3 +65,11 @@ def get_db_context(commit=False) -> Tuple[psycopg2.connect, DictDB]:
         db_conn.rollback()
 
     db_pool.putconn(db_conn, key=key, close=True)
+
+
+def setup_relationships(db):
+    """Assign all relationships between DictORM Tables."""
+    Channel = db['channel']
+    Video = db['video']
+    Channel['videos'] = Channel['id'].many(Video['channel_id'])
+    Video['channel'] = Video['channel_id'] == Channel['id']

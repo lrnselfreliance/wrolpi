@@ -47,4 +47,4 @@ class Paginator extends React.Component {
 }
 
 export default Paginator;
-export {VIDEOS_API};
+export {API_URI, VIDEOS_API};

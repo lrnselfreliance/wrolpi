@@ -28,16 +28,6 @@ def main(args):
         return 0
 
 
-def import_settings_config():
-    # If you build a config, it will be imported on startup here
-    pass
-
-
-def save_settings_config():
-    # This could be called by the command-line to save the DB settings to a config.
-    pass
-
-
 if __name__ == '__main__':
     # If run directly, we'll make our own parser in the same form that api.main does
     parser = argparse.ArgumentParser()

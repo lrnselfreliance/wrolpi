@@ -10,9 +10,10 @@ from sanic.request import Request
 from sanic_cors import CORS
 from sanic_openapi import swagger_blueprint, doc
 
-from api.common import logger, set_sanic_url_parts, validate_doc
+from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_config, get_config
 from api.db import get_db
 from api.modules import MODULES
+from api.videos.schema import SuccessResponse, SettingsRequest, SettingsResponse
 
 cwd = pathlib.Path(__file__).parent
 
@@ -103,6 +104,27 @@ async def echo(request: Request):
         args=request.args,
     )
     return response.json(ret)
+
+
+@root_api.route('/settings', methods=['GET', 'OPTIONS'])
+@validate_doc(
+    summary='Update video settings config',
+    produces=SettingsResponse,
+)
+def settings(_: Request):
+    config = dict(get_config())
+    return response.json({'config': config})
+
+
+@root_api.put('/settings')
+@validate_doc(
+    summary='Update video settings config',
+    consumes=SettingsRequest,
+    produces=SuccessResponse,
+)
+def settings(_: Request, data: dict):
+    save_settings_config(data)
+    return response.json({'success': 'Settings saved'})
 
 
 ROUTES_ATTACHED = False

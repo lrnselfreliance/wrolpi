@@ -6,8 +6,8 @@ from sanic.request import Request
 
 from api.common import validate_doc, logger
 from api.db import get_db_context
-from api.errors import UnknownVideo, UnknownFile, SearchEmpty, ValidationError
-from api.videos.common import VIDEO_QUERY_LIMIT, get_absolute_video_info_json, get_video_info_json
+from api.errors import UnknownVideo, SearchEmpty, ValidationError
+from api.videos.common import VIDEO_QUERY_LIMIT, get_video_info_json
 from api.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse
 
 video_bp = Blueprint('Video')

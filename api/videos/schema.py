@@ -103,3 +103,15 @@ class VideoSearchResponse:
 
 class PaginationQuery:
     offset = doc.Integer()
+
+
+class SettingsObject:
+    media_directory = doc.String()
+
+
+class SettingsResponse:
+    config = doc.Object(SettingsObject)
+
+
+class SettingsRequest(SettingsObject):
+    pass

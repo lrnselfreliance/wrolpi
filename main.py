@@ -10,7 +10,6 @@ import logging
 import sys
 
 from api import api
-from api.cmd import import_settings_configs, save_settings_configs
 from api.common import logger
 from api.modules import MODULES
 from api.videos.common import verify_config
@@ -59,15 +58,9 @@ def main():
     # Always warn about the log level so we know what will be logged
     logger.warning(f'Logging level: {logger.getEffectiveLevel()}')
 
-    # Always update the DB from the configs
-    import_settings_configs(MODULES)
-
     if args.sub_commands:
         module_main = choices_to_mains[args.sub_commands]
         return_code = module_main(args)
-    elif args.save_config:
-        return_code = save_settings_configs(MODULES)
-        logger.info('Config written.')
     else:
         parser.print_help()
         return_code = 1

@@ -4,29 +4,19 @@ from functools import partial, lru_cache
 from pathlib import Path
 from typing import Union, Tuple
 
-import yaml
 from dictorm import Dict, DictDB
 
-from api.common import sanitize_link, logger
+from api.common import sanitize_link, logger, CONFIG_PATH, get_config
 from api.db import get_db_context
 from api.errors import UnknownFile, UnknownChannel, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
-from api.vars import DOCKERIZED, PROJECT_DIR
+from api.vars import DOCKERIZED
 
 logger = logger.getChild('videos')
 
-CONFIG_PATH = PROJECT_DIR / 'local.yaml'
-EXAMPLE_CONFIG_PATH = PROJECT_DIR / 'example.yaml'
 REQUIRED_OPTIONS = ['name', 'directory']
 
 VIDEO_QUERY_LIMIT = 20
-
-
-def get_config() -> dict:
-    config_path = CONFIG_PATH if Path(CONFIG_PATH).exists() else EXAMPLE_CONFIG_PATH
-    with open(str(config_path), 'rt') as fh:
-        config = yaml.load(fh, Loader=yaml.Loader)
-    return config
 
 
 def get_downloader_config() -> dict:
@@ -39,28 +29,6 @@ def get_channels_config() -> dict:
     config = get_config()
     channels = config['channels']
     return channels
-
-
-def save_settings_config(downloader=None):
-    """Save the channel settings to the config."""
-    config = dict()
-    config['downloader'] = downloader or get_downloader_config()
-    config_channels = config['channels'] = {}
-
-    # Add channel sections
-    with get_db_context() as (db_conn, db):
-        Channel = db['channel']
-        channels = Channel.get_where().order_by('LOWER(name) ASC')
-        for channel in channels:
-            section = config_channels[channel['link']] = {}
-            section['name'] = channel['name'] or ''
-            section['url'] = channel['url'] or ''
-            section['directory'] = channel['directory'] or ''
-            section['match_regex'] = channel['match_regex'] or ''
-
-    with open(str(CONFIG_PATH), 'wt') as fh:
-        yaml.dump(config, fh)
-    return 0
 
 
 class ConfigError(Exception):

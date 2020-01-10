@@ -12,10 +12,10 @@ from dictorm import DictDB
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from api.api import api_app, attach_routes
-from api.common import setup_relationships
+from api.common import EXAMPLE_CONFIG_PATH, get_config
+from api.db import setup_relationships
 from api.vars import DOCKERIZED
 from api.videos.api import refresh_queue, download_queue
-from api.videos.common import EXAMPLE_CONFIG_PATH, get_config
 
 # Attach the default routes
 attach_routes(api_app)

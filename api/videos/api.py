@@ -39,7 +39,7 @@ from api.db import get_db_context
 from api.videos.channel import channel_bp
 from api.videos.video import video_bp
 from .captions import process_captions
-from .common import generate_video_paths, save_settings_config, get_downloader_config, \
+from .common import generate_video_paths, get_downloader_config, \
     get_absolute_media_path
 from .common import logger
 from .downloader import insert_video, update_channels, download_all_missing_videos
@@ -52,20 +52,6 @@ api_bp = Blueprint('Videos').group(
     channel_bp,  # view and manage channels
     video_bp,  # view videos
     url_prefix='/videos')
-
-
-@content_bp.put('/settings')
-@validate_doc(
-    summary='Update video settings config',
-    consumes=DownloaderConfig,
-    produces=SuccessResponse,
-)
-def settings(request: Request, data: dict):
-    downloader_config = get_downloader_config()
-    downloader_config['video_root_directory'] = data['video_root_directory']
-    downloader_config['file_name_format'] = data['file_name_format']
-    save_settings_config(downloader_config)
-    return response.json({'success': 'Settings saved'})
 
 
 refresh_queue, refresh_event = create_websocket_feed('/feeds/refresh', content_bp)

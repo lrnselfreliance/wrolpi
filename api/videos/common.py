@@ -184,6 +184,8 @@ def get_video_info_json(video: Dict) -> Union[dict, None]:
                 return contents
     except UnknownFile:
         return
+    except UnknownDirectory:
+        return
 
 
 def any_extensions(filename: str, extensions=None):

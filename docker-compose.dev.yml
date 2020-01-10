@@ -13,7 +13,6 @@ services:
       dockerfile: docker/api/Dockerfile
     volumes:
       - .:/opt/wrolpi
-      - .:/opt/wrolpi_media
     ports:
       - ${REACT_APP_API-127.0.0.1:8081}:8081
   app:

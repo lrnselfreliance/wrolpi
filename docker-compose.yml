@@ -38,10 +38,13 @@ services:
     volumes:
       - './map.osm.pbf:/data.osm.pbf'
       - openstreetmap-data:/var/lib/postgresql/12/main
+      - openstreetmap-rendered-tiles:/var/lib/mod_tile
     ports:
       - "8082:80"
     command: "run"
 
 volumes:
   openstreetmap-data:
+    external: true
+  openstreetmap-rendered-tiles:
     external: true

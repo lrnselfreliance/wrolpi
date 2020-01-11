@@ -113,3 +113,6 @@ test/videos
 *local.yml
 
 app/package-lock.json
+
+# open street map files
+*.pbf

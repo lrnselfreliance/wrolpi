@@ -13,6 +13,7 @@ from api import api
 from api.common import logger
 from api.modules import MODULES
 from api.videos.common import verify_config
+from cmd import import_settings_configs
 
 
 def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):
@@ -57,6 +58,8 @@ def main():
 
     # Always warn about the log level so we know what will be logged
     logger.warning(f'Logging level: {logger.getEffectiveLevel()}')
+
+    import_settings_configs(MODULES)
 
     if args.sub_commands:
         module_main = choices_to_mains[args.sub_commands]

@@ -4,7 +4,7 @@ function Map_() {
     return (
         <>
             <h1>Map</h1>
-            <iframe src='/mapproxy'></iframe>
+            <iframe width="100%" height="800px" src='/mapproxy'></iframe>
         </>
     )
 }

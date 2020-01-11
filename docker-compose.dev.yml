@@ -8,6 +8,8 @@ services:
     ports:
       - 54321:5432
   api:
+    depends_on:
+      - db
     build:
       context: .
       dockerfile: docker/api/Dockerfile
@@ -16,6 +18,8 @@ services:
     ports:
       - ${REACT_APP_API-127.0.0.1:8081}:8081
   app:
+    depends_on:
+      - api
     build:
       context: .
       dockerfile: docker/app/Dockerfile
@@ -27,11 +31,26 @@ services:
     volumes:
       - "./app:/app"
   web:
+    depends_on:
+      - app
+      - map
     build:
       context: .
       dockerfile: docker/web/Dockerfile
     ports:
       - ${WEB_HOST-127.0.0.1}:${WEB_PORT-8080}:80
     volumes:
-      - "./nginx.dev.conf:/etc/nginx/nginx.conf"
+      - "./nginx.conf:/etc/nginx/nginx.conf"
       - "./test:/opt/media"
+  map:
+    image: overv/openstreetmap-tile-server
+    volumes:
+      - './map.osm.pbf:/data.osm.pbf'
+      - openstreetmap-data:/var/lib/postgresql/12/main
+    ports:
+      - "8082:80"
+    command: "run"
+
+volumes:
+  openstreetmap-data:
+    external: true

@@ -1,12 +1,16 @@
 FROM python:3.8
 ENV DOCKER=true
 
-# Copy minimal directories/files
-COPY main.py requirements.txt example.yaml *local.yaml /opt/wrolpi/
-COPY api /opt/wrolpi/api
+WORKDIR /opt/wrolpi
+
 # Install dependencies
-RUN find /opt/wrolpi -name requirements.txt -exec pip install --upgrade -q -r {} \;
+COPY requirements.txt /opt/wrolpi/
+RUN find -name requirements.txt -exec pip install --upgrade -q -r {} \;
+
+# Copy minimal directories/files
+COPY main.py example.yaml *local.yaml /opt/wrolpi/
+COPY api /opt/wrolpi/api
 
 # Run the webserver
-WORKDIR /opt/wrolpi
-CMD [ "python3", "/opt/wrolpi/main.py", "api", "--host", "0.0.0.0" ]
+ENTRYPOINT [ "python3", "/opt/wrolpi/main.py"]
+CMD ["api", "--host", "0.0.0.0" ]

@@ -10,10 +10,10 @@ import logging
 import sys
 
 from api import api
+from api.cmd import import_settings_configs
 from api.common import logger
 from api.modules import MODULES
 from api.videos.common import verify_config
-from cmd import import_settings_configs
 
 
 def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):

@@ -33,7 +33,9 @@ services:
       - "./nginx.conf:/etc/nginx/nginx.conf"
       - "./test:/opt/media"
   map:
-    image: overv/openstreetmap-tile-server
+    build:
+      context: .
+      dockerfile: docker/map/Dockerfile
     volumes:
       - './map.osm.pbf:/data.osm.pbf'
       - openstreetmap-data:/var/lib/postgresql/12/main

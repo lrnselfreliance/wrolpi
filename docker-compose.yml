@@ -23,7 +23,6 @@ services:
       dockerfile: docker/app/Dockerfile
   web:
     depends_on:
-      - map
       - app
     build:
       context: .

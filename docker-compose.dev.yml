@@ -33,7 +33,6 @@ services:
   web:
     depends_on:
       - app
-      - map
     build:
       context: .
       dockerfile: docker/web/Dockerfile

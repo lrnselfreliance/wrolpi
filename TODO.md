@@ -19,3 +19,5 @@ Future Features
 Physical Properties
 ===================
 1. Which Raspberry Pi's can reliably run WROLPi?
+1. Test Wifi AP access
+    1. NAT'ing?

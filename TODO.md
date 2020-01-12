@@ -1,15 +1,20 @@
 Future Features
 ===============
-1. Search feature
- 1. Search video titles
- 1. Search video descriptions
- 1. Search video subtitles
+1. Documentation or wiki on Home page
 1. Wiki module
     1. Wikipedia? or something more simple
-1. Calibre module
-1. Podcasts module
+1. Calibre/ebook module
+1. Podcasts/audio module
 1. Screenshot browser addon
-1. Open Street Map module
+1. Videos
+    1. Refresh single channel
+    1. Rework cmd arguments
+    1. Remove video hashes since they have been replaced by nginx
+    1. Generate missing thumbnails, save to hdd
+    1. Timestamp for video duration on video card
+1. Map
+    1. Search feature?
+    1. How does it work on mobile?
 
 Physical Properties
 ===================

@@ -198,7 +198,7 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
     reporter.set_progress(1, len(missing_captions), status)
 
 
-def _refresh_videos(db: DictDB, q: Queue):
+def _refresh_videos(db: DictDB, q: Queue, channel_names: list = None):
     """
     Find any videos in the channel directories and add them to the DB.  Delete DB records of any videos not in the
     file system.
@@ -215,7 +215,19 @@ def _refresh_videos(db: DictDB, q: Queue):
     reporter.code('refresh-started')
     reporter.set_progress_total(0, Channel.count())
 
-    for idx, channel in enumerate(Channel.get_where()):
+    if channel_names:
+        channels = Channel.get_where(Channel['name'].In(channel_names))
+    else:
+        channels = Channel.get_where()
+
+    channels = list(channels)
+
+    if not channels and channel_names:
+        raise Exception(f'No channels match name: {channel_names}')
+    elif not channels:
+        raise Exception(f'No channels in DB.  Have you added them to your local.yaml?')
+
+    for idx, channel in enumerate(channels):
         reporter.set_progress(0, idx, f'Checking {channel["name"]} directory for new videos')
         with db.transaction(commit=True):
             refresh_channel_videos(db, channel, reporter)
@@ -224,11 +236,11 @@ def _refresh_videos(db: DictDB, q: Queue):
 
 
 @wraps(_refresh_videos)
-def refresh_videos(db: DictDB):
-    return _refresh_videos(db, refresh_queue)
+def refresh_videos(db: DictDB, channel_names: list = None):
+    return _refresh_videos(db, refresh_queue, channel_names=channel_names)
 
 
 @wraps(_refresh_videos)
-def refresh_videos_with_db():
+def refresh_videos_with_db(channel_names: list = None):
     with get_db_context(commit=True) as (db_conn, db):
-        return refresh_videos(db)
+        return refresh_videos(db, channel_names=channel_names)

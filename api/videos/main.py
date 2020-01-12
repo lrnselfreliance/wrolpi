@@ -15,8 +15,8 @@ def init_parser(sub_commands):
                                  help='Download at most this many videos to each channel\'s directory.')
 
     content_parser = sub_commands.add_parser('content')
-    content_parser.add_argument('-r', '--refresh', action='store_true', default=False,
-                                help='Search for new videos files.')
+    content_parser.add_argument('-r', '--refresh', nargs='*',
+                                help='Search for new videos files.  Specify a channel name.')
 
 
 def main(args):
@@ -24,7 +24,8 @@ def main(args):
         downloader.main(args)
         return 0
     elif args.sub_commands and 'content' in args.sub_commands:
-        api.refresh_videos_with_db()
+        refresh = args.refresh
+        api.refresh_videos_with_db(refresh)
         return 0
 
 

@@ -23,13 +23,9 @@ services:
     build:
       context: .
       dockerfile: docker/app/Dockerfile
-    environment:
-      - DANGEROUSLY_DISABLE_HOST_CHECK=true
-    ports:
-      - "3000:3000"
-    command: yarn start
     volumes:
-      - "./app:/app"
+      - './app:/app'
+    command: "yarn start"
   web:
     depends_on:
       - app
@@ -39,17 +35,22 @@ services:
     ports:
       - ${WEB_HOST-127.0.0.1}:${WEB_PORT-8080}:80
     volumes:
-      - "./nginx.conf:/etc/nginx/nginx.conf"
+      - "./nginx.dev.conf:/etc/nginx/nginx.conf"
       - "./test:/opt/media"
   map:
-    image: overv/openstreetmap-tile-server
+    build:
+      context: .
+      dockerfile: docker/map/Dockerfile
     volumes:
       - './map.osm.pbf:/data.osm.pbf'
       - openstreetmap-data:/var/lib/postgresql/12/main
+      - openstreetmap-rendered-tiles:/var/lib/mod_tile
     ports:
       - "8082:80"
     command: "run"
 
 volumes:
   openstreetmap-data:
+    external: true
+  openstreetmap-rendered-tiles:
     external: true

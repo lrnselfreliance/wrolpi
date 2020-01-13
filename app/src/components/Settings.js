@@ -40,7 +40,7 @@ class Settings extends React.Component {
 
     render() {
         return (
-            <>
+            <div className="container-fluid">
                 <h1>Settings</h1>
                 <p className="lead">
                     The global settings for your server.
@@ -66,7 +66,7 @@ class Settings extends React.Component {
                         Save
                     </Button>
                 </Form>
-            </>
+            </div>
         )
     }
 }

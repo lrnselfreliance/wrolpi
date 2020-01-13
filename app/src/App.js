@@ -33,15 +33,13 @@ function App() {
             <header>
                 <NavBar/>
             </header>
-            <Container fluid={true}>
-                <Switch>
-                    <Route path="/" exact={true} component={Welcome}/>
-                    <Route path="/videos" component={VideosRoute}/>
-                    <Route path="/map" component={Map_}/>
-                    <Route path="/settings" component={Settings}/>
-                    <Route component={PageNotFound}/>
-                </Switch>
-            </Container>
+            <Switch>
+                <Route path="/" exact={true} component={Welcome}/>
+                <Route path="/videos" component={VideosRoute}/>
+                <Route path="/map" component={Map_}/>
+                <Route path="/settings" component={Settings}/>
+                <Route component={PageNotFound}/>
+            </Switch>
         </>
     );
 }

@@ -1,4 +1,4 @@
-import React, {createRef, useRef, useState} from 'react';
+import React, {useRef, useState} from 'react';
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import Nav from "react-bootstrap/Nav";
@@ -12,6 +12,8 @@ import Breadcrumb from "react-bootstrap/Breadcrumb";
 import Paginator, {VIDEOS_API} from "./Common"
 import Container from "react-bootstrap/Container";
 import Video from "./VideoPlayer";
+import {Typeahead} from 'react-bootstrap-typeahead';
+import 'react-bootstrap-typeahead/css/Typeahead.css';
 
 async function updateChannel(channel, name_ref, url_ref, directory_ref, matchRegex_ref) {
     let name = name_ref.current.value;
@@ -199,45 +201,13 @@ function VideoCard({video, channel}) {
 
 class ChannelVideoPager extends Paginator {
 
-    constructor(props) {
-        super(props);
-        this.searchInput = createRef();
-        this.handleSearch = this.handleSearch.bind(this);
-        this.clear = this.clear.bind(this);
-    }
-
-    handleSearch(e) {
-        e.preventDefault();
-        this.props.setSearch(this.searchInput.current.value);
-    }
-
-    clear() {
-        this.searchInput.current.value = '';
-        this.props.setSearch(null);
+    setOffset(offset) {
+        this.props.setOffset(offset);
     }
 
     render() {
         return (
             <div className="d-flex flex-column">
-                <div className="d-flex flex-row">
-                    <Form inline style={{'marginBottom': '1em'}}
-                          onSubmit={this.handleSearch}>
-                        <FormControl
-                            ref={this.searchInput}
-                            type="text"
-                            className="mr-sm-2"
-                            placeholder="Search"
-                        />
-                        <ButtonGroup>
-                            <Button type="submit" variant="info">
-                                <span className="fas fa-search"/>
-                            </Button>
-                            <Button onClick={this.clear} variant="secondary">
-                                <span className="fas fa-window-close"/>
-                            </Button>
-                        </ButtonGroup>
-                    </Form>
-                </div>
                 <div className="d-flex flex-row">
                     <div className="card-deck">
                         {this.props.videos.map((v) => (
@@ -674,7 +644,7 @@ class VideoBreadcrumb extends React.Component {
 function VideoWrapper(props) {
 
     return (
-        (props.channel && props.video) ? <Video channel={props.channel} video={props.video}/> : <></>
+        (props.channel && props.video) ? <Video channel={props.channel} video={props.video} autoplay={false}/> : <></>
     )
 }
 
@@ -694,7 +664,11 @@ class Videos extends React.Component {
         };
         this.setOffset = this.setOffset.bind(this);
         this.handleSearch = this.handleSearch.bind(this);
-        this.setSearch = this.setSearch.bind(this);
+        this.clearSearch = this.clearSearch.bind(this);
+        this.channelSelect = this.channelSelect.bind(this);
+
+        this.searchInput = React.createRef();
+        this.channelTypeahead = React.createRef();
     }
 
     async resetChannels() {
@@ -704,10 +678,6 @@ class Videos extends React.Component {
 
     setChannels(channels,) {
         this.setState({channels});
-    }
-
-    setVideos(videos, videos_total) {
-        this.setState({videos, videos_total});
     }
 
     async componentDidMount() {
@@ -721,6 +691,11 @@ class Videos extends React.Component {
         let channel = null;
         if (channel_link) {
             channel = await getChannel(channel_link);
+        }
+        let currentSelected = this.channelTypeahead.current.state.selected[0] || null;
+        if ((currentSelected && channel && currentSelected['id'] !== channel['id']) || (!channel)) {
+            // Channel was changed, or is no longer selected
+            this.channelTypeahead.current.clear();
         }
         this.setState({channel: channel, offset: 0, total: null, videos: [], video: null, search_str: null},
             this.setChannelVideos);
@@ -771,7 +746,16 @@ class Videos extends React.Component {
         }
     }
 
-    async handleSearch(search_str) {
+    clearSearch() {
+        this.searchInput.current.value = null;
+        this.setState({search_str: null, offset: 0});
+    }
+
+    async handleSearch(event) {
+        event.preventDefault();
+        let search_str = this.searchInput.current.value;
+        this.setState({search_str});
+
         // Submit the search string to the API.  Overwrite the pager with the videos provided.
         // Overwrite the channels provided as well.
         let form_data = {search_str, offset: this.state.offset};
@@ -794,10 +778,6 @@ class Videos extends React.Component {
         this.setState({videos, total, channels});
     }
 
-    setSearch(search_str) {
-        this.setState({search_str});
-    }
-
     setOffset(offset) {
         this.setState({offset});
     }
@@ -810,10 +790,16 @@ class Videos extends React.Component {
                     video={this.state.video}
                 />
             )
+        } else if (this.state.search_str && this.state.videos.length === 0) {
+            return (
+                <>
+                    <h2>No videos found!</h2>
+                    <Button onClick={this.clearSearch}>Clear Search</Button>
+                </>
+            )
         } else if (this.state.channel) {
             return (
                 <ChannelVideoPager
-                    setSearch={this.setSearch}
                     channel={this.state.channel}
                     videos={this.state.videos}
                     total={this.state.total}
@@ -822,40 +808,80 @@ class Videos extends React.Component {
                     offset={this.state.offset}
                 />
             )
+        } else {
+            // TODO create a recently-played video selection
+            return (
+                <p>Select a channel, or search for a video above.</p>
+            )
         }
+    }
+
+    channelSelect(selection) {
+        let channel = selection[0];
+        this.props.history.push(`/videos/${channel['link']}`);
     }
 
     render() {
         return (
-            <div className="d-flex flex-row">
-                <div className="d-flex flex-column w-25">
-                    <div className="d-flex flex-row" style={{'margin': '1em'}}>
-                        <h4 className="flex-fill">Channels</h4>
-                        <ButtonGroup>
-                            <ManageContent/>
-                            <AddChannel/>
-                        </ButtonGroup>
+            <>
+                <div className="d-flex flex-row w-100" style={{'display': 'flex', 'flex-wrap': 'wrap'}}>
+                    <div className="d-flex flex-column">
+                        <div className="d-flex flex-row" style={{'margin': '0.5em'}}>
+                            <h4>Videos</h4>
+
+                            <ButtonGroup style={{'marginLeft': '0.5em', 'marginRight': '0.5em'}}>
+                                <ManageContent/>
+                                <AddChannel/>
+                            </ButtonGroup>
+                        </div>
                     </div>
                     <div className="d-flex flex-column">
-                        <ChannelsNav
-                            setChannels={this.setChannels}
-                            resetChannels={this.resetChannels}
-                            channels={this.state.channels}
-                            channel={this.state.channel}
-                        />
+                        <div className="d-flex flex-row" style={{'margin': '0.5em'}}>
+                            <Typeahead
+                                id="channel_select"
+                                ref={this.channelTypeahead}
+                                labelKey="name"
+                                multiple={false}
+                                options={this.state.channels}
+                                placeholder="Select a Channel..."
+                                onChange={this.channelSelect}
+                            />
+                        </div>
+                    </div>
+                    <div className="d-flex flex-column">
+                        <div className="d-flex flex-row" style={{'margin': '0.5em'}}>
+                            <Form inline onSubmit={this.handleSearch}>
+                                <FormControl
+                                    ref={this.searchInput}
+                                    type="text"
+                                    className="mr-sm-2"
+                                    placeholder="Search"
+                                />
+                                <ButtonGroup>
+                                    <Button type="submit" variant="info">
+                                        <span className="fas fa-search"/>
+                                    </Button>
+                                    <Button onClick={this.clearSearch} variant="secondary">
+                                        <span className="fas fa-window-close"/>
+                                    </Button>
+                                </ButtonGroup>
+                            </Form>
+                        </div>
                     </div>
                 </div>
-                <div className="d-flex flex-column w-75">
-                    <Container fluid={true} style={{'padding': '1em'}}>
-                        <VideoBreadcrumb
-                            channel={this.state.channel}
-                            video={this.state.video}
-                            search_str={this.state.search_str}
-                        />
-                        {this.getBody()}
-                    </Container>
+                <div className="d-flex flex-row">
+                    <div className="d-flex flex-column w-100">
+                        <Container fluid={true} style={{'padding': '0.5em'}}>
+                            <VideoBreadcrumb
+                                channel={this.state.channel}
+                                video={this.state.video}
+                                search_str={this.state.search_str}
+                            />
+                            {this.getBody()}
+                        </Container>
+                    </div>
                 </div>
-            </div>
+            </>
         )
     }
 }

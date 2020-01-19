@@ -37,6 +37,7 @@ services:
     volumes:
       - "./nginx.dev.conf:/etc/nginx/nginx.conf"
       - "./icon.ico:/etc/nginx/favicon.ico"
+      - "./icon.png:/etc/nginx/icon.png"
       - "./test:/opt/media"
   map:
     build:

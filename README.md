@@ -3,6 +3,10 @@
 
 **Bring your personal internet, off-grid.**
 
+<p align="center">
+  <img width="256px" src="https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/icon.png" alt='WROLPi Logo'>
+</p>
+
 WROLPi is a self-contained collection of software (on a Raspberry Pi) to help you survive the world Without Rule of Law.
 
 WROLPi is intended to be run on a Raspberry Pi with an optional external drive attached.  It serves up it's own wifi

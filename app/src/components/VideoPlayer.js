@@ -33,9 +33,9 @@ function Video(props) {
             </p>
 
             <h4>Description</h4>
-            <pre>
+            <p>
                 {description}
-            </pre>
+            </p>
         </>
     )
 }

@@ -3,7 +3,7 @@ import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import Nav from "react-bootstrap/Nav";
 import {Link, NavLink, Route} from "react-router-dom";
-import {Button, ButtonGroup, Form, FormControl, ProgressBar} from "react-bootstrap";
+import {Button, ButtonGroup, Form, FormControl, InputGroup, ProgressBar} from "react-bootstrap";
 import Modal from "react-bootstrap/Modal";
 import Card from "react-bootstrap/Card";
 import '../static/external/fontawesome-free/css/all.min.css';
@@ -824,59 +824,58 @@ class Videos extends React.Component {
     render() {
         return (
             <>
-                <div className="d-flex flex-row w-100" style={{'display': 'flex', 'flex-wrap': 'wrap'}}>
-                    <div className="d-flex flex-column">
-                        <div className="d-flex flex-row" style={{'margin': '0.5em'}}>
-                            <h4>Videos</h4>
+                <div className="d-flex flex-row">
+                    <div className="d-flex flex-column w-100">
+                        <VideoBreadcrumb
+                            channel={this.state.channel}
+                            video={this.state.video}
+                            search_str={this.state.search_str}
+                        />
+                    </div>
+                </div>
 
-                            <ButtonGroup style={{'marginLeft': '0.5em', 'marginRight': '0.5em'}}>
-                                <ManageContent/>
-                                <AddChannel/>
-                            </ButtonGroup>
-                        </div>
+                <div className="d-flex flex-row flex-wrap">
+                    <div className="d-flex flex-row p-1">
+                        <ButtonGroup>
+                            <ManageContent/>
+                            <AddChannel/>
+                        </ButtonGroup>
                     </div>
-                    <div className="d-flex flex-column">
-                        <div className="d-flex flex-row" style={{'margin': '0.5em'}}>
-                            <Typeahead
-                                id="channel_select"
-                                ref={this.channelTypeahead}
-                                labelKey="name"
-                                multiple={false}
-                                options={this.state.channels}
-                                placeholder="Select a Channel..."
-                                onChange={this.channelSelect}
-                            />
-                        </div>
+                    <div className="d-flex flex-column flex-grow-1 p-1">
+                        <Typeahead
+                            id="channel_select"
+                            className="flex-fill"
+                            ref={this.channelTypeahead}
+                            labelKey="name"
+                            multiple={false}
+                            options={this.state.channels}
+                            placeholder="Select a Channel..."
+                            onChange={this.channelSelect}
+                        />
                     </div>
-                    <div className="d-flex flex-column">
-                        <div className="d-flex flex-row" style={{'margin': '0.5em'}}>
-                            <Form inline onSubmit={this.handleSearch}>
+                    <div className="d-flex flex-column flex-grow-1 p-1">
+                        <Form inline onSubmit={this.handleSearch}>
+                            <InputGroup className="flex-fill">
                                 <FormControl
                                     ref={this.searchInput}
                                     type="text"
-                                    className="mr-sm-2"
-                                    placeholder="Search"
+                                    placeholder="Search Videos"
                                 />
-                                <ButtonGroup>
+                                <InputGroup.Append>
                                     <Button type="submit" variant="info">
                                         <span className="fas fa-search"/>
                                     </Button>
                                     <Button onClick={this.clearSearch} variant="secondary">
                                         <span className="fas fa-window-close"/>
                                     </Button>
-                                </ButtonGroup>
-                            </Form>
-                        </div>
+                                </InputGroup.Append>
+                            </InputGroup>
+                        </Form>
                     </div>
                 </div>
                 <div className="d-flex flex-row">
                     <div className="d-flex flex-column w-100">
                         <Container fluid={true} style={{'padding': '0.5em'}}>
-                            <VideoBreadcrumb
-                                channel={this.state.channel}
-                                video={this.state.video}
-                                search_str={this.state.search_str}
-                            />
                             {this.getBody()}
                         </Container>
                     </div>

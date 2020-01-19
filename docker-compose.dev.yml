@@ -36,6 +36,7 @@ services:
       - ${WEB_HOST-127.0.0.1}:${WEB_PORT-8080}:80
     volumes:
       - "./nginx.dev.conf:/etc/nginx/nginx.conf"
+      - "./icon.ico:/etc/nginx/favicon.ico"
       - "./test:/opt/media"
   map:
     build:

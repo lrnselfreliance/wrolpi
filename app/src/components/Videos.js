@@ -177,8 +177,8 @@ function VideoCard({video, channel}) {
 
     let upload_date = null;
     if (video.upload_date) {
-        upload_date = new Date(video.upload_date * 1000);
-        upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth()}-${upload_date.getDay()}`;
+        upload_date = new Date(video['upload_date'] * 1000);
+        upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth()+1}-${upload_date.getDate()}`;
     }
     let video_url = "/videos/" + channel.link + "/" + video.video_path_hash;
     let poster_url = video.poster_path ?

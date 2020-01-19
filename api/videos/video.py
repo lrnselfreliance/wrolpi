@@ -1,4 +1,5 @@
 from http import HTTPStatus
+from typing import List, Dict, Tuple
 
 from dictorm import DictDB
 from sanic import response, Blueprint
@@ -8,7 +9,8 @@ from api.common import validate_doc, logger
 from api.db import get_db_context
 from api.errors import UnknownVideo, SearchEmpty, ValidationError
 from api.videos.common import VIDEO_QUERY_LIMIT, get_video_info_json
-from api.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse
+from api.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse, \
+    ChannelVideosResponse
 
 video_bp = Blueprint('Video')
 
@@ -55,24 +57,6 @@ def video_search(db_conn, db: DictDB, search_str: str, offset: int):
     return results, total
 
 
-def channel_search(db_conn, db: DictDB, search_str: str, offset: int):
-    curs = db_conn.cursor()
-
-    query = 'SELECT id, COUNT(*) OVER() as total ' \
-            f'FROM channel WHERE name ILIKE %s ORDER BY LOWER(name) DESC OFFSET %s LIMIT {VIDEO_QUERY_LIMIT}'
-    curs.execute(query, (f'%{search_str}%', offset))
-    results = list(curs.fetchall())
-    total = results[0][1] if results else 0
-    ids = [i[0] for i in results]
-
-    results = []
-    if ids:
-        Channel = db['channel']
-        results = Channel.get_where(Channel['id'].In(ids))
-        results = list(results)
-    return results, total
-
-
 @video_bp.post('/search')
 @validate_doc(
     summary='Search Video titles and captions, search Channel names.',
@@ -98,3 +82,40 @@ def search(_: Request, data: dict):
     ret = {'videos': videos, 'tsquery': tsquery,
            'totals': {'videos': videos_total}}
     return response.json(ret)
+
+
+def get_recent_videos(db_conn, db: DictDB, offset: int = 0) -> Tuple[List[Dict], int]:
+    curs = db_conn.cursor()
+    query = 'SELECT id, COUNT(*) OVER() as total FROM video WHERE upload_date IS NOT NULL ORDER BY upload_date DESC ' \
+            'OFFSET %s LIMIT 20'
+    curs.execute(query, (offset,))
+    results = list(curs.fetchall())
+    total = results[0][1] if results else 0
+    ids = [i[0] for i in results]
+
+    results = []
+    if ids:
+        Video = db['video']
+        results = Video.get_where(Video['id'].In(ids))
+        results = list(results)
+    return results, total
+
+
+@video_bp.get('/recent')
+@validate_doc(
+    summary='Get Channel Videos',
+    produces=ChannelVideosResponse,
+    responses=(
+            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
+    ),
+)
+def recent_videos(request):
+    offset = int(request.args.get('offset', 0))
+
+    with get_db_context() as (db_conn, db):
+        videos, total = get_recent_videos(db_conn, db, offset)
+
+        # Get each Channel for each Video, this will be converted to a dict by the response
+        _ = [i['channel'] for i in videos]
+
+    return response.json({'videos': list(videos), 'total': total})

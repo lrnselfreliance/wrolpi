@@ -66,6 +66,17 @@ async function getVideo(video_hash) {
     return data['video'];
 }
 
+
+async function getRecentVideos(offset) {
+    let response = await fetch(`${VIDEOS_API}/recent?offset=${offset}`);
+    if (response.status === 200) {
+        let data = await response.json();
+        return [data['videos'], data['total']];
+    } else {
+        throw Error('Unable to fetch videos for channel');
+    }
+}
+
 class EditChannel extends React.Component {
 
     constructor(props) {
@@ -161,7 +172,7 @@ class EditChannel extends React.Component {
 }
 
 function VideoCard({video, channel}) {
-    // Search result videos come with their own channel, use it, fallback to the global channel
+    // Videos come with their own channel, use it; fallback to the global channel
     channel = video['channel'] || channel;
 
     let upload_date = null;
@@ -714,12 +725,22 @@ class Videos extends React.Component {
     }
 
     async componentDidUpdate(prevProps, prevState, snapshot) {
-        if (this.props.match.params.video_hash !== prevProps.match.params.video_hash) {
+        let params = this.props.match.params;
+
+        let video_change = params.video_hash !== prevProps.match.params.video_hash;
+        if (video_change) {
             await this.setVideo();
         }
 
-        if (this.props.match.params.channel_link !== prevProps.match.params.channel_link) {
+        let channel_change = params.channel_link !== prevProps.match.params.channel_link;
+        if (channel_change) {
             await this.setChannel();
+        }
+
+        if (!params.video_hash && !params.channel_link && this.state.videos.length == 0) {
+            // No video or channel selected, display the recent videos
+            let [recent_videos, total] = await getRecentVideos(this.state.offset);
+            this.setState({'videos': recent_videos, total});
         }
 
         if (this.state.offset !== prevState.offset) {
@@ -790,27 +811,21 @@ class Videos extends React.Component {
                     <Button onClick={this.clearSearch}>Clear Search</Button>
                 </>
             )
-        } else if (this.state.videos.length > 0) {
-            return (
-                <ChannelVideoPager
-                    channel={this.state.channel}
-                    videos={this.state.videos}
-                    total={this.state.total}
-                    limit={this.state.limit}
-                    setOffset={this.setOffset}
-                    offset={this.state.offset}
-                />
-            )
         } else {
-            // TODO create a recently-played video selection
             return (
-                <p>Select a channel, or search for a video above.</p>
+                <>
+                    {!this.state.channel && <h4>Recently Published Videos</h4>}
+                    <ChannelVideoPager
+                        channel={this.state.channel}
+                        videos={this.state.videos}
+                        total={this.state.total}
+                        limit={this.state.limit}
+                        setOffset={this.setOffset}
+                        offset={this.state.offset}
+                    />
+                </>
             )
         }
-    }
-
-    showModalWithChannel(channel) {
-        this.setState({show: true, channel: channel}, () => this.setEditChannel(channel));
     }
 
     setShow(show) {
@@ -855,7 +870,7 @@ class Videos extends React.Component {
                         />
                         {
                             this.state.channel &&
-                                <EditChannel channel={this.state.channel}/>
+                            <EditChannel channel={this.state.channel}/>
                         }
                         <ChannelModal
                             modalTitle="Edit Channel"

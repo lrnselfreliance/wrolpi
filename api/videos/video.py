@@ -91,8 +91,10 @@ def search(_: Request, data: dict):
 
     with get_db_context() as (db_conn, db):
         videos, videos_total = video_search(db_conn, db, tsquery, offset)
-        channels, channels_total = channel_search(db_conn, db, tsquery, offset)
 
-    ret = {'videos': videos, 'channels': channels, 'tsquery': tsquery,
-           'totals': {'videos': videos_total, 'channels': channels_total}}
+        # Get each Channel for each Video, this will be converted to a dict by the response
+        _ = [i['channel'] for i in videos]
+
+    ret = {'videos': videos, 'tsquery': tsquery,
+           'totals': {'videos': videos_total}}
     return response.json(ret)

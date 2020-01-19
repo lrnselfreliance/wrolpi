@@ -9,11 +9,17 @@
 }
 
 ::-ms-clear {
-  display: none;
+    display: none;
 }
 
 .form-control-clear {
-  z-index: 10;
-  pointer-events: auto;
-  cursor: pointer;
+    z-index: 10;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+pre.wrap-text {
+    white-space: pre-wrap; /* Since CSS 2.1 */
+    white-space: -moz-pre-wrap; /* Mozilla, since 1999 */
+    word-wrap: break-word; /* Internet Explorer 5.5+ */
 }

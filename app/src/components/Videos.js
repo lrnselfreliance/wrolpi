@@ -727,14 +727,14 @@ class Videos extends React.Component {
     async componentDidUpdate(prevProps, prevState, snapshot) {
         let params = this.props.match.params;
 
-        let video_change = params.video_hash !== prevProps.match.params.video_hash;
-        if (video_change) {
-            await this.setVideo();
+        let channelChange = params.channel_link !== prevProps.match.params.channel_link;
+        if (channelChange) {
+            await this.setChannel();
         }
 
-        let channel_change = params.channel_link !== prevProps.match.params.channel_link;
-        if (channel_change) {
-            await this.setChannel();
+        let videoChange = params.video_hash !== prevProps.match.params.video_hash;
+        if (videoChange) {
+            await this.setVideo();
         }
 
         if (!params.video_hash && !params.channel_link && this.state.videos.length == 0) {

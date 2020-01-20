@@ -21,10 +21,10 @@ WROLPi runs in a couple Docker containers.  Lets get the prerequisites installed
     * `git clone git@github.com:lrnselfreliance/wrolpi.git`
 1. Change directory into the code base
     * `cd wrolpi`
-1. Build the minimum docker containers
-    * `docker-compose build --parallel db api app web`
-1. Start the minimum docker containers
-    * `docker-compose up web`
+1. Build the docker containers
+    * `docker-compose build --parallel`
+1. Start the docker containers
+    * `docker-compose up`
 1. Navigate to WROLPi
     * http://0.0.0.0:8080
 

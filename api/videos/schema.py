@@ -73,6 +73,25 @@ class Video:
     channel_id = doc.Integer()
 
 
+class VideoWithChannel:
+    id = doc.Integer()
+    description_path = doc.String()
+    ext = doc.String()
+    poster_path = doc.String()
+    source_id = doc.String()
+    title = doc.String()
+    upload_date = doc.Date()
+    video_path = doc.String()
+    name = doc.String()
+    caption_path = doc.String()
+    idempotency = doc.String()
+    info_json_path = doc.String()
+    video_path_hash = doc.String()
+    channel_id = doc.Integer()
+
+    channel = ChannelModel
+
+
 class ChannelVideosResponse:
     videos = doc.List(Video)
 
@@ -91,8 +110,7 @@ class VideoSearchRequest:
 
 
 class VideoSearchResponse:
-    videos = doc.List(Video)
-    channels = doc.List(ChannelModel)
+    videos = doc.List(VideoWithChannel)
     tsquery = doc.String()
 
 

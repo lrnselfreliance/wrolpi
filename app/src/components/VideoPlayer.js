@@ -33,7 +33,7 @@ function Video(props) {
             </p>
 
             <h4>Description</h4>
-            <pre>
+            <pre className="wrap-text">
                 {description}
             </pre>
         </>

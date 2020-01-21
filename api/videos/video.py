@@ -97,6 +97,7 @@ def get_recent_videos(db_conn, db: DictDB, offset: int = 0) -> Tuple[List[Dict],
     if ids:
         Video = db['video']
         results = Video.get_where(Video['id'].In(ids))
+        results = sorted(results, key=lambda r: ids.index(r['id']))
         results = list(results)
     return results, total
 

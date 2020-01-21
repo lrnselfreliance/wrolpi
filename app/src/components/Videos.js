@@ -24,6 +24,13 @@ import {
     updateChannel
 } from "../api";
 
+function scrollToTop() {
+    window.scrollTo({
+        top: 0,
+        behavior: "auto"
+    });
+}
+
 class EditChannel extends React.Component {
 
     constructor(props) {
@@ -618,6 +625,7 @@ class RecentVideos extends React.Component {
     async componentDidUpdate(prevProps, prevState, snapshot) {
         if (prevState.offset !== this.state.offset) {
             await this.fetchVideos();
+            scrollToTop();
         }
     }
 

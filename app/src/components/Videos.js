@@ -73,8 +73,25 @@ async function getRecentVideos(offset) {
         let data = await response.json();
         return [data['videos'], data['total']];
     } else {
-        throw Error('Unable to fetch videos for channel');
+        throw Error('Unable to fetch recent videos');
     }
+}
+
+async function getSearchVideos(search_str, offset) {
+    let form_data = {search_str: search_str, offset: offset};
+    let response = await fetch(`${VIDEOS_API}/search`, {
+        method: 'POST',
+        body: JSON.stringify(form_data),
+    });
+    let data = await response.json();
+
+    let videos = [];
+    let total = null;
+    if (data['videos']) {
+        videos = data['videos'];
+        total = data['totals']['videos'];
+    }
+    return [videos, total];
 }
 
 class EditChannel extends React.Component {
@@ -178,7 +195,7 @@ function VideoCard({video, channel}) {
     let upload_date = null;
     if (video.upload_date) {
         upload_date = new Date(video['upload_date'] * 1000);
-        upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth()+1}-${upload_date.getDate()}`;
+        upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth() + 1}-${upload_date.getDate()}`;
     }
     let video_url = "/videos/" + channel.link + "/" + video.video_path_hash;
     let poster_url = video.poster_path ?
@@ -204,14 +221,16 @@ function VideoCard({video, channel}) {
 class ChannelVideoPager extends Paginator {
 
     setOffset(offset) {
+        // used in parent Paginator
         this.props.setOffset(offset);
     }
 
     render() {
         return (
             <div className="d-flex flex-column">
+                {this.props.title && <h4>{this.props.title}</h4>}
                 <div className="d-flex flex-row">
-                    <div className="card-deck">
+                    <div className="card-deck justify-content-center">
                         {this.props.videos.map((v) => (
                             <VideoCard key={v['id']} video={v} channel={this.props.channel}/>))}
                     </div>
@@ -650,6 +669,116 @@ function VideoWrapper(props) {
     )
 }
 
+class RecentVideos extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            offset: 0,
+            videos: [],
+            total: null,
+        };
+        this.fetchVideos = this.fetchVideos.bind(this);
+    }
+
+    async fetchVideos() {
+        let [videos, total] = await getRecentVideos(this.state.offset);
+        this.setState({videos, total});
+    }
+
+    async componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevState.offset !== this.state.offset) {
+            await this.fetchVideos();
+        }
+    }
+
+    async componentDidMount() {
+        await this.fetchVideos();
+    }
+
+    render() {
+        if (this.state.total > 0) {
+            return (
+                <>
+                    <ChannelVideoPager
+                        title="Recently Published Videos"
+                        videos={this.state.videos}
+                        total={this.state.total}
+                        setOffset={(o) => this.setState({offset: o})}
+                        offset={this.state.offset}
+                    />
+                </>
+            )
+        } else {
+            return (
+                <p>
+                    No videos were retrieved. Have you refreshed your content?
+                    Try adding a channel and downloading the videos
+                </p>
+            )
+        }
+    }
+}
+
+class ChannelVideos extends RecentVideos {
+
+    constructor(props) {
+        super(props);
+        this.fetchVideos = this.fetchVideos.bind(this);
+    }
+
+    async fetchVideos() {
+        let [videos, total] = await getChannelVideos(this.props.channel['link'], this.state.offset, 20);
+        this.setState({videos, total});
+    }
+
+    render() {
+        if (this.state.total > 0) {
+            return (
+                <ChannelVideoPager
+                    channel={this.props.channel}
+                    videos={this.state.videos}
+                    total={this.state.total}
+                    setOffset={(o) => this.setState({offset: o})}
+                    offset={this.state.offset}
+                />
+            )
+        } else {
+            return <></>
+        }
+    }
+
+}
+
+class SearchVideos extends RecentVideos {
+
+    constructor(props) {
+        super(props);
+        this.fetchVideos = this.fetchVideos.bind(this);
+    }
+
+    async fetchVideos() {
+        let [videos, total] = await getSearchVideos(this.props.search_str, this.state.offset);
+        this.setState({videos, total});
+    }
+
+    render() {
+        if (this.state.total > 0) {
+            return (
+                <ChannelVideoPager
+                    channel={this.props.channel}
+                    videos={this.state.videos}
+                    total={this.state.total}
+                    setOffset={(o) => this.setState({offset: o})}
+                    offset={this.state.offset}
+                />
+            )
+        } else {
+            return <></>
+        }
+    }
+
+}
+
 class Videos extends React.Component {
 
     constructor(props) {
@@ -658,20 +787,14 @@ class Videos extends React.Component {
             channel: null,
             video: null,
             channels: [],
-            videos: [],
-            limit: 20,
-            offset: 0,
-            total: null,
             search_str: null,
             show: false,
         };
 
-        this.setOffset = this.setOffset.bind(this);
-        this.handleSearch = this.handleSearch.bind(this);
-        this.clearSearch = this.clearSearch.bind(this);
         this.channelSelect = this.channelSelect.bind(this);
-        this.setShow = this.setShow.bind(this);
+        this.clearSearch = this.clearSearch.bind(this);
         this.handleSearchEvent = this.handleSearchEvent.bind(this);
+        this.setShow = this.setShow.bind(this);
 
         this.channelTypeahead = React.createRef();
         this.searchInput = React.createRef();
@@ -679,17 +802,13 @@ class Videos extends React.Component {
 
     async resetChannels() {
         let channels = await getChannels();
-        this.setChannels(channels);
-    }
-
-    setChannels(channels,) {
         this.setState({channels});
     }
 
     async componentDidMount() {
-        await this.resetChannels();
         await this.setChannel();
         await this.setVideo();
+        await this.resetChannels();
     }
 
     async setChannel() {
@@ -704,15 +823,7 @@ class Videos extends React.Component {
             this.channelTypeahead.current.clear();
         }
         this.setState({channel: channel, offset: 0, total: null, videos: [], video: null, search_str: null},
-            this.setChannelVideos);
-    }
-
-    async setChannelVideos() {
-        if (this.state.channel) {
-            let channel_link = this.state.channel.link;
-            let [videos, total] = await getChannelVideos(channel_link, this.state.offset, this.state.limit);
-            this.setState({videos, total});
-        }
+            this.fetchVideos);
     }
 
     async setVideo() {
@@ -736,30 +847,6 @@ class Videos extends React.Component {
         if (videoChange) {
             await this.setVideo();
         }
-
-        if (!params.video_hash && !params.channel_link && this.state.videos.length == 0) {
-            // No video or channel selected, display the recent videos
-            let [recent_videos, total] = await getRecentVideos(this.state.offset);
-            this.setState({'videos': recent_videos, total});
-        }
-
-        if (this.state.offset !== prevState.offset) {
-            if (this.state.search_str) {
-                await this.handleSearch(this.state.search_str);
-            } else {
-                await this.setChannelVideos();
-            }
-        }
-
-        if (this.state.search_str !== prevState.search_str) {
-            if (this.state.search_str) {
-                await this.handleSearch(this.state.search_str);
-            } else if (this.state.search_str === null) {
-                this.setState({offset: 0}); // send the client back to the first page when clearing search
-                await this.setChannelVideos();
-                await this.resetChannels();
-            }
-        }
     }
 
     clearSearch() {
@@ -767,64 +854,26 @@ class Videos extends React.Component {
         this.setState({search_str: null, offset: 0});
     }
 
-    async handleSearch(search_str) {
-        // Submit the search string to the API.  Overwrite the pager with the videos provided.
-        // Overwrite the channels provided as well.
-        let form_data = {search_str, offset: this.state.offset};
-        let response = await fetch(`${VIDEOS_API}/search`, {
-            method: 'POST',
-            body: JSON.stringify(form_data),
-        });
-        let data = await response.json();
-
-        let videos = [];
-        let total = null;
-        if (data['videos']) {
-            videos = data['videos'];
-            total = data['totals']['videos'];
-        }
-        this.setState({videos, total});
-    }
-
     async handleSearchEvent(event) {
         event.preventDefault();
         let search_str = this.searchInput.current.value;
-        this.setState({search_str});
-    }
-
-    setOffset(offset) {
-        this.setState({offset});
+        this.setState({search_str, video: null, channel: null, offset: 0});
     }
 
     getBody() {
-        if (this.state.video) {
+        if (this.state.search_str) {
+            return (<SearchVideos search_str={this.state.search_str}/>)
+        } else if (this.state.video) {
             return (
                 <VideoWrapper
                     channel={this.state.channel}
                     video={this.state.video}
                 />
             )
-        } else if (this.state.search_str && this.state.videos.length === 0) {
-            return (
-                <>
-                    <h2>No videos found!</h2>
-                    <Button onClick={this.clearSearch}>Clear Search</Button>
-                </>
-            )
+        } else if (this.state.channel !== null) {
+            return (<ChannelVideos channel={this.state.channel}/>)
         } else {
-            return (
-                <>
-                    {!this.state.channel && <h4>Recently Published Videos</h4>}
-                    <ChannelVideoPager
-                        channel={this.state.channel}
-                        videos={this.state.videos}
-                        total={this.state.total}
-                        limit={this.state.limit}
-                        setOffset={this.setOffset}
-                        offset={this.state.offset}
-                    />
-                </>
-            )
+            return (<RecentVideos/>)
         }
     }
 

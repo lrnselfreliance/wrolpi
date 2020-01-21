@@ -11,7 +11,7 @@ class Paginator extends React.Component {
         let item_count = 8;
 
         let total = this.props.total;
-        let limit = this.props.limit;
+        let limit = this.props.limit || 20;
         let offset = this.props.offset;
 
         // Generate all offsets that can exist

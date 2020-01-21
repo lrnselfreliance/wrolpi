@@ -13,86 +13,16 @@ import Container from "react-bootstrap/Container";
 import Video from "./VideoPlayer";
 import {Typeahead} from 'react-bootstrap-typeahead';
 import 'react-bootstrap-typeahead/css/Typeahead.css';
-
-async function updateChannel(channel, name_ref, url_ref, directory_ref, matchRegex_ref) {
-    let name = name_ref.current.value;
-    let url = url_ref.current.value;
-    let directory = directory_ref.current.value;
-    let matchRegex = matchRegex_ref.current.value;
-    let body = {name, url, directory, match_regex: matchRegex};
-
-    let response = await fetch(`${VIDEOS_API}/channels/${channel['link']}`,
-        {method: 'PUT', body: JSON.stringify(body)});
-
-    if (response.status !== 204) {
-        throw Error('Failed to update channel.  See browser logs.');
-    }
-}
-
-async function deleteChannel(channel) {
-    let response = await fetch(`${VIDEOS_API}/channels/${channel['link']}`, {method: 'DELETE'});
-
-    if (response.status !== 204) {
-        throw Error('Failed to delete channel.  See browser logs.');
-    }
-}
-
-async function getChannels() {
-    let url = `${VIDEOS_API}/channels`;
-    let response = await fetch(url);
-    let data = await response.json();
-    return data['channels'];
-}
-
-async function getChannel(link) {
-    let response = await fetch(`${VIDEOS_API}/channels/${link}`);
-    let data = await response.json();
-    return data['channel'];
-}
-
-async function getChannelVideos(link, offset, limit) {
-    let response = await fetch(`${VIDEOS_API}/channels/${link}/videos?offset=${offset}&limit=${limit}`);
-    if (response.status === 200) {
-        let data = await response.json();
-        return [data['videos'], data['total']];
-    } else {
-        throw Error('Unable to fetch videos for channel');
-    }
-}
-
-async function getVideo(video_hash) {
-    let response = await fetch(`${VIDEOS_API}/video/${video_hash}`);
-    let data = await response.json();
-    return data['video'];
-}
-
-
-async function getRecentVideos(offset) {
-    let response = await fetch(`${VIDEOS_API}/recent?offset=${offset}`);
-    if (response.status === 200) {
-        let data = await response.json();
-        return [data['videos'], data['total']];
-    } else {
-        throw Error('Unable to fetch recent videos');
-    }
-}
-
-async function getSearchVideos(search_str, offset) {
-    let form_data = {search_str: search_str, offset: offset};
-    let response = await fetch(`${VIDEOS_API}/search`, {
-        method: 'POST',
-        body: JSON.stringify(form_data),
-    });
-    let data = await response.json();
-
-    let videos = [];
-    let total = null;
-    if (data['videos']) {
-        videos = data['videos'];
-        total = data['totals']['videos'];
-    }
-    return [videos, total];
-}
+import {
+    deleteChannel,
+    getChannel,
+    getChannels,
+    getChannelVideos,
+    getRecentVideos,
+    getSearchVideos,
+    getVideo,
+    updateChannel
+} from "../api";
 
 class EditChannel extends React.Component {
 
@@ -794,24 +724,37 @@ class Videos extends React.Component {
         this.channelSelect = this.channelSelect.bind(this);
         this.clearSearch = this.clearSearch.bind(this);
         this.handleSearchEvent = this.handleSearchEvent.bind(this);
-        this.setShow = this.setShow.bind(this);
+        this.setShowModal = this.setShowModal.bind(this);
 
         this.channelTypeahead = React.createRef();
         this.searchInput = React.createRef();
     }
 
-    async resetChannels() {
+    async componentDidMount() {
+        await this.fetchChannel();
+        await this.fetchVideo();
+
+        // Get the available channels
         let channels = await getChannels();
         this.setState({channels});
     }
 
-    async componentDidMount() {
-        await this.setChannel();
-        await this.setVideo();
-        await this.resetChannels();
+    async componentDidUpdate(prevProps, prevState, snapshot) {
+        let params = this.props.match.params;
+
+        let channelChange = params.channel_link !== prevProps.match.params.channel_link;
+        if (channelChange) {
+            await this.fetchChannel();
+        }
+
+        let videoChange = params.video_hash !== prevProps.match.params.video_hash;
+        if (videoChange) {
+            await this.fetchVideo();
+        }
     }
 
-    async setChannel() {
+    async fetchChannel() {
+        // Get and display the channel specified in the Router match
         let channel_link = this.props.match.params.channel_link;
         let channel = null;
         if (channel_link) {
@@ -826,7 +769,8 @@ class Videos extends React.Component {
             this.fetchVideos);
     }
 
-    async setVideo() {
+    async fetchVideo() {
+        // Get and display the Video specified in the Router match
         let video_hash = this.props.match.params.video_hash;
         let video = null;
         if (video_hash) {
@@ -835,23 +779,10 @@ class Videos extends React.Component {
         this.setState({video});
     }
 
-    async componentDidUpdate(prevProps, prevState, snapshot) {
-        let params = this.props.match.params;
-
-        let channelChange = params.channel_link !== prevProps.match.params.channel_link;
-        if (channelChange) {
-            await this.setChannel();
-        }
-
-        let videoChange = params.video_hash !== prevProps.match.params.video_hash;
-        if (videoChange) {
-            await this.setVideo();
-        }
-    }
-
-    clearSearch() {
-        this.searchInput.current.value = null;
-        this.setState({search_str: null, offset: 0});
+    channelSelect(selection) {
+        // Switch the channel link in the Router match
+        let channel = selection[0];
+        this.props.history.push(`/videos/${channel['link']}`);
     }
 
     async handleSearchEvent(event) {
@@ -860,7 +791,21 @@ class Videos extends React.Component {
         this.setState({search_str, video: null, channel: null, offset: 0});
     }
 
+    clearSearch() {
+        this.searchInput.current.value = null;
+        this.setState({search_str: null, offset: 0});
+    }
+
+    setShowModal(show) {
+        this.setState({show});
+    }
+
     getBody() {
+        // The body of Video can be:
+        //   - search results
+        //   - video
+        //   - channel (with its videos)
+        //   - recently published videos
         if (this.state.search_str) {
             return (<SearchVideos search_str={this.state.search_str}/>)
         } else if (this.state.video) {
@@ -875,15 +820,6 @@ class Videos extends React.Component {
         } else {
             return (<RecentVideos/>)
         }
-    }
-
-    setShow(show) {
-        this.setState({show});
-    }
-
-    channelSelect(selection) {
-        let channel = selection[0];
-        this.props.history.push(`/videos/${channel['link']}`);
     }
 
     render() {
@@ -930,7 +866,7 @@ class Videos extends React.Component {
                             directory={this.directory}
                             matchRegex={this.matchRegex}
                             show={this.state.show}
-                            setShow={this.setShow}
+                            setShow={this.setShowModal}
                             message={this.state.message}
                             error={this.state.error}
                             onDelete={this.handleDelete}

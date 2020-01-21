@@ -49,6 +49,7 @@ export function NavBar() {
                 exact={true}
                 activeClassName="active"
             >
+                <img src='/apple-touch-icon.png' height="30" width="30" alt=""/>
                 WROLPi
             </NavLink>
             <Navbar.Toggle aria-controls="basic-navbar-nav"/>

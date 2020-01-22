@@ -650,7 +650,7 @@ class RecentVideos extends React.Component {
             return (
                 <p>
                     No videos were retrieved. Have you refreshed your content?
-                    Try adding a channel and downloading the videos
+                    Try adding a channel and downloading the videos.
                 </p>
             )
         }
@@ -681,7 +681,11 @@ class ChannelVideos extends RecentVideos {
                 />
             )
         } else {
-            return <></>
+            return (
+                <p>
+                    No videos were retrieved. Have you downloaded videos for this channel?
+                </p>
+            )
         }
     }
 

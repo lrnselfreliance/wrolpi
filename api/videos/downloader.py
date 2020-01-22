@@ -83,21 +83,32 @@ def find_matching_video_files(directory, search_str) -> str:
         yield from glob.glob(f'{directory}/*{search_str}*{ext}')
 
 
-def find_missing_channel_videos(channel: Dict) -> dict:
+def find_missing_channel_videos(db: DictDB, channel: Dict) -> dict:
+    """
+    Search a Channel's directory for any videos that are in the Channel's catalog, but not in the filesystem.  This
+    means that the video is available for download, but has not yet been downloaded.  This function speeds up future
+    searches by marking Video['downloaded'] = True for every video in a Channel not returned by this function.
+    """
     info_json = channel['info_json']
     entries = info_json['entries']
     directory = get_absolute_media_path(channel['directory'])
-    skip_download_videos = channel['skip_download_videos']
+    skip_download_videos = channel['skip_download_videos'] or []
+
+    # Compare the available videos to what has been marked as downloaded.
+    # Skip any videos that have been marked to skip.
+    Video = db['video']
+    possible_missing_videos = channel['videos'].refine(Video['downloaded'].Is(False))
+    possible_missing_videos = [v['source_id'] for v in possible_missing_videos]
+    entries = [e for e in entries if e['id'] in possible_missing_videos and e['id'] not in skip_download_videos]
+
+    found_entries = []
     for entry in entries:
         source_id = entry['id']
-        if skip_download_videos and source_id in skip_download_videos:
-            # This video previously failed to download, skip it
-            continue
-
         matching_video_files = find_matching_video_files(directory, source_id)
         try:
             next(matching_video_files)
             # Some video file was found, move onto the next
+            found_entries.append(source_id)
             continue
         except StopIteration:
             pass
@@ -110,6 +121,11 @@ def find_missing_channel_videos(channel: Dict) -> dict:
         else:
             # No matches and no regex, download it
             yield entry
+
+    # Mark the found entries as downloaded.
+    if found_entries:
+        query = 'UPDATE video SET downloaded=true WHERE source_id = ANY(%s)'
+        db.curs.execute(query, (found_entries,))
 
 
 def get_channel_video_count(channel: Dict) -> int:
@@ -127,7 +143,7 @@ def find_all_missing_videos(db: DictDB) -> Tuple[Dict, dict]:
     channels = Channel.get_where(Channel['info_json'].IsNotNull())
     for channel in channels:
         video_count = 0
-        for missing_video in find_missing_channel_videos(channel):
+        for missing_video in find_missing_channel_videos(db, channel):
             yield channel, missing_video
             video_count += 1
 
@@ -243,6 +259,7 @@ def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
         idempotency=idempotency,
         info_json_path=str(info_json_path) if info_json_path else None,
         video_path_hash=video_path_hash,
+        downloaded=True if video_path else False,
     )
     video.flush()
 

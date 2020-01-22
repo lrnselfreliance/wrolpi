@@ -116,3 +116,6 @@ app/package-lock.json
 
 # open street map files
 *.pbf
+
+# docker override
+docker-compose.override.yml

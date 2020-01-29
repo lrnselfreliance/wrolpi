@@ -97,9 +97,9 @@ def find_missing_channel_videos(db: DictDB, channel: Dict) -> dict:
     # Compare the available videos to what has been marked as downloaded.
     # Skip any videos that have been marked to skip.
     Video = db['video']
-    possible_missing_videos = channel['videos'].refine(Video['downloaded'].Is(False))
-    possible_missing_videos = [v['source_id'] for v in possible_missing_videos]
-    entries = [e for e in entries if e['id'] in possible_missing_videos and e['id'] not in skip_download_videos]
+    downloaded_videos = channel['videos'].refine(Video['downloaded'].Is(True))
+    downloaded_videos = [v['source_id'] for v in downloaded_videos]
+    entries = [e for e in entries if e['id'] not in downloaded_videos and e['id'] not in skip_download_videos]
 
     found_entries = []
     for entry in entries:

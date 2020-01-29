@@ -6,6 +6,7 @@ from typing import Tuple
 import psycopg2
 from dictorm import DictDB
 from psycopg2._psycopg import connection
+from psycopg2.errors import InFailedSqlTransaction
 from psycopg2.pool import ThreadedConnectionPool
 
 from api.vars import DOCKERIZED
@@ -49,7 +50,14 @@ def get_db(dbname=None) -> Tuple[SemaphoreThreadedConnectionPool, connection, Di
     key = threading.get_ident()
     db_conn = POOL_SINGLETON.getconn(key=key)
 
-    db = DictDB(db_conn)
+    try:
+        db = DictDB(db_conn)
+    except InFailedSqlTransaction:
+        # Connection has unresolvable error, recreate the pool
+        POOL_SINGLETON.closeall()
+        POOL_SINGLETON = SemaphoreThreadedConnectionPool(0, 20, **db_args, connect_timeout=5)
+        db = DictDB(db_conn)
+
     setup_relationships(db)
     return POOL_SINGLETON, db_conn, db, key
 

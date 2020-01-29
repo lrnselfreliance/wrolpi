@@ -1,3 +1,4 @@
+import logging
 import threading
 from contextlib import contextmanager
 from threading import Semaphore
@@ -10,6 +11,12 @@ from psycopg2.errors import InFailedSqlTransaction
 from psycopg2.pool import ThreadedConnectionPool
 
 from api.vars import DOCKERIZED
+
+db_logger = logging.getLogger('wrolpi')
+ch = logging.StreamHandler()
+formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
+ch.setFormatter(formatter)
+db_logger.addHandler(ch)
 
 
 class SemaphoreThreadedConnectionPool(ThreadedConnectionPool):
@@ -52,8 +59,9 @@ def get_db(dbname=None) -> Tuple[SemaphoreThreadedConnectionPool, connection, Di
 
     try:
         db = DictDB(db_conn)
-    except InFailedSqlTransaction:
+    except InFailedSqlTransaction as e:
         # Connection has unresolvable error, recreate the pool
+        db_logger.warning('DB connection pool in a failed state, recreating pool...', exc_info=e)
         POOL_SINGLETON.closeall()
         POOL_SINGLETON = SemaphoreThreadedConnectionPool(0, 20, **db_args, connect_timeout=5)
         db = DictDB(db_conn)

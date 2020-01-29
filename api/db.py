@@ -3,8 +3,9 @@ from contextlib import contextmanager
 from threading import Semaphore
 from typing import Tuple
 
-import psycopg2 as psycopg2
+import psycopg2
 from dictorm import DictDB
+from psycopg2._psycopg import connection
 from psycopg2.pool import ThreadedConnectionPool
 
 from api.vars import DOCKERIZED
@@ -27,7 +28,7 @@ class SemaphoreThreadedConnectionPool(ThreadedConnectionPool):
 POOL_SINGLETON = None
 
 
-def get_db(dbname=None):
+def get_db(dbname=None) -> Tuple[SemaphoreThreadedConnectionPool, connection, DictDB, int]:
     # Default database is local development
     db_args = dict(
         dbname=dbname or 'wrolpi',

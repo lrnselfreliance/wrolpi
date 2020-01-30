@@ -251,6 +251,15 @@ def get_channel_videos(db: DictDB, link: str, offset: int = 0):
 
 
 def get_matching_directories(path: Union[str, Path]):
+    """
+    Return a list of directory strings that start with the provided path.
+    """
     paths = iglob(f'{path}*')
     directories = sorted([str(i) for i in paths if os.path.isdir(i)])
     return directories
+
+
+def make_media_directory(path: str):
+    media_dir = get_media_directory()
+    path = media_dir / str(path)
+    path.mkdir(parents=True)

@@ -255,7 +255,7 @@ function ChannelModal(props) {
                                       ref={props.matchRegex}/>
                         <Form.Text className="text-muted">
                             The title of the video will be compared to this Regular Expression.
-                            <b>If you don't input this, all videos will be downloaded.</b>
+                            <b> If you don't input this, all videos will be downloaded.</b>
                         </Form.Text>
                     </Form.Group>
                 </Form>

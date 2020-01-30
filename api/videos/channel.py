@@ -4,14 +4,16 @@ from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from api.common import validate_doc, sanitize_link
+from api.common import validate_doc, sanitize_link, logger
 from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.videos.common import check_for_channel_conflicts, \
-    get_channel_videos, get_relative_to_media_directory
+    get_channel_videos, get_relative_to_media_directory, make_media_directory
 from api.videos.schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
     ChannelPostResponse, ChannelPutRequest, SuccessResponse, ChannelVideosResponse
 
 channel_bp = Blueprint('Channel')
+
+logger = logger.getChild('channel')
 
 
 @channel_bp.get('/channels')
@@ -63,7 +65,11 @@ def channel_post(request: Request, data: dict):
     try:
         data['directory'] = get_relative_to_media_directory(data['directory'])
     except UnknownDirectory:
-        raise UnknownDirectory()
+        if data['mkdir']:
+            make_media_directory(data['directory'])
+            data['directory'] = get_relative_to_media_directory(data['directory'])
+        else:
+            raise
 
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']
@@ -120,7 +126,11 @@ def channel_update(request: Request, link: str, data: dict):
             try:
                 data['directory'] = get_relative_to_media_directory(data['directory'])
             except UnknownDirectory:
-                raise
+                if data['mkdir']:
+                    make_media_directory(data['directory'])
+                    data['directory'] = get_relative_to_media_directory(data['directory'])
+                else:
+                    raise
 
         if 'directory' in data:
             data['directory'] = str(data['directory'])

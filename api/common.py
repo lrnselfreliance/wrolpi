@@ -47,7 +47,7 @@ def sanitize_link(link: str) -> str:
 
 
 def string_to_boolean(s: str) -> bool:
-    return str(s).lower() in {'true', 't', '1'}
+    return str(s).lower() in {'true', 't', '1', 'on'}
 
 
 def boolean_arg(request, arg_name):

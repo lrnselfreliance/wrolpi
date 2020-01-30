@@ -18,6 +18,7 @@ import {
     getChannel,
     getChannels,
     getChannelVideos,
+    getDirectories,
     getRecentVideos,
     getSearchVideos,
     getVideo,
@@ -44,6 +45,7 @@ class EditChannel extends React.Component {
         this.name = React.createRef();
         this.url = React.createRef();
         this.directory = React.createRef();
+        this.mkdir = React.createRef();
         this.matchRegex = React.createRef();
 
         this.setShow = this.setShow.bind(this);
@@ -57,7 +59,7 @@ class EditChannel extends React.Component {
         e.preventDefault();
         try {
             this.reset();
-            await updateChannel(this.props.channel, this.name, this.url, this.directory, this.matchRegex);
+            await updateChannel(this.props.channel, this.name, this.url, this.directory, this.mkdir, this.matchRegex);
             this.setShow(false);
         } catch (e) {
             this.setError(e.message);
@@ -77,7 +79,9 @@ class EditChannel extends React.Component {
         if (this.state.show && channel) {
             this.name.current.value = channel.name || '';
             this.url.current.value = channel.url || '';
-            this.directory.current.value = channel.directory || '';
+            if (this.directory.current) {
+                this.directory.current.value = channel.directory || '';
+            }
             this.matchRegex.current.value = channel.match_regex || '';
         }
     }
@@ -114,10 +118,12 @@ class EditChannel extends React.Component {
                     message={this.state.message}
                     error={this.state.error}
                     onDelete={this.handleDelete}
+                    disableDirectory={true}
 
                     name={this.name}
                     url={this.url}
                     directory={this.directory}
+                    mkdir={this.mkdir}
                     matchRegex={this.matchRegex}
                 />
             </>
@@ -183,6 +189,44 @@ class ChannelVideoPager extends Paginator {
 function ChannelModal(props) {
     const hide = () => props.setShow(false);
 
+    let [directories, setDirectories] = React.useState([]);
+
+    async function fetchDirectories(search_str) {
+        let dirs = await getDirectories(search_str);
+        setDirectories(dirs);
+    }
+
+    function getDirectoryInput() {
+        if (props.disableDirectory !== true) {
+            return (
+                <>
+                    <Typeahead
+                        id="channel_modal_directory"
+                        name="directory"
+                        ref={props.directory}
+                        multiple={false}
+                        options={directories}
+                        onInputChange={fetchDirectories}
+                    />
+                    <Form.Text className="text-muted">
+                        This will be appended to the root video directory in the config.
+                    </Form.Text>
+
+                    <Form.Group controlId="mkdir">
+                        <Form.Check label="Make directory, if it doesn't exist" ref={props.mkdir}/>
+                    </Form.Group>
+                </>
+            )
+        } else {
+            return (
+                <>
+                    <Form.Control type="text" ref={props.directory} disabled={true}/>
+                    <Form.Control type="hidden" ref={props.mkdir}/>
+                </>
+            )
+        }
+    }
+
     return (
         <Modal show={props.show} onHide={hide}>
             <Modal.Header closeButton>
@@ -202,11 +246,7 @@ function ChannelModal(props) {
 
                     <Form.Group controlId="directory">
                         <Form.Label column="">Directory</Form.Label>
-                        <Form.Control name="directory" type="directory" placeholder="prepping/something" required
-                                      ref={props.directory}/>
-                        <Form.Text className="text-muted">
-                            This will be appended to the root video directory in the config.
-                        </Form.Text>
+                        {getDirectoryInput()}
                     </Form.Group>
 
                     <Form.Group controlId="match_regex">
@@ -254,6 +294,7 @@ function AddChannel() {
     const name = useRef();
     const url = useRef();
     const directory = useRef();
+    const mkdir = useRef();
     const matchRegex = useRef();
 
     const [show, setShow] = useState(false);
@@ -266,7 +307,8 @@ function AddChannel() {
         let form_data = {
             name: name.current.value,
             url: url.current.value,
-            directory: directory.current.value,
+            directory: directory.current.state.text,
+            mkdir: mkdir.current.value,
             match_regex: matchRegex.current.value,
         };
         let response = await fetch(post_url, {
@@ -293,9 +335,12 @@ function AddChannel() {
                 modalTitle="Add New Channel"
                 form_id="add_channel"
                 handleSubmit={handleSubmit}
+                disableDirectory={false}
+
                 name={name}
                 url={url}
                 directory={directory}
+                mkdir={mkdir}
                 matchRegex={matchRegex}
                 show={show}
                 setShow={setShow}
@@ -869,20 +914,6 @@ class Videos extends React.Component {
                             this.state.channel &&
                             <EditChannel channel={this.state.channel}/>
                         }
-                        <ChannelModal
-                            modalTitle="Edit Channel"
-                            form_id="edit_channel"
-                            handleSubmit={this.handleSubmit}
-                            name={this.name}
-                            url={this.url}
-                            directory={this.directory}
-                            matchRegex={this.matchRegex}
-                            show={this.state.show}
-                            setShow={this.setShowModal}
-                            message={this.state.message}
-                            error={this.state.error}
-                            onDelete={this.handleDelete}
-                        />
                     </div>
                     <div className="d-flex flex-column flex-grow-1 p-1">
                         <Form inline onSubmit={this.handleSearchEvent}>

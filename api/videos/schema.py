@@ -6,6 +6,7 @@ class ChannelPostRequest:
     name = doc.String(description='A short readable name', required=True)
     match_regex = doc.String(description='Regex that the video title will have to match')
     directory = doc.String(required=True)
+    mkdir = doc.Boolean()
 
 
 class ChannelPutRequest:
@@ -14,6 +15,11 @@ class ChannelPutRequest:
     match_regex = doc.String()
     link = doc.String()
     directory = doc.String()
+    mkdir = doc.Boolean()
+
+
+class RefreshRequest:
+    channel_name = doc.String()
 
 
 class SuccessResponse:
@@ -128,3 +134,11 @@ class SettingsResponse:
 
 class SettingsRequest(SettingsObject):
     pass
+
+
+class DirectoriesRequest:
+    search_str = doc.String(required=True)
+
+
+class DirectoriesResponse:
+    directories = doc.List(doc.String())

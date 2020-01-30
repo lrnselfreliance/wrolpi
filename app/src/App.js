@@ -1,6 +1,6 @@
 import React from 'react';
 import './App.css';
-import {Container, Jumbotron} from "react-bootstrap";
+import {Jumbotron} from "react-bootstrap";
 import {NavBar} from "./components/Nav";
 import {Route, Switch} from "react-router-dom";
 import VideosRoute from "./components/Videos";

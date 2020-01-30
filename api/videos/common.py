@@ -1,6 +1,8 @@
 import json
+import os
 import pathlib
 from functools import partial, lru_cache
+from glob import iglob
 from pathlib import Path
 from typing import Union, Tuple
 
@@ -246,3 +248,9 @@ def get_channel_videos(db: DictDB, link: str, offset: int = 0):
     videos = Video.get_where(channel_id=channel['id']).order_by(
         'upload_date DESC, LOWER(title) ASC, LOWER(video_path) ASC').limit(VIDEO_QUERY_LIMIT).offset(offset)
     return videos, total
+
+
+def get_matching_directories(path: Union[str, Path]):
+    paths = iglob(f'{path}*')
+    directories = sorted([str(i) for i in paths if os.path.isdir(i)])
+    return directories

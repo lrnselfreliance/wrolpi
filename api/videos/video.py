@@ -8,9 +8,10 @@ from sanic.request import Request
 from api.common import validate_doc, logger
 from api.db import get_db_context
 from api.errors import UnknownVideo, SearchEmpty, ValidationError
-from api.videos.common import VIDEO_QUERY_LIMIT, get_video_info_json
+from api.videos.common import VIDEO_QUERY_LIMIT, get_video_info_json, get_matching_directories, get_media_directory, \
+    get_relative_to_media_directory
 from api.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse, \
-    ChannelVideosResponse
+    ChannelVideosResponse, DirectoriesResponse, DirectoriesRequest
 
 video_bp = Blueprint('Video')
 
@@ -120,3 +121,20 @@ def recent_videos(request):
         _ = [i['channel'] for i in videos]
 
     return response.json({'videos': list(videos), 'total': total})
+
+
+@video_bp.post('/directories')
+@validate_doc(
+    summary='Get all directories that match the search_str, prefixed by the media directory.',
+    consumes=DirectoriesRequest,
+    responses=(
+            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
+            (HTTPStatus.OK, DirectoriesResponse),
+    ),
+)
+def directories(request, data):
+    search_str = str(get_media_directory() / data['search_str'])
+    logger.debug(f'Searching for: {search_str}')
+    dirs = get_matching_directories(search_str)
+    dirs = [str(get_relative_to_media_directory(i)) for i in dirs]
+    return response.json({'directories': dirs})

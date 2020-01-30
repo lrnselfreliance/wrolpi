@@ -1,11 +1,12 @@
 import {VIDEOS_API} from "./components/Common";
 
-export async function updateChannel(channel, name_ref, url_ref, directory_ref, matchRegex_ref) {
+export async function updateChannel(channel, name_ref, url_ref, directory_ref, mkdir_ref, matchRegex_ref) {
     let name = name_ref.current.value;
     let url = url_ref.current.value;
     let directory = directory_ref.current.value;
+    let mkdir = mkdir_ref.current.value;
     let matchRegex = matchRegex_ref.current.value;
-    let body = {name, url, directory, match_regex: matchRegex};
+    let body = {name, url, directory, mkdir, match_regex: matchRegex};
 
     let response = await fetch(`${VIDEOS_API}/channels/${channel['link']}`,
         {method: 'PUT', body: JSON.stringify(body)});
@@ -77,4 +78,18 @@ export async function getSearchVideos(search_str, offset) {
         total = data['totals']['videos'];
     }
     return [videos, total];
+}
+
+export async function getDirectories(search_str) {
+    let form_data = {search_str};
+    let response = await fetch(`${VIDEOS_API}/directories`, {
+        method: 'post',
+        body: JSON.stringify(form_data),
+    });
+    if (response.status === 200) {
+        let data = await response.json();
+        let directories = data['directories'];
+        return directories;
+    }
+    return [];
 }

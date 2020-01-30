@@ -13,7 +13,7 @@ async function getConfig() {
 
 async function saveConfig(config) {
     let url = `http://${API_URI}/api/settings`;
-    let response = await fetch(url, {method: 'PUT', body: JSON.stringify(config)});
+    await fetch(url, {method: 'PUT', body: JSON.stringify(config)});
 }
 
 class Settings extends React.Component {

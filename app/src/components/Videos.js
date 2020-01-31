@@ -140,7 +140,7 @@ function VideoCard({video, channel}) {
         upload_date = new Date(video['upload_date'] * 1000);
         upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth() + 1}-${upload_date.getDate()}`;
     }
-    let video_url = "/videos/" + channel.link + "/" + video.video_path_hash;
+    let video_url = "/videos/" + channel.link + "/" + video.id;
     let poster_url = video.poster_path ?
         `/media/${channel.directory}/${encodeURIComponent(video.poster_path)}` : null;
     return (
@@ -629,7 +629,7 @@ class VideoBreadcrumb extends React.Component {
                         <Link
                             to={'/videos/' +
                             this.props.channel['link'] + '/' +
-                            this.props.video['video_path_hash']}>
+                            this.props.video['id']}>
                             {this.props.video['title'] || this.props.video['video_path']}
                         </Link>
                     </li>}
@@ -804,7 +804,7 @@ class Videos extends React.Component {
             await this.fetchChannel();
         }
 
-        let videoChange = params.video_hash !== prevProps.match.params.video_hash;
+        let videoChange = params.video_id !== prevProps.match.params.video_id;
         if (videoChange) {
             await this.fetchVideo();
         }
@@ -828,10 +828,10 @@ class Videos extends React.Component {
 
     async fetchVideo() {
         // Get and display the Video specified in the Router match
-        let video_hash = this.props.match.params.video_hash;
+        let video_id = this.props.match.params.video_id;
         let video = null;
-        if (video_hash) {
-            video = await getVideo(video_hash);
+        if (video_id) {
+            video = await getVideo(video_id);
         }
         this.setState({video});
     }
@@ -951,7 +951,7 @@ class VideosRoute extends React.Component {
 
     render() {
         return (
-            <Route path='/videos/:channel_link?/:video_hash?' exact component={Videos}/>
+            <Route path='/videos/:channel_link?/:video_id?' exact component={Videos}/>
         )
     }
 }

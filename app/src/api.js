@@ -47,8 +47,8 @@ export async function getChannelVideos(link, offset, limit) {
     }
 }
 
-export async function getVideo(video_hash) {
-    let response = await fetch(`${VIDEOS_API}/video/${video_hash}`);
+export async function getVideo(video_id) {
+    let response = await fetch(`${VIDEOS_API}/video/${video_id}`);
     let data = await response.json();
     return data['video'];
 }

@@ -333,15 +333,15 @@ class TestVideoAPI(TestAPI):
                 mock.patch('api.videos.common.get_absolute_video_info_json', raise_unknown_file):
             Channel, Video = db['channel'], db['video']
             channel = Channel(name='Foo', link='foo').flush()
-            Video(title='vidd', channel_id=channel['id'], video_path_hash='hashy').flush()
+            Video(title='vidd', channel_id=channel['id']).flush()
 
             # Test that a 404 is returned when no video exists
-            _, response = api_app.test_client.get('/api/videos/video/BAD_HASH')
+            _, response = api_app.test_client.get('/api/videos/video/10')
             assert response.status_code == HTTPStatus.NOT_FOUND, response.json
             assert response.json == {'code': 1, 'error': 'The video could not be found.'}
 
             # Get the video info we inserted
-            _, response = api_app.test_client.get('/api/videos/video/hashy')
+            _, response = api_app.test_client.get('/api/videos/video/1')
             assert response.status_code == HTTPStatus.OK, response.json
             self.assertDictContains(response.json['video'], {'title': 'vidd'})
 

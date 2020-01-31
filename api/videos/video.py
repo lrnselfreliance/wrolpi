@@ -18,7 +18,7 @@ video_bp = Blueprint('Video')
 logger = logger.getChild('video')
 
 
-@video_bp.get('/video/<video_hash:string>')
+@video_bp.get('/video/<video_id:string>')
 @validate_doc(
     summary='Get Video information',
     produces=VideoResponse,
@@ -26,10 +26,10 @@ logger = logger.getChild('video')
             (HTTPStatus.NOT_FOUND, JSONErrorResponse),
     ),
 )
-def video(request, video_hash: str):
+def video(request, video_id: str):
     db: DictDB = request.ctx.get_db()
     Video = db['video']
-    video = Video.get_one(video_path_hash=video_hash)
+    video = Video.get_one(id=video_id)
     if not video:
         raise UnknownVideo()
 
@@ -132,7 +132,7 @@ def recent_videos(request):
             (HTTPStatus.OK, DirectoriesResponse),
     ),
 )
-def directories(request, data):
+def directories(_, data):
     search_str = str(get_media_directory() / data['search_str'])
     logger.debug(f'Searching for: {search_str}')
     dirs = get_matching_directories(search_str)

@@ -1,6 +1,5 @@
 #! /usr/bin/env python3
 import glob
-import hashlib
 import logging
 import pathlib
 import re
@@ -228,10 +227,6 @@ def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
     channel_dir = get_absolute_media_path(channel['directory'])
     poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path, relative_to=channel_dir)
 
-    # Hash the video's path for easy and collision-free linking
-    video_path_hash = hashlib.sha3_512(str(video_path).encode('UTF-8')).hexdigest()
-    video_path_hash = video_path_hash[:10]
-
     # Video paths should be relative to the channel's directory
     if video_path.is_absolute():
         video_path = video_path.relative_to(channel_dir)
@@ -258,7 +253,6 @@ def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
         caption_path=str(caption_path) if caption_path else None,
         idempotency=idempotency,
         info_json_path=str(info_json_path) if info_json_path else None,
-        video_path_hash=video_path_hash,
         downloaded=True if video_path else False,
     )
     video.flush()

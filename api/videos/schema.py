@@ -75,7 +75,6 @@ class Video:
     caption_path = doc.String()
     idempotency = doc.String()
     info_json_path = doc.String()
-    video_path_hash = doc.String()
     channel_id = doc.Integer()
 
 
@@ -92,7 +91,6 @@ class VideoWithChannel:
     caption_path = doc.String()
     idempotency = doc.String()
     info_json_path = doc.String()
-    video_path_hash = doc.String()
     channel_id = doc.Integer()
 
     channel = ChannelModel

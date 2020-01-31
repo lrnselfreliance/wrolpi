@@ -4,7 +4,7 @@ import pathlib
 from functools import partial, lru_cache
 from glob import iglob
 from pathlib import Path
-from typing import Union, Tuple
+from typing import Union, Tuple, Generator
 
 from dictorm import Dict, DictDB
 
@@ -250,16 +250,32 @@ def get_channel_videos(db: DictDB, link: str, offset: int = 0):
     return videos, total
 
 
+def get_subdirectories(directory: Union[str, Path]) -> Generator[str, None, None]:
+    """
+    Return a list the subdirectories of a given directory.
+    """
+    paths = os.listdir(directory)
+    paths = (os.path.join(directory, p) for p in paths)
+    return paths
+
+
 def get_matching_directories(path: Union[str, Path]):
     """
     Return a list of directory strings that start with the provided path.
     """
-    paths = iglob(f'{path}*')
+    if os.path.isdir(path):
+        # Path is a real directory, return it's subdirectories
+        paths = get_subdirectories(path)
+    else:
+        paths = iglob(f'{path}*')
     directories = sorted([str(i) for i in paths if os.path.isdir(i)])
     return directories
 
 
 def make_media_directory(path: str):
+    """
+    Make a directory relative within the media directory.
+    """
     media_dir = get_media_directory()
     path = media_dir / str(path)
     path.mkdir(parents=True)

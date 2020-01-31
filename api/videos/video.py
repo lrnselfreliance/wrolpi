@@ -40,7 +40,7 @@ def video(request, video_id: str):
     return response.json({'video': video})
 
 
-def video_search(db_conn, db: DictDB, search_str: str, offset: int):
+def video_search(db_conn, db: DictDB, search_str: str, offset: int) -> Tuple[List[Dict], int]:
     curs = db_conn.cursor()
 
     query = 'SELECT id, ts_rank_cd(textsearch, websearch_to_tsquery(%s)), COUNT(*) OVER() AS total ' \

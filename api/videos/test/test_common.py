@@ -17,6 +17,9 @@ class TestCommon(ExtendedTestCase):
             # Directories
             foo = temp_dir / 'foo'
             foo.mkdir()
+            qux = foo / 'qux'
+            qux.mkdir()
+
             bar = temp_dir / 'bar'
             bar.mkdir()
             baz = temp_dir / 'baz'
@@ -37,3 +40,7 @@ class TestCommon(ExtendedTestCase):
             # No directories have c
             matches = get_matching_directories(temp_dir / 'c')
             assert matches == []
+
+            # foo is an exact match, return subdirectories
+            matches = get_matching_directories(temp_dir / 'foo')
+            assert matches == [str(foo / 'qux')]

@@ -20,30 +20,31 @@ class TestCommon(ExtendedTestCase):
             qux = foo / 'qux'
             qux.mkdir()
 
-            bar = temp_dir / 'bar'
+            bar = temp_dir / 'Bar'
             bar.mkdir()
             baz = temp_dir / 'baz'
             baz.mkdir()
 
-            # These files should never be returned
+            # These are files, and should never be returned
             (temp_dir / 'barr').touch()
             (temp_dir / 'bazz').touch()
+            (baz / 'baz').touch()
+
+            # No directories have c
+            matches = get_matching_directories(temp_dir / 'c')
+            assert matches == []
 
             # Get all directories starting with f
             matches = get_matching_directories(temp_dir / 'f')
             assert matches == [str(temp_dir / 'foo')]
 
-            # Get all directories starting with b
+            # Get all directories starting with b, ignore case
             matches = get_matching_directories(temp_dir / 'b')
-            assert matches == [str(temp_dir / 'bar'), str(temp_dir / 'baz')]
+            assert matches == [str(temp_dir / 'Bar'), str(temp_dir / 'baz')]
 
             # baz matches, but it has no subdirectories
             matches = get_matching_directories(temp_dir / 'baz')
             assert matches == [str(temp_dir / 'baz')]
-
-            # No directories have c
-            matches = get_matching_directories(temp_dir / 'c')
-            assert matches == []
 
             # foo is an exact match, return subdirectories
             matches = get_matching_directories(temp_dir / 'foo')

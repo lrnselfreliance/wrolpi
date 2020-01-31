@@ -1,8 +1,9 @@
+import fnmatch
 import json
 import os
 import pathlib
+import re
 from functools import partial, lru_cache
-from glob import iglob
 from pathlib import Path
 from typing import Union, Tuple, List
 
@@ -250,30 +251,28 @@ def get_channel_videos(db: DictDB, link: str, offset: int = 0):
     return videos, total
 
 
-def get_subdirectories(directory: Union[str, Path]) -> List[str]:
+def get_matching_directories(path: Union[str, Path]) -> List[str]:
     """
-    Return a list the subdirectories of a given directory.
-    """
-    paths = os.listdir(directory)
-    paths = [os.path.join(directory, p) for p in paths]
-    return paths
-
-
-def get_matching_directories(path: Union[str, Path]):
-    """
-    Return a list of directory strings that start with the provided path.
+    Return a list of directory strings that start with the provided path.  If the path is a directory, return it's
+    subdirectories, if the directory contains no subdirectories, return the directory.
     """
     path = str(path)
+
     if os.path.isdir(path):
-        # Path is a real directory, return it's subdirectories
-        paths = get_subdirectories(path)
+        # The provided path is a directory, return it's subdirectories, or itself if no subdirectories exist
+        paths = [os.path.join(path, i) for i in os.listdir(path)]
+        paths = sorted(i for i in paths if os.path.isdir(i))
         if len(paths) == 0:
-            # No subdirectories, return this directory
             return [path]
-    else:
-        paths = iglob(f'{path}*')
-    directories = sorted(filter(os.path.isdir, paths))
-    return directories
+        return paths
+
+    head, tail = os.path.split(path)
+    paths = os.listdir(head)
+    paths = [os.path.join(head, i) for i in paths]
+    pattern = path.lower()
+    paths = sorted(i for i in paths if os.path.isdir(i) and i.lower().startswith(pattern))
+
+    return paths
 
 
 def make_media_directory(path: str):

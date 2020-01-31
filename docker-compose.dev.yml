@@ -17,6 +17,7 @@ services:
       - .:/opt/wrolpi
     ports:
       - ${REACT_APP_API-127.0.0.1:8081}:8081
+    command: "-vv api --host 0.0.0.0"
   app:
     depends_on:
       - api

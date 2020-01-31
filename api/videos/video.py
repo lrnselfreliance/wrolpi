@@ -43,8 +43,8 @@ def video(request, video_id: str):
 def video_search(db_conn, db: DictDB, search_str: str, offset: int):
     curs = db_conn.cursor()
 
-    query = 'SELECT id, ts_rank_cd(textsearch, to_tsquery(%s)), COUNT(*) OVER() AS total ' \
-            f'FROM video WHERE textsearch @@ to_tsquery(%s) ORDER BY 2 DESC OFFSET %s LIMIT {VIDEO_QUERY_LIMIT}'
+    query = 'SELECT id, ts_rank_cd(textsearch, websearch_to_tsquery(%s)), COUNT(*) OVER() AS total ' \
+            f'FROM video WHERE textsearch @@ websearch_to_tsquery(%s) ORDER BY 2 DESC OFFSET %s LIMIT {VIDEO_QUERY_LIMIT}'
     curs.execute(query, (search_str, search_str, offset))
     results = list(curs.fetchall())
     total = results[0][2] if results else 0
@@ -71,16 +71,13 @@ def search(_: Request, data: dict):
     if not search_str:
         raise ValidationError() from SearchEmpty()
 
-    # ts_query accepts a & as an "and" between keywords, we'll just assume any spaces mean "and"
-    tsquery = ' & '.join(search_str.split(' '))
-
     with get_db_context() as (db_conn, db):
-        videos, videos_total = video_search(db_conn, db, tsquery, offset)
+        videos, videos_total = video_search(db_conn, db, search_str, offset)
 
         # Get each Channel for each Video, this will be converted to a dict by the response
         _ = [i['channel'] for i in videos]
 
-    ret = {'videos': videos, 'tsquery': tsquery,
+    ret = {'videos': videos,
            'totals': {'videos': videos_total}}
     return response.json(ret)
 

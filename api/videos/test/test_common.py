@@ -37,6 +37,10 @@ class TestCommon(ExtendedTestCase):
             matches = get_matching_directories(temp_dir / 'b')
             assert matches == [str(temp_dir / 'bar'), str(temp_dir / 'baz')]
 
+            # baz matches, but it has no subdirectories
+            matches = get_matching_directories(temp_dir / 'baz')
+            assert matches == [str(temp_dir / 'baz')]
+
             # No directories have c
             matches = get_matching_directories(temp_dir / 'c')
             assert matches == []

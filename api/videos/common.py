@@ -4,7 +4,7 @@ import pathlib
 from functools import partial, lru_cache
 from glob import iglob
 from pathlib import Path
-from typing import Union, Tuple, Generator
+from typing import Union, Tuple, List
 
 from dictorm import Dict, DictDB
 
@@ -250,12 +250,12 @@ def get_channel_videos(db: DictDB, link: str, offset: int = 0):
     return videos, total
 
 
-def get_subdirectories(directory: Union[str, Path]) -> Generator[str, None, None]:
+def get_subdirectories(directory: Union[str, Path]) -> List[str]:
     """
     Return a list the subdirectories of a given directory.
     """
     paths = os.listdir(directory)
-    paths = (os.path.join(directory, p) for p in paths)
+    paths = [os.path.join(directory, p) for p in paths]
     return paths
 
 
@@ -263,12 +263,16 @@ def get_matching_directories(path: Union[str, Path]):
     """
     Return a list of directory strings that start with the provided path.
     """
+    path = str(path)
     if os.path.isdir(path):
         # Path is a real directory, return it's subdirectories
         paths = get_subdirectories(path)
+        if len(paths) == 0:
+            # No subdirectories, return this directory
+            return [path]
     else:
         paths = iglob(f'{path}*')
-    directories = sorted([str(i) for i in paths if os.path.isdir(i)])
+    directories = sorted(filter(os.path.isdir, paths))
     return directories
 
 

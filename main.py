@@ -52,7 +52,7 @@ def main():
     if args.verbose == 1:
         logger.info('Setting verbosity to INFO')
         logger.setLevel(logging.INFO)
-    elif args.verbose == 2:
+    elif args.verbose and args.verbose >= 2:
         logger.debug('Setting verbosity to DEBUG')
         logger.setLevel(logging.DEBUG)
 

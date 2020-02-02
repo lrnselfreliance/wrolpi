@@ -3,7 +3,6 @@ import logging
 import os
 import queue
 import string
-import subprocess
 from collections import namedtuple
 from datetime import datetime
 from functools import wraps
@@ -22,7 +21,7 @@ from websocket import WebSocket
 
 from api.db import get_db_context
 from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents
-from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH
+from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT
 
 sanic_app = Sanic()
 
@@ -56,32 +55,10 @@ def boolean_arg(request, arg_name):
     return string_to_boolean(value)
 
 
-def get_http_file_info(url):
-    """Call a wget subprocess to get information about a file"""
-    size = None
-    filename = str(url).rfind('/')[-1]
-    proc = subprocess.run(['/usr/bin/wget', '--spider', '--timeout=10', url], stdin=subprocess.PIPE,
-                          stderr=subprocess.PIPE)
-    stderr = proc.stderr
-    for line in stderr.split(b'\n'):
-        if line.startswith(b'Length:'):
-            line = line.decode()
-            size = line.partition('Length: ')[2].split(' ')[0]
-            return size, filename
-        # TODO get content-disposition for filename
-        # TODO handle non-zero exits
-    else:
-        raise LookupError(f'Unable to get length of {url}')
-
-
-async def download_file(url: str, size: int, destination: str):
-    pass
-
-
 DEFAULT_QUEUE_SIZE = 1000
 QUEUE_TIMEOUT = 10
 
-feed_logger = logger.getChild('feeds')
+feed_logger = logger.getChild('ws_feed')
 
 
 def create_websocket_feed(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT_QUEUE_SIZE):
@@ -146,7 +123,9 @@ def get_sanic_url(scheme: str = 'http', path: str = None, query: list = None, fr
     """
     Build a URL with the provided parts that references this running service.
     """
-    components = URL_COMPONENTS(scheme=scheme, netloc=f'{SANIC_HOST}:{SANIC_PORT}', path=path,
+    host = PUBLIC_HOST or SANIC_HOST
+    port = PUBLIC_PORT or SANIC_PORT
+    components = URL_COMPONENTS(scheme=scheme, netloc=f'{host}:{port}', path=path,
                                 query=query, fragment=fragment)
     unparsed = str(urlunsplit(components))
     return unparsed

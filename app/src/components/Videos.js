@@ -375,9 +375,14 @@ function handleStream(stream_url, setAlertVariant, setAlertMessage, setProgress)
         }
     }
 
+    function handleError(error) {
+        console.log(`Websocket ${stream_url} error:`, error);
+    }
+
     let ws = new WebSocket(stream_url);
     window.onbeforeunload = (e) => (ws.close);
     ws.onmessage = handleMessage;
+    ws.onerror = handleError;
 
     return ws;
 }

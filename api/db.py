@@ -59,7 +59,7 @@ def get_db(dbname=None) -> Tuple[SemaphoreThreadedConnectionPool, connection, Di
 
     try:
         db = DictDB(db_conn)
-    except InFailedSqlTransaction as e:
+    except (InFailedSqlTransaction, psycopg2.InterfaceError) as e:
         # Connection has unresolvable error, recreate the pool
         db_logger.warning('DB connection pool in a failed state, recreating pool...', exc_info=e)
         POOL_SINGLETON.closeall()

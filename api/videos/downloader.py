@@ -15,10 +15,6 @@ from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path
 
 logger = logging.getLogger('api:downloader')
-ch = logging.StreamHandler()
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-ch.setFormatter(formatter)
-logger.addHandler(ch)
 
 ydl_logger = logging.getLogger('api:ydl')
 

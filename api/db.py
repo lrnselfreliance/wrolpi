@@ -13,10 +13,6 @@ from psycopg2.pool import ThreadedConnectionPool
 from api.vars import DOCKERIZED
 
 db_logger = logging.getLogger('wrolpi')
-ch = logging.StreamHandler()
-formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
-ch.setFormatter(formatter)
-db_logger.addHandler(ch)
 
 
 class SemaphoreThreadedConnectionPool(ThreadedConnectionPool):

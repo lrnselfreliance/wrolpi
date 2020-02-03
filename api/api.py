@@ -1,10 +1,8 @@
 import argparse
 import logging
-import os
 import pathlib
 from functools import wraps
 
-from dotenv import load_dotenv
 from sanic import Blueprint, Sanic, response
 from sanic.request import Request
 from sanic_cors import CORS
@@ -24,10 +22,7 @@ CORS(api_app)
 # Attach the Sanic OpenAPI blueprint to the API App.  This will generate our API docs.
 api_app.blueprint(swagger_blueprint)
 
-# Load default variables from .env file
-load_dotenv()
-DEFAULT_URL = os.getenv('REACT_APP_API', '127.0.0.1:8081')
-DEFAULT_HOST, DEFAULT_PORT = DEFAULT_URL.split(':')
+DEFAULT_HOST, DEFAULT_PORT = '127.0.0.1', '8081'
 
 
 # Add DB middleware

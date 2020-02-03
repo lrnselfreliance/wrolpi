@@ -165,8 +165,8 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
     new_videos = {p for p in possible_new_paths if str(p.relative_to(directory)) not in existing_paths}
 
     for video_path in new_videos:
-        logger.debug(f'{channel["name"]}: Added {video_path}')
         insert_video(db, pathlib.Path(video_path), channel, idempotency=idempotency)
+        logger.warning(f'{channel["name"]}: Added {video_path}')
 
     reporter.message('Matched all existing video files')
 

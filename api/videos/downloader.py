@@ -1,22 +1,20 @@
 #! /usr/bin/env python3
 import glob
-import logging
 import pathlib
 import re
 from datetime import datetime
-from typing import Tuple
+from typing import Tuple, Union
 
 from dictorm import DictDB, Dict, Or
 from youtube_dl import YoutubeDL
 
-from api.common import make_progress_calculator
+from api.common import make_progress_calculator, logger
 from api.db import get_db_context
 from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path
 
-logger = logging.getLogger('api:downloader')
-
-ydl_logger = logging.getLogger('api:ydl')
+logger = logger.getChild('api:downloader')
+ydl_logger = logger.getChild('api:ydl')
 
 
 def get_channel_info(channel: Dict) -> dict:
@@ -232,8 +230,10 @@ def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
     if name_match:
         _, upload_date, source_id, title, ext = name_match.groups()
 
-    # Youtube-DL can sometimes set date to `NA`, lets use a None
-    if upload_date == 'NA':
+    # Make sure the date is a valid date format, if not, leave it blank.  Youtube-DL sometimes puts an NA in the date.
+    # We may even get videos that weren't downloaded by WROLPi.
+    if not upload_date.isdigit() or len(upload_date) != 8:
+        logger.debug(f'Could not parse date from filename: {video_path}')
         upload_date = None
 
     video = Video(

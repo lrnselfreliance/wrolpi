@@ -232,7 +232,7 @@ def insert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
 
     # Make sure the date is a valid date format, if not, leave it blank.  Youtube-DL sometimes puts an NA in the date.
     # We may even get videos that weren't downloaded by WROLPi.
-    if not upload_date.isdigit() or len(upload_date) != 8:
+    if not upload_date or not upload_date.isdigit() or len(upload_date) != 8:
         logger.debug(f'Could not parse date from filename: {video_path}')
         upload_date = None
 

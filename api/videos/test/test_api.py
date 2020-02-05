@@ -18,7 +18,6 @@ from api.videos.downloader import insert_video
 attach_routes(api_app)
 
 
-@mock.patch('api.videos.common.CONFIG_PATH', TEST_CONFIG_PATH.name)
 class TestVideoAPI(TestAPI):
 
     @wrap_test_db

@@ -1,3 +1,4 @@
+import collections
 import json
 import logging
 import os
@@ -19,7 +20,6 @@ from sanic.request import Request
 from sanic_openapi import doc
 from websocket import WebSocket
 
-from api.db import get_db_context
 from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents
 from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT
 
@@ -313,29 +313,70 @@ def get_last_modified_headers(request_headers: dict, path: Union[Path, str]) -> 
     return headers
 
 
-def get_config() -> dict:
-    config_path = CONFIG_PATH if Path(CONFIG_PATH).exists() else EXAMPLE_CONFIG_PATH
+def get_example_config() -> dict:
+    config_path = EXAMPLE_CONFIG_PATH
     with open(str(config_path), 'rt') as fh:
         config = yaml.load(fh, Loader=yaml.Loader)
-    return config
+    return dict(config)
 
 
-def save_settings_config(config):
-    """Save new settings to local.yaml, overwriting what is there."""
-    old_config = dict(get_config())
-    new_config = {}
+def get_local_config() -> dict:
+    config_path = CONFIG_PATH
+    with open(str(config_path), 'rt') as fh:
+        config = yaml.load(fh, Loader=yaml.Loader)
+    return dict(config)
 
-    # Add channel sections
-    with get_db_context() as (db_conn, db):
-        Channel = db['channel']
-        channels = Channel.get_where().order_by('LOWER(name) ASC')
-        for channel in channels:
-            section = config_channels[channel['link']] = {}
-            section['name'] = channel['name'] or ''
-            section['url'] = channel['url'] or ''
-            section['directory'] = channel['directory'] or ''
-            section['match_regex'] = channel['match_regex'] or ''
+
+def get_config() -> dict:
+    try:
+        return get_local_config()
+    except FileNotFoundError:
+        return get_example_config()
+
+
+def combine_dicts(*dicts: dict) -> dict:
+    """
+    Recursively combine dictionaries, preserving the leftmost value.
+
+    >>> a = dict(a='b', c=dict(d='e'))
+    >>> b = dict(a='c', e='f')
+    >>> combine_dicts(a, b)
+    dict(a='b', c=dict(d='e'), e='f')
+    """
+    if len(dicts) == 0:
+        raise IndexError('No dictionaries to iterate through')
+    elif len(dicts) == 1:
+        return dicts[0]
+    a, b = dicts[-2:]
+    c = dicts[:-2]
+    new = {}
+    keys = set(a.keys())
+    keys = keys.union(b.keys())
+    for k in keys:
+        if k in b and k in a and isinstance(b[k], collections.Mapping):
+            value = combine_dicts(a[k], b[k])
+        else:
+            value = a.get(k, b.get(k))
+        new[k] = value
+    if c:
+        return combine_dicts(*c, new)
+    return new
+
+
+def save_settings_config(config=None):
+    """
+    Save new settings to local.yaml, overwriting what is there.  This function updates the config file from three
+    sources: the config object argument, the local config, then the example config; in that order.
+    """
+    config = config or {}
+    example_config = get_example_config()
+    try:
+        local_config = get_local_config()
+    except FileNotFoundError:
+        # Local config does not yet exist, lets create it
+        local_config = {}
+
+    new_config = combine_dicts(config, local_config, example_config)
 
     with open(str(CONFIG_PATH), 'wt') as fh:
-        yaml.dump(config, fh)
-    return 0
+        yaml.dump(new_config, fh)

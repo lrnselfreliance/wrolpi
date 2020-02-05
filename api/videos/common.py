@@ -13,7 +13,7 @@ from api.common import sanitize_link, logger, CONFIG_PATH, get_config
 from api.db import get_db_context
 from api.errors import UnknownFile, UnknownChannel, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
-from api.vars import DOCKERIZED
+from api.vars import DOCKERIZED, PROJECT_DIR
 
 logger = logger.getChild('videos')
 
@@ -75,7 +75,11 @@ def get_media_directory() -> Path:
     config = get_config()
     media_directory = config['media_directory']
     media_directory = Path(media_directory)
-    return media_directory.absolute()
+    if media_directory.is_absolute():
+        return media_directory.absolute()
+    media_directory = PROJECT_DIR / media_directory
+    media_directory = media_directory.absolute()
+    return media_directory
 
 
 def get_absolute_media_path(path: str) -> Path:

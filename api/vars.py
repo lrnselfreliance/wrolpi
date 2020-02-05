@@ -1,7 +1,7 @@
 import os
 import pathlib
 
-PROJECT_DIR: pathlib.Path = pathlib.Path(__file__).parent.parent
+PROJECT_DIR: pathlib.Path = pathlib.Path(__file__).parents[1]
 EXAMPLE_VIDEOS_DIR: pathlib.Path = PROJECT_DIR / 'test/example_videos'
 TEMPLATES_DIR: pathlib.Path = (PROJECT_DIR / 'templates').absolute()
 DOCKERIZED = True if os.environ.get('DOCKER', '').lower().startswith('t') else False

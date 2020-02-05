@@ -1,16 +1,16 @@
-import unittest
 from pathlib import Path
 
 import mock
 
 from api.db import get_db_context
-from api.test.common import wrap_test_db
+from api.test.common import wrap_test_db, TestAPI
+from api.vars import PROJECT_DIR
 from api.videos import captions
 
 
-class TestCaption(unittest.TestCase):
-    vtt_path1 = Path('test/example1.en.vtt').absolute()
-    vtt_path2 = Path('test/example2.en.vtt').absolute()
+class TestCaption(TestAPI):
+    vtt_path1 = (PROJECT_DIR / 'test/example1.en.vtt').absolute()
+    vtt_path2 = (PROJECT_DIR / 'test/example2.en.vtt').absolute()
 
     def test_example_en_vtt(self):
         expected = ['okay welcome to this session this is',

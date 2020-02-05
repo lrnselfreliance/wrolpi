@@ -1,8 +1,12 @@
 import pytest
 from sanic_openapi import doc
 
-from api.common import validate_data
+from api.api import api_app, attach_routes
+from api.common import validate_data, combine_dicts
 from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
+
+# Attach the default routes
+attach_routes(api_app)
 
 
 class Model:
@@ -64,3 +68,43 @@ def test_validate_doc(data, expected):
 def test_validate_doc_errors(data, expected):
     model = Model()
     pytest.raises(expected, validate_data, model, data)
+
+
+@pytest.mark.parametrize(
+    'data,expected',
+    (
+            (
+                    [dict()],
+                    dict()
+            ), (
+                    [dict(a='b')],
+                    dict(a='b')
+            ), (
+                    [dict(a='b'), dict(b='c')],
+                    dict(a='b', b='c')
+            ), (
+                    [dict(b='c'), dict(a='b')],
+                    dict(a='b', b='c'),
+            ), (
+                    [dict(a=dict(b='c'), d='e'), dict(a=(dict(f='g')))],
+                    dict(a=dict(b='c', f='g'), d='e'),
+            ), (
+                    [dict(a=dict(b='c'), d='e'), dict(a=(dict(b='g')))],
+                    dict(a=dict(b='c'), d='e'),
+            ), (
+                    [dict(a=dict(b='c'), d=[1, 2, 3]), dict(a=(dict(b='g')))],
+                    dict(a=dict(b='c'), d=[1, 2, 3]),
+            ), (
+                    [dict(a='b', c=dict(d='e')), dict(a='c', e='f')],
+                    dict(a='b', c=dict(d='e'), e='f')
+            ), (
+                    [dict(a='b'), dict(a='c', d='e'), dict(e='f', a='d')],
+                    dict(a='b', d='e', e='f')
+            ), (
+                    [dict(a='b'), dict(), dict(e='f', a='d')],
+                    dict(a='b', e='f')
+            )
+    )
+)
+def test_combine_dicts(data, expected):
+    assert combine_dicts(*data) == expected

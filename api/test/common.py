@@ -21,7 +21,7 @@ from api.videos.api import refresh_queue, download_queue
 attach_routes(api_app)
 
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
-cwd = pathlib.Path(__file__).parents[3]
+cwd = pathlib.Path(__file__).parents[2]
 
 
 def wrap_test_db(func):
@@ -118,13 +118,13 @@ class ExtendedTestCase(unittest.TestCase):
 class TestAPI(ExtendedTestCase):
 
     def setUp(self) -> None:
-        self.patch = mock.patch('api.videos.common.CONFIG_PATH', TEST_CONFIG_PATH.name)
+        self.patch = mock.patch('api.common.CONFIG_PATH', TEST_CONFIG_PATH.name)
         self.patch.start()
         # Copy the example config to test against
         copyfile(str(EXAMPLE_CONFIG_PATH), TEST_CONFIG_PATH.name)
         # Setup the testing video root directory
         config = get_config()
-        config['media_directory'] = cwd / 'test/example_videos'
+        config['media_directory'] = cwd / 'test'
         with open(TEST_CONFIG_PATH.name, 'wt') as fh:
             fh.write(yaml.dump(config))
 

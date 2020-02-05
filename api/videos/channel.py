@@ -4,7 +4,7 @@ from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from api.common import validate_doc, sanitize_link, logger
+from api.common import validate_doc, sanitize_link, logger, save_settings_config
 from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.videos.common import check_for_channel_conflicts, \
     get_channel_videos, get_relative_to_media_directory, make_media_directory
@@ -96,6 +96,9 @@ def channel_post(request: Request, data: dict):
         )
         channel.flush()
 
+    # Save these changes to the local.yaml as well
+    save_settings_config()
+
     return response.json({'success': 'Channel created successfully'}, HTTPStatus.CREATED,
                          {'Location': f'/api/videos/channels/{channel["link"]}'})
 
@@ -149,6 +152,9 @@ def channel_update(request: Request, link: str, data: dict):
         channel.update(data)
         channel.flush()
 
+    # Save these changes to the local.yaml as well
+    save_settings_config()
+
     return response.raw('', HTTPStatus.NO_CONTENT,
                         headers={'Location': f'/api/videos/channels/{channel["link"]}'})
 
@@ -169,6 +175,10 @@ def channel_delete(request, link: str):
         raise UnknownChannel()
     with db.transaction(commit=True):
         channel.delete()
+
+    # Save these changes to the local.yaml as well
+    save_settings_config()
+
     return response.raw(None, HTTPStatus.NO_CONTENT)
 
 

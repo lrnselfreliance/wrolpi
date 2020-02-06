@@ -10,7 +10,6 @@ Future Features
     1. Recently played videos section
     1. Rework cmd arguments
     1. Next/previous video buttons
-    1. Generate missing thumbnails, save to hdd
     1. Timestamp for video duration on video card
 1. Map
     1. Search feature?

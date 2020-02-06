@@ -342,3 +342,46 @@ async def generate_bulk_thumbnails(video_ids: List[int]):
             video['generated_poster'] = True
             video.flush()
             db_conn.commit()
+
+
+def get_video_duration(video_path: Path) -> int:
+    """
+    Get the duration of a video in seconds.  Do this using ffprobe.
+    """
+    cmd = ['/usr/bin/ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of',
+           'default=noprint_wrappers=1:nokey=1', str(video_path)]
+
+    try:
+        proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        logger.warning(f'FFPROBE failed to get duration with stdout: {e.stdout.decode()}')
+        logger.warning(f'FFPROBE failed to get duration with stderr: {e.stderr.decode()}')
+        raise
+    stdout = proc.stdout.decode()
+    duration = int(float(stdout.strip()))
+    return duration
+
+
+async def get_bulk_video_duration(video_ids: List[int]):
+    """
+    Get and save the duration for each video provided.
+    """
+    with get_db_context(commit=True) as (db_conn, db):
+        logger.info(f'Getting {len(video_ids)} video durations.')
+        Video = db['video']
+        for video_id in video_ids:
+            video = Video.get_one(id=video_id)
+            logger.debug(f'Getting video duration: {video["id"]} {video["title"]}')
+            video_path = get_absolute_video_path(video)
+
+            try:
+                info_json = get_absolute_video_info_json(video)
+                with open(str(info_json), 'rt') as fh:
+                    contents = json.load(fh)
+                    duration = contents['duration']
+            except UnknownFile:
+                duration = get_video_duration(video_path)
+
+            video['duration'] = duration
+            video.flush()
+            db_conn.commit()

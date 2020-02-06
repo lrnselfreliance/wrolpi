@@ -38,7 +38,8 @@ from api.db import get_db_context
 from api.videos.channel import channel_bp
 from api.videos.video import video_bp
 from .captions import insert_bulk_captions
-from .common import logger, generate_video_paths, get_absolute_media_path, generate_bulk_thumbnails
+from .common import logger, generate_video_paths, get_absolute_media_path, generate_bulk_thumbnails, \
+    get_bulk_video_duration
 from .downloader import update_channels, download_all_missing_videos, insert_video
 from .schema import StreamResponse, \
     JSONErrorResponse
@@ -181,6 +182,9 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
     logger.info(status)
     reporter.message(status)
 
+    # Commit all insertions and deletions
+    db.conn.commit()
+
     # Fill in any missing captions
     query = 'SELECT id FROM video WHERE channel_id=%s AND caption IS NULL AND caption_path IS NOT NULL'
     curs.execute(query, (channel['id'],))
@@ -202,6 +206,18 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
         asyncio.ensure_future(coro)
     else:
         logger.debug('No missing posters to generate.')
+
+    # Get the duration of any video that is missing it's duration
+    query = 'SELECT id FROM video WHERE channel_id=%s AND duration IS NULL'
+    curs.execute(query, (channel['id'],))
+    missing_duration = [i for (i,) in curs.fetchall()]
+
+    if missing_duration:
+        logger.warning(f'Missing duration: {missing_duration}')
+        coro = get_bulk_video_duration(missing_duration)
+        asyncio.ensure_future(coro)
+    else:
+        logger.debug('No videos missing duration')
 
 
 def _refresh_videos(db: DictDB, q: Queue, channel_names: list = None):

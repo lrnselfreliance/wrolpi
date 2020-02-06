@@ -325,6 +325,7 @@ async def generate_bulk_thumbnails(video_ids: List[int]):
     clobber existing jpg files.
     """
     with get_db_context(commit=True) as (db_conn, db):
+        logger.info(f'Generating {len(video_ids)} video thumbnails')
         Video = db['video']
         for idx, video_id in enumerate(video_ids):
             video = Video.get_one(id=video_id)

@@ -339,7 +339,6 @@ async def generate_bulk_thumbnails(video_ids: List[int]):
             poster_path = poster_path.relative_to(channel_dir)
             video['poster_path'] = str(poster_path)
 
-            video['generated_poster'] = True
             video.flush()
             db_conn.commit()
 

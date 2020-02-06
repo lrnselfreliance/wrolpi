@@ -213,7 +213,6 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
     missing_duration = [i for (i,) in curs.fetchall()]
 
     if missing_duration:
-        logger.warning(f'Missing duration: {missing_duration}')
         coro = get_bulk_video_duration(missing_duration)
         asyncio.ensure_future(coro)
     else:

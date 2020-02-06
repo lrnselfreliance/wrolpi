@@ -130,8 +130,8 @@ class SettingsResponse:
     config = doc.Object(SettingsObject)
 
 
-class SettingsRequest(SettingsObject):
-    pass
+class SettingsRequest:
+    media_directory = doc.String()
 
 
 class DirectoriesRequest:

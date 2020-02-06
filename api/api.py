@@ -2,6 +2,7 @@ import argparse
 import logging
 import pathlib
 from functools import wraps
+from http import HTTPStatus
 
 from sanic import Blueprint, Sanic, response
 from sanic.request import Request
@@ -11,7 +12,7 @@ from sanic_openapi import swagger_blueprint, doc
 from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_config, get_config
 from api.db import get_db
 from api.modules import MODULES
-from api.videos.schema import SuccessResponse, SettingsRequest, SettingsResponse
+from api.videos.schema import SettingsRequest, SettingsResponse
 
 cwd = pathlib.Path(__file__).parent
 
@@ -103,23 +104,22 @@ async def echo(request: Request):
 
 @root_api.route('/settings', methods=['GET', 'OPTIONS'])
 @validate_doc(
-    summary='Update video settings config',
+    summary='Get WROLPi settings',
     produces=SettingsResponse,
 )
-def settings(_: Request):
+def get_settings(_: Request):
     config = dict(get_config())
     return response.json({'config': config})
 
 
 @root_api.put('/settings')
 @validate_doc(
-    summary='Update video settings config',
+    summary='Update WROLPI settings',
     consumes=SettingsRequest,
-    produces=SuccessResponse,
 )
-def settings(_: Request, data: dict):
+def update_settings(_: Request, data: dict):
     save_settings_config(data)
-    return response.json({'success': 'Settings saved'})
+    return response.raw('', HTTPStatus.NO_CONTENT)
 
 
 ROUTES_ATTACHED = False

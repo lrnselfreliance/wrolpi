@@ -128,10 +128,7 @@ def get_channel_video_count(channel: Dict) -> int:
 
 def find_all_missing_videos(db: DictDB) -> Tuple[Dict, dict]:
     """Search recursively for each video identified in the channel's JSON package.  If a video's file can't
-    be found, yield it.
-
-    If max_downloads_per_channel is provided, this will only yield missing videos when there are less video
-    files than this number."""
+    be found, yield it."""
     Channel = db['channel']
     channels = Channel.get_where(Channel['info_json'].IsNotNull())
     for channel in channels:

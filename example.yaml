@@ -10,7 +10,6 @@ downloader:
   embedthumbnail: true
   file_name_format: "%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s"
   format: 22/135/18/43
-  max_downloads_per_channel: 0
   nooverwrites: true
   quiet: false
   writeautomaticsub: true

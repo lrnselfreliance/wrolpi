@@ -312,6 +312,7 @@ def generate_video_thumbnail(video_path: Path):
            str(poster_path)]
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        logger.info(f'Generated thumbnail at {poster_path}')
     except subprocess.CalledProcessError as e:
         logger.warning(f'FFMPEG thumbnail generation failed with stdout: {e.stdout.decode()}')
         logger.warning(f'FFMPEG thumbnail generation failed with stdout: {e.stderr.decode()}')

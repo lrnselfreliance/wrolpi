@@ -370,6 +370,8 @@ def save_settings_config(config=None):
     """
     config = config or {}
     example_config = get_example_config()
+    # Remove the example channel, that shouldn't be saved to local
+    example_config.pop('channels')
     try:
         local_config = get_local_config()
     except FileNotFoundError:

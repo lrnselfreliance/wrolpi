@@ -185,7 +185,7 @@ def channel_delete(request, link: str):
     # Save these changes to the local.yaml as well
     save_settings_config()
 
-    return response.raw(None, HTTPStatus.NO_CONTENT)
+    return response.raw('', HTTPStatus.NO_CONTENT)
 
 
 @channel_bp.get('/channels/<link:string>/videos')

@@ -1,5 +1,5 @@
 #! /usr/bin/env python3
-from typing import Generator
+from typing import Generator, List
 
 import srt
 import webvtt
@@ -8,6 +8,7 @@ from dictorm import Dict
 from api.common import logger
 from api.errors import UnknownCaptionFile
 from .common import get_absolute_video_caption
+from ..db import get_db_context
 
 
 def get_caption_text(caption_path: str) -> Generator:
@@ -56,3 +57,12 @@ def process_captions(video: Dict):
     except webvtt.errors.MalformedFileError:
         # File format is broken
         logger.debug(f'Failed to parse caption file {caption_path}')
+
+
+async def insert_bulk_captions(video_ids: List[int]):
+    with get_db_context(commit=True) as (db_conn, db):
+        Video = db['video']
+        for idx, video_id in enumerate(video_ids):
+            video = Video.get_one(id=video_id)
+            process_captions(video)
+    logger.debug(f'Inserted {len(video_ids)} captions')

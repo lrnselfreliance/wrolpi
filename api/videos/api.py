@@ -37,8 +37,8 @@ from api.common import create_websocket_feed, get_sanic_url, \
 from api.db import get_db_context
 from api.videos.channel import channel_bp
 from api.videos.video import video_bp
-from .captions import process_captions
-from .common import logger, generate_video_paths, get_absolute_media_path
+from .captions import insert_bulk_captions
+from .common import logger, generate_video_paths, get_absolute_media_path, generate_bulk_thumbnails
 from .downloader import update_channels, download_all_missing_videos, insert_video
 from .schema import StreamResponse, \
     JSONErrorResponse
@@ -185,16 +185,23 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
     query = 'SELECT id FROM video WHERE channel_id=%s AND caption IS NULL AND caption_path IS NOT NULL'
     curs.execute(query, (channel['id'],))
     missing_captions = [i for (i,) in curs.fetchall()]
-    reporter.set_progress_total(1, len(missing_captions))
-    Video = db['video']
-    for idx, video_id in enumerate(missing_captions):
-        video = Video.get_one(id=video_id)
-        process_captions(video)
-        reporter.set_progress(1, idx, f'Processed captions for video {video_id}')
 
-    status = f'Processed {len(missing_captions)} missing captions.'
-    logger.info(status)
-    reporter.set_progress(1, len(missing_captions), status)
+    if missing_captions:
+        coro = insert_bulk_captions(missing_captions)
+        asyncio.ensure_future(coro)
+    else:
+        logger.debug('No missing captions to process.')
+
+    # Generate any missing posters
+    query = 'SELECT id FROM video WHERE channel_id=%s AND poster_path IS NULL'
+    curs.execute(query, (channel['id'],))
+    missing_posters = [i for (i,) in curs.fetchall()]
+
+    if missing_posters:
+        coro = generate_bulk_thumbnails(missing_posters)
+        asyncio.ensure_future(coro)
+    else:
+        logger.debug('No missing posters to generate.')
 
 
 def _refresh_videos(db: DictDB, q: Queue, channel_names: list = None):
@@ -222,9 +229,9 @@ def _refresh_videos(db: DictDB, q: Queue, channel_names: list = None):
     channels = list(channels)
 
     if not channels and channel_names:
-        raise Exception(f'No channels match name: {channel_names}')
+        raise Exception(f'No channels match name(s): {channel_names}')
     elif not channels:
-        raise Exception(f'No channels in DB.  Have you added them to your local.yaml?')
+        raise Exception(f'No channels in DB.  Have you created any?')
 
     for idx, channel in enumerate(channels):
         reporter.set_progress(0, idx, f'Checking {channel["name"]} directory for new videos')

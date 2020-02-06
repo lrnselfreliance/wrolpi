@@ -1,6 +1,7 @@
 import json
 import os
 import pathlib
+import subprocess
 from functools import partial, lru_cache
 from pathlib import Path
 from typing import Union, Tuple, List
@@ -284,3 +285,58 @@ def make_media_directory(path: str):
     media_dir = get_media_directory()
     path = media_dir / str(path)
     path.mkdir(parents=True)
+
+
+def replace_extension(path: pathlib.Path, new_ext) -> pathlib.Path:
+    """Swap the extension of a file's path.
+
+    Example:
+        >>> foo = pathlib.Path('foo.bar')
+        >>> replace_extension(foo, 'baz')
+        'foo.baz'
+    """
+    parent = path.parent
+    existing_ext = path.suffix
+    path = str(path)
+    name, _, _ = path.rpartition(existing_ext)
+    path = pathlib.Path(str(parent / name) + new_ext)
+    return path
+
+
+def generate_video_thumbnail(video_path: Path):
+    """
+    Create a thumbnail next to the provided video_path.
+    """
+    poster_path = replace_extension(video_path, '.jpg')
+    cmd = ['/usr/bin/ffmpeg', '-n', '-i', str(video_path), '-f', 'mjpeg', '-vframes', '1', '-ss', '00:00:05.000',
+           str(poster_path)]
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        logger.warning(f'FFMPEG thumbnail generation failed with stdout: {e.stdout.decode()}')
+        logger.warning(f'FFMPEG thumbnail generation failed with stdout: {e.stderr.decode()}')
+        raise
+
+
+async def generate_bulk_thumbnails(video_ids: List[int]):
+    """
+    Generate all thumbnails for the provided videos.  Update the video object with the new jpg file location.  Do not
+    clobber existing jpg files.
+    """
+    with get_db_context(commit=True) as (db_conn, db):
+        Video = db['video']
+        for idx, video_id in enumerate(video_ids):
+            video = Video.get_one(id=video_id)
+            channel = video['channel']
+            video_path = get_absolute_video_path(video)
+
+            poster_path = replace_extension(video_path, '.jpg')
+            if not poster_path.exists():
+                generate_video_thumbnail(video_path)
+            channel_dir = get_absolute_media_path(channel['directory'])
+            poster_path = poster_path.relative_to(channel_dir)
+            video['poster_path'] = str(poster_path)
+
+            video['generated_poster'] = True
+            video.flush()
+            db_conn.commit()

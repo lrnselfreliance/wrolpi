@@ -4,6 +4,8 @@ ENV DOCKER=true
 WORKDIR /opt/wrolpi
 
 # Install dependencies
+RUN apt update
+RUN apt install -y ffmpeg
 COPY requirements.txt /opt/wrolpi/
 RUN find -name requirements.txt -exec pip install --upgrade -q -r {} \;
 

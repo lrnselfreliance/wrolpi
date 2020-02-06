@@ -3,7 +3,7 @@ import glob
 import pathlib
 import re
 from datetime import datetime
-from typing import Tuple, Union
+from typing import Tuple
 
 from dictorm import DictDB, Dict, Or
 from youtube_dl import YoutubeDL
@@ -11,7 +11,7 @@ from youtube_dl import YoutubeDL
 from api.common import make_progress_calculator, logger
 from api.db import get_db_context
 from .captions import process_captions
-from .common import get_downloader_config, get_absolute_media_path
+from .common import get_downloader_config, get_absolute_media_path, replace_extension
 
 logger = logger.getChild('api:downloader')
 ydl_logger = logger.getChild('api:ydl')
@@ -160,22 +160,6 @@ def download_video(channel: dict, video: dict) -> pathlib.Path:
     final_filename = ydl.prepare_filename(entry)
     final_filename = pathlib.Path(final_filename)
     return final_filename
-
-
-def replace_extension(path: pathlib.Path, new_ext) -> pathlib.Path:
-    """Swap the extension of a file's path.
-
-    Example:
-        >>> foo = pathlib.Path('foo.bar')
-        >>> replace_extension(foo, 'baz')
-        'foo.baz'
-    """
-    parent = path.parent
-    existing_ext = path.suffix
-    path = str(path)
-    name, _, _ = path.rpartition(existing_ext)
-    path = pathlib.Path(str(parent / name) + new_ext)
-    return path
 
 
 def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[

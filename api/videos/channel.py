@@ -1,3 +1,4 @@
+import asyncio
 from http import HTTPStatus
 
 from dictorm import DictDB
@@ -98,6 +99,11 @@ def channel_post(request: Request, data: dict):
 
     # Save these changes to the local.yaml as well
     save_settings_config()
+
+    # Refresh the videos asynchronously
+    from api.videos.api import async_refresh_videos_with_db
+    coro = async_refresh_videos_with_db([data['name']])
+    asyncio.ensure_future(coro)
 
     return response.json({'success': 'Channel created successfully'}, HTTPStatus.CREATED,
                          {'Location': f'/api/videos/channels/{channel["link"]}'})

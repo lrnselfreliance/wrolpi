@@ -1,6 +1,7 @@
 #! /usr/bin/env python3
 import argparse
 
+import api.videos.common
 from . import downloader, api
 
 PRETTY_NAME = 'Videos'
@@ -25,7 +26,7 @@ def main(args):
         return 0
     elif args.sub_commands and 'content' in args.sub_commands:
         refresh = args.refresh
-        api.refresh_videos_with_db(refresh)
+        api.videos.common.refresh_videos_with_db(refresh)
         return 0
 
 

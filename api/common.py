@@ -380,3 +380,4 @@ def save_settings_config(config=None):
 
     with open(str(CONFIG_PATH), 'wt') as fh:
         yaml.dump(new_config, fh)
+        # asynchronous

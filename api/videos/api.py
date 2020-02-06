@@ -26,7 +26,7 @@ import asyncio
 import pathlib
 from functools import wraps
 from http import HTTPStatus
-from multiprocessing import Queue
+from multiprocessing.queues import Queue
 from uuid import uuid1
 
 from dictorm import DictDB, Dict
@@ -38,9 +38,8 @@ from api.db import get_db_context
 from api.videos.channel import channel_bp
 from api.videos.video import video_bp
 from .captions import process_captions
-from .common import generate_video_paths, get_absolute_media_path
-from .common import logger
-from .downloader import insert_video, update_channels, download_all_missing_videos
+from .common import logger, generate_video_paths, get_absolute_media_path
+from .downloader import update_channels, download_all_missing_videos, insert_video
 from .schema import StreamResponse, \
     JSONErrorResponse
 
@@ -244,3 +243,8 @@ def refresh_videos(db: DictDB, channel_names: list = None):
 def refresh_videos_with_db(channel_names: list = None):
     with get_db_context(commit=True) as (db_conn, db):
         return refresh_videos(db, channel_names=channel_names)
+
+
+@wraps(refresh_videos_with_db)
+async def async_refresh_videos_with_db(channel_names: list = None):
+    return refresh_videos_with_db(channel_names)

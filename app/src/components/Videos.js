@@ -87,7 +87,7 @@ class EditChannel extends React.Component {
     }
 
     async handleDelete() {
-        await deleteChannel(this.state.channel);
+        await deleteChannel(this.props.channel);
         this.setShow(false);
     }
 

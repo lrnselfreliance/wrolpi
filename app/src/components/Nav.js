@@ -1,66 +1,65 @@
 import React from "react";
-import {Navbar} from "react-bootstrap";
-import Nav from "react-bootstrap/Nav";
 import {NavLink} from "react-router-dom";
+import {Dropdown, Menu, Responsive} from "semantic-ui-react";
 
-const Modules = [
-    {href: '/videos', name: 'Videos'},
-    {href: '/map', name: 'Map'}
+const links = [
+    {to: '/videos', text: 'Videos'},
+    {to: '/map', text: 'Map'},
 ];
 
-function Module(props) {
+const settings = {to: '/settings', text: 'Settings', exact: true};
+
+const collapsedLinks = links.concat([settings,]);
+
+const rightLinks = [settings,];
+
+const responsiveWidth = 500;
+
+function NavLink_(props) {
     return (
         <NavLink
-            className="nav-link"
-            to={props.href}
-            activeClassName="active"
+            className="item"
+            exact={props.link.exact || false}
+            to={props.link.to}
         >
-            {props.name}
+            {props.link.text}
         </NavLink>
-    )
-}
-
-function ModuleList(props) {
-    return props.plugins.map(
-        (plugin) => <Module key={plugin['href']} {...plugin}/>
-    )
-}
-
-function NavSettings() {
-    return (
-        <Nav className="navbar-nav ml-auto">
-            <NavLink
-                className="nav-link"
-                to="/settings"
-                activeClassName="active"
-            >
-                Settings
-            </NavLink>
-        </Nav>
     )
 }
 
 export function NavBar() {
     return (
-        <Navbar bg="light" expand="lg">
-            <NavLink
-                className="navbar-brand"
-                to="/"
-                exact={true}
-                activeClassName="active"
-            >
-                <img src='/apple-touch-icon.png' height="30" width="30" alt=""/>
-                WROLPi
-            </NavLink>
-            <Navbar.Toggle aria-controls="basic-navbar-nav"/>
-            <Navbar.Collapse id="basic-navbar-nav">
-                <Nav className="mr-auto">
-                    <ModuleList plugins={Modules}/>
-                </Nav>
-                <Nav className="ml-auto">
-                    <NavSettings/>
-                </Nav>
-            </Navbar.Collapse>
-        </Navbar>
+        <Menu>
+            {/*Always show WROLPi home button*/}
+            <NavLink_ link={{to: '/', text: 'WROLPi', exact: true}}/>
+
+            {/*Show the links in a menu when on desktop*/}
+            {links.map((link) => {
+                return (
+                    <Responsive minWidth={responsiveWidth}
+                                as={NavLink_}
+                                link={link}
+                    />
+                )
+            })}
+            <Responsive minWidth={responsiveWidth}
+                        as={Menu.Menu}
+                        position="right">
+                {rightLinks.map((link) => {
+                    return (<NavLink_ link={link}/>)
+                })}
+            </Responsive>
+
+            {/*Show the menu items in a dropdown when on mobile*/}
+            <Responsive as={Menu.Menu} maxWidth={responsiveWidth - 1} position='right'>
+                <Dropdown item icon="bars">
+                    <Dropdown.Menu>
+                        {collapsedLinks.map((link) => {
+                            return (<NavLink_ link={link}/>)
+                        })}
+                    </Dropdown.Menu>
+                </Dropdown>
+            </Responsive>
+        </Menu>
     )
 }

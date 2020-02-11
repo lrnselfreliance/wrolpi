@@ -1,29 +1,30 @@
 import React from 'react';
 import './App.css';
-import {Jumbotron} from "react-bootstrap";
 import {NavBar} from "./components/Nav";
 import {Route, Switch} from "react-router-dom";
 import VideosRoute from "./components/Videos";
 import Map_ from "./components/Map";
 import Settings from "./components/Settings";
+import {Container, Header} from "semantic-ui-react";
+import 'semantic-ui-css/semantic.min.css';
 
 function Welcome() {
     return (
-        <Jumbotron>
-            <h1 className="display-4">Welcome to WROLPi!</h1>
-            <p className="lead">
+        <Container fluid>
+            <Header as="h1">Welcome to WROLPi!</Header>
+            <p>
                 Bring your personal internet, off-grid.
             </p>
-        </Jumbotron>
+        </Container>
     )
 }
 
 function PageNotFound() {
     return (
-        <Jumbotron>
+        <Container>
             <h1 className="display-4">Page Not Found!</h1>
             <p>The page you requested cannot be found</p>
-        </Jumbotron>
+        </Container>
     )
 }
 

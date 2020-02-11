@@ -13,7 +13,7 @@ const rightLinks = [settings,];
 
 const collapsedLinks = links.concat([settings,]);
 
-function NavLink_(props) {
+function Link(props) {
     return (
         <NavLink
             className="item"
@@ -29,17 +29,17 @@ export function NavBar() {
     return (
         <Menu>
             {/*Always show WROLPi home button*/}
-            <NavLink_ link={{to: '/', text: 'WROLPi', exact: true}}/>
+            <Link link={{to: '/', text: 'WROLPi', exact: true}}/>
 
             {/*Show the links in a menu when on desktop*/}
             {links.map((link) => {
                 return (
-                    <Responsive minWidth={responsiveWidth} as={NavLink_} link={link} key={link.to}/>
+                    <Responsive minWidth={responsiveWidth} as={Link} link={link} key={link.to}/>
                 )
             })}
             <Responsive minWidth={responsiveWidth} as={Menu.Menu} position="right">
                 {rightLinks.map((link) => {
-                    return (<NavLink_ link={link} key={link.to}/>)
+                    return (<Link link={link} key={link.to}/>)
                 })}
             </Responsive>
 
@@ -48,7 +48,7 @@ export function NavBar() {
                 <Dropdown item icon="bars">
                     <Dropdown.Menu>
                         {collapsedLinks.map((link) => {
-                            return (<NavLink_ link={link} key={link.to}/>)
+                            return (<Link link={link} key={link.to}/>)
                         })}
                     </Dropdown.Menu>
                 </Dropdown>

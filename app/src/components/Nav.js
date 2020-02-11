@@ -2,18 +2,16 @@ import React from "react";
 import {NavLink} from "react-router-dom";
 import {Dropdown, Menu, Responsive} from "semantic-ui-react";
 
+const responsiveWidth = 500;
+
 const links = [
     {to: '/videos', text: 'Videos'},
     {to: '/map', text: 'Map'},
 ];
-
 const settings = {to: '/settings', text: 'Settings', exact: true};
-
-const collapsedLinks = links.concat([settings,]);
-
 const rightLinks = [settings,];
 
-const responsiveWidth = 500;
+const collapsedLinks = links.concat([settings,]);
 
 function NavLink_(props) {
     return (
@@ -36,17 +34,12 @@ export function NavBar() {
             {/*Show the links in a menu when on desktop*/}
             {links.map((link) => {
                 return (
-                    <Responsive minWidth={responsiveWidth}
-                                as={NavLink_}
-                                link={link}
-                    />
+                    <Responsive minWidth={responsiveWidth} as={NavLink_} link={link} key={link.to}/>
                 )
             })}
-            <Responsive minWidth={responsiveWidth}
-                        as={Menu.Menu}
-                        position="right">
+            <Responsive minWidth={responsiveWidth} as={Menu.Menu} position="right">
                 {rightLinks.map((link) => {
-                    return (<NavLink_ link={link}/>)
+                    return (<NavLink_ link={link} key={link.to}/>)
                 })}
             </Responsive>
 
@@ -55,7 +48,7 @@ export function NavBar() {
                 <Dropdown item icon="bars">
                     <Dropdown.Menu>
                         {collapsedLinks.map((link) => {
-                            return (<NavLink_ link={link}/>)
+                            return (<NavLink_ link={link} key={link.to}/>)
                         })}
                     </Dropdown.Menu>
                 </Dropdown>

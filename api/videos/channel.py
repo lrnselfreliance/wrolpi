@@ -28,8 +28,13 @@ def get_channels(request: Request):
     channels = Channel.get_where().order_by('LOWER(name) ASC')
     # Minimize the data returned when getting all channels
     keys = {'id', 'name', 'link', 'directory', 'match_regex', 'url'}
-    channels = [{k: c[k] for k in keys} for c in channels]
-    return response.json({'channels': channels})
+    new_channels = [{k: c[k] for k in keys} for c in channels]
+
+    # Add video count to each channel
+    for idx, channel in enumerate(new_channels):
+        channel['video_count'] = len(channels[idx]['videos'])
+
+    return response.json({'channels': new_channels})
 
 
 @channel_bp.route('/channels/<link:string>', methods=['GET', 'OPTIONS'])

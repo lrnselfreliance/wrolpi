@@ -2,16 +2,13 @@ import React, {useRef, useState} from 'react';
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import {Link, Route} from "react-router-dom";
-import {Button, ButtonGroup, Form, FormControl, InputGroup, ProgressBar} from "react-bootstrap";
+import {ButtonGroup, Form, ProgressBar} from "react-bootstrap";
 import Modal from "react-bootstrap/Modal";
-import Card from "react-bootstrap/Card";
 import '../static/external/fontawesome-free/css/all.min.css';
 import Alert from "react-bootstrap/Alert";
-import Breadcrumb from "react-bootstrap/Breadcrumb";
 import Paginator, {VIDEOS_API} from "./Common"
 import Container from "react-bootstrap/Container";
 import Video from "./VideoPlayer";
-import {Typeahead} from 'react-bootstrap-typeahead';
 import 'react-bootstrap-typeahead/css/Typeahead.css';
 import {
     deleteChannel,
@@ -24,6 +21,7 @@ import {
     getVideo,
     updateChannel
 } from "../api";
+import {Button, Card, Grid, Header, Placeholder} from "semantic-ui-react";
 
 function scrollToTop() {
     window.scrollTo({
@@ -140,7 +138,7 @@ function VideoCard({video, channel}) {
         upload_date = new Date(video['upload_date'] * 1000);
         upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth() + 1}-${upload_date.getDate()}`;
     }
-    let video_url = "/videos/" + channel.link + "/" + video.id;
+    let video_url = `/videos/channel/${channel.link}/video/${video.id}`;
     let poster_url = video.poster_path ?
         `/media/${channel.directory}/${encodeURIComponent(video.poster_path)}` : null;
     return (
@@ -151,9 +149,10 @@ function VideoCard({video, channel}) {
                     src={poster_url}
                 />
                 <Card.Body>
-                    <h5>{video.title || video.video_path}</h5>
+                    <Header as="h4">{video.title || video.video_path}</Header>
                     <Card.Text>
-                        {upload_date}
+                        <Header as="h5">{video.channel.name}</Header>
+                        <p>{upload_date}</p>
                     </Card.Text>
                 </Card.Body>
             </Card>
@@ -171,7 +170,7 @@ class ChannelVideoPager extends Paginator {
     render() {
         return (
             <div className="d-flex flex-column">
-                {this.props.title && <h4>{this.props.title}</h4>}
+                <Header as="h1">{this.props.title}</Header>
                 <div className="d-flex flex-row">
                     <div className="card-deck justify-content-center">
                         {this.props.videos.map((v) => (
@@ -200,14 +199,6 @@ function ChannelModal(props) {
         if (props.disableDirectory !== true) {
             return (
                 <>
-                    <Typeahead
-                        id="channel_modal_directory"
-                        name="directory"
-                        ref={props.directory}
-                        multiple={false}
-                        options={directories}
-                        onInputChange={fetchDirectories}
-                    />
                     <Form.Text className="text-muted">
                         This will be appended to the root video directory in the config.
                     </Form.Text>
@@ -610,45 +601,6 @@ class ManageContent extends React.Component {
     }
 }
 
-class VideoBreadcrumb extends React.Component {
-
-    render() {
-        return (
-            <Breadcrumb>
-                {/* Always include the /videos breadcrumb */}
-                <li className="breadcrumb-item">
-                    <Link to='/videos'>Videos</Link>
-                </li>
-                {/* Show the channel only when its set */}
-                {
-                    this.props.channel &&
-                    <li className="breadcrumb-item">
-                        <Link to={'/videos/' + this.props.channel['link']}>
-                            {this.props.channel['name']}
-                        </Link>
-                    </li>}
-                {/* Show the video when the video is set */}
-                {
-                    this.props.video &&
-                    <li className="breadcrumb-item">
-                        <Link
-                            to={'/videos/' +
-                            this.props.channel['link'] + '/' +
-                            this.props.video['id']}>
-                            {this.props.video['title'] || this.props.video['video_path']}
-                        </Link>
-                    </li>}
-                {
-                    !this.props.video && this.props.search_str &&
-                    <li className="breadcrumb-item">
-                        Search: {this.props.search_str}
-                    </li>
-                }
-            </Breadcrumb>
-        )
-    }
-}
-
 function VideoWrapper(props) {
 
     return (
@@ -656,7 +608,7 @@ function VideoWrapper(props) {
     )
 }
 
-class RecentVideos extends React.Component {
+class NewestVideos extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
@@ -688,7 +640,7 @@ class RecentVideos extends React.Component {
             return (
                 <>
                     <ChannelVideoPager
-                        title="Recently Published Videos"
+                        title="Newest Videos"
                         videos={this.state.videos}
                         total={this.state.total}
                         setOffset={(o) => this.setState({offset: o})}
@@ -707,7 +659,7 @@ class RecentVideos extends React.Component {
     }
 }
 
-class ChannelVideos extends RecentVideos {
+class ChannelVideos extends NewestVideos {
 
     constructor(props) {
         super(props);
@@ -741,7 +693,7 @@ class ChannelVideos extends RecentVideos {
 
 }
 
-class SearchVideos extends RecentVideos {
+class SearchVideos extends NewestVideos {
 
     constructor(props) {
         super(props);
@@ -771,6 +723,121 @@ class SearchVideos extends RecentVideos {
 
 }
 
+function ChannelCard(props) {
+    let editTo = `/videos/channel/${props.channel.link}/edit`;
+    let videosTo = `/videos/channel/${props.channel.link}/video`;
+
+    return (
+        <Card fluid={true}>
+            <Card.Content>
+                <Card.Header>
+                    {props.channel.name}
+                </Card.Header>
+                <Card.Description>
+                    Videos: {props.channel.video_count}
+                </Card.Description>
+            </Card.Content>
+            <Card.Content extra>
+                <div className="ui buttons two">
+                    <Link className="ui button" to={videosTo}>View Videos</Link>
+                    <Link className="ui button blue" to={editTo}>Edit</Link>
+                </div>
+            </Card.Content>
+        </Card>
+    )
+}
+
+function VideoPlaceholder() {
+    return (
+        <Placeholder>
+            <Placeholder.Header image>
+                <Placeholder.Line/>
+                <Placeholder.Line/>
+            </Placeholder.Header>
+            <Placeholder.Paragraph>
+                <Placeholder.Line length='medium'/>
+                <Placeholder.Line length='short'/>
+            </Placeholder.Paragraph>
+        </Placeholder>
+    )
+}
+
+function ChannelPlaceholder() {
+    return (
+        <Placeholder>
+            <Placeholder.Header image>
+                <Placeholder.Line/>
+                <Placeholder.Line/>
+            </Placeholder.Header>
+            <Placeholder.Paragraph>
+                <Placeholder.Line length='short'/>
+            </Placeholder.Paragraph>
+        </Placeholder>
+    )
+}
+
+function ChannelsHeader() {
+    return (<Header as="h1">Channels</Header>)
+}
+
+class Channels extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            channels: null,
+        };
+    }
+
+    async componentDidMount() {
+        let channels = await getChannels();
+        this.setState({channels});
+    }
+
+    render() {
+        if (this.state.channels === null) {
+            // Placeholders while fetching
+            return (
+                <>
+                    <ChannelsHeader/>
+                    <Grid columns={2} doubling>
+                        {[1, 1, 1, 1, 1, 1].map(() => {
+                            return (
+                                <Grid.Column>
+                                    <ChannelPlaceholder/>
+                                </Grid.Column>
+                            )
+                        })}
+                    </Grid>
+                </>
+            )
+        } else if (this.state.channels === []) {
+            return (
+                <>
+                    <ChannelsHeader/>
+                    Not channels exist yet!
+                    <Button primary>Create Channel</Button>
+                </>
+            )
+        } else {
+            return (
+                <>
+                    <ChannelsHeader/>
+                    <Grid columns={2} doubling>
+                        {this.state.channels.map((channel) => {
+                            return (
+                                <Grid.Column>
+                                    <ChannelCard channel={channel}/>
+                                </Grid.Column>
+                            )
+                        })}
+                    </Grid>
+                </>
+            )
+        }
+    }
+}
+
 class Videos extends React.Component {
 
     constructor(props) {
@@ -778,7 +845,6 @@ class Videos extends React.Component {
         this.state = {
             channel: null,
             video: null,
-            channels: [],
             search_str: null,
             show: false,
         };
@@ -788,17 +854,12 @@ class Videos extends React.Component {
         this.handleSearchEvent = this.handleSearchEvent.bind(this);
         this.setShowModal = this.setShowModal.bind(this);
 
-        this.channelTypeahead = React.createRef();
         this.searchInput = React.createRef();
     }
 
     async componentDidMount() {
         await this.fetchChannel();
         await this.fetchVideo();
-
-        // Get the available channels
-        let channels = await getChannels();
-        this.setState({channels});
     }
 
     async componentDidUpdate(prevProps, prevState, snapshot) {
@@ -821,11 +882,6 @@ class Videos extends React.Component {
         let channel = null;
         if (channel_link) {
             channel = await getChannel(channel_link);
-        }
-        let currentSelected = this.channelTypeahead.current.state.selected[0] || null;
-        if ((currentSelected && channel && currentSelected['id'] !== channel['id']) || (!channel)) {
-            // Channel was changed, or is no longer selected
-            this.channelTypeahead.current.clear();
         }
         this.setState({channel: channel, offset: 0, total: null, videos: [], video: null, search_str: null},
             this.fetchVideos);
@@ -862,92 +918,9 @@ class Videos extends React.Component {
         this.setState({show});
     }
 
-    getBody() {
-        // The body of Video can be:
-        //   - search results
-        //   - video
-        //   - channel (with its videos)
-        //   - recently published videos
-        if (this.state.search_str) {
-            return (<SearchVideos search_str={this.state.search_str}/>)
-        } else if (this.state.video) {
-            return (
-                <VideoWrapper
-                    channel={this.state.channel}
-                    video={this.state.video}
-                />
-            )
-        } else if (this.state.channel !== null) {
-            return (<ChannelVideos channel={this.state.channel}/>)
-        } else {
-            return (<RecentVideos/>)
-        }
-    }
-
     render() {
         return (
-            <>
-                <div className="d-flex flex-row">
-                    <div className="d-flex flex-column w-100">
-                        <VideoBreadcrumb
-                            channel={this.state.channel}
-                            video={this.state.video}
-                            search_str={this.state.search_str}
-                        />
-                    </div>
-                </div>
-
-                <div className="d-flex flex-row flex-wrap">
-                    <div className="d-flex flex-row p-1">
-                        <ButtonGroup>
-                            <ManageContent/>
-                            <AddChannel/>
-                        </ButtonGroup>
-                    </div>
-                    <div className="d-flex flex-row flex-grow-1 p-1">
-                        <Typeahead
-                            id="channel_select"
-                            className="flex-fill"
-                            ref={this.channelTypeahead}
-                            labelKey="name"
-                            multiple={false}
-                            options={this.state.channels}
-                            placeholder="Select a Channel..."
-                            onChange={this.channelSelect}
-                        />
-                        {
-                            this.state.channel &&
-                            <EditChannel channel={this.state.channel}/>
-                        }
-                    </div>
-                    <div className="d-flex flex-column flex-grow-1 p-1">
-                        <Form inline onSubmit={this.handleSearchEvent}>
-                            <InputGroup className="flex-fill">
-                                <FormControl
-                                    ref={this.searchInput}
-                                    type="text"
-                                    placeholder="Search Videos"
-                                />
-                                <InputGroup.Append>
-                                    <Button type="submit" variant="info">
-                                        <span className="fas fa-search"/>
-                                    </Button>
-                                    <Button onClick={this.clearSearch} variant="secondary">
-                                        <span className="fas fa-window-close"/>
-                                    </Button>
-                                </InputGroup.Append>
-                            </InputGroup>
-                        </Form>
-                    </div>
-                </div>
-                <div className="d-flex flex-row">
-                    <div className="d-flex flex-column w-100">
-                        <Container fluid={true} style={{'padding': '0.5em'}}>
-                            {this.getBody()}
-                        </Container>
-                    </div>
-                </div>
-            </>
+            <></>
         )
     }
 }
@@ -956,7 +929,13 @@ class VideosRoute extends React.Component {
 
     render() {
         return (
-            <Route path='/videos/:channel_link?/:video_id?' exact component={Videos}/>
+            <Container fluid={true} style={{margin: '2em', padding: '0.5em'}}>
+                <Route path='/videos' exact={true} component={Videos}/>
+                <Route path='/videos/channels' exact component={Channels}/>
+                <Route path='/videos/favorites' exact component={Videos}/>
+                <Route path='/videos/channel/:channel_link?/edit' exact component={EditChannel}/>
+                <Route path='/videos/channel/:channel_link?/video/:video_id?' exact component={Videos}/>
+            </Container>
         )
     }
 }

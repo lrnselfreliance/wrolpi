@@ -5,7 +5,13 @@ import {Dropdown, Menu, Responsive} from "semantic-ui-react";
 const responsiveWidth = 500;
 
 const links = [
-    {to: '/videos', text: 'Videos'},
+    {
+        text: 'Videos', links: [
+            {to: '/videos', text: 'Newest Videos', exact: true},
+            {to: '/videos/channels', text: 'Channels', exact: true},
+            {to: '/videos/favorites', text: 'Favorites', exact: true},
+        ]
+    },
     {to: '/map', text: 'Map'},
 ];
 const settings = {to: '/settings', text: 'Settings', exact: true};
@@ -13,16 +19,41 @@ const rightLinks = [settings,];
 
 const collapsedLinks = links.concat([settings,]);
 
-function Link(props) {
+function DropdownLinks(props) {
     return (
-        <NavLink
-            className="item"
-            exact={props.link.exact || false}
-            to={props.link.to}
-        >
-            {props.link.text}
-        </NavLink>
+        <Dropdown item text={props.link.text}>
+            <Dropdown.Menu>
+                {props.link.links.map((l) => {
+                    return (
+                        <Link link={l}/>
+                    )
+                })}
+            </Dropdown.Menu>
+        </Dropdown>
     )
+}
+
+function Link(props) {
+    let classes = 'item';
+    if (props.link.header) {
+        classes = `${classes} header`;
+    }
+
+    if (!props.link.links) {
+        return (
+            <NavLink
+                className={classes}
+                exact={props.link.exact || false}
+                to={props.link.to}
+            >
+                {props.link.text}
+            </NavLink>
+        )
+    } else {
+        return (
+            <DropdownLinks link={props.link}/>
+        )
+    }
 }
 
 export function NavBar() {

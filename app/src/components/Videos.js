@@ -17,7 +17,7 @@ import {
     getDirectories,
     getRecentVideos,
     getSearchVideos,
-    getVideo
+    getVideo, updateChannel
 } from "../api";
 import {Button, Card, Checkbox, Form, Grid, Header, Placeholder} from "semantic-ui-react";
 
@@ -89,12 +89,15 @@ class ChannelPage extends React.Component {
 
     async handleSubmit(e) {
         e.preventDefault();
-        console.log({
+        let channel = {
             name: this.state.name,
             directory: this.state.directory,
+            url: this.state.url,
+            match_regex: this.state.match_regex,
             generate_thumbnails: this.state.generate_thumbnails,
             calculate_duration: this.state.calculate_duration,
-        });
+        };
+        await updateChannel(this.state.channel.link, channel);
     }
 
     render() {

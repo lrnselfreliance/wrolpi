@@ -25,7 +25,7 @@ function DropdownLinks(props) {
             <Dropdown.Menu>
                 {props.link.links.map((l) => {
                     return (
-                        <Link link={l}/>
+                        <Link key={l.to} link={l}/>
                     )
                 })}
             </Dropdown.Menu>

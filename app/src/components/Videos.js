@@ -2,7 +2,7 @@ import React, {useRef, useState} from 'react';
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import {Link, Route} from "react-router-dom";
-import {ButtonGroup, Form, ProgressBar} from "react-bootstrap";
+import {ButtonGroup, ProgressBar} from "react-bootstrap";
 import Modal from "react-bootstrap/Modal";
 import '../static/external/fontawesome-free/css/all.min.css';
 import Alert from "react-bootstrap/Alert";
@@ -11,17 +11,15 @@ import Container from "react-bootstrap/Container";
 import Video from "./VideoPlayer";
 import 'react-bootstrap-typeahead/css/Typeahead.css';
 import {
-    deleteChannel,
     getChannel,
     getChannels,
     getChannelVideos,
     getDirectories,
     getRecentVideos,
     getSearchVideos,
-    getVideo,
-    updateChannel
+    getVideo
 } from "../api";
-import {Button, Card, Grid, Header, Placeholder} from "semantic-ui-react";
+import {Button, Card, Checkbox, Form, Grid, Header, Placeholder} from "semantic-ui-react";
 
 function scrollToTop() {
     window.scrollTo({
@@ -30,104 +28,183 @@ function scrollToTop() {
     });
 }
 
-class EditChannel extends React.Component {
+function FieldPlaceholder() {
+    return (
+        <Form.Field>
+            <Placeholder style={{'marginBottom': '0.5em'}}>
+                <Placeholder.Line length="short"/>
+            </Placeholder>
+            <input disabled/>
+        </Form.Field>
+    )
+}
+
+class ChannelPage extends React.Component {
 
     constructor(props) {
         super(props);
         this.state = {
-            show: false,
-            message: null,
-            error: false,
+            channel: null,
+            name: null,
+            directory: null,
+            url: null,
+            match_regex: null,
+            generate_thumbnails: null,
+            calculate_duration: null
         };
 
-        this.name = React.createRef();
-        this.url = React.createRef();
-        this.directory = React.createRef();
-        this.mkdir = React.createRef();
-        this.matchRegex = React.createRef();
-
-        this.setShow = this.setShow.bind(this);
-        this.setError = this.setError.bind(this);
-        this.setMessage = this.setMessage.bind(this);
+        this.handleInputChange = this.handleInputChange.bind(this);
         this.handleSubmit = this.handleSubmit.bind(this);
-        this.handleDelete = this.handleDelete.bind(this);
+
+        this.generateThumbnails = React.createRef();
+        this.calculateDuration = React.createRef();
+    }
+
+    async componentDidMount() {
+        let channel_link = this.props.match.params.channel_link;
+        let channel = await getChannel(channel_link);
+        this.setState({
+            channel: channel,
+            name: channel.name,
+            directory: channel.directory,
+            url: channel.url,
+            match_regex: channel.match_regex,
+            generate_thumbnails: channel.generate_thumbnails,
+            calculate_duration: channel.calculate_duration,
+        });
+    }
+
+    async handleInputChange(event) {
+        const target = event.target;
+        const value = target.type === 'label' ? target.checked : target.value;
+        const name = target.name;
+        this.setState({[name]: value});
+    }
+
+    async handleCheckbox(checkbox) {
+        let checked = checkbox.current.state.checked;
+        let name = checkbox.current.props.name;
+        this.setState({[name]: !checked});
     }
 
     async handleSubmit(e) {
         e.preventDefault();
-        try {
-            this.reset();
-            await updateChannel(this.props.channel, this.name, this.url, this.directory, this.mkdir, this.matchRegex);
-            this.setShow(false);
-        } catch (e) {
-            this.setError(e.message);
-        }
-    }
-
-    componentDidUpdate(prevProps, prevState, snapshot) {
-        this.setChannel();
-    }
-
-    setShow(show) {
-        this.setState({show});
-    }
-
-    setChannel() {
-        let channel = this.props.channel;
-        if (this.state.show && channel) {
-            this.name.current.value = channel.name || '';
-            this.url.current.value = channel.url || '';
-            if (this.directory.current) {
-                this.directory.current.value = channel.directory || '';
-            }
-            this.matchRegex.current.value = channel.match_regex || '';
-        }
-    }
-
-    async handleDelete() {
-        await deleteChannel(this.props.channel);
-        this.setShow(false);
-    }
-
-    reset() {
-        this.setState({error: false, message: null})
-    }
-
-    setError(message) {
-        this.setState({'error': true, 'message': message});
-    }
-
-    setMessage(message) {
-        this.setState({'error': false, 'message': message});
+        console.log({
+            name: this.state.name,
+            directory: this.state.directory,
+            generate_thumbnails: this.state.generate_thumbnails,
+            calculate_duration: this.state.calculate_duration,
+        });
     }
 
     render() {
-        return (
-            <>
-                {/* TODO This span should be reworked later so its easier to find */}
-                <span className="fa fa-ellipsis-v channel-edit fill"
-                      onClick={() => this.setShow(true)}/>
-                <ChannelModal
-                    modalTitle="Edit Channel"
-                    form_id="edit_channel"
-                    handleSubmit={this.handleSubmit}
-                    show={this.state.show}
-                    setShow={this.setShow}
-                    message={this.state.message}
-                    error={this.state.error}
-                    onDelete={this.handleDelete}
-                    disableDirectory={true}
+        if (this.state.channel) {
+            return (
+                <Container>
+                    <Header as="h1">{this.props.header}</Header>
+                    <Form id="editChannel" onSubmit={this.handleSubmit}>
+                        <div className="two fields">
+                            <Form.Field>
+                                <label>Channel Name</label>
+                                <input
+                                    name="name"
+                                    type="text"
+                                    placeholder="Short Channel Name"
+                                    value={this.state.name}
+                                    onChange={this.handleInputChange}
+                                />
+                            </Form.Field>
+                            <Form.Field>
+                                <label>Directory</label>
+                                <input
+                                    name="directory"
+                                    type="text"
+                                    placeholder='videos/channel/directory'
+                                    value={this.state.directory}
+                                    onChange={this.handleInputChange}
+                                />
+                            </Form.Field>
+                        </div>
+                        <Form.Field>
+                            <label>URL</label>
+                            <input
+                                name="url"
+                                type="url"
+                                placeholder='https://example.com/channel/videos'
+                                value={this.state.url}
+                                onChange={this.handleInputChange}
+                            />
+                        </Form.Field>
 
-                    name={this.name}
-                    url={this.url}
-                    directory={this.directory}
-                    mkdir={this.mkdir}
-                    matchRegex={this.matchRegex}
-                />
-            </>
-        )
+                        <Header as="h4" style={{'marginTop': '3em'}}>
+                            The following settings are encouraged by default, modify them at your own risk.
+                        </Header>
+                        <Form.Field>
+                            <label>Title Match Regex</label>
+                            <input
+                                name="match_regex"
+                                type="text"
+                                placeholder='.*([Nn]ame Matching).*'
+                                value={this.state.title_regex}
+                                onChange={this.handleInputChange}
+                            />
+                        </Form.Field>
+
+                        <Checkbox
+                            toggle
+                            label="Generate thumbnails, if not found"
+                            name="generate_thumbnails"
+                            asdf="foo"
+                            checked={this.state.generate_thumbnails}
+                            ref={this.generateThumbnails}
+                            onClick={() => this.handleCheckbox(this.generateThumbnails)}
+                        />
+                        <Checkbox
+                            toggle
+                            label="Calculate video duration"
+                            name="calculate_duration"
+                            checked={this.state.calculate_duration}
+                            ref={this.calculateDuration}
+                            onClick={() => this.handleCheckbox(this.calculateDuration)}
+                        />
+
+                        <br/>
+                        <Button color="blue" type="submit">Save</Button>
+                    </Form>
+                </Container>
+            )
+        } else {
+            // Channel not loaded yet
+            return (
+                <Container>
+                    <Header as="h1">{this.props.header}</Header>
+                    <Form>
+                        <div className="two fields">
+                            <FieldPlaceholder/>
+                            <FieldPlaceholder/>
+                        </div>
+                        <FieldPlaceholder/>
+
+                        <Header as="h4" style={{'marginTop': '3em'}}>
+                            <Placeholder>
+                                <Placeholder.Line length="very long"/>
+                            </Placeholder>
+                        </Header>
+                        <FieldPlaceholder/>
+                        <FieldPlaceholder/>
+                    </Form>
+                </Container>
+            )
+        }
     }
 }
+
+function EditChannel(props) {
+    return (
+        <ChannelPage header="Edit Channel" history={props.history} match={props.match}/>
+    )
+}
+
 
 function VideoCard({video, channel}) {
     // Videos come with their own channel, use it; fallback to the global channel
@@ -933,7 +1010,7 @@ class VideosRoute extends React.Component {
                 <Route path='/videos' exact={true} component={Videos}/>
                 <Route path='/videos/channels' exact component={Channels}/>
                 <Route path='/videos/favorites' exact component={Videos}/>
-                <Route path='/videos/channel/:channel_link?/edit' exact component={EditChannel}/>
+                <Route path='/videos/channel/:channel_link/edit' exact component={EditChannel}/>
                 <Route path='/videos/channel/:channel_link?/video/:video_id?' exact component={Videos}/>
             </Container>
         )

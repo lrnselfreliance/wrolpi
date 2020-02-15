@@ -17,9 +17,10 @@ import {
     getDirectories,
     getRecentVideos,
     getSearchVideos,
-    getVideo, updateChannel
+    getVideo,
+    updateChannel
 } from "../api";
-import {Button, Card, Checkbox, Form, Grid, Header, Placeholder} from "semantic-ui-react";
+import {Button, Card, Checkbox, Dimmer, Form, Grid, Header, Loader, Placeholder, Segment} from "semantic-ui-react";
 
 function scrollToTop() {
     window.scrollTo({
@@ -45,6 +46,9 @@ class ChannelPage extends React.Component {
         super(props);
         this.state = {
             channel: null,
+            disabled: false,
+
+            // The properties to edit/submit
             name: null,
             directory: null,
             url: null,
@@ -97,7 +101,12 @@ class ChannelPage extends React.Component {
             generate_thumbnails: this.state.generate_thumbnails,
             calculate_duration: this.state.calculate_duration,
         };
-        await updateChannel(this.state.channel.link, channel);
+        try {
+            this.setState({disabled: true});
+            await updateChannel(this.state.channel.link, channel);
+        } finally {
+            this.setState({disabled: false});
+        }
     }
 
     render() {
@@ -113,6 +122,7 @@ class ChannelPage extends React.Component {
                                     name="name"
                                     type="text"
                                     placeholder="Short Channel Name"
+                                    disabled={this.state.disabled}
                                     value={this.state.name}
                                     onChange={this.handleInputChange}
                                 />
@@ -122,6 +132,7 @@ class ChannelPage extends React.Component {
                                 <input
                                     name="directory"
                                     type="text"
+                                    disabled={this.state.disabled}
                                     placeholder='videos/channel/directory'
                                     value={this.state.directory}
                                     onChange={this.handleInputChange}
@@ -133,6 +144,7 @@ class ChannelPage extends React.Component {
                             <input
                                 name="url"
                                 type="url"
+                                disabled={this.state.disabled}
                                 placeholder='https://example.com/channel/videos'
                                 value={this.state.url}
                                 onChange={this.handleInputChange}
@@ -147,6 +159,7 @@ class ChannelPage extends React.Component {
                             <input
                                 name="match_regex"
                                 type="text"
+                                disabled={this.state.disabled}
                                 placeholder='.*([Nn]ame Matching).*'
                                 value={this.state.title_regex}
                                 onChange={this.handleInputChange}
@@ -157,7 +170,7 @@ class ChannelPage extends React.Component {
                             toggle
                             label="Generate thumbnails, if not found"
                             name="generate_thumbnails"
-                            asdf="foo"
+                            disabled={this.state.disabled}
                             checked={this.state.generate_thumbnails}
                             ref={this.generateThumbnails}
                             onClick={() => this.handleCheckbox(this.generateThumbnails)}
@@ -166,13 +179,16 @@ class ChannelPage extends React.Component {
                             toggle
                             label="Calculate video duration"
                             name="calculate_duration"
+                            disabled={this.state.disabled}
                             checked={this.state.calculate_duration}
                             ref={this.calculateDuration}
                             onClick={() => this.handleCheckbox(this.calculateDuration)}
                         />
 
                         <br/>
-                        <Button color="blue" type="submit">Save</Button>
+                        <Button color="blue" type="submit" disabled={this.state.disabled}>
+                            {this.state.disabled ? <Loader active inline/> : 'Save'}
+                        </Button>
                     </Form>
                 </Container>
             )

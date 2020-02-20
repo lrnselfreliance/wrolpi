@@ -60,11 +60,14 @@ QUEUE_TIMEOUT = 10
 
 feed_logger = logger.getChild('ws_feed')
 
+EVENTS = []
 
-def create_websocket_feed(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT_QUEUE_SIZE):
+
+def create_websocket_feed(name: str, uri: str, blueprint: Blueprint, maxsize: int = DEFAULT_QUEUE_SIZE):
     """
     Build the objects needed to run a websocket which will pass on messages from a multiprocessing.Queue.
 
+    :param name: the name that will be reported in the global event feeds
     :param uri: the Sanic URI that the websocket will listen on
     :param blueprint: the Sanic Blueprint to attach the websocket to
     :param maxsize: the maximum size of the Queue
@@ -72,6 +75,7 @@ def create_websocket_feed(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT
     """
     q = Queue(maxsize=maxsize)
     event = Event()
+    EVENTS.append((name, event))
 
     @blueprint.websocket(uri)
     async def local_websocket(_: Request, ws: WebSocket):

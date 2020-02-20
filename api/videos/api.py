@@ -51,10 +51,11 @@ api_bp = Blueprint('Videos').group(
     video_bp,  # view videos
     url_prefix='/videos')
 
-refresh_queue, refresh_event = create_websocket_feed('/feeds/refresh', content_bp)
+refresh_queue, refresh_event = create_websocket_feed('refresh', '/feeds/refresh', content_bp)
 
 
-@content_bp.post('/settings:refresh')
+@content_bp.post('/refresh')
+@content_bp.post('/refresh/<link:string>')
 @validate_doc(
     summary='Search for videos that have previously been downloaded and stored.',
     produces=StreamResponse,
@@ -62,7 +63,7 @@ refresh_queue, refresh_event = create_websocket_feed('/feeds/refresh', content_b
         (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
     ],
 )
-async def refresh(_):
+async def refresh(_, link: str = None):
     refresh_logger = logger.getChild('refresh')
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/refresh')
 
@@ -92,10 +93,11 @@ async def refresh(_):
     return response.json({'code': 'stream-started', 'stream_url': stream_url})
 
 
-download_queue, download_event = create_websocket_feed('/feeds/download', content_bp)
+download_queue, download_event = create_websocket_feed('download', '/feeds/download', content_bp)
 
 
-@content_bp.post('/settings:download')
+@content_bp.post('/download')
+@content_bp.post('/download/<link:string>')
 @validate_doc(
     summary='Update channel catalogs, download any missing videos',
     produces=StreamResponse,
@@ -103,7 +105,7 @@ download_queue, download_event = create_websocket_feed('/feeds/download', conten
         (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
     ],
 )
-async def download(_):
+async def download(_, link: str = None):
     download_logger = logger.getChild('download')
 
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/download')

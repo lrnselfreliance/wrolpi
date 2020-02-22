@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import mock
 
 from api.db import get_db_context

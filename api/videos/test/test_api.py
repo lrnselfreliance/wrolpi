@@ -10,7 +10,7 @@ import pytest
 from api.api import api_app, attach_routes
 from api.db import get_db_context
 from api.errors import UnknownFile
-from api.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI, TEST_CONFIG_PATH
+from api.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI
 from api.videos.api import refresh_queue
 from api.videos.downloader import insert_video
 

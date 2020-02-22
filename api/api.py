@@ -13,7 +13,7 @@ from sanic_openapi import swagger_blueprint, doc
 from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_config, get_config, EVENTS
 from api.db import get_db
 from api.modules import MODULES
-from api.videos.schema import SettingsRequest, SettingsResponse, EventsResponse
+from api.videos.schema import EventsResponse
 from api.videos.schema import SettingsRequest, SettingsResponse, RegexRequest, RegexResponse
 
 cwd = pathlib.Path(__file__).parent

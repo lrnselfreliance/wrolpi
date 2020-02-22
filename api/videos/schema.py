@@ -137,6 +137,15 @@ class SettingsRequest:
     media_directory = doc.String()
 
 
+class RegexRequest:
+    regex = doc.String()
+
+
+class RegexResponse:
+    regex = doc.String()
+    valid = doc.Boolean()
+
+
 class DirectoriesRequest:
     search_str = doc.String(required=True)
 

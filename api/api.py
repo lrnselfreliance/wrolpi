@@ -1,6 +1,7 @@
 import argparse
 import logging
 import pathlib
+import re
 from functools import wraps
 from http import HTTPStatus
 
@@ -12,7 +13,7 @@ from sanic_openapi import swagger_blueprint, doc
 from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_config, get_config
 from api.db import get_db
 from api.modules import MODULES
-from api.videos.schema import SettingsRequest, SettingsResponse
+from api.videos.schema import SettingsRequest, SettingsResponse, RegexRequest, RegexResponse
 
 cwd = pathlib.Path(__file__).parent
 
@@ -120,6 +121,23 @@ def get_settings(_: Request):
 def update_settings(_: Request, data: dict):
     save_settings_config(data)
     return response.raw('', HTTPStatus.NO_CONTENT)
+
+
+@root_api.post('/valid_regex')
+@validate_doc(
+    summary='Check if the regex is valid',
+    consumes=RegexRequest,
+    responses=(
+            (HTTPStatus.OK, RegexResponse),
+            (HTTPStatus.BAD_REQUEST, RegexResponse),
+    )
+)
+def valid_regex(_: Request, data: dict):
+    try:
+        re.compile(data['regex'])
+        return response.json({'valid': True, 'regex': data['regex']})
+    except re.error:
+        return response.json({'valid': False, 'regex': data['regex']}, HTTPStatus.BAD_REQUEST)
 
 
 ROUTES_ATTACHED = False

@@ -14,13 +14,15 @@ import {
     getChannel,
     getChannels,
     getChannelVideos,
+    getConfig,
     getDirectories,
     getRecentVideos,
     getSearchVideos,
     getVideo,
-    updateChannel
+    updateChannel,
+    validateRegex
 } from "../api";
-import {Button, Card, Checkbox, Dimmer, Form, Grid, Header, Loader, Placeholder, Segment} from "semantic-ui-react";
+import {Button, Card, Checkbox, Form, Grid, Header, Input, Loader, Placeholder, Popup} from "semantic-ui-react";
 
 function scrollToTop() {
     window.scrollTo({
@@ -46,7 +48,11 @@ class ChannelPage extends React.Component {
         super(props);
         this.state = {
             channel: null,
+            media_directory: null,
             disabled: false,
+            dirty: false,
+            inputs: ['name', 'directory', 'url', 'match_regex', 'generate_thumbnails', 'calculate_duration'],
+            validRegex: true,
 
             // The properties to edit/submit
             name: null,
@@ -59,16 +65,35 @@ class ChannelPage extends React.Component {
 
         this.handleInputChange = this.handleInputChange.bind(this);
         this.handleSubmit = this.handleSubmit.bind(this);
+        this.isDirty = this.isDirty.bind(this);
+        this.checkDirty = this.checkDirty.bind(this);
+        this.checkRegex = this.checkRegex.bind(this);
 
         this.generateThumbnails = React.createRef();
         this.calculateDuration = React.createRef();
     }
 
+    isDirty() {
+        for (let i = 0; i < this.state.inputs.length; i++) {
+            let name = this.state.inputs[i];
+            if (this.state.channel[name] !== this.state[name]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    checkDirty() {
+        this.setState({dirty: this.isDirty()})
+    }
+
     async componentDidMount() {
         let channel_link = this.props.match.params.channel_link;
+        let global_config = await getConfig();
         let channel = await getChannel(channel_link);
         this.setState({
             channel: channel,
+            media_directory: `${global_config.media_directory}/`,
             name: channel.name,
             directory: channel.directory,
             url: channel.url,
@@ -78,17 +103,21 @@ class ChannelPage extends React.Component {
         });
     }
 
-    async handleInputChange(event) {
-        const target = event.target;
-        const value = target.type === 'label' ? target.checked : target.value;
-        const name = target.name;
-        this.setState({[name]: value});
+    async handleInputChange(event, {name, value}) {
+        this.setState({[name]: value}, this.checkDirty);
     }
 
     async handleCheckbox(checkbox) {
         let checked = checkbox.current.state.checked;
         let name = checkbox.current.props.name;
-        this.setState({[name]: !checked});
+        this.setState({[name]: !checked}, this.checkDirty);
+    }
+
+    async checkRegex(event, {name, value}) {
+        event.persist();
+        await this.handleInputChange(event, {name, value});
+        let valid = await validateRegex(value);
+        this.setState({validRegex: valid});
     }
 
     async handleSubmit(e) {
@@ -115,10 +144,11 @@ class ChannelPage extends React.Component {
                 <Container>
                     <Header as="h1">{this.props.header}</Header>
                     <Form id="editChannel" onSubmit={this.handleSubmit}>
-                        <div className="two fields">
-                            <Form.Field>
-                                <label>Channel Name</label>
-                                <input
+                        <Form.Group>
+                            <Form.Field width={8}>
+                                <Form.Input
+                                    required
+                                    label="Channel Name"
                                     name="name"
                                     type="text"
                                     placeholder="Short Channel Name"
@@ -127,21 +157,26 @@ class ChannelPage extends React.Component {
                                     onChange={this.handleInputChange}
                                 />
                             </Form.Field>
-                            <Form.Field>
-                                <label>Directory</label>
-                                <input
+                            <Form.Field width={8}>
+                                <label>
+                                    Directory
+                                    <span style={{color: '#db2828'}}> *</span>
+                                </label>
+                                <Input
+                                    required
                                     name="directory"
                                     type="text"
                                     disabled={this.state.disabled}
+                                    label={this.state.media_directory}
                                     placeholder='videos/channel/directory'
                                     value={this.state.directory}
                                     onChange={this.handleInputChange}
                                 />
                             </Form.Field>
-                        </div>
+                        </Form.Group>
                         <Form.Field>
-                            <label>URL</label>
-                            <input
+                            <Form.Input
+                                label="URL"
                                 name="url"
                                 type="url"
                                 disabled={this.state.disabled}
@@ -155,38 +190,46 @@ class ChannelPage extends React.Component {
                             The following settings are encouraged by default, modify them at your own risk.
                         </Header>
                         <Form.Field>
-                            <label>Title Match Regex</label>
-                            <input
+                            <Form.Input
+                                label="Title Match Regex"
                                 name="match_regex"
                                 type="text"
                                 disabled={this.state.disabled}
+                                error={!this.state.validRegex}
                                 placeholder='.*([Nn]ame Matching).*'
-                                value={this.state.title_regex}
-                                onChange={this.handleInputChange}
+                                value={this.state.match_regex}
+                                onChange={this.checkRegex}
                             />
                         </Form.Field>
 
-                        <Checkbox
-                            toggle
-                            label="Generate thumbnails, if not found"
-                            name="generate_thumbnails"
-                            disabled={this.state.disabled}
-                            checked={this.state.generate_thumbnails}
-                            ref={this.generateThumbnails}
-                            onClick={() => this.handleCheckbox(this.generateThumbnails)}
-                        />
-                        <Checkbox
-                            toggle
-                            label="Calculate video duration"
-                            name="calculate_duration"
-                            disabled={this.state.disabled}
-                            checked={this.state.calculate_duration}
-                            ref={this.calculateDuration}
-                            onClick={() => this.handleCheckbox(this.calculateDuration)}
-                        />
+                        <Form.Field>
+                            <Checkbox
+                                toggle
+                                label="Generate thumbnails, if not found"
+                                name="generate_thumbnails"
+                                disabled={this.state.disabled}
+                                checked={this.state.generate_thumbnails}
+                                ref={this.generateThumbnails}
+                                onClick={() => this.handleCheckbox(this.generateThumbnails)}
+                            />
+                        </Form.Field>
+                        <Form.Field>
+                            <Checkbox
+                                toggle
+                                label="Calculate video duration"
+                                name="calculate_duration"
+                                disabled={this.state.disabled}
+                                checked={this.state.calculate_duration}
+                                ref={this.calculateDuration}
+                                onClick={() => this.handleCheckbox(this.calculateDuration)}
+                            />
+                        </Form.Field>
 
-                        <br/>
-                        <Button color="blue" type="submit" disabled={this.state.disabled}>
+                        <Button
+                            color="blue"
+                            type="submit"
+                            disabled={this.state.disabled || !this.state.dirty}
+                        >
                             {this.state.disabled ? <Loader active inline/> : 'Save'}
                         </Button>
                     </Form>
@@ -222,6 +265,27 @@ function EditChannel(props) {
     return (
         <ChannelPage header="Edit Channel" history={props.history} match={props.match}/>
     )
+}
+
+class ManageVideos extends React.Component {
+
+    render() {
+        return (
+            <>
+                <Header as="h1">Manage Videos</Header>
+
+                <p>
+                    <Button primary>Download Videos</Button>
+                    <label>Download any missing videos</label>
+                </p>
+
+                <p>
+                    <Button secondary>Refresh Video Files</Button>
+                    <label>Search for any videos in the media directory</label>
+                </p>
+            </>
+        )
+    }
 }
 
 
@@ -823,20 +887,45 @@ function ChannelCard(props) {
     let editTo = `/videos/channel/${props.channel.link}/edit`;
     let videosTo = `/videos/channel/${props.channel.link}/video`;
 
+    async function downloadVideos(e) {
+        e.preventDefault();
+        let url = `${VIDEOS_API}/settings:download/${props.channel.link}`;
+        let response = await fetch(url, {method: 'POST'});
+    }
+
+    async function refreshVideos(e) {
+        e.preventDefault();
+        let url = `${VIDEOS_API}/settings:refresh/${props.channel.link}`;
+        let response = await fetch(url, {method: 'POST'});
+    }
+
     return (
         <Card fluid={true}>
             <Card.Content>
                 <Card.Header>
-                    {props.channel.name}
+                    <Link to={videosTo}>
+                        {props.channel.name}
+                    </Link>
                 </Card.Header>
                 <Card.Description>
-                    Videos: {props.channel.video_count}
+                    <Link to={videosTo}>
+                        Videos: {props.channel.video_count}
+                    </Link>
                 </Card.Description>
             </Card.Content>
             <Card.Content extra>
-                <div className="ui buttons two">
-                    <Link className="ui button" to={videosTo}>View Videos</Link>
-                    <Link className="ui button blue" to={editTo}>Edit</Link>
+                <div className="ui buttons four">
+                    <Popup
+                        header="Download any missing videos"
+                        on="hover"
+                        trigger={<Button primary onClick={downloadVideos}>Download Videos</Button>}
+                    />
+                    <Popup
+                        header="Search for any local videos"
+                        on="hover"
+                        trigger={<Button secondary onClick={refreshVideos}>Refresh Files</Button>}
+                    />
+                    <Link className="ui button primary inverted" to={editTo}>Edit</Link>
                 </div>
             </Card.Content>
         </Card>
@@ -845,16 +934,20 @@ function ChannelCard(props) {
 
 function VideoPlaceholder() {
     return (
-        <Placeholder>
-            <Placeholder.Header image>
-                <Placeholder.Line/>
-                <Placeholder.Line/>
-            </Placeholder.Header>
-            <Placeholder.Paragraph>
-                <Placeholder.Line length='medium'/>
-                <Placeholder.Line length='short'/>
-            </Placeholder.Paragraph>
-        </Placeholder>
+        <Card.Group doubling stackable>
+            <Card>
+                <Placeholder>
+                    <Placeholder.Image rectangular/>
+                </Placeholder>
+                <Card.Content>
+                    <Placeholder>
+                        <Placeholder.Line/>
+                        <Placeholder.Line/>
+                        <Placeholder.Line/>
+                    </Placeholder>
+                </Card.Content>
+            </Card>
+        </Card.Group>
     )
 }
 
@@ -873,7 +966,10 @@ function ChannelPlaceholder() {
 }
 
 function ChannelsHeader() {
-    return (<Header as="h1">Channels</Header>)
+
+    return (
+        <Header as='h1'>Channels</Header>
+    )
 }
 
 class Channels extends React.Component {
@@ -912,7 +1008,7 @@ class Channels extends React.Component {
                 <>
                     <ChannelsHeader/>
                     Not channels exist yet!
-                    <Button primary>Create Channel</Button>
+                    <Button secondary>Create Channel</Button>
                 </>
             )
         } else {
@@ -1016,7 +1112,15 @@ class Videos extends React.Component {
 
     render() {
         return (
-            <></>
+            <>
+                <Header>Newest Videos</Header>
+                <VideoPlaceholder/>
+                <VideoPlaceholder/>
+                <VideoPlaceholder/>
+                <VideoPlaceholder/>
+                <VideoPlaceholder/>
+                <VideoPlaceholder/>
+            </>
         )
     }
 }
@@ -1026,8 +1130,9 @@ class VideosRoute extends React.Component {
     render() {
         return (
             <Container fluid={true} style={{margin: '2em', padding: '0.5em'}}>
-                <Route path='/videos' exact={true} component={Videos}/>
-                <Route path='/videos/channels' exact component={Channels}/>
+                <Route path='/videos' exact component={Videos}/>
+                <Route path='/videos/manage' exact component={ManageVideos}/>
+                <Route path='/videos/channel' exact component={Channels}/>
                 <Route path='/videos/favorites' exact component={Videos}/>
                 <Route path='/videos/channel/:channel_link/edit' exact component={EditChannel}/>
                 <Route path='/videos/channel/:channel_link?/video/:video_id?' exact component={Videos}/>

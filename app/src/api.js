@@ -1,4 +1,4 @@
-import {VIDEOS_API} from "./components/Common";
+import {API_URI, VIDEOS_API} from "./components/Common";
 
 export async function updateChannel(link, channel) {
     let response = await fetch(`${VIDEOS_API}/channels/${link}`,
@@ -85,4 +85,23 @@ export async function getDirectories(search_str) {
         return directories;
     }
     return [];
+}
+
+export async function getConfig() {
+    let url = `http://${API_URI}/api/settings`;
+    let response = await fetch(url);
+    let data = await response.json();
+    return data['config'];
+}
+
+export async function saveConfig(config) {
+    let url = `http://${API_URI}/api/settings`;
+    await fetch(url, {method: 'PUT', body: JSON.stringify(config)});
+}
+
+export async function validateRegex(regex) {
+    let url = `http://${API_URI}/api/valid_regex`;
+    let body = {regex: regex};
+    let response = await fetch(url, {method: 'POST', body: JSON.stringify(body)});
+    return (await response.json())['valid'];
 }

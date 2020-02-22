@@ -40,7 +40,7 @@ from api.videos.video import video_bp
 from .captions import insert_bulk_captions
 from .common import logger, generate_video_paths, get_absolute_media_path, generate_bulk_thumbnails, \
     get_bulk_video_duration
-from .downloader import update_channels, download_all_missing_videos, insert_video
+from .downloader import update_channels, download_all_missing_videos, insert_video, update_channel
 from .schema import StreamResponse, \
     JSONErrorResponse
 
@@ -55,6 +55,7 @@ refresh_queue, refresh_event = create_websocket_feed('/feeds/refresh', content_b
 
 
 @content_bp.post('/settings:refresh')
+@content_bp.post('/settings:refresh/<link:string>')
 @validate_doc(
     summary='Search for videos that have previously been downloaded and stored.',
     produces=StreamResponse,
@@ -62,9 +63,15 @@ refresh_queue, refresh_event = create_websocket_feed('/feeds/refresh', content_b
         (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
     ],
 )
-async def refresh(_):
+async def refresh(_, link: str = None):
     refresh_logger = logger.getChild('refresh')
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/refresh')
+
+    channel_names = []
+    with get_db_context(commit=False) as (db_conn, db):
+        Channel = db['channel']
+        channel = Channel.get_one(link=link)
+        channel_names = [channel['name']]
 
     # Only one refresh can run at a time
     if refresh_event.is_set():
@@ -76,8 +83,7 @@ async def refresh(_):
         try:
             refresh_logger.info('refresh started')
 
-            with get_db_context(commit=True) as (db_conn, db):
-                _refresh_videos(db, refresh_queue)
+            refresh_videos_with_db(channel_names)
 
             refresh_logger.info('refresh complete')
         except Exception as e:
@@ -96,6 +102,7 @@ download_queue, download_event = create_websocket_feed('/feeds/download', conten
 
 
 @content_bp.post('/settings:download')
+@content_bp.post('/settings:download/<link:string>')
 @validate_doc(
     summary='Update channel catalogs, download any missing videos',
     produces=StreamResponse,
@@ -103,7 +110,7 @@ download_queue, download_event = create_websocket_feed('/feeds/download', conten
         (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
     ],
 )
-async def download(_):
+async def download(_, link: str = None):
     download_logger = logger.getChild('download')
 
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/download')
@@ -118,12 +125,16 @@ async def download(_):
         try:
             download_logger.info('download started')
 
-            with get_db_context(commit=True) as (db_conn, db):
-                for msg in update_channels(db_conn, db):
-                    download_queue.put(msg)
-                download_logger.info('Updated all channel catalogs')
-                for msg in download_all_missing_videos(db_conn, db):
-                    download_queue.put(msg)
+            if link:
+                with get_db_context(commit=True) as (db_conn, db):
+                    update_channel(db_conn, db, link)
+            else:
+                with get_db_context(commit=True) as (db_conn, db):
+                    for msg in update_channels(db_conn, db):
+                        download_queue.put(msg)
+                    download_logger.info('Updated all channel catalogs')
+                    for msg in download_all_missing_videos(db_conn, db):
+                        download_queue.put(msg)
 
             download_logger.info('download complete')
         except Exception as e:

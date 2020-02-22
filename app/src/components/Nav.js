@@ -7,8 +7,9 @@ const responsiveWidth = 500;
 const links = [
     {
         text: 'Videos', links: [
+            {to: '/videos/manage', text: 'Manage', exact: true},
             {to: '/videos', text: 'Newest Videos', exact: true},
-            {to: '/videos/channels', text: 'Channels', exact: true},
+            {to: '/videos/channel', text: 'Channels', exact: true},
             {to: '/videos/favorites', text: 'Favorites', exact: true},
         ]
     },

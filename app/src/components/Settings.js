@@ -1,18 +1,6 @@
 import React from 'react';
-import {API_URI} from "./Common"
 import {Button, Container, Form, Header} from "semantic-ui-react";
-
-async function getConfig() {
-    let url = `http://${API_URI}/api/settings`;
-    let response = await fetch(url);
-    let data = await response.json();
-    return data['config'];
-}
-
-async function saveConfig(config) {
-    let url = `http://${API_URI}/api/settings`;
-    await fetch(url, {method: 'PUT', body: JSON.stringify(config)});
-}
+import {getConfig, saveConfig} from "../api";
 
 class Settings extends React.Component {
 

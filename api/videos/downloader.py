@@ -39,6 +39,16 @@ def get_channel_info(channel: Dict) -> dict:
     return info
 
 
+def update_channel(db_conn, db, link):
+    Channel = db['channel']
+    channel = Channel.get_one(link=link)
+    info = get_channel_info(channel)
+    channel['info_json'] = info
+    channel['info_date'] = datetime.now()
+    channel.flush()
+    db_conn.commit()
+
+
 def update_channels(db_conn, db, oldest_date=None):
     """Get all information for each channel.  (No downloads performed)"""
     Channel = db['channel']

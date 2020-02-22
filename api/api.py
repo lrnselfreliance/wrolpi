@@ -10,9 +10,10 @@ from sanic.request import Request
 from sanic_cors import CORS
 from sanic_openapi import swagger_blueprint, doc
 
-from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_config, get_config
+from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_config, get_config, EVENTS
 from api.db import get_db
 from api.modules import MODULES
+from api.videos.schema import SettingsRequest, SettingsResponse, EventsResponse
 from api.videos.schema import SettingsRequest, SettingsResponse, RegexRequest, RegexResponse
 
 cwd = pathlib.Path(__file__).parent
@@ -138,6 +139,16 @@ def valid_regex(_: Request, data: dict):
         return response.json({'valid': True, 'regex': data['regex']})
     except re.error:
         return response.json({'valid': False, 'regex': data['regex']}, HTTPStatus.BAD_REQUEST)
+
+
+@root_api.get('/events')
+@validate_doc(
+    summary='Get a list of event feeds',
+    produces=EventsResponse,
+)
+def events(_: Request):
+    e = [{'name': name, 'is_set': event.is_set()} for (name, event) in EVENTS]
+    return response.json({'events': e})
 
 
 ROUTES_ATTACHED = False

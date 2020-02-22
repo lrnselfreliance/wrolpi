@@ -12,7 +12,7 @@ NAME = 'map'
 
 api_bp = Blueprint('Map', url_prefix='/map')
 
-download_queue, download_event = create_websocket_feed('/feeds/pbf_progress', api_bp)
+download_queue, download_event = create_websocket_feed('pbf_progress', '/feeds/pbf_progress', api_bp)
 
 
 @api_bp.route('/pbf', methods=['POST'])

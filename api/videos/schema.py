@@ -152,3 +152,12 @@ class DirectoriesRequest:
 
 class DirectoriesResponse:
     directories = doc.List(doc.String())
+
+
+class EventObject:
+    name = doc.String()
+    is_set = doc.Boolean()
+
+
+class EventsResponse:
+    events = doc.List(EventObject)

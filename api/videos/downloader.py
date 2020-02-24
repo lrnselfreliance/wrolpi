@@ -5,8 +5,10 @@ import re
 from datetime import datetime
 from typing import Tuple
 
+import psycopg2
 from dictorm import DictDB, Dict, Or
 from youtube_dl import YoutubeDL
+from youtube_dl.extractor.common import InfoExtractor
 
 from api.common import make_progress_calculator, logger
 from api.db import get_db_context
@@ -14,35 +16,70 @@ from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path, replace_extension
 
 logger = logger.getChild('api:downloader')
-ydl_logger = logger.getChild('api:ydl')
+ydl_logger = logger.getChild('api:youtube-dl')
 
 
-def get_channel_info(channel: Dict) -> dict:
+def update_channel_video_entries(db_conn: psycopg2.connect, db: DictDB, channel: Dict):
     """
-    Get the YoutubeDL info_extractor information dictionary.  This is built using many http requests.
+    Get all video entries from the Channel's URL.  Stop adding video entries as soon as we run into an entry that
+    already exists.  This allows a minimum of requests.
 
-    :param channel: dictorm Channel table
+    :param db_conn:
+    :param db:
+    :param channel: dictorm Channel entry
     :return:
     """
     ydl = YoutubeDL()
     # ydl.params['logger'] = ydl_logger
     ydl.add_default_info_extractors()
 
+    channel_id = channel['id']
+
     logger.info(f'Downloading video list for {channel["url"]}  This may take several minutes.')
-    info = ydl.extract_info(channel['url'], download=False, process=False)
-    if 'url' in info:
-        url = info['url']
-        info = ydl.extract_info(url, download=False, process=False)
 
-    # Resolve all entries to dictionaries
-    info['entries'] = list(info['entries'])
-    return info
+    # This logic was extracted from the Youtube-DL source code.
+    for ie in ydl._ies:
+        if ie.suitable(channel['url']):
+            extractor = ydl.get_info_extractor(ie.ie_key())
+            break
+    else:
+        raise Exception(f'Could not find suitable extractor for channel url: {channel["url"]} ')
+
+    # Get the channel extractor
+    extractor: InfoExtractor
+    ie_result = extractor.extract(channel['url'])
+    # Get the playlist extractor
+    extractor = ydl.get_info_extractor(ie_result['ie_key'])
+    ie_result = extractor.extract(ie_result['url'])
+
+    # Get the existing source_ids, we will only add new entries.
+    curs = db_conn.cursor()
+    query = 'SELECT source_id FROM video WHERE channel_id=%s'
+    curs.execute(query, (channel_id,))
+    existing_source_ids = {i[0] for i in curs.fetchall()}
+
+    # Add any new entries to the DB.
+    Video = db['video']
+    new_videos = 0
+    for entry in ie_result['entries']:
+        source_id = entry['url']
+        if source_id in existing_source_ids:
+            break
+        # Add the new video to the database.  This should be downloaded later.
+        Video(source_id=source_id, url=entry['url'], channel_id=channel_id).flush()
+        db_conn.commit()
+        new_videos += 1
+
+    if new_videos:
+        logger.info(f'Found {new_videos} new videos for channel {channel["name"]}')
+    else:
+        logger.info(f'No new videos for channel {channel["name"]}')
 
 
-def update_channel(db_conn, db, link):
+def update_channel(db_conn: psycopg2.connect, db: DictDB, link: str):
     Channel = db['channel']
     channel = Channel.get_one(link=link)
-    info = get_channel_info(channel)
+    info = update_channel_video_entries(db_conn, db, channel)
     channel['info_json'] = info
     channel['info_date'] = datetime.now()
     channel.flush()
@@ -64,11 +101,12 @@ def update_channels(db_conn, db, oldest_date=None):
         ),
     )
     remote_channels = list(remote_channels)
+    remote_channels = list(Channel.get_where())
     logger.debug(f'Getting info for {len(remote_channels)} channels')
     calc_progress = make_progress_calculator(len(remote_channels))
     for idx, channel in enumerate(remote_channels):
         yield {'progress': calc_progress(idx), 'message': f'Getting video list for {channel["name"]}'}
-        info = get_channel_info(channel)
+        info = update_channel_video_entries(db_conn, db, channel)
         channel['info_json'] = info
         channel['info_date'] = datetime.now()
         channel.flush()

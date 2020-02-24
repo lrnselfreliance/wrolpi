@@ -161,3 +161,10 @@ class EventObject:
 
 class EventsResponse:
     events = doc.List(EventObject)
+
+
+class EchoResponse:
+    form = doc.Dictionary()
+    headers = doc.Dictionary()
+    json = doc.String()
+    method = doc.String()

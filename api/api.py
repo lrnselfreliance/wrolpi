@@ -56,10 +56,7 @@ def teardown_db_context(request, _):
         pass
 
 
-@api_app.route('/')
-@api_app.route('/api')
-def index(request):
-    html = '''
+index_html = '''
     <html>
     <body>
     <p>
@@ -71,10 +68,19 @@ def index(request):
     </p>
     </body>
     </html>'''
-    return response.html(html)
+
+
+@api_app.get('/')
+def index(_):
+    return response.html(index_html)
 
 
 root_api = Blueprint('Root API')
+
+
+@root_api.get('/')
+def index(_):
+    return response.html(index_html)
 
 
 class EchoResponse:

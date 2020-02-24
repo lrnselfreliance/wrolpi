@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
-from typing import Generator, List
+from pathlib import Path
+from typing import Generator, List, Union
 
 import srt
 import webvtt
@@ -11,7 +12,7 @@ from .common import get_absolute_video_caption
 from ..db import get_db_context
 
 
-def get_caption_text(caption_path: str) -> Generator:
+def get_caption_text(caption_path: Union[str, Path]) -> Generator:
     """
     Return all text from each caption of a caption file.
     """
@@ -26,7 +27,7 @@ def get_caption_text(caption_path: str) -> Generator:
                 yield subtitle.content
 
 
-def get_unique_caption_lines(caption_path: str) -> Generator:
+def get_unique_caption_lines(caption_path: Union[str, Path]) -> Generator:
     """
     Return all unique lines from each caption of a caption file.
     """

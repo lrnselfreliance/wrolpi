@@ -243,7 +243,11 @@ def verify_config():
     raise Exception(error)
 
 
-def get_channel_videos(db: DictDB, link: str, offset: int = 0):
+def get_channel_videos(db: DictDB, link: str, offset: int = 0) -> Tuple[List[Dict], int]:
+    """
+    Get all video objects for a particular channel that have a video file.  Also get the total videos that match this
+    criteria.
+    """
     Channel, Video = db['channel'], db['video']
     channel = Channel.get_one(link=link)
     if not channel:

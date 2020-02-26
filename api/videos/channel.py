@@ -107,7 +107,7 @@ def channel_post(request: Request, data: dict):
 
     # Refresh the videos asynchronously
     from api.videos.api import async_refresh_videos_with_db
-    coro = async_refresh_videos_with_db([data['name']])
+    coro = async_refresh_videos_with_db([channel['link']])
     asyncio.ensure_future(coro)
 
     return response.json({'success': 'Channel created successfully'}, HTTPStatus.CREATED,

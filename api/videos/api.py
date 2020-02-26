@@ -54,8 +54,8 @@ api_bp = Blueprint('Videos').group(
 refresh_queue, refresh_event = create_websocket_feed('refresh', '/feeds/refresh', content_bp)
 
 
-@content_bp.post('/refresh')
-@content_bp.post('/refresh/<link:string>')
+@content_bp.post(':refresh')
+@content_bp.post(':refresh/<link:string>')
 @validate_doc(
     summary='Search for videos that have previously been downloaded and stored.',
     produces=StreamResponse,
@@ -67,12 +67,6 @@ async def refresh(_, link: str = None):
     refresh_logger = logger.getChild('refresh')
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/refresh')
 
-    channel_names = []
-    with get_db_context(commit=False) as (db_conn, db):
-        Channel = db['channel']
-        channel = Channel.get_one(link=link)
-        channel_names = [channel['name']]
-
     # Only one refresh can run at a time
     if refresh_event.is_set():
         return response.json({'error': 'Refresh already running', 'stream_url': stream_url}, HTTPStatus.CONFLICT)
@@ -83,7 +77,8 @@ async def refresh(_, link: str = None):
         try:
             refresh_logger.info('refresh started')
 
-            refresh_videos_with_db(channel_names)
+            channel_links = [link] if link else None
+            refresh_videos_with_db(channel_links)
 
             refresh_logger.info('refresh complete')
         except Exception as e:
@@ -230,7 +225,7 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
         logger.debug('No videos missing duration')
 
 
-def _refresh_videos(db: DictDB, q: Queue, channel_names: list = None):
+def _refresh_videos(db: DictDB, q: Queue, channel_links: list = None):
     """
     Find any videos in the channel directories and add them to the DB.  Delete DB records of any videos not in the
     file system.
@@ -247,15 +242,15 @@ def _refresh_videos(db: DictDB, q: Queue, channel_names: list = None):
     reporter.code('refresh-started')
     reporter.set_progress_total(0, Channel.count())
 
-    if channel_names:
-        channels = Channel.get_where(Channel['name'].In(channel_names))
+    if channel_links:
+        channels = Channel.get_where(Channel['link'].In(channel_links))
     else:
         channels = Channel.get_where()
 
     channels = list(channels)
 
-    if not channels and channel_names:
-        raise Exception(f'No channels match name(s): {channel_names}')
+    if not channels and channel_links:
+        raise Exception(f'No channels match links(s): {channel_links}')
     elif not channels:
         raise Exception(f'No channels in DB.  Have you created any?')
 
@@ -268,16 +263,16 @@ def _refresh_videos(db: DictDB, q: Queue, channel_names: list = None):
 
 
 @wraps(_refresh_videos)
-def refresh_videos(db: DictDB, channel_names: list = None):
-    return _refresh_videos(db, refresh_queue, channel_names=channel_names)
+def refresh_videos(db: DictDB, channel_links: list = None):
+    return _refresh_videos(db, refresh_queue, channel_links=channel_links)
 
 
 @wraps(_refresh_videos)
-def refresh_videos_with_db(channel_names: list = None):
+def refresh_videos_with_db(channel_links: list = None):
     with get_db_context(commit=True) as (db_conn, db):
-        return refresh_videos(db, channel_names=channel_names)
+        return refresh_videos(db, channel_links=channel_links)
 
 
 @wraps(refresh_videos_with_db)
-async def async_refresh_videos_with_db(channel_names: list = None):
-    return refresh_videos_with_db(channel_names)
+async def async_refresh_videos_with_db(channel_links: list = None):
+    return refresh_videos_with_db(channel_links)

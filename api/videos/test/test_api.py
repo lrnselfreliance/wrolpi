@@ -243,6 +243,7 @@ class TestVideoAPI(TestAPI):
             channel = Channel(directory=channel_dir).flush()
             video1 = upsert_video(db, vid1, channel)
             video2 = upsert_video(db, vid2, channel)
+            db_conn.commit()
             self.assertEqual({i['video_path'] for i in channel['videos']}, {'subdir/' + vid1.name, vid2.name})
 
             # Poster files were found
@@ -268,7 +269,7 @@ class TestVideoAPI(TestAPI):
 
             # Finally, call the refresh.  Again, it should remove the "foo" video, then discover this 3rd video
             # file and it's description.
-            api_app.test_client.post('/api/videos/settings:refresh')
+            api_app.test_client.post('/api/videos:refresh')
 
             # Bogus file was removed
             self.assertNotIn('foo', {i['video_path'] for i in channel['videos']})
@@ -304,8 +305,8 @@ class TestVideoAPI(TestAPI):
 
         with get_db_context(commit=True) as (db_conn, db):
             Channel, Video = db['channel'], db['video']
-            Video(title='vid1', channel_id=channel2['id']).flush()
-            Video(title='vid2', channel_id=channel1['id']).flush()
+            Video(title='vid1', channel_id=channel2['id'], video_path='foo').flush()
+            Video(title='vid2', channel_id=channel1['id'], video_path='foo').flush()
 
         # Videos are gotten by their respective channels
         request, response = api_app.test_client.get(f'/api/videos/channels/{channel1["link"]}/videos')
@@ -351,10 +352,10 @@ class TestVideoAPI(TestAPI):
             channel1 = Channel(name='Foo', link='foo').flush()
 
             for i in range(50):
-                Video(title=f'Foo.Video{i}', channel_id=channel1['id']).flush()
+                Video(title=f'Foo.Video{i}', channel_id=channel1['id'], video_path='foo').flush()
 
             channel2 = Channel(name='Bar', link='bar').flush()
-            Video(title='vid2', channel_id=channel2['id']).flush()
+            Video(title='vid2', channel_id=channel2['id'], video_path='foo').flush()
 
         # Get first, second, third, and empty pages of videos.
         tests = [

@@ -1,6 +1,7 @@
 from http import HTTPStatus
 from typing import List, Dict, Tuple
 
+import psycopg2
 from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
@@ -8,7 +9,7 @@ from sanic.request import Request
 from api.common import validate_doc, logger
 from api.db import get_db_context
 from api.errors import UnknownVideo, SearchEmpty, ValidationError
-from api.videos.common import VIDEO_QUERY_LIMIT, get_video_info_json, get_matching_directories, get_media_directory, \
+from api.videos.common import get_video_info_json, get_matching_directories, get_media_directory, \
     get_relative_to_media_directory
 from api.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse, \
     ChannelVideosResponse, DirectoriesResponse, DirectoriesRequest
@@ -40,12 +41,53 @@ def video(request, video_id: str):
     return response.json({'video': video})
 
 
-def video_search(db_conn, db: DictDB, search_str: str, offset: int) -> Tuple[List[Dict], int]:
+VIDEO_ORDERS = {
+    'upload_date': 'upload_date ASC',
+    '-upload_date': 'upload_date DESC',
+    'rank': '2 DESC',
+    '-rank': '2 ASC',
+}
+DEFAULT_VIDEO_ORDER = 'rank'
+VIDEO_QUERY_LIMIT = 20
+
+
+def video_search(
+        db_conn: psycopg2.connect,
+        db: DictDB,
+        search_str: str = None,
+        offset: int = None,
+        channel_link: str = None,
+        order_by: str = None,
+) -> Tuple[List[Dict], int]:
+    # TODO handle when there is no search_str
     curs = db_conn.cursor()
 
-    query = 'SELECT id, ts_rank_cd(textsearch, websearch_to_tsquery(%s)), COUNT(*) OVER() AS total ' \
-            f'FROM video WHERE textsearch @@ websearch_to_tsquery(%s) ORDER BY 2 DESC OFFSET %s LIMIT {VIDEO_QUERY_LIMIT}'
-    curs.execute(query, (search_str, search_str, offset))
+    args = dict(search_str=search_str, offset=offset)
+    channel_where = ''
+    if channel_link:
+        channel_where = 'AND channel_id = (select id from channel where link=%(channel_link)s)'
+        args['channel_link'] = channel_link
+
+    # Convert the user-friendly order by into a real order by, restrict what can be interpolated by using the whitelist.
+    order = VIDEO_ORDERS[DEFAULT_VIDEO_ORDER]
+    if order_by:
+        try:
+            order = VIDEO_ORDERS[order_by]
+        except KeyError:
+            raise
+
+    query = f'''
+        SELECT
+            id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total
+        FROM video
+        WHERE
+            textsearch @@ websearch_to_tsquery(%(search_str)s)
+            {channel_where}
+        ORDER BY {order}
+        OFFSET %(offset)s LIMIT {VIDEO_QUERY_LIMIT}
+    '''
+
+    curs.execute(query, args)
     results = list(curs.fetchall())
     total = results[0][2] if results else 0
     ranked_ids = [i[0] for i in results]
@@ -66,13 +108,15 @@ def video_search(db_conn, db: DictDB, search_str: str, offset: int) -> Tuple[Lis
 )
 def search(_: Request, data: dict):
     search_str = data['search_str']
+    channel_link = data.get('channel_link')
+    order_by = data.get('channe_link', DEFAULT_VIDEO_ORDER)
     offset = int(data.get('offset', 0))
 
     if not search_str:
         raise ValidationError() from SearchEmpty()
 
     with get_db_context() as (db_conn, db):
-        videos, videos_total = video_search(db_conn, db, search_str, offset)
+        videos, videos_total = video_search(db_conn, db, search_str, offset, channel_link, order_by)
 
         # Get each Channel for each Video, this will be converted to a dict by the response
         _ = [i['channel'] for i in videos]
@@ -116,7 +160,7 @@ def get_recent_videos(db_conn, db: DictDB, offset: int = 0) -> Tuple[List[Dict],
             (HTTPStatus.NOT_FOUND, JSONErrorResponse),
     ),
 )
-def recent_videos(request):
+def recent_videos(request, channel_link: str = None):
     offset = int(request.args.get('offset', 0))
 
     with get_db_context() as (db_conn, db):

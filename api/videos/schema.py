@@ -113,6 +113,8 @@ class VideoResponse:
 
 class VideoSearchRequest:
     search_str = doc.String(required=True)
+    channel_link = doc.String()
+    order_by = doc.String()
     offset = doc.Integer()
 
 

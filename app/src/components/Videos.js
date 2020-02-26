@@ -666,7 +666,7 @@ class RefreshContent extends ButtonProgressGroup {
     }
 
     async onClick() {
-        let url = `${VIDEOS_API}/settings:refresh`;
+        let url = `${VIDEOS_API}:refresh`;
         await this.fetchAndHandle(url);
     }
 
@@ -895,7 +895,7 @@ function ChannelCard(props) {
 
     async function refreshVideos(e) {
         e.preventDefault();
-        let url = `${VIDEOS_API}/settings:refresh/${props.channel.link}`;
+        let url = `${VIDEOS_API}:refresh/${props.channel.link}`;
         let response = await fetch(url, {method: 'POST'});
     }
 

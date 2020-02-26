@@ -281,12 +281,7 @@ def upsert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
         logger.debug(f'Could not parse date from filename: {video_path}')
         upload_date = None
 
-    if source_id:
-        video = Video.get_one(id=id_)
-    else:
-        video = Video()
-
-    video.update(dict(
+    video_dict = dict(
         channel_id=channel['id'],
         description_path=str(description_path) if description_path else None,
         ext=ext,
@@ -300,7 +295,14 @@ def upsert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
         idempotency=idempotency,
         info_json_path=str(info_json_path) if info_json_path else None,
         downloaded=True if video_path else False,
-    ))
+    )
+
+    if id_:
+        video = Video.get_one(id=id_)
+        video.update(video_dict)
+    else:
+        video = Video(**video_dict)
+
     video.flush()
 
     if skip_captions is False and caption_path:

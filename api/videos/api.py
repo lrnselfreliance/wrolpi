@@ -40,7 +40,7 @@ from api.videos.video import video_bp
 from .captions import insert_bulk_captions
 from .common import logger, generate_video_paths, get_absolute_media_path, generate_bulk_thumbnails, \
     get_bulk_video_duration
-from .downloader import update_channels, download_all_missing_videos, insert_video, update_channel
+from .downloader import update_channels, download_all_missing_videos, upsert_video, update_channel
 from .schema import StreamResponse, \
     JSONErrorResponse
 
@@ -127,7 +127,7 @@ async def download(_, link: str = None):
 
             if link:
                 with get_db_context(commit=True) as (db_conn, db):
-                    update_channel(db_conn, db, link)
+                    update_channel(db_conn, db, link=link)
             else:
                 with get_db_context(commit=True) as (db_conn, db):
                     for msg in update_channels(db_conn, db):
@@ -176,7 +176,7 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
     new_videos = {p for p in possible_new_paths if str(p.relative_to(directory)) not in existing_paths}
 
     for video_path in new_videos:
-        insert_video(db, pathlib.Path(video_path), channel, idempotency=idempotency)
+        upsert_video(db, pathlib.Path(video_path), channel, idempotency=idempotency)
         logger.debug(f'{channel["name"]}: Added {video_path}')
 
     reporter.message('Matched all existing video files')

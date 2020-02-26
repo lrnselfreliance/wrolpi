@@ -248,9 +248,14 @@ def get_channel_videos(db: DictDB, link: str, offset: int = 0):
     channel = Channel.get_one(link=link)
     if not channel:
         raise UnknownChannel('Unknown Channel')
-    total = len(Video.get_where(channel_id=channel['id']))
-    videos = Video.get_where(channel_id=channel['id']).order_by(
+
+    videos = Video.get_where(channel_id=channel['id']).refine(
+        Video['video_path'].IsNotNull())
+    total = len(videos)
+
+    videos = videos.order_by(
         'upload_date DESC, LOWER(title) ASC, LOWER(video_path) ASC').limit(VIDEO_QUERY_LIMIT).offset(offset)
+
     return videos, total
 
 

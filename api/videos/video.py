@@ -84,8 +84,16 @@ def search(_: Request, data: dict):
 
 def get_recent_videos(db_conn, db: DictDB, offset: int = 0) -> Tuple[List[Dict], int]:
     curs = db_conn.cursor()
-    query = 'SELECT id, COUNT(*) OVER() as total FROM video WHERE upload_date IS NOT NULL ORDER BY upload_date DESC ' \
-            'OFFSET %s LIMIT 20'
+    query = '''
+        SELECT
+        id, COUNT(*) OVER() as total
+        FROM video
+        WHERE
+            upload_date IS NOT NULL
+            AND (video_path IS NOT NULL AND video_path != '')
+        ORDER BY upload_date DESC
+        OFFSET %s LIMIT 20
+        '''
     curs.execute(query, (offset,))
     results = list(curs.fetchall())
     total = results[0][1] if results else 0

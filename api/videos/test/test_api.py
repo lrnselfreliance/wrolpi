@@ -12,7 +12,7 @@ from api.db import get_db_context
 from api.errors import UnknownFile
 from api.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI
 from api.videos.api import refresh_queue
-from api.videos.downloader import insert_video
+from api.videos.downloader import upsert_video
 
 # Attach the default routes
 attach_routes(api_app)
@@ -241,8 +241,8 @@ class TestVideoAPI(TestAPI):
 
             # Create a channel, associate videos with it.
             channel = Channel(directory=channel_dir).flush()
-            video1 = insert_video(db, vid1, channel)
-            video2 = insert_video(db, vid2, channel)
+            video1 = upsert_video(db, vid1, channel)
+            video2 = upsert_video(db, vid2, channel)
             self.assertEqual({i['video_path'] for i in channel['videos']}, {'subdir/' + vid1.name, vid2.name})
 
             # Poster files were found

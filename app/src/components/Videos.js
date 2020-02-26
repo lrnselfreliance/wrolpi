@@ -693,7 +693,7 @@ class DownloadVideos extends ButtonProgressGroup {
     }
 
     async onClick() {
-        let url = `${VIDEOS_API}/settings:download`;
+        let url = `${VIDEOS_API}:download`;
         await this.fetchAndHandle(url);
     }
 
@@ -889,7 +889,7 @@ function ChannelCard(props) {
 
     async function downloadVideos(e) {
         e.preventDefault();
-        let url = `${VIDEOS_API}/settings:download/${props.channel.link}`;
+        let url = `${VIDEOS_API}:download/${props.channel.link}`;
         let response = await fetch(url, {method: 'POST'});
     }
 

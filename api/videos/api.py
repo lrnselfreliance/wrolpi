@@ -96,8 +96,8 @@ async def refresh(_, link: str = None):
 download_queue, download_event = create_websocket_feed('download', '/feeds/download', content_bp)
 
 
-@content_bp.post('/download')
-@content_bp.post('/download/<link:string>')
+@content_bp.post(':download')
+@content_bp.post(':download/<link:string>')
 @validate_doc(
     summary='Update channel catalogs, download any missing videos',
     produces=StreamResponse,

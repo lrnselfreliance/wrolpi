@@ -1,0 +1,3 @@
+[submodule "openstreetmap-tile-server"]
+	path = openstreetmap-tile-server
+	url = https://github.com/lrnselfreliance/openstreetmap-tile-server.git

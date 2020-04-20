@@ -11,3 +11,4 @@ PUBLIC_HOST = os.environ.get('PUBLIC_HOST')
 PUBLIC_PORT = os.environ.get('PUBLIC_PORT')
 
 TEST_VIDEO_PATH = EXAMPLE_VIDEOS_DIR / 'blender/big_buck_bunny_720p_1mb.mp4'
+DATE_FORMAT = '%a, %d %b %Y %H:%M:%S GMT'

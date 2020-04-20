@@ -5,7 +5,7 @@ from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from api.common import validate_doc, sanitize_link, logger, save_settings_config
+from api.common import validate_doc, sanitize_link, logger, save_settings_config, json_response
 from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.videos.common import check_for_channel_conflicts, \
     get_channel_videos, get_relative_to_media_directory, make_media_directory
@@ -24,7 +24,7 @@ logger = logger.getChild('channel')
 )
 def get_channels(request: Request):
     db: DictDB = request.ctx.get_db()
-    Channel = db['channel']
+    Channel, Video = db['channel'], db['video']
     channels = Channel.get_where().order_by('LOWER(name) ASC')
     # Minimize the data returned when getting all channels
     keys = {'id', 'name', 'link', 'directory', 'match_regex', 'url'}
@@ -32,7 +32,7 @@ def get_channels(request: Request):
 
     # Add video count to each channel
     for idx, channel in enumerate(new_channels):
-        channel['video_count'] = len(channels[idx]['videos'])
+        channel['video_count'] = len([i for i in channels[idx]['videos'] if i['video_path']])
 
     return response.json({'channels': new_channels})
 
@@ -54,7 +54,7 @@ def channel_get(request: Request, link: str):
     # Remove the info_json stuff
     channel = dict(channel)
     channel.pop('info_json')
-    return response.json({'channel': channel})
+    return json_response({'channel': channel})
 
 
 @channel_bp.post('/channels')

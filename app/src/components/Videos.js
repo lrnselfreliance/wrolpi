@@ -1131,9 +1131,9 @@ class VideosRoute extends React.Component {
         return (
             <Container fluid={true} style={{margin: '2em', padding: '0.5em'}}>
                 <Route path='/videos' exact component={Videos}/>
-                <Route path='/videos/manage' exact component={ManageVideos}/>
-                <Route path='/videos/channel' exact component={Channels}/>
                 <Route path='/videos/favorites' exact component={Videos}/>
+                <Route path='/videos/channel' exact component={Channels}/>
+                <Route path='/videos/manage' exact component={ManageVideos}/>
                 <Route path='/videos/channel/:channel_link/edit' exact component={EditChannel}/>
                 <Route path='/videos/channel/:channel_link?/video/:video_id?' exact component={Videos}/>
             </Container>

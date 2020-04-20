@@ -8,7 +8,7 @@ from http import HTTPStatus
 from sanic import Blueprint, Sanic, response
 from sanic.request import Request
 from sanic_cors import CORS
-from sanic_openapi import swagger_blueprint, doc
+from sanic_openapi import swagger_blueprint
 
 from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_config, get_config, EVENTS
 from api.db import get_db

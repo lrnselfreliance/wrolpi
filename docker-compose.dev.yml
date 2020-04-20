@@ -7,6 +7,8 @@ services:
       dockerfile: docker/db/Dockerfile
     ports:
       - 54321:5432
+    environment:
+      - POSTGRES_PASSWORD=wrolpi
   api:
     depends_on:
       - db

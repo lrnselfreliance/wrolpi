@@ -38,7 +38,7 @@ def video(request, video_id: str):
     video = dict(video)
     video['info_json'] = info_json
 
-    return response.json({'video': video})
+    return json_response({'video': video})
 
 
 VIDEO_ORDERS = {

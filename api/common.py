@@ -22,7 +22,7 @@ from sanic_openapi import doc
 from websocket import WebSocket
 
 from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents
-from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT, DATE_FORMAT
+from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT
 
 sanic_app = Sanic()
 
@@ -221,12 +221,15 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
                 return func(request, *a, **kw)
             except ValidationError as e:
                 error = API_ERRORS[type(e)]
-                cause = API_ERRORS[type(e.__cause__)]
                 body = {
                     'error': error['message'],
                     'code': error['code'],
-                    'cause': {'error': cause['message'], 'code': cause['code']}
                 }
+
+                if cause := e.__cause__:
+                    cause = API_ERRORS[type(cause)] if cause else None
+                    body['cause'] = {'error': cause['message'], 'code': cause['code']}
+
                 r = response.json(body, error['status'])
                 return r
             except APIError as e:

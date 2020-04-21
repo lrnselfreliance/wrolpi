@@ -1,12 +1,7 @@
-import React, {useRef, useState} from 'react';
-import Row from "react-bootstrap/Row";
-import Col from "react-bootstrap/Col";
+import React from 'react';
 import {Link, Route} from "react-router-dom";
-import {ButtonGroup, ProgressBar} from "react-bootstrap";
-import Modal from "react-bootstrap/Modal";
 import '../static/external/fontawesome-free/css/all.min.css';
-import Alert from "react-bootstrap/Alert";
-import Paginator, {VIDEOS_API} from "./Common"
+import {VIDEOS_API} from "./Common"
 import Container from "react-bootstrap/Container";
 import Video from "./VideoPlayer";
 import 'react-bootstrap-typeahead/css/Typeahead.css';
@@ -15,9 +10,7 @@ import {
     getChannels,
     getChannelVideos,
     getConfig,
-    getDirectories,
     getNewestVideos,
-    getSearchVideos,
     getVideo,
     updateChannel,
     validateRegex
@@ -288,9 +281,26 @@ class ManageVideos extends React.Component {
     }
 }
 
+function Duration({video}) {
+    let duration = video.duration;
+    let hours = Math.floor(duration / 3600);
+    duration -= hours * 3600;
+    let minutes = Math.floor(duration / 60);
+    let seconds = duration - (minutes * 60);
+
+    hours = String('00' + hours).slice(-2);
+    minutes = String('00' + minutes).slice(-2);
+    seconds = String('00' + seconds).slice(-2);
+
+    if (hours > 0) {
+        return <div className="duration-overlay">{hours}:{minutes}:{seconds}</div>
+    }
+    return <div className="duration-overlay">{minutes}:{seconds}</div>
+}
 
 function VideoCard({video}) {
     let channel = video.channel;
+    let channel_url = `/videos/channel/${channel.link}/video`;
 
     let upload_date = null;
     if (video.upload_date) {
@@ -301,583 +311,33 @@ function VideoCard({video}) {
     let poster_url = video.poster_path ? `/media/${channel.directory}/${encodeURIComponent(video.poster_path)}` : null;
 
     return (
-        <Link to={video_url}>
-            <Card style={{'width': '18em', 'margin': '1em'}}>
-                <Image src={poster_url} wrapped/>
-                <Card.Content>
-                    <Card.Header>
+        <Card style={{'width': '18em', 'margin': '1em'}}>
+            <Link to={video_url}>
+                <Image src={poster_url} wrapped style={{position: 'relative', width: '100%'}}/>
+            </Link>
+            <Duration video={video}/>
+            <Card.Content>
+                <Card.Header>
+                    <Link to={video_url} className="no-link-underscore video-card-link">
                         <p>{video.title || video.video_path}</p>
-                    </Card.Header>
-                    <Card.Description>
-                        <p>{upload_date}</p>
-                    </Card.Description>
-                </Card.Content>
-            </Card>
-        </Link>
+                    </Link>
+                </Card.Header>
+                <Card.Description>
+                    <Link to={channel_url} className="no-link-underscore video-card-link">
+                        <b>{channel.name}</b>
+                    </Link>
+                    <p>{upload_date}</p>
+                </Card.Description>
+            </Card.Content>
+        </Card>
     )
-}
-
-class ChannelVideoPager extends Paginator {
-
-    setOffset(offset) {
-        // used in parent Paginator
-        this.props.setOffset(offset);
-    }
-
-    render() {
-        return (
-            <div className="d-flex flex-column">
-                <Header as="h1">{this.props.title}</Header>
-                <div className="d-flex flex-row">
-                    <div className="card-deck justify-content-center">
-                        {this.props.videos.map((v) => (
-                            <VideoCard key={v['id']} video={v} channel={this.props.channel}/>))}
-                    </div>
-                </div>
-                <div className="d-flex flex-row justify-content-center">
-                    {this.getPagination()}
-                </div>
-            </div>
-        )
-    }
-}
-
-function ChannelModal(props) {
-    const hide = () => props.setShow(false);
-
-    let [directories, setDirectories] = React.useState([]);
-
-    async function fetchDirectories(search_str) {
-        let dirs = await getDirectories(search_str);
-        setDirectories(dirs);
-    }
-
-    function getDirectoryInput() {
-        if (props.disableDirectory !== true) {
-            return (
-                <>
-                    <Form.Text className="text-muted">
-                        This will be appended to the root video directory in the config.
-                    </Form.Text>
-
-                    <Form.Group controlId="mkdir">
-                        <Form.Check label="Make directory, if it doesn't exist" ref={props.mkdir}/>
-                    </Form.Group>
-                </>
-            )
-        } else {
-            return (
-                <>
-                    <Form.Control type="text" ref={props.directory} disabled={true}/>
-                    <Form.Control type="hidden" ref={props.mkdir}/>
-                </>
-            )
-        }
-    }
-
-    return (
-        <Modal show={props.show} onHide={hide}>
-            <Modal.Header closeButton>
-                <Modal.Title>{props.modalTitle}</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-                <Form id={props.form_id} onSubmit={props.handleSubmit}>
-                    <Form.Group controlId="name">
-                        <Form.Label column="">Name</Form.Label>
-                        <Form.Control name="name" type="text" placeholder="Short Name" required ref={props.name}/>
-                    </Form.Group>
-
-                    <Form.Group controlId="url">
-                        <Form.Label column="">URL</Form.Label>
-                        <Form.Control type="url" placeholder="https://example.com/some-channel" ref={props.url}/>
-                    </Form.Group>
-
-                    <Form.Group controlId="directory">
-                        <Form.Label column="">Directory</Form.Label>
-                        {getDirectoryInput()}
-                    </Form.Group>
-
-                    <Form.Group controlId="match_regex">
-                        <Form.Label column="">Title Match Regex</Form.Label>
-                        <Form.Control name="match_regex" type="text" placeholder=".*(prepper|prepping).*"
-                                      ref={props.matchRegex}/>
-                        <Form.Text className="text-muted">
-                            The title of the video will be compared to this Regular Expression.
-                            <b> If you don't input this, all videos will be downloaded.</b>
-                        </Form.Text>
-                    </Form.Group>
-                </Form>
-            </Modal.Body>
-            <Modal.Footer>
-                <div className="d-flex flex-row flex-fill">
-                    <div className="d-flex flex-column align-content-start">
-                        {props.onDelete &&
-                        <Button variant="danger" onClick={props.onDelete}>
-                            Delete
-                        </Button>
-                        }
-                    </div>
-                    <div className="d-flex flex-column flex-fill">
-                        <Alert variant={(props.error ? 'danger' : 'success')} hidden={(!props.message)}>
-                            {props.message}
-                        </Alert>
-                    </div>
-                    <div className="d-flex flex-column align-content-end">
-                        <ButtonGroup>
-                            <Button variant="secondary" onClick={hide}>
-                                Close
-                            </Button>
-                            <Button type="submit" variant={props.submitBtnVariant || 'primary'} form={props.form_id}>
-                                Save
-                            </Button>
-                        </ButtonGroup>
-                    </div>
-                </div>
-            </Modal.Footer>
-        </Modal>
-    )
-}
-
-function AddChannel() {
-    const name = useRef();
-    const url = useRef();
-    const directory = useRef();
-    const mkdir = useRef();
-    const matchRegex = useRef();
-
-    const [show, setShow] = useState(false);
-    const [message, setMessage] = useState();
-    const [error, setError] = useState(false);
-
-    async function handleSubmit(event) {
-        event.preventDefault();
-        let post_url = `${VIDEOS_API}/channels`;
-        let form_data = {
-            name: name.current.value,
-            url: url.current.value,
-            directory: directory.current.state.text,
-            mkdir: mkdir.current.value,
-            match_regex: matchRegex.current.value,
-        };
-        let response = await fetch(post_url, {
-            method: 'POST',
-            body: JSON.stringify(form_data),
-        });
-
-        let data = await response.json();
-        if (data['success']) {
-            setMessage(data['success']);
-            setError(false);
-        } else if (data['error']) {
-            setMessage(data['error']);
-            setError(true);
-        }
-    }
-
-    return (
-        <>
-            <Button className="btn-success" onClick={() => setShow(true)}>
-                <span className="fas fa-plus"/>
-            </Button>
-            <ChannelModal
-                modalTitle="Add New Channel"
-                form_id="add_channel"
-                handleSubmit={handleSubmit}
-                disableDirectory={false}
-
-                name={name}
-                url={url}
-                directory={directory}
-                mkdir={mkdir}
-                matchRegex={matchRegex}
-                show={show}
-                setShow={setShow}
-                message={message}
-                error={error}
-            />
-        </>
-    )
-}
-
-function handleStream(stream_url, setAlertVariant, setAlertMessage, setProgress) {
-    function setMessage(message) {
-        setAlertVariant('success');
-        setAlertMessage(message);
-    }
-
-    function setError(message) {
-        setAlertVariant('danger');
-        setAlertMessage(message);
-    }
-
-    function handleMessage(message) {
-        let data = JSON.parse(message.data);
-        if (data['error']) {
-            setError(data['error']);
-        } else if (data['message']) {
-            setAlertVariant('success');
-            setMessage(data['message']);
-        }
-        if (data['progresses']) {
-            setProgress(data['progresses']);
-        }
-    }
-
-    function handleError(error) {
-        console.log(`Websocket ${stream_url} error:`, error);
-    }
-
-    let ws = new WebSocket(stream_url);
-    window.onbeforeunload = (e) => (ws.close);
-    ws.onmessage = handleMessage;
-    ws.onerror = handleError;
-
-    return ws;
-}
-
-function StripedProgressBar(props) {
-    return (
-        <ProgressBar striped={true} style={{'marginTop': '0.5em'}} {...props}/>
-    )
-}
-
-function AlertProgress(props) {
-
-    return (
-        <Row style={{'marginBottom': '1em'}}>
-            <Col className="col-5">
-                <Button onClick={props.onClick} disabled={props.buttonDisabled}>
-                    {props.buttonValue}
-                </Button>
-            </Col>
-            <Col className="col-7">
-                {props.description}
-                <Alert variant={props.alertVariant} show={props.alertMessage !== ''}
-                       style={{'marginTop': '1em'}}>
-                    {props.alertMessage}
-                </Alert>
-                <StripedProgressBar hidden={props.progresses[0]['now'] == null} now={props.progresses[0]['now']}/>
-                <StripedProgressBar hidden={props.progresses[1]['now'] == null} now={props.progresses[1]['now']}/>
-                <StripedProgressBar hidden={props.progresses[2]['now'] == null} now={props.progresses[2]['now']}/>
-            </Col>
-        </Row>
-    )
-}
-
-class ButtonProgressGroup extends React.Component {
-
-    constructor(props) {
-        super(props);
-        this.state = {
-            alertVariant: 'success',
-            alertMessage: '',
-            buttonDisabled: false,
-            progresses: [{'now': null}, {'now': null}, {'now': null}],
-            websocket: null,
-        };
-
-        this.setAlertVariant = this.setAlertVariant.bind(this);
-        this.setAlertMessage = this.setAlertMessage.bind(this);
-        this.setProgress = this.setProgress.bind(this);
-    }
-
-    componentWillUnmount() {
-        if (this.state.websocket) {
-            this.state.websocket.close();
-        }
-    }
-
-    setAlertVariant(variant) {
-        this.setState({'alertVariant': variant});
-    }
-
-    setError(message) {
-        this.setState({alertMessage: message, alertVariant: 'danger'});
-    }
-
-    setAlertMessage(message) {
-        this.setState({'alertMessage': message}, this.logState);
-    }
-
-    reset() {
-        this.setState({alertMessage: '', alertVariant: 'success', buttonDisabled: false});
-    }
-
-    disableButton() {
-        this.setState({buttonDisabled: true});
-    }
-
-    enableButton() {
-        this.setState({buttonDisabled: false});
-    }
-
-    setProgress(progresses) {
-        let new_progresses = [{'now': null}, {'now': null}, {'now': null}];
-        for (let i = 0; i < progresses.length; i++) {
-            new_progresses[i]['now'] = progresses[i]['now'];
-        }
-        this.setState({'progresses': new_progresses});
-    }
-
-    async fetchAndHandle(url) {
-        this.reset();
-        this.disableButton();
-        try {
-            let response = await fetch(url, {'method': 'POST'});
-            let data = await response.json();
-            if (data['stream_url']) {
-                let stream_url = data['stream_url'];
-                let ws = handleStream(stream_url, this.setAlertVariant, this.setAlertMessage, this.setProgress);
-                this.setState({'websocket': ws});
-            }
-            if (data['error']) {
-                this.setError('Server responded with an error');
-            }
-
-        } catch (e) {
-            this.setError('Server did not respond as expected');
-        }
-        this.enableButton();
-    }
-
-    render() {
-        return (
-            <AlertProgress
-                onClick={this.props.onClick}
-                buttonDisabled={this.props.buttonDisabled}
-                buttonValue={this.props.buttonValue}
-                description={this.props.description}
-                alertMessage={this.props.alertMessage}
-                alertVariant={this.props.alertVariant}
-                progresses={this.props.progresses}
-            />
-        )
-    }
-}
-
-class RefreshContent extends ButtonProgressGroup {
-
-    constructor(props) {
-        super(props);
-        this.onClick = this.onClick.bind(this);
-    }
-
-    async onClick() {
-        let url = `${VIDEOS_API}:refresh`;
-        await this.fetchAndHandle(url);
-    }
-
-    render() {
-        return (
-            <ButtonProgressGroup
-                onClick={this.onClick}
-                buttonDisabled={this.state.buttonDisabled}
-                buttonValue="Refresh Content"
-                description="Find and process all videos stored on this WROLPi."
-                alertMessage={this.state.alertMessage}
-                alertVariant={this.state.alertVariant}
-                progresses={this.state.progresses}
-            />
-        )
-    }
-}
-
-class DownloadVideos extends ButtonProgressGroup {
-
-    constructor(props) {
-        super(props);
-        this.onClick = this.onClick.bind(this);
-    }
-
-    async onClick() {
-        let url = `${VIDEOS_API}:download`;
-        await this.fetchAndHandle(url);
-    }
-
-    render() {
-        return (
-            <ButtonProgressGroup
-                onClick={this.onClick}
-                buttonValue="Download Videos"
-                description="Update channel catalogs, then download any missing videos."
-                alertMessage={this.state.alertMessage}
-                alertVariant={this.state.alertVariant}
-                progresses={this.state.progresses}
-            />
-        )
-    }
-}
-
-class ManageContent extends React.Component {
-
-    constructor(props) {
-        super(props);
-        this.state = {
-            show: false,
-        };
-
-        this.handleClose = this.handleClose.bind(this);
-        this.handleShow = this.handleShow.bind(this);
-    }
-
-    handleClose() {
-        this.setState({'show': false});
-    }
-
-    handleShow() {
-        this.setState({'show': true});
-    }
-
-    render() {
-        return (
-            <>
-                <Button
-                    id="manage_content"
-                    className="btn-secondary"
-                    onClick={this.handleShow}
-                >
-                    <span className="fas fa-cog"/>
-                </Button>
-
-                <Modal show={this.state.show} onHide={this.handleClose}>
-                    <Modal.Header>
-                        <Modal.Title>Manage Video Content</Modal.Title>
-                    </Modal.Header>
-                    <Modal.Body>
-                        <RefreshContent/>
-                        <DownloadVideos/>
-                    </Modal.Body>
-                    <Modal.Footer>
-                        <Button variant="secondary" onClick={this.handleClose}>
-                            Close
-                        </Button>
-                    </Modal.Footer>
-                </Modal>
-            </>
-        )
-    }
 }
 
 function VideoWrapper(props) {
 
     return (
-        (props.channel && props.video) ? <Video channel={props.channel} video={props.video} autoplay={false}/> : <></>
+        <Video video={props.video} autoplay={false}/>
     )
-}
-
-class NewestVideos extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            offset: 0,
-            videos: [],
-            total: null,
-        };
-        this.fetchVideos = this.fetchVideos.bind(this);
-    }
-
-    async fetchVideos() {
-        let [videos, total] = await getNewestVideos(this.state.offset);
-        this.setState({videos, total});
-    }
-
-    async componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevState.offset !== this.state.offset) {
-            await this.fetchVideos();
-            scrollToTop();
-        }
-    }
-
-    async componentDidMount() {
-        await this.fetchVideos();
-    }
-
-    render() {
-        if (this.state.total > 0) {
-            return (
-                <>
-                    <ChannelVideoPager
-                        title="Newest Videos"
-                        videos={this.state.videos}
-                        total={this.state.total}
-                        setOffset={(o) => this.setState({offset: o})}
-                        offset={this.state.offset}
-                    />
-                </>
-            )
-        } else {
-            return (
-                <p>
-                    No videos were retrieved. Have you refreshed your content?
-                    Try adding a channel and downloading the videos.
-                </p>
-            )
-        }
-    }
-}
-
-class ChannelVideos extends NewestVideos {
-
-    constructor(props) {
-        super(props);
-        this.fetchVideos = this.fetchVideos.bind(this);
-    }
-
-    async fetchVideos() {
-        let [videos, total] = await getChannelVideos(this.props.channel['link'], this.state.offset, 20);
-        this.setState({videos, total});
-    }
-
-    render() {
-        if (this.state.total > 0) {
-            return (
-                <ChannelVideoPager
-                    channel={this.props.channel}
-                    videos={this.state.videos}
-                    total={this.state.total}
-                    setOffset={(o) => this.setState({offset: o})}
-                    offset={this.state.offset}
-                />
-            )
-        } else {
-            return (
-                <p>
-                    No videos were retrieved. Have you downloaded videos for this channel?
-                </p>
-            )
-        }
-    }
-
-}
-
-class SearchVideos extends NewestVideos {
-
-    constructor(props) {
-        super(props);
-        this.fetchVideos = this.fetchVideos.bind(this);
-    }
-
-    async fetchVideos() {
-        let [videos, total] = await getSearchVideos(this.props.search_str, this.state.offset);
-        this.setState({videos, total});
-    }
-
-    render() {
-        if (this.state.total > 0) {
-            return (
-                <ChannelVideoPager
-                    channel={this.props.channel}
-                    videos={this.state.videos}
-                    total={this.state.total}
-                    setOffset={(o) => this.setState({offset: o})}
-                    offset={this.state.offset}
-                />
-            )
-        } else {
-            return <></>
-        }
-    }
-
 }
 
 function ChannelCard(props) {
@@ -1027,29 +487,42 @@ class Channels extends React.Component {
     }
 }
 
+class VideoCards extends React.Component {
+
+    render() {
+        return (
+            <Card.Group>
+                {this.props.videos.map((v) => {
+                    return <VideoCard key={v['id']} video={v}/>
+                })}
+            </Card.Group>
+        )
+    }
+}
+
+class VideoPage extends React.Component {
+
+}
+
 class Videos extends React.Component {
 
     constructor(props) {
         super(props);
         this.state = {
             channel: null,
+            videos: null,
             video: null,
             search_str: null,
             show: false,
-            videos: null,
         };
-
-        this.channelSelect = this.channelSelect.bind(this);
-        this.clearSearch = this.clearSearch.bind(this);
-        this.handleSearchEvent = this.handleSearchEvent.bind(this);
-        this.setShowModal = this.setShowModal.bind(this);
-
-        this.searchInput = React.createRef();
     }
 
     async componentDidMount() {
-        await this.fetchChannel();
-        await this.fetchVideo();
+        if (this.props.match.params.video_id) {
+            await this.fetchVideo();
+        } else {
+            await this.fetchChannel();
+        }
     }
 
     async componentDidUpdate(prevProps, prevState, snapshot) {
@@ -1094,66 +567,37 @@ class Videos extends React.Component {
     async fetchVideo() {
         // Get and display the Video specified in the Router match
         let video_id = this.props.match.params.video_id;
-        let video = null;
         if (video_id) {
-            video = await getVideo(video_id);
+            let video = await getVideo(video_id);
+            this.setState({video});
         }
-        this.setState({video});
-    }
-
-    channelSelect(selection) {
-        // Switch the channel link in the Router match
-        let channel = selection[0];
-        this.props.history.push(`/videos/${channel['link']}`);
-    }
-
-    async handleSearchEvent(event) {
-        event.preventDefault();
-        let search_str = this.searchInput.current.value;
-        this.setState({search_str, video: null, channel: null, offset: 0});
-    }
-
-    clearSearch() {
-        this.searchInput.current.value = null;
-        this.setState({search_str: null, offset: 0});
-    }
-
-    setShowModal(show) {
-        this.setState({show});
     }
 
     render() {
-        if (this.state.videos === []) {
-            return (
-                <>
-                    <Header>Newest Videos</Header>
-                    No videos retrieved. Have you downloaded videos yet?
-                </>
-            )
-        } else if (this.state.videos) {
-            return (
-                <>
-                    <Header>Newest Videos</Header>
-                    <Card.Group>
-                        {this.state.videos.map((v) => {
-                            return <VideoCard key={v['id']} video={v}/>
-                        })}
-                    </Card.Group>
-                </>
-            )
-        } else {
-            return (
-                <>
-                    <Header>Newest Videos</Header>
-                    <VideoPlaceholder/>
-                    <VideoPlaceholder/>
-                    <VideoPlaceholder/>
-                    <VideoPlaceholder/>
-                    <VideoPlaceholder/>
-                    <VideoPlaceholder/>
-                </>
-            )
+        let video = this.state.video;
+        let videos = this.state.videos;
+        let body = <VideoPlaceholder/>;
+
+        if (video) {
+            body = <VideoWrapper video={video} channel={video.channel}/>
+        } else if (videos === []) {
+            body = "No videos retrieved. Have you downloaded videos yet?";
+        } else if (videos) {
+            body = <VideoCards videos={videos}/>;
         }
+
+        let title = this.props.title;
+        if (!this.props.title && this.state.channel) {
+            // No title specified, but a channel is selected, use it's name for the title.
+            title = this.state.channel.name;
+        }
+
+        return (
+            <>
+                <Header>{title}</Header>
+                {body}
+            </>
+        )
     }
 }
 
@@ -1162,12 +606,14 @@ class VideosRoute extends React.Component {
     render() {
         return (
             <Container fluid={true} style={{margin: '2em', padding: '0.5em'}}>
-                <Route path='/videos' exact component={Videos}/>
-                <Route path='/videos/favorites' exact component={Videos}/>
+                <Route path='/videos' exact component={(i) => <Videos title="Newest Videos" match={i.match}/>}/>
+                <Route path='/videos/favorites' exact
+                       component={(i) => <Videos title="Favorite Videos" match={i.match}/>}/>
                 <Route path='/videos/channel' exact component={Channels}/>
                 <Route path='/videos/manage' exact component={ManageVideos}/>
                 <Route path='/videos/channel/:channel_link/edit' exact component={EditChannel}/>
-                <Route path='/videos/channel/:channel_link?/video/:video_id?' exact component={Videos}/>
+                <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
+                <Route path='/videos/channel/:channel_link/video/:video_id' exact component={Videos}/>
             </Container>
         )
     }

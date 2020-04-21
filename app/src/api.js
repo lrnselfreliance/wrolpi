@@ -31,6 +31,8 @@ export async function getChannel(link) {
 }
 
 export async function getChannelVideos(link, offset, limit) {
+    offset = offset || 0;
+    limit = limit || 20;
     let response = await fetch(`${VIDEOS_API}/channels/${link}/videos?offset=${offset}&limit=${limit}`);
     if (response.status === 200) {
         let data = await response.json();

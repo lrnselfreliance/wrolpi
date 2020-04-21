@@ -12,12 +12,12 @@ from api.videos.common import check_for_channel_conflicts, \
 from api.videos.schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
     ChannelPostResponse, ChannelPutRequest, SuccessResponse, ChannelVideosResponse
 
-channel_bp = Blueprint('Channel')
+channel_bp = Blueprint('Channel', url_prefix='/channels')
 
 logger = logger.getChild('channel')
 
 
-@channel_bp.get('/channels')
+@channel_bp.get('/')
 @validate_doc(
     summary='Get a list of all Channels',
     produces=ChannelsResponse,
@@ -37,7 +37,7 @@ def get_channels(request: Request):
     return response.json({'channels': new_channels})
 
 
-@channel_bp.route('/channels/<link:string>', methods=['GET', 'OPTIONS'])
+@channel_bp.route('/<link:string>', methods=['GET', 'OPTIONS'])
 @validate_doc(
     summary='Get a Channel',
     produces=ChannelResponse,
@@ -57,7 +57,7 @@ def channel_get(request: Request, link: str):
     return json_response({'channel': channel})
 
 
-@channel_bp.post('/channels')
+@channel_bp.post('/')
 @validate_doc(
     summary='Insert a Channel',
     consumes=ChannelPostRequest,
@@ -114,8 +114,8 @@ def channel_post(request: Request, data: dict):
                          {'Location': f'/api/videos/channels/{channel["link"]}'})
 
 
-@channel_bp.put('/channels/<link:string>')
-@channel_bp.patch('/channels/<link:string>')
+@channel_bp.put('/<link:string>')
+@channel_bp.patch('/<link:string>')
 @validate_doc(
     summary='Update a Channel',
     consumes=ChannelPutRequest,
@@ -170,7 +170,7 @@ def channel_update(request: Request, link: str, data: dict):
                         headers={'Location': f'/api/videos/channels/{channel["link"]}'})
 
 
-@channel_bp.delete('/channels/<link:string>')
+@channel_bp.delete('/<link:string>')
 @validate_doc(
     summary='Delete a Channel',
     produces=SuccessResponse,
@@ -193,7 +193,7 @@ def channel_delete(request, link: str):
     return response.raw('', HTTPStatus.NO_CONTENT)
 
 
-@channel_bp.get('/channels/<link:string>/videos')
+@channel_bp.get('/<link:string>/videos')
 @validate_doc(
     summary='Get Channel Videos',
     produces=ChannelVideosResponse,
@@ -202,17 +202,24 @@ def channel_delete(request, link: str):
     ),
 )
 def channel_videos(request, link: str):
-    offset = int(request.args.get('offset', 0))
+    try:
+        offset = int(request.args.get('offset', 0))
+    except ValueError:
+        raise ValidationError('Invalid offset')
+
     db: DictDB = request.ctx.get_db()
     try:
         videos, total = get_channel_videos(db, link, offset)
     except UnknownChannel:
         raise
 
-    return response.json({'videos': list(videos), 'total': total})
+    # Get each Channel for each Video, this will be converted to a dict by the response
+    _ = [i['channel'] for i in videos]
+
+    return json_response({'videos': list(videos), 'total': total})
 
 
-@channel_bp.post('/channels/conflict')
+@channel_bp.post('/conflict')
 @validate_doc(
     summary='Get any channels that conflict with the properties provided.',
     consumes=ChannelPutRequest,

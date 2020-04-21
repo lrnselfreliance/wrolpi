@@ -22,7 +22,7 @@ from sanic_openapi import doc
 from websocket import WebSocket
 
 from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents
-from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, DATE_FORMAT
+from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT, DATE_FORMAT
 
 sanic_app = Sanic()
 
@@ -306,11 +306,11 @@ def get_last_modified_headers(request_headers: dict, path: Union[Path, str]) -> 
 
     modified_since = request_headers.get('If-Modified-Since')
     if modified_since:
-        modified_since = datetime.strptime(modified_since, DATE_FORMAT)
+        modified_since = datetime.strptime(modified_since, LAST_MODIFIED_DATE_FORMAT)
         if last_modified >= modified_since:
             raise FileNotModified()
 
-    last_modified = last_modified.strftime(DATE_FORMAT)
+    last_modified = last_modified.strftime(LAST_MODIFIED_DATE_FORMAT)
     headers = {'Last-Modified': last_modified}
     return headers
 
@@ -391,9 +391,9 @@ class JSONEncodeDate(json.JSONEncoder):
 
     def default(self, obj):
         if isinstance(obj, datetime):
-            return obj.strftime(DATE_FORMAT)
+            return obj.timestamp()
         elif isinstance(obj, date):
-            return obj.strftime(DATE_FORMAT)
+            return datetime(obj.year, obj.month, obj.day).timestamp()
         return super(JSONEncodeDate, self).default(obj)
 
 

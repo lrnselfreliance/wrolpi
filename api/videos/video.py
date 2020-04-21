@@ -6,7 +6,7 @@ from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from api.common import validate_doc, logger
+from api.common import validate_doc, logger, json_response
 from api.db import get_db_context
 from api.errors import UnknownVideo, SearchEmpty, ValidationError
 from api.videos.common import get_video_info_json, get_matching_directories, get_media_directory, \
@@ -169,7 +169,7 @@ def recent_videos(request, channel_link: str = None):
         # Get each Channel for each Video, this will be converted to a dict by the response
         _ = [i['channel'] for i in videos]
 
-    return response.json({'videos': list(videos), 'total': total})
+    return json_response({'videos': list(videos), 'total': total})
 
 
 @video_bp.post('/directories')

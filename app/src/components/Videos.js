@@ -16,13 +16,13 @@ import {
     getChannelVideos,
     getConfig,
     getDirectories,
-    getRecentVideos,
+    getNewestVideos,
     getSearchVideos,
     getVideo,
     updateChannel,
     validateRegex
 } from "../api";
-import {Button, Card, Checkbox, Form, Grid, Header, Input, Loader, Placeholder, Popup} from "semantic-ui-react";
+import {Button, Card, Checkbox, Form, Grid, Header, Image, Input, Loader, Placeholder, Popup} from "semantic-ui-react";
 
 function scrollToTop() {
     window.scrollTo({
@@ -289,9 +289,8 @@ class ManageVideos extends React.Component {
 }
 
 
-function VideoCard({video, channel}) {
-    // Videos come with their own channel, use it; fallback to the global channel
-    channel = video['channel'] || channel;
+function VideoCard({video}) {
+    let channel = video.channel;
 
     let upload_date = null;
     if (video.upload_date) {
@@ -299,22 +298,20 @@ function VideoCard({video, channel}) {
         upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth() + 1}-${upload_date.getDate()}`;
     }
     let video_url = `/videos/channel/${channel.link}/video/${video.id}`;
-    let poster_url = video.poster_path ?
-        `/media/${channel.directory}/${encodeURIComponent(video.poster_path)}` : null;
+    let poster_url = video.poster_path ? `/media/${channel.directory}/${encodeURIComponent(video.poster_path)}` : null;
+
     return (
         <Link to={video_url}>
-            <Card style={{'width': '18em', 'marginBottom': '1em'}}>
-                <Card.Img
-                    variant="top"
-                    src={poster_url}
-                />
-                <Card.Body>
-                    <Header as="h4">{video.title || video.video_path}</Header>
-                    <Card.Text>
-                        <Header as="h5">{video.channel.name}</Header>
+            <Card style={{'width': '18em', 'margin': '1em'}}>
+                <Image src={poster_url} wrapped/>
+                <Card.Content>
+                    <Card.Header>
+                        <p>{video.title || video.video_path}</p>
+                    </Card.Header>
+                    <Card.Description>
                         <p>{upload_date}</p>
-                    </Card.Text>
-                </Card.Body>
+                    </Card.Description>
+                </Card.Content>
             </Card>
         </Link>
     )
@@ -780,7 +777,7 @@ class NewestVideos extends React.Component {
     }
 
     async fetchVideos() {
-        let [videos, total] = await getRecentVideos(this.state.offset);
+        let [videos, total] = await getNewestVideos(this.state.offset);
         this.setState({videos, total});
     }
 
@@ -1039,6 +1036,7 @@ class Videos extends React.Component {
             video: null,
             search_str: null,
             show: false,
+            videos: null,
         };
 
         this.channelSelect = this.channelSelect.bind(this);
@@ -1075,8 +1073,22 @@ class Videos extends React.Component {
         if (channel_link) {
             channel = await getChannel(channel_link);
         }
-        this.setState({channel: channel, offset: 0, total: null, videos: [], video: null, search_str: null},
+        this.setState({channel, offset: 0, total: null, videos: null, video: null, search_str: null},
             this.fetchVideos);
+    }
+
+    async fetchVideos() {
+        let videos = [];
+        let total = 0;
+
+        if (this.state.channel) {
+            // Display the videos for the selected channel
+            [videos, total] = await getChannelVideos(this.state.channel.link);
+        } else {
+            [videos, total] = await getNewestVideos();
+        }
+
+        this.setState({videos: videos});
     }
 
     async fetchVideo() {
@@ -1111,17 +1123,37 @@ class Videos extends React.Component {
     }
 
     render() {
-        return (
-            <>
-                <Header>Newest Videos</Header>
-                <VideoPlaceholder/>
-                <VideoPlaceholder/>
-                <VideoPlaceholder/>
-                <VideoPlaceholder/>
-                <VideoPlaceholder/>
-                <VideoPlaceholder/>
-            </>
-        )
+        if (this.state.videos === []) {
+            return (
+                <>
+                    <Header>Newest Videos</Header>
+                    No videos retrieved. Have you downloaded videos yet?
+                </>
+            )
+        } else if (this.state.videos) {
+            return (
+                <>
+                    <Header>Newest Videos</Header>
+                    <Card.Group>
+                        {this.state.videos.map((v) => {
+                            return <VideoCard key={v['id']} video={v}/>
+                        })}
+                    </Card.Group>
+                </>
+            )
+        } else {
+            return (
+                <>
+                    <Header>Newest Videos</Header>
+                    <VideoPlaceholder/>
+                    <VideoPlaceholder/>
+                    <VideoPlaceholder/>
+                    <VideoPlaceholder/>
+                    <VideoPlaceholder/>
+                    <VideoPlaceholder/>
+                </>
+            )
+        }
     }
 }
 

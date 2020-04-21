@@ -46,7 +46,8 @@ export async function getVideo(video_id) {
     return data['video'];
 }
 
-export async function getRecentVideos(offset) {
+export async function getNewestVideos(offset) {
+    offset = offset || 0;
     let response = await fetch(`${VIDEOS_API}/recent?offset=${offset}`);
     if (response.status === 200) {
         let data = await response.json();

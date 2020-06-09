@@ -29,6 +29,7 @@ services:
     volumes:
       - './app:/app'
     command: "yarn start"
+    stdin_open: true
   map:
     build:
       context: .

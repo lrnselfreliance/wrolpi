@@ -1,7 +1,7 @@
 import React from 'react';
 import {Link, Route} from "react-router-dom";
 import '../static/external/fontawesome-free/css/all.min.css';
-import {VIDEOS_API} from "./Common"
+import Paginator, {DEFAULT_LIMIT, VIDEOS_API} from "./Common"
 import Container from "react-bootstrap/Container";
 import Video from "./VideoPlayer";
 import 'react-bootstrap-typeahead/css/Typeahead.css';
@@ -16,13 +16,14 @@ import {
     validateRegex
 } from "../api";
 import {Button, Card, Checkbox, Form, Grid, Header, Image, Input, Loader, Placeholder, Popup} from "semantic-ui-react";
+import * as QueryString from 'query-string';
 
-function scrollToTop() {
-    window.scrollTo({
-        top: 0,
-        behavior: "auto"
-    });
-}
+// function scrollToTop() {
+//     window.scrollTo({
+//         top: 0,
+//         behavior: "auto"
+//     });
+// }
 
 function FieldPlaceholder() {
     return (
@@ -347,13 +348,13 @@ function ChannelCard(props) {
     async function downloadVideos(e) {
         e.preventDefault();
         let url = `${VIDEOS_API}:download/${props.channel.link}`;
-        let response = await fetch(url, {method: 'POST'});
+        await fetch(url, {method: 'POST'});
     }
 
     async function refreshVideos(e) {
         e.preventDefault();
         let url = `${VIDEOS_API}:refresh/${props.channel.link}`;
-        let response = await fetch(url, {method: 'POST'});
+        await fetch(url, {method: 'POST'});
     }
 
     return (
@@ -500,8 +501,11 @@ class VideoCards extends React.Component {
     }
 }
 
-class VideoPage extends React.Component {
-
+function changePageHistory(history, location, activePage) {
+    history.push({
+        pathname: location.pathname,
+        search: `?page=${activePage}`,
+    });
 }
 
 class Videos extends React.Component {
@@ -514,10 +518,22 @@ class Videos extends React.Component {
             video: null,
             search_str: null,
             show: false,
+            limit: DEFAULT_LIMIT,
+            activePage: 1,
+            total: null,
+            totalPages: null,
         };
+        this.changePage = this.changePage.bind(this);
     }
 
     async componentDidMount() {
+        const query = QueryString.parse(this.props.location.search);
+        let activePage = 1; // First page is 1 by default, of course.
+        if (query.page) {
+            activePage = parseInt(query.page);
+        }
+        this.setState({activePage});
+
         if (this.props.match.params.video_id) {
             await this.fetchVideo();
         } else {
@@ -528,14 +544,20 @@ class Videos extends React.Component {
     async componentDidUpdate(prevProps, prevState, snapshot) {
         let params = this.props.match.params;
 
-        let channelChange = params.channel_link !== prevProps.match.params.channel_link;
-        if (channelChange) {
+        let channelChanged = params.channel_link !== prevProps.match.params.channel_link;
+        if (channelChanged) {
             await this.fetchChannel();
         }
 
-        let videoChange = params.video_id !== prevProps.match.params.video_id;
-        if (videoChange) {
+        let videoChanged = params.video_id !== prevProps.match.params.video_id;
+        if (videoChanged) {
             await this.fetchVideo();
+        }
+
+        let pageChanged = prevState.activePage !== this.state.activePage;
+        if (pageChanged) {
+            changePageHistory(this.props.history, this.props.location, this.state.activePage);
+            await this.fetchVideos();
         }
     }
 
@@ -551,17 +573,19 @@ class Videos extends React.Component {
     }
 
     async fetchVideos() {
-        let videos = [];
-        let total = 0;
+        let videos;
+        let total;
 
         if (this.state.channel) {
             // Display the videos for the selected channel
-            [videos, total] = await getChannelVideos(this.state.channel.link);
+            let offset = this.state.limit * this.state.activePage - this.state.limit;
+            [videos, total] = await getChannelVideos(this.state.channel.link, offset, this.state.limit);
         } else {
             [videos, total] = await getNewestVideos();
         }
 
-        this.setState({videos: videos});
+        let totalPages = Math.round(total / this.state.limit) + 1;
+        this.setState({videos, total, totalPages});
     }
 
     async fetchVideo() {
@@ -573,10 +597,15 @@ class Videos extends React.Component {
         }
     }
 
+    async changePage(activePage) {
+        this.setState({activePage});
+    }
+
     render() {
         let video = this.state.video;
         let videos = this.state.videos;
         let body = <VideoPlaceholder/>;
+        let pagination = null;
 
         if (video) {
             body = <VideoWrapper video={video} channel={video.channel}/>
@@ -592,10 +621,23 @@ class Videos extends React.Component {
             title = this.state.channel.name;
         }
 
+        if (this.state.totalPages) {
+            pagination = (
+                <div style={{'marginTop': '3em', 'textAlign': 'center'}}>
+                    <Paginator
+                        activePage={this.state.activePage}
+                        changePage={this.changePage}
+                        totalPages={this.state.totalPages}
+                    />
+                </div>
+            );
+        }
+
         return (
             <>
                 <Header>{title}</Header>
                 {body}
+                {pagination}
             </>
         )
     }
@@ -606,7 +648,7 @@ class VideosRoute extends React.Component {
     render() {
         return (
             <Container fluid={true} style={{margin: '2em', padding: '0.5em'}}>
-                <Route path='/videos' exact component={(i) => <Videos title="Newest Videos" match={i.match}/>}/>
+                <Route path='/videos' exact component={(i) => <Videos title="Newest Videos" match={i.match} history={i.history} location={i.location}/>}/>
                 <Route path='/videos/favorites' exact
                        component={(i) => <Videos title="Favorite Videos" match={i.match}/>}/>
                 <Route path='/videos/channel' exact component={Channels}/>

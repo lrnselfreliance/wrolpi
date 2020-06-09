@@ -42,3 +42,7 @@ pre.wrap-text {
 .video-card-link {
     color: black;
 }
+
+.center-me {
+    margin: 0 auto;
+}

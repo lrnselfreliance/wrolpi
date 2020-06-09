@@ -19,6 +19,7 @@ logger = logger.getChild('videos')
 REQUIRED_OPTIONS = ['name', 'directory']
 
 VIDEO_QUERY_LIMIT = 20
+VIDEO_QUERY_MAX_LIMIT = 100
 
 
 def get_downloader_config() -> dict:
@@ -31,6 +32,16 @@ def get_channels_config() -> dict:
     config = get_config()
     channels = config['channels']
     return channels
+
+
+def get_allowed_limit(limit: int) -> int:
+    """
+    Return the video limit int if it was passed, unless it is over the maximum limit.  If no limit is provided, return
+    the default limit.
+    """
+    if limit:
+        return min(int(limit), VIDEO_QUERY_MAX_LIMIT)
+    return VIDEO_QUERY_LIMIT
 
 
 class ConfigError(Exception):
@@ -243,7 +254,7 @@ def verify_config():
     raise Exception(error)
 
 
-def get_channel_videos(db: DictDB, link: str, offset: int = 0) -> Tuple[List[Dict], int]:
+def get_channel_videos(db: DictDB, link: str, offset: int = 0, limit: int = 0) -> Tuple[List[Dict], int]:
     """
     Get all video objects for a particular channel that have a video file.  Also get the total videos that match this
     criteria.
@@ -258,7 +269,7 @@ def get_channel_videos(db: DictDB, link: str, offset: int = 0) -> Tuple[List[Dic
     total = len(videos)
 
     videos = videos.order_by(
-        'upload_date DESC, LOWER(title) ASC, LOWER(video_path) ASC').limit(VIDEO_QUERY_LIMIT).offset(offset)
+        'upload_date DESC, LOWER(title) ASC, LOWER(video_path) ASC').limit(limit).offset(offset)
 
     return videos, total
 

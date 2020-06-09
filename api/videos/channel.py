@@ -8,7 +8,7 @@ from sanic.request import Request
 from api.common import validate_doc, sanitize_link, logger, save_settings_config, json_response
 from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.videos.common import check_for_channel_conflicts, \
-    get_channel_videos, get_relative_to_media_directory, make_media_directory
+    get_channel_videos, get_relative_to_media_directory, make_media_directory, VIDEO_QUERY_LIMIT, get_allowed_limit
 from api.videos.schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
     ChannelPostResponse, ChannelPutRequest, SuccessResponse, ChannelVideosResponse
 
@@ -206,10 +206,14 @@ def channel_videos(request, link: str):
         offset = int(request.args.get('offset', 0))
     except ValueError:
         raise ValidationError('Invalid offset')
+    try:
+        limit = get_allowed_limit(request.args.get('limit'))
+    except ValueError:
+        raise ValidationError('Invalid limit')
 
     db: DictDB = request.ctx.get_db()
     try:
-        videos, total = get_channel_videos(db, link, offset)
+        videos, total = get_channel_videos(db, link, offset, limit)
     except UnknownChannel:
         raise
 

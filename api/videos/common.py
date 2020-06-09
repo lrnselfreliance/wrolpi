@@ -2,9 +2,10 @@ import json
 import os
 import pathlib
 import subprocess
+from datetime import datetime
 from functools import partial, lru_cache
 from pathlib import Path
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Optional
 
 from dictorm import Dict, DictDB
 
@@ -404,3 +405,16 @@ async def get_bulk_video_duration(video_ids: List[int]):
             video['duration'] = duration
             video.flush()
             db_conn.commit()
+
+
+def toggle_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
+    """
+    Toggle the timestamp on Video.favorite on a video.
+    """
+    with get_db_context(commit=True) as (db_conn, db):
+        Video = db['video']
+        video = Video.get_one(id=video_id)
+        _favorite = video['favorite'] = datetime.now() if favorite else None
+        video.flush()
+
+    return _favorite

@@ -193,36 +193,6 @@ def channel_delete(request, link: str):
     return response.raw('', HTTPStatus.NO_CONTENT)
 
 
-@channel_bp.get('/<link:string>/videos')
-@validate_doc(
-    summary='Get Channel Videos',
-    produces=ChannelVideosResponse,
-    responses=(
-            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
-    ),
-)
-def channel_videos(request, link: str):
-    try:
-        offset = int(request.args.get('offset', 0))
-    except ValueError:
-        raise ValidationError('Invalid offset')
-    try:
-        limit = get_allowed_limit(request.args.get('limit'))
-    except ValueError:
-        raise ValidationError('Invalid limit')
-
-    db: DictDB = request.ctx.get_db()
-    try:
-        videos, total = get_channel_videos(db, link, offset, limit)
-    except UnknownChannel:
-        raise
-
-    # Get each Channel for each Video, this will be converted to a dict by the response
-    _ = [i['channel'] for i in videos]
-
-    return json_response({'videos': list(videos), 'total': total})
-
-
 @channel_bp.post('/conflict')
 @validate_doc(
     summary='Get any channels that conflict with the properties provided.',

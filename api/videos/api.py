@@ -31,18 +31,19 @@ from uuid import uuid1
 
 from dictorm import DictDB, Dict
 from sanic import Blueprint, response
+from sanic.request import Request
 
 from api.common import create_websocket_feed, get_sanic_url, \
-    validate_doc, FeedReporter
+    validate_doc, FeedReporter, json_response
 from api.db import get_db_context
 from api.videos.channel import channel_bp
 from api.videos.video import video_bp
 from .captions import insert_bulk_captions
 from .common import logger, generate_video_paths, get_absolute_media_path, generate_bulk_thumbnails, \
-    get_bulk_video_duration
+    get_bulk_video_duration, toggle_video_favorite
 from .downloader import update_channels, download_all_missing_videos, upsert_video, update_channel
 from .schema import StreamResponse, \
-    JSONErrorResponse
+    JSONErrorResponse, FavoriteRequest, FavoriteResponse
 
 content_bp = Blueprint('Video Content')
 api_bp = Blueprint('Videos').group(
@@ -276,3 +277,18 @@ def refresh_videos_with_db(channel_links: list = None):
 @wraps(refresh_videos_with_db)
 async def async_refresh_videos_with_db(channel_links: list = None):
     return refresh_videos_with_db(channel_links)
+
+
+@content_bp.post(':favorite')
+@validate_doc(
+    summary='Toggle the favorite flag on a video',
+    consumes=FavoriteRequest,
+    produces=FavoriteResponse,
+    responses=[
+        (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
+    ]
+)
+async def favorite(_: Request, data: dict):
+    _favorite = toggle_video_favorite(data['video_id'], data['favorite'])
+    ret = {'video_id': data['video_id'], 'favorite': _favorite}
+    return json_response(ret, HTTPStatus.OK)

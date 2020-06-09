@@ -1,7 +1,10 @@
 import React from 'react';
 import Button from "react-bootstrap/Button";
+import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
+import {favoriteVideo} from "../api";
 
 const MEDIA_PATH = '/media';
+
 
 function Video(props) {
     let video = props.video;
@@ -31,8 +34,16 @@ function Video(props) {
 
             <p>
                 <a href={video_url}>
-                    <Button>Download</Button>
+                    <Button>
+                        <Icon name='download'/>
+                        Download
+                    </Button>
                 </a>
+                <Button color='ui red' style={{'margin': '0.5em'}}
+                        onClick={(e) => favoriteVideo(e, video.id, !!!video.favorite)}>
+                    <Icon name='heart'/>
+                    Favorite
+                </Button>
             </p>
 
             <h4>Description</h4>

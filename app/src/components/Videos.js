@@ -5,16 +5,7 @@ import Paginator, {DEFAULT_LIMIT, VIDEOS_API} from "./Common"
 import Container from "react-bootstrap/Container";
 import Video from "./VideoPlayer";
 import 'react-bootstrap-typeahead/css/Typeahead.css';
-import {
-    getChannel,
-    getChannels,
-    getChannelVideos,
-    getConfig,
-    getNewestVideos,
-    getVideo,
-    updateChannel,
-    validateRegex
-} from "../api";
+import {getChannel, getChannels, getConfig, getVideo, getVideos, updateChannel, validateRegex} from "../api";
 import {Button, Card, Checkbox, Form, Grid, Header, Image, Input, Loader, Placeholder, Popup} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 
@@ -512,6 +503,11 @@ class Videos extends React.Component {
 
     constructor(props) {
         super(props);
+        const query = QueryString.parse(this.props.location.search);
+        let activePage = 1; // First page is 1 by default, of course.
+        if (query.page) {
+            activePage = parseInt(query.page);
+        }
         this.state = {
             channel: null,
             videos: null,
@@ -519,7 +515,7 @@ class Videos extends React.Component {
             search_str: null,
             show: false,
             limit: DEFAULT_LIMIT,
-            activePage: 1,
+            activePage: activePage,
             total: null,
             totalPages: null,
         };
@@ -527,13 +523,6 @@ class Videos extends React.Component {
     }
 
     async componentDidMount() {
-        const query = QueryString.parse(this.props.location.search);
-        let activePage = 1; // First page is 1 by default, of course.
-        if (query.page) {
-            activePage = parseInt(query.page);
-        }
-        this.setState({activePage});
-
         if (this.props.match.params.video_id) {
             await this.fetchVideo();
         } else {
@@ -545,17 +534,14 @@ class Videos extends React.Component {
         let params = this.props.match.params;
 
         let channelChanged = params.channel_link !== prevProps.match.params.channel_link;
+        let videoChanged = params.video_id !== prevProps.match.params.video_id;
+        let pageChanged = prevState.activePage !== this.state.activePage;
+
         if (channelChanged) {
             await this.fetchChannel();
-        }
-
-        let videoChanged = params.video_id !== prevProps.match.params.video_id;
-        if (videoChanged) {
+        } else if (videoChanged) {
             await this.fetchVideo();
-        }
-
-        let pageChanged = prevState.activePage !== this.state.activePage;
-        if (pageChanged) {
+        } else if (pageChanged) {
             changePageHistory(this.props.history, this.props.location, this.state.activePage);
             await this.fetchVideos();
         }
@@ -573,16 +559,10 @@ class Videos extends React.Component {
     }
 
     async fetchVideos() {
-        let videos;
-        let total;
-
-        if (this.state.channel) {
-            // Display the videos for the selected channel
-            let offset = this.state.limit * this.state.activePage - this.state.limit;
-            [videos, total] = await getChannelVideos(this.state.channel.link, offset, this.state.limit);
-        } else {
-            [videos, total] = await getNewestVideos();
-        }
+        let offset = this.state.limit * this.state.activePage - this.state.limit;
+        let channel_link = this.state.channel ? this.state.channel.link : null;
+        let favorites = this.props.filter === 'favorites';
+        let [videos, total] = await getVideos(offset, this.state.limit, channel_link, null, favorites);
 
         let totalPages = Math.round(total / this.state.limit) + 1;
         this.setState({videos, total, totalPages});
@@ -648,9 +628,25 @@ class VideosRoute extends React.Component {
     render() {
         return (
             <Container fluid={true} style={{margin: '2em', padding: '0.5em'}}>
-                <Route path='/videos' exact component={(i) => <Videos title="Newest Videos" match={i.match} history={i.history} location={i.location}/>}/>
+                <Route path='/videos' exact
+                       component={(i) =>
+                           <Videos
+                               title="Newest Videos"
+                               match={i.match}
+                               history={i.history}
+                               location={i.location}
+                           />}
+                />
                 <Route path='/videos/favorites' exact
-                       component={(i) => <Videos title="Favorite Videos" match={i.match}/>}/>
+                       component={(i) =>
+                           <Videos
+                               title="Favorite Videos"
+                               match={i.match}
+                               history={i.history}
+                               location={i.location}
+                               filter='favorites'
+                           />
+                       }/>
                 <Route path='/videos/channel' exact component={Channels}/>
                 <Route path='/videos/manage' exact component={ManageVideos}/>
                 <Route path='/videos/channel/:channel_link/edit' exact component={EditChannel}/>

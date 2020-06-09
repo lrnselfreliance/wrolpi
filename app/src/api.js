@@ -1,4 +1,4 @@
-import {API_URI, VIDEOS_API} from "./components/Common";
+import {API_URI, DEFAULT_LIMIT, VIDEOS_API} from "./components/Common";
 
 export async function updateChannel(link, channel) {
     let response = await fetch(`${VIDEOS_API}/channels/${link}`,
@@ -6,14 +6,6 @@ export async function updateChannel(link, channel) {
 
     if (response.status !== 204) {
         throw Error('Failed to update channel.  See browser logs.');
-    }
-}
-
-export async function deleteChannel(channel) {
-    let response = await fetch(`${VIDEOS_API}/channels/${channel['link']}`, {method: 'DELETE'});
-
-    if (response.status !== 204) {
-        throw Error('Failed to delete channel.  See browser logs.');
     }
 }
 
@@ -30,15 +22,25 @@ export async function getChannel(link) {
     return data['channel'];
 }
 
-export async function getChannelVideos(link, offset, limit) {
+export async function getVideos(offset, limit, channel_link, search_str, favorites) {
+    // Build a search query to retrieve a list of videos from the API
     offset = offset || 0;
-    limit = limit || 20;
-    let response = await fetch(`${VIDEOS_API}/channels/${link}/videos?offset=${offset}&limit=${limit}`);
+    limit = limit || DEFAULT_LIMIT;
+    let body = {offset, limit, favorites: !!favorites};
+
+    if (search_str) {
+        body.search_str = search_str;
+    }
+    if (channel_link) {
+        body.channel_link = channel_link;
+    }
+
+    let response = await fetch(`${VIDEOS_API}/search`, {method: 'POST', body: JSON.stringify(body)});
     if (response.status === 200) {
         let data = await response.json();
-        return [data['videos'], data['total']];
+        return [data['videos'], data['totals']['videos']];
     } else {
-        throw Error('Unable to fetch videos for channel');
+        throw Error(`Unable to search videos`);
     }
 }
 
@@ -46,34 +48,6 @@ export async function getVideo(video_id) {
     let response = await fetch(`${VIDEOS_API}/video/${video_id}`);
     let data = await response.json();
     return data['video'];
-}
-
-export async function getNewestVideos(offset) {
-    offset = offset || 0;
-    let response = await fetch(`${VIDEOS_API}/recent?offset=${offset}`);
-    if (response.status === 200) {
-        let data = await response.json();
-        return [data['videos'], data['total']];
-    } else {
-        throw Error('Unable to fetch recent videos');
-    }
-}
-
-export async function getSearchVideos(search_str, offset) {
-    let form_data = {search_str: search_str, offset: offset};
-    let response = await fetch(`${VIDEOS_API}/search`, {
-        method: 'POST',
-        body: JSON.stringify(form_data),
-    });
-    let data = await response.json();
-
-    let videos = [];
-    let total = null;
-    if (data['videos']) {
-        videos = data['videos'];
-        total = data['totals']['videos'];
-    }
-    return [videos, total];
 }
 
 export async function getDirectories(search_str) {
@@ -107,4 +81,11 @@ export async function validateRegex(regex) {
     let body = {regex: regex};
     let response = await fetch(url, {method: 'POST', body: JSON.stringify(body)});
     return (await response.json())['valid'];
+}
+
+export async function favoriteVideo(event, video_id, favorite) {
+    event.preventDefault();
+    let url = `${VIDEOS_API}:favorite`;
+    let body = {favorite: favorite, video_id};
+    await fetch(url, {method: 'POST', body: JSON.stringify(body)});
 }

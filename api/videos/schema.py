@@ -112,10 +112,12 @@ class VideoResponse:
 
 
 class VideoSearchRequest:
-    search_str = doc.String(required=True)
+    search_str = doc.String()
     channel_link = doc.String()
     order_by = doc.String()
     offset = doc.Integer()
+    limit = doc.Integer()
+    favorites = doc.Boolean()
 
 
 class VideoSearchResponse:
@@ -170,3 +172,13 @@ class EchoResponse:
     headers = doc.Dictionary()
     json = doc.String()
     method = doc.String()
+
+
+class FavoriteRequest:
+    video_id = doc.Integer()
+    favorite = doc.Boolean()
+
+
+class FavoriteResponse:
+    video_id = doc.Integer()
+    favorite = doc.DateTime()

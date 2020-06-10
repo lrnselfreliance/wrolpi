@@ -43,7 +43,7 @@ def video(request, video_id: str):
 
 VIDEO_ORDERS = {
     'upload_date': 'upload_date ASC, LOWER(video_path) ASC',
-    '-upload_date': 'upload_date DESC, LOWER(video_path) DESC',
+    '-upload_date': 'upload_date DESC NULLS LAST, LOWER(video_path) DESC',
     'rank': '2 DESC, LOWER(video_path) DESC',
     '-rank': '2 ASC, LOWER(video_path) ASC',
 }

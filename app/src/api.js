@@ -22,7 +22,7 @@ export async function getChannel(link) {
     return data['channel'];
 }
 
-export async function getVideos(offset, limit, channel_link, search_str, favorites) {
+export async function searchVideos(offset, limit, channel_link, search_str, favorites, order_by) {
     // Build a search query to retrieve a list of videos from the API
     offset = offset || 0;
     limit = limit || DEFAULT_LIMIT;
@@ -34,6 +34,7 @@ export async function getVideos(offset, limit, channel_link, search_str, favorit
     if (channel_link) {
         body.channel_link = channel_link;
     }
+    body.order_by = order_by ? order_by : 'rank'
 
     let response = await fetch(`${VIDEOS_API}/search`, {method: 'POST', body: JSON.stringify(body)});
     if (response.status === 200) {
@@ -42,6 +43,10 @@ export async function getVideos(offset, limit, channel_link, search_str, favorit
     } else {
         throw Error(`Unable to search videos`);
     }
+}
+
+export async function getVideos(offset, limit, channel_link, favorites) {
+    return await searchVideos(offset, limit, channel_link, null, favorites, '-upload_date')
 }
 
 export async function getVideo(video_id) {

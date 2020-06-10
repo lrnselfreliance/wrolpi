@@ -42,10 +42,10 @@ def video(request, video_id: str):
 
 
 VIDEO_ORDERS = {
-    'upload_date': 'upload_date ASC',
-    '-upload_date': 'upload_date DESC',
-    'rank': '2 DESC',
-    '-rank': '2 ASC',
+    'upload_date': 'upload_date ASC, LOWER(video_path) ASC',
+    '-upload_date': 'upload_date DESC, LOWER(video_path) DESC',
+    'rank': '2 DESC, LOWER(video_path) DESC',
+    '-rank': '2 ASC, LOWER(video_path) ASC',
 }
 DEFAULT_VIDEO_ORDER = 'rank'
 VIDEO_QUERY_LIMIT = 20

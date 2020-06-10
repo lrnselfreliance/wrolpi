@@ -19,6 +19,31 @@ function Video(props) {
         description = video.info_json['description'];
     }
 
+    let [favorite, setFavorite] = React.useState(video.favorite);
+    let handleFavorite = async (e) => {
+        e.preventDefault();
+        let new_favorite = await favoriteVideo(video.id, !!!favorite);
+        setFavorite(new_favorite);
+    }
+    let favorite_button;
+    if (favorite) {
+        favorite_button = (
+            <Button color='ui red' style={{'margin': '0.5em'}}
+                    onClick={handleFavorite}>
+                <Icon name='heart'/>
+                Unfavorite
+            </Button>
+        );
+    } else {
+        favorite_button = (
+            <Button style={{'margin': '0.5em'}}
+                    onClick={handleFavorite}>
+                <Icon name='heart'/>
+                Favorite
+            </Button>
+        );
+    }
+
     return (
         <>
             <video controls
@@ -39,11 +64,7 @@ function Video(props) {
                         Download
                     </Button>
                 </a>
-                <Button color='ui red' style={{'margin': '0.5em'}}
-                        onClick={(e) => favoriteVideo(e, video.id, !!!video.favorite)}>
-                    <Icon name='heart'/>
-                    Favorite
-                </Button>
+                {favorite_button}
             </p>
 
             <h4>Description</h4>

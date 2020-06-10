@@ -88,9 +88,9 @@ export async function validateRegex(regex) {
     return (await response.json())['valid'];
 }
 
-export async function favoriteVideo(event, video_id, favorite) {
-    event.preventDefault();
+export async function favoriteVideo(video_id, favorite) {
     let url = `${VIDEOS_API}:favorite`;
     let body = {favorite: favorite, video_id};
-    await fetch(url, {method: 'POST', body: JSON.stringify(body)});
+    let response = await fetch(url, {method: 'POST', body: JSON.stringify(body)});
+    return (await response.json())['favorite'];
 }

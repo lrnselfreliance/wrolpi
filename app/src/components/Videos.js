@@ -356,9 +356,7 @@ function ChannelCard(props) {
                     </Link>
                 </Card.Header>
                 <Card.Description>
-                    <Link to={videosTo}>
-                        Videos: {props.channel.video_count}
-                    </Link>
+                    Videos: {props.channel.video_count}
                 </Card.Description>
             </Card.Content>
             <Card.Content extra>

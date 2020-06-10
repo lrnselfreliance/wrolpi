@@ -26,11 +26,13 @@ async def get_minimal_channels() -> List[Dict]:
     with get_db_context() as (db_conn, db):
         query = '''
             SELECT
-                id, name, link, directory, match_regex, url,
-                (select COUNT(*) from public.video as v where v.channel_id = c.id and v.video_path is not null) AS
-                    video_count
+                c.id, name, link, directory, match_regex, url, COUNT(v.id)
             FROM
                 channel AS c
+                LEFT JOIN video AS v ON v.channel_id = c.id
+            WHERE
+                v.video_path IS NOT NULL
+            GROUP BY 1, 2, 3, 4, 5, 6
             ORDER BY LOWER(name)
         '''
         curs = db.get_cursor()

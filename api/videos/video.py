@@ -1,4 +1,5 @@
 from http import HTTPStatus
+from pprint import pprint
 from typing import List, Dict, Tuple
 
 import psycopg2
@@ -46,6 +47,7 @@ VIDEO_ORDERS = {
     '-upload_date': 'upload_date DESC NULLS LAST, LOWER(video_path) DESC',
     'rank': '2 DESC, LOWER(video_path) DESC',
     '-rank': '2 ASC, LOWER(video_path) ASC',
+    'id': 'id ASC'
 }
 DEFAULT_VIDEO_ORDER = 'rank'
 VIDEO_QUERY_LIMIT = 20
@@ -61,7 +63,7 @@ def video_search(
         order_by: str = None,
         favorites: bool = None,
 ) -> Tuple[List[Dict], int]:
-    curs = db_conn.cursor()
+    curs = db.get_cursor()
 
     args = dict(search_str=search_str, offset=offset)
     channel_where = ''
@@ -85,16 +87,16 @@ def video_search(
     where = ''
     if search_str:
         # A search_str was provided by the user, modify the query to filter by it.
-        select = 'id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
+        columns = 'id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
         where = 'AND textsearch @@ websearch_to_tsquery(%(search_str)s)'
         args['search_str'] = search_str
     else:
         # No search_str provided.  Get id and total only.
-        select = 'id, COUNT(*) OVER() AS total'
+        columns = 'id, COUNT(*) OVER() AS total'
 
     query = f'''
         SELECT
-            {select}
+            {columns}
         FROM video
         WHERE
             video_path IS NOT NULL
@@ -102,13 +104,13 @@ def video_search(
             {channel_where}
             {favorites_where}
         ORDER BY {order}
-        OFFSET %(offset)s LIMIT {limit}
+        OFFSET %(offset)s LIMIT {int(limit)}
     '''
 
     curs.execute(query, args)
-    results = list(curs.fetchall())
-    total = results[0][1] if results else 0
-    ranked_ids = [i[0] for i in results]
+    results = [dict(i) for i in curs.fetchall()]
+    total = results[0]['total'] if results else 0
+    ranked_ids = [i['id'] for i in results]
 
     results = []
     if ranked_ids:

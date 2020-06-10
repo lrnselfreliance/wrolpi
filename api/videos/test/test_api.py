@@ -28,9 +28,11 @@ class TestVideoAPI(TestAPI):
         assert response.json == {'channels': []}
 
         with get_db_context(commit=True) as (db_conn, db):
-            Channel = db['channel']
-            Channel(name='Foo').flush()
-            Channel(name='Bar').flush()
+            Channel, Video = db['channel'], db['video']
+            foo = Channel(name='Foo').flush()
+            bar = Channel(name='Bar').flush()
+            Video(channel_id=foo['id'], video_path='foo').flush()
+            Video(channel_id=bar['id'], video_path='bar').flush()
 
         request, response = api_app.test_client.get('/api/videos/channels')
         assert response.status_code == HTTPStatus.OK
@@ -299,7 +301,8 @@ class TestVideoAPI(TestAPI):
             channel2 = Channel(name='Bar', link='bar').flush()
 
         # Channels don't have videos yet
-        request, response = api_app.test_client.get(f'/api/videos/channels/{channel1["link"]}/videos')
+        d = dict(channel_link=channel1['link'])
+        request, response = api_app.test_client.post(f'/api/videos/search', data=json.dumps(d))
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 0
 
@@ -309,13 +312,14 @@ class TestVideoAPI(TestAPI):
             Video(title='vid2', channel_id=channel1['id'], video_path='foo').flush()
 
         # Videos are gotten by their respective channels
-        request, response = api_app.test_client.get(f'/api/videos/channels/{channel1["link"]}/videos')
+        request, response = api_app.test_client.post(f'/api/videos/search', data=json.dumps(d))
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 1
-        assert response.json['total'] == 1
+        assert response.json['totals']['videos'] == 1
         self.assertDictContains(response.json['videos'][0], dict(id=2, title='vid2', channel_id=channel1['id']))
 
-        request, response = api_app.test_client.get(f'/api/videos/channels/{channel2["link"]}/videos')
+        d = dict(channel_link=channel2['link'])
+        request, response = api_app.test_client.post(f'/api/videos/search', data=json.dumps(d))
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 1
         self.assertDictContains(response.json['videos'][0], dict(id=1, title='vid1', channel_id=channel2['id']))
@@ -367,11 +371,12 @@ class TestVideoAPI(TestAPI):
         ]
         last_ids = []
         for offset, video_count in tests:
-            _, response = api_app.test_client.get(f'/api/videos/channels/{channel1["link"]}/videos?offset={offset}')
+            d = dict(channel_link=channel1['link'], order_by='id', offset=offset)
+            _, response = api_app.test_client.post(f'/api/videos/search', data=json.dumps(d))
             assert response.status_code == HTTPStatus.OK
             assert len(response.json['videos']) == video_count
             current_ids = [i['id'] for i in response.json['videos']]
-            assert current_ids != last_ids
+            assert current_ids != last_ids, f'IDs are unchanged {current_ids=}'
             last_ids = current_ids
 
     @wrap_test_db
@@ -390,10 +395,10 @@ class TestVideoAPI(TestAPI):
         with get_db_context(commit=True) as (db_conn, db):
             Video = db['video']
             for title, caption in videos:
-                Video(title=title, caption=caption).flush()
+                Video(title=title, caption=caption, video_path='foo').flush()
 
-        def do_search(search_str):
-            d = json.dumps({'search_str': search_str})
+        def do_search(search_str, limit=20):
+            d = json.dumps({'search_str': search_str, 'limit': limit})
             _, resp = api_app.test_client.post('/api/videos/search', data=d)
             return resp
 
@@ -402,15 +407,6 @@ class TestVideoAPI(TestAPI):
             response_ids = [i['id'] for i in resp.json['videos']]
             assert response_ids == expected
             assert resp.json['totals']['videos'] == len(expected)
-
-        # No search_str, get an error
-        response = do_search('')
-        assert response.json == {
-            'cause': {'code': 8,
-                      'error': 'Search is empty, search_str must have content.'},
-            'code': 10,
-            'error': 'Could not validate the contents of the request',
-        }
 
         # Repeated runs should return the same result
         for _ in range(2):
@@ -439,7 +435,6 @@ class TestVideoAPI(TestAPI):
         search_is_as_expected(response, [1, 4])
 
         # Check totals are correct even with a limit
-        with mock.patch('api.videos.video.VIDEO_QUERY_LIMIT', 2):
-            response = do_search('b')
-            assert [i['id'] for i in response.json['videos']] == [1, 2]
-            assert response.json['totals']['videos'] == 4
+        response = do_search('b', 2)
+        assert [i['id'] for i in response.json['videos']] == [1, 2]
+        assert response.json['totals']['videos'] == 4

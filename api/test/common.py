@@ -34,7 +34,7 @@ def wrap_test_db(func):
         # This is the Docker db container
         db_args = dict(
             user='postgres',
-            password='postgres',
+            password='wrolpi',
             host='127.0.0.1',
             port=54321,
         )

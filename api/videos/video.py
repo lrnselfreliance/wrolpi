@@ -86,7 +86,7 @@ def video_search(
     if search_str:
         # A search_str was provided by the user, modify the query to filter by it.
         select = 'id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
-        where = 'textsearch @@ websearch_to_tsquery(%(search_str)s)'
+        where = 'AND textsearch @@ websearch_to_tsquery(%(search_str)s)'
         args['search_str'] = search_str
     else:
         # No search_str provided.  Get id and total only.

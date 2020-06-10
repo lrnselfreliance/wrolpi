@@ -1,9 +1,9 @@
 import React from 'react';
 import {Link, Route} from "react-router-dom";
 import '../static/external/fontawesome-free/css/all.min.css';
-import Paginator, {API_URI, DEFAULT_LIMIT, VIDEOS_API} from "./Common"
+import Paginator, {DEFAULT_LIMIT, VIDEOS_API} from "./Common"
 import Video from "./VideoPlayer";
-import {getChannel, getChannels, getConfig, getVideo, getVideos, updateChannel, validateRegex} from "../api";
+import {getChannel, getChannels, getConfig, getVideo, searchVideos, updateChannel, validateRegex} from "../api";
 import {Button, Card, Checkbox, Form, Grid, Header, Image, Input, Loader, Placeholder, Popup} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
@@ -569,7 +569,7 @@ class Videos extends React.Component {
         let offset = this.state.limit * this.state.activePage - this.state.limit;
         let channel_link = this.state.channel ? this.state.channel.link : null;
         let favorites = this.props.filter === 'favorites';
-        let [videos, total] = await getVideos(offset, this.state.limit, channel_link, null, favorites);
+        let [videos, total] = await searchVideos(offset, this.state.limit, channel_link, this.state.search_str, favorites);
 
         let totalPages = Math.round(total / this.state.limit) + 1;
         this.setState({videos, total, totalPages});
@@ -586,6 +586,15 @@ class Videos extends React.Component {
 
     async changePage(activePage) {
         this.setState({activePage});
+    }
+
+    handleSearch = async (e) => {
+        e.preventDefault();
+        await this.fetchVideos();
+    }
+
+    handleInputChange = (event, {name, value}) => {
+        this.setState({[name]: value});
     }
 
     render() {
@@ -622,7 +631,21 @@ class Videos extends React.Component {
 
         return (
             <>
-                <Header>{title}</Header>
+                <Grid columns={2}>
+                    <Grid.Column>
+                        <Header>{title}</Header>
+                    </Grid.Column>
+                    <Grid.Column textAlign='right'>
+                        <Form onSubmit={this.handleSearch}>
+                            <Input
+                                icon='search'
+                                placeholder='Search...'
+                                size="large"
+                                name="search_str"
+                                onChange={this.handleInputChange}/>
+                        </Form>
+                    </Grid.Column>
+                </Grid>
                 {body}
                 {pagination}
             </>

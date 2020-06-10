@@ -26,7 +26,7 @@ async def get_minimal_channels() -> List[Dict]:
     with get_db_context() as (db_conn, db):
         query = '''
             SELECT
-                c.id, name, link, directory, match_regex, url, COUNT(v.id)
+                c.id, name, link, directory, match_regex, url, COUNT(v.id) AS video_count
             FROM
                 channel AS c
                 LEFT JOIN video AS v ON v.channel_id = c.id

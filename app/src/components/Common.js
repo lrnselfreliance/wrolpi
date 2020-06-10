@@ -3,7 +3,7 @@ import {Pagination} from 'semantic-ui-react';
 
 export const API_URI = process.env.REACT_APP_API ? process.env.REACT_APP_API : '127.0.0.1:8080';
 export const VIDEOS_API = `http://${API_URI}/api/videos`;
-export const DEFAULT_LIMIT = 16;
+export const DEFAULT_LIMIT = 18;
 
 export default class Paginator extends React.Component {
     state = {

@@ -8,7 +8,7 @@ from sanic.request import Request
 
 from api.common import validate_doc, logger, json_response, string_to_boolean
 from api.db import get_db_context
-from api.errors import UnknownVideo, ValidationError
+from api.errors import UnknownVideo, ValidationError, InvalidOrderBy
 from api.videos.common import get_video_info_json, get_matching_directories, get_media_directory, \
     get_relative_to_media_directory, get_allowed_limit
 from api.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse, \
@@ -134,6 +134,9 @@ def search(_: Request, data: dict):
         favorites = string_to_boolean(data['favorites']) if 'favorites' in data else None
     except Exception as e:
         raise ValidationError('Unable to validate search queries') from e
+
+    if order_by not in VIDEO_ORDERS:
+        raise InvalidOrderBy('Invalid order by')
 
     with get_db_context() as (db_conn, db):
         videos, videos_total = video_search(db_conn, db, search_str, offset, limit, channel_link, order_by, favorites)

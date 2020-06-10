@@ -65,6 +65,10 @@ class NoBodyContents(APIError):
     pass
 
 
+class InvalidOrderBy(ValidationError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -141,6 +145,11 @@ API_ERRORS = {
     NoBodyContents: {
         'code': next(error_codes),
         'message': 'No content in the body of the request',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    InvalidOrderBy: {
+        'code': next(error_codes),
+        'message': 'Invalid order_by',
         'status': HTTPStatus.BAD_REQUEST,
     },
 }

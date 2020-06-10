@@ -1,20 +1,43 @@
 import asyncio
 from http import HTTPStatus
+from typing import List, Dict
 
 from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
 from api.common import validate_doc, sanitize_link, logger, save_settings_config, json_response
+from api.db import get_db_context
 from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.videos.common import check_for_channel_conflicts, \
-    get_channel_videos, get_relative_to_media_directory, make_media_directory, VIDEO_QUERY_LIMIT, get_allowed_limit
+    get_relative_to_media_directory, make_media_directory
 from api.videos.schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
-    ChannelPostResponse, ChannelPutRequest, SuccessResponse, ChannelVideosResponse
+    ChannelPostResponse, ChannelPutRequest, SuccessResponse
 
 channel_bp = Blueprint('Channel', url_prefix='/channels')
 
 logger = logger.getChild('channel')
+
+
+async def get_minimal_channels() -> List[Dict]:
+    """
+    Get the minimum amount of information necessary about all channels.
+    """
+    with get_db_context() as (db_conn, db):
+        query = '''
+            SELECT
+                id, name, link, directory, match_regex, url,
+                (select COUNT(*) from public.video as v where v.channel_id = c.id and v.video_path is not null) AS
+                    video_count
+            FROM
+                channel AS c
+            ORDER BY LOWER(name)
+        '''
+        curs = db.get_cursor()
+        curs.execute(query)
+        results = [dict(i) for i in curs.fetchall()]
+
+    return results
 
 
 @channel_bp.get('/')
@@ -22,19 +45,9 @@ logger = logger.getChild('channel')
     summary='Get a list of all Channels',
     produces=ChannelsResponse,
 )
-def get_channels(request: Request):
-    db: DictDB = request.ctx.get_db()
-    Channel, Video = db['channel'], db['video']
-    channels = Channel.get_where().order_by('LOWER(name) ASC')
-    # Minimize the data returned when getting all channels
-    keys = {'id', 'name', 'link', 'directory', 'match_regex', 'url'}
-    new_channels = [{k: c[k] for k in keys} for c in channels]
-
-    # Add video count to each channel
-    for idx, channel in enumerate(new_channels):
-        channel['video_count'] = len([i for i in channels[idx]['videos'] if i['video_path']])
-
-    return response.json({'channels': new_channels})
+async def get_channels(_: Request):
+    channels = await get_minimal_channels()
+    return response.json({'channels': channels})
 
 
 @channel_bp.route('/<link:string>', methods=['GET', 'OPTIONS'])

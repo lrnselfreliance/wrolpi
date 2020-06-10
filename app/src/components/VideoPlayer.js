@@ -28,7 +28,7 @@ function Video(props) {
     let favorite_button;
     if (favorite) {
         favorite_button = (
-            <Button color='ui red' style={{'margin': '0.5em'}}
+            <Button color='red' style={{'margin': '0.5em'}}
                     onClick={handleFavorite}>
                 <Icon name='heart'/>
                 Unfavorite

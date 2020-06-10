@@ -607,8 +607,10 @@ class Videos extends React.Component {
 
         if (video) {
             body = <VideoWrapper video={video} channel={video.channel}/>
-        } else if (videos === []) {
-            body = "No videos retrieved. Have you downloaded videos yet?";
+        } else if (videos && videos.length === 0 && this.props.filter !== 'favorites') {
+            body = <p>No videos retrieved. Have you downloaded videos yet?</p>;
+        } else if (videos && videos.length === 0 && this.props.filter === 'favorites') {
+            body = <p>You haven't tagged any videos as favorite.</p>;
         } else if (videos) {
             body = <VideoCards videos={videos}/>;
         }

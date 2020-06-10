@@ -68,7 +68,7 @@ def update_channels(db_conn, db):
     """Update all information for each channel.  (No downloads performed)"""
     Channel = db['channel']
 
-    channels = list(Channel.get_where())
+    channels = list(Channel.get_where(Channel['url'].IsNotNull()))
     logger.debug(f'Getting info for {len(channels)} channels')
     calc_progress = make_progress_calculator(len(channels))
     for idx, channel in enumerate(channels):

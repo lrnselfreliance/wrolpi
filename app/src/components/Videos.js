@@ -1,7 +1,7 @@
 import React from 'react';
 import {Link, Route} from "react-router-dom";
 import '../static/external/fontawesome-free/css/all.min.css';
-import Paginator, {DEFAULT_LIMIT, VIDEOS_API} from "./Common"
+import Paginator, {API_URI, DEFAULT_LIMIT, VIDEOS_API} from "./Common"
 import Video from "./VideoPlayer";
 import {getChannel, getChannels, getConfig, getVideo, getVideos, updateChannel, validateRegex} from "../api";
 import {Button, Card, Checkbox, Form, Grid, Header, Image, Input, Loader, Placeholder, Popup} from "semantic-ui-react";
@@ -253,18 +253,28 @@ function EditChannel(props) {
 
 class ManageVideos extends React.Component {
 
+    download = async (e) => {
+        e.preventDefault();
+        await fetch(`${VIDEOS_API}:download`, {method: 'POST'});
+    }
+
+    refresh = async (e) => {
+        e.preventDefault();
+        await fetch(`${VIDEOS_API}:refresh`, {method: 'POST'});
+    }
+
     render() {
         return (
             <>
                 <Header as="h1">Manage Videos</Header>
 
                 <p>
-                    <Button primary>Download Videos</Button>
+                    <Button primary onClick={this.download}>Download Videos</Button>
                     <label>Download any missing videos</label>
                 </p>
 
                 <p>
-                    <Button secondary>Refresh Video Files</Button>
+                    <Button secondary onClick={this.refresh}>Refresh Video Files</Button>
                     <label>Search for any videos in the media directory</label>
                 </p>
             </>

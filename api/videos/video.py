@@ -82,6 +82,7 @@ def video_search(
     if favorites is not None:
         favorites_where = f'AND favorite IS {"NOT" if favorites else ""} NULL'
 
+    where = ''
     if search_str:
         # A search_str was provided by the user, modify the query to filter by it.
         select = 'id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
@@ -90,14 +91,13 @@ def video_search(
     else:
         # No search_str provided.  Get id and total only.
         select = 'id, COUNT(*) OVER() AS total'
-        # don't filter by anything by default
-        where = 'id IS NOT NULL'
 
     query = f'''
         SELECT
             {select}
         FROM video
         WHERE
+            video_path IS NOT NULL
             {where}
             {channel_where}
             {favorites_where}

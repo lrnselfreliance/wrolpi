@@ -37,7 +37,7 @@ def get_db(dbname=None) -> Tuple[SemaphoreThreadedConnectionPool, connection, Di
     db_args = dict(
         dbname=dbname or 'wrolpi',
         user='postgres',
-        password='postgres',
+        password='wrolpi',
         host='127.0.0.1',
         port=54321,
     )

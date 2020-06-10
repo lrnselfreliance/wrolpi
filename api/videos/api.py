@@ -31,18 +31,19 @@ from uuid import uuid1
 
 from dictorm import DictDB, Dict
 from sanic import Blueprint, response
+from sanic.request import Request
 
 from api.common import create_websocket_feed, get_sanic_url, \
-    validate_doc, FeedReporter
+    validate_doc, FeedReporter, json_response
 from api.db import get_db_context
 from api.videos.channel import channel_bp
 from api.videos.video import video_bp
 from .captions import insert_bulk_captions
 from .common import logger, generate_video_paths, get_absolute_media_path, generate_bulk_thumbnails, \
-    get_bulk_video_duration
-from .downloader import update_channels, download_all_missing_videos, insert_video
+    get_bulk_video_duration, toggle_video_favorite
+from .downloader import update_channels, download_all_missing_videos, upsert_video, update_channel
 from .schema import StreamResponse, \
-    JSONErrorResponse
+    JSONErrorResponse, FavoriteRequest, FavoriteResponse
 
 content_bp = Blueprint('Video Content')
 api_bp = Blueprint('Videos').group(
@@ -51,10 +52,11 @@ api_bp = Blueprint('Videos').group(
     video_bp,  # view videos
     url_prefix='/videos')
 
-refresh_queue, refresh_event = create_websocket_feed('/feeds/refresh', content_bp)
+refresh_queue, refresh_event = create_websocket_feed('refresh', '/feeds/refresh', content_bp)
 
 
-@content_bp.post('/settings:refresh')
+@content_bp.post(':refresh')
+@content_bp.post(':refresh/<link:string>')
 @validate_doc(
     summary='Search for videos that have previously been downloaded and stored.',
     produces=StreamResponse,
@@ -62,7 +64,7 @@ refresh_queue, refresh_event = create_websocket_feed('/feeds/refresh', content_b
         (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
     ],
 )
-async def refresh(_):
+async def refresh(_, link: str = None):
     refresh_logger = logger.getChild('refresh')
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/refresh')
 
@@ -76,8 +78,8 @@ async def refresh(_):
         try:
             refresh_logger.info('refresh started')
 
-            with get_db_context(commit=True) as (db_conn, db):
-                _refresh_videos(db, refresh_queue)
+            channel_links = [link] if link else None
+            refresh_videos_with_db(channel_links)
 
             refresh_logger.info('refresh complete')
         except Exception as e:
@@ -92,10 +94,11 @@ async def refresh(_):
     return response.json({'code': 'stream-started', 'stream_url': stream_url})
 
 
-download_queue, download_event = create_websocket_feed('/feeds/download', content_bp)
+download_queue, download_event = create_websocket_feed('download', '/feeds/download', content_bp)
 
 
-@content_bp.post('/settings:download')
+@content_bp.post(':download')
+@content_bp.post(':download/<link:string>')
 @validate_doc(
     summary='Update channel catalogs, download any missing videos',
     produces=StreamResponse,
@@ -103,7 +106,7 @@ download_queue, download_event = create_websocket_feed('/feeds/download', conten
         (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
     ],
 )
-async def download(_):
+async def download(_, link: str = None):
     download_logger = logger.getChild('download')
 
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/download')
@@ -118,12 +121,16 @@ async def download(_):
         try:
             download_logger.info('download started')
 
-            with get_db_context(commit=True) as (db_conn, db):
-                for msg in update_channels(db_conn, db):
-                    download_queue.put(msg)
-                download_logger.info('Updated all channel catalogs')
-                for msg in download_all_missing_videos(db_conn, db):
-                    download_queue.put(msg)
+            if link:
+                with get_db_context(commit=True) as (db_conn, db):
+                    update_channel(db_conn, db, link=link)
+            else:
+                with get_db_context(commit=True) as (db_conn, db):
+                    for msg in update_channels(db_conn, db):
+                        download_queue.put(msg)
+                    download_logger.info('Updated all channel catalogs')
+                    for msg in download_all_missing_videos(db_conn, db):
+                        download_queue.put(msg)
 
             download_logger.info('download complete')
         except Exception as e:
@@ -165,7 +172,7 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
     new_videos = {p for p in possible_new_paths if str(p.relative_to(directory)) not in existing_paths}
 
     for video_path in new_videos:
-        insert_video(db, pathlib.Path(video_path), channel, idempotency=idempotency)
+        upsert_video(db, pathlib.Path(video_path), channel, idempotency=idempotency)
         logger.debug(f'{channel["name"]}: Added {video_path}')
 
     reporter.message('Matched all existing video files')
@@ -219,7 +226,7 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
         logger.debug('No videos missing duration')
 
 
-def _refresh_videos(db: DictDB, q: Queue, channel_names: list = None):
+def _refresh_videos(db: DictDB, q: Queue, channel_links: list = None):
     """
     Find any videos in the channel directories and add them to the DB.  Delete DB records of any videos not in the
     file system.
@@ -236,15 +243,15 @@ def _refresh_videos(db: DictDB, q: Queue, channel_names: list = None):
     reporter.code('refresh-started')
     reporter.set_progress_total(0, Channel.count())
 
-    if channel_names:
-        channels = Channel.get_where(Channel['name'].In(channel_names))
+    if channel_links:
+        channels = Channel.get_where(Channel['link'].In(channel_links))
     else:
         channels = Channel.get_where()
 
     channels = list(channels)
 
-    if not channels and channel_names:
-        raise Exception(f'No channels match name(s): {channel_names}')
+    if not channels and channel_links:
+        raise Exception(f'No channels match links(s): {channel_links}')
     elif not channels:
         raise Exception(f'No channels in DB.  Have you created any?')
 
@@ -257,16 +264,31 @@ def _refresh_videos(db: DictDB, q: Queue, channel_names: list = None):
 
 
 @wraps(_refresh_videos)
-def refresh_videos(db: DictDB, channel_names: list = None):
-    return _refresh_videos(db, refresh_queue, channel_names=channel_names)
+def refresh_videos(db: DictDB, channel_links: list = None):
+    return _refresh_videos(db, refresh_queue, channel_links=channel_links)
 
 
 @wraps(_refresh_videos)
-def refresh_videos_with_db(channel_names: list = None):
+def refresh_videos_with_db(channel_links: list = None):
     with get_db_context(commit=True) as (db_conn, db):
-        return refresh_videos(db, channel_names=channel_names)
+        return refresh_videos(db, channel_links=channel_links)
 
 
 @wraps(refresh_videos_with_db)
-async def async_refresh_videos_with_db(channel_names: list = None):
-    return refresh_videos_with_db(channel_names)
+async def async_refresh_videos_with_db(channel_links: list = None):
+    return refresh_videos_with_db(channel_links)
+
+
+@content_bp.post(':favorite')
+@validate_doc(
+    summary='Toggle the favorite flag on a video',
+    consumes=FavoriteRequest,
+    produces=FavoriteResponse,
+    responses=[
+        (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
+    ]
+)
+async def favorite(_: Request, data: dict):
+    _favorite = toggle_video_favorite(data['video_id'], data['favorite'])
+    ret = {'video_id': data['video_id'], 'favorite': _favorite}
+    return json_response(ret, HTTPStatus.OK)

@@ -5,34 +5,39 @@ from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from api.common import validate_doc, sanitize_link, logger, save_settings_config
+from api.common import validate_doc, sanitize_link, logger, save_settings_config, json_response
 from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.videos.common import check_for_channel_conflicts, \
-    get_channel_videos, get_relative_to_media_directory, make_media_directory
+    get_channel_videos, get_relative_to_media_directory, make_media_directory, VIDEO_QUERY_LIMIT, get_allowed_limit
 from api.videos.schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
     ChannelPostResponse, ChannelPutRequest, SuccessResponse, ChannelVideosResponse
 
-channel_bp = Blueprint('Channel')
+channel_bp = Blueprint('Channel', url_prefix='/channels')
 
 logger = logger.getChild('channel')
 
 
-@channel_bp.get('/channels')
+@channel_bp.get('/')
 @validate_doc(
     summary='Get a list of all Channels',
     produces=ChannelsResponse,
 )
 def get_channels(request: Request):
     db: DictDB = request.ctx.get_db()
-    Channel = db['channel']
+    Channel, Video = db['channel'], db['video']
     channels = Channel.get_where().order_by('LOWER(name) ASC')
     # Minimize the data returned when getting all channels
     keys = {'id', 'name', 'link', 'directory', 'match_regex', 'url'}
-    channels = [{k: c[k] for k in keys} for c in channels]
-    return response.json({'channels': channels})
+    new_channels = [{k: c[k] for k in keys} for c in channels]
+
+    # Add video count to each channel
+    for idx, channel in enumerate(new_channels):
+        channel['video_count'] = len([i for i in channels[idx]['videos'] if i['video_path']])
+
+    return response.json({'channels': new_channels})
 
 
-@channel_bp.route('/channels/<link:string>', methods=['GET', 'OPTIONS'])
+@channel_bp.route('/<link:string>', methods=['GET', 'OPTIONS'])
 @validate_doc(
     summary='Get a Channel',
     produces=ChannelResponse,
@@ -49,10 +54,10 @@ def channel_get(request: Request, link: str):
     # Remove the info_json stuff
     channel = dict(channel)
     channel.pop('info_json')
-    return response.json({'channel': channel})
+    return json_response({'channel': channel})
 
 
-@channel_bp.post('/channels')
+@channel_bp.post('/')
 @validate_doc(
     summary='Insert a Channel',
     consumes=ChannelPostRequest,
@@ -102,15 +107,15 @@ def channel_post(request: Request, data: dict):
 
     # Refresh the videos asynchronously
     from api.videos.api import async_refresh_videos_with_db
-    coro = async_refresh_videos_with_db([data['name']])
+    coro = async_refresh_videos_with_db([channel['link']])
     asyncio.ensure_future(coro)
 
     return response.json({'success': 'Channel created successfully'}, HTTPStatus.CREATED,
                          {'Location': f'/api/videos/channels/{channel["link"]}'})
 
 
-@channel_bp.put('/channels/<link:string>')
-@channel_bp.patch('/channels/<link:string>')
+@channel_bp.put('/<link:string>')
+@channel_bp.patch('/<link:string>')
 @validate_doc(
     summary='Update a Channel',
     consumes=ChannelPutRequest,
@@ -165,7 +170,7 @@ def channel_update(request: Request, link: str, data: dict):
                         headers={'Location': f'/api/videos/channels/{channel["link"]}'})
 
 
-@channel_bp.delete('/channels/<link:string>')
+@channel_bp.delete('/<link:string>')
 @validate_doc(
     summary='Delete a Channel',
     produces=SuccessResponse,
@@ -188,26 +193,7 @@ def channel_delete(request, link: str):
     return response.raw('', HTTPStatus.NO_CONTENT)
 
 
-@channel_bp.get('/channels/<link:string>/videos')
-@validate_doc(
-    summary='Get Channel Videos',
-    produces=ChannelVideosResponse,
-    responses=(
-            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
-    ),
-)
-def channel_videos(request, link: str):
-    offset = int(request.args.get('offset', 0))
-    db: DictDB = request.ctx.get_db()
-    try:
-        videos, total = get_channel_videos(db, link, offset)
-    except UnknownChannel:
-        raise
-
-    return response.json({'videos': list(videos), 'total': total})
-
-
-@channel_bp.post('/channels/conflict')
+@channel_bp.post('/conflict')
 @validate_doc(
     summary='Get any channels that conflict with the properties provided.',
     consumes=ChannelPutRequest,

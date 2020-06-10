@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import mock
 
 from api.db import get_db_context
@@ -44,9 +42,6 @@ class TestCaption(TestAPI):
             video2 = Video(title='bar', caption_path=str(self.vtt_path2)).flush()
             with mock.patch('api.videos.captions.get_absolute_video_caption', lambda *a: self.vtt_path2):
                 captions.process_captions(video2)
-
-            v1_id = video1['id']
-            v2_id = video2['id']
 
             # Get the video from the DB
             video1 = Video.get_one(id=video1['id'])

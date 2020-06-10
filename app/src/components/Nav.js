@@ -1,66 +1,90 @@
 import React from "react";
-import {Navbar} from "react-bootstrap";
-import Nav from "react-bootstrap/Nav";
 import {NavLink} from "react-router-dom";
+import {Dropdown, Menu, Responsive} from "semantic-ui-react";
 
-const Modules = [
-    {href: '/videos', name: 'Videos'},
-    {href: '/map', name: 'Map'}
+const responsiveWidth = 500;
+
+const links = [
+    {
+        text: 'Videos', links: [
+            {to: '/videos', text: 'Newest Videos', exact: true},
+            {to: '/videos/favorites', text: 'Favorites', exact: true},
+            {to: '/videos/channel', text: 'Channels', exact: true},
+            {to: '/videos/manage', text: 'Manage', exact: true},
+        ]
+    },
+    {to: '/map', text: 'Map'},
 ];
+const settings = {to: '/settings', text: 'Settings', exact: true};
+const rightLinks = [settings,];
 
-function Module(props) {
+const collapsedLinks = links.concat([settings,]);
+
+function DropdownLinks(props) {
     return (
-        <NavLink
-            className="nav-link"
-            to={props.href}
-            activeClassName="active"
-        >
-            {props.name}
-        </NavLink>
+        <Dropdown item text={props.link.text}>
+            <Dropdown.Menu>
+                {props.link.links.map((l) => {
+                    return (
+                        <Link key={l.to} link={l}/>
+                    )
+                })}
+            </Dropdown.Menu>
+        </Dropdown>
     )
 }
 
-function ModuleList(props) {
-    return props.plugins.map(
-        (plugin) => <Module key={plugin['href']} {...plugin}/>
-    )
-}
+function Link(props) {
+    let classes = 'item';
+    if (props.link.header) {
+        classes = `${classes} header`;
+    }
 
-function NavSettings() {
-    return (
-        <Nav className="navbar-nav ml-auto">
+    if (!props.link.links) {
+        return (
             <NavLink
-                className="nav-link"
-                to="/settings"
-                activeClassName="active"
+                className={classes}
+                exact={props.link.exact || false}
+                to={props.link.to}
             >
-                Settings
+                {props.link.text}
             </NavLink>
-        </Nav>
-    )
+        )
+    } else {
+        return (
+            <DropdownLinks link={props.link}/>
+        )
+    }
 }
 
 export function NavBar() {
     return (
-        <Navbar bg="light" expand="lg">
-            <NavLink
-                className="navbar-brand"
-                to="/"
-                exact={true}
-                activeClassName="active"
-            >
-                <img src='/apple-touch-icon.png' height="30" width="30" alt=""/>
-                WROLPi
-            </NavLink>
-            <Navbar.Toggle aria-controls="basic-navbar-nav"/>
-            <Navbar.Collapse id="basic-navbar-nav">
-                <Nav className="mr-auto">
-                    <ModuleList plugins={Modules}/>
-                </Nav>
-                <Nav className="ml-auto">
-                    <NavSettings/>
-                </Nav>
-            </Navbar.Collapse>
-        </Navbar>
+        <Menu>
+            {/*Always show WROLPi home button*/}
+            <Link link={{to: '/', text: 'WROLPi', exact: true}}/>
+
+            {/*Show the links in a menu when on desktop*/}
+            {links.map((link) => {
+                return (
+                    <Responsive minWidth={responsiveWidth} as={Link} link={link} key={link.to}/>
+                )
+            })}
+            <Responsive minWidth={responsiveWidth} as={Menu.Menu} position="right">
+                {rightLinks.map((link) => {
+                    return (<Link link={link} key={link.to}/>)
+                })}
+            </Responsive>
+
+            {/*Show the menu items in a dropdown when on mobile*/}
+            <Responsive as={Menu.Menu} maxWidth={responsiveWidth - 1} position='right'>
+                <Dropdown item icon="bars">
+                    <Dropdown.Menu>
+                        {collapsedLinks.map((link) => {
+                            return (<Link link={link} key={link.to}/>)
+                        })}
+                    </Dropdown.Menu>
+                </Dropdown>
+            </Responsive>
+        </Menu>
     )
 }

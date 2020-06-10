@@ -6,8 +6,8 @@ ENV PATH /app/node_modules/.bin:$PATH
 
 # install and cache app dependencies
 COPY app .env* /app/
+RUN rm -rf /app/node_modules
 RUN npm install --silent
-RUN npm install react-scripts@3.3.0 -g --silent
 
 # Create the production build
 RUN yarn run build

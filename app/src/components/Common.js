@@ -1,50 +1,48 @@
 import React from "react";
-import Pagination from "react-bootstrap/Pagination";
+import {Pagination} from 'semantic-ui-react';
 
-const API_URI = process.env.REACT_APP_API ? process.env.REACT_APP_API : '127.0.0.1:8080';
-const VIDEOS_API = `http://${API_URI}/api/videos`;
+export const API_URI = process.env.REACT_APP_API ? process.env.REACT_APP_API : '127.0.0.1:8080';
+export const VIDEOS_API = `http://${API_URI}/api/videos`;
+export const DEFAULT_LIMIT = 16;
 
-class Paginator extends React.Component {
+export default class Paginator extends React.Component {
+    state = {
+        boundaryRange: 1,
+        siblingRange: 2,
+        showEllipsis: true,
+        showFirstAndLastNav: false,
+        showPreviousAndNextNav: false,
+    }
 
-    getPagination() {
-        // The amount of items that will be shown
-        let item_count = 8;
+    handlePaginationChange = (e, {activePage}) => {
+        this.props.changePage(activePage);
+    }
 
-        let total = this.props.total;
-        let limit = this.props.limit || 20;
-        let offset = this.props.offset;
-
-        // Generate all offsets that can exist
-        let items = [];
-        let last = null;
-        for (let i = 0; i <= total; i = i + limit) {
-            items.push(i);
-            last = i;
-        }
-
-        // Reduce the offsets to those around the current offset
-        let current_idx = items.indexOf(offset);
-        // There can't be less than zero offset
-        let start = Math.max(0, current_idx - (item_count / 2));
-        items = items.slice(start, start + item_count);
+    render() {
+        const {
+            boundaryRange,
+            siblingRange,
+            showEllipsis,
+            showFirstAndLastNav,
+            showPreviousAndNextNav,
+        } = this.state;
 
         return (
-            <Pagination>
-                {/* first and last should always be present */}
-                {items[0] !== 0 && <Pagination.First onClick={() => this.setOffset(0)}/>}
-                {items.map((i) =>
-                    <Pagination.Item
-                        active={i === offset}
-                        key={i}
-                        onClick={() => this.props.setOffset(i)}
-                    >
-                        {(i / limit) + 1}
-                    </Pagination.Item>)}
-                {items[items.length-1] !== last && <Pagination.Last onClick={() => this.setOffset(last)}/>}
-            </Pagination>
+            <Pagination
+                activePage={this.props.activePage}
+                boundaryRange={boundaryRange}
+                onPageChange={this.handlePaginationChange}
+                size='mini'
+                siblingRange={siblingRange}
+                totalPages={this.props.totalPages}
+                // Heads up! All items are powered by shorthands, if you want to hide one of them, just pass `null` as value
+                ellipsisItem={showEllipsis ? undefined : null}
+                firstItem={showFirstAndLastNav ? undefined : null}
+                lastItem={showFirstAndLastNav ? undefined : null}
+                prevItem={showPreviousAndNextNav ? undefined : null}
+                nextItem={showPreviousAndNextNav ? undefined : null}
+            />
+
         )
     }
 }
-
-export default Paginator;
-export {API_URI, VIDEOS_API};

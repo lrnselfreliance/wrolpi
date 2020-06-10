@@ -1,817 +1,556 @@
-import React, {useRef, useState} from 'react';
-import Row from "react-bootstrap/Row";
-import Col from "react-bootstrap/Col";
+import React from 'react';
 import {Link, Route} from "react-router-dom";
-import {Button, ButtonGroup, Form, FormControl, InputGroup, ProgressBar} from "react-bootstrap";
-import Modal from "react-bootstrap/Modal";
-import Card from "react-bootstrap/Card";
 import '../static/external/fontawesome-free/css/all.min.css';
-import Alert from "react-bootstrap/Alert";
-import Breadcrumb from "react-bootstrap/Breadcrumb";
-import Paginator, {VIDEOS_API} from "./Common"
-import Container from "react-bootstrap/Container";
+import Paginator, {API_URI, DEFAULT_LIMIT, VIDEOS_API} from "./Common"
 import Video from "./VideoPlayer";
-import {Typeahead} from 'react-bootstrap-typeahead';
-import 'react-bootstrap-typeahead/css/Typeahead.css';
-import {
-    deleteChannel,
-    getChannel,
-    getChannels,
-    getChannelVideos,
-    getDirectories,
-    getRecentVideos,
-    getSearchVideos,
-    getVideo,
-    updateChannel
-} from "../api";
+import {getChannel, getChannels, getConfig, getVideo, getVideos, updateChannel, validateRegex} from "../api";
+import {Button, Card, Checkbox, Form, Grid, Header, Image, Input, Loader, Placeholder, Popup} from "semantic-ui-react";
+import * as QueryString from 'query-string';
+import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 
-function scrollToTop() {
-    window.scrollTo({
-        top: 0,
-        behavior: "auto"
-    });
+// function scrollToTop() {
+//     window.scrollTo({
+//         top: 0,
+//         behavior: "auto"
+//     });
+// }
+
+function FieldPlaceholder() {
+    return (
+        <Form.Field>
+            <Placeholder style={{'marginBottom': '0.5em'}}>
+                <Placeholder.Line length="short"/>
+            </Placeholder>
+            <input disabled/>
+        </Form.Field>
+    )
 }
 
-class EditChannel extends React.Component {
+class ChannelPage extends React.Component {
 
     constructor(props) {
         super(props);
         this.state = {
-            show: false,
-            message: null,
-            error: false,
+            channel: null,
+            media_directory: null,
+            disabled: false,
+            dirty: false,
+            inputs: ['name', 'directory', 'url', 'match_regex', 'generate_thumbnails', 'calculate_duration'],
+            validRegex: true,
+
+            // The properties to edit/submit
+            name: null,
+            directory: null,
+            url: null,
+            match_regex: null,
+            generate_thumbnails: null,
+            calculate_duration: null
         };
 
-        this.name = React.createRef();
-        this.url = React.createRef();
-        this.directory = React.createRef();
-        this.mkdir = React.createRef();
-        this.matchRegex = React.createRef();
-
-        this.setShow = this.setShow.bind(this);
-        this.setError = this.setError.bind(this);
-        this.setMessage = this.setMessage.bind(this);
+        this.handleInputChange = this.handleInputChange.bind(this);
         this.handleSubmit = this.handleSubmit.bind(this);
-        this.handleDelete = this.handleDelete.bind(this);
+        this.isDirty = this.isDirty.bind(this);
+        this.checkDirty = this.checkDirty.bind(this);
+        this.checkRegex = this.checkRegex.bind(this);
+
+        this.generateThumbnails = React.createRef();
+        this.calculateDuration = React.createRef();
+    }
+
+    isDirty() {
+        for (let i = 0; i < this.state.inputs.length; i++) {
+            let name = this.state.inputs[i];
+            if (this.state.channel[name] !== this.state[name]) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    checkDirty() {
+        this.setState({dirty: this.isDirty()})
+    }
+
+    async componentDidMount() {
+        let channel_link = this.props.match.params.channel_link;
+        let global_config = await getConfig();
+        let channel = await getChannel(channel_link);
+        this.setState({
+            channel: channel,
+            media_directory: `${global_config.media_directory}/`,
+            name: channel.name,
+            directory: channel.directory,
+            url: channel.url,
+            match_regex: channel.match_regex,
+            generate_thumbnails: channel.generate_thumbnails,
+            calculate_duration: channel.calculate_duration,
+        });
+    }
+
+    async handleInputChange(event, {name, value}) {
+        this.setState({[name]: value}, this.checkDirty);
+    }
+
+    async handleCheckbox(checkbox) {
+        let checked = checkbox.current.state.checked;
+        let name = checkbox.current.props.name;
+        this.setState({[name]: !checked}, this.checkDirty);
+    }
+
+    async checkRegex(event, {name, value}) {
+        event.persist();
+        await this.handleInputChange(event, {name, value});
+        let valid = await validateRegex(value);
+        this.setState({validRegex: valid});
     }
 
     async handleSubmit(e) {
         e.preventDefault();
+        let channel = {
+            name: this.state.name,
+            directory: this.state.directory,
+            url: this.state.url,
+            match_regex: this.state.match_regex,
+            generate_thumbnails: this.state.generate_thumbnails,
+            calculate_duration: this.state.calculate_duration,
+        };
         try {
-            this.reset();
-            await updateChannel(this.props.channel, this.name, this.url, this.directory, this.mkdir, this.matchRegex);
-            this.setShow(false);
-        } catch (e) {
-            this.setError(e.message);
+            this.setState({disabled: true});
+            await updateChannel(this.state.channel.link, channel);
+        } finally {
+            this.setState({disabled: false});
         }
     }
 
-    componentDidUpdate(prevProps, prevState, snapshot) {
-        this.setChannel();
-    }
+    render() {
+        if (this.state.channel) {
+            return (
+                <Container>
+                    <Header as="h1">{this.props.header}</Header>
+                    <Form id="editChannel" onSubmit={this.handleSubmit}>
+                        <Form.Group>
+                            <Form.Field width={8}>
+                                <Form.Input
+                                    required
+                                    label="Channel Name"
+                                    name="name"
+                                    type="text"
+                                    placeholder="Short Channel Name"
+                                    disabled={this.state.disabled}
+                                    value={this.state.name}
+                                    onChange={this.handleInputChange}
+                                />
+                            </Form.Field>
+                            <Form.Field width={8}>
+                                <label>
+                                    Directory
+                                    <span style={{color: '#db2828'}}> *</span>
+                                </label>
+                                <Input
+                                    required
+                                    name="directory"
+                                    type="text"
+                                    disabled={this.state.disabled}
+                                    label={this.state.media_directory}
+                                    placeholder='videos/channel/directory'
+                                    value={this.state.directory}
+                                    onChange={this.handleInputChange}
+                                />
+                            </Form.Field>
+                        </Form.Group>
+                        <Form.Field>
+                            <Form.Input
+                                label="URL"
+                                name="url"
+                                type="url"
+                                disabled={this.state.disabled}
+                                placeholder='https://example.com/channel/videos'
+                                value={this.state.url}
+                                onChange={this.handleInputChange}
+                            />
+                        </Form.Field>
 
-    setShow(show) {
-        this.setState({show});
-    }
+                        <Header as="h4" style={{'marginTop': '3em'}}>
+                            The following settings are encouraged by default, modify them at your own risk.
+                        </Header>
+                        <Form.Field>
+                            <Form.Input
+                                label="Title Match Regex"
+                                name="match_regex"
+                                type="text"
+                                disabled={this.state.disabled}
+                                error={!this.state.validRegex}
+                                placeholder='.*([Nn]ame Matching).*'
+                                value={this.state.match_regex}
+                                onChange={this.checkRegex}
+                            />
+                        </Form.Field>
 
-    setChannel() {
-        let channel = this.props.channel;
-        if (this.state.show && channel) {
-            this.name.current.value = channel.name || '';
-            this.url.current.value = channel.url || '';
-            if (this.directory.current) {
-                this.directory.current.value = channel.directory || '';
-            }
-            this.matchRegex.current.value = channel.match_regex || '';
+                        <Form.Field>
+                            <Checkbox
+                                toggle
+                                label="Generate thumbnails, if not found"
+                                name="generate_thumbnails"
+                                disabled={this.state.disabled}
+                                checked={this.state.generate_thumbnails}
+                                ref={this.generateThumbnails}
+                                onClick={() => this.handleCheckbox(this.generateThumbnails)}
+                            />
+                        </Form.Field>
+                        <Form.Field>
+                            <Checkbox
+                                toggle
+                                label="Calculate video duration"
+                                name="calculate_duration"
+                                disabled={this.state.disabled}
+                                checked={this.state.calculate_duration}
+                                ref={this.calculateDuration}
+                                onClick={() => this.handleCheckbox(this.calculateDuration)}
+                            />
+                        </Form.Field>
+
+                        <Button
+                            color="blue"
+                            type="submit"
+                            disabled={this.state.disabled || !this.state.dirty}
+                        >
+                            {this.state.disabled ? <Loader active inline/> : 'Save'}
+                        </Button>
+                    </Form>
+                </Container>
+            )
+        } else {
+            // Channel not loaded yet
+            return (
+                <Container>
+                    <Header as="h1">{this.props.header}</Header>
+                    <Form>
+                        <div className="two fields">
+                            <FieldPlaceholder/>
+                            <FieldPlaceholder/>
+                        </div>
+                        <FieldPlaceholder/>
+
+                        <Header as="h4" style={{'marginTop': '3em'}}>
+                            <Placeholder>
+                                <Placeholder.Line length="very long"/>
+                            </Placeholder>
+                        </Header>
+                        <FieldPlaceholder/>
+                        <FieldPlaceholder/>
+                    </Form>
+                </Container>
+            )
         }
     }
+}
 
-    async handleDelete() {
-        await deleteChannel(this.props.channel);
-        this.setShow(false);
+function EditChannel(props) {
+    return (
+        <ChannelPage header="Edit Channel" history={props.history} match={props.match}/>
+    )
+}
+
+class ManageVideos extends React.Component {
+
+    download = async (e) => {
+        e.preventDefault();
+        await fetch(`${VIDEOS_API}:download`, {method: 'POST'});
     }
 
-    reset() {
-        this.setState({error: false, message: null})
-    }
-
-    setError(message) {
-        this.setState({'error': true, 'message': message});
-    }
-
-    setMessage(message) {
-        this.setState({'error': false, 'message': message});
+    refresh = async (e) => {
+        e.preventDefault();
+        await fetch(`${VIDEOS_API}:refresh`, {method: 'POST'});
     }
 
     render() {
         return (
             <>
-                {/* TODO This span should be reworked later so its easier to find */}
-                <span className="fa fa-ellipsis-v channel-edit fill"
-                      onClick={() => this.setShow(true)}/>
-                <ChannelModal
-                    modalTitle="Edit Channel"
-                    form_id="edit_channel"
-                    handleSubmit={this.handleSubmit}
-                    show={this.state.show}
-                    setShow={this.setShow}
-                    message={this.state.message}
-                    error={this.state.error}
-                    onDelete={this.handleDelete}
-                    disableDirectory={true}
+                <Header as="h1">Manage Videos</Header>
 
-                    name={this.name}
-                    url={this.url}
-                    directory={this.directory}
-                    mkdir={this.mkdir}
-                    matchRegex={this.matchRegex}
-                />
+                <p>
+                    <Button primary onClick={this.download}>Download Videos</Button>
+                    <label>Download any missing videos</label>
+                </p>
+
+                <p>
+                    <Button secondary onClick={this.refresh}>Refresh Video Files</Button>
+                    <label>Search for any videos in the media directory</label>
+                </p>
             </>
         )
     }
 }
 
-function VideoCard({video, channel}) {
-    // Videos come with their own channel, use it; fallback to the global channel
-    channel = video['channel'] || channel;
+function Duration({video}) {
+    let duration = video.duration;
+    let hours = Math.floor(duration / 3600);
+    duration -= hours * 3600;
+    let minutes = Math.floor(duration / 60);
+    let seconds = duration - (minutes * 60);
+
+    hours = String('00' + hours).slice(-2);
+    minutes = String('00' + minutes).slice(-2);
+    seconds = String('00' + seconds).slice(-2);
+
+    if (hours > 0) {
+        return <div className="duration-overlay">{hours}:{minutes}:{seconds}</div>
+    }
+    return <div className="duration-overlay">{minutes}:{seconds}</div>
+}
+
+function VideoCard({video}) {
+    let channel = video.channel;
+    let channel_url = `/videos/channel/${channel.link}/video`;
 
     let upload_date = null;
     if (video.upload_date) {
         upload_date = new Date(video['upload_date'] * 1000);
         upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth() + 1}-${upload_date.getDate()}`;
     }
-    let video_url = "/videos/" + channel.link + "/" + video.id;
-    let poster_url = video.poster_path ?
-        `/media/${channel.directory}/${encodeURIComponent(video.poster_path)}` : null;
-    return (
-        <Link to={video_url}>
-            <Card style={{'width': '18em', 'marginBottom': '1em'}}>
-                <Card.Img
-                    variant="top"
-                    src={poster_url}
-                />
-                <Card.Body>
-                    <h5>{video.title || video.video_path}</h5>
-                    <Card.Text>
-                        {upload_date}
-                    </Card.Text>
-                </Card.Body>
-            </Card>
-        </Link>
-    )
-}
-
-class ChannelVideoPager extends Paginator {
-
-    setOffset(offset) {
-        // used in parent Paginator
-        this.props.setOffset(offset);
-    }
-
-    render() {
-        return (
-            <div className="d-flex flex-column">
-                {this.props.title && <h4>{this.props.title}</h4>}
-                <div className="d-flex flex-row">
-                    <div className="card-deck justify-content-center">
-                        {this.props.videos.map((v) => (
-                            <VideoCard key={v['id']} video={v} channel={this.props.channel}/>))}
-                    </div>
-                </div>
-                <div className="d-flex flex-row justify-content-center">
-                    {this.getPagination()}
-                </div>
-            </div>
-        )
-    }
-}
-
-function ChannelModal(props) {
-    const hide = () => props.setShow(false);
-
-    let [directories, setDirectories] = React.useState([]);
-
-    async function fetchDirectories(search_str) {
-        let dirs = await getDirectories(search_str);
-        setDirectories(dirs);
-    }
-
-    function getDirectoryInput() {
-        if (props.disableDirectory !== true) {
-            return (
-                <>
-                    <Typeahead
-                        id="channel_modal_directory"
-                        name="directory"
-                        ref={props.directory}
-                        multiple={false}
-                        options={directories}
-                        onInputChange={fetchDirectories}
-                    />
-                    <Form.Text className="text-muted">
-                        This will be appended to the root video directory in the config.
-                    </Form.Text>
-
-                    <Form.Group controlId="mkdir">
-                        <Form.Check label="Make directory, if it doesn't exist" ref={props.mkdir}/>
-                    </Form.Group>
-                </>
-            )
-        } else {
-            return (
-                <>
-                    <Form.Control type="text" ref={props.directory} disabled={true}/>
-                    <Form.Control type="hidden" ref={props.mkdir}/>
-                </>
-            )
-        }
-    }
+    let video_url = `/videos/channel/${channel.link}/video/${video.id}`;
+    let poster_url = video.poster_path ? `/media/${channel.directory}/${encodeURIComponent(video.poster_path)}` : null;
 
     return (
-        <Modal show={props.show} onHide={hide}>
-            <Modal.Header closeButton>
-                <Modal.Title>{props.modalTitle}</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-                <Form id={props.form_id} onSubmit={props.handleSubmit}>
-                    <Form.Group controlId="name">
-                        <Form.Label column="">Name</Form.Label>
-                        <Form.Control name="name" type="text" placeholder="Short Name" required ref={props.name}/>
-                    </Form.Group>
-
-                    <Form.Group controlId="url">
-                        <Form.Label column="">URL</Form.Label>
-                        <Form.Control type="url" placeholder="https://example.com/some-channel" ref={props.url}/>
-                    </Form.Group>
-
-                    <Form.Group controlId="directory">
-                        <Form.Label column="">Directory</Form.Label>
-                        {getDirectoryInput()}
-                    </Form.Group>
-
-                    <Form.Group controlId="match_regex">
-                        <Form.Label column="">Title Match Regex</Form.Label>
-                        <Form.Control name="match_regex" type="text" placeholder=".*(prepper|prepping).*"
-                                      ref={props.matchRegex}/>
-                        <Form.Text className="text-muted">
-                            The title of the video will be compared to this Regular Expression.
-                            <b> If you don't input this, all videos will be downloaded.</b>
-                        </Form.Text>
-                    </Form.Group>
-                </Form>
-            </Modal.Body>
-            <Modal.Footer>
-                <div className="d-flex flex-row flex-fill">
-                    <div className="d-flex flex-column align-content-start">
-                        {props.onDelete &&
-                        <Button variant="danger" onClick={props.onDelete}>
-                            Delete
-                        </Button>
-                        }
-                    </div>
-                    <div className="d-flex flex-column flex-fill">
-                        <Alert variant={(props.error ? 'danger' : 'success')} hidden={(!props.message)}>
-                            {props.message}
-                        </Alert>
-                    </div>
-                    <div className="d-flex flex-column align-content-end">
-                        <ButtonGroup>
-                            <Button variant="secondary" onClick={hide}>
-                                Close
-                            </Button>
-                            <Button type="submit" variant={props.submitBtnVariant || 'primary'} form={props.form_id}>
-                                Save
-                            </Button>
-                        </ButtonGroup>
-                    </div>
-                </div>
-            </Modal.Footer>
-        </Modal>
+        <Card style={{'width': '18em', 'margin': '1em'}}>
+            <Link to={video_url}>
+                <Image src={poster_url} wrapped style={{position: 'relative', width: '100%'}}/>
+            </Link>
+            <Duration video={video}/>
+            <Card.Content>
+                <Card.Header>
+                    <Link to={video_url} className="no-link-underscore video-card-link">
+                        <p>{video.title || video.video_path}</p>
+                    </Link>
+                </Card.Header>
+                <Card.Description>
+                    <Link to={channel_url} className="no-link-underscore video-card-link">
+                        <b>{channel.name}</b>
+                    </Link>
+                    <p>{upload_date}</p>
+                </Card.Description>
+            </Card.Content>
+        </Card>
     )
-}
-
-function AddChannel() {
-    const name = useRef();
-    const url = useRef();
-    const directory = useRef();
-    const mkdir = useRef();
-    const matchRegex = useRef();
-
-    const [show, setShow] = useState(false);
-    const [message, setMessage] = useState();
-    const [error, setError] = useState(false);
-
-    async function handleSubmit(event) {
-        event.preventDefault();
-        let post_url = `${VIDEOS_API}/channels`;
-        let form_data = {
-            name: name.current.value,
-            url: url.current.value,
-            directory: directory.current.state.text,
-            mkdir: mkdir.current.value,
-            match_regex: matchRegex.current.value,
-        };
-        let response = await fetch(post_url, {
-            method: 'POST',
-            body: JSON.stringify(form_data),
-        });
-
-        let data = await response.json();
-        if (data['success']) {
-            setMessage(data['success']);
-            setError(false);
-        } else if (data['error']) {
-            setMessage(data['error']);
-            setError(true);
-        }
-    }
-
-    return (
-        <>
-            <Button className="btn-success" onClick={() => setShow(true)}>
-                <span className="fas fa-plus"/>
-            </Button>
-            <ChannelModal
-                modalTitle="Add New Channel"
-                form_id="add_channel"
-                handleSubmit={handleSubmit}
-                disableDirectory={false}
-
-                name={name}
-                url={url}
-                directory={directory}
-                mkdir={mkdir}
-                matchRegex={matchRegex}
-                show={show}
-                setShow={setShow}
-                message={message}
-                error={error}
-            />
-        </>
-    )
-}
-
-function handleStream(stream_url, setAlertVariant, setAlertMessage, setProgress) {
-    function setMessage(message) {
-        setAlertVariant('success');
-        setAlertMessage(message);
-    }
-
-    function setError(message) {
-        setAlertVariant('danger');
-        setAlertMessage(message);
-    }
-
-    function handleMessage(message) {
-        let data = JSON.parse(message.data);
-        if (data['error']) {
-            setError(data['error']);
-        } else if (data['message']) {
-            setAlertVariant('success');
-            setMessage(data['message']);
-        }
-        if (data['progresses']) {
-            setProgress(data['progresses']);
-        }
-    }
-
-    function handleError(error) {
-        console.log(`Websocket ${stream_url} error:`, error);
-    }
-
-    let ws = new WebSocket(stream_url);
-    window.onbeforeunload = (e) => (ws.close);
-    ws.onmessage = handleMessage;
-    ws.onerror = handleError;
-
-    return ws;
-}
-
-function StripedProgressBar(props) {
-    return (
-        <ProgressBar striped={true} style={{'marginTop': '0.5em'}} {...props}/>
-    )
-}
-
-function AlertProgress(props) {
-
-    return (
-        <Row style={{'marginBottom': '1em'}}>
-            <Col className="col-5">
-                <Button onClick={props.onClick} disabled={props.buttonDisabled}>
-                    {props.buttonValue}
-                </Button>
-            </Col>
-            <Col className="col-7">
-                {props.description}
-                <Alert variant={props.alertVariant} show={props.alertMessage !== ''}
-                       style={{'marginTop': '1em'}}>
-                    {props.alertMessage}
-                </Alert>
-                <StripedProgressBar hidden={props.progresses[0]['now'] == null} now={props.progresses[0]['now']}/>
-                <StripedProgressBar hidden={props.progresses[1]['now'] == null} now={props.progresses[1]['now']}/>
-                <StripedProgressBar hidden={props.progresses[2]['now'] == null} now={props.progresses[2]['now']}/>
-            </Col>
-        </Row>
-    )
-}
-
-class ButtonProgressGroup extends React.Component {
-
-    constructor(props) {
-        super(props);
-        this.state = {
-            alertVariant: 'success',
-            alertMessage: '',
-            buttonDisabled: false,
-            progresses: [{'now': null}, {'now': null}, {'now': null}],
-            websocket: null,
-        };
-
-        this.setAlertVariant = this.setAlertVariant.bind(this);
-        this.setAlertMessage = this.setAlertMessage.bind(this);
-        this.setProgress = this.setProgress.bind(this);
-    }
-
-    componentWillUnmount() {
-        if (this.state.websocket) {
-            this.state.websocket.close();
-        }
-    }
-
-    setAlertVariant(variant) {
-        this.setState({'alertVariant': variant});
-    }
-
-    setError(message) {
-        this.setState({alertMessage: message, alertVariant: 'danger'});
-    }
-
-    setAlertMessage(message) {
-        this.setState({'alertMessage': message}, this.logState);
-    }
-
-    reset() {
-        this.setState({alertMessage: '', alertVariant: 'success', buttonDisabled: false});
-    }
-
-    disableButton() {
-        this.setState({buttonDisabled: true});
-    }
-
-    enableButton() {
-        this.setState({buttonDisabled: false});
-    }
-
-    setProgress(progresses) {
-        let new_progresses = [{'now': null}, {'now': null}, {'now': null}];
-        for (let i = 0; i < progresses.length; i++) {
-            new_progresses[i]['now'] = progresses[i]['now'];
-        }
-        this.setState({'progresses': new_progresses});
-    }
-
-    async fetchAndHandle(url) {
-        this.reset();
-        this.disableButton();
-        try {
-            let response = await fetch(url, {'method': 'POST'});
-            let data = await response.json();
-            if (data['stream_url']) {
-                let stream_url = data['stream_url'];
-                let ws = handleStream(stream_url, this.setAlertVariant, this.setAlertMessage, this.setProgress);
-                this.setState({'websocket': ws});
-            }
-            if (data['error']) {
-                this.setError('Server responded with an error');
-            }
-
-        } catch (e) {
-            this.setError('Server did not respond as expected');
-        }
-        this.enableButton();
-    }
-
-    render() {
-        return (
-            <AlertProgress
-                onClick={this.props.onClick}
-                buttonDisabled={this.props.buttonDisabled}
-                buttonValue={this.props.buttonValue}
-                description={this.props.description}
-                alertMessage={this.props.alertMessage}
-                alertVariant={this.props.alertVariant}
-                progresses={this.props.progresses}
-            />
-        )
-    }
-}
-
-class RefreshContent extends ButtonProgressGroup {
-
-    constructor(props) {
-        super(props);
-        this.onClick = this.onClick.bind(this);
-    }
-
-    async onClick() {
-        let url = `${VIDEOS_API}/settings:refresh`;
-        await this.fetchAndHandle(url);
-    }
-
-    render() {
-        return (
-            <ButtonProgressGroup
-                onClick={this.onClick}
-                buttonDisabled={this.state.buttonDisabled}
-                buttonValue="Refresh Content"
-                description="Find and process all videos stored on this WROLPi."
-                alertMessage={this.state.alertMessage}
-                alertVariant={this.state.alertVariant}
-                progresses={this.state.progresses}
-            />
-        )
-    }
-}
-
-class DownloadVideos extends ButtonProgressGroup {
-
-    constructor(props) {
-        super(props);
-        this.onClick = this.onClick.bind(this);
-    }
-
-    async onClick() {
-        let url = `${VIDEOS_API}/settings:download`;
-        await this.fetchAndHandle(url);
-    }
-
-    render() {
-        return (
-            <ButtonProgressGroup
-                onClick={this.onClick}
-                buttonValue="Download Videos"
-                description="Update channel catalogs, then download any missing videos."
-                alertMessage={this.state.alertMessage}
-                alertVariant={this.state.alertVariant}
-                progresses={this.state.progresses}
-            />
-        )
-    }
-}
-
-class ManageContent extends React.Component {
-
-    constructor(props) {
-        super(props);
-        this.state = {
-            show: false,
-        };
-
-        this.handleClose = this.handleClose.bind(this);
-        this.handleShow = this.handleShow.bind(this);
-    }
-
-    handleClose() {
-        this.setState({'show': false});
-    }
-
-    handleShow() {
-        this.setState({'show': true});
-    }
-
-    render() {
-        return (
-            <>
-                <Button
-                    id="manage_content"
-                    className="btn-secondary"
-                    onClick={this.handleShow}
-                >
-                    <span className="fas fa-cog"/>
-                </Button>
-
-                <Modal show={this.state.show} onHide={this.handleClose}>
-                    <Modal.Header>
-                        <Modal.Title>Manage Video Content</Modal.Title>
-                    </Modal.Header>
-                    <Modal.Body>
-                        <RefreshContent/>
-                        <DownloadVideos/>
-                    </Modal.Body>
-                    <Modal.Footer>
-                        <Button variant="secondary" onClick={this.handleClose}>
-                            Close
-                        </Button>
-                    </Modal.Footer>
-                </Modal>
-            </>
-        )
-    }
-}
-
-class VideoBreadcrumb extends React.Component {
-
-    render() {
-        return (
-            <Breadcrumb>
-                {/* Always include the /videos breadcrumb */}
-                <li className="breadcrumb-item">
-                    <Link to='/videos'>Videos</Link>
-                </li>
-                {/* Show the channel only when its set */}
-                {
-                    this.props.channel &&
-                    <li className="breadcrumb-item">
-                        <Link to={'/videos/' + this.props.channel['link']}>
-                            {this.props.channel['name']}
-                        </Link>
-                    </li>}
-                {/* Show the video when the video is set */}
-                {
-                    this.props.video &&
-                    <li className="breadcrumb-item">
-                        <Link
-                            to={'/videos/' +
-                            this.props.channel['link'] + '/' +
-                            this.props.video['id']}>
-                            {this.props.video['title'] || this.props.video['video_path']}
-                        </Link>
-                    </li>}
-                {
-                    !this.props.video && this.props.search_str &&
-                    <li className="breadcrumb-item">
-                        Search: {this.props.search_str}
-                    </li>
-                }
-            </Breadcrumb>
-        )
-    }
 }
 
 function VideoWrapper(props) {
 
     return (
-        (props.channel && props.video) ? <Video channel={props.channel} video={props.video} autoplay={false}/> : <></>
+        <Video video={props.video} autoplay={false}/>
     )
 }
 
-class RecentVideos extends React.Component {
+function ChannelCard(props) {
+    let editTo = `/videos/channel/${props.channel.link}/edit`;
+    let videosTo = `/videos/channel/${props.channel.link}/video`;
+
+    async function downloadVideos(e) {
+        e.preventDefault();
+        let url = `${VIDEOS_API}:download/${props.channel.link}`;
+        await fetch(url, {method: 'POST'});
+    }
+
+    async function refreshVideos(e) {
+        e.preventDefault();
+        let url = `${VIDEOS_API}:refresh/${props.channel.link}`;
+        await fetch(url, {method: 'POST'});
+    }
+
+    return (
+        <Card fluid={true}>
+            <Card.Content>
+                <Card.Header>
+                    <Link to={videosTo}>
+                        {props.channel.name}
+                    </Link>
+                </Card.Header>
+                <Card.Description>
+                    Videos: {props.channel.video_count}
+                </Card.Description>
+            </Card.Content>
+            <Card.Content extra>
+                <div className="ui buttons four">
+                    <Popup
+                        header="Download any missing videos"
+                        on="hover"
+                        trigger={<Button primary onClick={downloadVideos}>Download Videos</Button>}
+                    />
+                    <Popup
+                        header="Search for any local videos"
+                        on="hover"
+                        trigger={<Button secondary onClick={refreshVideos}>Refresh Files</Button>}
+                    />
+                    <Link className="ui button primary inverted" to={editTo}>Edit</Link>
+                </div>
+            </Card.Content>
+        </Card>
+    )
+}
+
+function VideoPlaceholder() {
+    return (
+        <Card.Group doubling stackable>
+            <Card>
+                <Placeholder>
+                    <Placeholder.Image rectangular/>
+                </Placeholder>
+                <Card.Content>
+                    <Placeholder>
+                        <Placeholder.Line/>
+                        <Placeholder.Line/>
+                        <Placeholder.Line/>
+                    </Placeholder>
+                </Card.Content>
+            </Card>
+        </Card.Group>
+    )
+}
+
+function ChannelPlaceholder() {
+    return (
+        <Placeholder>
+            <Placeholder.Header image>
+                <Placeholder.Line/>
+                <Placeholder.Line/>
+            </Placeholder.Header>
+            <Placeholder.Paragraph>
+                <Placeholder.Line length='short'/>
+            </Placeholder.Paragraph>
+        </Placeholder>
+    )
+}
+
+function ChannelsHeader() {
+
+    return (
+        <Header as='h1'>Channels</Header>
+    )
+}
+
+class Channels extends React.Component {
+
     constructor(props) {
         super(props);
         this.state = {
-            offset: 0,
-            videos: [],
-            total: null,
+            channels: null,
         };
-        this.fetchVideos = this.fetchVideos.bind(this);
-    }
-
-    async fetchVideos() {
-        let [videos, total] = await getRecentVideos(this.state.offset);
-        this.setState({videos, total});
-    }
-
-    async componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevState.offset !== this.state.offset) {
-            await this.fetchVideos();
-            scrollToTop();
-        }
     }
 
     async componentDidMount() {
-        await this.fetchVideos();
+        let channels = await getChannels();
+        this.setState({channels});
     }
 
     render() {
-        if (this.state.total > 0) {
+        if (this.state.channels === null) {
+            // Placeholders while fetching
             return (
                 <>
-                    <ChannelVideoPager
-                        title="Recently Published Videos"
-                        videos={this.state.videos}
-                        total={this.state.total}
-                        setOffset={(o) => this.setState({offset: o})}
-                        offset={this.state.offset}
-                    />
+                    <ChannelsHeader/>
+                    <Grid columns={2} doubling>
+                        {[1, 1, 1, 1, 1, 1].map(() => {
+                            return (
+                                <Grid.Column>
+                                    <ChannelPlaceholder/>
+                                </Grid.Column>
+                            )
+                        })}
+                    </Grid>
+                </>
+            )
+        } else if (this.state.channels === []) {
+            return (
+                <>
+                    <ChannelsHeader/>
+                    Not channels exist yet!
+                    <Button secondary>Create Channel</Button>
                 </>
             )
         } else {
             return (
-                <p>
-                    No videos were retrieved. Have you refreshed your content?
-                    Try adding a channel and downloading the videos.
-                </p>
+                <>
+                    <ChannelsHeader/>
+                    <Grid columns={2} doubling>
+                        {this.state.channels.map((channel) => {
+                            return (
+                                <Grid.Column>
+                                    <ChannelCard channel={channel}/>
+                                </Grid.Column>
+                            )
+                        })}
+                    </Grid>
+                </>
             )
         }
     }
 }
 
-class ChannelVideos extends RecentVideos {
-
-    constructor(props) {
-        super(props);
-        this.fetchVideos = this.fetchVideos.bind(this);
-    }
-
-    async fetchVideos() {
-        let [videos, total] = await getChannelVideos(this.props.channel['link'], this.state.offset, 20);
-        this.setState({videos, total});
-    }
+class VideoCards extends React.Component {
 
     render() {
-        if (this.state.total > 0) {
-            return (
-                <ChannelVideoPager
-                    channel={this.props.channel}
-                    videos={this.state.videos}
-                    total={this.state.total}
-                    setOffset={(o) => this.setState({offset: o})}
-                    offset={this.state.offset}
-                />
-            )
-        } else {
-            return (
-                <p>
-                    No videos were retrieved. Have you downloaded videos for this channel?
-                </p>
-            )
-        }
+        return (
+            <Card.Group>
+                {this.props.videos.map((v) => {
+                    return <VideoCard key={v['id']} video={v}/>
+                })}
+            </Card.Group>
+        )
     }
-
 }
 
-class SearchVideos extends RecentVideos {
-
-    constructor(props) {
-        super(props);
-        this.fetchVideos = this.fetchVideos.bind(this);
-    }
-
-    async fetchVideos() {
-        let [videos, total] = await getSearchVideos(this.props.search_str, this.state.offset);
-        this.setState({videos, total});
-    }
-
-    render() {
-        if (this.state.total > 0) {
-            return (
-                <ChannelVideoPager
-                    channel={this.props.channel}
-                    videos={this.state.videos}
-                    total={this.state.total}
-                    setOffset={(o) => this.setState({offset: o})}
-                    offset={this.state.offset}
-                />
-            )
-        } else {
-            return <></>
-        }
-    }
-
+function changePageHistory(history, location, activePage) {
+    history.push({
+        pathname: location.pathname,
+        search: `?page=${activePage}`,
+    });
 }
 
 class Videos extends React.Component {
 
     constructor(props) {
         super(props);
+        const query = QueryString.parse(this.props.location.search);
+        let activePage = 1; // First page is 1 by default, of course.
+        if (query.page) {
+            activePage = parseInt(query.page);
+        }
         this.state = {
             channel: null,
+            videos: null,
             video: null,
-            channels: [],
             search_str: null,
             show: false,
+            limit: DEFAULT_LIMIT,
+            activePage: activePage,
+            total: null,
+            totalPages: null,
         };
-
-        this.channelSelect = this.channelSelect.bind(this);
-        this.clearSearch = this.clearSearch.bind(this);
-        this.handleSearchEvent = this.handleSearchEvent.bind(this);
-        this.setShowModal = this.setShowModal.bind(this);
-
-        this.channelTypeahead = React.createRef();
-        this.searchInput = React.createRef();
+        this.changePage = this.changePage.bind(this);
     }
 
     async componentDidMount() {
-        await this.fetchChannel();
-        await this.fetchVideo();
-
-        // Get the available channels
-        let channels = await getChannels();
-        this.setState({channels});
+        if (this.props.match.params.video_id) {
+            await this.fetchVideo();
+        } else {
+            await this.fetchChannel();
+        }
     }
 
     async componentDidUpdate(prevProps, prevState, snapshot) {
         let params = this.props.match.params;
 
-        let channelChange = params.channel_link !== prevProps.match.params.channel_link;
-        if (channelChange) {
-            await this.fetchChannel();
-        }
+        let channelChanged = params.channel_link !== prevProps.match.params.channel_link;
+        let videoChanged = params.video_id !== prevProps.match.params.video_id;
+        let pageChanged = prevState.activePage !== this.state.activePage;
 
-        let videoChange = params.video_id !== prevProps.match.params.video_id;
-        if (videoChange) {
+        if (channelChanged) {
+            await this.fetchChannel();
+        } else if (videoChanged) {
             await this.fetchVideo();
+        } else if (pageChanged) {
+            changePageHistory(this.props.history, this.props.location, this.state.activePage);
+            await this.fetchVideos();
         }
     }
 
@@ -822,131 +561,70 @@ class Videos extends React.Component {
         if (channel_link) {
             channel = await getChannel(channel_link);
         }
-        let currentSelected = this.channelTypeahead.current.state.selected[0] || null;
-        if ((currentSelected && channel && currentSelected['id'] !== channel['id']) || (!channel)) {
-            // Channel was changed, or is no longer selected
-            this.channelTypeahead.current.clear();
-        }
-        this.setState({channel: channel, offset: 0, total: null, videos: [], video: null, search_str: null},
+        this.setState({channel, offset: 0, total: null, videos: null, video: null, search_str: null},
             this.fetchVideos);
+    }
+
+    async fetchVideos() {
+        let offset = this.state.limit * this.state.activePage - this.state.limit;
+        let channel_link = this.state.channel ? this.state.channel.link : null;
+        let favorites = this.props.filter === 'favorites';
+        let [videos, total] = await getVideos(offset, this.state.limit, channel_link, null, favorites);
+
+        let totalPages = Math.round(total / this.state.limit) + 1;
+        this.setState({videos, total, totalPages});
     }
 
     async fetchVideo() {
         // Get and display the Video specified in the Router match
         let video_id = this.props.match.params.video_id;
-        let video = null;
         if (video_id) {
-            video = await getVideo(video_id);
+            let video = await getVideo(video_id);
+            this.setState({video});
         }
-        this.setState({video});
     }
 
-    channelSelect(selection) {
-        // Switch the channel link in the Router match
-        let channel = selection[0];
-        this.props.history.push(`/videos/${channel['link']}`);
-    }
-
-    async handleSearchEvent(event) {
-        event.preventDefault();
-        let search_str = this.searchInput.current.value;
-        this.setState({search_str, video: null, channel: null, offset: 0});
-    }
-
-    clearSearch() {
-        this.searchInput.current.value = null;
-        this.setState({search_str: null, offset: 0});
-    }
-
-    setShowModal(show) {
-        this.setState({show});
-    }
-
-    getBody() {
-        // The body of Video can be:
-        //   - search results
-        //   - video
-        //   - channel (with its videos)
-        //   - recently published videos
-        if (this.state.search_str) {
-            return (<SearchVideos search_str={this.state.search_str}/>)
-        } else if (this.state.video) {
-            return (
-                <VideoWrapper
-                    channel={this.state.channel}
-                    video={this.state.video}
-                />
-            )
-        } else if (this.state.channel !== null) {
-            return (<ChannelVideos channel={this.state.channel}/>)
-        } else {
-            return (<RecentVideos/>)
-        }
+    async changePage(activePage) {
+        this.setState({activePage});
     }
 
     render() {
+        let video = this.state.video;
+        let videos = this.state.videos;
+        let body = <VideoPlaceholder/>;
+        let pagination = null;
+
+        if (video) {
+            body = <VideoWrapper video={video} channel={video.channel}/>
+        } else if (videos === []) {
+            body = "No videos retrieved. Have you downloaded videos yet?";
+        } else if (videos) {
+            body = <VideoCards videos={videos}/>;
+        }
+
+        let title = this.props.title;
+        if (!this.props.title && this.state.channel) {
+            // No title specified, but a channel is selected, use it's name for the title.
+            title = this.state.channel.name;
+        }
+
+        if (this.state.totalPages) {
+            pagination = (
+                <div style={{'marginTop': '3em', 'textAlign': 'center'}}>
+                    <Paginator
+                        activePage={this.state.activePage}
+                        changePage={this.changePage}
+                        totalPages={this.state.totalPages}
+                    />
+                </div>
+            );
+        }
+
         return (
             <>
-                <div className="d-flex flex-row">
-                    <div className="d-flex flex-column w-100">
-                        <VideoBreadcrumb
-                            channel={this.state.channel}
-                            video={this.state.video}
-                            search_str={this.state.search_str}
-                        />
-                    </div>
-                </div>
-
-                <div className="d-flex flex-row flex-wrap">
-                    <div className="d-flex flex-row p-1">
-                        <ButtonGroup>
-                            <ManageContent/>
-                            <AddChannel/>
-                        </ButtonGroup>
-                    </div>
-                    <div className="d-flex flex-row flex-grow-1 p-1">
-                        <Typeahead
-                            id="channel_select"
-                            className="flex-fill"
-                            ref={this.channelTypeahead}
-                            labelKey="name"
-                            multiple={false}
-                            options={this.state.channels}
-                            placeholder="Select a Channel..."
-                            onChange={this.channelSelect}
-                        />
-                        {
-                            this.state.channel &&
-                            <EditChannel channel={this.state.channel}/>
-                        }
-                    </div>
-                    <div className="d-flex flex-column flex-grow-1 p-1">
-                        <Form inline onSubmit={this.handleSearchEvent}>
-                            <InputGroup className="flex-fill">
-                                <FormControl
-                                    ref={this.searchInput}
-                                    type="text"
-                                    placeholder="Search Videos"
-                                />
-                                <InputGroup.Append>
-                                    <Button type="submit" variant="info">
-                                        <span className="fas fa-search"/>
-                                    </Button>
-                                    <Button onClick={this.clearSearch} variant="secondary">
-                                        <span className="fas fa-window-close"/>
-                                    </Button>
-                                </InputGroup.Append>
-                            </InputGroup>
-                        </Form>
-                    </div>
-                </div>
-                <div className="d-flex flex-row">
-                    <div className="d-flex flex-column w-100">
-                        <Container fluid={true} style={{'padding': '0.5em'}}>
-                            {this.getBody()}
-                        </Container>
-                    </div>
-                </div>
+                <Header>{title}</Header>
+                {body}
+                {pagination}
             </>
         )
     }
@@ -956,7 +634,32 @@ class VideosRoute extends React.Component {
 
     render() {
         return (
-            <Route path='/videos/:channel_link?/:video_id?' exact component={Videos}/>
+            <Container fluid={true} style={{margin: '2em', padding: '0.5em'}}>
+                <Route path='/videos' exact
+                       component={(i) =>
+                           <Videos
+                               title="Newest Videos"
+                               match={i.match}
+                               history={i.history}
+                               location={i.location}
+                           />}
+                />
+                <Route path='/videos/favorites' exact
+                       component={(i) =>
+                           <Videos
+                               title="Favorite Videos"
+                               match={i.match}
+                               history={i.history}
+                               location={i.location}
+                               filter='favorites'
+                           />
+                       }/>
+                <Route path='/videos/channel' exact component={Channels}/>
+                <Route path='/videos/manage' exact component={ManageVideos}/>
+                <Route path='/videos/channel/:channel_link/edit' exact component={EditChannel}/>
+                <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
+                <Route path='/videos/channel/:channel_link/video/:video_id' exact component={Videos}/>
+            </Container>
         )
     }
 }

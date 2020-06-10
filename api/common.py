@@ -5,7 +5,7 @@ import os
 import queue
 import string
 from collections import namedtuple
-from datetime import datetime
+from datetime import datetime, date
 from functools import wraps
 from multiprocessing import Event, Queue
 from pathlib import Path
@@ -17,11 +17,12 @@ import sanic
 import yaml
 from sanic import Sanic, Blueprint, response
 from sanic.request import Request
+from sanic.response import HTTPResponse
 from sanic_openapi import doc
 from websocket import WebSocket
 
 from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents
-from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT
+from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT
 
 sanic_app = Sanic()
 
@@ -60,11 +61,14 @@ QUEUE_TIMEOUT = 10
 
 feed_logger = logger.getChild('ws_feed')
 
+EVENTS = []
 
-def create_websocket_feed(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT_QUEUE_SIZE):
+
+def create_websocket_feed(name: str, uri: str, blueprint: Blueprint, maxsize: int = DEFAULT_QUEUE_SIZE):
     """
     Build the objects needed to run a websocket which will pass on messages from a multiprocessing.Queue.
 
+    :param name: the name that will be reported in the global event feeds
     :param uri: the Sanic URI that the websocket will listen on
     :param blueprint: the Sanic Blueprint to attach the websocket to
     :param maxsize: the maximum size of the Queue
@@ -72,6 +76,7 @@ def create_websocket_feed(uri: str, blueprint: Blueprint, maxsize: int = DEFAULT
     """
     q = Queue(maxsize=maxsize)
     event = Event()
+    EVENTS.append((name, event))
 
     @blueprint.websocket(uri)
     async def local_websocket(_: Request, ws: WebSocket):
@@ -216,12 +221,15 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
                 return func(request, *a, **kw)
             except ValidationError as e:
                 error = API_ERRORS[type(e)]
-                cause = API_ERRORS[type(e.__cause__)]
                 body = {
                     'error': error['message'],
                     'code': error['code'],
-                    'cause': {'error': cause['message'], 'code': cause['code']}
                 }
+
+                if cause := e.__cause__:
+                    cause = API_ERRORS[type(cause)] if cause else None
+                    body['cause'] = {'error': cause['message'], 'code': cause['code']}
+
                 r = response.json(body, error['status'])
                 return r
             except APIError as e:
@@ -279,9 +287,6 @@ class FeedReporter:
         self.queue.put({'progresses': self.progresses, 'message': message})
 
 
-LAST_MODIFIED_FORMAT = '%a, %d %b %Y %H:%M:%S GMT'
-
-
 class FileNotModified(Exception):
     pass
 
@@ -304,11 +309,11 @@ def get_last_modified_headers(request_headers: dict, path: Union[Path, str]) -> 
 
     modified_since = request_headers.get('If-Modified-Since')
     if modified_since:
-        modified_since = datetime.strptime(modified_since, LAST_MODIFIED_FORMAT)
+        modified_since = datetime.strptime(modified_since, LAST_MODIFIED_DATE_FORMAT)
         if last_modified >= modified_since:
             raise FileNotModified()
 
-    last_modified = last_modified.strftime(LAST_MODIFIED_FORMAT)
+    last_modified = last_modified.strftime(LAST_MODIFIED_DATE_FORMAT)
     headers = {'Last-Modified': last_modified}
     return headers
 
@@ -383,3 +388,21 @@ def save_settings_config(config=None):
     with open(str(CONFIG_PATH), 'wt') as fh:
         yaml.dump(new_config, fh)
         # asynchronous
+
+
+class JSONEncodeDate(json.JSONEncoder):
+
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.timestamp()
+        elif isinstance(obj, date):
+            return datetime(obj.year, obj.month, obj.day).timestamp()
+        return super(JSONEncodeDate, self).default(obj)
+
+
+@wraps(response.json)
+def json_response(*a, **kwargs) -> HTTPResponse:
+    """
+    Handles encoding dates/datetimes in JSON.
+    """
+    return response.json(*a, **kwargs, cls=JSONEncodeDate, dumps=json.dumps)

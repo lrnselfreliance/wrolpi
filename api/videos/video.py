@@ -1,17 +1,18 @@
 from http import HTTPStatus
 from typing import List, Dict, Tuple
 
+import psycopg2
 from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from api.common import validate_doc, logger
+from api.common import validate_doc, logger, json_response, string_to_boolean
 from api.db import get_db_context
-from api.errors import UnknownVideo, SearchEmpty, ValidationError
-from api.videos.common import VIDEO_QUERY_LIMIT, get_video_info_json, get_matching_directories, get_media_directory, \
-    get_relative_to_media_directory
+from api.errors import UnknownVideo, ValidationError
+from api.videos.common import get_video_info_json, get_matching_directories, get_media_directory, \
+    get_relative_to_media_directory, get_allowed_limit
 from api.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse, \
-    ChannelVideosResponse, DirectoriesResponse, DirectoriesRequest
+    DirectoriesResponse, DirectoriesRequest
 
 video_bp = Blueprint('Video')
 
@@ -37,17 +38,76 @@ def video(request, video_id: str):
     video = dict(video)
     video['info_json'] = info_json
 
-    return response.json({'video': video})
+    return json_response({'video': video})
 
 
-def video_search(db_conn, db: DictDB, search_str: str, offset: int) -> Tuple[List[Dict], int]:
+VIDEO_ORDERS = {
+    'upload_date': 'upload_date ASC, LOWER(video_path) ASC',
+    '-upload_date': 'upload_date DESC NULLS LAST, LOWER(video_path) DESC',
+    'rank': '2 DESC, LOWER(video_path) DESC',
+    '-rank': '2 ASC, LOWER(video_path) ASC',
+}
+DEFAULT_VIDEO_ORDER = 'rank'
+VIDEO_QUERY_LIMIT = 20
+
+
+def video_search(
+        db_conn: psycopg2.connect,
+        db: DictDB,
+        search_str: str = None,
+        offset: int = None,
+        limit: int = VIDEO_QUERY_LIMIT,
+        channel_link: str = None,
+        order_by: str = None,
+        favorites: bool = None,
+) -> Tuple[List[Dict], int]:
     curs = db_conn.cursor()
 
-    query = 'SELECT id, ts_rank_cd(textsearch, websearch_to_tsquery(%s)), COUNT(*) OVER() AS total ' \
-            f'FROM video WHERE textsearch @@ websearch_to_tsquery(%s) ORDER BY 2 DESC OFFSET %s LIMIT {VIDEO_QUERY_LIMIT}'
-    curs.execute(query, (search_str, search_str, offset))
+    args = dict(search_str=search_str, offset=offset)
+    channel_where = ''
+    if channel_link:
+        channel_where = 'AND channel_id = (select id from channel where link=%(channel_link)s)'
+        args['channel_link'] = channel_link
+
+    # Convert the user-friendly order by into a real order by, restrict what can be interpolated by using the whitelist.
+    order = VIDEO_ORDERS[DEFAULT_VIDEO_ORDER]
+    if order_by:
+        try:
+            order = VIDEO_ORDERS[order_by]
+        except KeyError:
+            raise
+
+    # Filter for/against favorites, if it was provided
+    favorites_where = ''
+    if favorites is not None:
+        favorites_where = f'AND favorite IS {"NOT" if favorites else ""} NULL'
+
+    where = ''
+    if search_str:
+        # A search_str was provided by the user, modify the query to filter by it.
+        select = 'id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
+        where = 'textsearch @@ websearch_to_tsquery(%(search_str)s)'
+        args['search_str'] = search_str
+    else:
+        # No search_str provided.  Get id and total only.
+        select = 'id, COUNT(*) OVER() AS total'
+
+    query = f'''
+        SELECT
+            {select}
+        FROM video
+        WHERE
+            video_path IS NOT NULL
+            {where}
+            {channel_where}
+            {favorites_where}
+        ORDER BY {order}
+        OFFSET %(offset)s LIMIT {limit}
+    '''
+
+    curs.execute(query, args)
     results = list(curs.fetchall())
-    total = results[0][2] if results else 0
+    total = results[0][1] if results else 0
     ranked_ids = [i[0] for i in results]
 
     results = []
@@ -60,64 +120,30 @@ def video_search(db_conn, db: DictDB, search_str: str, offset: int) -> Tuple[Lis
 
 @video_bp.post('/search')
 @validate_doc(
-    summary='Search Video titles and captions, search Channel names.',
+    summary='Search Video titles and captions',
     consumes=VideoSearchRequest,
     produces=VideoSearchResponse,
 )
 def search(_: Request, data: dict):
-    search_str = data['search_str']
-    offset = int(data.get('offset', 0))
-
-    if not search_str:
-        raise ValidationError() from SearchEmpty()
-
-    with get_db_context() as (db_conn, db):
-        videos, videos_total = video_search(db_conn, db, search_str, offset)
-
-        # Get each Channel for each Video, this will be converted to a dict by the response
-        _ = [i['channel'] for i in videos]
-
-    ret = {'videos': videos,
-           'totals': {'videos': videos_total}}
-    return response.json(ret)
-
-
-def get_recent_videos(db_conn, db: DictDB, offset: int = 0) -> Tuple[List[Dict], int]:
-    curs = db_conn.cursor()
-    query = 'SELECT id, COUNT(*) OVER() as total FROM video WHERE upload_date IS NOT NULL ORDER BY upload_date DESC ' \
-            'OFFSET %s LIMIT 20'
-    curs.execute(query, (offset,))
-    results = list(curs.fetchall())
-    total = results[0][1] if results else 0
-    ids = [i[0] for i in results]
-
-    results = []
-    if ids:
-        Video = db['video']
-        results = Video.get_where(Video['id'].In(ids))
-        results = sorted(results, key=lambda r: ids.index(r['id']))
-        results = list(results)
-    return results, total
-
-
-@video_bp.get('/recent')
-@validate_doc(
-    summary='Get Channel Videos',
-    produces=ChannelVideosResponse,
-    responses=(
-            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
-    ),
-)
-def recent_videos(request):
-    offset = int(request.args.get('offset', 0))
+    try:
+        search_str = data.get('search_str')
+        channel_link = data.get('channel_link')
+        order_by = data.get('order_by', DEFAULT_VIDEO_ORDER)
+        offset = int(data.get('offset', 0))
+        limit = get_allowed_limit(data.get('limit'))
+        favorites = string_to_boolean(data['favorites']) if 'favorites' in data else None
+    except Exception as e:
+        raise ValidationError('Unable to validate search queries') from e
 
     with get_db_context() as (db_conn, db):
-        videos, total = get_recent_videos(db_conn, db, offset)
+        videos, videos_total = video_search(db_conn, db, search_str, offset, limit, channel_link, order_by, favorites)
 
         # Get each Channel for each Video, this will be converted to a dict by the response
+        # TODO these are huge, and must be simplified.
         _ = [i['channel'] for i in videos]
 
-    return response.json({'videos': list(videos), 'total': total})
+    ret = {'videos': videos, 'totals': {'videos': videos_total}}
+    return json_response(ret)
 
 
 @video_bp.post('/directories')

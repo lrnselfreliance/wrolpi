@@ -7,6 +7,8 @@ class ChannelPostRequest:
     match_regex = doc.String(description='Regex that the video title will have to match')
     directory = doc.String(required=True)
     mkdir = doc.Boolean()
+    generate_thumbnails = doc.Boolean()
+    calculate_duration = doc.Boolean()
 
 
 class ChannelPutRequest:
@@ -15,7 +17,8 @@ class ChannelPutRequest:
     match_regex = doc.String()
     link = doc.String()
     directory = doc.String()
-    mkdir = doc.Boolean()
+    generate_thumbnails = doc.Boolean()
+    calculate_duration = doc.Boolean()
 
 
 class RefreshRequest:
@@ -109,8 +112,12 @@ class VideoResponse:
 
 
 class VideoSearchRequest:
-    search_str = doc.String(required=True)
+    search_str = doc.String()
+    channel_link = doc.String()
+    order_by = doc.String()
     offset = doc.Integer()
+    limit = doc.Integer()
+    favorites = doc.Boolean()
 
 
 class VideoSearchResponse:
@@ -134,9 +141,44 @@ class SettingsRequest:
     media_directory = doc.String()
 
 
+class RegexRequest:
+    regex = doc.String()
+
+
+class RegexResponse:
+    regex = doc.String()
+    valid = doc.Boolean()
+
+
 class DirectoriesRequest:
     search_str = doc.String(required=True)
 
 
 class DirectoriesResponse:
     directories = doc.List(doc.String())
+
+
+class EventObject:
+    name = doc.String()
+    is_set = doc.Boolean()
+
+
+class EventsResponse:
+    events = doc.List(EventObject)
+
+
+class EchoResponse:
+    form = doc.Dictionary()
+    headers = doc.Dictionary()
+    json = doc.String()
+    method = doc.String()
+
+
+class FavoriteRequest:
+    video_id = doc.Integer()
+    favorite = doc.Boolean()
+
+
+class FavoriteResponse:
+    video_id = doc.Integer()
+    favorite = doc.DateTime()

@@ -2,9 +2,10 @@ import json
 import os
 import pathlib
 import subprocess
+from datetime import datetime
 from functools import partial, lru_cache
 from pathlib import Path
-from typing import Union, Tuple, List
+from typing import Union, Tuple, List, Optional
 
 from dictorm import Dict, DictDB
 
@@ -19,6 +20,7 @@ logger = logger.getChild('videos')
 REQUIRED_OPTIONS = ['name', 'directory']
 
 VIDEO_QUERY_LIMIT = 20
+VIDEO_QUERY_MAX_LIMIT = 100
 
 
 def get_downloader_config() -> dict:
@@ -31,6 +33,16 @@ def get_channels_config() -> dict:
     config = get_config()
     channels = config['channels']
     return channels
+
+
+def get_allowed_limit(limit: int) -> int:
+    """
+    Return the video limit int if it was passed, unless it is over the maximum limit.  If no limit is provided, return
+    the default limit.
+    """
+    if limit:
+        return min(int(limit), VIDEO_QUERY_MAX_LIMIT)
+    return VIDEO_QUERY_LIMIT
 
 
 class ConfigError(Exception):
@@ -243,14 +255,23 @@ def verify_config():
     raise Exception(error)
 
 
-def get_channel_videos(db: DictDB, link: str, offset: int = 0):
+def get_channel_videos(db: DictDB, link: str, offset: int = 0, limit: int = 0) -> Tuple[List[Dict], int]:
+    """
+    Get all video objects for a particular channel that have a video file.  Also get the total videos that match this
+    criteria.
+    """
     Channel, Video = db['channel'], db['video']
     channel = Channel.get_one(link=link)
     if not channel:
         raise UnknownChannel('Unknown Channel')
-    total = len(Video.get_where(channel_id=channel['id']))
-    videos = Video.get_where(channel_id=channel['id']).order_by(
-        'upload_date DESC, LOWER(title) ASC, LOWER(video_path) ASC').limit(VIDEO_QUERY_LIMIT).offset(offset)
+
+    videos = Video.get_where(channel_id=channel['id']).refine(
+        Video['video_path'].IsNotNull())
+    total = len(videos)
+
+    videos = videos.order_by(
+        'upload_date DESC, LOWER(title) ASC, LOWER(video_path) ASC').limit(limit).offset(offset)
+
     return videos, total
 
 
@@ -384,3 +405,16 @@ async def get_bulk_video_duration(video_ids: List[int]):
             video['duration'] = duration
             video.flush()
             db_conn.commit()
+
+
+def toggle_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
+    """
+    Toggle the timestamp on Video.favorite on a video.
+    """
+    with get_db_context(commit=True) as (db_conn, db):
+        Video = db['video']
+        video = Video.get_one(id=video_id)
+        _favorite = video['favorite'] = datetime.now() if favorite else None
+        video.flush()
+
+    return _favorite

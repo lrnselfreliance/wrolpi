@@ -2,12 +2,11 @@ import React from 'react';
 import {Link, Route} from "react-router-dom";
 import '../static/external/fontawesome-free/css/all.min.css';
 import Paginator, {DEFAULT_LIMIT, VIDEOS_API} from "./Common"
-import Container from "react-bootstrap/Container";
 import Video from "./VideoPlayer";
-import 'react-bootstrap-typeahead/css/Typeahead.css';
 import {getChannel, getChannels, getConfig, getVideo, getVideos, updateChannel, validateRegex} from "../api";
 import {Button, Card, Checkbox, Form, Grid, Header, Image, Input, Loader, Placeholder, Popup} from "semantic-ui-react";
 import * as QueryString from 'query-string';
+import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 
 // function scrollToTop() {
 //     window.scrollTo({

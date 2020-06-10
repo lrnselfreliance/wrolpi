@@ -1,7 +1,7 @@
 import React from 'react';
-import Button from "react-bootstrap/Button";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {favoriteVideo} from "../api";
+import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 
 const MEDIA_PATH = '/media';
 

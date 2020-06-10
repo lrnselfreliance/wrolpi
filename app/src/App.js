@@ -13,7 +13,7 @@ function Welcome() {
         <Container fluid>
             <Header as="h1">Welcome to WROLPi!</Header>
             <p>
-                Bring your personal internet, off-grid.
+                Take your internet, off-grid.
             </p>
         </Container>
     )

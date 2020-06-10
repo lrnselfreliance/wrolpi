@@ -2,7 +2,7 @@
 [![Build Status](https://img.shields.io/travis/lrnselfreliance/wrolpi?style=flat-square)](https://travis-ci.org/lrnselfreliance/wrolpi)
 [![License: GPL v3](https://img.shields.io/github/license/lrnselfreliance/wrolpi?style=flat-square)](https://github.com/lrnselfreliance/wrolpi/blob/master/LICENSE)
 
-**Bring your personal internet, off-grid.**
+**Take your internet, off-grid.**
 
 <p align="center">
   <img width="256px" src="https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/icon.png" alt='WROLPi Logo'>

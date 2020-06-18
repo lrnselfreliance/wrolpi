@@ -265,7 +265,7 @@ class ManageVideos extends React.Component {
 
     render() {
         return (
-            <>
+            <Container>
                 <Header as="h1">Manage Videos</Header>
 
                 <p>
@@ -277,7 +277,7 @@ class ManageVideos extends React.Component {
                     <Button secondary onClick={this.refresh}>Refresh Video Files</Button>
                     <label>Search for any videos in the media directory</label>
                 </p>
-            </>
+            </Container>
         )
     }
 }

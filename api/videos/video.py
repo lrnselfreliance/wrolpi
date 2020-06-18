@@ -126,7 +126,7 @@ def video_search(
     consumes=VideoSearchRequest,
     produces=VideoSearchResponse,
 )
-def search(_: Request, data: dict):
+async def search(_: Request, data: dict):
     try:
         search_str = data.get('search_str')
         channel_link = data.get('channel_link')

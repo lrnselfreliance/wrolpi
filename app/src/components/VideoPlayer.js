@@ -2,6 +2,7 @@ import React from 'react';
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {favoriteVideo} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
+import {Link} from "react-router-dom";
 
 const MEDIA_PATH = '/media';
 
@@ -56,6 +57,11 @@ function Video(props) {
                 <source src={video_url} type="video/mp4"/>
                 <track kind="captions" label="English captions" src={captions_url} srcLang="en" default/>
             </video>
+
+            <h2>{video.title}</h2>
+            <Link to={`/videos/channel/${channel.link}/video`}>
+                <h3>{channel.name}</h3>
+            </Link>
 
             <p>
                 <a href={video_url}>

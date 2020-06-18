@@ -11,7 +11,7 @@ export default class Paginator extends React.Component {
         siblingRange: 2,
         showEllipsis: true,
         showFirstAndLastNav: false,
-        showPreviousAndNextNav: false,
+        showPreviousAndNextNav: true,
     }
 
     handlePaginationChange = (e, {activePage}) => {

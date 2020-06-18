@@ -615,10 +615,10 @@ class Videos extends React.Component {
             body = <VideoCards videos={videos}/>;
         }
 
-        let title = this.props.title;
+        let channelName = this.props.title;
         if (!this.props.title && this.state.channel) {
             // No title specified, but a channel is selected, use it's name for the title.
-            title = this.state.channel.name;
+            channelName = this.state.channel.name;
         }
 
         if (this.state.totalPages) {
@@ -637,7 +637,7 @@ class Videos extends React.Component {
             <>
                 <Grid columns={2}>
                     <Grid.Column>
-                        <Header>{title}</Header>
+                        <Header as='h1'>{channelName}</Header>
                     </Grid.Column>
                     <Grid.Column textAlign='right'>
                         <Form onSubmit={this.handleSearch}>

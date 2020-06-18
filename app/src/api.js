@@ -22,14 +22,14 @@ export async function getChannel(link) {
     return data['channel'];
 }
 
-export async function searchVideos(offset, limit, channel_link, search_str, favorites, order_by) {
+export async function searchVideos(offset, limit, channel_link, searchStr, favorites, order_by) {
     // Build a search query to retrieve a list of videos from the API
     offset = offset || 0;
     limit = limit || DEFAULT_LIMIT;
     let body = {offset, limit, favorites: !!favorites};
 
-    if (search_str) {
-        body.search_str = search_str;
+    if (searchStr) {
+        body.search_str = searchStr;
     }
     if (channel_link) {
         body.channel_link = channel_link;

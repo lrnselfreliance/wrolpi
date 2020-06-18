@@ -1,6 +1,5 @@
 from http import HTTPStatus
-from pprint import pprint
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 import psycopg2
 from dictorm import DictDB
@@ -38,8 +37,58 @@ def video(request, video_id: str):
     info_json = get_video_info_json(video)
     video = dict(video)
     video['info_json'] = info_json
+    previous_video, next_video = get_surrounding_videos(db, video_id, video['channel_id'])
 
-    return json_response({'video': video})
+    return json_response({'video': video, 'prev': previous_video, 'next': next_video})
+
+
+def get_surrounding_videos(db: DictDB, video_id: int, channel_id: int) -> Tuple[Optional[Dict], Optional[Dict]]:
+    video_id, channel_id = int(video_id), int(channel_id)
+
+    # Get the position of the video in the default order of a video search.
+    query = '''
+        SELECT position
+        FROM (
+            select *, row_number() over (
+            order by upload_date ASC, LOWER(video_path) ASC) as position
+            from video
+        ) result
+        WHERE
+            id = %(video_id)s
+            AND channel_id = %(channel_id)s
+    '''
+    curs = db.get_cursor()
+    curs.execute(query, dict(video_id=video_id, channel_id=channel_id))
+    position = curs.fetchone()[0]
+
+    # Get the video before, and after the video's position.
+    # TODO there has to be a way to do this in postgres
+    query = '''
+        SELECT id
+        FROM video
+        ORDER BY upload_date ASC, LOWER(video_path) ASC
+        OFFSET %(offset)s
+        FETCH FIRST 3 ROWS ONLY
+    '''
+    curs.execute(query, dict(offset=max(position - 2, 0)))
+    id_range = [i[0] for i in curs.fetchall()]
+    previous_id = next_id = None
+    for idx, id_ in enumerate(id_range):
+        if id_ == video_id:
+            if idx - 1 >= 0:
+                previous_id = id_range[idx - 1]
+            if idx + 1 < len(id_range):
+                next_id = id_range[idx + 1]
+
+    # Fetch the videos by id, if they exist.
+    Video = db['video']
+    previous_video = next_video = None
+    if previous_id:
+        previous_video = Video.get_one(id=previous_id)
+    if next_id:
+        next_video = Video.get_one(id=next_id)
+
+    return previous_video, next_video
 
 
 VIDEO_ORDERS = {

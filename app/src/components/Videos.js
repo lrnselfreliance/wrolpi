@@ -499,10 +499,14 @@ class VideoCards extends React.Component {
     }
 }
 
-function changePageHistory(history, location, activePage) {
+function changePageHistory(history, location, activePage, searchStr) {
+    let search = `?page=${activePage}`;
+    if (searchStr) {
+        search = `${search}&q=${searchStr}`;
+    }
     history.push({
         pathname: location.pathname,
-        search: `?page=${activePage}`,
+        search: search,
     });
 }
 
@@ -511,29 +515,29 @@ class Videos extends React.Component {
     constructor(props) {
         super(props);
         const query = QueryString.parse(this.props.location.search);
-        let activePage = 1; // First page is 1 by default, of course.
-        if (query.page) {
-            activePage = parseInt(query.page);
-        }
+        let activePage = query.page ? parseInt(query.page) : 1; // First page is 1 by default, of course.
+        let searchStr = query.q || null;
+
         this.state = {
             channel: null,
             videos: null,
             video: null,
-            search_str: null,
+            searchStr: searchStr,
             show: false,
             limit: DEFAULT_LIMIT,
             activePage: activePage,
             total: null,
             totalPages: null,
         };
-        this.changePage = this.changePage.bind(this);
     }
 
     async componentDidMount() {
         if (this.props.match.params.video_id) {
             await this.fetchVideo();
-        } else {
+        } else if (this.props.match.params.channel_link) {
             await this.fetchChannel();
+        } else {
+            await this.fetchVideos();
         }
     }
 
@@ -549,7 +553,7 @@ class Videos extends React.Component {
         } else if (videoChanged) {
             await this.fetchVideo();
         } else if (pageChanged) {
-            changePageHistory(this.props.history, this.props.location, this.state.activePage);
+            changePageHistory(this.props.history, this.props.location, this.state.activePage, this.state.searchStr);
             await this.fetchVideos();
         }
     }
@@ -561,7 +565,13 @@ class Videos extends React.Component {
         if (channel_link) {
             channel = await getChannel(channel_link);
         }
-        this.setState({channel, offset: 0, total: null, videos: null, video: null, search_str: null},
+        this.setState({
+                channel,
+                offset: 0,
+                total: null,
+                videos: null,
+                video: null,
+            },
             this.fetchVideos);
     }
 
@@ -569,9 +579,9 @@ class Videos extends React.Component {
         let offset = this.state.limit * this.state.activePage - this.state.limit;
         let channel_link = this.state.channel ? this.state.channel.link : null;
         let favorites = this.props.filter === 'favorites';
-        let order_by = this.state.search_str ? 'rank' : '-upload_date';
+        let order_by = this.state.searchStr ? 'rank' : '-upload_date';
         let [videos, total] = await searchVideos(
-            offset, this.state.limit, channel_link, this.state.search_str, favorites, order_by);
+            offset, this.state.limit, channel_link, this.state.searchStr, favorites, order_by);
 
         let totalPages = Math.round(total / this.state.limit) + 1;
         this.setState({videos, total, totalPages});
@@ -586,13 +596,14 @@ class Videos extends React.Component {
         }
     }
 
-    async changePage(activePage) {
+    changePage = async (activePage) => {
         this.setState({activePage});
     }
 
     handleSearch = async (e) => {
         e.preventDefault();
         await this.fetchVideos();
+        changePageHistory(this.props.history, this.props.location, this.state.activePage, this.state.searchStr);
     }
 
     handleInputChange = (event, {name, value}) => {
@@ -645,7 +656,8 @@ class Videos extends React.Component {
                                 icon='search'
                                 placeholder='Search...'
                                 size="large"
-                                name="search_str"
+                                name="searchStr"
+                                value={this.state.searchStr}
                                 onChange={this.handleInputChange}/>
                         </Form>
                     </Grid.Column>

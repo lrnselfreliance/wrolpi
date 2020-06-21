@@ -232,11 +232,11 @@ def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
         >>> foo = pathlib.Path('foo.bar')
         >>> find_meta_files(foo)
         (pathlib.Path('foo.jpg'), pathlib.Path('foo.description'),
-        pathlib.Path('foo.jpg'), pathlib.Path('foo.info.json'))
+        pathlib.Path('foo.en.vtt'), pathlib.Path('foo.info.json'))
     """
     suffix = path.suffix
     name, suffix, _ = str(path.name).rpartition(suffix)
-    meta_file_exts = (('.jpg',), ('.description',), ('.en.vtt', '.en.srt'), ('.info.json',))
+    meta_file_exts = (('.jpg', '.webp'), ('.description',), ('.en.vtt', '.en.srt'), ('.info.json',))
     for meta_exts in meta_file_exts:
         for meta_ext in meta_exts:
             meta_path = replace_extension(path, meta_ext)
@@ -252,7 +252,7 @@ def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
 
 
 NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
-                         r'(jpg|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
+                         r'(jpg|webp|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
 
 
 def upsert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotency: str = None,

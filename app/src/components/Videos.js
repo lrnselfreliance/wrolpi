@@ -295,8 +295,11 @@ function Duration({video}) {
 
     if (hours > 0) {
         return <div className="duration-overlay">{hours}:{minutes}:{seconds}</div>
+    } else if (duration) {
+        return <div className="duration-overlay">{minutes}:{seconds}</div>
+    } else {
+        return <></>
     }
-    return <div className="duration-overlay">{minutes}:{seconds}</div>
 }
 
 function VideoCard({video}) {

@@ -49,8 +49,7 @@ async def get_minimal_channels() -> List[Dict]:
             GROUP BY 1
         '''
         curs.execute(query)
-        video_counts = [dict(i) for i in curs.fetchall()]
-        video_counts = {i['id']: i['video_count'] for i in video_counts}
+        video_counts = {i['id']: i['video_count'] for i in curs.fetchall()}
 
         for channel in channels:
             channel_id = channel['id']

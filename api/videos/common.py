@@ -252,7 +252,8 @@ def verify_config():
     elif error:
         error += 'Have you updated your local.yaml with the media_directory?'
 
-    raise Exception(error)
+    if error:
+        raise Exception(error)
 
 
 def get_channel_videos(db: DictDB, link: str, offset: int = 0, limit: int = 0) -> Tuple[List[Dict], int]:

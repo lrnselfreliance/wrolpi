@@ -47,6 +47,7 @@ def main():
 
     if args.verify_config:
         verify_config()
+        print('Config verified')
         return 0
 
     if args.verbose == 1:

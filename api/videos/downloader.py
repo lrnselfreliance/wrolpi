@@ -147,7 +147,7 @@ def _find_all_missing_videos(db_conn: psycopg2.connect) -> List[Tuple]:
         WHERE
             source_id IS NOT NULL
             AND channel_id IS NOT NULL
-            AND (video_path IS NULL OR video_path = '')
+            AND (video_path IS NULL OR video_path = '' OR poster_path IS NULL OR poster_path = '')
     '''
     curs.execute(query)
     missing_videos = list(curs.fetchall())

@@ -31,14 +31,16 @@ class TestVideoAPI(TestAPI):
             Channel, Video = db['channel'], db['video']
             foo = Channel(name='Foo').flush()
             bar = Channel(name='Bar').flush()
+            baz = Channel(name='Baz').flush()
             Video(channel_id=foo['id'], video_path='foo').flush()
             Video(channel_id=bar['id'], video_path='bar').flush()
 
         request, response = api_app.test_client.get('/api/videos/channels')
         assert response.status_code == HTTPStatus.OK
         # Channels are sorted by name
-        self.assertDictContains(response.json['channels'][0], {'id': 2, 'name': 'Bar'})
-        self.assertDictContains(response.json['channels'][1], {'id': 1, 'name': 'Foo'})
+        self.assertDictContains(response.json['channels'][0], {'id': 2, 'name': 'Bar', 'video_count': 1})
+        self.assertDictContains(response.json['channels'][1], {'id': 3, 'name': 'Baz', 'video_count': 0})
+        self.assertDictContains(response.json['channels'][2], {'id': 1, 'name': 'Foo', 'video_count': 1})
 
     @wrap_test_db
     def test_channel(self):

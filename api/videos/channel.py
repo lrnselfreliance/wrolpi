@@ -24,22 +24,43 @@ async def get_minimal_channels() -> List[Dict]:
     Get the minimum amount of information necessary about all channels.
     """
     with get_db_context() as (db_conn, db):
+        curs = db.get_cursor()
+
+        # Get all channels, even if they don't have videos.
         query = '''
             SELECT
-                c.id, name, link, directory, match_regex, url, COUNT(v.id) AS video_count
+                c.id, name, link, directory, url
+            FROM
+                channel AS c
+            ORDER BY LOWER(name)
+        '''
+        curs.execute(query)
+        channels = list(map(dict, curs.fetchall()))
+
+        # Add video counts to all channels
+        query = '''
+            SELECT
+                c.id, COUNT(v.id) AS video_count
             FROM
                 channel AS c
                 LEFT JOIN video AS v ON v.channel_id = c.id
             WHERE
                 v.video_path IS NOT NULL
-            GROUP BY 1, 2, 3, 4, 5, 6
-            ORDER BY LOWER(name)
+            GROUP BY 1
         '''
-        curs = db.get_cursor()
         curs.execute(query)
-        results = [dict(i) for i in curs.fetchall()]
+        video_counts = [dict(i) for i in curs.fetchall()]
+        video_counts = {i['id']: i['video_count'] for i in video_counts}
 
-    return results
+        for channel in channels:
+            channel_id = channel['id']
+            try:
+                channel['video_count'] = video_counts[channel_id]
+            except KeyError:
+                # No videos for this channel
+                channel['video_count'] = 0
+
+    return channels
 
 
 @channel_bp.get('/')

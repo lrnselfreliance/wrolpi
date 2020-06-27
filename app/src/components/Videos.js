@@ -4,7 +4,20 @@ import '../static/external/fontawesome-free/css/all.min.css';
 import Paginator, {DEFAULT_LIMIT, VIDEOS_API} from "./Common"
 import Video from "./VideoPlayer";
 import {getChannel, getChannels, getConfig, getVideo, searchVideos, updateChannel, validateRegex} from "../api";
-import {Button, Card, Checkbox, Form, Grid, Header, Image, Input, Loader, Placeholder, Popup} from "semantic-ui-react";
+import {
+    Button,
+    Card,
+    Checkbox,
+    Form,
+    Grid,
+    Header,
+    Icon,
+    Image,
+    Input,
+    Loader,
+    Placeholder,
+    Popup
+} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 
@@ -651,7 +664,19 @@ class Videos extends React.Component {
             <>
                 <Grid columns={2}>
                     <Grid.Column>
-                        <Header as='h1'>{channelName}</Header>
+                        <Header as='h1'>
+                            {channelName}
+                            {
+                                this.state.channel &&
+                                <>
+                                    &nbsp;
+                                    &nbsp;
+                                    <Link to={`/videos/channel/${this.state.channel.link}/edit`}>
+                                        <Icon name="edit"/>
+                                    </Link>
+                                </>
+                            }
+                        </Header>
                     </Grid.Column>
                     <Grid.Column textAlign='right'>
                         <Form onSubmit={this.handleSearch}>

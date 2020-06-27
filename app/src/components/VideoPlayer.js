@@ -17,12 +17,12 @@ function Video(props) {
         poster_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.poster_path)}`;
     }
     let video_url = null;
-    if (video.video_url) {
-        video_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.video_url)}`;
+    if (video.video_path) {
+        video_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.video_path)}`;
     }
     let captions_url = null;
-    if (video.captions_url) {
-        captions_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.captions_url)}`;
+    if (video.caption_path) {
+        captions_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.caption_path)}`;
     }
 
     let description = 'No description available.';

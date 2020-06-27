@@ -1,23 +1,10 @@
 import React from 'react';
 import {Link, Route} from "react-router-dom";
 import '../static/external/fontawesome-free/css/all.min.css';
-import Paginator, {DEFAULT_LIMIT, VIDEOS_API} from "./Common"
+import Paginator, {DEFAULT_LIMIT, VideoCards, VIDEOS_API} from "./Common"
 import Video from "./VideoPlayer";
 import {getChannel, getChannels, getConfig, getVideo, searchVideos, updateChannel, validateRegex} from "../api";
-import {
-    Button,
-    Card,
-    Checkbox,
-    Form,
-    Grid,
-    Header,
-    Icon,
-    Image,
-    Input,
-    Loader,
-    Placeholder,
-    Popup
-} from "semantic-ui-react";
+import {Button, Card, Checkbox, Form, Grid, Header, Icon, Input, Loader, Placeholder, Popup} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 
@@ -295,65 +282,10 @@ class ManageVideos extends React.Component {
     }
 }
 
-function Duration({video}) {
-    let duration = video.duration;
-    let hours = Math.floor(duration / 3600);
-    duration -= hours * 3600;
-    let minutes = Math.floor(duration / 60);
-    let seconds = duration - (minutes * 60);
-
-    hours = String('00' + hours).slice(-2);
-    minutes = String('00' + minutes).slice(-2);
-    seconds = String('00' + seconds).slice(-2);
-
-    if (hours > 0) {
-        return <div className="duration-overlay">{hours}:{minutes}:{seconds}</div>
-    } else if (duration) {
-        return <div className="duration-overlay">{minutes}:{seconds}</div>
-    } else {
-        return <></>
-    }
-}
-
-function VideoCard({video}) {
-    let channel = video.channel;
-    let channel_url = `/videos/channel/${channel.link}/video`;
-
-    let upload_date = null;
-    if (video.upload_date) {
-        upload_date = new Date(video['upload_date'] * 1000);
-        upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth() + 1}-${upload_date.getDate()}`;
-    }
-    let video_url = `/videos/channel/${channel.link}/video/${video.id}`;
-    let poster_url = video.poster_path ? `/media/${channel.directory}/${encodeURIComponent(video.poster_path)}` : null;
-
-    return (
-        <Card style={{'width': '18em', 'margin': '1em'}}>
-            <Link to={video_url}>
-                <Image src={poster_url} wrapped style={{position: 'relative', width: '100%'}}/>
-            </Link>
-            <Duration video={video}/>
-            <Card.Content>
-                <Card.Header>
-                    <Link to={video_url} className="no-link-underscore video-card-link">
-                        <p>{video.title || video.video_path}</p>
-                    </Link>
-                </Card.Header>
-                <Card.Description>
-                    <Link to={channel_url} className="no-link-underscore video-card-link">
-                        <b>{channel.name}</b>
-                    </Link>
-                    <p>{upload_date}</p>
-                </Card.Description>
-            </Card.Content>
-        </Card>
-    )
-}
-
 function VideoWrapper(props) {
 
     return (
-        <Video video={props.video} autoplay={false}/>
+        <Video video={props.video} prev={props.prev} next={props.next} autoplay={false}/>
     )
 }
 
@@ -502,19 +434,6 @@ class Channels extends React.Component {
     }
 }
 
-class VideoCards extends React.Component {
-
-    render() {
-        return (
-            <Card.Group>
-                {this.props.videos.map((v) => {
-                    return <VideoCard key={v['id']} video={v}/>
-                })}
-            </Card.Group>
-        )
-    }
-}
-
 function changePageHistory(history, location, activePage, searchStr) {
     let search = `?page=${activePage}`;
     if (searchStr) {
@@ -544,6 +463,8 @@ class Videos extends React.Component {
             activePage: activePage,
             total: null,
             totalPages: null,
+            prev: null,
+            next: null,
         };
     }
 
@@ -607,8 +528,8 @@ class Videos extends React.Component {
         // Get and display the Video specified in the Router match
         let video_id = this.props.match.params.video_id;
         if (video_id) {
-            let video = await getVideo(video_id);
-            this.setState({video});
+            let [video, prev, next] = await getVideo(video_id);
+            this.setState({video, prev, next});
         }
     }
 
@@ -629,11 +550,13 @@ class Videos extends React.Component {
     render() {
         let video = this.state.video;
         let videos = this.state.videos;
+        let prev = this.state.prev;
+        let next = this.state.next;
         let body = <VideoPlaceholder/>;
         let pagination = null;
 
         if (video) {
-            body = <VideoWrapper video={video} channel={video.channel}/>
+            body = <VideoWrapper video={video} prev={prev} next={next} channel={video.channel}/>
         } else if (videos && videos.length === 0 && this.props.filter !== 'favorites') {
             body = <p>No videos retrieved. Have you downloaded videos yet?</p>;
         } else if (videos && videos.length === 0 && this.props.filter === 'favorites') {

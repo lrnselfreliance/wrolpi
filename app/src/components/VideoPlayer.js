@@ -3,6 +3,7 @@ import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {favoriteVideo} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link} from "react-router-dom";
+import {VideoCards} from "./Common";
 
 const MEDIA_PATH = '/media';
 
@@ -54,6 +55,14 @@ function Video(props) {
         );
     }
 
+    let cards = [];
+    if (props.prev) {
+        cards = cards.concat([props.prev]);
+    }
+    if (props.next) {
+        cards = cards.concat([props.next]);
+    }
+
     return (
         <>
             <video controls
@@ -86,6 +95,8 @@ function Video(props) {
             <pre className="wrap-text">
                 {description}
             </pre>
+
+            <VideoCards videos={cards}/>
         </>
     )
 }

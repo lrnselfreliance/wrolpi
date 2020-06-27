@@ -45,14 +45,10 @@ export async function searchVideos(offset, limit, channel_link, searchStr, favor
     }
 }
 
-export async function getVideos(offset, limit, channel_link, favorites) {
-    return await searchVideos(offset, limit, channel_link, null, favorites, '-upload_date')
-}
-
 export async function getVideo(video_id) {
     let response = await fetch(`${VIDEOS_API}/video/${video_id}`);
     let data = await response.json();
-    return data['video'];
+    return [data['video'], data['prev'], data['next']];
 }
 
 export async function getDirectories(search_str) {

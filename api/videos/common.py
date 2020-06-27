@@ -5,7 +5,7 @@ import subprocess
 from datetime import datetime
 from functools import partial, lru_cache
 from pathlib import Path
-from typing import Union, Tuple, List, Optional
+from typing import Union, Tuple, List, Optional, Set
 
 from dictorm import Dict, DictDB
 
@@ -419,3 +419,42 @@ def toggle_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
         video.flush()
 
     return _favorite
+
+
+def minimize_dict(d: dict, keys: Union[Set, List]) -> dict:
+    """
+    Return a new dictionary that contains only the keys provided.
+    """
+    return {k: d[k] for k in d if k in keys}
+
+
+def minimize_channel(channel: dict) -> dict:
+    """
+    Return a Channel dictionary that contains only the key/values typically used.
+    """
+    minimal_keys = {'id', 'name', 'directory', 'url', 'video_count', 'link'}
+    channel = minimize_dict(channel, minimal_keys)
+    return channel
+
+
+def minimize_video_info_json(info_json: dict) -> dict:
+    minimal_keys = {'description'}
+    info_json = minimize_dict(info_json, minimal_keys)
+    return info_json
+
+
+def minimize_video(video: dict) -> dict:
+    """
+    Return a Video dictionary that contains only the key/values typically used.  Minimize the Channel and info_json,
+    if they are present.
+    """
+    minimal_keys = {'id', 'title', 'upload_date', 'duration', 'channel', 'channel_id',
+                    'poster_path', 'caption_path', 'video_path', 'info_json', 'channel'}
+    video = minimize_dict(video, minimal_keys)
+
+    if video.get('channel'):
+        video['channel'] = minimize_channel(video['channel'])
+    if video.get('info_json'):
+        video['info_json'] = minimize_video_info_json(video['info_json'])
+
+    return video

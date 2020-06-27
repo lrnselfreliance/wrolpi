@@ -10,7 +10,7 @@ from api.common import validate_doc, logger, json_response, string_to_boolean
 from api.db import get_db_context
 from api.errors import UnknownVideo, ValidationError, InvalidOrderBy
 from api.videos.common import get_video_info_json, get_matching_directories, get_media_directory, \
-    get_relative_to_media_directory, get_allowed_limit
+    get_relative_to_media_directory, get_allowed_limit, minimize_video
 from api.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse, \
     DirectoriesResponse, DirectoriesRequest
 
@@ -19,7 +19,7 @@ video_bp = Blueprint('Video')
 logger = logger.getChild('video')
 
 
-@video_bp.get('/video/<video_id:string>')
+@video_bp.get('/video/<video_id:int>')
 @validate_doc(
     summary='Get Video information',
     produces=VideoResponse,
@@ -27,7 +27,7 @@ logger = logger.getChild('video')
             (HTTPStatus.NOT_FOUND, JSONErrorResponse),
     ),
 )
-def video(request, video_id: str):
+def video_get(request, video_id: int):
     db: DictDB = request.ctx.get_db()
     Video = db['video']
     video = Video.get_one(id=video_id)
@@ -37,7 +37,11 @@ def video(request, video_id: str):
     info_json = get_video_info_json(video)
     video = dict(video)
     video['info_json'] = info_json
+    video = minimize_video(video)
+
     previous_video, next_video = get_surrounding_videos(db, video_id, video['channel_id'])
+    previous_video = minimize_video(previous_video) if previous_video else None
+    next_video = minimize_video(next_video) if next_video else None
 
     return json_response({'video': video, 'prev': previous_video, 'next': next_video})
 
@@ -103,7 +107,6 @@ VIDEO_QUERY_LIMIT = 20
 
 
 def video_search(
-        db_conn: psycopg2.connect,
         db: DictDB,
         search_str: str = None,
         offset: int = None,
@@ -190,7 +193,7 @@ async def search(_: Request, data: dict):
         raise InvalidOrderBy('Invalid order by')
 
     with get_db_context() as (db_conn, db):
-        videos, videos_total = video_search(db_conn, db, search_str, offset, limit, channel_link, order_by, favorites)
+        videos, videos_total = video_search(db, search_str, offset, limit, channel_link, order_by, favorites)
 
         # Get each Channel for each Video, this will be converted to a dict by the response
         # TODO these are huge, and must be simplified.

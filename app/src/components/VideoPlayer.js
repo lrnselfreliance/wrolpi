@@ -11,9 +11,18 @@ function Video(props) {
     let video = props.video;
     let channel = video.channel;
 
-    let poster_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.poster_path)}`;
-    let video_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.video_path)}`;
-    let captions_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.caption_path)}`;
+    let poster_url = null;
+    if (video.poster_path) {
+        poster_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.poster_path)}`;
+    }
+    let video_url = null;
+    if (video.video_url) {
+        video_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.video_url)}`;
+    }
+    let captions_url = null;
+    if (video.captions_url) {
+        captions_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.captions_url)}`;
+    }
 
     let description = 'No description available.';
     if (video.info_json) {

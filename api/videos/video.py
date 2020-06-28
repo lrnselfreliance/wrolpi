@@ -1,7 +1,6 @@
 from http import HTTPStatus
 from typing import List, Dict, Tuple, Optional
 
-import psycopg2
 from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
@@ -47,50 +46,66 @@ def video_get(request, video_id: int):
 
 
 def get_surrounding_videos(db: DictDB, video_id: int, channel_id: int) -> Tuple[Optional[Dict], Optional[Dict]]:
+    """
+    Get the previous and next videos around the provided video.  The videos must be in the same channel.
+
+    Example:
+        vid1 = Video(id=1, upload_date=10)
+        vid2 = Video(id=2, upload_date=20)
+        vid3 = Video(id=3, upload_date=30)
+        vid4 = Video(id=4)
+
+        >>> get_surrounding_videos(video_id=1, ...)
+        (None, vid2)
+        >>> get_surrounding_videos(video_id=2, ...)
+        (vid1, vid3)
+        >>> get_surrounding_videos(video_id=3, ...)
+        (vid2, None)
+        Video 4 has no upload date, so we can't place it in order.
+        >>> get_surrounding_videos(video_id=4, ...)
+        (None, None)
+    """
     video_id, channel_id = int(video_id), int(channel_id)
 
-    # Get the position of the video in the default order of a video search.
-    query = '''
-        SELECT position
-        FROM (
-            select *, row_number() over (
-            order by upload_date ASC, LOWER(video_path) ASC) as position
-            from video
-        ) result
-        WHERE
-            id = %(video_id)s
-            AND channel_id = %(channel_id)s
-    '''
     curs = db.get_cursor()
-    curs.execute(query, dict(video_id=video_id, channel_id=channel_id))
-    position = curs.fetchone()[0]
 
-    # Get the video before, and after the video's position.
-    # TODO there has to be a way to do this in postgres
     query = '''
-        SELECT id
-        FROM video
-        ORDER BY upload_date ASC, LOWER(video_path) ASC
-        OFFSET %(offset)s
-        FETCH FIRST 3 ROWS ONLY
+            WITH numbered_videos AS (
+                SELECT id,
+                    ROW_NUMBER() OVER (ORDER BY upload_date ASC) AS row_number
+                FROM video
+                WHERE
+                    channel_id = %(channel_id)s
+                    AND upload_date IS NOT NULL
+            )
+
+            SELECT id
+            FROM numbered_videos
+            WHERE row_number IN (
+                SELECT row_number+i
+                FROM numbered_videos
+                CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
+                WHERE
+                id = %(video_id)s
+            )
     '''
-    curs.execute(query, dict(offset=max(position - 2, 0)))
-    id_range = [i[0] for i in curs.fetchall()]
+    curs.execute(query, dict(channel_id=channel_id, video_id=video_id))
+    results = [i[0] for i in curs.fetchall()]
+
+    # Assign the returned ID's to their respective positions relative to the ID that matches the video_id.
     previous_id = next_id = None
-    for idx, id_ in enumerate(id_range):
+    for idx, id_ in enumerate(results):
         if id_ == video_id:
-            if idx - 1 >= 0:
-                previous_id = id_range[idx - 1]
-            if idx + 1 < len(id_range):
-                next_id = id_range[idx + 1]
+            if idx > 0:
+                previous_id = results[idx - 1]
+            if idx + 1 < len(results):
+                next_id = results[idx + 1]
+            break
 
     # Fetch the videos by id, if they exist.
     Video = db['video']
-    previous_video = next_video = None
-    if previous_id:
-        previous_video = Video.get_one(id=previous_id)
-    if next_id:
-        next_video = Video.get_one(id=next_id)
+    previous_video = Video.get_one(id=previous_id) if previous_id else None
+    next_video = Video.get_one(id=next_id) if next_id else None
 
     return previous_video, next_video
 

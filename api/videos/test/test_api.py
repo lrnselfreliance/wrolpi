@@ -1,6 +1,7 @@
 import json
 import pathlib
 import tempfile
+from datetime import datetime, timedelta
 from http import HTTPStatus
 from queue import Empty
 
@@ -339,7 +340,9 @@ class TestVideoAPI(TestAPI):
                 mock.patch('api.videos.common.get_absolute_video_info_json', raise_unknown_file):
             Channel, Video = db['channel'], db['video']
             channel = Channel(name='Foo', link='foo').flush()
-            Video(title='vidd', channel_id=channel['id']).flush()
+            now = datetime.utcnow()
+            Video(title='vid1', channel_id=channel['id'], upload_date=now).flush()
+            Video(title='vid2', channel_id=channel['id'], upload_date=now + timedelta(seconds=1)).flush()
 
             # Test that a 404 is returned when no video exists
             _, response = api_app.test_client.get('/api/videos/video/10')
@@ -349,38 +352,11 @@ class TestVideoAPI(TestAPI):
             # Get the video info we inserted
             _, response = api_app.test_client.get('/api/videos/video/1')
             assert response.status_code == HTTPStatus.OK, response.json
-            self.assertDictContains(response.json['video'], {'title': 'vidd'})
+            self.assertDictContains(response.json['video'], {'title': 'vid1'})
 
-    @wrap_test_db
-    def test_get_video_prev_next(self):
-        """
-        Test that the previous and next videos will be retrieved when fetching a video.
-        """
-
-        def raise_unknown_file(_):
-            raise UnknownFile()
-
-        with get_db_context(commit=True) as (db_conn, db), \
-                mock.patch('api.videos.common.get_absolute_video_info_json', raise_unknown_file):
-            Channel, Video = db['channel'], db['video']
-            channel = Channel(name='Foo', link='foo').flush()
-            for i in range(1, 5):
-                Video(title=f'vid{i}', channel_id=channel['id']).flush()
-
-            # The first video has no previous video.
-            _, response = api_app.test_client.get('/api/videos/video/1')
+            # The next video is included.
             self.assertIsNone(response.json['prev'])
             self.assertDictContains(response.json['next'], {'title': 'vid2'})
-
-            # The second video has a previous, and next.
-            _, response = api_app.test_client.get('/api/videos/video/2')
-            self.assertDictContains(response.json['prev'], {'title': 'vid1'})
-            self.assertDictContains(response.json['next'], {'title': 'vid3'})
-
-            # The forth video has no next.
-            _, response = api_app.test_client.get('/api/videos/video/4')
-            self.assertDictContains(response.json['prev'], {'title': 'vid3'})
-            self.assertIsNone(response.json['next'])
 
     @wrap_test_db
     def test_get_channel_videos_pagination(self):

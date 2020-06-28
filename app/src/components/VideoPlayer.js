@@ -12,13 +12,11 @@ function Video(props) {
     let video = props.video;
     let channel = video.channel;
 
+    let video_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.video_path)}`;
+
     let poster_url = null;
     if (video.poster_path) {
         poster_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.poster_path)}`;
-    }
-    let video_url = null;
-    if (video.video_path) {
-        video_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.video_path)}`;
     }
     let captions_url = null;
     if (video.caption_path) {

@@ -1,5 +1,5 @@
 import React from "react";
-import {Card, Image, Pagination} from 'semantic-ui-react';
+import {Card, Container, Image, Pagination} from 'semantic-ui-react';
 import {Link} from "react-router-dom";
 
 export const API_URI = process.env.REACT_APP_API ? process.env.REACT_APP_API : '127.0.0.1:8080';
@@ -88,15 +88,19 @@ function VideoCard({video}) {
             <Duration video={video}/>
             <Card.Content>
                 <Card.Header>
-                    <Link to={video_url} className="no-link-underscore video-card-link">
-                        <p>{video.title || video.video_path}</p>
-                    </Link>
+                    <Container textAlign='left'>
+                        <Link to={video_url} className="no-link-underscore video-card-link">
+                            <p>{video.title || video.video_path}</p>
+                        </Link>
+                    </Container>
                 </Card.Header>
                 <Card.Description>
-                    <Link to={channel_url} className="no-link-underscore video-card-link">
-                        <b>{channel.name}</b>
-                    </Link>
-                    <p>{upload_date}</p>
+                    <Container textAlign='left'>
+                        <Link to={channel_url} className="no-link-underscore video-card-link">
+                            <b>{channel.name}</b>
+                        </Link>
+                        <p>{upload_date}</p>
+                    </Container>
                 </Card.Description>
             </Card.Content>
         </Card>

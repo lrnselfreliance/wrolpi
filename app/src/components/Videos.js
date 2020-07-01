@@ -247,7 +247,7 @@ class ChannelPage extends React.Component {
 
 function EditChannel(props) {
     return (
-        <ChannelPage header="Edit Channel" history={props.history} match={props.match}/>
+        <ChannelPage header="Edit Channel" {...props}/>
     )
 }
 
@@ -613,7 +613,9 @@ class Videos extends React.Component {
                         </Form>
                     </Grid.Column>
                 </Grid>
-                {body}
+                <Container textAlign='center'>
+                    {body}
+                </Container>
                 {pagination}
             </>
         )

@@ -4,6 +4,7 @@ import {favoriteVideo} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link} from "react-router-dom";
 import {VideoCards} from "./Common";
+import {Container} from "semantic-ui-react";
 
 const MEDIA_PATH = '/media';
 
@@ -62,7 +63,7 @@ function Video(props) {
     }
 
     return (
-        <>
+        <Container textAlign='left'>
             <video controls
                    autoPlay={props.autoplay !== undefined ? props.autoplay : true}
                    poster={poster_url}
@@ -95,7 +96,7 @@ function Video(props) {
             </pre>
 
             <VideoCards videos={cards}/>
-        </>
+        </Container>
     )
 }
 

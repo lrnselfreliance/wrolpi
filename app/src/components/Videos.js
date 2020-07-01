@@ -7,6 +7,7 @@ import {getChannel, getChannels, getConfig, getVideo, searchVideos, updateChanne
 import {Button, Card, Checkbox, Form, Grid, Header, Icon, Input, Loader, Placeholder, Popup} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
+import _ from 'lodash';
 
 // function scrollToTop() {
 //     window.scrollTo({
@@ -378,24 +379,64 @@ function ChannelsHeader() {
 
 class Channels extends React.Component {
 
+    initialState = {
+        channels: null,
+        value: '',
+        results: [],
+    };
+
     constructor(props) {
         super(props);
-        this.state = {
-            channels: null,
-        };
+        this.state = this.initialState;
     }
 
     async componentDidMount() {
         let channels = await getChannels();
-        this.setState({channels});
+        this.setState({channels, results: channels});
     }
 
+    handleSearchChange = async (e, {value}) => {
+        this.setState({value});
+
+        setTimeout(() => {
+            if (this.state.value.length < 1) {
+                return this.setState({value, results: this.state.channels});
+            }
+
+            const re = new RegExp(_.escapeRegExp(this.state.value), 'i');
+            const isMatch = (result) => re.test(result.name);
+
+            this.setState({
+                results: _.filter(this.state.channels, isMatch),
+            });
+        }, 300);
+    };
+
     render() {
+        let header = (
+            <Grid columns={2}>
+                <Grid.Column>
+                    <ChannelsHeader/>
+                </Grid.Column>
+                <Grid.Column textAlign='right'>
+                    <Form onSubmit={this.handleSearch}>
+                        <Input
+                            icon='search'
+                            placeholder='Name filter...'
+                            size="large"
+                            name="filterStr"
+                            value={this.state.value}
+                            onChange={this.handleSearchChange}/>
+                    </Form>
+                </Grid.Column>
+            </Grid>
+        );
+
         if (this.state.channels === null) {
             // Placeholders while fetching
             return (
                 <>
-                    <ChannelsHeader/>
+                    {header}
                     <Grid columns={2} doubling>
                         {[1, 1, 1, 1, 1, 1].map(() => {
                             return (
@@ -410,7 +451,7 @@ class Channels extends React.Component {
         } else if (this.state.channels === []) {
             return (
                 <>
-                    <ChannelsHeader/>
+                    {header}
                     Not channels exist yet!
                     <Button secondary>Create Channel</Button>
                 </>
@@ -418,9 +459,9 @@ class Channels extends React.Component {
         } else {
             return (
                 <>
-                    <ChannelsHeader/>
+                    {header}
                     <Grid columns={2} doubling>
-                        {this.state.channels.map((channel) => {
+                        {this.state.results.map((channel) => {
                             return (
                                 <Grid.Column>
                                     <ChannelCard channel={channel}/>
@@ -584,7 +625,7 @@ class Videos extends React.Component {
         }
 
         return (
-            <>
+            <Container textAlign='center' fluid>
                 <Grid columns={2}>
                     <Grid.Column>
                         <Header as='h1'>
@@ -617,7 +658,7 @@ class Videos extends React.Component {
                     {body}
                 </Container>
                 {pagination}
-            </>
+            </Container>
         )
     }
 }

@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Tuple, List
 
 import psycopg2
-from dictorm import DictDB, Dict
+from dictorm import DictDB, Dict, And
 from youtube_dl import YoutubeDL
 
 from api.common import make_progress_calculator, logger
@@ -68,7 +68,7 @@ def update_channels(db_conn, db):
     """Update all information for each channel.  (No downloads performed)"""
     Channel = db['channel']
 
-    channels = list(Channel.get_where(Channel['url'].IsNotNull()))
+    channels = list(Channel.get_where(And(Channel['url'].IsNotNull(), Channel['url'] != '')))
     logger.debug(f'Getting info for {len(channels)} channels')
     calc_progress = make_progress_calculator(len(channels))
     for idx, channel in enumerate(channels):

@@ -226,7 +226,8 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
                     'code': error['code'],
                 }
 
-                if cause := e.__cause__:
+                if e.__cause__:
+                    cause = e.__cause__
                     cause = API_ERRORS[type(cause)] if cause else None
                     body['cause'] = {'error': cause['message'], 'code': cause['code']}
 

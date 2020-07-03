@@ -9,6 +9,13 @@ export async function updateChannel(link, channel) {
     }
 }
 
+export async function createChannel(channel) {
+    let response = await fetch(`${VIDEOS_API}/channels`,
+        {method: 'POST', body: JSON.stringify(channel)});
+
+    return response;
+}
+
 export async function getChannels() {
     let url = `${VIDEOS_API}/channels`;
     let response = await fetch(url);

@@ -119,3 +119,7 @@ export class VideoCards extends React.Component {
         )
     }
 }
+
+export function RequiredAsterisk() {
+    return <span style={{color: '#db2828'}}> *</span>
+}

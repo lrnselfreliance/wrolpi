@@ -191,7 +191,16 @@ def find_all_missing_videos(db_conn: psycopg2.connect, db: DictDB) -> Tuple[Dict
 
     for id_, source_id, channel_id in missing_videos:
         channel = channels[channel_id]
-        missing_video = channels_entries[channel_id][source_id]
+        try:
+            missing_video = channels_entries[channel_id][source_id]
+        except KeyError:
+            # The video is not in the latest channel catalog, the video was probably deleted.  Lets
+            # remove this entry because it will be impossible to find.  A later update will download
+            # this video if the previous statement is not true.
+            Video = db['video']
+            Video.get_one(id=id_).delete()
+            continue
+
         match_regex: re.compile = match_regexes.get(channel_id)
         if not match_regex or (match_regex and match_regex.match(missing_video['title'])):
             # No title match regex, or the title matches the regex.

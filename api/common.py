@@ -378,9 +378,9 @@ def get_channels_config(db) -> dict:
         i['link']:
             dict(
                 directory=i['directory'],
-                match_regex=i['match_regex'],
+                match_regex=i.get('match_regex', ''),
                 name=i['name'],
-                url=i['url'],
+                url=i.get('url', ''),
                 generate_thumbnails=i['generate_thumbnails'],
                 calculate_duration=i['calculate_duration'],
             )

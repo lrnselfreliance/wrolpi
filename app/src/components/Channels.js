@@ -98,7 +98,7 @@ class ChannelPage extends React.Component {
     async componentDidMount() {
         let global_config = await getConfig();
         let newState = {
-            media_directory: `${global_config.media_directory}/`
+            media_directory: `${global_config.media_directory}`
         };
         if (!this.state.create) {
             let channel_link = this.props.match.params.channel_link;

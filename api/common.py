@@ -404,6 +404,12 @@ def save_settings_config(config=None):
         # Local config does not yet exist, lets create it
         local_config = {}
 
+    if 'channels' in config and 'channels' in local_config:
+        del local_config['channels']
+
+    if ('channels' in config or 'channels' in local_config) and 'channels' in example_config:
+        del example_config['channels']
+
     new_config = combine_dicts(config, local_config, example_config)
 
     logger.debug(f'Writing config to file: {CONFIG_PATH}')

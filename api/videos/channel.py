@@ -6,7 +6,7 @@ from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from api.common import validate_doc, sanitize_link, logger, save_settings_config, json_response
+from api.common import validate_doc, sanitize_link, logger, save_settings_config, json_response, get_channels_config
 from api.db import get_db_context
 from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.videos.common import check_for_channel_conflicts, \
@@ -138,7 +138,8 @@ def channel_post(request: Request, data: dict):
         channel.flush()
 
     # Save these changes to the local.yaml as well
-    save_settings_config()
+    channels = get_channels_config(db)
+    save_settings_config(channels)
 
     # Refresh the videos asynchronously
     from api.videos.api import async_refresh_videos_with_db
@@ -199,7 +200,8 @@ def channel_update(request: Request, link: str, data: dict):
         channel.flush()
 
     # Save these changes to the local.yaml as well
-    save_settings_config()
+    channels = get_channels_config(db)
+    save_settings_config(channels)
 
     return response.raw('', HTTPStatus.NO_CONTENT,
                         headers={'Location': f'/api/videos/channels/{channel["link"]}'})
@@ -223,7 +225,8 @@ def channel_delete(request, link: str):
         channel.delete()
 
     # Save these changes to the local.yaml as well
-    save_settings_config()
+    channels = get_channels_config(db)
+    save_settings_config(channels)
 
     return response.raw('', HTTPStatus.NO_CONTENT)
 

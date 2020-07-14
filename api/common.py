@@ -369,6 +369,26 @@ def combine_dicts(*dicts: dict) -> dict:
     return new
 
 
+def get_channels_config(db) -> dict:
+    """
+    Create a dictionary that contains all the Channels from the DB.
+    """
+    Channel = db['channel']
+    channels = {
+        i['link']:
+            dict(
+                directory=i['directory'],
+                match_regex=i['match_regex'],
+                name=i['name'],
+                url=i['url'],
+                generate_thumbnails=i['generate_thumbnails'],
+                calculate_duration=i['calculate_duration'],
+            )
+        for i in Channel.get_where().order_by('link')
+    }
+    return dict(channels=channels)
+
+
 def save_settings_config(config=None):
     """
     Save new settings to local.yaml, overwriting what is there.  This function updates the config file from three

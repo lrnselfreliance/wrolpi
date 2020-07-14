@@ -19,6 +19,7 @@ class ChannelPutRequest:
     directory = doc.String()
     generate_thumbnails = doc.Boolean()
     calculate_duration = doc.Boolean()
+    mkdir = doc.Boolean()
 
 
 class RefreshRequest:

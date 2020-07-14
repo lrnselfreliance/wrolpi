@@ -386,9 +386,9 @@ def save_settings_config(config=None):
 
     new_config = combine_dicts(config, local_config, example_config)
 
+    logger.debug(f'Writing config to file: {CONFIG_PATH}')
     with open(str(CONFIG_PATH), 'wt') as fh:
         yaml.dump(new_config, fh)
-        # asynchronous
 
 
 class JSONEncodeDate(json.JSONEncoder):

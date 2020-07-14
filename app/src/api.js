@@ -16,6 +16,13 @@ export async function createChannel(channel) {
     return response;
 }
 
+export async function deleteChannel(channel_link) {
+    let response = await fetch(`${VIDEOS_API}/channels/${channel_link}`,
+        {method: 'DELETE'});
+
+    return response;
+}
+
 export async function getChannels() {
     let url = `${VIDEOS_API}/channels`;
     let response = await fetch(url);

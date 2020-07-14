@@ -1,11 +1,12 @@
 import React from "react";
 import {Button, Card, Checkbox, Form, Grid, Header, Input, Loader, Placeholder, Popup} from "semantic-ui-react";
-import {createChannel, getChannel, getChannels, getConfig, updateChannel, validateRegex} from "../api";
+import {createChannel, deleteChannel, getChannel, getChannels, getConfig, updateChannel, validateRegex} from "../api";
 import _ from "lodash";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {RequiredAsterisk, VIDEOS_API} from "./Common";
 import {Link} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
+import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
 
 
 function FieldPlaceholder() {
@@ -28,6 +29,7 @@ class ChannelPage extends React.Component {
             channel: {},
             media_directory: null,
             disabled: false,
+            open: false,
             dirty: false,
             inputs: ['name', 'directory', 'url', 'match_regex', 'generate_thumbnails', 'calculate_duration'],
             validRegex: true,
@@ -56,6 +58,27 @@ class ChannelPage extends React.Component {
         this.generateThumbnails = React.createRef();
         this.calculateDuration = React.createRef();
         this.mkdir = React.createRef();
+    }
+
+    show = (e) => {
+        e.preventDefault();
+        this.setState({open: true});
+    }
+
+    handleConfirm = async () => {
+        this.setState({open: false});
+        let response = await deleteChannel(this.props.match.params.channel_link);
+        if (response.status === 204) {
+            this.props.history.push({
+                pathname: '/videos/channel'
+            });
+        } else {
+            this.setState({
+                error: true,
+                message_header: 'Failed to delete',
+                message_content: 'Failed to delete this channel, check logs.'
+            })
+        }
     }
 
     isDirty = () => {
@@ -321,6 +344,18 @@ class ChannelPage extends React.Component {
                         >
                             {this.state.disabled ? <Loader active inline/> : 'Save'}
                         </Button>
+
+                        {!this.state.create && <>
+                            <Button color='red' onClick={this.show}>Delete</Button>
+                            <Confirm
+                                open={this.state.open}
+                                content='Are you sure you want to delete this channel?  No video files will be deleted.'
+                                confirmButton='Delete'
+                                onCancel={() => this.setState({open: false})}
+                                onConfirm={this.handleConfirm}
+                            />
+                        </>
+                        }
                     </Form>
                 </Container>
             )

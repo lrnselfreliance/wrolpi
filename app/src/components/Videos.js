@@ -288,7 +288,14 @@ class VideosRoute extends React.Component {
                 <Route path='/videos/channel' exact component={Channels}/>
                 <Route path='/videos/manage' exact component={ManageVideos}/>
                 <Route path='/videos/channel/new' exact component={NewChannel}/>
-                <Route path='/videos/channel/:channel_link/edit' exact component={EditChannel}/>
+                <Route path='/videos/channel/:channel_link/edit' exact
+                       component={(i) =>
+                           <EditChannel
+                               match={i.match}
+                               history={i.history}
+                               />
+                           }
+                />
                 <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
                 <Route path='/videos/channel/:channel_link/video/:video_id' exact component={Videos}/>
             </Container>

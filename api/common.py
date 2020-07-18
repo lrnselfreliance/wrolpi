@@ -433,3 +433,8 @@ def json_response(*a, **kwargs) -> HTTPResponse:
     Handles encoding dates/datetimes in JSON.
     """
     return response.json(*a, **kwargs, cls=JSONEncodeDate, dumps=json.dumps)
+
+
+def today():
+    """Return today's date."""
+    return datetime.now().date()

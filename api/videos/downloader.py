@@ -9,7 +9,7 @@ import psycopg2
 from dictorm import DictDB, Dict, And
 from youtube_dl import YoutubeDL
 
-from api.common import make_progress_calculator, logger
+from api.common import make_progress_calculator, logger, today
 from api.db import get_db_context
 from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path, replace_extension
@@ -68,7 +68,12 @@ def update_channels(db_conn, db):
     """Update all information for each channel.  (No downloads performed)"""
     Channel = db['channel']
 
-    channels = list(Channel.get_where(And(Channel['url'].IsNotNull(), Channel['url'] != '')))
+    channels = list(Channel.get_where(
+        And(Channel['url'].IsNotNull(), Channel['url'] != '', Channel['info_date'] != today())))
+
+    if len(channels) == 0:
+        logger.warning(f'All channels have been updated today, or none exist.')
+
     # Randomize downloading of channels.
     shuffle(channels)
     logger.debug(f'Getting info for {len(channels)} channels')
@@ -97,21 +102,6 @@ def _find_all_missing_videos(db_conn: psycopg2.connect) -> List[Tuple]:
     curs.execute(query)
     missing_videos = list(curs.fetchall())
     return missing_videos
-
-
-def _count_missing_videos(db_conn: psycopg2.connect):
-    curs = db_conn.cursor()
-    query = '''
-        SELECT
-            COUNT(id)
-        FROM video
-        WHERE
-            source_id IS NOT NULL
-            AND channel_id IS NOT NULL
-            AND (video_path IS NULL OR video_path = '')
-    '''
-    curs.execute(query)
-    return int(curs.fetchone()[0])
 
 
 def find_all_missing_videos(db_conn: psycopg2.connect, db: DictDB) -> Tuple[Dict, dict]:

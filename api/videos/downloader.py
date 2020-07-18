@@ -3,7 +3,7 @@ import glob
 import pathlib
 import re
 from datetime import datetime
-from typing import Tuple, List, Union
+from typing import Tuple, List
 
 import psycopg2
 from dictorm import DictDB, Dict, And
@@ -81,63 +81,6 @@ def update_channels(db_conn, db):
 VIDEO_EXTENSIONS = ['mp4', 'webm', 'flv']
 
 
-def find_matching_video_files(directory, search_str) -> str:
-    """Create a generator which returns any video files containing the search string."""
-    for ext in VIDEO_EXTENSIONS:
-        yield from glob.glob(f'{directory}/*{search_str}*{ext}')
-
-
-def find_missing_channel_videos(db: DictDB, channel: Dict) -> dict:
-    """
-    Search a Channel's directory for any videos that are in the Channel's catalog, but not in the filesystem.  This
-    means that the video is available for download, but has not yet been downloaded.  This function speeds up future
-    searches by marking Video['downloaded'] = True for every video in a Channel not returned by this function.
-    """
-    info_json = channel['info_json']
-    entries = info_json['entries']
-
-    directory = get_absolute_media_path(channel['directory'])
-    skip_download_videos = channel['skip_download_videos'] or []
-
-    # Compare the available videos to what has been marked as downloaded.
-    # Skip any videos that have been marked to skip.
-    Video = db['video']
-    downloaded_videos = channel['videos'].refine(Video['downloaded'].Is(True))
-    downloaded_videos = [v['source_id'] for v in downloaded_videos]
-    entries = [e for e in entries if e['id'] not in downloaded_videos and e['id'] not in skip_download_videos]
-
-    found_entries = []
-    for entry in entries:
-        source_id = entry['id']
-        matching_video_files = find_matching_video_files(directory, source_id)
-        try:
-            next(matching_video_files)
-            # Some video file was found, move onto the next
-            found_entries.append(source_id)
-            continue
-        except StopIteration:
-            pass
-
-        # No match for this entry, check if the title matches the channel regex
-        if channel['match_regex'] and re.match(channel['match_regex'], entry['title']):
-            yield entry
-        elif channel['match_regex']:
-            logger.debug(f'Skipping "{entry["title"]}", title does not match regex.')
-        else:
-            # No matches and no regex, download it
-            yield entry
-
-    # Mark the found entries as downloaded.
-    if found_entries:
-        query = 'UPDATE video SET downloaded=true WHERE source_id = ANY(%s)'
-        db.curs.execute(query, (found_entries,))
-
-
-def get_channel_video_count(channel: Dict) -> int:
-    """Count all video files in a channel's directory."""
-    return len(list(find_matching_video_files(channel['directory'], '')))
-
-
 def _find_all_missing_videos(db_conn: psycopg2.connect) -> List[Tuple]:
     curs = db_conn.cursor()
     query = '''
@@ -199,6 +142,10 @@ def find_all_missing_videos(db_conn: psycopg2.connect, db: DictDB) -> Tuple[Dict
             # this video if the previous statement is not true.
             Video = db['video']
             Video.get_one(id=id_).delete()
+            continue
+
+        if channel['skip_download_videos'] and source_id in channel['skip_download_videos']:
+            # This video has been marked to skip.
             continue
 
         match_regex: re.compile = match_regexen.get(channel_id)

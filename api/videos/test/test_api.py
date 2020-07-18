@@ -385,7 +385,7 @@ class TestVideoAPI(TestAPI):
             assert response.status_code == HTTPStatus.OK
             assert len(response.json['videos']) == video_count
             current_ids = [i['id'] for i in response.json['videos']]
-            assert current_ids != last_ids, f'IDs are unchanged {current_ids=}'
+            assert current_ids != last_ids, f'IDs are unchanged current_ids={current_ids}'
             last_ids = current_ids
 
     @wrap_test_db

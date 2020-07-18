@@ -1,5 +1,4 @@
 #! /usr/bin/env python3
-import glob
 import pathlib
 import re
 from datetime import datetime
@@ -134,22 +133,19 @@ def find_all_missing_videos(db_conn: psycopg2.connect, db: DictDB) -> Tuple[Dict
 
     for id_, source_id, channel_id in missing_videos:
         channel = channels[channel_id]
-        try:
-            missing_video = channels_entries[channel_id][source_id]
-        except KeyError:
-            # The video is not in the latest channel catalog, the video was probably deleted.  Lets
-            # remove this entry because it will be impossible to find.  A later update will download
-            # this video if the previous statement is not true.
-            Video = db['video']
-            Video.get_one(id=id_).delete()
-            continue
 
         if channel['skip_download_videos'] and source_id in channel['skip_download_videos']:
             # This video has been marked to skip.
             continue
 
+        try:
+            missing_video = channels_entries[channel_id][source_id]
+        except KeyError:
+            logger.warning(f'Video {id_} / {source_id} is not in {channel["name"]} info_json')
+            continue
+
         match_regex: re.compile = match_regexen.get(channel_id)
-        if not match_regex or (match_regex and match_regex.match(missing_video['title'])):
+        if not match_regex or (match_regex and missing_video['title'] and match_regex.match(missing_video['title'])):
             # No title match regex, or the title matches the regex.
             yield channel, id_, missing_video
 

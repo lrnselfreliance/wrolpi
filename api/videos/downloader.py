@@ -2,6 +2,7 @@
 import pathlib
 import re
 from datetime import datetime
+from random import shuffle
 from typing import Tuple, List
 
 import psycopg2
@@ -68,6 +69,8 @@ def update_channels(db_conn, db):
     Channel = db['channel']
 
     channels = list(Channel.get_where(And(Channel['url'].IsNotNull(), Channel['url'] != '')))
+    # Randomize downloading of channels.
+    shuffle(channels)
     logger.debug(f'Getting info for {len(channels)} channels')
     calc_progress = make_progress_calculator(len(channels))
     for idx, channel in enumerate(channels):

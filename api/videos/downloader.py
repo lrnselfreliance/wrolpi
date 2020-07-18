@@ -3,7 +3,7 @@ import glob
 import pathlib
 import re
 from datetime import datetime
-from typing import Tuple, List
+from typing import Tuple, List, Union
 
 import psycopg2
 from dictorm import DictDB, Dict, And
@@ -179,7 +179,7 @@ def find_all_missing_videos(db_conn: psycopg2.connect, db: DictDB) -> Tuple[Dict
     channels = Channel.get_where(Channel['info_json'].IsNotNull())
     channels = {i['id']: i for i in channels}
 
-    match_regexes = {i: re.compile(j['match_regex']) for i, j in channels.items() if j['match_regex']}
+    match_regexen = {i: re.compile(j['match_regex']) for i, j in channels.items() if j['match_regex']}
 
     # Convert the channel video entries into a form that allows them to be quickly retrieved without searching through
     # the entire entries list.
@@ -201,7 +201,7 @@ def find_all_missing_videos(db_conn: psycopg2.connect, db: DictDB) -> Tuple[Dict
             Video.get_one(id=id_).delete()
             continue
 
-        match_regex: re.compile = match_regexes.get(channel_id)
+        match_regex: re.compile = match_regexen.get(channel_id)
         if not match_regex or (match_regex and match_regex.match(missing_video['title'])):
             # No title match regex, or the title matches the regex.
             yield channel, id_, missing_video
@@ -336,9 +336,9 @@ def download_all_missing_videos(db_conn, db):
     """Find any videos identified by the info packet that haven't yet been downloaded, download them."""
     yield {'progress': 0, 'message': 'Comparing local videos to available videos...'}
     missing_videos = list(find_all_missing_videos(db_conn, db))
+    logger.info(f'Found {len(missing_videos)} missing videos.')
 
-    missing_videos_count = _count_missing_videos(db_conn)
-    calc_progress = make_progress_calculator(missing_videos_count)
+    calc_progress = make_progress_calculator(len(missing_videos))
 
     for index, (channel, id_, missing_video) in enumerate(missing_videos):
         try:

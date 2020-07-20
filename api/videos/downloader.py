@@ -46,6 +46,10 @@ def update_channel(channel: Dict = None, link: str = None):
     all_source_ids = {i['id'] for i in entries}
 
     with get_db_context(commit=True) as (db_conn, db):
+        # Get the channel in this new context.
+        Channel = db['channel']
+        channel = Channel.get_one(id=channel['id'])
+
         channel['info_json'] = info
         channel['info_date'] = datetime.now()
         channel.flush()

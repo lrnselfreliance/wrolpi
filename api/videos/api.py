@@ -121,16 +121,12 @@ async def download(_, link: str = None):
         try:
             download_logger.info('download started')
 
-            if link:
-                with get_db_context(commit=True) as (db_conn, db):
-                    update_channel(db_conn, db, link=link)
-            else:
-                with get_db_context(commit=True) as (db_conn, db):
-                    for msg in update_channels(db_conn, db):
-                        download_queue.put(msg)
-                    download_logger.info('Updated all channel catalogs')
-                    for msg in download_all_missing_videos(db_conn, db):
-                        download_queue.put(msg)
+            with get_db_context(commit=True) as (db_conn, db):
+                for msg in update_channels(db_conn, db, link):
+                    download_queue.put(msg)
+                download_logger.info('Updated all channel catalogs')
+                for msg in download_all_missing_videos(db_conn, db, link):
+                    download_queue.put(msg)
 
             download_logger.info('download complete')
         except Exception as e:

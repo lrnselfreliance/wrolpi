@@ -13,6 +13,7 @@ from api.common import make_progress_calculator, logger, today
 from api.db import get_db_context
 from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path, replace_extension
+from ..errors import UnknownChannel
 
 logger = logger.getChild('api:downloader')
 ydl_logger = logger.getChild('api:youtube-dl')
@@ -32,16 +33,16 @@ def update_channel(db_conn: psycopg2.connect, db: DictDB, channel: Dict = None, 
         Channel = db['channel']
         channel = Channel.get_one(link=link)
 
+    logger.info(f'Downloading video list for {channel["name"]} at {channel["url"]}  This may take several minutes.')
+    info = YDL.extract_info(channel['url'], download=False, process=False)
+    if 'url' in info:
+        url = info['url']
+        info = YDL.extract_info(url, download=False, process=False)
+
+    # Resolve all entries to dictionaries.
+    entries = info['entries'] = list(info['entries'])
+
     with db.transaction(commit=True):
-        logger.info(f'Downloading video list for {channel["url"]}  This may take several minutes.')
-        info = YDL.extract_info(channel['url'], download=False, process=False)
-        if 'url' in info:
-            url = info['url']
-            info = YDL.extract_info(url, download=False, process=False)
-
-        # Resolve all entries to dictionaries.
-        entries = info['entries'] = list(info['entries'])
-
         channel['info_json'] = info
         channel['info_date'] = datetime.now()
         channel.flush()
@@ -64,15 +65,21 @@ def update_channel(db_conn: psycopg2.connect, db: DictDB, channel: Dict = None, 
             Video(source_id=source_id, channel_id=channel_id).flush()
 
 
-def update_channels(db_conn, db):
+def update_channels(db_conn, db, link: str = None):
     """Update all information for each channel.  (No downloads performed)"""
     Channel = db['channel']
 
-    channels = list(Channel.get_where(
-        And(Channel['url'].IsNotNull(), Channel['url'] != '', Channel['info_date'] != today())))
+    if link:
+        channel = Channel.get_one(link=link)
+        if not channel:
+            raise UnknownChannel(f'No channel with link: {link}')
+        channels = [channel, ]
+    else:
+        channels = list(Channel.get_where(
+            And(Channel['url'].IsNotNull(), Channel['url'] != '', Channel['info_date'] != today())))
 
-    if len(channels) == 0:
-        logger.warning(f'All channels have been updated today, or none exist.')
+        if len(channels) == 0:
+            logger.warning(f'All channels have been updated today, or none exist.')
 
     # Randomize downloading of channels.
     shuffle(channels)
@@ -88,30 +95,56 @@ def update_channels(db_conn, db):
 VIDEO_EXTENSIONS = ['mp4', 'webm', 'flv']
 
 
-def _find_all_missing_videos(db_conn: psycopg2.connect) -> List[Tuple]:
+def _find_all_missing_videos(db_conn: psycopg2.connect, link: str = None) -> List[Tuple]:
+    """
+    Get all Video entries which don't have the required media files (i.e. hasn't been downloaded).  Restrict to a
+    single channel if "link" is provided.
+    """
     curs = db_conn.cursor()
-    query = '''
+
+    # Get all channels by default.
+    where = ''
+    params = ()
+
+    if link:
+        # Restrict by channel when link is provided.
+        query = 'SELECT id FROM channel WHERE link = %s'
+        curs.execute(query, (link,))
+        channel_id = curs.fetchall()[0][0]
+        where = 'AND channel_id = %s'
+        params = (channel_id,)
+
+    query = f'''
         SELECT
             id, source_id, channel_id
         FROM video
         WHERE
             source_id IS NOT NULL
+            {where}
             AND channel_id IS NOT NULL
             AND (video_path IS NULL OR video_path = '' OR poster_path IS NULL OR poster_path = '')
     '''
-    curs.execute(query)
+    curs.execute(query, params)
     missing_videos = list(curs.fetchall())
     return missing_videos
 
 
-def find_all_missing_videos(db_conn: psycopg2.connect, db: DictDB) -> Tuple[Dict, dict]:
+def find_all_missing_videos(db_conn: psycopg2.connect, db: DictDB, link: str = None) -> Tuple[Dict, dict]:
     """
     Find all videos that don't have a video file, but are found in the DB (taken from the channel's info_json).
 
     Yields a Channel Dict object, and the "entry" of the video from the channel's info_json['entries'].
     """
     Channel = db['channel']
-    channels = Channel.get_where(Channel['info_json'].IsNotNull())
+
+    if link:
+        channel = Channel.get_one(link=link)
+        if not channel:
+            raise UnknownChannel(f'No channel with link: {link}')
+        channels = [channel, ]
+    else:
+        channels = Channel.get_where(Channel['info_json'].IsNotNull())
+
     channels = {i['id']: i for i in channels}
 
     match_regexen = {i: re.compile(j['match_regex']) for i, j in channels.items() if j['match_regex']}
@@ -122,7 +155,7 @@ def find_all_missing_videos(db_conn: psycopg2.connect, db: DictDB) -> Tuple[Dict
     for id_, channel in channels.items():
         channels_entries[id_] = {i['id']: i for i in channel['info_json']['entries']}
 
-    missing_videos = _find_all_missing_videos(db_conn)
+    missing_videos = _find_all_missing_videos(db_conn, link)
 
     for id_, source_id, channel_id in missing_videos:
         channel = channels[channel_id]
@@ -268,10 +301,10 @@ def _skip_download(error):
     return False
 
 
-def download_all_missing_videos(db_conn, db):
+def download_all_missing_videos(db_conn, db, link: str = None):
     """Find any videos identified by the info packet that haven't yet been downloaded, download them."""
     yield {'progress': 0, 'message': 'Comparing local videos to available videos...'}
-    missing_videos = list(find_all_missing_videos(db_conn, db))
+    missing_videos = list(find_all_missing_videos(db_conn, db, link))
     logger.info(f'Found {len(missing_videos)} missing videos.')
 
     calc_progress = make_progress_calculator(len(missing_videos))

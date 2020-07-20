@@ -331,27 +331,28 @@ def download_all_missing_videos(link: str = None):
                 source_id = missing_video.get('id')
                 logger.warning(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
                                f'attempt to download it again.')
-                if skip_download_videos and source_id:
-                    channel['skip_download_videos'].append(missing_video['id'])
-                elif source_id:
-                    channel['skip_download_videos'] = [missing_video['id'], ]
-                channel.flush()
-                db_conn.commit()
+
+                with get_db_context(commit=True) as (db_conn, db):
+                    channel = db['channel'].get_one(id=channel['id'])
+                    if skip_download_videos and source_id:
+                        channel['skip_download_videos'].append(missing_video['id'])
+                    elif source_id:
+                        channel['skip_download_videos'] = [missing_video['id'], ]
+                    channel.flush()
 
             yield f'Failed to download "{missing_video["title"]}", see logs...'
             continue
-        upsert_video(db, video_path, channel, id_=id_)
+        with get_db_context(commit=True) as (db_conn, db):
+            upsert_video(db, video_path, channel, id_=id_)
         yield {'progress': calc_progress(index), 'message': f'{channel["name"]}: Downloaded: {missing_video["title"]}'}
-        db_conn.commit()
 
     yield {'progress': 100, 'message': 'All videos are downloaded'}
 
 
 def main(args=None):
     """Find and download any missing videos.  Parse any arguments passed by the cmd-line."""
-    with get_db_context(commit=True) as (db_conn, db):
-        for status in update_channels(db_conn, db):
-            logger.info(str(status))
-        for status in download_all_missing_videos(db_conn, db):
-            logger.info(status)
+    for status in update_channels():
+        logger.info(str(status))
+    for status in download_all_missing_videos():
+        logger.info(status)
     return 0

@@ -5,7 +5,6 @@ from datetime import datetime
 from random import shuffle
 from typing import Tuple, List
 
-import psycopg2
 from dictorm import DictDB, Dict, And
 from youtube_dl import YoutubeDL
 
@@ -23,15 +22,16 @@ YDL.params['logger'] = ydl_logger
 YDL.add_default_info_extractors()
 
 
-def update_channel(db_conn: psycopg2.connect, db: DictDB, channel: Dict = None, link: str = None):
+def update_channel(channel: Dict = None, link: str = None):
     """
     Connect to the Channel's host website and pull a catalog of all videos.  Insert any new videos into the DB.
 
     It is expected that any missing videos will be downloaded later.
     """
-    if not channel:
-        Channel = db['channel']
-        channel = Channel.get_one(link=link)
+    with get_db_context() as (db_conn, db):
+        if not channel:
+            Channel = db['channel']
+            channel = Channel.get_one(link=link)
 
     logger.info(f'Downloading video list for {channel["name"]} at {channel["url"]}  This may take several minutes.')
     info = YDL.extract_info(channel['url'], download=False, process=False)
@@ -42,13 +42,13 @@ def update_channel(db_conn: psycopg2.connect, db: DictDB, channel: Dict = None, 
     # Resolve all entries to dictionaries.
     entries = info['entries'] = list(info['entries'])
 
-    with db.transaction(commit=True):
+    # This is all the source id's that are currently available.
+    all_source_ids = {i['id'] for i in entries}
+
+    with get_db_context(commit=True) as (db_conn, db):
         channel['info_json'] = info
         channel['info_date'] = datetime.now()
         channel.flush()
-
-        # This is all the source id's that are currently available.
-        all_source_ids = {i['id'] for i in entries}
 
         # Insert any new videos.
         curs = db_conn.cursor()
@@ -65,29 +65,31 @@ def update_channel(db_conn: psycopg2.connect, db: DictDB, channel: Dict = None, 
             Video(source_id=source_id, channel_id=channel_id).flush()
 
 
-def update_channels(db_conn, db, link: str = None):
+def update_channels(link: str = None):
     """Update all information for each channel.  (No downloads performed)"""
-    Channel = db['channel']
 
-    if link:
-        channel = Channel.get_one(link=link)
-        if not channel:
-            raise UnknownChannel(f'No channel with link: {link}')
-        channels = [channel, ]
-    else:
-        channels = list(Channel.get_where(
-            And(Channel['url'].IsNotNull(), Channel['url'] != '', Channel['info_date'] != today())))
+    with get_db_context() as (db_conn, db):
+        Channel = db['channel']
+        if link:
+            channel = Channel.get_one(link=link)
+            if not channel:
+                raise UnknownChannel(f'No channel with link: {link}')
+            channels = [channel, ]
+        else:
+            channels = list(Channel.get_where(
+                And(Channel['url'].IsNotNull(), Channel['url'] != '', Channel['info_date'] != today())))
 
         if len(channels) == 0:
             logger.warning(f'All channels have been updated today, or none exist.')
 
     # Randomize downloading of channels.
     shuffle(channels)
+
     logger.debug(f'Getting info for {len(channels)} channels')
     calc_progress = make_progress_calculator(len(channels))
     for idx, channel in enumerate(channels):
         yield {'progress': calc_progress(idx), 'message': f'Getting video list for {channel["name"]}'}
-        update_channel(db_conn, db, channel)
+        update_channel(channel)
 
     yield {'progress': 100, 'message': 'All video lists updated.'}
 
@@ -95,55 +97,60 @@ def update_channels(db_conn, db, link: str = None):
 VIDEO_EXTENSIONS = ['mp4', 'webm', 'flv']
 
 
-def _find_all_missing_videos(db_conn: psycopg2.connect, link: str = None) -> List[Tuple]:
+def _find_all_missing_videos(link: str = None) -> List[Tuple]:
     """
     Get all Video entries which don't have the required media files (i.e. hasn't been downloaded).  Restrict to a
     single channel if "link" is provided.
     """
-    curs = db_conn.cursor()
+    with get_db_context() as (db_conn, db):
+        curs = db_conn.cursor()
 
-    # Get all channels by default.
-    where = ''
-    params = ()
+        # Get all channels by default.
+        where = ''
+        params = ()
 
-    if link:
-        # Restrict by channel when link is provided.
-        query = 'SELECT id FROM channel WHERE link = %s'
-        curs.execute(query, (link,))
-        channel_id = curs.fetchall()[0][0]
-        where = 'AND channel_id = %s'
-        params = (channel_id,)
+        if link:
+            # Restrict by channel when link is provided.
+            query = 'SELECT id FROM channel WHERE link = %s'
+            curs.execute(query, (link,))
+            channel_id = curs.fetchall()[0][0]
+            where = 'AND channel_id = %s'
+            params = (channel_id,)
 
-    query = f'''
-        SELECT
-            id, source_id, channel_id
-        FROM video
-        WHERE
-            source_id IS NOT NULL
-            {where}
-            AND channel_id IS NOT NULL
-            AND (video_path IS NULL OR video_path = '' OR poster_path IS NULL OR poster_path = '')
-    '''
-    curs.execute(query, params)
-    missing_videos = list(curs.fetchall())
-    return missing_videos
+        query = f'''
+            SELECT
+                id, source_id, channel_id
+            FROM video
+            WHERE
+                source_id IS NOT NULL
+                {where}
+                AND channel_id IS NOT NULL
+                AND (video_path IS NULL OR video_path = '' OR poster_path IS NULL OR poster_path = '')
+        '''
+        curs.execute(query, params)
+        missing_videos = list(curs.fetchall())
+        return missing_videos
 
 
-def find_all_missing_videos(db_conn: psycopg2.connect, db: DictDB, link: str = None) -> Tuple[Dict, dict]:
+def find_all_missing_videos(link: str = None) -> Tuple[Dict, dict]:
     """
     Find all videos that don't have a video file, but are found in the DB (taken from the channel's info_json).
 
-    Yields a Channel Dict object, and the "entry" of the video from the channel's info_json['entries'].
+    Yields a Channel Dict object, our Video id, and the "entry" of the video from the channel's info_json['entries'].
     """
-    Channel = db['channel']
+    with get_db_context() as (db_conn, db):
+        Channel = db['channel']
 
-    if link:
-        channel = Channel.get_one(link=link)
-        if not channel:
-            raise UnknownChannel(f'No channel with link: {link}')
-        channels = [channel, ]
-    else:
-        channels = Channel.get_where(Channel['info_json'].IsNotNull())
+        if link:
+            channel = Channel.get_one(link=link)
+            if not channel:
+                raise UnknownChannel(f'No channel with link: {link}')
+            channels = [channel, ]
+        else:
+            channels = Channel.get_where(Channel['info_json'].IsNotNull())
+
+        # Get all channels while in the db context.
+        channels = list(channels)
 
     channels = {i['id']: i for i in channels}
 
@@ -155,7 +162,7 @@ def find_all_missing_videos(db_conn: psycopg2.connect, db: DictDB, link: str = N
     for id_, channel in channels.items():
         channels_entries[id_] = {i['id']: i for i in channel['info_json']['entries']}
 
-    missing_videos = _find_all_missing_videos(db_conn, link)
+    missing_videos = _find_all_missing_videos(link)
 
     for id_, source_id, channel_id in missing_videos:
         channel = channels[channel_id]
@@ -301,10 +308,10 @@ def _skip_download(error):
     return False
 
 
-def download_all_missing_videos(db_conn, db, link: str = None):
+def download_all_missing_videos(link: str = None):
     """Find any videos identified by the info packet that haven't yet been downloaded, download them."""
     yield {'progress': 0, 'message': 'Comparing local videos to available videos...'}
-    missing_videos = list(find_all_missing_videos(db_conn, db, link))
+    missing_videos = list(find_all_missing_videos(link))
     logger.info(f'Found {len(missing_videos)} missing videos.')
 
     calc_progress = make_progress_calculator(len(missing_videos))

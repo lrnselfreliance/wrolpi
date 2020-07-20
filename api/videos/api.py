@@ -41,7 +41,7 @@ from api.videos.video import video_bp
 from .captions import insert_bulk_captions
 from .common import logger, generate_video_paths, get_absolute_media_path, generate_bulk_thumbnails, \
     get_bulk_video_duration, toggle_video_favorite
-from .downloader import update_channels, download_all_missing_videos, upsert_video, update_channel
+from .downloader import update_channels, download_all_missing_videos, upsert_video
 from .schema import StreamResponse, \
     JSONErrorResponse, FavoriteRequest, FavoriteResponse
 
@@ -121,12 +121,11 @@ async def download(_, link: str = None):
         try:
             download_logger.info('download started')
 
-            with get_db_context(commit=True) as (db_conn, db):
-                for msg in update_channels(db_conn, db, link):
-                    download_queue.put(msg)
-                download_logger.info('Updated all channel catalogs')
-                for msg in download_all_missing_videos(db_conn, db, link):
-                    download_queue.put(msg)
+            for msg in update_channels(link):
+                download_queue.put(msg)
+            download_logger.info('Updated all channel catalogs')
+            for msg in download_all_missing_videos(link):
+                download_queue.put(msg)
 
             download_logger.info('download complete')
         except Exception as e:

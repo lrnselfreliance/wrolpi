@@ -301,14 +301,20 @@ def upsert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
     return video
 
 
+UNRECOVERABLE_ERRORS = {
+    '404: Not Found',
+    'requires payment',
+    'Content Warning',
+    'Did not get any data blocks',
+}
+
+
 def _skip_download(error):
     """Return True if the error is unrecoverable and the video should be skipped in the future."""
-    if 'requires payment' in str(error):
-        return True
-    elif 'Content Warning' in str(error):
-        return True
-    elif 'Did not get any data blocks' in str(error):
-        return True
+    error_str = str(error)
+    for msg in UNRECOVERABLE_ERRORS:
+        if msg in error_str:
+            return True
     return False
 
 

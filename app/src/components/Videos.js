@@ -159,7 +159,7 @@ class Videos extends React.Component {
         let [videos, total] = await searchVideos(
             offset, this.state.limit, channel_link, this.state.searchStr, favorites, order_by);
 
-        let totalPages = Math.round(total / this.state.limit) + 1;
+        let totalPages = Math.round(total / this.state.limit) || 1;
         this.setState({videos, total, totalPages});
     }
 

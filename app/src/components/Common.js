@@ -4,7 +4,7 @@ import {Link} from "react-router-dom";
 
 export const API_URI = process.env.REACT_APP_API ? process.env.REACT_APP_API : '127.0.0.1:8080';
 export const VIDEOS_API = `http://${API_URI}/api/videos`;
-export const DEFAULT_LIMIT = 18;
+export const DEFAULT_LIMIT = 20;
 
 export default class Paginator extends React.Component {
     state = {

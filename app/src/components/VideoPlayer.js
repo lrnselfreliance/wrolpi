@@ -3,7 +3,7 @@ import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {favoriteVideo} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link} from "react-router-dom";
-import {VideoCards} from "./Common";
+import {uploadDate, VideoCards} from "./Common";
 import {Container} from "semantic-ui-react";
 
 const MEDIA_PATH = '/media';
@@ -76,6 +76,7 @@ function Video(props) {
             </video>
 
             <h2>{video.title}</h2>
+            {video.upload_date && <h3>{uploadDate(video.upload_date)}</h3>}
             <Link to={`/videos/channel/${channel.link}/video`}>
                 <h3>{channel.name}</h3>
             </Link>

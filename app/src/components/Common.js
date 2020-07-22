@@ -68,15 +68,21 @@ export function Duration({video}) {
     }
 }
 
+export function uploadDate(d) {
+    // Convert a date integer to a human readable date format.
+    let upload_date = <></>;
+    if (d) {
+        upload_date = new Date(d * 1000);
+        upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth() + 1}-${upload_date.getDate()}`;
+    }
+    return upload_date;
+}
+
 function VideoCard({video}) {
     let channel = video.channel;
     let channel_url = `/videos/channel/${channel.link}/video`;
 
-    let upload_date = null;
-    if (video.upload_date) {
-        upload_date = new Date(video['upload_date'] * 1000);
-        upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth() + 1}-${upload_date.getDate()}`;
-    }
+    let upload_date = uploadDate(video.upload_date);
     let video_url = `/videos/channel/${channel.link}/video/${video.id}`;
     let poster_url = video.poster_path ? `/media/${channel.directory}/${encodeURIComponent(video.poster_path)}` : null;
 

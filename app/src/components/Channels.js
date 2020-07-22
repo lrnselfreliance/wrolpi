@@ -1,5 +1,5 @@
 import React from "react";
-import {Button, Card, Checkbox, Form, Grid, Header, Input, Loader, Placeholder, Popup} from "semantic-ui-react";
+import {Button, Checkbox, Form, Grid, Header, Input, Loader, Placeholder} from "semantic-ui-react";
 import {createChannel, deleteChannel, getChannel, getChannels, getConfig, updateChannel, validateRegex} from "../api";
 import _ from "lodash";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
@@ -7,6 +7,8 @@ import {RequiredAsterisk, VIDEOS_API} from "./Common";
 import {Link} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
+import Table from "semantic-ui-react/dist/commonjs/collections/Table";
+import Popup from "semantic-ui-react/dist/commonjs/modules/Popup";
 
 
 function FieldPlaceholder() {
@@ -341,9 +343,19 @@ class ChannelPage extends React.Component {
                             color="blue"
                             type="submit"
                             disabled={this.state.disabled || !this.state.dirty}
+                            floated='right'
                         >
                             {this.state.disabled ? <Loader active inline/> : 'Save'}
                         </Button>
+
+                        <Link to='/videos/channel'>
+                            <Button
+                                secondary
+                                floated='right'
+                            >
+                                Cancel
+                            </Button>
+                        </Link>
 
                         {!this.state.create && <>
                             <Button color='red' onClick={this.show}>Delete</Button>
@@ -397,7 +409,7 @@ export function NewChannel(props) {
     )
 }
 
-function ChannelCard(props) {
+function ChannelRow(props) {
     let editTo = `/videos/channel/${props.channel.link}/edit`;
     let videosTo = `/videos/channel/${props.channel.link}/video`;
 
@@ -414,46 +426,39 @@ function ChannelCard(props) {
     }
 
     return (
-        <Card fluid={true}>
-            <Card.Content>
-                <Card.Header>
-                    <Link to={videosTo}>
-                        {props.channel.name}
-                    </Link>
-                </Card.Header>
-                <Card.Description>
-                    Videos: {props.channel.video_count}
-                </Card.Description>
-            </Card.Content>
-            <Card.Content extra>
-                <div className="ui buttons four">
-                    <Popup
-                        header="Download any missing videos"
-                        on="hover"
-                        trigger={<Button primary onClick={downloadVideos}>Download Videos</Button>}
-                    />
-                    <Popup
-                        header="Search for any local videos"
-                        on="hover"
-                        trigger={<Button secondary onClick={refreshVideos}>Refresh Files</Button>}
-                    />
-                    <Link className="ui button primary inverted" to={editTo}>Edit</Link>
-                </div>
-            </Card.Content>
-        </Card>
+        <Table.Row>
+            <Table.Cell>
+                <Link to={videosTo}>{props.channel.name}</Link>
+            </Table.Cell>
+            <Table.Cell>
+                Videos: {props.channel.video_count}
+            </Table.Cell>
+            <Table.Cell textAlign='right'>
+                <Popup
+                    header="Download any missing videos"
+                    on="hover"
+                    trigger={<Button primary onClick={downloadVideos}>Download Videos</Button>}
+                />
+            </Table.Cell>
+            <Table.Cell textAlign='right'>
+                <Popup
+                    header="Search for any local videos"
+                    on="hover"
+                    trigger={<Button primary inverted onClick={refreshVideos}>Refresh Files</Button>}
+                />
+            </Table.Cell>
+            <Table.Cell textAlign='right'>
+                <Link className="ui button secondary" to={editTo}>Edit</Link>
+            </Table.Cell>
+        </Table.Row>
     )
 }
 
 function ChannelPlaceholder() {
     return (
         <Placeholder>
-            <Placeholder.Header image>
-                <Placeholder.Line/>
-                <Placeholder.Line/>
-            </Placeholder.Header>
-            <Placeholder.Paragraph>
-                <Placeholder.Line length='short'/>
-            </Placeholder.Paragraph>
+            <Placeholder.Line length='long'/>
+            <Placeholder.Line length='short'/>
         </Placeholder>
     )
 }
@@ -527,20 +532,36 @@ export class Channels extends React.Component {
             </Grid>
         );
 
+        let table_header = (
+            <Table.Header>
+                <Table.Row>
+                    <Table.HeaderCell>Name</Table.HeaderCell>
+                    <Table.HeaderCell>Details</Table.HeaderCell>
+                    <Table.HeaderCell/>
+                    <Table.HeaderCell/>
+                    <Table.HeaderCell/>
+                </Table.Row>
+            </Table.Header>
+        );
+
         if (this.state.channels === null) {
             // Placeholders while fetching
             return (
                 <>
                     {header}
-                    <Grid columns={2} doubling>
-                        {[1, 1, 1, 1, 1, 1].map(() => {
-                            return (
-                                <Grid.Column>
-                                    <ChannelPlaceholder/>
-                                </Grid.Column>
-                            )
-                        })}
-                    </Grid>
+
+                    <Table celled>
+                        {table_header}
+
+                        <Table.Body>
+                            <Table.Row>
+                                <Table.Cell><ChannelPlaceholder/></Table.Cell>
+                                <Table.Cell/>
+                                <Table.Cell/>
+                                <Table.Cell/>
+                            </Table.Row>
+                        </Table.Body>
+                    </Table>
                 </>
             )
         } else if (this.state.channels === []) {
@@ -554,15 +575,12 @@ export class Channels extends React.Component {
             return (
                 <>
                     {header}
-                    <Grid columns={2} doubling>
-                        {this.state.results.map((channel) => {
-                            return (
-                                <Grid.Column>
-                                    <ChannelCard channel={channel}/>
-                                </Grid.Column>
-                            )
-                        })}
-                    </Grid>
+                    <Table celled>
+                        {table_header}
+                        <Table.Body>
+                            {this.state.results.map((channel) => <ChannelRow channel={channel}/>)}
+                        </Table.Body>
+                    </Table>
                 </>
             )
         }

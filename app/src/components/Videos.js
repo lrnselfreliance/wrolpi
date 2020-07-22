@@ -178,7 +178,6 @@ class Videos extends React.Component {
 
     handleSearch = async (e) => {
         e.preventDefault();
-        await this.fetchVideos();
         changePageHistory(this.props.history, this.props.location, this.state.activePage, this.state.searchStr);
     }
 

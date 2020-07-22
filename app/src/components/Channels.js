@@ -535,11 +535,11 @@ export class Channels extends React.Component {
         let table_header = (
             <Table.Header>
                 <Table.Row>
-                    <Table.HeaderCell>Name</Table.HeaderCell>
-                    <Table.HeaderCell>Details</Table.HeaderCell>
-                    <Table.HeaderCell/>
-                    <Table.HeaderCell/>
-                    <Table.HeaderCell/>
+                    <Table.HeaderCell width={8}>Name</Table.HeaderCell>
+                    <Table.HeaderCell width={2}>Details</Table.HeaderCell>
+                    <Table.HeaderCell width={2}/>
+                    <Table.HeaderCell width={2}/>
+                    <Table.HeaderCell width={2}/>
                 </Table.Row>
             </Table.Header>
         );
@@ -575,7 +575,7 @@ export class Channels extends React.Component {
             return (
                 <>
                     {header}
-                    <Table celled>
+                    <Table striped basic size='large'>
                         {table_header}
                         <Table.Body>
                             {this.state.results.map((channel) => <ChannelRow channel={channel}/>)}

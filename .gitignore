@@ -111,6 +111,7 @@ test/videos
 # local configs
 *local.yaml
 *local.yml
+*local.yml.bak
 
 app/package-lock.json
 

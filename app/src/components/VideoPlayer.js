@@ -3,8 +3,9 @@ import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {favoriteVideo} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link} from "react-router-dom";
-import {uploadDate, VideoCards} from "./Common";
+import {uploadDate, VideoCard} from "./Common";
 import {Container} from "semantic-ui-react";
+import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
 const MEDIA_PATH = '/media';
 
@@ -54,14 +55,6 @@ function Video(props) {
         );
     }
 
-    let cards = [];
-    if (props.prev) {
-        cards = cards.concat([props.prev]);
-    }
-    if (props.next) {
-        cards = cards.concat([props.next]);
-    }
-
     return (
         <Container textAlign='left'>
             <video controls
@@ -96,7 +89,16 @@ function Video(props) {
                 {description}
             </pre>
 
-            <VideoCards videos={cards}/>
+            <Grid columns={2}>
+                <Grid.Row>
+                    <Grid.Column textAlign='left'>
+                        {props.prev && <><h3>Older</h3><VideoCard video={props.prev}/></>}
+                    </Grid.Column>
+                    <Grid.Column textAlign='left'>
+                        {props.next && <><h3>Newer</h3><VideoCard video={props.next}/></>}
+                    </Grid.Column>
+                </Grid.Row>
+            </Grid>
         </Container>
     )
 }

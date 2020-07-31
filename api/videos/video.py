@@ -115,7 +115,8 @@ VIDEO_ORDERS = {
     '-upload_date': 'upload_date DESC NULLS LAST, LOWER(video_path) DESC',
     'rank': '2 DESC, LOWER(video_path) DESC',
     '-rank': '2 ASC, LOWER(video_path) ASC',
-    'id': 'id ASC'
+    'id': 'id ASC',
+    '-id': 'id DESC',
 }
 DEFAULT_VIDEO_ORDER = 'rank'
 VIDEO_QUERY_LIMIT = 20

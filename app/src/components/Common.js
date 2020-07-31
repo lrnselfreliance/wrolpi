@@ -78,7 +78,7 @@ export function uploadDate(d) {
     return upload_date;
 }
 
-function VideoCard({video}) {
+export function VideoCard({video}) {
     let channel = video.channel;
     let channel_url = `/videos/channel/${channel.link}/video`;
 

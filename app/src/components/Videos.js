@@ -9,12 +9,12 @@ import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {Channels, EditChannel, NewChannel} from "./Channels";
 
-// function scrollToTop() {
-//     window.scrollTo({
-//         top: 0,
-//         behavior: "auto"
-//     });
-// }
+function scrollToTop() {
+    window.scrollTo({
+        top: 0,
+        behavior: "auto"
+    });
+}
 
 class ManageVideos extends React.Component {
 
@@ -82,6 +82,7 @@ function changePageHistory(history, location, activePage, searchStr) {
         pathname: location.pathname,
         search: search,
     });
+    scrollToTop();
 }
 
 class Videos extends React.Component {
@@ -90,12 +91,13 @@ class Videos extends React.Component {
         super(props);
         const query = QueryString.parse(this.props.location.search);
         let activePage = query.page ? parseInt(query.page) : 1; // First page is 1 by default, of course.
-        let searchStr = query.q || null;
+        let searchStr = query.q || '';
 
         this.state = {
             channel: null,
             videos: null,
             video: null,
+            queryStr: searchStr,
             searchStr: searchStr,
             show: false,
             limit: DEFAULT_LIMIT,
@@ -154,7 +156,7 @@ class Videos extends React.Component {
     async fetchVideos() {
         let offset = this.state.limit * this.state.activePage - this.state.limit;
         let channel_link = this.state.channel ? this.state.channel.link : null;
-        let favorites = this.props.filter === 'favorites';
+        let favorites = this.props.filter !== undefined ? this.props.filter === 'favorites' : null;
         let order_by = this.state.searchStr ? 'rank' : '-upload_date';
         let [videos, total] = await searchVideos(
             offset, this.state.limit, channel_link, this.state.searchStr, favorites, order_by);
@@ -176,9 +178,13 @@ class Videos extends React.Component {
         this.setState({activePage});
     }
 
+    clearSearch = async () => {
+        this.setState({searchStr: ''}, this.handleSearch);
+    }
+
     handleSearch = async (e) => {
-        e.preventDefault();
-        changePageHistory(this.props.history, this.props.location, this.state.activePage, this.state.searchStr);
+        e && e.preventDefault();
+        changePageHistory(this.props.history, this.props.location, 1, this.state.searchStr);
     }
 
     handleInputChange = (event, {name, value}) => {
@@ -221,11 +227,21 @@ class Videos extends React.Component {
             );
         }
 
+        let clearSearchButton = null;
+        if (this.state.queryStr) {
+            clearSearchButton = (
+                <Button icon labelPosition='right' onClick={this.clearSearch}>
+                    Search: {this.state.queryStr}
+                    <Icon name='close'/>
+                </Button>
+            )
+        }
+
         return (
-            <Container textAlign='center' fluid>
+            <Container textAlign='center'>
                 <Grid columns={2}>
-                    <Grid.Column>
-                        <Header as='h1'>
+                    <Grid.Column textAlign='left'>
+                        <h1>
                             {channelName}
                             {
                                 this.state.channel &&
@@ -237,7 +253,8 @@ class Videos extends React.Component {
                                     </Link>
                                 </>
                             }
-                        </Header>
+                        </h1>
+                        {clearSearchButton}
                     </Grid.Column>
                     <Grid.Column textAlign='right'>
                         <Form onSubmit={this.handleSearch}>
@@ -292,8 +309,8 @@ class VideosRoute extends React.Component {
                            <EditChannel
                                match={i.match}
                                history={i.history}
-                               />
-                           }
+                           />
+                       }
                 />
                 <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
                 <Route path='/videos/channel/:channel_link/video/:video_id' exact component={Videos}/>

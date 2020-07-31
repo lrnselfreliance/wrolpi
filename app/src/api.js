@@ -40,7 +40,7 @@ export async function searchVideos(offset, limit, channel_link, searchStr, favor
     // Build a search query to retrieve a list of videos from the API
     offset = offset || 0;
     limit = limit || DEFAULT_LIMIT;
-    let body = {offset, limit, favorites: !!favorites};
+    let body = {offset, limit, favorites: favorites};
 
     if (searchStr) {
         body.search_str = searchStr;

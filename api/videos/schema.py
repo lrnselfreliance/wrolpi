@@ -140,6 +140,7 @@ class SettingsResponse:
 
 class SettingsRequest:
     media_directory = doc.String()
+    wrol_mode = doc.Boolean()
 
 
 class RegexRequest:
@@ -183,3 +184,7 @@ class FavoriteRequest:
 class FavoriteResponse:
     video_id = doc.Integer()
     favorite = doc.DateTime()
+
+
+class WROLModeRequest:
+    enabled = doc.Boolean(required=True)

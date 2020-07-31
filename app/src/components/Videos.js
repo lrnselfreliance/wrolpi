@@ -217,7 +217,7 @@ class Videos extends React.Component {
 
         if (this.state.totalPages) {
             pagination = (
-                <div style={{'marginTop': '3em', 'textAlign': 'center'}}>
+                <div style={{marginTop: '3em', textAlign: 'center'}}>
                     <Paginator
                         activePage={this.state.activePage}
                         changePage={this.changePage}

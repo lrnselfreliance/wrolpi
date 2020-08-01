@@ -1,6 +1,9 @@
 import json
 from http import HTTPStatus
 
+import pytest
+from sanic_openapi import swagger_blueprint
+
 from api.api import api_app
 from api.test.common import TestAPI
 
@@ -52,3 +55,14 @@ class TestRootAPI(TestAPI):
         request, response = api_app.test_client.post('/api/valid_regex', data=json.dumps(data))
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert json.loads(response.body) == {'valid': False, 'regex': '.*(missing parenthesis.*'}
+
+    @pytest.mark.xfail
+    def test_swagger(self):
+        """
+        Swagger can be generated.  This test is just to assure that our spec generation hasn't broken.
+        """
+        # An API request is required to set things up (apparently).
+        api_app.test_client.get('/')
+
+        from sanic.response import json as json_
+        json_(swagger_blueprint._spec)

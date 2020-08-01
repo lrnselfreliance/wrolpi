@@ -25,7 +25,7 @@ from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredFie
     WROLModeEnabled
 from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT
 
-logger = logging.getLogger('wrolpi')
+logger = logging.getLogger(__name__)
 ch = logging.StreamHandler()
 formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
 ch.setFormatter(formatter)

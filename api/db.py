@@ -10,9 +10,10 @@ from psycopg2._psycopg import connection
 from psycopg2.errors import InFailedSqlTransaction
 from psycopg2.pool import ThreadedConnectionPool
 
+from api.common import logger
 from api.vars import DOCKERIZED
 
-db_logger = logging.getLogger('wrolpi')
+db_logger = logger.getChild(__name__)
 
 
 class SemaphoreThreadedConnectionPool(ThreadedConnectionPool):

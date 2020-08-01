@@ -29,7 +29,7 @@ from http import HTTPStatus
 from multiprocessing.queues import Queue
 from uuid import uuid1
 
-from dictorm import DictDB, Dict
+from dictorm import Dict
 from sanic import Blueprint, response
 from sanic.request import Request
 
@@ -51,6 +51,8 @@ api_bp = Blueprint('Videos').group(
     channel_bp,  # view and manage channels
     video_bp,  # view videos
     url_prefix='/videos')
+
+logger = logger.getChild(__name__)
 
 refresh_queue, refresh_event = create_websocket_feed('refresh', '/feeds/refresh', content_bp)
 
@@ -143,6 +145,51 @@ async def download(_, link: str = None):
     return response.json({'code': 'stream-started', 'stream_url': stream_url})
 
 
+def refresh_channel_video_captions(channel: Dict) -> bool:
+    with get_db_curs() as curs:
+        query = 'SELECT id FROM video WHERE channel_id=%s AND caption IS NULL AND caption_path IS NOT NULL'
+        curs.execute(query, (channel['id'],))
+        missing_captions = [i for (i,) in curs.fetchall()]
+
+    if missing_captions:
+        coro = insert_bulk_captions(missing_captions)
+        asyncio.ensure_future(coro)
+        return True
+    else:
+        logger.debug('No missing captions to process.')
+        return False
+
+
+def refresh_channel_generate_posters(channel: Dict) -> bool:
+    with get_db_curs() as curs:
+        query = 'SELECT id FROM video WHERE channel_id=%s AND poster_path IS NULL'
+        curs.execute(query, (channel['id'],))
+        missing_posters = [i for (i,) in curs.fetchall()]
+
+    if missing_posters:
+        coro = generate_bulk_thumbnails(missing_posters)
+        asyncio.ensure_future(coro)
+        return True
+    else:
+        logger.debug('No missing posters to generate.')
+        return False
+
+
+def refresh_channel_calculate_duration(channel: Dict) -> bool:
+    with get_db_curs() as curs:
+        query = 'SELECT id FROM video WHERE channel_id=%s AND duration IS NULL'
+        curs.execute(query, (channel['id'],))
+        missing_duration = [i for (i,) in curs.fetchall()]
+
+    if missing_duration:
+        coro = get_bulk_video_duration(missing_duration)
+        asyncio.ensure_future(coro)
+        return True
+    else:
+        logger.debug('No videos missing duration.')
+        return False
+
+
 def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
     """
     Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
@@ -161,9 +208,9 @@ def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
     reporter.message('Found all possible video files')
 
     # Update all videos that match the current video paths
-    query = 'UPDATE video SET idempotency = %s WHERE channel_id = %s AND video_path = ANY(%s) RETURNING video_path'
     relative_new_paths = [str(i.relative_to(directory)) for i in possible_new_paths]
     with get_db_curs(commit=True) as curs:
+        query = 'UPDATE video SET idempotency = %s WHERE channel_id = %s AND video_path = ANY(%s) RETURNING video_path'
         curs.execute(query, (idempotency, channel['id'], relative_new_paths))
         existing_paths = {i for (i,) in curs.fetchall()}
 
@@ -180,10 +227,9 @@ def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
 
     with get_db_curs(commit=True) as curs:
         curs.execute('DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL RETURNING id', (channel['id'],))
-        deleted_count = curs.fetchall()
+        deleted_count = len(curs.fetchall())
 
     if deleted_count:
-        deleted_count = len(deleted_count)
         deleted_status = f'Deleted {deleted_count} video records from channel {channel["name"]}'
         logger.info(deleted_status)
         reporter.message(deleted_status)
@@ -193,40 +239,13 @@ def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
     reporter.message(status)
 
     # Fill in any missing captions
-    with get_db_curs(commit=True) as curs:
-        query = 'SELECT id FROM video WHERE channel_id=%s AND caption IS NULL AND caption_path IS NOT NULL'
-        curs.execute(query, (channel['id'],))
-        missing_captions = [i for (i,) in curs.fetchall()]
-
-    if missing_captions:
-        coro = insert_bulk_captions(missing_captions)
-        asyncio.ensure_future(coro)
-    else:
-        logger.debug('No missing captions to process.')
+    refresh_channel_video_captions(channel)
 
     # Generate any missing posters.
-    with get_db_curs(commit=True) as curs:
-        query = 'SELECT id FROM video WHERE channel_id=%s AND poster_path IS NULL'
-        curs.execute(query, (channel['id'],))
-        missing_posters = [i for (i,) in curs.fetchall()]
-
-    if missing_posters:
-        coro = generate_bulk_thumbnails(missing_posters)
-        asyncio.ensure_future(coro)
-    else:
-        logger.debug('No missing posters to generate.')
+    refresh_channel_generate_posters(channel)
 
     # Get the duration of any video that is missing it's duration.
-    with get_db_curs(commit=True) as curs:
-        query = 'SELECT id FROM video WHERE channel_id=%s AND duration IS NULL'
-        curs.execute(query, (channel['id'],))
-        missing_duration = [i for (i,) in curs.fetchall()]
-
-    if missing_duration:
-        coro = get_bulk_video_duration(missing_duration)
-        asyncio.ensure_future(coro)
-    else:
-        logger.debug('No videos missing duration')
+    refresh_channel_calculate_duration(channel)
 
 
 def _refresh_videos(q: Queue, channel_links: list = None):

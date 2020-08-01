@@ -9,6 +9,7 @@ import argparse
 import logging
 
 # Pretty Name will be displayed when your plugin is linked to in the UI
+
 PRETTY_NAME = 'Map'
 logger = logging.getLogger('api')
 

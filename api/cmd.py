@@ -1,6 +1,6 @@
 from api.common import logger
 
-logger = logger.getChild('cmd')
+logger = logger.getChild(__name__)
 
 
 def import_settings_configs(modules):

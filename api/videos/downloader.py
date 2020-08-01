@@ -14,7 +14,7 @@ from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path, replace_extension
 from ..errors import UnknownChannel
 
-logger = logger.getChild('api:downloader')
+logger = logger.getChild(__name__)
 ydl_logger = logger.getChild('api:youtube-dl')
 
 YDL = YoutubeDL()

@@ -15,7 +15,7 @@ from api.errors import UnknownFile, UnknownChannel, UnknownDirectory, ChannelNam
     ChannelLinkConflict, ChannelDirectoryConflict
 from api.vars import DOCKERIZED, PROJECT_DIR
 
-logger = logger.getChild('videos')
+logger = logger.getChild(__name__)
 
 REQUIRED_OPTIONS = ['name', 'directory']
 

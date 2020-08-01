@@ -18,6 +18,7 @@ from api.modules import MODULES
 from api.videos.schema import EventsResponse, EchoResponse
 from api.videos.schema import SettingsRequest, SettingsResponse, RegexRequest, RegexResponse
 
+logger = logger.getChild(__name__)
 cwd = pathlib.Path(__file__).parent
 
 api_app = Sanic(name='api_app')

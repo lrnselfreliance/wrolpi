@@ -201,7 +201,7 @@ async def search(_: Request, data: dict):
         order_by = data.get('order_by', DEFAULT_VIDEO_ORDER)
         offset = int(data.get('offset', 0))
         limit = get_allowed_limit(data.get('limit'))
-        favorites = string_to_boolean(data['favorites']) if 'favorites' in data else None
+        favorites = data.get('favorites', None)
     except Exception as e:
         raise ValidationError('Unable to validate search queries') from e
 

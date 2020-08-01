@@ -34,7 +34,7 @@ from sanic import Blueprint, response
 from sanic.request import Request
 
 from api.common import create_websocket_feed, get_sanic_url, \
-    validate_doc, FeedReporter, json_response
+    validate_doc, FeedReporter, json_response, wrol_mode_check
 from api.db import get_db_context
 from api.videos.channel import channel_bp
 from api.videos.video import video_bp
@@ -64,6 +64,7 @@ refresh_queue, refresh_event = create_websocket_feed('refresh', '/feeds/refresh'
         (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
     ],
 )
+@wrol_mode_check
 async def refresh(_, link: str = None):
     refresh_logger = logger.getChild('refresh')
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/refresh')
@@ -106,6 +107,7 @@ download_queue, download_event = create_websocket_feed('download', '/feeds/downl
         (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
     ],
 )
+@wrol_mode_check
 async def download(_, link: str = None):
     download_logger = logger.getChild('download')
 

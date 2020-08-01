@@ -69,6 +69,10 @@ class InvalidOrderBy(ValidationError):
     pass
 
 
+class WROLModeEnabled(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -151,5 +155,10 @@ API_ERRORS = {
         'code': next(error_codes),
         'message': 'Invalid order_by',
         'status': HTTPStatus.BAD_REQUEST,
+    },
+    WROLModeEnabled: {
+        'code': next(error_codes),
+        'message': 'This method is disabled while WROL Mode is enabled.',
+        'status': HTTPStatus.FORBIDDEN,
     },
 }

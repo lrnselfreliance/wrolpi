@@ -6,7 +6,8 @@ from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from api.common import validate_doc, sanitize_link, logger, save_settings_config, json_response, get_channels_config
+from api.common import validate_doc, sanitize_link, logger, save_settings_config, json_response, get_channels_config, \
+    wrol_mode_check
 from api.db import get_db_context
 from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.videos.common import check_for_channel_conflicts, \
@@ -101,6 +102,7 @@ def channel_get(request: Request, link: str):
             (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
     ),
 )
+@wrol_mode_check
 def channel_post(request: Request, data: dict):
     """Create a new channel"""
     try:
@@ -161,6 +163,7 @@ def channel_post(request: Request, data: dict):
             (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
     ),
 )
+@wrol_mode_check
 def channel_update(request: Request, link: str, data: dict):
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']
@@ -215,6 +218,7 @@ def channel_update(request: Request, link: str, data: dict):
             (HTTPStatus.NOT_FOUND, JSONErrorResponse),
     ),
 )
+@wrol_mode_check
 def channel_delete(request, link: str):
     db: DictDB = request.ctx.get_db()
     Channel = db['channel']

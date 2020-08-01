@@ -19,9 +19,11 @@ from sanic import Sanic, Blueprint, response
 from sanic.request import Request
 from sanic.response import HTTPResponse
 from sanic_openapi import doc
+from sanic_openapi.doc import Field
 from websocket import WebSocket
 
-from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents
+from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents, \
+    WROLModeEnabled
 from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT
 
 sanic_app = Sanic()
@@ -184,6 +186,11 @@ def validate_data(model: type, data: dict):
                 new_data[attr] = dict(data.pop(attr))
             elif isinstance(field, doc.List):
                 new_data[attr] = list(data.pop(attr))
+            elif isinstance(field, Trinary):
+                val = data.pop(attr)
+                if val is not None:
+                    val = string_to_boolean(val)
+                new_data[attr] = val
             else:
                 raise ValidationError(f'Bad field type {field} specified in the API model!')
         except KeyError:
@@ -438,3 +445,42 @@ def json_response(*a, **kwargs) -> HTTPResponse:
 def today():
     """Return today's date."""
     return datetime.now().date()
+
+
+class Trinary(Field):
+    """
+    A field for API docs.  Can be True/False/None.
+    """
+
+    def __init__(self, *a, **kw):
+        kw['choices'] = (True, False, None)
+        super().__init__(*a, **kw)
+
+    def serialize(self):
+        return {"type": "trinary", **super().serialize()}
+
+
+def wrol_mode_enabled() -> bool:
+    """
+    Return the boolean value of the `wrol_mode` in the config.
+    """
+    config = get_config()
+    enabled = config.get('wrol_mode', False)
+    return bool(enabled)
+
+
+def wrol_mode_check(func):
+    """
+    Wraps a function so that it cannot be called when WROL Mode is enabled.
+    """
+
+    @wraps(func)
+    def check(*a, **kw):
+        if wrol_mode_enabled():
+            raise WROLModeEnabled()
+
+        # WROL Mode is not enabled, run the function as normal.
+        result = func(*a, **kw)
+        return result
+
+    return check

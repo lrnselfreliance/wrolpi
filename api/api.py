@@ -10,10 +10,12 @@ from sanic.request import Request
 from sanic_cors import CORS
 from sanic_openapi import swagger_blueprint
 
-from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_config, get_config, EVENTS
+from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_config, get_config, EVENTS, \
+    wrol_mode_enabled
 from api.db import get_db
+from api.errors import WROLModeEnabled
 from api.modules import MODULES
-from api.videos.schema import EventsResponse, EchoResponse, WROLModeRequest
+from api.videos.schema import EventsResponse, EchoResponse
 from api.videos.schema import SettingsRequest, SettingsResponse, RegexRequest, RegexResponse
 
 cwd = pathlib.Path(__file__).parent
@@ -115,11 +117,16 @@ def get_settings(_: Request):
 
 @root_api.put('/settings')
 @validate_doc(
-    summary='Update WROLPI settings',
+    summary='Update WROLPi settings',
     consumes=SettingsRequest,
 )
 def update_settings(_: Request, data: dict):
+    if wrol_mode_enabled() and 'wrol_mode' not in data:
+        # Cannot update settings while WROL Mode is enabled, unless you want to disable WROL Mode.
+        raise WROLModeEnabled()
+
     save_settings_config(data)
+
     return response.raw('', HTTPStatus.NO_CONTENT)
 
 

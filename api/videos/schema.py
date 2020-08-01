@@ -1,5 +1,7 @@
 from sanic_openapi import doc
 
+from api.common import Trinary
+
 
 class ChannelPostRequest:
     url = doc.String()
@@ -118,7 +120,7 @@ class VideoSearchRequest:
     order_by = doc.String()
     offset = doc.Integer()
     limit = doc.Integer()
-    favorites = doc.Boolean()
+    favorites = Trinary()
 
 
 class VideoSearchResponse:

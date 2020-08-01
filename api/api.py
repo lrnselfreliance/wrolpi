@@ -20,7 +20,7 @@ from api.videos.schema import SettingsRequest, SettingsResponse, RegexRequest, R
 
 cwd = pathlib.Path(__file__).parent
 
-api_app = Sanic()
+api_app = Sanic(name='api_app')
 # TODO Allow all requests to this webapp during development.  This should be restricted later.
 CORS(api_app)
 

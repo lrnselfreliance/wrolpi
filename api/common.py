@@ -4,7 +4,6 @@ import logging
 import os
 import queue
 import string
-from collections import namedtuple
 from datetime import datetime, date
 from functools import wraps
 from multiprocessing import Event, Queue
@@ -15,7 +14,7 @@ from uuid import UUID
 
 import sanic
 import yaml
-from sanic import Sanic, Blueprint, response
+from sanic import Blueprint, response
 from sanic.request import Request
 from sanic.response import HTTPResponse
 from sanic_openapi import doc
@@ -25,8 +24,6 @@ from websocket import WebSocket
 from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents, \
     WROLModeEnabled
 from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT
-
-sanic_app = Sanic()
 
 logger = logging.getLogger('wrolpi')
 ch = logging.StreamHandler()
@@ -112,7 +109,7 @@ def create_websocket_feed(name: str, uri: str, blueprint: Blueprint, maxsize: in
 # The following code is used to consistently construct URLs that will reference this service.
 SANIC_HOST = None
 SANIC_PORT = None
-URL_COMPONENTS = namedtuple('Components', ['scheme', 'netloc', 'path', 'query', 'fragment'])
+URL_COMPONENTS = collections.namedtuple('Components', ['scheme', 'netloc', 'path', 'query', 'fragment'])
 
 
 def set_sanic_url_parts(host, port):

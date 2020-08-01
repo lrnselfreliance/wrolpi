@@ -226,6 +226,12 @@ def channel_delete(request, link: str):
     if not channel:
         raise UnknownChannel()
     with db.transaction(commit=True):
+        # Delete all videos in this channel
+        curs = db.get_cursor()
+        query = 'DELETE FROM video WHERE channel_id = %s'
+        curs.execute(query, (channel['id'],))
+
+        # Finally, delete the channel
         channel.delete()
 
     # Save these changes to the local.yaml as well

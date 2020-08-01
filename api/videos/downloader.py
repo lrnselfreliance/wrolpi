@@ -225,7 +225,7 @@ def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
     """
     suffix = path.suffix
     name, suffix, _ = str(path.name).rpartition(suffix)
-    meta_file_exts = (('.jpg', '.webp'), ('.description',), ('.en.vtt', '.en.srt'), ('.info.json',))
+    meta_file_exts = (('.jpg', '.webp', '.png'), ('.description',), ('.en.vtt', '.en.srt'), ('.info.json',))
     for meta_exts in meta_file_exts:
         for meta_ext in meta_exts:
             meta_path = replace_extension(path, meta_ext)

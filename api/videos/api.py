@@ -40,7 +40,7 @@ from api.videos.channel import channel_bp
 from api.videos.video import video_bp
 from .captions import insert_bulk_captions
 from .common import logger, generate_video_paths, get_absolute_media_path, generate_bulk_thumbnails, \
-    get_bulk_video_duration, toggle_video_favorite
+    get_bulk_video_duration, toggle_video_favorite, get_bulk_video_size
 from .downloader import update_channels, download_all_missing_videos, upsert_video
 from .schema import StreamResponse, \
     JSONErrorResponse, FavoriteRequest, FavoriteResponse
@@ -190,6 +190,21 @@ def refresh_channel_calculate_duration(channel: Dict) -> bool:
         return False
 
 
+def refresh_channel_calculate_size(channel: Dict) -> bool:
+    with get_db_curs() as curs:
+        query = 'SELECT id FROM video WHERE channel_id=%s AND size IS NULL'
+        curs.execute(query, (channel['id'],))
+        missing_size = [i for (i,) in curs.fetchall()]
+
+    if missing_size:
+        coro = get_bulk_video_size(missing_size)
+        asyncio.ensure_future(coro)
+        return True
+    else:
+        logger.debug('No videos missing size.')
+        return False
+
+
 def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
     """
     Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
@@ -238,14 +253,11 @@ def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
     logger.info(status)
     reporter.message(status)
 
-    # Fill in any missing captions
+    # Fill in any missing data.
     refresh_channel_video_captions(channel)
-
-    # Generate any missing posters.
     refresh_channel_generate_posters(channel)
-
-    # Get the duration of any video that is missing it's duration.
     refresh_channel_calculate_duration(channel)
+    refresh_channel_calculate_size(channel)
 
 
 def _refresh_videos(q: Queue, channel_links: list = None):

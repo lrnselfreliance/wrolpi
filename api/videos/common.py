@@ -408,6 +408,23 @@ async def get_bulk_video_duration(video_ids: List[int]):
             db_conn.commit()
 
 
+async def get_bulk_video_size(video_ids: List[int]):
+    """
+    Get and save the size for each video provided.
+    """
+    with get_db_context(commit=True) as (db_conn, db):
+        logger.info(f'Getting {len(video_ids)} video sizes.')
+        Video = db['video']
+        for video_id in video_ids:
+            video = Video.get_one(id=video_id)
+            logger.debug(f'Getting video size: {video["id"]} {video["title"]}')
+            video_path = get_absolute_video_path(video)
+
+            size = video_path.stat().st_size
+            video['size'] = size
+            video.flush()
+
+
 def toggle_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
     """
     Toggle the timestamp on Video.favorite on a video.

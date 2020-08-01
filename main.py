@@ -15,8 +15,6 @@ from api.common import logger
 from api.modules import MODULES
 from api.videos.common import verify_config
 
-logger = logger.getChild(__name__)
-
 
 def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):
     """Associate a sub-command with the provided main, but only if that sub-command hasn't already been claimed

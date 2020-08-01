@@ -35,7 +35,7 @@ from sanic.request import Request
 
 from api.common import create_websocket_feed, get_sanic_url, \
     validate_doc, FeedReporter, json_response, wrol_mode_check
-from api.db import get_db_context
+from api.db import get_db_context, get_db_curs
 from api.videos.channel import channel_bp
 from api.videos.video import video_bp
 from .captions import insert_bulk_captions
@@ -143,15 +143,16 @@ async def download(_, link: str = None):
     return response.json({'code': 'stream-started', 'stream_url': stream_url})
 
 
-def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
+def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
     """
     Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
     """
     reporter.set_progress(1, 0)
 
     # Set the idempotency key so we can remove any videos not touched during this search
-    curs = db.get_cursor()
-    curs.execute('UPDATE video SET idempotency=NULL WHERE channel_id=%s', (channel['id'],))
+    with get_db_curs(commit=True) as curs:
+        curs.execute('UPDATE video SET idempotency=NULL WHERE channel_id=%s', (channel['id'],))
+
     idempotency = str(uuid1())
     directory = get_absolute_media_path(channel['directory'])
 
@@ -162,21 +163,25 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
     # Update all videos that match the current video paths
     query = 'UPDATE video SET idempotency = %s WHERE channel_id = %s AND video_path = ANY(%s) RETURNING video_path'
     relative_new_paths = [str(i.relative_to(directory)) for i in possible_new_paths]
-    curs.execute(query, (idempotency, channel['id'], relative_new_paths))
-    existing_paths = {i for (i,) in curs.fetchall()}
+    with get_db_curs(commit=True) as curs:
+        curs.execute(query, (idempotency, channel['id'], relative_new_paths))
+        existing_paths = {i for (i,) in curs.fetchall()}
 
     # Get the paths for any video not yet in the DB
     # (paths in DB are relative, but we need to pass an absolute path)
     new_videos = {p for p in possible_new_paths if str(p.relative_to(directory)) not in existing_paths}
 
     for video_path in new_videos:
-        upsert_video(db, pathlib.Path(video_path), channel, idempotency=idempotency)
-        logger.debug(f'{channel["name"]}: Added {video_path}')
+        with get_db_context(commit=True) as (db_conn, db):
+            upsert_video(db, pathlib.Path(video_path), channel, idempotency=idempotency)
+            logger.debug(f'{channel["name"]}: Added {video_path}')
 
     reporter.message('Matched all existing video files')
 
-    curs.execute('DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL RETURNING id', (channel['id'],))
-    deleted_count = curs.fetchall()
+    with get_db_curs(commit=True) as curs:
+        curs.execute('DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL RETURNING id', (channel['id'],))
+        deleted_count = curs.fetchall()
+
     if deleted_count:
         deleted_count = len(deleted_count)
         deleted_status = f'Deleted {deleted_count} video records from channel {channel["name"]}'
@@ -187,13 +192,11 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
     logger.info(status)
     reporter.message(status)
 
-    # Commit all insertions and deletions
-    db.conn.commit()
-
     # Fill in any missing captions
-    query = 'SELECT id FROM video WHERE channel_id=%s AND caption IS NULL AND caption_path IS NOT NULL'
-    curs.execute(query, (channel['id'],))
-    missing_captions = [i for (i,) in curs.fetchall()]
+    with get_db_curs(commit=True) as curs:
+        query = 'SELECT id FROM video WHERE channel_id=%s AND caption IS NULL AND caption_path IS NOT NULL'
+        curs.execute(query, (channel['id'],))
+        missing_captions = [i for (i,) in curs.fetchall()]
 
     if missing_captions:
         coro = insert_bulk_captions(missing_captions)
@@ -201,10 +204,11 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
     else:
         logger.debug('No missing captions to process.')
 
-    # Generate any missing posters
-    query = 'SELECT id FROM video WHERE channel_id=%s AND poster_path IS NULL'
-    curs.execute(query, (channel['id'],))
-    missing_posters = [i for (i,) in curs.fetchall()]
+    # Generate any missing posters.
+    with get_db_curs(commit=True) as curs:
+        query = 'SELECT id FROM video WHERE channel_id=%s AND poster_path IS NULL'
+        curs.execute(query, (channel['id'],))
+        missing_posters = [i for (i,) in curs.fetchall()]
 
     if missing_posters:
         coro = generate_bulk_thumbnails(missing_posters)
@@ -212,10 +216,11 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
     else:
         logger.debug('No missing posters to generate.')
 
-    # Get the duration of any video that is missing it's duration
-    query = 'SELECT id FROM video WHERE channel_id=%s AND duration IS NULL'
-    curs.execute(query, (channel['id'],))
-    missing_duration = [i for (i,) in curs.fetchall()]
+    # Get the duration of any video that is missing it's duration.
+    with get_db_curs(commit=True) as curs:
+        query = 'SELECT id FROM video WHERE channel_id=%s AND duration IS NULL'
+        curs.execute(query, (channel['id'],))
+        missing_duration = [i for (i,) in curs.fetchall()]
 
     if missing_duration:
         coro = get_bulk_video_duration(missing_duration)
@@ -224,7 +229,7 @@ def refresh_channel_videos(db: DictDB, channel: Dict, reporter: FeedReporter):
         logger.debug('No videos missing duration')
 
 
-def _refresh_videos(db: DictDB, q: Queue, channel_links: list = None):
+def _refresh_videos(q: Queue, channel_links: list = None):
     """
     Find any videos in the channel directories and add them to the DB.  Delete DB records of any videos not in the
     file system.
@@ -235,18 +240,19 @@ def _refresh_videos(db: DictDB, q: Queue, channel_links: list = None):
     :return:
     """
     logger.info('Refreshing video files')
-    Channel = db['channel']
+    with get_db_context() as (db_conn, db):
+        Channel = db['channel']
 
-    reporter = FeedReporter(q, 2)
-    reporter.code('refresh-started')
-    reporter.set_progress_total(0, Channel.count())
+        reporter = FeedReporter(q, 2)
+        reporter.code('refresh-started')
+        reporter.set_progress_total(0, Channel.count())
 
-    if channel_links:
-        channels = Channel.get_where(Channel['link'].In(channel_links))
-    else:
-        channels = Channel.get_where()
+        if channel_links:
+            channels = Channel.get_where(Channel['link'].In(channel_links))
+        else:
+            channels = Channel.get_where()
 
-    channels = list(channels)
+        channels = list(channels)
 
     if not channels and channel_links:
         raise Exception(f'No channels match links(s): {channel_links}')
@@ -255,21 +261,19 @@ def _refresh_videos(db: DictDB, q: Queue, channel_links: list = None):
 
     for idx, channel in enumerate(channels):
         reporter.set_progress(0, idx, f'Checking {channel["name"]} directory for new videos')
-        with db.transaction(commit=True):
-            refresh_channel_videos(db, channel, reporter)
+        refresh_channel_videos(channel, reporter)
     reporter.set_progress(0, 100, 'All videos refreshed.')
     reporter.code('refresh-complete')
 
 
 @wraps(_refresh_videos)
-def refresh_videos(db: DictDB, channel_links: list = None):
-    return _refresh_videos(db, refresh_queue, channel_links=channel_links)
+def refresh_videos(channel_links: list = None):
+    return _refresh_videos(refresh_queue, channel_links=channel_links)
 
 
 @wraps(_refresh_videos)
 def refresh_videos_with_db(channel_links: list = None):
-    with get_db_context(commit=True) as (db_conn, db):
-        return refresh_videos(db, channel_links=channel_links)
+    return refresh_videos(channel_links=channel_links)
 
 
 @wraps(refresh_videos_with_db)

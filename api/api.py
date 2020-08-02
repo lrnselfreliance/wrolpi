@@ -116,7 +116,7 @@ def get_settings(_: Request):
     return response.json({'config': config})
 
 
-@root_api.put('/settings')
+@root_api.patch('/settings')
 @validate_doc(
     summary='Update WROLPi settings',
     consumes=SettingsRequest,

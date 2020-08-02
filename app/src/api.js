@@ -88,7 +88,7 @@ export async function getConfig() {
 
 export async function saveConfig(config) {
     let url = `http://${API_URI}/api/settings`;
-    await fetch(url, {method: 'PUT', body: JSON.stringify(config)});
+    await fetch(url, {method: 'PATCH', body: JSON.stringify(config)});
 }
 
 export async function validateRegex(regex) {

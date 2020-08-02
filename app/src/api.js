@@ -77,7 +77,7 @@ export async function updateChannel(link, channel) {
 }
 
 export async function createChannel(channel) {
-    return await apiPost(`${VIDEOS_API}/channels`, 'POST', channel);
+    return await apiPost(`${VIDEOS_API}/channels`, channel);
 }
 
 export async function deleteChannel(channel_link) {

@@ -564,11 +564,14 @@ export class Channels extends React.Component {
                     </Table>
                 </>
             )
-        } else if (this.state.channels === []) {
+        } else if (this.state.channels.length === 0) {
             return (
                 <>
                     {header}
-                    Not channels exist yet! Create one.
+                    <Message>
+                        <Message.Header>No channels exist yet!</Message.Header>
+                        <Message.Content><Link to='/videos/channel/new'>Create one.</Link></Message.Content>
+                    </Message>
                 </>
             )
         } else {

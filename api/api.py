@@ -23,7 +23,12 @@ cwd = pathlib.Path(__file__).parent
 
 api_app = Sanic(name='api_app')
 # TODO Allow all requests to this webapp during development.  This should be restricted later.
-CORS(api_app)
+CORS(
+    api_app,
+    expose_headers=[
+        'Location',  # Expose this header so the App can send users to the location of a created object.
+    ],
+)
 
 # Attach the Sanic OpenAPI blueprint to the API App.  This will generate our API docs.
 api_app.blueprint(swagger_blueprint)

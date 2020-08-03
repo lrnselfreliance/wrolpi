@@ -2,7 +2,7 @@ import React from 'react';
 import './App.css';
 import {NavBar} from "./components/Nav";
 import {Route, Switch} from "react-router-dom";
-import VideosRoute from "./components/Videos";
+import {NewestVideosPreview, VideosRoute} from "./components/Videos";
 import Map_ from "./components/Map";
 import Settings from "./components/Settings";
 import {Container, Header} from "semantic-ui-react";
@@ -12,11 +12,12 @@ import 'react-semantic-toasts/styles/react-semantic-alert.css';
 
 function Welcome() {
     return (
-        <Container fluid>
+        <Container style={{marginTop: '2em'}}>
             <Header as="h1">Welcome to WROLPi!</Header>
             <p>
                 Take your internet, off-grid.
             </p>
+            <NewestVideosPreview />
         </Container>
     )
 }
@@ -43,7 +44,7 @@ function App() {
                 <Route path="/settings" component={Settings}/>
                 <Route component={PageNotFound}/>
             </Switch>
-            <SemanticToastContainer position="top-right" />
+            <SemanticToastContainer position="top-right"/>
         </>
     );
 }

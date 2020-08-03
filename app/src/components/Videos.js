@@ -88,6 +88,40 @@ function changePageHistory(history, location, activePage, searchStr, searchOrder
     scrollToTop();
 }
 
+export class NewestVideosPreview extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            videos: null,
+        };
+    }
+
+    async componentDidMount() {
+        await this.fetchVideos();
+    }
+
+    async fetchVideos() {
+        let [videos, _] = await searchVideos(0, 4);
+        this.setState({videos});
+    }
+
+    render() {
+        let header = <h2>Newest Videos</h2>;
+        let body = <VideoPlaceholder/>
+        if (this.state.videos && this.state.videos.length === 0) {
+            body = <p>No videos available.</p>
+        } else if (this.state.videos && this.state.videos.length > 0) {
+            body = <VideoCards videos={this.state.videos}/>
+        }
+        return <>
+            {header}
+            {body}
+        </>
+    }
+
+}
+
+
 class Videos extends React.Component {
 
     constructor(props) {
@@ -303,7 +337,7 @@ class Videos extends React.Component {
     }
 }
 
-class VideosRoute extends React.Component {
+export class VideosRoute extends React.Component {
 
     render() {
         return (
@@ -344,5 +378,3 @@ class VideosRoute extends React.Component {
         )
     }
 }
-
-export default VideosRoute;

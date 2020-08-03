@@ -88,7 +88,7 @@ function changePageHistory(history, location, activePage, searchStr, searchOrder
     scrollToTop();
 }
 
-export class NewestVideosPreview extends React.Component {
+class VideosPreview extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
@@ -100,14 +100,8 @@ export class NewestVideosPreview extends React.Component {
         await this.fetchVideos();
     }
 
-    async fetchVideos() {
-        let [videos, _] = await searchVideos(
-            0, 4, null, null, null, '-upload_date');
-        this.setState({videos});
-    }
-
     render() {
-        let header = <h2>Newest Videos</h2>;
+        let header = <h2>{this.title}</h2>;
         let body = <VideoPlaceholder/>
         if (this.state.videos && this.state.videos.length === 0) {
             body = <p>No videos available.</p>
@@ -122,36 +116,32 @@ export class NewestVideosPreview extends React.Component {
 
 }
 
-export class ViewedVideosPreview extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            videos: null,
-        };
-    }
+export class FavoriteVideosPreview extends VideosPreview {
 
-    async componentDidMount() {
-        await this.fetchVideos();
+    constructor() {
+        super();
+        this.title = 'Favorite Videos'
     }
 
     async fetchVideos() {
         let [videos, _] = await searchVideos(
-            0, 4, null, null, null, '-viewed');
+            0, 3, null, null, true, '-favorite');
         this.setState({videos});
     }
 
-    render() {
-        let header = <h2>Recently Viewed Videos</h2>;
-        let body = <VideoPlaceholder/>
-        if (this.state.videos && this.state.videos.length === 0) {
-            body = <p>No videos available.</p>
-        } else if (this.state.videos && this.state.videos.length > 0) {
-            body = <VideoCards videos={this.state.videos}/>
-        }
-        return <>
-            {header}
-            {body}
-        </>
+}
+
+export class ViewedVideosPreview extends VideosPreview {
+
+    constructor() {
+        super();
+        this.title = 'Recently Viewed Videos'
+    }
+
+    async fetchVideos() {
+        let [videos, _] = await searchVideos(
+            0, 3, null, null, null, '-viewed');
+        this.setState({videos});
     }
 
 }

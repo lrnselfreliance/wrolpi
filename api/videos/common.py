@@ -466,7 +466,7 @@ def minimize_video(video: dict) -> dict:
     if they are present.
     """
     minimal_keys = {'id', 'title', 'upload_date', 'duration', 'channel', 'channel_id', 'favorite',
-                    'poster_path', 'caption_path', 'video_path', 'info_json', 'channel'}
+                    'poster_path', 'caption_path', 'video_path', 'info_json', 'channel', 'viewed'}
     video = minimize_dict(video, minimal_keys)
 
     if video.get('channel'):

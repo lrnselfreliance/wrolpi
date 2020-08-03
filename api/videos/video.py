@@ -124,6 +124,8 @@ VIDEO_ORDERS = {
     '-size': 'size DESC, LOWER(video_path) DESC',
     'duration': 'duration ASC, LOWER(video_path) ASC',
     '-duration': 'duration DESC, LOWER(video_path) DESC',
+    'favorite': 'favorite ASC, LOWER(video_path) ASC',
+    '-favorite': 'favorite DESC, LOWER(video_path) DESC',
     'viewed': 'viewed ASC',
     '-viewed': 'viewed DESC',
 }
@@ -228,8 +230,7 @@ async def search(_: Request, data: dict):
         videos, videos_total = video_search(db, search_str, offset, limit, channel_link, order_by, favorites)
 
         # Get each Channel for each Video, this will be converted to a dict by the response
-        # TODO these are huge, and must be simplified.
-        _ = [i['channel'] for i in videos]
+        videos = [minimize_video(i) for i in videos]
 
     ret = {'videos': videos, 'totals': {'videos': videos_total}}
     return json_response(ret)

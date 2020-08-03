@@ -135,7 +135,7 @@ export let videoOrders = [
     {key: 'upload_date', value: 'upload_date', text: 'Oldest'},
     {key: '-duration', value: '-duration', text: 'Longest'},
     {key: 'duration', value: 'duration', text: 'Shortest'},
-    {key: 'viewed', value: 'viewed', text: 'Recently viewed'},
+    {key: '-viewed', value: 'viewed', text: 'Recently viewed'},
 ];
 
 export let searchOrders = [

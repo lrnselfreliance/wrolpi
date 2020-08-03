@@ -121,6 +121,40 @@ export class NewestVideosPreview extends React.Component {
 
 }
 
+export class ViewedVideosPreview extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            videos: null,
+        };
+    }
+
+    async componentDidMount() {
+        await this.fetchVideos();
+    }
+
+    async fetchVideos() {
+        let [videos, _] = await searchVideos(
+            0, 4, null, null, null, 'viewed');
+        this.setState({videos});
+    }
+
+    render() {
+        let header = <h2>Recently Viewed Videos</h2>;
+        let body = <VideoPlaceholder/>
+        if (this.state.videos && this.state.videos.length === 0) {
+            body = <p>No videos available.</p>
+        } else if (this.state.videos && this.state.videos.length > 0) {
+            body = <VideoCards videos={this.state.videos}/>
+        }
+        return <>
+            {header}
+            {body}
+        </>
+    }
+
+}
+
 
 class Videos extends React.Component {
 

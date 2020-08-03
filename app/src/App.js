@@ -2,7 +2,7 @@ import React from 'react';
 import './App.css';
 import {NavBar} from "./components/Nav";
 import {Route, Switch} from "react-router-dom";
-import {NewestVideosPreview, VideosRoute} from "./components/Videos";
+import {NewestVideosPreview, VideosRoute, ViewedVideosPreview} from "./components/Videos";
 import Map_ from "./components/Map";
 import Settings from "./components/Settings";
 import {Container, Header} from "semantic-ui-react";
@@ -17,7 +17,8 @@ function Welcome() {
             <p>
                 Take your internet, off-grid.
             </p>
-            <NewestVideosPreview />
+            <NewestVideosPreview/>
+            <ViewedVideosPreview/>
         </Container>
     )
 }

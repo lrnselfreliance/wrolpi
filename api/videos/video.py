@@ -1,3 +1,4 @@
+from datetime import datetime
 from http import HTTPStatus
 from typing import List, Dict, Tuple, Optional
 
@@ -5,7 +6,7 @@ from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from api.common import validate_doc, logger, json_response, string_to_boolean
+from api.common import validate_doc, logger, json_response
 from api.db import get_db_context
 from api.errors import UnknownVideo, ValidationError, InvalidOrderBy
 from api.videos.common import get_video_info_json, get_matching_directories, get_media_directory, \
@@ -27,20 +28,22 @@ logger = logger.getChild('video')
     ),
 )
 def video_get(request, video_id: int):
-    db: DictDB = request.ctx.get_db()
-    Video = db['video']
-    video = Video.get_one(id=video_id)
-    if not video:
-        raise UnknownVideo()
+    with get_db_context(commit=True) as (db_conn, db):
+        Video = db['video']
+        video = Video.get_one(id=video_id)
+        if not video:
+            raise UnknownVideo()
+        video['viewed'] = datetime.now()
+        video.flush()
 
-    info_json = get_video_info_json(video)
-    video = dict(video)
-    video['info_json'] = info_json
-    video = minimize_video(video)
+        info_json = get_video_info_json(video)
+        video = dict(video)
+        video['info_json'] = info_json
+        video = minimize_video(video)
 
-    previous_video, next_video = get_surrounding_videos(db, video_id, video['channel_id'])
-    previous_video = minimize_video(previous_video) if previous_video else None
-    next_video = minimize_video(next_video) if next_video else None
+        previous_video, next_video = get_surrounding_videos(db, video_id, video['channel_id'])
+        previous_video = minimize_video(previous_video) if previous_video else None
+        next_video = minimize_video(next_video) if next_video else None
 
     return json_response({'video': video, 'prev': previous_video, 'next': next_video})
 
@@ -121,6 +124,12 @@ VIDEO_ORDERS = {
     '-size': 'size DESC, LOWER(video_path) DESC',
     'duration': 'duration ASC, LOWER(video_path) ASC',
     '-duration': 'duration DESC, LOWER(video_path) DESC',
+    'viewed': 'viewed ASC',
+    '-viewed': 'viewed DESC',
+}
+NO_NULL_ORDERS = {
+    'viewed': '\nAND viewed IS NOT NULL',
+    '-viewed': '\nAND viewed IS NOT NULL',
 }
 DEFAULT_VIDEO_ORDER = 'rank'
 VIDEO_QUERY_LIMIT = 20
@@ -143,14 +152,6 @@ def video_search(
         channel_where = 'AND channel_id = (select id from channel where link=%(channel_link)s)'
         args['channel_link'] = channel_link
 
-    # Convert the user-friendly order by into a real order by, restrict what can be interpolated by using the whitelist.
-    order = VIDEO_ORDERS[DEFAULT_VIDEO_ORDER]
-    if order_by:
-        try:
-            order = VIDEO_ORDERS[order_by]
-        except KeyError:
-            raise
-
     # Filter for/against favorites, if it was provided
     favorites_where = ''
     if favorites is not None:
@@ -166,6 +167,16 @@ def video_search(
         # No search_str provided.  Get id and total only.
         columns = 'id, COUNT(*) OVER() AS total'
 
+    # Convert the user-friendly order by into a real order by, restrict what can be interpolated by using the whitelist.
+    order = VIDEO_ORDERS[DEFAULT_VIDEO_ORDER]
+    if order_by:
+        try:
+            order = VIDEO_ORDERS[order_by]
+        except KeyError:
+            raise
+        if order_by in NO_NULL_ORDERS:
+            where += NO_NULL_ORDERS[order_by]
+
     query = f'''
         SELECT
             {columns}
@@ -178,6 +189,7 @@ def video_search(
         ORDER BY {order}
         OFFSET %(offset)s LIMIT {int(limit)}
     '''
+    logger.debug(query)
 
     curs.execute(query, args)
     results = [dict(i) for i in curs.fetchall()]

@@ -129,3 +129,14 @@ export class VideoCards extends React.Component {
 export function RequiredAsterisk() {
     return <span style={{color: '#db2828'}}> *</span>
 }
+
+export let videoOrders = [
+    {key: '-upload_date', value: '-upload_date', text: 'Newest'},
+    {key: 'upload_date', value: 'upload_date', text: 'Oldest'},
+    {key: '-duration', value: '-duration', text: 'Longest'},
+    {key: 'duration', value: 'duration', text: 'Shortest'},
+];
+
+export let searchOrders = [
+    {key: 'rank', value: 'rank', text: 'Search Rank'},
+];

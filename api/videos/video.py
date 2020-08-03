@@ -117,6 +117,10 @@ VIDEO_ORDERS = {
     '-rank': '2 ASC, LOWER(video_path) ASC',
     'id': 'id ASC',
     '-id': 'id DESC',
+    'size': 'size ASC, LOWER(video_path) ASC',
+    '-size': 'size DESC, LOWER(video_path) DESC',
+    'duration': 'duration ASC, LOWER(video_path) ASC',
+    '-duration': 'duration DESC, LOWER(video_path) DESC',
 }
 DEFAULT_VIDEO_ORDER = 'rank'
 VIDEO_QUERY_LIMIT = 20

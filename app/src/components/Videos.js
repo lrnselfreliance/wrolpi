@@ -1,10 +1,10 @@
 import React from 'react';
 import {Link, Route} from "react-router-dom";
 import '../static/external/fontawesome-free/css/all.min.css';
-import Paginator, {DEFAULT_LIMIT, VideoCards, VIDEOS_API} from "./Common"
+import Paginator, {DEFAULT_LIMIT, searchOrders, VideoCards, videoOrders, VIDEOS_API} from "./Common"
 import Video from "./VideoPlayer";
 import {getChannel, getVideo, searchVideos} from "../api";
-import {Button, Card, Form, Grid, Header, Icon, Input, Placeholder} from "semantic-ui-react";
+import {Button, Card, Dropdown, Form, Grid, Header, Icon, Input, Placeholder} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {Channels, EditChannel, NewChannel} from "./Channels";
@@ -73,10 +73,13 @@ function VideoPlaceholder() {
     )
 }
 
-function changePageHistory(history, location, activePage, searchStr) {
+function changePageHistory(history, location, activePage, searchStr, searchOrder) {
     let search = `?page=${activePage}`;
     if (searchStr) {
         search = `${search}&q=${searchStr}`;
+    }
+    if (searchOrder) {
+        search = `${search}&o=${searchOrder}`;
     }
     history.push({
         pathname: location.pathname,
@@ -92,6 +95,7 @@ class Videos extends React.Component {
         const query = QueryString.parse(this.props.location.search);
         let activePage = query.page ? parseInt(query.page) : 1; // First page is 1 by default, of course.
         let searchStr = query.q || '';
+        let searchOrder = query.o || '-upload_date';
 
         this.state = {
             channel: null,
@@ -106,6 +110,8 @@ class Videos extends React.Component {
             totalPages: null,
             prev: null,
             next: null,
+            videoOrders: searchStr ? searchOrders : videoOrders,
+            searchOrder: searchOrder,
         };
     }
 
@@ -131,7 +137,7 @@ class Videos extends React.Component {
         } else if (videoChanged) {
             await this.fetchVideo();
         } else if (pageChanged) {
-            changePageHistory(this.props.history, this.props.location, this.state.activePage, this.state.searchStr);
+            this.applyStateToHistory();
             await this.fetchVideos();
         }
     }
@@ -157,9 +163,8 @@ class Videos extends React.Component {
         let offset = this.state.limit * this.state.activePage - this.state.limit;
         let channel_link = this.state.channel ? this.state.channel.link : null;
         let favorites = this.props.filter !== undefined ? this.props.filter === 'favorites' : null;
-        let order_by = this.state.searchStr ? 'rank' : '-upload_date';
         let [videos, total] = await searchVideos(
-            offset, this.state.limit, channel_link, this.state.searchStr, favorites, order_by);
+            offset, this.state.limit, channel_link, this.state.searchStr, favorites, this.state.searchOrder);
 
         let totalPages = Math.round(total / this.state.limit) || 1;
         this.setState({videos, total, totalPages});
@@ -179,16 +184,26 @@ class Videos extends React.Component {
     }
 
     clearSearch = async () => {
-        this.setState({searchStr: ''}, this.handleSearch);
+        this.setState({searchStr: '', searchOrder: 'upload_date'}, this.handleSearch);
+    }
+
+    applyStateToHistory = () => {
+        let {history, location} = this.props;
+        let {activePage, searchStr, searchOrder} = this.state;
+        changePageHistory(history, location, activePage, searchStr, searchOrder);
     }
 
     handleSearch = async (e) => {
         e && e.preventDefault();
-        changePageHistory(this.props.history, this.props.location, 1, this.state.searchStr);
+        this.setState({activePage: 1, searchOrder: 'rank'}, this.applyStateToHistory);
     }
 
     handleInputChange = (event, {name, value}) => {
         this.setState({[name]: value});
+    }
+
+    changeSearchOrder = (event, {value}) => {
+        this.setState({searchOrder: value, activePage: 1}, this.applyStateToHistory);
     }
 
     render() {
@@ -239,7 +254,7 @@ class Videos extends React.Component {
 
         return (
             <Container textAlign='center'>
-                <Grid columns={2}>
+                <Grid columns={3}>
                     <Grid.Column textAlign='left'>
                         <h1>
                             {channelName}
@@ -261,11 +276,22 @@ class Videos extends React.Component {
                             <Input
                                 icon='search'
                                 placeholder='Search...'
-                                size="large"
                                 name="searchStr"
                                 value={this.state.searchStr}
                                 onChange={this.handleInputChange}/>
                         </Form>
+                    </Grid.Column>
+                    <Grid.Column>
+                        <Dropdown
+                            size='large'
+                            placeholder='Sort by...'
+                            selection
+                            name='searchOrder'
+                            onChange={this.changeSearchOrder}
+                            value={this.state.searchOrder}
+                            options={this.state.videoOrders}
+                            disabled={this.state.searchQuery === ''}
+                        />
                     </Grid.Column>
                 </Grid>
                 <Container textAlign='center'>

@@ -101,7 +101,8 @@ export class NewestVideosPreview extends React.Component {
     }
 
     async fetchVideos() {
-        let [videos, _] = await searchVideos(0, 4);
+        let [videos, _] = await searchVideos(
+            0, 4, null, null, null, '-upload_date');
         this.setState({videos});
     }
 
@@ -135,7 +136,7 @@ export class ViewedVideosPreview extends React.Component {
 
     async fetchVideos() {
         let [videos, _] = await searchVideos(
-            0, 4, null, null, null, 'viewed');
+            0, 4, null, null, null, '-viewed');
         this.setState({videos});
     }
 

@@ -132,6 +132,10 @@ VIDEO_ORDERS = {
 NO_NULL_ORDERS = {
     'viewed': '\nAND viewed IS NOT NULL',
     '-viewed': '\nAND viewed IS NOT NULL',
+    'duration': '\nAND duration IS NOT NULL',
+    '-duration': '\nAND duration IS NOT NULL',
+    'size': '\nAND size IS NOT NULL',
+    '-size': '\nAND size IS NOT NULL',
 }
 DEFAULT_VIDEO_ORDER = 'rank'
 VIDEO_QUERY_LIMIT = 20

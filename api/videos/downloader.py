@@ -96,7 +96,7 @@ def update_channels(link: str = None):
         try:
             update_channel(channel)
         except Exception:
-            logger.fatal('Unable to fetch channel videos', exc_info=True)
+            logger.critical('Unable to fetch channel videos', exc_info=True)
             continue
 
     yield {'progress': 100, 'message': 'All video lists updated.'}

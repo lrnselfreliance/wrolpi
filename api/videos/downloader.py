@@ -93,12 +93,13 @@ def update_channels(link: str = None):
     calc_progress = make_progress_calculator(len(channels))
     for idx, channel in enumerate(channels):
         yield {'progress': calc_progress(idx), 'message': f'Getting video list for {channel["name"]}'}
-        update_channel(channel)
+        try:
+            update_channel(channel)
+        except Exception:
+            logger.fatal('Unable to fetch channel videos', exc_info=True)
+            continue
 
     yield {'progress': 100, 'message': 'All video lists updated.'}
-
-
-VIDEO_EXTENSIONS = ['mp4', 'webm', 'flv']
 
 
 def _find_all_missing_videos(link: str = None) -> List[Tuple]:

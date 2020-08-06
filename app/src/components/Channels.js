@@ -437,7 +437,13 @@ function ChannelRow(props) {
                 <Popup
                     header="Download any missing videos"
                     on="hover"
-                    trigger={<Button primary onClick={downloadVideos}>Download Videos</Button>}
+                    trigger={<Button
+                        primary
+                        onClick={downloadVideos}
+                        disabled={!!!props.channel.url}
+                    >
+                        Download Videos
+                    </Button>}
                 />
             </Table.Cell>
             <Table.Cell textAlign='right'>

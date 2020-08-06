@@ -12,7 +12,7 @@ from api.common import make_progress_calculator, logger, today
 from api.db import get_db_context
 from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path, replace_extension
-from ..errors import UnknownChannel
+from ..errors import UnknownChannel, ChannelURLEmpty
 
 logger = logger.getChild(__name__)
 ydl_logger = logger.getChild('api:youtube-dl')
@@ -150,6 +150,8 @@ def find_all_missing_videos(link: str = None) -> Tuple[Dict, dict]:
             channel = Channel.get_one(link=link)
             if not channel:
                 raise UnknownChannel(f'No channel with link: {link}')
+            if not channel['url']:
+                raise ChannelURLEmpty('No URL for this channel')
             channels = [channel, ]
         else:
             channels = Channel.get_where(Channel['info_json'].IsNotNull())

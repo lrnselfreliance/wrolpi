@@ -313,7 +313,7 @@ class Videos extends React.Component {
 
         return (
             <Container textAlign='center'>
-                <Grid columns={3}>
+                <Grid columns={3} stackable>
                     <Grid.Column textAlign='left'>
                         <h1>
                             {channelName}
@@ -333,6 +333,7 @@ class Videos extends React.Component {
                     <Grid.Column textAlign='right'>
                         <Form onSubmit={this.handleSearch}>
                             <Input
+                                fluid
                                 icon='search'
                                 placeholder='Search...'
                                 name="searchStr"
@@ -345,6 +346,7 @@ class Videos extends React.Component {
                             size='large'
                             placeholder='Sort by...'
                             selection
+                            fluid
                             name='searchOrder'
                             onChange={this.changeSearchOrder}
                             value={this.state.searchOrder}

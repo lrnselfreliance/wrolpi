@@ -348,14 +348,13 @@ class ChannelPage extends React.Component {
                             {this.state.disabled ? <Loader active inline/> : 'Save'}
                         </Button>
 
-                        <Link to='/videos/channel'>
-                            <Button
-                                secondary
-                                floated='right'
-                            >
-                                Cancel
-                            </Button>
-                        </Link>
+                        <Button
+                            secondary
+                            floated='right'
+                            onClick={() => this.props.history.goBack()}
+                        >
+                            Cancel
+                        </Button>
 
                         {!this.state.create && <>
                             <Button color='red' onClick={this.show}>Delete</Button>

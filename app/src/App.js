@@ -5,7 +5,7 @@ import {Route, Switch} from "react-router-dom";
 import {FavoriteVideosPreview, VideosRoute, VideoWrapper, ViewedVideosPreview} from "./components/Videos";
 import Map_ from "./components/Map";
 import Settings from "./components/Settings";
-import {Container, Header} from "semantic-ui-react";
+import {Container, Header, Segment} from "semantic-ui-react";
 import 'semantic-ui-css/semantic.min.css';
 import {SemanticToastContainer} from 'react-semantic-toasts';
 import 'react-semantic-toasts/styles/react-semantic-alert.css';
@@ -14,11 +14,15 @@ function Welcome() {
     return (
         <Container style={{marginTop: '2em'}}>
             <Header as="h1">Welcome to WROLPi!</Header>
-            <p>
+            <h3>
                 Take your internet, off-grid.
-            </p>
-            <FavoriteVideosPreview/>
-            <ViewedVideosPreview/>
+            </h3>
+            <Segment>
+                <FavoriteVideosPreview/>
+            </Segment>
+            <Segment>
+                <ViewedVideosPreview/>
+            </Segment>
         </Container>
     )
 }

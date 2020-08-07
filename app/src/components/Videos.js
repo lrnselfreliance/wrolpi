@@ -11,10 +11,11 @@ import Paginator, {
 } from "./Common"
 import VideoPage from "./VideoPlayer";
 import {getChannel, getVideo, searchVideos} from "../api";
-import {Button, Card, Dropdown, Form, Grid, Header, Icon, Input, Placeholder} from "semantic-ui-react";
+import {Button, Dropdown, Form, Grid, Header, Icon, Input} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {Channels, EditChannel, NewChannel} from "./Channels";
+import {VideoPlaceholder} from "./Placeholder";
 
 function scrollToTop() {
     window.scrollTo({
@@ -52,25 +53,6 @@ class ManageVideos extends React.Component {
             </Container>
         )
     }
-}
-
-function VideoPlaceholder() {
-    return (
-        <Card.Group doubling stackable>
-            <Card>
-                <Placeholder>
-                    <Placeholder.Image rectangular/>
-                </Placeholder>
-                <Card.Content>
-                    <Placeholder>
-                        <Placeholder.Line/>
-                        <Placeholder.Line/>
-                        <Placeholder.Line/>
-                    </Placeholder>
-                </Card.Content>
-            </Card>
-        </Card.Group>
-    )
 }
 
 export class VideoWrapper extends React.Component {

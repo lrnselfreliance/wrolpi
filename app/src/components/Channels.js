@@ -9,18 +9,7 @@ import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
 import Table from "semantic-ui-react/dist/commonjs/collections/Table";
 import Popup from "semantic-ui-react/dist/commonjs/modules/Popup";
-
-
-function FieldPlaceholder() {
-    return (
-        <Form.Field>
-            <Placeholder style={{'marginBottom': '0.5em'}}>
-                <Placeholder.Line length="short"/>
-            </Placeholder>
-            <input disabled/>
-        </Form.Field>
-    )
-}
+import {FieldPlaceholder, ChannelPlaceholder} from "./Placeholder";
 
 
 class ChannelPage extends React.Component {
@@ -456,15 +445,6 @@ function ChannelRow(props) {
                 <Link className="ui button secondary" to={editTo}>Edit</Link>
             </Table.Cell>
         </Table.Row>
-    )
-}
-
-function ChannelPlaceholder() {
-    return (
-        <Placeholder>
-            <Placeholder.Line length='long'/>
-            <Placeholder.Line length='short'/>
-        </Placeholder>
     )
 }
 

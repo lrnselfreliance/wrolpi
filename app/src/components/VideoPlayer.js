@@ -4,7 +4,7 @@ import {favoriteVideo} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link} from "react-router-dom";
 import {uploadDate, VideoCard} from "./Common";
-import {Container} from "semantic-ui-react";
+import {Container, Segment} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
 const MEDIA_PATH = '/media';
@@ -64,41 +64,45 @@ function Video(props) {
                 <Icon name='left arrow'/>
                 Back
             </Button>
-            <video controls
-                   autoPlay={props.autoplay !== undefined ? props.autoplay : true}
-                   poster={posterUrl}
-                   id="player"
-                   playsInline={true}
-                   style={{maxWidth: '100%'}}
-            >
-                <source src={videoUrl} type="video/mp4"/>
-                <track kind="captions" label="English captions" src={captionsUrl} srcLang="en" default/>
-            </video>
+            <Segment>
+                <video controls
+                       autoPlay={props.autoplay !== undefined ? props.autoplay : true}
+                       poster={posterUrl}
+                       id="player"
+                       playsInline={true}
+                       style={{maxWidth: '100%'}}
+                >
+                    <source src={videoUrl} type="video/mp4"/>
+                    <track kind="captions" label="English captions" src={captionsUrl} srcLang="en" default/>
+                </video>
 
-            <h2>{video.title}</h2>
-            {video.upload_date && <h3>{uploadDate(video.upload_date)}</h3>}
-            <h3>
-                <Link to={`/videos/channel/${channel.link}/video`}>
-                    {channel.name}
-                </Link>
-            </h3>
+                <h2>{video.title}</h2>
+                {video.upload_date && <h3>{uploadDate(video.upload_date)}</h3>}
+                <h3>
+                    <Link to={`/videos/channel/${channel.link}/video`}>
+                        {channel.name}
+                    </Link>
+                </h3>
 
-            <p>
-                <a href={videoUrl}>
-                    <Button>
-                        <Icon name='download'/>
-                        Download
-                    </Button>
-                </a>
-                {favorite_button}
-            </p>
+                <p>
+                    <a href={videoUrl}>
+                        <Button>
+                            <Icon name='download'/>
+                            Download
+                        </Button>
+                    </a>
+                    {favorite_button}
+                </p>
+            </Segment>
 
-            <h4>Description</h4>
-            <pre className="wrap-text">
+            <Segment secondary>
+                <h3>Description</h3>
+                <pre className="wrap-text">
                 {description}
             </pre>
+            </Segment>
 
-            <Grid columns={2}>
+            <Grid columns={2} stackable>
                 <Grid.Row>
                     <Grid.Column textAlign='left'>
                         {props.prev && <><h3>Older</h3><VideoCard video={props.prev}/></>}

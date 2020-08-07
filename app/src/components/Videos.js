@@ -374,40 +374,42 @@ export class VideosRoute extends React.Component {
 
     render() {
         return (
-            <Container fluid={true} style={{margin: '2em', padding: '0.5em'}}>
-                <Route path='/videos' exact
-                       component={(i) =>
-                           <Videos
-                               title="Newest Videos"
-                               match={i.match}
-                               history={i.history}
-                               location={i.location}
-                           />}
-                />
-                <Route path='/videos/favorites' exact
-                       component={(i) =>
-                           <Videos
-                               title="Favorite Videos"
-                               match={i.match}
-                               history={i.history}
-                               location={i.location}
-                               filter='favorites'
-                           />
-                       }/>
-                <Route path='/videos/channel' exact component={Channels}/>
-                <Route path='/videos/manage' exact component={ManageVideos}/>
-                <Route path='/videos/channel/new' exact component={NewChannel}/>
-                <Route path='/videos/channel/:channel_link/edit' exact
-                       component={(i) =>
-                           <EditChannel
-                               match={i.match}
-                               history={i.history}
-                           />
-                       }
-                />
-                <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
+            <>
+                <Container fluid={true} style={{margin: '2em', padding: '0.5em'}}>
+                    <Route path='/videos' exact
+                           component={(i) =>
+                               <Videos
+                                   title="Newest Videos"
+                                   match={i.match}
+                                   history={i.history}
+                                   location={i.location}
+                               />}
+                    />
+                    <Route path='/videos/favorites' exact
+                           component={(i) =>
+                               <Videos
+                                   title="Favorite Videos"
+                                   match={i.match}
+                                   history={i.history}
+                                   location={i.location}
+                                   filter='favorites'
+                               />
+                           }/>
+                    <Route path='/videos/channel' exact component={Channels}/>
+                    <Route path='/videos/manage' exact component={ManageVideos}/>
+                    <Route path='/videos/channel/new' exact component={NewChannel}/>
+                    <Route path='/videos/channel/:channel_link/edit' exact
+                           component={(i) =>
+                               <EditChannel
+                                   match={i.match}
+                                   history={i.history}
+                               />
+                           }
+                    />
+                    <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
+                </Container>
                 <Route path='/videos/channel/:channel_link/video/:video_id' exact component={Videos}/>
-            </Container>
+            </>
         )
     }
 }

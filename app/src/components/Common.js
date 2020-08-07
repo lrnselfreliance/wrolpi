@@ -139,6 +139,8 @@ export let videoOrders = [
     {key: '-duration', value: '-duration', text: 'Longest'},
     {key: 'duration', value: 'duration', text: 'Shortest'},
     {key: '-viewed', value: 'viewed', text: 'Recently viewed'},
+    {key: '-size', value: '-size', text: 'Largest'},
+    {key: 'size', value: 'size', text: 'Smallest'},
 ];
 
 export let searchOrders = [

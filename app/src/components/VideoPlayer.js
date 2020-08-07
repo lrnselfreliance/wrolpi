@@ -10,7 +10,7 @@ import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 const MEDIA_PATH = '/media';
 
 
-function Video(props) {
+function VideoPage(props) {
     let video = props.video;
     let channel = video.channel;
     let [deleteOpen, setDeleteOpen] = useState(false);
@@ -134,4 +134,4 @@ function Video(props) {
     )
 }
 
-export default Video;
+export default VideoPage;

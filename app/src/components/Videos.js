@@ -1,6 +1,5 @@
 import React from 'react';
 import {Link, Route} from "react-router-dom";
-import '../static/external/fontawesome-free/css/all.min.css';
 import Paginator, {
     DEFAULT_LIMIT,
     defaultSearchOrder,
@@ -10,7 +9,7 @@ import Paginator, {
     videoOrders,
     VIDEOS_API
 } from "./Common"
-import Video from "./VideoPlayer";
+import VideoPage from "./VideoPlayer";
 import {getChannel, getVideo, searchVideos} from "../api";
 import {Button, Card, Dropdown, Form, Grid, Header, Icon, Input, Placeholder} from "semantic-ui-react";
 import * as QueryString from 'query-string';
@@ -105,7 +104,7 @@ export class VideoWrapper extends React.Component {
 
     render() {
         if (this.state.video && this.state.channel) {
-            return <Video {...this.state} history={this.props.history} autoplay={false}/>
+            return <VideoPage {...this.state} history={this.props.history} autoplay={false}/>
         } else {
             return <VideoPlaceholder/>
         }

@@ -87,10 +87,20 @@ export class VideoWrapper extends React.Component {
     }
 
     async componentDidMount() {
+        await this.fetchVideo();
+    }
+
+    async fetchVideo() {
         // Get and display the Video specified in the Router match
         let [video, prev, next] = await getVideo(this.props.match.params.video_id);
         let channel = await getChannel(this.props.match.params.channel_link);
-        this.setState({video, prev, next, channel});
+        this.setState({video, prev, next, channel}, scrollToTop);
+    }
+
+    async componentDidUpdate(prevProps, prevState) {
+        if (prevProps.match.params.video_id !== this.props.match.params.video_id) {
+            await this.fetchVideo();
+        }
     }
 
     render() {

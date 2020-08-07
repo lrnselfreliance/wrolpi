@@ -2,21 +2,30 @@ from datetime import datetime
 from http import HTTPStatus
 from typing import List, Dict, Tuple, Optional
 
-from dictorm import DictDB
+from dictorm import DictDB, Dict as orm_Dict
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from api.common import validate_doc, logger, json_response
+from api.common import validate_doc, logger, json_response, EMPTY_RESPONSE
 from api.db import get_db_context
 from api.errors import UnknownVideo, ValidationError, InvalidOrderBy
 from api.videos.common import get_video_info_json, get_matching_directories, get_media_directory, \
-    get_relative_to_media_directory, get_allowed_limit, minimize_video
+    get_relative_to_media_directory, get_allowed_limit, minimize_video, delete_video
 from api.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse, \
     DirectoriesResponse, DirectoriesRequest
 
 video_bp = Blueprint('Video')
 
 logger = logger.getChild('video')
+
+
+def get_video(db, video_id: int) -> orm_Dict:
+    Video = db['video']
+    video = Video.get_one(id=video_id)
+    if not video:
+        raise UnknownVideo()
+    _ = video['channel']
+    return video
 
 
 @video_bp.get('/video/<video_id:int>')
@@ -29,10 +38,7 @@ logger = logger.getChild('video')
 )
 def video_get(request, video_id: int):
     with get_db_context(commit=True) as (db_conn, db):
-        Video = db['video']
-        video = Video.get_one(id=video_id)
-        if not video:
-            raise UnknownVideo()
+        video = get_video(db, video_id)
         video['viewed'] = datetime.now()
         video.flush()
 
@@ -255,3 +261,17 @@ def directories(_, data):
     dirs = get_matching_directories(search_str)
     dirs = [str(get_relative_to_media_directory(i)) for i in dirs]
     return response.json({'directories': dirs})
+
+
+@video_bp.delete('/video/<video_id:int>')
+@validate_doc(
+    summary='Delete a video',
+    responses=(
+            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
+    ),
+)
+def video_delete(request: Request, video_id: int):
+    with get_db_context(commit=True) as (db_conn, db):
+        video = get_video(db, video_id)
+    delete_video(video)
+    return EMPTY_RESPONSE

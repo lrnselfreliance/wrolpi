@@ -6,6 +6,7 @@ import queue
 import string
 from datetime import datetime, date
 from functools import wraps
+from http import HTTPStatus
 from multiprocessing import Event, Queue
 from pathlib import Path
 from typing import Union
@@ -481,3 +482,6 @@ def wrol_mode_check(func):
         return result
 
     return check
+
+
+EMPTY_RESPONSE = response.raw('', HTTPStatus.NO_CONTENT)

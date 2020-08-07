@@ -11,7 +11,7 @@ from youtube_dl import YoutubeDL
 from api.common import make_progress_calculator, logger, today
 from api.db import get_db_context
 from .captions import process_captions
-from .common import get_downloader_config, get_absolute_media_path, replace_extension
+from .common import get_downloader_config, get_absolute_media_path, replace_extension, add_video_to_skip_list
 from ..errors import UnknownChannel, ChannelURLEmpty
 
 logger = logger.getChild(__name__)
@@ -343,11 +343,7 @@ def download_all_missing_videos(link: str = None):
 
                 with get_db_context(commit=True) as (db_conn, db):
                     channel = db['channel'].get_one(id=channel['id'])
-                    if skip_download_videos and source_id:
-                        channel['skip_download_videos'].append(missing_video['id'])
-                    elif source_id:
-                        channel['skip_download_videos'] = [missing_video['id'], ]
-                    channel.flush()
+                    add_video_to_skip_list(channel, {'source_id': source_id})
 
             yield f'Failed to download "{missing_video["title"]}", see logs...'
             continue

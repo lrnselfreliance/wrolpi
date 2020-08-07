@@ -1,10 +1,10 @@
-import React from 'react';
+import React, {useState} from 'react';
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {favoriteVideo} from "../api";
+import {deleteVideo, favoriteVideo} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link} from "react-router-dom";
 import {uploadDate, VideoCard} from "./Common";
-import {Container, Segment} from "semantic-ui-react";
+import {Confirm, Container, Segment} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
 const MEDIA_PATH = '/media';
@@ -13,6 +13,12 @@ const MEDIA_PATH = '/media';
 function Video(props) {
     let video = props.video;
     let channel = video.channel;
+    let [deleteOpen, setDeleteOpen] = useState(false);
+
+    async function handleDeleteVideo(video_id) {
+        await deleteVideo(video_id)
+        props.history.goBack();
+    }
 
     let videoUrl = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.video_path)}`;
 
@@ -92,6 +98,14 @@ function Video(props) {
                         </Button>
                     </a>
                     {favorite_button}
+                    <Button color='red' onClick={() => setDeleteOpen(true)}>Delete</Button>
+                    <Confirm
+                        open={deleteOpen}
+                        content='Are you sure you want to delete this video?  All files related to this video will be deleted. It will not be downloaded again!'
+                        confirmButton='Delete'
+                        onCancel={() => setDeleteOpen(false)}
+                        onConfirm={() => handleDeleteVideo(video.id)}
+                    />
                 </p>
             </Segment>
 

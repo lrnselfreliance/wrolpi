@@ -208,7 +208,8 @@ class Videos extends React.Component {
 
         let channelChanged = params.channel_link !== prevProps.match.params.channel_link;
         let videoChanged = params.video_id !== prevProps.match.params.video_id;
-        let pageChanged = prevState.activePage !== this.state.activePage;
+        let pageChanged = prevState.activePage !== this.state.activePage ||
+            prevState.searchOrder !== this.state.searchOrder;
 
         if (channelChanged) {
             await this.fetchChannel();

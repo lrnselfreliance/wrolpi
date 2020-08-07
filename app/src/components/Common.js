@@ -130,6 +130,9 @@ export function RequiredAsterisk() {
     return <span style={{color: '#db2828'}}> *</span>
 }
 
+export let defaultSearchOrder = '-upload_date';
+export let searchSearchOrder = 'rank';
+
 export let videoOrders = [
     {key: '-upload_date', value: '-upload_date', text: 'Newest'},
     {key: 'upload_date', value: 'upload_date', text: 'Oldest'},

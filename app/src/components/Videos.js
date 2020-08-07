@@ -1,7 +1,15 @@
 import React from 'react';
 import {Link, Route} from "react-router-dom";
 import '../static/external/fontawesome-free/css/all.min.css';
-import Paginator, {DEFAULT_LIMIT, searchOrders, VideoCards, videoOrders, VIDEOS_API} from "./Common"
+import Paginator, {
+    DEFAULT_LIMIT,
+    defaultSearchOrder,
+    searchOrders,
+    searchSearchOrder,
+    VideoCards,
+    videoOrders,
+    VIDEOS_API
+} from "./Common"
 import Video from "./VideoPlayer";
 import {getChannel, getVideo, searchVideos} from "../api";
 import {Button, Card, Dropdown, Form, Grid, Header, Icon, Input, Placeholder} from "semantic-ui-react";
@@ -175,22 +183,21 @@ class Videos extends React.Component {
         const query = QueryString.parse(this.props.location.search);
         let activePage = query.page ? parseInt(query.page) : 1; // First page is 1 by default, of course.
         let searchStr = query.q || '';
-        let searchOrder = query.o || '-upload_date';
+        let searchOrder = query.o || defaultSearchOrder;
 
         this.state = {
             channel: null,
             videos: null,
             video: null,
             queryStr: searchStr,
-            searchStr: searchStr,
-            show: false,
+            searchStr: '',
             limit: DEFAULT_LIMIT,
             activePage: activePage,
             total: null,
             totalPages: null,
             prev: null,
             next: null,
-            videoOrders: searchStr ? searchOrders : videoOrders,
+            videoOrders: searchStr === '' ? videoOrders : searchOrders,
             searchOrder: searchOrder,
         };
     }
@@ -207,14 +214,14 @@ class Videos extends React.Component {
         let params = this.props.match.params;
 
         let channelChanged = params.channel_link !== prevProps.match.params.channel_link;
-        let videoChanged = params.video_id !== prevProps.match.params.video_id;
-        let pageChanged = prevState.activePage !== this.state.activePage ||
-            prevState.searchOrder !== this.state.searchOrder;
+        let pageChanged = (
+            prevState.activePage !== this.state.activePage ||
+            prevState.searchOrder !== this.state.searchOrder ||
+            prevState.queryStr !== this.state.queryStr
+        );
 
         if (channelChanged) {
             await this.fetchChannel();
-        } else if (videoChanged) {
-            await this.fetchVideo();
         } else if (pageChanged) {
             this.applyStateToHistory();
             await this.fetchVideos();
@@ -243,7 +250,7 @@ class Videos extends React.Component {
         let channel_link = this.state.channel ? this.state.channel.link : null;
         let favorites = this.props.filter !== undefined ? this.props.filter === 'favorites' : null;
         let [videos, total] = await searchVideos(
-            offset, this.state.limit, channel_link, this.state.searchStr, favorites, this.state.searchOrder);
+            offset, this.state.limit, channel_link, this.state.queryStr, favorites, this.state.searchOrder);
 
         let totalPages = Math.round(total / this.state.limit) || 1;
         this.setState({videos, total, totalPages});
@@ -254,7 +261,7 @@ class Videos extends React.Component {
     }
 
     clearSearch = async () => {
-        this.setState({searchStr: '', searchOrder: 'upload_date'}, this.handleSearch);
+        this.setState({searchStr: '', queryStr: '', searchOrder: defaultSearchOrder, activePage: 1});
     }
 
     applyStateToHistory = () => {
@@ -265,7 +272,8 @@ class Videos extends React.Component {
 
     handleSearch = async (e) => {
         e && e.preventDefault();
-        this.setState({activePage: 1, searchOrder: 'rank'}, this.applyStateToHistory);
+        this.setState({activePage: 1, searchOrder: searchSearchOrder, queryStr: this.state.searchStr},
+            this.applyStateToHistory);
     }
 
     handleInputChange = (event, {name, value}) => {
@@ -357,7 +365,7 @@ class Videos extends React.Component {
                             onChange={this.changeSearchOrder}
                             value={this.state.searchOrder}
                             options={this.state.videoOrders}
-                            disabled={this.state.searchQuery === ''}
+                            disabled={this.state.searchOrder === searchSearchOrder}
                         />
                     </Grid.Column>
                 </Grid>

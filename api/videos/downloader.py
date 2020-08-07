@@ -124,10 +124,14 @@ def _find_all_missing_videos(link: str = None) -> List[Tuple]:
 
         query = f'''
             SELECT
-                id, source_id, channel_id
-            FROM video
+                video.id, video.source_id, video.channel_id
+            FROM
+                video
+                LEFT JOIN channel ON channel.id = video.channel_id
             WHERE
-                source_id IS NOT NULL
+                channel.url IS NOT NULL
+                AND channel.url != ''
+                AND source_id IS NOT NULL
                 {where}
                 AND channel_id IS NOT NULL
                 AND (video_path IS NULL OR video_path = '' OR poster_path IS NULL OR poster_path = '')

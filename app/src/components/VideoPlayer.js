@@ -14,15 +14,15 @@ function Video(props) {
     let video = props.video;
     let channel = video.channel;
 
-    let video_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.video_path)}`;
+    let videoUrl = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.video_path)}`;
 
-    let poster_url = null;
+    let posterUrl = null;
     if (video.poster_path) {
-        poster_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.poster_path)}`;
+        posterUrl = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.poster_path)}`;
     }
-    let captions_url = null;
+    let captionsUrl = null;
     if (video.caption_path) {
-        captions_url = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.caption_path)}`;
+        captionsUrl = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.caption_path)}`;
     }
 
     let description = 'No description available.';
@@ -56,26 +56,35 @@ function Video(props) {
     }
 
     return (
-        <Container textAlign='left'>
+        <Container textAlign='left' style={{marginTop: '2em'}}>
+            <Button
+                style={{marginTop: '1em', marginBottom: '1em'}}
+                onClick={() => props.history.goBack()}
+            >
+                <Icon name='left arrow'/>
+                Back
+            </Button>
             <video controls
                    autoPlay={props.autoplay !== undefined ? props.autoplay : true}
-                   poster={poster_url}
+                   poster={posterUrl}
                    id="player"
                    playsInline={true}
-                   style={{'maxWidth': '100%'}}
+                   style={{maxWidth: '100%'}}
             >
-                <source src={video_url} type="video/mp4"/>
-                <track kind="captions" label="English captions" src={captions_url} srcLang="en" default/>
+                <source src={videoUrl} type="video/mp4"/>
+                <track kind="captions" label="English captions" src={captionsUrl} srcLang="en" default/>
             </video>
 
             <h2>{video.title}</h2>
             {video.upload_date && <h3>{uploadDate(video.upload_date)}</h3>}
-            <Link to={`/videos/channel/${channel.link}/video`}>
-                <h3>{channel.name}</h3>
-            </Link>
+            <h3>
+                <Link to={`/videos/channel/${channel.link}/video`}>
+                    {channel.name}
+                </Link>
+            </h3>
 
             <p>
-                <a href={video_url}>
+                <a href={videoUrl}>
                     <Button>
                         <Icon name='download'/>
                         Download

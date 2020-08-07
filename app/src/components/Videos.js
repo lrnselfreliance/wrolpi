@@ -50,7 +50,7 @@ class ManageVideos extends React.Component {
 function VideoWrapper(props) {
 
     return (
-        <Video video={props.video} prev={props.prev} next={props.next} autoplay={false}/>
+        <Video {...props} autoplay={false}/>
     )
 }
 
@@ -124,7 +124,7 @@ export class FavoriteVideosPreview extends VideosPreview {
     }
 
     async fetchVideos() {
-        let [videos, _] = await searchVideos(
+        let [videos] = await searchVideos(
             0, 3, null, null, true, '-favorite');
         this.setState({videos});
     }
@@ -139,7 +139,7 @@ export class ViewedVideosPreview extends VideosPreview {
     }
 
     async fetchVideos() {
-        let [videos, _] = await searchVideos(
+        let [videos] = await searchVideos(
             0, 3, null, null, null, '-viewed');
         this.setState({videos});
     }
@@ -274,7 +274,13 @@ class Videos extends React.Component {
         let pagination = null;
 
         if (video) {
-            body = <VideoWrapper video={video} prev={prev} next={next} channel={video.channel}/>
+            body = <VideoWrapper
+                video={video}
+                prev={prev}
+                next={next}
+                channel={video.channel}
+                history={this.props.history}
+            />
         } else if (videos && videos.length === 0 && this.props.filter !== 'favorites') {
             body = <p>No videos retrieved. Have you downloaded videos yet?</p>;
         } else if (videos && videos.length === 0 && this.props.filter === 'favorites') {

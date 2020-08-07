@@ -131,6 +131,9 @@ async def download(_, link: str = None):
             for msg in download_all_missing_videos(link):
                 download_queue.put(msg)
 
+            # Fill in any missing data for all videos.
+            process_video_meta_data()
+
             download_logger.info('download complete')
         except Exception as e:
             logger.fatal(f'Download failed: {e}')
@@ -145,10 +148,10 @@ async def download(_, link: str = None):
     return response.json({'code': 'stream-started', 'stream_url': stream_url})
 
 
-def refresh_channel_video_captions(channel: Dict) -> bool:
+def refresh_channel_video_captions() -> bool:
     with get_db_curs() as curs:
-        query = 'SELECT id FROM video WHERE channel_id=%s AND caption IS NULL AND caption_path IS NOT NULL'
-        curs.execute(query, (channel['id'],))
+        query = 'SELECT id FROM video WHERE caption IS NULL AND caption_path IS NOT NULL'
+        curs.execute(query)
         missing_captions = [i for (i,) in curs.fetchall()]
 
     if missing_captions:
@@ -160,10 +163,10 @@ def refresh_channel_video_captions(channel: Dict) -> bool:
         return False
 
 
-def refresh_channel_generate_posters(channel: Dict) -> bool:
+def refresh_channel_generate_posters() -> bool:
     with get_db_curs() as curs:
-        query = 'SELECT id FROM video WHERE channel_id=%s AND poster_path IS NULL'
-        curs.execute(query, (channel['id'],))
+        query = 'SELECT id FROM video WHERE video_path IS NOT NULL AND poster_path IS NULL'
+        curs.execute(query)
         missing_posters = [i for (i,) in curs.fetchall()]
 
     if missing_posters:
@@ -175,10 +178,10 @@ def refresh_channel_generate_posters(channel: Dict) -> bool:
         return False
 
 
-def refresh_channel_calculate_duration(channel: Dict) -> bool:
+def refresh_channel_calculate_duration() -> bool:
     with get_db_curs() as curs:
-        query = 'SELECT id FROM video WHERE channel_id=%s AND duration IS NULL'
-        curs.execute(query, (channel['id'],))
+        query = 'SELECT id FROM video WHERE video_path IS NOT NULL AND duration IS NULL'
+        curs.execute(query)
         missing_duration = [i for (i,) in curs.fetchall()]
 
     if missing_duration:
@@ -190,10 +193,10 @@ def refresh_channel_calculate_duration(channel: Dict) -> bool:
         return False
 
 
-def refresh_channel_calculate_size(channel: Dict) -> bool:
+def refresh_channel_calculate_size() -> bool:
     with get_db_curs() as curs:
-        query = 'SELECT id FROM video WHERE channel_id=%s AND size IS NULL'
-        curs.execute(query, (channel['id'],))
+        query = 'SELECT id FROM video WHERE video_path IS NOT NULL AND size IS NULL'
+        curs.execute(query)
         missing_size = [i for (i,) in curs.fetchall()]
 
     if missing_size:
@@ -203,6 +206,16 @@ def refresh_channel_calculate_size(channel: Dict) -> bool:
     else:
         logger.debug('No videos missing size.')
         return False
+
+
+def process_video_meta_data():
+    """
+    Search for any videos missing meta data, fill in that data.
+    """
+    refresh_channel_video_captions()
+    refresh_channel_generate_posters()
+    refresh_channel_calculate_duration()
+    refresh_channel_calculate_size()
 
 
 def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
@@ -253,12 +266,6 @@ def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
     logger.info(status)
     reporter.message(status)
 
-    # Fill in any missing data.
-    refresh_channel_video_captions(channel)
-    refresh_channel_generate_posters(channel)
-    refresh_channel_calculate_duration(channel)
-    refresh_channel_calculate_size(channel)
-
 
 def _refresh_videos(q: Queue, channel_links: list = None):
     """
@@ -293,6 +300,10 @@ def _refresh_videos(q: Queue, channel_links: list = None):
     for idx, channel in enumerate(channels):
         reporter.set_progress(0, idx, f'Checking {channel["name"]} directory for new videos')
         refresh_channel_videos(channel, reporter)
+
+    # Fill in any missing data for all videos.
+    process_video_meta_data()
+
     reporter.set_progress(0, 100, 'All videos refreshed.')
     reporter.code('refresh-complete')
 

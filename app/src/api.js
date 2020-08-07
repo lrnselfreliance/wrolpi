@@ -125,6 +125,16 @@ export async function getVideo(video_id) {
 
 export async function deleteVideo(video_id) {
     let response = await apiDelete(`${VIDEOS_API}/video/${video_id}`);
+    let data = await response.json();
+    if (data.code === 17) {
+        toast({
+            type: 'warning',
+            title: 'WROL Mode Enabled',
+            description: 'This cannot be done while WROL Mode is enabled.',
+            time: 5000,
+        });
+        throw Error('WROL Mode enabled');
+    }
     if (response.status !== 204) {
         toast({
             type: 'error',

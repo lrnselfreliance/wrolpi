@@ -16,7 +16,12 @@ function VideoPage(props) {
     let [deleteOpen, setDeleteOpen] = useState(false);
 
     async function handleDeleteVideo(video_id) {
-        await deleteVideo(video_id)
+        try {
+            await deleteVideo(video_id)
+        } catch (e) {
+            setDeleteOpen(false);
+            throw e;
+        }
         props.history.goBack();
     }
 

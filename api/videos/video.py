@@ -6,7 +6,7 @@ from dictorm import DictDB, Dict as orm_Dict
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from api.common import validate_doc, logger, json_response, EMPTY_RESPONSE
+from api.common import validate_doc, logger, json_response
 from api.db import get_db_context
 from api.errors import UnknownVideo, ValidationError, InvalidOrderBy
 from api.videos.common import get_video_info_json, get_matching_directories, get_media_directory, \
@@ -274,4 +274,4 @@ def video_delete(request: Request, video_id: int):
     with get_db_context(commit=True) as (db_conn, db):
         video = get_video(db, video_id)
     delete_video(video)
-    return EMPTY_RESPONSE
+    return response.raw('', HTTPStatus.NO_CONTENT)

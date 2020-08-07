@@ -45,7 +45,7 @@ function Video(props) {
     let favorite_button;
     if (favorite) {
         favorite_button = (
-            <Button color='red' style={{'margin': '0.5em'}}
+            <Button color='green' style={{'margin': '0.5em'}}
                     onClick={handleFavorite}>
                 <Icon name='heart'/>
                 Unfavorite
@@ -53,7 +53,7 @@ function Video(props) {
         );
     } else {
         favorite_button = (
-            <Button style={{'margin': '0.5em'}}
+            <Button basic color='green' style={{'margin': '0.5em'}}
                     onClick={handleFavorite}>
                 <Icon name='heart'/>
                 Favorite
@@ -91,14 +91,18 @@ function Video(props) {
                 </h3>
 
                 <p>
+                    {favorite_button}
                     <a href={videoUrl}>
-                        <Button>
+                        <Button style={{margin: '0.5em'}}>
                             <Icon name='download'/>
                             Download
                         </Button>
                     </a>
-                    {favorite_button}
-                    <Button color='red' onClick={() => setDeleteOpen(true)}>Delete</Button>
+                    <Button
+                        color='red'
+                        onClick={() => setDeleteOpen(true)}
+                        style={{margin: '0.5em'}}
+                    >Delete</Button>
                     <Confirm
                         open={deleteOpen}
                         content='Are you sure you want to delete this video?  All files related to this video will be deleted. It will not be downloaded again!'

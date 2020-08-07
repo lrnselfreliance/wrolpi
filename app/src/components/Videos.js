@@ -47,13 +47,6 @@ class ManageVideos extends React.Component {
     }
 }
 
-function VideoWrapper(props) {
-
-    return (
-        <Video {...props} autoplay={false}/>
-    )
-}
-
 function VideoPlaceholder() {
     return (
         <Card.Group doubling stackable>
@@ -71,6 +64,34 @@ function VideoPlaceholder() {
             </Card>
         </Card.Group>
     )
+}
+
+export class VideoWrapper extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            video: null,
+            prev: null,
+            next: null,
+            channel: null,
+        }
+    }
+
+    async componentDidMount() {
+        // Get and display the Video specified in the Router match
+        let [video, prev, next] = await getVideo(this.props.match.params.video_id);
+        let channel = await getChannel(this.props.match.params.channel_link);
+        this.setState({video, prev, next, channel});
+    }
+
+    render() {
+        if (this.state.video && this.state.channel) {
+            return <Video {...this.state} history={this.props.history} autoplay={false}/>
+        } else {
+            return <VideoPlaceholder/>
+        }
+    }
 }
 
 function changePageHistory(history, location, activePage, searchStr, searchOrder) {
@@ -175,9 +196,7 @@ class Videos extends React.Component {
     }
 
     async componentDidMount() {
-        if (this.props.match.params.video_id) {
-            await this.fetchVideo();
-        } else if (this.props.match.params.channel_link) {
+        if (this.props.match.params.channel_link) {
             await this.fetchChannel();
         } else {
             await this.fetchVideos();
@@ -229,15 +248,6 @@ class Videos extends React.Component {
         this.setState({videos, total, totalPages});
     }
 
-    async fetchVideo() {
-        // Get and display the Video specified in the Router match
-        let video_id = this.props.match.params.video_id;
-        if (video_id) {
-            let [video, prev, next] = await getVideo(video_id);
-            this.setState({video, prev, next});
-        }
-    }
-
     changePage = async (activePage) => {
         this.setState({activePage});
     }
@@ -266,22 +276,11 @@ class Videos extends React.Component {
     }
 
     render() {
-        let video = this.state.video;
         let videos = this.state.videos;
-        let prev = this.state.prev;
-        let next = this.state.next;
         let body = <VideoPlaceholder/>;
         let pagination = null;
 
-        if (video) {
-            body = <VideoWrapper
-                video={video}
-                prev={prev}
-                next={next}
-                channel={video.channel}
-                history={this.props.history}
-            />
-        } else if (videos && videos.length === 0 && this.props.filter !== 'favorites') {
+        if (videos && videos.length === 0 && this.props.filter !== 'favorites') {
             body = <p>No videos retrieved. Have you downloaded videos yet?</p>;
         } else if (videos && videos.length === 0 && this.props.filter === 'favorites') {
             body = <p>You haven't tagged any videos as favorite.</p>;
@@ -408,7 +407,6 @@ export class VideosRoute extends React.Component {
                     />
                     <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
                 </Container>
-                <Route path='/videos/channel/:channel_link/video/:video_id' exact component={Videos}/>
             </>
         )
     }

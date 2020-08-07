@@ -2,7 +2,7 @@ import React from 'react';
 import './App.css';
 import {NavBar} from "./components/Nav";
 import {Route, Switch} from "react-router-dom";
-import {FavoriteVideosPreview, VideosRoute, ViewedVideosPreview} from "./components/Videos";
+import {FavoriteVideosPreview, VideosRoute, VideoWrapper, ViewedVideosPreview} from "./components/Videos";
 import Map_ from "./components/Map";
 import Settings from "./components/Settings";
 import {Container, Header} from "semantic-ui-react";
@@ -39,6 +39,7 @@ function App() {
                 <NavBar/>
             </header>
             <Switch>
+                <Route path='/videos/channel/:channel_link/video/:video_id' exact component={VideoWrapper}/>
                 <Route path="/" exact={true} component={Welcome}/>
                 <Route path="/videos" component={VideosRoute}/>
                 <Route path="/map" component={Map_}/>

@@ -22,10 +22,8 @@ WROLPi runs in a couple Docker containers.  Lets get the prerequisites installed
     * `git clone git@github.com:lrnselfreliance/wrolpi.git`
 1. Change directory into the code base
     * `cd wrolpi`
-1. Build the docker containers, create the map volumes
+1. Build the docker containers
     * `docker-compose build --parallel`
-    * `docker volume create --name=openstreetmap-data`
-    * `docker volume create --name=openstreetmap-rendered-tiles`
 1. Start the docker containers
     * `docker-compose up`
 1. Navigate to WROLPi

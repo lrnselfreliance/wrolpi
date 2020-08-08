@@ -387,7 +387,7 @@ def get_channels_config(db) -> dict:
                 url=i.get('url', ''),
                 generate_thumbnails=i['generate_thumbnails'],
                 calculate_duration=i['calculate_duration'],
-                skip_download_videos=[j for j in i['skip_download_videos'] if j],
+                skip_download_videos=[j for j in i['skip_download_videos'] if j] if i['skip_download_videos'] else [],
             )
         for i in Channel.get_where().order_by('link')
     }

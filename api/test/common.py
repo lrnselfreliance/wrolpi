@@ -1,6 +1,7 @@
 import pathlib
 import tempfile
 import unittest
+from contextlib import contextmanager
 from queue import Empty
 from shutil import copyfile
 from uuid import uuid1
@@ -135,3 +136,17 @@ class TestAPI(ExtendedTestCase):
         # Clear out any messages in queues
         get_all_messages_in_queue(refresh_queue)
         get_all_messages_in_queue(download_queue)
+
+
+@contextmanager
+def build_video_directories(structure: dict) -> pathlib.Path:
+    with tempfile.TemporaryDirectory() as temp_dir:
+        root = pathlib.Path(temp_dir)
+        for name, paths in structure.items():
+            directory = root / name
+            directory.mkdir()
+
+            for path in paths:
+                (directory / path).touch()
+
+        yield root.absolute()

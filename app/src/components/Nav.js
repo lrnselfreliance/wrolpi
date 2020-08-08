@@ -13,7 +13,6 @@ const links = [
             {to: '/videos/manage', text: 'Manage', exact: true},
         ]
     },
-    {to: '/map', text: 'Map'},
 ];
 const settings = {to: '/settings', text: 'Settings', exact: true};
 const rightLinks = [settings,];

@@ -1,9 +1,12 @@
+import inspect
 import pathlib
 import tempfile
 import unittest
 from contextlib import contextmanager
-from queue import Empty
+from functools import wraps
+from queue import Empty, Queue
 from shutil import copyfile
+from typing import Tuple, Dict
 from uuid import uuid1
 
 import mock
@@ -13,10 +16,10 @@ from dictorm import DictDB
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from api.api import api_app, attach_routes
-from api.common import EXAMPLE_CONFIG_PATH, get_config
-from api.db import setup_relationships
+from api.common import EXAMPLE_CONFIG_PATH, get_config, FeedReporter
+from api.db import setup_relationships, get_db_context
 from api.vars import DOCKERIZED
-from api.videos.api import refresh_queue, download_queue
+from api.videos.api import refresh_queue, download_queue, refresh_channel_videos
 
 # Attach the default routes
 attach_routes(api_app)
@@ -150,3 +153,53 @@ def build_video_directories(structure: dict) -> pathlib.Path:
                 (directory / path).touch()
 
         yield root.absolute()
+
+
+def insert_parameter(func, parameter_name, parameter, args, kwargs) -> Tuple[Tuple, Dict]:
+    """
+    Insert a parameter wherever it fits in the func's signature.
+    """
+    sig = inspect.signature(func)
+    assert 'tempdir' in sig.parameters, 'Wrapped test MUST have a tempdir parameter!'
+    index = [i for i, j in enumerate(sig.parameters) if j == parameter_name][0]
+    args = list(args)
+    args.insert(index, parameter)
+    args = tuple(args)
+
+    return args, kwargs
+
+
+def create_db_structure(structure):
+    """
+    Create a directory containing the specified structure of channels and videos.  Create DB entries for these
+    channels and videos.
+
+    Example:
+        >>> structure = {
+                        'channel1': ['vid1.mp4'],
+                        'channel2': ['vid1.mp4', 'vid2.mp4', 'vid2.en.vtt']
+                        }
+        >>> create_db_structure(structure)
+    """
+
+    def wrapper(func):
+        @wraps(func)
+        @wrap_test_db
+        def wrapped(*args, **kwargs):
+            # Filler queue and reporter, these aren't used.
+            q = Queue()
+            reporter = FeedReporter(q, 2)
+
+            with build_video_directories(structure) as tempdir:
+                args, kwargs = insert_parameter(func, 'tempdir', tempdir, args, kwargs)
+
+                with get_db_context(commit=True) as (db_conn, db):
+                    Channel, Video = db['channel'], db['video']
+                    for channel in structure:
+                        channel = Channel(directory=str(tempdir / channel), name=channel).flush()
+                        refresh_channel_videos(channel, reporter)
+                return func(*args, **kwargs)
+
+        return wrapped
+
+    return wrapper

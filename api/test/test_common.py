@@ -1,11 +1,15 @@
+from pathlib import Path
+
 import pytest
 from sanic_openapi import doc
 
 from api.api import api_app, attach_routes
 from api.common import validate_data, combine_dicts
+from api.db import get_db_context
 from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
-
 # Attach the default routes
+from api.test.common import create_db_structure
+
 attach_routes(api_app)
 
 
@@ -108,3 +112,51 @@ def test_validate_doc_errors(data, expected):
 )
 def test_combine_dicts(data, expected):
     assert combine_dicts(*data) == expected
+
+
+@pytest.mark.parametrize(
+    '_structure,paths',
+    (
+            (
+                    {'channel1': ['vid1.mp4']},
+                    [
+                        'channel1/vid1.mp4',
+                    ],
+            ),
+            (
+                    {'channel1': ['vid1.mp4'], 'channel2': ['vid1.mp4']},
+                    [
+                        'channel1/vid1.mp4',
+                        'channel2/vid1.mp4',
+                    ],
+            ),
+            (
+                    {'channel1': ['vid1.mp4'], 'channel2': ['vid1.mp4', 'vid2.mp4', 'vid2.en.vtt']},
+                    [
+                        'channel1/vid1.mp4',
+                        'channel2/vid1.mp4',
+                        'channel2/vid2.mp4',
+                        'channel2/vid2.en.vtt',
+                    ],
+            ),
+    )
+)
+def test_create_db_structure(_structure, paths):
+    @create_db_structure(_structure)
+    def test_func(tempdir):
+        assert isinstance(tempdir, Path)
+        for path in paths:
+            path = (tempdir / path)
+            assert path.exists()
+            assert path.is_file()
+
+        with get_db_context() as (db_conn, db):
+            Channel = db['channel']
+            for channel_name in _structure:
+                channel = Channel.get_one(name=channel_name)
+                assert (tempdir / channel_name).is_dir()
+                assert channel
+                assert channel['directory'] == str(tempdir / channel_name)
+                assert len(list(channel['videos'])) == len([i for i in _structure[channel_name] if i.endswith('mp4')])
+
+    test_func()

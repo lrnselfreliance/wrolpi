@@ -1,13 +1,8 @@
 import pathlib
 import tempfile
-from queue import Queue
 
-from dictorm import Dict
-
-from api.common import FeedReporter
 from api.db import get_db_context
-from api.test.common import ExtendedTestCase, build_video_directories, wrap_test_db
-from api.videos.api import refresh_channel_videos
+from api.test.common import ExtendedTestCase, wrap_test_db, create_db_structure
 from api.videos.common import get_absolute_media_path, get_matching_directories, delete_video
 
 
@@ -57,34 +52,27 @@ class TestCommon(ExtendedTestCase):
             assert matches == [str(foo / 'qux')]
 
     @wrap_test_db
-    def test_delete_video(self):
-        structure = {
-            'channel1': [
-                'vid1.mp4',
-                'vid1.en.vtt',
-            ],
-            'channel2': [
-                'vid2.mp4',
-                'vid2.info.json',
-            ],
-        }
-        q = Queue()
-        reporter = FeedReporter(q, 2)
-        with build_video_directories(structure) as tempdir, \
-                get_db_context(commit=True) as (db_conn, db):
+    @create_db_structure({
+        'channel1': [
+            'vid1.mp4',
+            'vid1.en.vtt',
+        ],
+        'channel2': [
+            'vid2.mp4',
+            'vid2.info.json',
+        ],
+    })
+    def test_delete_video(self, tempdir):
+        with get_db_context(commit=True) as (db_conn, db):
             Channel, Video = db['channel'], db['video']
 
-            channel1: Dict = Channel(directory=str(tempdir / 'channel1')).flush()
-            channel2: Dict = Channel(directory=str(tempdir / 'channel2')).flush()
+            channel1 = Channel.get_one(name='channel1')
+            channel2 = Channel.get_one(name='channel2')
+            vid1, vid2 = Video.get_where().order_by('video_path ASC')
 
-            refresh_channel_videos(channel1, reporter)
-            refresh_channel_videos(channel2, reporter)
-
-            vid1 = Video.get_one(1)
-            vid2 = Video.get_one(2)
-
+            # No videos have been deleted yet.
             self.assertIsNone(channel1['skip_download_videos'])
-            self.assertEqual(Video.count(), 2)
+            self.assertIsNone(channel2['skip_download_videos'])
             self.assertTrue((tempdir / 'channel1/vid1.mp4').is_file())
 
             delete_video(vid1)

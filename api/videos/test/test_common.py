@@ -1,8 +1,7 @@
 import pathlib
-import tempfile
 
 from api.db import get_db_context
-from api.test.common import ExtendedTestCase, wrap_test_db, create_db_structure
+from api.test.common import ExtendedTestCase, wrap_test_db, create_db_structure, build_video_directories
 from api.videos.common import get_absolute_media_path, get_matching_directories, delete_video
 
 
@@ -13,23 +12,16 @@ class TestCommon(ExtendedTestCase):
         assert str(blender).endswith('blender')
 
     def test_matching_directories(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
+        structure = [
+            'foo/qux/',
+            'Bar/',
+            'baz/baz'
+            'barr',
+            'bazz',
+        ]
+
+        with build_video_directories(structure) as temp_dir:
             temp_dir = pathlib.Path(temp_dir)
-            # Directories
-            foo = temp_dir / 'foo'
-            foo.mkdir()
-            qux = foo / 'qux'
-            qux.mkdir()
-
-            bar = temp_dir / 'Bar'
-            bar.mkdir()
-            baz = temp_dir / 'baz'
-            baz.mkdir()
-
-            # These are files, and should never be returned
-            (temp_dir / 'barr').touch()
-            (temp_dir / 'bazz').touch()
-            (baz / 'baz').touch()
 
             # No directories have c
             matches = get_matching_directories(temp_dir / 'c')
@@ -49,7 +41,7 @@ class TestCommon(ExtendedTestCase):
 
             # foo is an exact match, return subdirectories
             matches = get_matching_directories(temp_dir / 'foo')
-            assert matches == [str(foo / 'qux')]
+            assert matches == [str(temp_dir / 'foo/qux')]
 
     @wrap_test_db
     @create_db_structure({
@@ -62,7 +54,7 @@ class TestCommon(ExtendedTestCase):
             'vid2.info.json',
         ],
     })
-    def test_delete_video(self, tempdir):
+    def test_delete_video(self, tempdir: pathlib.Path):
         with get_db_context(commit=True) as (db_conn, db):
             Channel, Video = db['channel'], db['video']
 
@@ -77,7 +69,7 @@ class TestCommon(ExtendedTestCase):
 
             delete_video(vid1)
 
-            channel1 = Channel.get_one(id=channel1['id'])
+            channel1 = Channel.get_one(name='channel1')
             # Video was added to skip list.
             self.assertEqual(len(channel1['skip_download_videos']), 1)
             # Deleting a video leaves it's entry in the DB, but its files are deleted.

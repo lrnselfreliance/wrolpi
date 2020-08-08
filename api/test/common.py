@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from functools import wraps
 from queue import Empty, Queue
 from shutil import copyfile
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List, Callable
 from uuid import uuid1
 
 import mock
@@ -142,20 +142,42 @@ class TestAPI(ExtendedTestCase):
 
 
 @contextmanager
-def build_video_directories(structure: dict) -> pathlib.Path:
+def build_video_directories(paths: List[str]) -> pathlib.Path:
+    """
+    Create directories based on the provided structure.
+
+    Example:
+        >>> create_db_structure([
+                'channel1/vid1.mp4',
+                'channel2/vid1.mp4',
+                'channel2/vid2.mp4',
+                'channel2/vid2.en.vtt'
+            ])
+
+        Creates directories like so:
+            channel1/vid1.mp4
+            channel2/vid1.mp4
+            channel2/vid2.mp4
+            channel2/vid2.en.vtt
+    """
     with tempfile.TemporaryDirectory() as temp_dir:
         root = pathlib.Path(temp_dir)
-        for name, paths in structure.items():
-            directory = root / name
-            directory.mkdir()
 
-            for path in paths:
-                (directory / path).touch()
+        directories = filter(lambda i: i.endswith('/'), paths)
+        for directory in directories:
+            (root / directory).mkdir(parents=True)
+
+        files = filter(lambda i: not i.endswith('/'), paths)
+        for file in files:
+            file = root / file
+            parents = file.parents
+            parents[0].mkdir(parents=True, exist_ok=True)
+            (root / file).touch()
 
         yield root.absolute()
 
 
-def insert_parameter(func, parameter_name, parameter, args, kwargs) -> Tuple[Tuple, Dict]:
+def insert_parameter(func: Callable, parameter_name: str, item, args: Tuple, kwargs: Dict) -> Tuple[Tuple, Dict]:
     """
     Insert a parameter wherever it fits in the func's signature.
     """
@@ -163,7 +185,7 @@ def insert_parameter(func, parameter_name, parameter, args, kwargs) -> Tuple[Tup
     assert 'tempdir' in sig.parameters, 'Wrapped test MUST have a tempdir parameter!'
     index = [i for i, j in enumerate(sig.parameters) if j == parameter_name][0]
     args = list(args)
-    args.insert(index, parameter)
+    args.insert(index, item)
     args = tuple(args)
 
     return args, kwargs
@@ -175,11 +197,23 @@ def create_db_structure(structure):
     channels and videos.
 
     Example:
-        >>> structure = {
-                        'channel1': ['vid1.mp4'],
-                        'channel2': ['vid1.mp4', 'vid2.mp4', 'vid2.en.vtt']
-                        }
-        >>> create_db_structure(structure)
+        >>> s = {'channel1': ['vid1.mp4'], 'channel2': ['vid1.mp4', 'vid2.mp4', 'vid2.en.vtt']}
+        >>> create_db_structure(s)
+
+        Creates directories like so:
+            channel1/vid1.mp4
+            channel2/vid1.mp4
+            channel2/vid2.mp4
+            channel2/vid2.en.vtt
+
+        Channels like so:
+            Channel(name='channel1', directory='channel1')
+            Channel(name='channel2', directory='channel2')
+
+        And, Videos like so:
+            Video(channel_id=1, video_path='vid1.mp4')
+            Video(channel_id=2, video_path='vid1.mp4')
+            Video(channel_id=2, video_path='vid2.mp4', caption_path='vid2.en.vtt')
     """
 
     def wrapper(func):
@@ -190,7 +224,12 @@ def create_db_structure(structure):
             q = Queue()
             reporter = FeedReporter(q, 2)
 
-            with build_video_directories(structure) as tempdir:
+            file_structure = []
+            for channel, paths in structure.items():
+                for path in paths:
+                    file_structure.append(f'{channel}/{path}')
+
+            with build_video_directories(file_structure) as tempdir:
                 args, kwargs = insert_parameter(func, 'tempdir', tempdir, args, kwargs)
 
                 with get_db_context(commit=True) as (db_conn, db):
@@ -198,6 +237,7 @@ def create_db_structure(structure):
                     for channel in structure:
                         channel = Channel(directory=str(tempdir / channel), name=channel).flush()
                         refresh_channel_videos(channel, reporter)
+
                 return func(*args, **kwargs)
 
         return wrapped

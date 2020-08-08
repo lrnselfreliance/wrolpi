@@ -8,7 +8,7 @@ from api.common import validate_data, combine_dicts
 from api.db import get_db_context
 from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
 # Attach the default routes
-from api.test.common import create_db_structure
+from api.test.common import create_db_structure, build_video_directories
 
 attach_routes(api_app)
 
@@ -160,3 +160,41 @@ def test_create_db_structure(_structure, paths):
                 assert len(list(channel['videos'])) == len([i for i in _structure[channel_name] if i.endswith('mp4')])
 
     test_func()
+
+
+def test_build_video_directories():
+    structure = [
+        'channel1/vid1.mp4',
+    ]
+    with build_video_directories(structure) as tempdir:
+        assert (tempdir / 'channel1/vid1.mp4').is_file()
+
+    structure = [
+        'channel2/',
+        'channel2.1/channel2.2/',
+    ]
+    with build_video_directories(structure) as tempdir:
+        assert (tempdir / 'channel2').is_dir()
+        assert (tempdir / 'channel2.1/channel2.2').is_dir()
+
+    structure = [
+        'channel3/vid1.mp4',
+        'channel3/vid2.mp4',
+        'channel4/vid1.mp4',
+        'channel4/vid1.en.vtt',
+        'channel5/',
+    ]
+    with build_video_directories(structure) as tempdir:
+        assert (tempdir / 'channel3/vid1.mp4').is_file()
+        assert (tempdir / 'channel3').is_dir()
+        assert (tempdir / 'channel3/vid2.mp4').is_file()
+        assert (tempdir / 'channel4/vid1.mp4').is_file()
+        assert (tempdir / 'channel4/vid1.en.vtt').is_file()
+        assert (tempdir / 'channel5').is_dir()
+
+    structure = [
+        'channel6/subdirectory/vid1.mp4',
+    ]
+    with build_video_directories(structure) as tempdir:
+        assert (tempdir / 'channel6/subdirectory').is_dir()
+        assert (tempdir / 'channel6/subdirectory/vid1.mp4').is_file()

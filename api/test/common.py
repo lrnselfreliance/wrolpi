@@ -142,7 +142,7 @@ class TestAPI(ExtendedTestCase):
 
 
 @contextmanager
-def build_video_directories(paths: List[str]) -> pathlib.Path:
+def build_test_directories(paths: List[str]) -> pathlib.Path:
     """
     Create directories based on the provided structure.
 
@@ -160,7 +160,9 @@ def build_video_directories(paths: List[str]) -> pathlib.Path:
             channel2/vid2.mp4
             channel2/vid2.en.vtt
     """
-    with tempfile.TemporaryDirectory() as temp_dir:
+    dir_ = get_config().get('media_directory')
+    dir_ = pathlib.Path(dir_).absolute()
+    with tempfile.TemporaryDirectory(dir=dir_) as temp_dir:
         root = pathlib.Path(temp_dir)
 
         directories = filter(lambda i: i.endswith('/'), paths)
@@ -224,12 +226,14 @@ def create_db_structure(structure):
             q = Queue()
             reporter = FeedReporter(q, 2)
 
+            # Convert the channel/video structure to a file structure for the test.
             file_structure = []
             for channel, paths in structure.items():
                 for path in paths:
                     file_structure.append(f'{channel}/{path}')
+                file_structure.append(f'{channel}/')
 
-            with build_video_directories(file_structure) as tempdir:
+            with build_test_directories(file_structure) as tempdir:
                 args, kwargs = insert_parameter(func, 'tempdir', tempdir, args, kwargs)
 
                 with get_db_context(commit=True) as (db_conn, db):

@@ -1,7 +1,7 @@
 import pathlib
 
 from api.db import get_db_context
-from api.test.common import ExtendedTestCase, wrap_test_db, create_db_structure, build_video_directories
+from api.test.common import ExtendedTestCase, wrap_test_db, create_db_structure, build_test_directories
 from api.videos.common import get_absolute_media_path, get_matching_directories, delete_video
 
 
@@ -20,7 +20,7 @@ class TestCommon(ExtendedTestCase):
             'bazz',
         ]
 
-        with build_video_directories(structure) as temp_dir:
+        with build_test_directories(structure) as temp_dir:
             temp_dir = pathlib.Path(temp_dir)
 
             # No directories have c

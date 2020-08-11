@@ -189,7 +189,7 @@ class Videos extends React.Component {
             next: null,
             videoOrders: searchStr === '' ? videoOrders : searchOrders,
             searchOrder: searchOrder,
-            title: 'Videos',
+            title: '',
         };
     }
 
@@ -199,7 +199,7 @@ class Videos extends React.Component {
         } else {
             await this.fetchVideos();
         }
-        this.setTitleToSearchOrder();
+        this.setTitle();
     }
 
     async componentDidUpdate(prevProps, prevState, snapshot) {
@@ -220,12 +220,17 @@ class Videos extends React.Component {
         }
     }
 
-    setTitleToSearchOrder() {
+    setTitle() {
         let title = '';
-        for (let i = 0; i < this.state.videoOrders.length; i++) {
-            let item = this.state.videoOrders[i];
-            if (item.value === this.state.searchOrder) {
-                title = item.title;
+        if (this.props.filter === 'favorites') {
+            title = 'Favorite Videos';
+        } else {
+            // Find the matching title from the search orders.
+            for (let i = 0; i < this.state.videoOrders.length; i++) {
+                let item = this.state.videoOrders[i];
+                if (item.value === this.state.searchOrder) {
+                    title = item.title;
+                }
             }
         }
         this.setState({title: title});

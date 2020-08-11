@@ -2,9 +2,9 @@ import React from 'react';
 import {Link, Route} from "react-router-dom";
 import Paginator, {
     DEFAULT_LIMIT,
+    defaultSearchOrder,
     defaultVideoOrder,
     searchOrders,
-    defaultSearchOrder,
     VideoCards,
     videoOrders,
     VIDEOS_API
@@ -183,7 +183,6 @@ class Videos extends React.Component {
             searchStr: '',
             limit: DEFAULT_LIMIT,
             activePage: activePage,
-            total: null,
             totalPages: null,
             prev: null,
             next: null,
@@ -224,6 +223,8 @@ class Videos extends React.Component {
         let title = '';
         if (this.props.filter === 'favorites') {
             title = 'Favorite Videos';
+        } else if (this.state.channel) {
+            title = this.state.channel.name;
         } else {
             // Find the matching title from the search orders.
             for (let i = 0; i < this.state.videoOrders.length; i++) {
@@ -262,7 +263,7 @@ class Videos extends React.Component {
             offset, this.state.limit, channel_link, this.state.queryStr, favorites, this.state.searchOrder);
 
         let totalPages = Math.round(total / this.state.limit) || 1;
-        this.setState({videos, total, totalPages});
+        this.setState({videos, totalPages});
     }
 
     changePage = async (activePage) => {
@@ -320,11 +321,6 @@ class Videos extends React.Component {
             body = <VideoCards videos={videos}/>;
         }
 
-        if (channel) {
-            // Overwrite sorting title with the Channel's name.
-            title = channel.name;
-        }
-
         let pagination = null;
         if (totalPages) {
             pagination = (
@@ -338,15 +334,12 @@ class Videos extends React.Component {
             );
         }
 
-        let clearSearchButton = null;
-        if (queryStr) {
-            clearSearchButton = (
-                <Button icon labelPosition='right' onClick={this.clearSearch}>
-                    Search: {queryStr}
-                    <Icon name='close'/>
-                </Button>
-            )
-        }
+        let clearSearchButton = (
+            <Button icon labelPosition='right' onClick={this.clearSearch}>
+                Search: {queryStr}
+                <Icon name='close'/>
+            </Button>
+        );
 
         return (
             <Container textAlign='center'>
@@ -365,7 +358,7 @@ class Videos extends React.Component {
                                 </>
                             }
                         </h1>
-                        {clearSearchButton}
+                        {queryStr && clearSearchButton}
                     </Grid.Column>
                     <Grid.Column textAlign='right'>
                         <Form onSubmit={this.handleSearch}>

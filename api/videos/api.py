@@ -350,11 +350,11 @@ async def statistics(_: Request):
             COUNT(id) AS "videos",
             COUNT(id) FILTER (WHERE favorite IS NOT NULL) AS "favorites",
             COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 week') AS "week",
-            COUNT(id) FILTER (WHERE upload_date >= current_date - interval '30 days') AS "month",
+            COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 month') AS "month",
             COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 year') AS "year",
-            SUM(duration) AS "sum_duration",
-            SUM(size)::BIGINT AS "sum_size",
-            MAX(size) AS "max_size"
+            COALESCE(SUM(duration), 0) AS "sum_duration",
+            COALESCE(SUM(size)::BIGINT, 0) AS "sum_size",
+            COALESCE(MAX(size), 0) AS "max_size"
         FROM
             video
         WHERE

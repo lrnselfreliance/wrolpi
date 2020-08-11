@@ -112,8 +112,8 @@ class Statistics extends React.Component {
             {key: 'channels', label: 'Channels'},
         ];
         this.historicalNames = [
-            {key: 'average_count', label: 'Average Downloads'},
-            {key: 'average_size', label: 'Average Video Size'},
+            {key: 'average_count', label: 'Average Monthly Downloads'},
+            {key: 'average_size', label: 'Average Monthly Usage'},
         ];
     }
 

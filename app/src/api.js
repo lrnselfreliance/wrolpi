@@ -181,5 +181,5 @@ export async function favoriteVideo(video_id, favorite) {
 
 export async function getStatistics() {
     let response = await apiGet(`${VIDEOS_API}/statistics`);
-    return await response.json();
+    return (await response.json())['statistics'];
 }

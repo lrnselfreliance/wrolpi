@@ -353,7 +353,7 @@ async def statistics(_: Request):
             COUNT(id) FILTER (WHERE upload_date >= current_date - interval '30 days') AS "month",
             COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 year') AS "year",
             SUM(duration) AS "sum_duration",
-            SUM(size)::INTEGER AS "sum_size",
+            SUM(size)::BIGINT AS "sum_size",
             MAX(size) AS "max_size"
         FROM
             video

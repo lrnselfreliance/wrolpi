@@ -138,8 +138,8 @@ class VideosPreview extends React.Component {
 
 export class FavoriteVideosPreview extends VideosPreview {
 
-    constructor() {
-        super();
+    constructor(props) {
+        super(props);
         this.title = 'Favorite Videos'
     }
 
@@ -153,8 +153,8 @@ export class FavoriteVideosPreview extends VideosPreview {
 
 export class ViewedVideosPreview extends VideosPreview {
 
-    constructor() {
-        super();
+    constructor(props) {
+        super(props);
         this.title = 'Recently Viewed Videos'
     }
 

@@ -158,23 +158,20 @@ export function secondsToString(seconds) {
 
     let numYears = Math.floor(seconds / secondsToYears);
     if (numYears) {
-        s = `${numYears} years`;
+        s = `${numYears}Y`;
         seconds -= numYears * secondsToYears;
     }
     let numDays = Math.floor(seconds / secondsToDays);
     if (numDays) {
-        s = `${s} ${numDays} days`;
+        s = `${s} ${numDays}D`;
         seconds -= numDays * secondsToDays;
     }
     let numHours = Math.floor(seconds / secondsToHours);
     if (numHours) {
-        s = `${s} ${numHours} hours`;
         seconds -= numHours * secondsToHours;
     }
     let numMinutes = Math.floor(seconds / secondsToMinutes);
-    if (numMinutes) {
-        s = `${s} ${numMinutes} minutes`;
-    }
+    s = `${s} ${numHours}:${numMinutes}H`;
     return s;
 }
 

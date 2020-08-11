@@ -146,3 +146,56 @@ export let videoOrders = [
 export let searchOrders = [
     {key: 'rank', value: 'rank', text: 'Search Rank'},
 ];
+
+const secondsToYears = 31536000;
+const secondsToDays = 86400;
+const secondsToHours = 3600;
+const secondsToMinutes = 60;
+
+
+export function secondsToString(seconds) {
+    let s = '';
+
+    let numYears = Math.floor(seconds / secondsToYears);
+    if (numYears) {
+        s = `${numYears} years`;
+        seconds -= numYears * secondsToYears;
+    }
+    let numDays = Math.floor(seconds / secondsToDays);
+    if (numDays) {
+        s = `${s} ${numDays} days`;
+        seconds -= numDays * secondsToDays;
+    }
+    let numHours = Math.floor(seconds / secondsToHours);
+    if (numHours) {
+        s = `${s} ${numHours} hours`;
+        seconds -= numHours * secondsToHours;
+    }
+    let numMinutes = Math.floor(seconds / secondsToMinutes);
+    if (numMinutes) {
+        s = `${s} ${numMinutes} minutes`;
+    }
+    return s;
+}
+
+export function humanFileSize(bytes, si = false, dp = 1) {
+    const thresh = si ? 1000 : 1024;
+
+    if (Math.abs(bytes) < thresh) {
+        return bytes + ' B';
+    }
+
+    const units = si
+        ? ['kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+        : ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+    let u = -1;
+    const r = 10 ** dp;
+
+    do {
+        bytes /= thresh;
+        ++u;
+    } while (Math.round(Math.abs(bytes) * r) / r >= thresh && u < units.length - 1);
+
+
+    return bytes.toFixed(dp) + ' ' + units[u];
+}

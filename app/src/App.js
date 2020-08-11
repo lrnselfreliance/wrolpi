@@ -3,7 +3,7 @@ import './App.css';
 import {NavBar} from "./components/Nav";
 import {Route, Switch} from "react-router-dom";
 import {FavoriteVideosPreview, VideosRoute, VideoWrapper, ViewedVideosPreview} from "./components/Videos";
-import Settings from "./components/Settings";
+import Admin from "./components/Admin";
 import {Container, Header, Segment} from "semantic-ui-react";
 import 'semantic-ui-css/semantic.min.css';
 import {SemanticToastContainer} from 'react-semantic-toasts';
@@ -45,7 +45,7 @@ function App() {
                 <Route path='/videos/channel/:channel_link/video/:video_id' exact component={VideoWrapper}/>
                 <Route path="/" exact={true} component={Welcome}/>
                 <Route path="/videos" component={VideosRoute}/>
-                <Route path="/settings" component={Settings}/>
+                <Route path="/admin" component={Admin}/>
                 <Route component={PageNotFound}/>
             </Switch>
             <SemanticToastContainer position="top-right"/>

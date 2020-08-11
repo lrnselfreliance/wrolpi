@@ -190,3 +190,23 @@ class FavoriteResponse:
 
 class WROLModeRequest:
     enabled = doc.Boolean(required=True)
+
+
+class VideoStatistics:
+    videos = doc.Integer()
+    favorites = doc.Integer()
+    week = doc.Integer()
+    month = doc.Integer()
+    year = doc.Integer()
+    sum_duration = doc.Integer()
+    sum_size = doc.Integer()
+    max_size = doc.Integer()
+
+
+class ChannelStatistics:
+    channels = doc.Integer()
+
+
+class VideosStatisticsResponse:
+    videos = VideoStatistics
+    channels = ChannelStatistics

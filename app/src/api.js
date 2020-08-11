@@ -178,3 +178,8 @@ export async function favoriteVideo(video_id, favorite) {
     let response = await apiPost(`${VIDEOS_API}:favorite`, body);
     return (await response.json())['favorite'];
 }
+
+export async function getStatistics() {
+    let response = await apiGet(`${VIDEOS_API}/statistics`);
+    return await response.json();
+}

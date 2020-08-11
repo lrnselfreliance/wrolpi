@@ -1,4 +1,3 @@
-import logging
 import threading
 from contextlib import contextmanager
 from threading import Semaphore
@@ -8,6 +7,7 @@ import psycopg2
 from dictorm import DictDB
 from psycopg2._psycopg import connection
 from psycopg2.errors import InFailedSqlTransaction
+from psycopg2.extras import DictCursor
 from psycopg2.pool import ThreadedConnectionPool
 
 from api.common import logger
@@ -61,7 +61,7 @@ def get_simple_db(dbname=None):
 def get_db_curs(commit=False) -> psycopg2.connect:
     db_pool, db_conn, key, _ = get_simple_db()
 
-    curs = db_conn.cursor()
+    curs = db_conn.cursor(cursor_factory=DictCursor)
     yield curs
 
     if commit:

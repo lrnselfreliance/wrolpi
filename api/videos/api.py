@@ -43,7 +43,7 @@ from .common import logger, generate_video_paths, get_absolute_media_path, gener
     get_bulk_video_duration, toggle_video_favorite, get_bulk_video_size
 from .downloader import update_channels, download_all_missing_videos, upsert_video
 from .schema import StreamResponse, \
-    JSONErrorResponse, FavoriteRequest, FavoriteResponse
+    JSONErrorResponse, FavoriteRequest, FavoriteResponse, VideosStatisticsResponse
 
 content_bp = Blueprint('Video Content')
 api_bp = Blueprint('Videos').group(
@@ -335,4 +335,40 @@ async def async_refresh_videos_with_db(channel_links: list = None):
 async def favorite(_: Request, data: dict):
     _favorite = toggle_video_favorite(data['video_id'], data['favorite'])
     ret = {'video_id': data['video_id'], 'favorite': _favorite}
+    return json_response(ret, HTTPStatus.OK)
+
+
+@content_bp.get('/statistics')
+@validate_doc(
+    summary='Retrieve video statistics',
+    produces=VideosStatisticsResponse,
+)
+async def statistics(_: Request):
+    with get_db_curs() as curs:
+        curs.execute('''
+        SELECT
+            COUNT(id) AS "videos",
+            COUNT(id) FILTER (WHERE favorite IS NOT NULL) AS "favorites",
+            COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 week') AS "week",
+            COUNT(id) FILTER (WHERE upload_date >= current_date - interval '30 days') AS "month",
+            COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 year') AS "year",
+            SUM(duration) AS "sum_duration",
+            SUM(size)::INTEGER AS "sum_size",
+            MAX(size) AS "max_size"
+        FROM
+            video
+        WHERE
+            video_path IS NOT NULL
+        ''')
+        video_stats = dict(curs.fetchone())
+
+        curs.execute('''
+        SELECT
+            COUNT(id) AS "channels"
+        FROM
+            channel
+        ''')
+        channel_stats = dict(curs.fetchone())
+
+    ret = dict(statistics=dict(videos=video_stats, channels=channel_stats))
     return json_response(ret, HTTPStatus.OK)

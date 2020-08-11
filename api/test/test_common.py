@@ -4,7 +4,7 @@ import pytest
 from sanic_openapi import doc
 
 from api.api import api_app, attach_routes
-from api.common import validate_data, combine_dicts
+from api.common import validate_data, combine_dicts, insert_parameter
 from api.db import get_db_context
 from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
 # Attach the default routes
@@ -199,3 +199,46 @@ def test_build_video_directories():
     with build_test_directories(structure) as tempdir:
         assert (tempdir / 'channel6/subdirectory').is_dir()
         assert (tempdir / 'channel6/subdirectory/vid1.mp4').is_file()
+
+
+def test_insert_parameter():
+    """
+    A convenience function exists that inserts a parameter or keyword argument into the provided args/kwargs,
+    wherever that may be according to the function's signature.
+    """
+
+    def func(foo, bar):
+        pass
+
+    results = insert_parameter(func, 'bar', 'bar', (1,), {})
+    assert results == ((1, 'bar'), {})
+
+    def func(foo, bar, baz):
+        pass
+
+    results = insert_parameter(func, 'bar', 'bar', (1, 2), {})
+    assert results == ((1, 'bar', 2), {})
+
+    def func(foo, baz, bar=None):
+        pass
+
+    results = insert_parameter(func, 'bar', 'bar', (1, 2), {})
+    assert results == ((1, 2, 'bar'), {})
+
+    def func(foo, baz, bar=None):
+        pass
+
+    results = insert_parameter(func, 'baz', 'baz', (1, 2), {})
+    assert results == ((1, 'baz', 2), {})
+
+    def func(foo, baz, qux=None, bar=None):
+        pass
+
+    results = insert_parameter(func, 'bar', 'bar', (1, 2, 3), {})
+    assert results == ((1, 2, 3, 'bar'), {})
+
+    # bar is not defined as a parameter!
+    def func(foo):
+        pass
+
+    pytest.raises(TypeError, insert_parameter, func, 'bar', 'bar', (1,), {})

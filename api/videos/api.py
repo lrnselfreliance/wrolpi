@@ -347,13 +347,19 @@ async def statistics(_: Request):
     with get_db_curs() as curs:
         curs.execute('''
         SELECT
+            -- total videos
             COUNT(id) AS "videos",
+            -- total videos that are marked as favorite
             COUNT(id) FILTER (WHERE favorite IS NOT NULL) AS "favorites",
+            -- total videos downloaded over the past week/month/year
             COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 week') AS "week",
             COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 month') AS "month",
             COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 year') AS "year",
+            -- sum of all video lengths in seconds
             COALESCE(SUM(duration), 0) AS "sum_duration",
+            -- sum of all video file sizes
             COALESCE(SUM(size)::BIGINT, 0) AS "sum_size",
+            -- largest video
             COALESCE(MAX(size), 0) AS "max_size"
         FROM
             video
@@ -361,6 +367,34 @@ async def statistics(_: Request):
             video_path IS NOT NULL
         ''')
         video_stats = dict(curs.fetchone())
+
+        # Get the total videos downloaded every month for the past two years.
+        curs.execute('''
+        SELECT
+            DATE_TRUNC('month', months.a),
+            COUNT(id)::BIGINT,
+            SUM(size)::BIGINT AS "size"
+        FROM
+            generate_series(
+                date_trunc('month', current_date) - interval '2 years',
+                date_trunc('month', current_date) - interval '1 month',
+                '1 month'::interval) AS months(a),
+            video
+        WHERE
+            video.upload_date >= date_trunc('month', months.a)
+            AND video.upload_date < date_trunc('month', months.a) + interval '1 month'
+            AND video.upload_date IS NOT NULL
+            AND video.video_path IS NOT NULL
+        GROUP BY
+            1
+        ORDER BY
+            1
+        ''')
+        monthly_videos = [dict(i) for i in curs.fetchall()]
+
+        historical_stats = dict(monthly_videos=monthly_videos)
+        historical_stats['average_count'] = sum(i['count'] for i in monthly_videos) // len(monthly_videos)
+        historical_stats['average_size'] = sum(i['size'] for i in monthly_videos) // len(monthly_videos)
 
         curs.execute('''
         SELECT
@@ -370,5 +404,9 @@ async def statistics(_: Request):
         ''')
         channel_stats = dict(curs.fetchone())
 
-    ret = dict(statistics=dict(videos=video_stats, channels=channel_stats))
+    ret = dict(statistics=dict(
+        videos=video_stats,
+        channels=channel_stats,
+        historical=historical_stats,
+    ))
     return json_response(ret, HTTPStatus.OK)

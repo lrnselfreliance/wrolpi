@@ -103,13 +103,17 @@ class Statistics extends React.Component {
             {key: 'favorites', label: 'Favorite Videos'},
             {key: 'sum_size', label: 'Total Size'},
             {key: 'max_size', label: 'Largest Video'},
-            {key: 'week', label: 'Weekly Downloads'},
-            {key: 'month', label: 'Monthly Downloads'},
-            {key: 'year', label: 'Yearly Downloads'},
+            {key: 'week', label: 'Downloads Past Week'},
+            {key: 'month', label: 'Downloads Past Month'},
+            {key: 'year', label: 'Downloads Past Year'},
             {key: 'sum_duration', label: 'Total Duration'},
         ];
         this.channelNames = [
             {key: 'channels', label: 'Channels'},
+        ];
+        this.historicalNames = [
+            {key: 'average_count', label: 'Average Downloads'},
+            {key: 'average_size', label: 'Average Video Size'},
         ];
     }
 
@@ -122,6 +126,7 @@ class Statistics extends React.Component {
         data.statistics.videos.sum_duration = secondsToString(data.statistics.videos.sum_duration);
         data.statistics.videos.sum_size = humanFileSize(data.statistics.videos.sum_size, true);
         data.statistics.videos.max_size = humanFileSize(data.statistics.videos.max_size, true);
+        data.statistics.historical.average_size = humanFileSize(data.statistics.historical.average_size, true);
         this.setState(data);
     }
 
@@ -141,12 +146,25 @@ class Statistics extends React.Component {
                         <Statistic.Label>{label}</Statistic.Label>
                     </Statistic>
             );
+            let historicalStatistics = this.historicalNames.map(
+                ({key, label}) =>
+                    <Statistic key={key} style={{margin: '2em'}}>
+                        <Statistic.Value>{this.state.statistics.historical[key]}</Statistic.Value>
+                        <Statistic.Label>{label}</Statistic.Label>
+                    </Statistic>
+            );
             return (
                 <>
                     <Segment secondary>
                         <Header textAlign='center' as='h1'>Videos</Header>
                         <Statistic.Group>
                             {videoStatistics}
+                        </Statistic.Group>
+                    </Segment>
+                    <Segment secondary>
+                        <Header textAlign='center' as='h1'>Historical Video</Header>
+                        <Statistic.Group>
+                            {historicalStatistics}
                         </Statistic.Group>
                     </Segment>
                     <Segment secondary style={{marginTop: '2em'}}>

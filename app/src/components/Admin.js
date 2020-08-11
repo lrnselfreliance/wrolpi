@@ -101,12 +101,12 @@ class Statistics extends React.Component {
         this.videoNames = [
             {key: 'videos', label: 'Downloaded Videos'},
             {key: 'favorites', label: 'Favorite Videos'},
+            {key: 'sum_size', label: 'Total Size'},
+            {key: 'max_size', label: 'Largest Video'},
             {key: 'week', label: 'Weekly Downloads'},
             {key: 'month', label: 'Monthly Downloads'},
             {key: 'year', label: 'Yearly Downloads'},
             {key: 'sum_duration', label: 'Total Duration'},
-            {key: 'sum_size', label: 'Total Size'},
-            {key: 'max_size', label: 'Largest Video'},
         ];
         this.channelNames = [
             {key: 'channels', label: 'Channels'},

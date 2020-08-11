@@ -3,6 +3,7 @@ import tempfile
 import unittest
 from contextlib import contextmanager
 from functools import wraps
+from http import HTTPStatus
 from queue import Empty, Queue
 from shutil import copyfile
 from typing import List
@@ -118,6 +119,11 @@ class ExtendedTestCase(unittest.TestCase):
             assert d2, f'dict 1 is empty: {d2}'
             assert k2 in d1, f'dict 1 does not contain {k2}'
             assert d1[k2] == d2[k2], f'{k2} of value "{d1[k2]}" does not equal {d2[k2]} in dict 1'
+
+    def assertError(self, response, http_status: int, code=None):
+        self.assertEqual(response.status_code, http_status)
+        if code:
+            self.assertEqual(response.json['code'], code)
 
 
 class TestAPI(ExtendedTestCase):

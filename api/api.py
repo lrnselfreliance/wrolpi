@@ -22,13 +22,6 @@ logger = logger.getChild(__name__)
 cwd = pathlib.Path(__file__).parent
 
 api_app = Sanic(name='api_app')
-# TODO Allow all requests to this webapp during development.  This should be restricted later.
-CORS(
-    api_app,
-    expose_headers=[
-        'Location',  # Expose this header so the App can send users to the location of a created object.
-    ],
-)
 
 # Attach the Sanic OpenAPI blueprint to the API App.  This will generate our API docs.
 api_app.blueprint(swagger_blueprint)
@@ -168,7 +161,7 @@ ROUTES_ATTACHED = False
 
 def attach_routes(app):
     """
-    Attach all module routes to the provided app.
+    Attach all module routes to the provided app.  Set CORS permissions.
     """
     global ROUTES_ATTACHED
     if ROUTES_ATTACHED:
@@ -178,6 +171,14 @@ def attach_routes(app):
     blueprints = [module.api_bp for module in MODULES.values()]
     api_group = Blueprint.group(*blueprints, root_api, url_prefix='/api')
     app.blueprint(api_group)
+
+    # TODO Allow all requests to this webapp during development.  This should be restricted later.
+    CORS(
+        api_app,
+        expose_headers=[
+            'Location',  # Expose this header so the App can send users to the location of a created object.
+        ],
+    )
 
 
 def run_webserver(host: str, port: int, workers: int = 8):

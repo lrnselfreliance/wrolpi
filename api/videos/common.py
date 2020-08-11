@@ -141,20 +141,32 @@ def get_absolute_video_path(video: Dict, kind: str = 'video') -> Path:
     raise UnknownFile()
 
 
-def get_absolute_video_caption(video: Dict) -> Path:
-    return get_absolute_video_path(video, 'caption')
+get_absolute_video_caption = partial(get_absolute_video_path, kind='caption')
+get_absolute_video_poster = partial(get_absolute_video_path, kind='poster')
+get_absolute_video_description = partial(get_absolute_video_path, kind='description')
+get_absolute_video_info_json = partial(get_absolute_video_path, kind='info_json')
 
 
-def get_absolute_video_poster(video: Dict) -> Path:
-    return get_absolute_video_path(video, 'poster')
+def get_absolute_video_files(video: Dict) -> List[Path]:
+    """
+    Get all video files that exist.
+    """
+    getters = [
+        get_absolute_video_description,
+        get_absolute_video_caption,
+        get_absolute_video_poster,
+        get_absolute_video_info_json,
+        get_absolute_video_path,
+    ]
 
+    def _get():
+        for getter in getters:
+            try:
+                yield getter(video)
+            except UnknownFile:
+                pass
 
-def get_absolute_video_description(video: Dict) -> Path:
-    return get_absolute_video_path(video, 'description')
-
-
-def get_absolute_video_info_json(video: Dict) -> Path:
-    return get_absolute_video_path(video, 'info_json')
+    return list(_get())
 
 
 def get_video_info_json(video: Dict) -> Union[dict, None]:
@@ -465,7 +477,7 @@ def minimize_video(video: dict) -> dict:
     Return a Video dictionary that contains only the key/values typically used.  Minimize the Channel and info_json,
     if they are present.
     """
-    minimal_keys = {'id', 'title', 'upload_date', 'duration', 'channel', 'channel_id', 'favorite',
+    minimal_keys = {'id', 'title', 'upload_date', 'duration', 'channel', 'channel_id', 'favorite', 'size',
                     'poster_path', 'caption_path', 'video_path', 'info_json', 'channel', 'viewed'}
     video = minimize_dict(video, minimal_keys)
 
@@ -475,3 +487,41 @@ def minimize_video(video: dict) -> dict:
         video['info_json'] = minimize_video_info_json(video['info_json'])
 
     return video
+
+
+def add_video_to_skip_list(channel: Dict, video: Dict):
+    try:
+        channel['skip_download_videos'].append(video['source_id'])
+        channel.flush()
+    except AttributeError:
+        channel['skip_download_videos'] = [video['source_id'], ]
+        channel.flush()
+
+
+def delete_video(video: Dict):
+    """
+    Delete any and all video files for a particular video.  If deletion succeeds, mark it as "do-not-download".
+    """
+    video_files = get_absolute_video_files(video)
+    for path in video_files:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+
+    if not video_files:
+        raise UnknownFile('No video files were deleted')
+
+    with get_db_context(commit=True) as (db_conn, db):
+        Video = db['video']
+        video = Video.get_one(id=video['id'])
+
+        video['video_path'] = None
+        video['poster_path'] = None
+        video['caption_path'] = None
+        video['description_path'] = None
+        video['info_json_path'] = None
+        video.flush()
+
+        channel = video['channel']
+        add_video_to_skip_list(channel, video)

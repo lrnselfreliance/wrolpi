@@ -11,7 +11,7 @@ import pytest
 from api.api import api_app, attach_routes
 from api.db import get_db_context
 from api.errors import UnknownFile
-from api.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI
+from api.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI, create_db_structure
 from api.videos.api import refresh_queue
 from api.videos.downloader import upsert_video
 
@@ -22,20 +22,14 @@ attach_routes(api_app)
 class TestVideoAPI(TestAPI):
 
     @wrap_test_db
-    def test_get_channels(self):
-        # No channels exist yet
-        request, response = api_app.test_client.get('/api/videos/channels')
-        assert response.status_code == HTTPStatus.OK
-        assert response.json == {'channels': []}
-
-        with get_db_context(commit=True) as (db_conn, db):
-            Channel, Video = db['channel'], db['video']
-            foo = Channel(name='Foo').flush()
-            bar = Channel(name='Bar').flush()
-            baz = Channel(name='Baz').flush()
-            Video(channel_id=foo['id'], video_path='foo').flush()
-            Video(channel_id=bar['id'], video_path='bar').flush()
-
+    @create_db_structure(
+        {
+            'Foo': ['vid1.mp4'],
+            'Bar': ['vid2.mp4'],
+            'Baz': [],
+        }
+    )
+    def test_get_channels(self, tempdir):
         request, response = api_app.test_client.get('/api/videos/channels')
         assert response.status_code == HTTPStatus.OK
         # Channels are sorted by name

@@ -13,12 +13,11 @@ const links = [
             {to: '/videos/manage', text: 'Manage', exact: true},
         ]
     },
-    {to: '/map', text: 'Map'},
 ];
-const settings = {to: '/settings', text: 'Settings', exact: true};
-const rightLinks = [settings,];
+const admin = {to: '/admin', text: 'Admin', exact: true};
+const rightLinks = [admin,];
 
-const collapsedLinks = links.concat([settings,]);
+const collapsedLinks = links.concat([admin,]);
 
 function DropdownLinks(props) {
     return (

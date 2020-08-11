@@ -11,8 +11,8 @@ from youtube_dl import YoutubeDL
 from api.common import make_progress_calculator, logger, today
 from api.db import get_db_context
 from .captions import process_captions
-from .common import get_downloader_config, get_absolute_media_path, replace_extension
-from ..errors import UnknownChannel
+from .common import get_downloader_config, get_absolute_media_path, replace_extension, add_video_to_skip_list
+from ..errors import UnknownChannel, ChannelURLEmpty
 
 logger = logger.getChild(__name__)
 ydl_logger = logger.getChild('api:youtube-dl')
@@ -93,12 +93,13 @@ def update_channels(link: str = None):
     calc_progress = make_progress_calculator(len(channels))
     for idx, channel in enumerate(channels):
         yield {'progress': calc_progress(idx), 'message': f'Getting video list for {channel["name"]}'}
-        update_channel(channel)
+        try:
+            update_channel(channel)
+        except Exception:
+            logger.critical('Unable to fetch channel videos', exc_info=True)
+            continue
 
     yield {'progress': 100, 'message': 'All video lists updated.'}
-
-
-VIDEO_EXTENSIONS = ['mp4', 'webm', 'flv']
 
 
 def _find_all_missing_videos(link: str = None) -> List[Tuple]:
@@ -123,10 +124,14 @@ def _find_all_missing_videos(link: str = None) -> List[Tuple]:
 
         query = f'''
             SELECT
-                id, source_id, channel_id
-            FROM video
+                video.id, video.source_id, video.channel_id
+            FROM
+                video
+                LEFT JOIN channel ON channel.id = video.channel_id
             WHERE
-                source_id IS NOT NULL
+                channel.url IS NOT NULL
+                AND channel.url != ''
+                AND source_id IS NOT NULL
                 {where}
                 AND channel_id IS NOT NULL
                 AND (video_path IS NULL OR video_path = '' OR poster_path IS NULL OR poster_path = '')
@@ -149,6 +154,8 @@ def find_all_missing_videos(link: str = None) -> Tuple[Dict, dict]:
             channel = Channel.get_one(link=link)
             if not channel:
                 raise UnknownChannel(f'No channel with link: {link}')
+            if not channel['url']:
+                raise ChannelURLEmpty('No URL for this channel')
             channels = [channel, ]
         else:
             channels = Channel.get_where(Channel['info_json'].IsNotNull())
@@ -340,11 +347,7 @@ def download_all_missing_videos(link: str = None):
 
                 with get_db_context(commit=True) as (db_conn, db):
                     channel = db['channel'].get_one(id=channel['id'])
-                    if skip_download_videos and source_id:
-                        channel['skip_download_videos'].append(missing_video['id'])
-                    elif source_id:
-                        channel['skip_download_videos'] = [missing_video['id'], ]
-                    channel.flush()
+                    add_video_to_skip_list(channel, {'source_id': source_id})
 
             yield f'Failed to download "{missing_video["title"]}", see logs...'
             continue

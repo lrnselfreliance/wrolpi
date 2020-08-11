@@ -1,4 +1,5 @@
 import collections
+import inspect
 import json
 import logging
 import os
@@ -8,12 +9,13 @@ from datetime import datetime, date
 from functools import wraps
 from multiprocessing import Event, Queue
 from pathlib import Path
-from typing import Union
+from typing import Union, Callable, Tuple, Dict
 from urllib.parse import urlunsplit
 from uuid import UUID
 
 import sanic
 import yaml
+from cachetools import cached, TTLCache
 from sanic import Blueprint, response
 from sanic.request import Request
 from sanic.response import HTTPResponse
@@ -387,6 +389,7 @@ def get_channels_config(db) -> dict:
                 url=i.get('url', ''),
                 generate_thumbnails=i['generate_thumbnails'],
                 calculate_duration=i['calculate_duration'],
+                skip_download_videos=[j for j in i['skip_download_videos'] if j] if i['skip_download_videos'] else [],
             )
         for i in Channel.get_where().order_by('link')
     }
@@ -457,6 +460,7 @@ class Trinary(Field):
         return {"type": "trinary", **super().serialize()}
 
 
+@cached(cache=TTLCache(maxsize=1, ttl=30))
 def wrol_mode_enabled() -> bool:
     """
     Return the boolean value of the `wrol_mode` in the config.
@@ -481,3 +485,20 @@ def wrol_mode_check(func):
         return result
 
     return check
+
+
+def insert_parameter(func: Callable, parameter_name: str, item, args: Tuple, kwargs: Dict) -> Tuple[Tuple, Dict]:
+    """
+    Insert a parameter wherever it fits in the func's signature.
+    """
+    sig = inspect.signature(func)
+    if parameter_name not in sig.parameters:
+        raise TypeError(f'Function {func} MUST have a {parameter_name} parameter!')
+
+    args = list(args)
+
+    index = list(sig.parameters).index(parameter_name)
+    args.insert(index, item)
+    args = tuple(args)
+
+    return args, kwargs

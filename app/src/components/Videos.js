@@ -1,13 +1,21 @@
 import React from 'react';
 import {Link, Route} from "react-router-dom";
-import '../static/external/fontawesome-free/css/all.min.css';
-import Paginator, {DEFAULT_LIMIT, searchOrders, VideoCards, videoOrders, VIDEOS_API} from "./Common"
-import Video from "./VideoPlayer";
+import Paginator, {
+    DEFAULT_LIMIT,
+    defaultSearchOrder,
+    searchOrders,
+    searchSearchOrder,
+    VideoCards,
+    videoOrders,
+    VIDEOS_API
+} from "./Common"
+import VideoPage from "./VideoPlayer";
 import {getChannel, getVideo, searchVideos} from "../api";
-import {Button, Card, Dropdown, Form, Grid, Header, Icon, Input, Placeholder} from "semantic-ui-react";
+import {Button, Dropdown, Form, Grid, Header, Icon, Input} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {Channels, EditChannel, NewChannel} from "./Channels";
+import {VideoPlaceholder} from "./Placeholder";
 
 function scrollToTop() {
     window.scrollTo({
@@ -47,30 +55,42 @@ class ManageVideos extends React.Component {
     }
 }
 
-function VideoWrapper(props) {
+export class VideoWrapper extends React.Component {
 
-    return (
-        <Video video={props.video} prev={props.prev} next={props.next} autoplay={false}/>
-    )
-}
+    constructor(props) {
+        super(props);
+        this.state = {
+            video: null,
+            prev: null,
+            next: null,
+            channel: null,
+        }
+    }
 
-function VideoPlaceholder() {
-    return (
-        <Card.Group doubling stackable>
-            <Card>
-                <Placeholder>
-                    <Placeholder.Image rectangular/>
-                </Placeholder>
-                <Card.Content>
-                    <Placeholder>
-                        <Placeholder.Line/>
-                        <Placeholder.Line/>
-                        <Placeholder.Line/>
-                    </Placeholder>
-                </Card.Content>
-            </Card>
-        </Card.Group>
-    )
+    async componentDidMount() {
+        await this.fetchVideo();
+    }
+
+    async fetchVideo() {
+        // Get and display the Video specified in the Router match
+        let [video, prev, next] = await getVideo(this.props.match.params.video_id);
+        let channel = await getChannel(this.props.match.params.channel_link);
+        this.setState({video, prev, next, channel}, scrollToTop);
+    }
+
+    async componentDidUpdate(prevProps, prevState) {
+        if (prevProps.match.params.video_id !== this.props.match.params.video_id) {
+            await this.fetchVideo();
+        }
+    }
+
+    render() {
+        if (this.state.video && this.state.channel) {
+            return <VideoPage {...this.state} history={this.props.history} autoplay={false}/>
+        } else {
+            return <VideoPlaceholder/>
+        }
+    }
 }
 
 function changePageHistory(history, location, activePage, searchStr, searchOrder) {
@@ -124,7 +144,7 @@ export class FavoriteVideosPreview extends VideosPreview {
     }
 
     async fetchVideos() {
-        let [videos, _] = await searchVideos(
+        let [videos] = await searchVideos(
             0, 3, null, null, true, '-favorite');
         this.setState({videos});
     }
@@ -139,7 +159,7 @@ export class ViewedVideosPreview extends VideosPreview {
     }
 
     async fetchVideos() {
-        let [videos, _] = await searchVideos(
+        let [videos] = await searchVideos(
             0, 3, null, null, null, '-viewed');
         this.setState({videos});
     }
@@ -154,30 +174,27 @@ class Videos extends React.Component {
         const query = QueryString.parse(this.props.location.search);
         let activePage = query.page ? parseInt(query.page) : 1; // First page is 1 by default, of course.
         let searchStr = query.q || '';
-        let searchOrder = query.o || '-upload_date';
+        let searchOrder = query.o || defaultSearchOrder;
 
         this.state = {
             channel: null,
             videos: null,
             video: null,
             queryStr: searchStr,
-            searchStr: searchStr,
-            show: false,
+            searchStr: '',
             limit: DEFAULT_LIMIT,
             activePage: activePage,
             total: null,
             totalPages: null,
             prev: null,
             next: null,
-            videoOrders: searchStr ? searchOrders : videoOrders,
+            videoOrders: searchStr === '' ? videoOrders : searchOrders,
             searchOrder: searchOrder,
         };
     }
 
     async componentDidMount() {
-        if (this.props.match.params.video_id) {
-            await this.fetchVideo();
-        } else if (this.props.match.params.channel_link) {
+        if (this.props.match.params.channel_link) {
             await this.fetchChannel();
         } else {
             await this.fetchVideos();
@@ -188,13 +205,14 @@ class Videos extends React.Component {
         let params = this.props.match.params;
 
         let channelChanged = params.channel_link !== prevProps.match.params.channel_link;
-        let videoChanged = params.video_id !== prevProps.match.params.video_id;
-        let pageChanged = prevState.activePage !== this.state.activePage;
+        let pageChanged = (
+            prevState.activePage !== this.state.activePage ||
+            prevState.searchOrder !== this.state.searchOrder ||
+            prevState.queryStr !== this.state.queryStr
+        );
 
         if (channelChanged) {
             await this.fetchChannel();
-        } else if (videoChanged) {
-            await this.fetchVideo();
         } else if (pageChanged) {
             this.applyStateToHistory();
             await this.fetchVideos();
@@ -223,19 +241,10 @@ class Videos extends React.Component {
         let channel_link = this.state.channel ? this.state.channel.link : null;
         let favorites = this.props.filter !== undefined ? this.props.filter === 'favorites' : null;
         let [videos, total] = await searchVideos(
-            offset, this.state.limit, channel_link, this.state.searchStr, favorites, this.state.searchOrder);
+            offset, this.state.limit, channel_link, this.state.queryStr, favorites, this.state.searchOrder);
 
         let totalPages = Math.round(total / this.state.limit) || 1;
         this.setState({videos, total, totalPages});
-    }
-
-    async fetchVideo() {
-        // Get and display the Video specified in the Router match
-        let video_id = this.props.match.params.video_id;
-        if (video_id) {
-            let [video, prev, next] = await getVideo(video_id);
-            this.setState({video, prev, next});
-        }
     }
 
     changePage = async (activePage) => {
@@ -243,7 +252,7 @@ class Videos extends React.Component {
     }
 
     clearSearch = async () => {
-        this.setState({searchStr: '', searchOrder: 'upload_date'}, this.handleSearch);
+        this.setState({searchStr: '', queryStr: '', searchOrder: defaultSearchOrder, activePage: 1});
     }
 
     applyStateToHistory = () => {
@@ -254,7 +263,8 @@ class Videos extends React.Component {
 
     handleSearch = async (e) => {
         e && e.preventDefault();
-        this.setState({activePage: 1, searchOrder: 'rank'}, this.applyStateToHistory);
+        this.setState({activePage: 1, searchOrder: searchSearchOrder, queryStr: this.state.searchStr},
+            this.applyStateToHistory);
     }
 
     handleInputChange = (event, {name, value}) => {
@@ -266,16 +276,11 @@ class Videos extends React.Component {
     }
 
     render() {
-        let video = this.state.video;
         let videos = this.state.videos;
-        let prev = this.state.prev;
-        let next = this.state.next;
         let body = <VideoPlaceholder/>;
         let pagination = null;
 
-        if (video) {
-            body = <VideoWrapper video={video} prev={prev} next={next} channel={video.channel}/>
-        } else if (videos && videos.length === 0 && this.props.filter !== 'favorites') {
+        if (videos && videos.length === 0 && this.props.filter !== 'favorites') {
             body = <p>No videos retrieved. Have you downloaded videos yet?</p>;
         } else if (videos && videos.length === 0 && this.props.filter === 'favorites') {
             body = <p>You haven't tagged any videos as favorite.</p>;
@@ -313,7 +318,7 @@ class Videos extends React.Component {
 
         return (
             <Container textAlign='center'>
-                <Grid columns={3}>
+                <Grid columns={3} stackable>
                     <Grid.Column textAlign='left'>
                         <h1>
                             {channelName}
@@ -333,6 +338,7 @@ class Videos extends React.Component {
                     <Grid.Column textAlign='right'>
                         <Form onSubmit={this.handleSearch}>
                             <Input
+                                fluid
                                 icon='search'
                                 placeholder='Search...'
                                 name="searchStr"
@@ -345,11 +351,12 @@ class Videos extends React.Component {
                             size='large'
                             placeholder='Sort by...'
                             selection
+                            fluid
                             name='searchOrder'
                             onChange={this.changeSearchOrder}
                             value={this.state.searchOrder}
                             options={this.state.videoOrders}
-                            disabled={this.state.searchQuery === ''}
+                            disabled={this.state.searchOrder === searchSearchOrder}
                         />
                     </Grid.Column>
                 </Grid>
@@ -366,40 +373,41 @@ export class VideosRoute extends React.Component {
 
     render() {
         return (
-            <Container fluid={true} style={{margin: '2em', padding: '0.5em'}}>
-                <Route path='/videos' exact
-                       component={(i) =>
-                           <Videos
-                               title="Newest Videos"
-                               match={i.match}
-                               history={i.history}
-                               location={i.location}
-                           />}
-                />
-                <Route path='/videos/favorites' exact
-                       component={(i) =>
-                           <Videos
-                               title="Favorite Videos"
-                               match={i.match}
-                               history={i.history}
-                               location={i.location}
-                               filter='favorites'
-                           />
-                       }/>
-                <Route path='/videos/channel' exact component={Channels}/>
-                <Route path='/videos/manage' exact component={ManageVideos}/>
-                <Route path='/videos/channel/new' exact component={NewChannel}/>
-                <Route path='/videos/channel/:channel_link/edit' exact
-                       component={(i) =>
-                           <EditChannel
-                               match={i.match}
-                               history={i.history}
-                           />
-                       }
-                />
-                <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
-                <Route path='/videos/channel/:channel_link/video/:video_id' exact component={Videos}/>
-            </Container>
+            <>
+                <Container fluid={true} style={{margin: '2em', padding: '0.5em'}}>
+                    <Route path='/videos' exact
+                           component={(i) =>
+                               <Videos
+                                   title="Newest Videos"
+                                   match={i.match}
+                                   history={i.history}
+                                   location={i.location}
+                               />}
+                    />
+                    <Route path='/videos/favorites' exact
+                           component={(i) =>
+                               <Videos
+                                   title="Favorite Videos"
+                                   match={i.match}
+                                   history={i.history}
+                                   location={i.location}
+                                   filter='favorites'
+                               />
+                           }/>
+                    <Route path='/videos/channel' exact component={Channels}/>
+                    <Route path='/videos/manage' exact component={ManageVideos}/>
+                    <Route path='/videos/channel/new' exact component={NewChannel}/>
+                    <Route path='/videos/channel/:channel_link/edit' exact
+                           component={(i) =>
+                               <EditChannel
+                                   match={i.match}
+                                   history={i.history}
+                               />
+                           }
+                    />
+                    <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
+                </Container>
+            </>
         )
     }
 }

@@ -73,6 +73,10 @@ class WROLModeEnabled(APIError):
     pass
 
 
+class ChannelURLEmpty(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -160,5 +164,10 @@ API_ERRORS = {
         'code': next(error_codes),
         'message': 'This method is disabled while WROL Mode is enabled.',
         'status': HTTPStatus.FORBIDDEN,
+    },
+    ChannelURLEmpty: {
+        'code': next(error_codes),
+        'message': 'This channel has no URL',
+        'status': HTTPStatus.BAD_REQUEST,
     },
 }

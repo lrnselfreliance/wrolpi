@@ -43,7 +43,7 @@ from .common import logger, generate_video_paths, get_absolute_media_path, gener
     get_bulk_video_duration, toggle_video_favorite, get_bulk_video_size
 from .downloader import update_channels, download_all_missing_videos, upsert_video
 from .schema import StreamResponse, \
-    JSONErrorResponse, FavoriteRequest, FavoriteResponse
+    JSONErrorResponse, FavoriteRequest, FavoriteResponse, VideosStatisticsResponse
 
 content_bp = Blueprint('Video Content')
 api_bp = Blueprint('Videos').group(
@@ -131,6 +131,9 @@ async def download(_, link: str = None):
             for msg in download_all_missing_videos(link):
                 download_queue.put(msg)
 
+            # Fill in any missing data for all videos.
+            process_video_meta_data()
+
             download_logger.info('download complete')
         except Exception as e:
             logger.fatal(f'Download failed: {e}')
@@ -145,10 +148,10 @@ async def download(_, link: str = None):
     return response.json({'code': 'stream-started', 'stream_url': stream_url})
 
 
-def refresh_channel_video_captions(channel: Dict) -> bool:
+def refresh_channel_video_captions() -> bool:
     with get_db_curs() as curs:
-        query = 'SELECT id FROM video WHERE channel_id=%s AND caption IS NULL AND caption_path IS NOT NULL'
-        curs.execute(query, (channel['id'],))
+        query = 'SELECT id FROM video WHERE caption IS NULL AND caption_path IS NOT NULL'
+        curs.execute(query)
         missing_captions = [i for (i,) in curs.fetchall()]
 
     if missing_captions:
@@ -160,10 +163,10 @@ def refresh_channel_video_captions(channel: Dict) -> bool:
         return False
 
 
-def refresh_channel_generate_posters(channel: Dict) -> bool:
+def refresh_channel_generate_posters() -> bool:
     with get_db_curs() as curs:
-        query = 'SELECT id FROM video WHERE channel_id=%s AND poster_path IS NULL'
-        curs.execute(query, (channel['id'],))
+        query = 'SELECT id FROM video WHERE video_path IS NOT NULL AND poster_path IS NULL'
+        curs.execute(query)
         missing_posters = [i for (i,) in curs.fetchall()]
 
     if missing_posters:
@@ -175,10 +178,10 @@ def refresh_channel_generate_posters(channel: Dict) -> bool:
         return False
 
 
-def refresh_channel_calculate_duration(channel: Dict) -> bool:
+def refresh_channel_calculate_duration() -> bool:
     with get_db_curs() as curs:
-        query = 'SELECT id FROM video WHERE channel_id=%s AND duration IS NULL'
-        curs.execute(query, (channel['id'],))
+        query = 'SELECT id FROM video WHERE video_path IS NOT NULL AND duration IS NULL'
+        curs.execute(query)
         missing_duration = [i for (i,) in curs.fetchall()]
 
     if missing_duration:
@@ -190,10 +193,10 @@ def refresh_channel_calculate_duration(channel: Dict) -> bool:
         return False
 
 
-def refresh_channel_calculate_size(channel: Dict) -> bool:
+def refresh_channel_calculate_size() -> bool:
     with get_db_curs() as curs:
-        query = 'SELECT id FROM video WHERE channel_id=%s AND size IS NULL'
-        curs.execute(query, (channel['id'],))
+        query = 'SELECT id FROM video WHERE video_path IS NOT NULL AND size IS NULL'
+        curs.execute(query)
         missing_size = [i for (i,) in curs.fetchall()]
 
     if missing_size:
@@ -203,6 +206,16 @@ def refresh_channel_calculate_size(channel: Dict) -> bool:
     else:
         logger.debug('No videos missing size.')
         return False
+
+
+def process_video_meta_data():
+    """
+    Search for any videos missing meta data, fill in that data.
+    """
+    refresh_channel_video_captions()
+    refresh_channel_generate_posters()
+    refresh_channel_calculate_duration()
+    refresh_channel_calculate_size()
 
 
 def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
@@ -253,12 +266,6 @@ def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
     logger.info(status)
     reporter.message(status)
 
-    # Fill in any missing data.
-    refresh_channel_video_captions(channel)
-    refresh_channel_generate_posters(channel)
-    refresh_channel_calculate_duration(channel)
-    refresh_channel_calculate_size(channel)
-
 
 def _refresh_videos(q: Queue, channel_links: list = None):
     """
@@ -293,6 +300,10 @@ def _refresh_videos(q: Queue, channel_links: list = None):
     for idx, channel in enumerate(channels):
         reporter.set_progress(0, idx, f'Checking {channel["name"]} directory for new videos')
         refresh_channel_videos(channel, reporter)
+
+    # Fill in any missing data for all videos.
+    process_video_meta_data()
+
     reporter.set_progress(0, 100, 'All videos refreshed.')
     reporter.code('refresh-complete')
 
@@ -324,4 +335,78 @@ async def async_refresh_videos_with_db(channel_links: list = None):
 async def favorite(_: Request, data: dict):
     _favorite = toggle_video_favorite(data['video_id'], data['favorite'])
     ret = {'video_id': data['video_id'], 'favorite': _favorite}
+    return json_response(ret, HTTPStatus.OK)
+
+
+@content_bp.get('/statistics')
+@validate_doc(
+    summary='Retrieve video statistics',
+    produces=VideosStatisticsResponse,
+)
+async def statistics(_: Request):
+    with get_db_curs() as curs:
+        curs.execute('''
+        SELECT
+            -- total videos
+            COUNT(id) AS "videos",
+            -- total videos that are marked as favorite
+            COUNT(id) FILTER (WHERE favorite IS NOT NULL) AS "favorites",
+            -- total videos downloaded over the past week/month/year
+            COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 week') AS "week",
+            COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 month') AS "month",
+            COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 year') AS "year",
+            -- sum of all video lengths in seconds
+            COALESCE(SUM(duration), 0) AS "sum_duration",
+            -- sum of all video file sizes
+            COALESCE(SUM(size)::BIGINT, 0) AS "sum_size",
+            -- largest video
+            COALESCE(MAX(size), 0) AS "max_size"
+        FROM
+            video
+        WHERE
+            video_path IS NOT NULL
+        ''')
+        video_stats = dict(curs.fetchone())
+
+        # Get the total videos downloaded every month for the past two years.
+        curs.execute('''
+        SELECT
+            DATE_TRUNC('month', months.a),
+            COUNT(id)::BIGINT,
+            SUM(size)::BIGINT AS "size"
+        FROM
+            generate_series(
+                date_trunc('month', current_date) - interval '2 years',
+                date_trunc('month', current_date) - interval '1 month',
+                '1 month'::interval) AS months(a),
+            video
+        WHERE
+            video.upload_date >= date_trunc('month', months.a)
+            AND video.upload_date < date_trunc('month', months.a) + interval '1 month'
+            AND video.upload_date IS NOT NULL
+            AND video.video_path IS NOT NULL
+        GROUP BY
+            1
+        ORDER BY
+            1
+        ''')
+        monthly_videos = [dict(i) for i in curs.fetchall()]
+
+        historical_stats = dict(monthly_videos=monthly_videos)
+        historical_stats['average_count'] = sum(i['count'] for i in monthly_videos) // len(monthly_videos)
+        historical_stats['average_size'] = sum(i['size'] for i in monthly_videos) // len(monthly_videos)
+
+        curs.execute('''
+        SELECT
+            COUNT(id) AS "channels"
+        FROM
+            channel
+        ''')
+        channel_stats = dict(curs.fetchone())
+
+    ret = dict(statistics=dict(
+        videos=video_stats,
+        channels=channel_stats,
+        historical=historical_stats,
+    ))
     return json_response(ret, HTTPStatus.OK)

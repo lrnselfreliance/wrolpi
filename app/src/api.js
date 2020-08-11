@@ -123,6 +123,29 @@ export async function getVideo(video_id) {
     return [data['video'], data['prev'], data['next']];
 }
 
+export async function deleteVideo(video_id) {
+    let response = await apiDelete(`${VIDEOS_API}/video/${video_id}`);
+    let data = await response.json();
+    if (data.code === 17) {
+        toast({
+            type: 'warning',
+            title: 'WROL Mode Enabled',
+            description: 'This cannot be done while WROL Mode is enabled.',
+            time: 5000,
+        });
+        throw Error('WROL Mode enabled');
+    }
+    if (response.status !== 204) {
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: 'Failed to delete video.  See server logs.',
+            time: 5000,
+        });
+        throw Error('Failed to delete video');
+    }
+}
+
 export async function getDirectories(search_str) {
     let form_data = {search_str};
     let response = await apiGet(`${VIDEOS_API}/directories`, {
@@ -154,4 +177,9 @@ export async function favoriteVideo(video_id, favorite) {
     let body = {favorite: favorite, video_id};
     let response = await apiPost(`${VIDEOS_API}:favorite`, body);
     return (await response.json())['favorite'];
+}
+
+export async function getStatistics() {
+    let response = await apiGet(`${VIDEOS_API}/statistics`);
+    return await response.json();
 }

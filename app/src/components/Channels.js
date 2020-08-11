@@ -9,18 +9,7 @@ import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
 import Table from "semantic-ui-react/dist/commonjs/collections/Table";
 import Popup from "semantic-ui-react/dist/commonjs/modules/Popup";
-
-
-function FieldPlaceholder() {
-    return (
-        <Form.Field>
-            <Placeholder style={{'marginBottom': '0.5em'}}>
-                <Placeholder.Line length="short"/>
-            </Placeholder>
-            <input disabled/>
-        </Form.Field>
-    )
-}
+import {FieldPlaceholder, ChannelPlaceholder} from "./Placeholder";
 
 
 class ChannelPage extends React.Component {
@@ -348,14 +337,13 @@ class ChannelPage extends React.Component {
                             {this.state.disabled ? <Loader active inline/> : 'Save'}
                         </Button>
 
-                        <Link to='/videos/channel'>
-                            <Button
-                                secondary
-                                floated='right'
-                            >
-                                Cancel
-                            </Button>
-                        </Link>
+                        <Button
+                            secondary
+                            floated='right'
+                            onClick={() => this.props.history.goBack()}
+                        >
+                            Cancel
+                        </Button>
 
                         {!this.state.create && <>
                             <Button color='red' onClick={this.show}>Delete</Button>
@@ -437,7 +425,13 @@ function ChannelRow(props) {
                 <Popup
                     header="Download any missing videos"
                     on="hover"
-                    trigger={<Button primary onClick={downloadVideos}>Download Videos</Button>}
+                    trigger={<Button
+                        primary
+                        onClick={downloadVideos}
+                        disabled={!!!props.channel.url}
+                    >
+                        Download Videos
+                    </Button>}
                 />
             </Table.Cell>
             <Table.Cell textAlign='right'>
@@ -451,15 +445,6 @@ function ChannelRow(props) {
                 <Link className="ui button secondary" to={editTo}>Edit</Link>
             </Table.Cell>
         </Table.Row>
-    )
-}
-
-function ChannelPlaceholder() {
-    return (
-        <Placeholder>
-            <Placeholder.Line length='long'/>
-            <Placeholder.Line length='short'/>
-        </Placeholder>
     )
 }
 

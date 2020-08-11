@@ -130,14 +130,69 @@ export function RequiredAsterisk() {
     return <span style={{color: '#db2828'}}> *</span>
 }
 
+export let defaultSearchOrder = '-upload_date';
+export let searchSearchOrder = 'rank';
+
 export let videoOrders = [
     {key: '-upload_date', value: '-upload_date', text: 'Newest'},
     {key: 'upload_date', value: 'upload_date', text: 'Oldest'},
     {key: '-duration', value: '-duration', text: 'Longest'},
     {key: 'duration', value: 'duration', text: 'Shortest'},
-    {key: '-viewed', value: 'viewed', text: 'Recently viewed'},
+    {key: '-viewed', value: '-viewed', text: 'Recently viewed'},
+    {key: '-size', value: '-size', text: 'Largest'},
+    {key: 'size', value: 'size', text: 'Smallest'},
 ];
 
 export let searchOrders = [
     {key: 'rank', value: 'rank', text: 'Search Rank'},
 ];
+
+const secondsToYears = 31536000;
+const secondsToDays = 86400;
+const secondsToHours = 3600;
+const secondsToMinutes = 60;
+
+
+export function secondsToString(seconds) {
+    let s = '';
+
+    let numYears = Math.floor(seconds / secondsToYears);
+    if (numYears) {
+        s = `${numYears}Y`;
+        seconds -= numYears * secondsToYears;
+    }
+    let numDays = Math.floor(seconds / secondsToDays);
+    if (numDays) {
+        s = `${s} ${numDays}D`;
+        seconds -= numDays * secondsToDays;
+    }
+    let numHours = Math.floor(seconds / secondsToHours);
+    if (numHours) {
+        seconds -= numHours * secondsToHours;
+    }
+    let numMinutes = Math.floor(seconds / secondsToMinutes);
+    s = `${s} ${numHours}:${numMinutes}H`;
+    return s;
+}
+
+export function humanFileSize(bytes, si = false, dp = 1) {
+    const thresh = si ? 1000 : 1024;
+
+    if (Math.abs(bytes) < thresh) {
+        return bytes + ' B';
+    }
+
+    const units = si
+        ? ['kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
+        : ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+    let u = -1;
+    const r = 10 ** dp;
+
+    do {
+        bytes /= thresh;
+        ++u;
+    } while (Math.round(Math.abs(bytes) * r) / r >= thresh && u < units.length - 1);
+
+
+    return bytes.toFixed(dp) + ' ' + units[u];
+}

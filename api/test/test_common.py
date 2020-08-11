@@ -1,11 +1,15 @@
+from pathlib import Path
+
 import pytest
 from sanic_openapi import doc
 
 from api.api import api_app, attach_routes
-from api.common import validate_data, combine_dicts
+from api.common import validate_data, combine_dicts, insert_parameter
+from api.db import get_db_context
 from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
-
 # Attach the default routes
+from api.test.common import create_db_structure, build_test_directories
+
 attach_routes(api_app)
 
 
@@ -108,3 +112,133 @@ def test_validate_doc_errors(data, expected):
 )
 def test_combine_dicts(data, expected):
     assert combine_dicts(*data) == expected
+
+
+@pytest.mark.parametrize(
+    '_structure,paths',
+    (
+            (
+                    {'channel1': ['vid1.mp4']},
+                    [
+                        'channel1/vid1.mp4',
+                    ],
+            ),
+            (
+                    {'channel1': ['vid1.mp4'], 'channel2': ['vid1.mp4']},
+                    [
+                        'channel1/vid1.mp4',
+                        'channel2/vid1.mp4',
+                    ],
+            ),
+            (
+                    {'channel1': ['vid1.mp4'], 'channel2': ['vid1.mp4', 'vid2.mp4', 'vid2.en.vtt']},
+                    [
+                        'channel1/vid1.mp4',
+                        'channel2/vid1.mp4',
+                        'channel2/vid2.mp4',
+                        'channel2/vid2.en.vtt',
+                    ],
+            ),
+    )
+)
+def test_create_db_structure(_structure, paths):
+    @create_db_structure(_structure)
+    def test_func(tempdir):
+        assert isinstance(tempdir, Path)
+        for path in paths:
+            path = (tempdir / path)
+            assert path.exists()
+            assert path.is_file()
+
+        with get_db_context() as (db_conn, db):
+            Channel = db['channel']
+            for channel_name in _structure:
+                channel = Channel.get_one(name=channel_name)
+                assert (tempdir / channel_name).is_dir()
+                assert channel
+                assert channel['directory'] == str(tempdir / channel_name)
+                assert len(list(channel['videos'])) == len([i for i in _structure[channel_name] if i.endswith('mp4')])
+
+    test_func()
+
+
+def test_build_video_directories():
+    structure = [
+        'channel1/vid1.mp4',
+    ]
+    with build_test_directories(structure) as tempdir:
+        assert (tempdir / 'channel1').is_dir()
+        assert (tempdir / 'channel1/vid1.mp4').is_file()
+
+    structure = [
+        'channel2/',
+        'channel2.1/channel2.2/',
+    ]
+    with build_test_directories(structure) as tempdir:
+        assert (tempdir / 'channel2').is_dir()
+        assert (tempdir / 'channel2.1/channel2.2').is_dir()
+
+    structure = [
+        'channel3/vid1.mp4',
+        'channel3/vid2.mp4',
+        'channel4/vid1.mp4',
+        'channel4/vid1.en.vtt',
+        'channel5/',
+    ]
+    with build_test_directories(structure) as tempdir:
+        assert (tempdir / 'channel3/vid1.mp4').is_file()
+        assert (tempdir / 'channel3').is_dir()
+        assert (tempdir / 'channel3/vid2.mp4').is_file()
+        assert (tempdir / 'channel4/vid1.mp4').is_file()
+        assert (tempdir / 'channel4/vid1.en.vtt').is_file()
+        assert (tempdir / 'channel5').is_dir()
+
+    structure = [
+        'channel6/subdirectory/vid1.mp4',
+    ]
+    with build_test_directories(structure) as tempdir:
+        assert (tempdir / 'channel6/subdirectory').is_dir()
+        assert (tempdir / 'channel6/subdirectory/vid1.mp4').is_file()
+
+
+def test_insert_parameter():
+    """
+    A convenience function exists that inserts a parameter or keyword argument into the provided args/kwargs,
+    wherever that may be according to the function's signature.
+    """
+
+    def func(foo, bar):
+        pass
+
+    results = insert_parameter(func, 'bar', 'bar', (1,), {})
+    assert results == ((1, 'bar'), {})
+
+    def func(foo, bar, baz):
+        pass
+
+    results = insert_parameter(func, 'bar', 'bar', (1, 2), {})
+    assert results == ((1, 'bar', 2), {})
+
+    def func(foo, baz, bar=None):
+        pass
+
+    results = insert_parameter(func, 'bar', 'bar', (1, 2), {})
+    assert results == ((1, 2, 'bar'), {})
+
+    def func(foo, baz, bar=None):
+        pass
+
+    results = insert_parameter(func, 'baz', 'baz', (1, 2), {})
+    assert results == ((1, 'baz', 2), {})
+
+    def func(foo, baz, qux=None, bar=None):
+        pass
+
+    results = insert_parameter(func, 'bar', 'bar', (1, 2, 3), {})
+    assert results == ((1, 2, 3, 'bar'), {})
+
+    # bar is not defined as a parameter!
+    def func(foo):
+        pass
+
+    pytest.raises(TypeError, insert_parameter, func, 'bar', 'bar', (1,), {})

@@ -1,8 +1,12 @@
 import pathlib
 import tempfile
 import unittest
-from queue import Empty
+from contextlib import contextmanager
+from functools import wraps
+from http import HTTPStatus
+from queue import Empty, Queue
 from shutil import copyfile
+from typing import List
 from uuid import uuid1
 
 import mock
@@ -12,10 +16,10 @@ from dictorm import DictDB
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from api.api import api_app, attach_routes
-from api.common import EXAMPLE_CONFIG_PATH, get_config
-from api.db import setup_relationships
+from api.common import EXAMPLE_CONFIG_PATH, get_config, FeedReporter, insert_parameter
+from api.db import setup_relationships, get_db_context
 from api.vars import DOCKERIZED
-from api.videos.api import refresh_queue, download_queue
+from api.videos.api import refresh_queue, download_queue, refresh_channel_videos
 
 # Attach the default routes
 attach_routes(api_app)
@@ -116,6 +120,11 @@ class ExtendedTestCase(unittest.TestCase):
             assert k2 in d1, f'dict 1 does not contain {k2}'
             assert d1[k2] == d2[k2], f'{k2} of value "{d1[k2]}" does not equal {d2[k2]} in dict 1'
 
+    def assertError(self, response, http_status: int, code=None):
+        self.assertEqual(response.status_code, http_status)
+        if code:
+            self.assertEqual(response.json['code'], code)
+
 
 class TestAPI(ExtendedTestCase):
 
@@ -135,3 +144,97 @@ class TestAPI(ExtendedTestCase):
         # Clear out any messages in queues
         get_all_messages_in_queue(refresh_queue)
         get_all_messages_in_queue(download_queue)
+
+
+@contextmanager
+def build_test_directories(paths: List[str]) -> pathlib.Path:
+    """
+    Create directories based on the provided structure.
+
+    Example:
+        >>> create_db_structure([
+                'channel1/vid1.mp4',
+                'channel2/vid1.mp4',
+                'channel2/vid2.mp4',
+                'channel2/vid2.en.vtt'
+            ])
+
+        Creates directories like so:
+            channel1/vid1.mp4
+            channel2/vid1.mp4
+            channel2/vid2.mp4
+            channel2/vid2.en.vtt
+    """
+    dir_ = get_config().get('media_directory')
+    dir_ = pathlib.Path(dir_).absolute()
+    with tempfile.TemporaryDirectory(dir=dir_) as temp_dir:
+        root = pathlib.Path(temp_dir)
+
+        directories = filter(lambda i: i.endswith('/'), paths)
+        for directory in directories:
+            (root / directory).mkdir(parents=True)
+
+        files = filter(lambda i: not i.endswith('/'), paths)
+        for file in files:
+            file = root / file
+            parents = file.parents
+            parents[0].mkdir(parents=True, exist_ok=True)
+            (root / file).touch()
+
+        yield root.absolute()
+
+
+def create_db_structure(structure):
+    """
+    Create a directory containing the specified structure of channels and videos.  Create DB entries for these
+    channels and videos.
+
+    Example:
+        >>> s = {'channel1': ['vid1.mp4'], 'channel2': ['vid1.mp4', 'vid2.mp4', 'vid2.en.vtt']}
+        >>> create_db_structure(s)
+
+        Creates directories like so:
+            channel1/vid1.mp4
+            channel2/vid1.mp4
+            channel2/vid2.mp4
+            channel2/vid2.en.vtt
+
+        Channels like so:
+            Channel(name='channel1', directory='channel1')
+            Channel(name='channel2', directory='channel2')
+
+        And, Videos like so:
+            Video(channel_id=1, video_path='vid1.mp4')
+            Video(channel_id=2, video_path='vid1.mp4')
+            Video(channel_id=2, video_path='vid2.mp4', caption_path='vid2.en.vtt')
+    """
+
+    def wrapper(func):
+        @wraps(func)
+        @wrap_test_db
+        def wrapped(*args, **kwargs):
+            # Filler queue and reporter, these aren't used.
+            q = Queue()
+            reporter = FeedReporter(q, 2)
+
+            # Convert the channel/video structure to a file structure for the test.
+            file_structure = []
+            for channel, paths in structure.items():
+                for path in paths:
+                    file_structure.append(f'{channel}/{path}')
+                file_structure.append(f'{channel}/')
+
+            with build_test_directories(file_structure) as tempdir:
+                args, kwargs = insert_parameter(func, 'tempdir', tempdir, args, kwargs)
+
+                with get_db_context(commit=True) as (db_conn, db):
+                    Channel, Video = db['channel'], db['video']
+                    for channel in structure:
+                        channel = Channel(directory=str(tempdir / channel), name=channel).flush()
+                        refresh_channel_videos(channel, reporter)
+
+                return func(*args, **kwargs)
+
+        return wrapped
+
+    return wrapper

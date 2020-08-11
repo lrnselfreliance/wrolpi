@@ -1,7 +1,12 @@
 from datetime import datetime, timedelta
+from http import HTTPStatus
+from json import dumps
+from unittest import mock
 
+from api.api import api_app
 from api.db import get_db_context
-from api.test.common import wrap_test_db, TestAPI
+from api.errors import API_ERRORS, WROLModeEnabled
+from api.test.common import wrap_test_db, TestAPI, create_db_structure
 from api.videos.video import get_surrounding_videos
 
 
@@ -66,3 +71,39 @@ class TestVideoFunctions(TestAPI):
                     self.assertIsNone(next_video)
                 else:
                     self.assertDictContains(next_video, {'title': next_title})
+
+    @wrap_test_db
+    @create_db_structure({
+        'channel1': ['vid1.mp4']
+    })
+    def test_wrol_mode(self, tempdir):
+        """
+        Many methods are blocked when WROL Mode is enabled.
+        """
+        channel = dumps(dict(name='foo', directory='foo'))
+        favorite = dumps(dict(video_id=1, favorite=True))
+
+        with mock.patch('api.common.wrol_mode_enabled', lambda: True):
+            # Can't create, update, or delete a channel.
+            _, resp = api_app.test_client.post('/api/videos/channels', data=channel)
+            self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
+            _, resp = api_app.test_client.put('/api/videos/channels/channel1', data=channel)
+            self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
+            _, resp = api_app.test_client.patch('/api/videos/channels/channel1', data=channel)
+            self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
+            _, resp = api_app.test_client.delete('/api/videos/channels/channel1')
+            self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
+
+            # Can't delete a video
+            _, resp = api_app.test_client.delete('/api/videos/video/1')
+            self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
+
+            # Can't refresh or download
+            _, resp = api_app.test_client.post('/api/videos:refresh')
+            self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
+            _, resp = api_app.test_client.post('/api/videos:download')
+            self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
+
+            # THE REST OF THESE METHODS ARE ALLOWED
+            _, resp = api_app.test_client.post('/api/videos:favorite', data=favorite)
+            self.assertEqual(resp.status_code, HTTPStatus.OK)

@@ -14,6 +14,7 @@ from uuid import UUID
 
 import sanic
 import yaml
+from cachetools import cached, TTLCache
 from sanic import Blueprint, response
 from sanic.request import Request
 from sanic.response import HTTPResponse
@@ -458,6 +459,7 @@ class Trinary(Field):
         return {"type": "trinary", **super().serialize()}
 
 
+@cached(cache=TTLCache(maxsize=1, ttl=30))
 def wrol_mode_enabled() -> bool:
     """
     Return the boolean value of the `wrol_mode` in the config.

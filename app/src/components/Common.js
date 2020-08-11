@@ -130,21 +130,21 @@ export function RequiredAsterisk() {
     return <span style={{color: '#db2828'}}> *</span>
 }
 
-export let defaultSearchOrder = '-upload_date';
-export let searchSearchOrder = 'rank';
+export let defaultVideoOrder = '-upload_date';
+export let defaultSearchOrder = 'rank';
 
 export let videoOrders = [
-    {key: '-upload_date', value: '-upload_date', text: 'Newest'},
-    {key: 'upload_date', value: 'upload_date', text: 'Oldest'},
-    {key: '-duration', value: '-duration', text: 'Longest'},
-    {key: 'duration', value: 'duration', text: 'Shortest'},
-    {key: '-viewed', value: '-viewed', text: 'Recently viewed'},
-    {key: '-size', value: '-size', text: 'Largest'},
-    {key: 'size', value: 'size', text: 'Smallest'},
+    {key: '-upload_date', value: '-upload_date', text: 'Newest', title: 'Newest Videos'},
+    {key: 'upload_date', value: 'upload_date', text: 'Oldest', title: 'Oldest Videos'},
+    {key: '-duration', value: '-duration', text: 'Longest', title: 'Longest Videos'},
+    {key: 'duration', value: 'duration', text: 'Shortest', title: 'Shortest Videos'},
+    {key: '-viewed', value: '-viewed', text: 'Recently viewed', title: 'Recently Viewed Videos'},
+    {key: '-size', value: '-size', text: 'Largest', title: 'Largest Videos'},
+    {key: 'size', value: 'size', text: 'Smallest', title: 'Smallest Videos'},
 ];
 
 export let searchOrders = [
-    {key: 'rank', value: 'rank', text: 'Search Rank'},
+    {key: 'rank', value: 'rank', text: 'Search Rank', title: 'Search Results'},
 ];
 
 const secondsToYears = 31536000;

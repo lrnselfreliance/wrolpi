@@ -2,9 +2,9 @@ import React from 'react';
 import {Link, Route} from "react-router-dom";
 import Paginator, {
     DEFAULT_LIMIT,
-    defaultSearchOrder,
+    defaultVideoOrder,
     searchOrders,
-    searchSearchOrder,
+    defaultSearchOrder,
     VideoCards,
     videoOrders,
     VIDEOS_API
@@ -174,12 +174,11 @@ class Videos extends React.Component {
         const query = QueryString.parse(this.props.location.search);
         let activePage = query.page ? parseInt(query.page) : 1; // First page is 1 by default, of course.
         let searchStr = query.q || '';
-        let searchOrder = query.o || defaultSearchOrder;
+        let searchOrder = query.o || defaultVideoOrder;
 
         this.state = {
             channel: null,
             videos: null,
-            video: null,
             queryStr: searchStr,
             searchStr: '',
             limit: DEFAULT_LIMIT,
@@ -190,6 +189,7 @@ class Videos extends React.Component {
             next: null,
             videoOrders: searchStr === '' ? videoOrders : searchOrders,
             searchOrder: searchOrder,
+            title: 'Videos',
         };
     }
 
@@ -199,6 +199,7 @@ class Videos extends React.Component {
         } else {
             await this.fetchVideos();
         }
+        this.setTitleToSearchOrder();
     }
 
     async componentDidUpdate(prevProps, prevState, snapshot) {
@@ -219,6 +220,17 @@ class Videos extends React.Component {
         }
     }
 
+    setTitleToSearchOrder() {
+        let title = '';
+        for (let i = 0; i < this.state.videoOrders.length; i++) {
+            let item = this.state.videoOrders[i];
+            if (item.value === this.state.searchOrder) {
+                title = item.title;
+            }
+        }
+        this.setState({title: title});
+    }
+
     async fetchChannel() {
         // Get and display the channel specified in the Router match
         let channel_link = this.props.match.params.channel_link;
@@ -228,6 +240,7 @@ class Videos extends React.Component {
         }
         this.setState({
                 channel,
+                title: channel ? channel.title : '',
                 offset: 0,
                 total: null,
                 videos: null,
@@ -252,7 +265,7 @@ class Videos extends React.Component {
     }
 
     clearSearch = async () => {
-        this.setState({searchStr: '', queryStr: '', searchOrder: defaultSearchOrder, activePage: 1});
+        this.setState({searchStr: '', queryStr: '', searchOrder: defaultVideoOrder, activePage: 1});
     }
 
     applyStateToHistory = () => {
@@ -263,7 +276,7 @@ class Videos extends React.Component {
 
     handleSearch = async (e) => {
         e && e.preventDefault();
-        this.setState({activePage: 1, searchOrder: searchSearchOrder, queryStr: this.state.searchStr},
+        this.setState({activePage: 1, searchOrder: defaultSearchOrder, queryStr: this.state.searchStr},
             this.applyStateToHistory);
     }
 
@@ -276,41 +289,55 @@ class Videos extends React.Component {
     }
 
     render() {
-        let videos = this.state.videos;
-        let body = <VideoPlaceholder/>;
-        let pagination = null;
+        let {
+            activePage,
+            channel,
+            queryStr,
+            searchOrder,
+            searchStr,
+            title,
+            totalPages,
+            videoOrders,
+            videos,
+        } = this.state;
 
-        if (videos && videos.length === 0 && this.props.filter !== 'favorites') {
-            body = <p>No videos retrieved. Have you downloaded videos yet?</p>;
-        } else if (videos && videos.length === 0 && this.props.filter === 'favorites') {
-            body = <p>You haven't tagged any videos as favorite.</p>;
+        let body = <VideoPlaceholder/>;
+
+        if (videos && videos.length === 0) {
+            // API didn't send back any videos, tell the user what to do.
+            if (this.props.filter === 'favorites') {
+                body = <p>You haven't tagged any videos as favorite.</p>;
+            } else {
+                // default empty body.
+                body = <p>No videos retrieved. Have you downloaded videos yet?</p>;
+            }
         } else if (videos) {
             body = <VideoCards videos={videos}/>;
         }
 
-        let channelName = this.props.title;
-        if (!this.props.title && this.state.channel) {
-            // No title specified, but a channel is selected, use it's name for the title.
-            channelName = this.state.channel.name;
+        if (channel) {
+            // Overwrite sorting title with the Channel's name.
+            title = channel.name;
         }
 
-        if (this.state.totalPages) {
+        let pagination = null;
+        if (totalPages) {
             pagination = (
                 <div style={{marginTop: '3em', textAlign: 'center'}}>
                     <Paginator
-                        activePage={this.state.activePage}
+                        activePage={activePage}
                         changePage={this.changePage}
-                        totalPages={this.state.totalPages}
+                        totalPages={totalPages}
                     />
                 </div>
             );
         }
 
         let clearSearchButton = null;
-        if (this.state.queryStr) {
+        if (queryStr) {
             clearSearchButton = (
                 <Button icon labelPosition='right' onClick={this.clearSearch}>
-                    Search: {this.state.queryStr}
+                    Search: {queryStr}
                     <Icon name='close'/>
                 </Button>
             )
@@ -321,13 +348,13 @@ class Videos extends React.Component {
                 <Grid columns={3} stackable>
                     <Grid.Column textAlign='left'>
                         <h1>
-                            {channelName}
+                            {title}
                             {
-                                this.state.channel &&
+                                channel &&
                                 <>
                                     &nbsp;
                                     &nbsp;
-                                    <Link to={`/videos/channel/${this.state.channel.link}/edit`}>
+                                    <Link to={`/videos/channel/${channel.link}/edit`}>
                                         <Icon name="edit"/>
                                     </Link>
                                 </>
@@ -342,7 +369,7 @@ class Videos extends React.Component {
                                 icon='search'
                                 placeholder='Search...'
                                 name="searchStr"
-                                value={this.state.searchStr}
+                                value={searchStr}
                                 onChange={this.handleInputChange}/>
                         </Form>
                     </Grid.Column>
@@ -354,9 +381,9 @@ class Videos extends React.Component {
                             fluid
                             name='searchOrder'
                             onChange={this.changeSearchOrder}
-                            value={this.state.searchOrder}
-                            options={this.state.videoOrders}
-                            disabled={this.state.searchOrder === searchSearchOrder}
+                            value={searchOrder}
+                            options={videoOrders}
+                            disabled={searchOrder === defaultSearchOrder}
                         />
                     </Grid.Column>
                 </Grid>
@@ -378,7 +405,6 @@ export class VideosRoute extends React.Component {
                     <Route path='/videos' exact
                            component={(i) =>
                                <Videos
-                                   title="Newest Videos"
                                    match={i.match}
                                    history={i.history}
                                    location={i.location}
@@ -387,7 +413,6 @@ export class VideosRoute extends React.Component {
                     <Route path='/videos/favorites' exact
                            component={(i) =>
                                <Videos
-                                   title="Favorite Videos"
                                    match={i.match}
                                    history={i.history}
                                    location={i.location}

@@ -8,7 +8,6 @@ class Settings extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            WROLMode: false,
             disabled: false,
             ready: false,
         }
@@ -19,7 +18,7 @@ class Settings extends React.Component {
 
     async componentDidMount() {
         let config = await getConfig();
-        this.setState({ready: true, WROLMode: config.wrol_mode, disabled: config.wrol_mode});
+        this.setState({ready: true, disabled: config.wrol_mode});
         this.mediaDirectory.current.value = config.media_directory;
     }
 
@@ -29,15 +28,6 @@ class Settings extends React.Component {
             media_directory: this.mediaDirectory.current.value,
         };
         await saveConfig(config);
-    }
-
-    toggleWROLMode = async () => {
-        // Handle WROL Mode toggling by itself so that other settings are not modified.
-        let config = {
-            wrol_mode: !this.state.WROLMode,
-        }
-        await saveConfig(config);
-        this.setState({disabled: !this.state.WROLMode, WROLMode: !this.state.WROLMode});
     }
 
     render() {
@@ -58,21 +48,6 @@ class Settings extends React.Component {
                 <Divider/>
                 <Form id="settings" onSubmit={this.handleSubmit}>
 
-                    <Header as="h2">WROL Mode</Header>
-                    <h4>
-                        Enable read-only mode. No content can be deleted or modified. Enable this when the SHTF and you
-                        want to prevent any potential loss of data.
-                    </h4>
-                    <p>
-                        Note: User settings and favorites can still be modified.
-                    </p>
-                    <Checkbox toggle
-                              checked={this.state.WROLMode}
-                              onChange={this.toggleWROLMode}
-                              label={this.state.WROLMode ? 'WROL Mode Enabled' : 'WROL Mode Disabled'}
-                    />
-
-                    <Divider/>
                     <Form.Field>
                         <label>Media Directory</label>
                         <input
@@ -92,7 +67,58 @@ class Settings extends React.Component {
                     <Button color="blue" type="submit" disabled={this.state.disabled}>
                         Save
                     </Button>
+
                 </Form>
+            </Container>
+        )
+    }
+}
+
+class WROLMode extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            WROLMode: false,
+        }
+    }
+
+    async componentDidMount() {
+        let config = await getConfig();
+        this.setState({ready: true, WROLMode: config.wrol_mode});
+    }
+
+    toggleWROLMode = async () => {
+        // Handle WROL Mode toggling by itself so that other settings are not modified.
+        let config = {
+            wrol_mode: !this.state.WROLMode,
+        }
+        await saveConfig(config);
+        this.setState({disabled: !this.state.WROLMode, WROLMode: !this.state.WROLMode});
+    }
+
+    render() {
+        if (this.state.ready === false) {
+            return <Loader active inline='centered'/>
+        }
+
+        return (
+            <Container>
+
+                <Header as="h1">WROL Mode</Header>
+                <h4>
+                    Enable read-only mode. No content can be deleted or modified. Enable this when the SHTF and you
+                    want to prevent any potential loss of data.
+                </h4>
+                <p>
+                    Note: User settings and favorites can still be modified.
+                </p>
+                <Checkbox toggle
+                          checked={this.state.WROLMode}
+                          onChange={this.toggleWROLMode}
+                          label={this.state.WROLMode ? 'WROL Mode Enabled' : 'WROL Mode Disabled'}
+                />
+
             </Container>
         )
     }
@@ -175,6 +201,7 @@ class Admin extends React.Component {
 
         const panes = [
             {menuItem: 'Settings', render: () => <Tab.Pane><Settings/></Tab.Pane>},
+            {menuItem: 'WROL Mode', render: () => <Tab.Pane><WROLMode/></Tab.Pane>},
             {menuItem: 'Statistics', render: () => <Tab.Pane><Statistics/></Tab.Pane>},
         ];
 

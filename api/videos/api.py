@@ -39,8 +39,8 @@ from api.db import get_db_context, get_db_curs
 from api.videos.channel import channel_bp
 from api.videos.video import video_bp
 from .captions import insert_bulk_captions
-from .common import logger, generate_video_paths, get_absolute_media_path, generate_bulk_thumbnails, \
-    get_bulk_video_duration, toggle_video_favorite, get_bulk_video_size, remove_duplicate_video_paths
+from .common import logger, generate_video_paths, get_absolute_media_path, generate_bulk_posters, \
+    get_bulk_video_duration, set_video_favorite, get_bulk_video_size, remove_duplicate_video_paths
 from .downloader import update_channels, download_all_missing_videos, upsert_video
 from .schema import StreamResponse, \
     JSONErrorResponse, FavoriteRequest, FavoriteResponse, VideosStatisticsResponse
@@ -170,7 +170,7 @@ def refresh_channel_generate_posters() -> bool:
         missing_posters = [i for (i,) in curs.fetchall()]
 
     if missing_posters:
-        coro = generate_bulk_thumbnails(missing_posters)
+        coro = generate_bulk_posters(missing_posters)
         asyncio.ensure_future(coro)
         return True
     else:
@@ -323,7 +323,7 @@ async def refresh_videos(channel_links: list = None):
     ]
 )
 async def favorite(_: Request, data: dict):
-    _favorite = toggle_video_favorite(data['video_id'], data['favorite'])
+    _favorite = set_video_favorite(data['video_id'], data['favorite'])
     ret = {'video_id': data['video_id'], 'favorite': _favorite}
     return json_response(ret, HTTPStatus.OK)
 

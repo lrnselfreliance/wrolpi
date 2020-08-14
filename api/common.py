@@ -9,7 +9,7 @@ from datetime import datetime, date
 from functools import wraps
 from multiprocessing import Event, Queue
 from pathlib import Path
-from typing import Union, Callable, Tuple, Dict
+from typing import Union, Callable, Tuple, Dict, Mapping
 from urllib.parse import urlunsplit
 from uuid import UUID
 
@@ -365,7 +365,7 @@ def combine_dicts(*dicts: dict) -> dict:
     keys = set(a.keys())
     keys = keys.union(b.keys())
     for k in keys:
-        if k in b and k in a and isinstance(b[k], collections.Mapping):
+        if k in b and k in a and isinstance(b[k], Mapping):
             value = combine_dicts(a[k], b[k])
         else:
             value = a.get(k, b.get(k))
@@ -387,7 +387,7 @@ def get_channels_config(db) -> dict:
                 match_regex=i.get('match_regex', ''),
                 name=i['name'],
                 url=i.get('url', ''),
-                generate_thumbnails=i['generate_thumbnails'],
+                generate_posters=i['generate_posters'],
                 calculate_duration=i['calculate_duration'],
                 skip_download_videos=[j for j in i['skip_download_videos'] if j] if i['skip_download_videos'] else [],
             )

@@ -22,7 +22,7 @@ class ChannelPage extends React.Component {
             disabled: false,
             open: false,
             dirty: false,
-            inputs: ['name', 'directory', 'url', 'match_regex', 'generate_thumbnails', 'calculate_duration'],
+            inputs: ['name', 'directory', 'url', 'match_regex', 'generate_posters', 'calculate_duration'],
             validRegex: true,
             create: !!this.props.create,
             error: false,
@@ -35,7 +35,7 @@ class ChannelPage extends React.Component {
             directory: '',
             url: '',
             match_regex: '',
-            generate_thumbnails: null,
+            generate_posters: null,
             calculate_duration: null,
             mkdir: null,
 
@@ -46,7 +46,7 @@ class ChannelPage extends React.Component {
             match_regex_error: null,
         };
 
-        this.generateThumbnails = React.createRef();
+        this.generatePosters = React.createRef();
         this.calculateDuration = React.createRef();
         this.mkdir = React.createRef();
     }
@@ -100,7 +100,7 @@ class ChannelPage extends React.Component {
                 directory: channel.directory,
                 url: channel.url,
                 match_regex: channel.match_regex,
-                generate_thumbnails: channel.generate_thumbnails,
+                generate_posters: channel.generate_posters,
                 calculate_duration: channel.calculate_duration,
                 media_directory: newState.media_directory,
             };
@@ -154,7 +154,7 @@ class ChannelPage extends React.Component {
             directory: this.state.directory,
             url: this.state.url,
             match_regex: this.state.match_regex,
-            generate_thumbnails: this.state.generate_thumbnails,
+            generate_posters: this.state.generate_posters,
             calculate_duration: this.state.calculate_duration,
             mkdir: this.state.mkdir,
         };
@@ -299,12 +299,12 @@ class ChannelPage extends React.Component {
                         <Form.Field>
                             <Checkbox
                                 toggle
-                                label="Generate thumbnails, if not found"
-                                name="generate_thumbnails"
+                                label="Generate posters, if not found"
+                                name="generate_posters"
                                 disabled={this.state.disabled}
-                                checked={this.state.generate_thumbnails}
-                                ref={this.generateThumbnails}
-                                onClick={() => this.handleCheckbox(this.generateThumbnails)}
+                                checked={this.state.generate_posters}
+                                ref={this.generateposters}
+                                onClick={() => this.handleCheckbox(this.generatePosters)}
                             />
                         </Form.Field>
                         <Form.Field>

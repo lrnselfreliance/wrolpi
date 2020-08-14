@@ -196,7 +196,7 @@ def find_all_missing_videos(link: str = None) -> Tuple[Dict, dict]:
 
 def download_video(channel: dict, video: dict) -> pathlib.Path:
     """
-    Download a video (and associated thumbnail/etc) to it's channel's directory.
+    Download a video (and associated posters/etc) to it's channel's directory.
 
     :param channel: A DictORM Channel entry
     :param video: A YoutubeDL info entry dictionary
@@ -235,7 +235,7 @@ def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
     meta_file_exts = (('.jpg', '.webp', '.png'), ('.description',), ('.en.vtt', '.en.srt'), ('.info.json',))
     for meta_exts in meta_file_exts:
         for meta_ext in meta_exts:
-            meta_path = replace_extension(path, meta_ext)
+            meta_path = path.with_suffix(meta_ext)
             if meta_path.exists():
                 if relative_to:
                     yield meta_path.relative_to(relative_to)

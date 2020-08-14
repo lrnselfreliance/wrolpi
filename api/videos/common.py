@@ -382,29 +382,29 @@ def replace_extension(path: pathlib.Path, new_ext) -> pathlib.Path:
     return path
 
 
-def generate_video_thumbnail(video_path: Path):
+def generate_video_poster(video_path: Path):
     """
-    Create a thumbnail next to the provided video_path.
+    Create a poster (aka thumbnail) next to the provided video_path.
     """
     poster_path = replace_extension(video_path, '.jpg')
     cmd = ['/usr/bin/ffmpeg', '-n', '-i', str(video_path), '-f', 'mjpeg', '-vframes', '1', '-ss', '00:00:05.000',
            str(poster_path)]
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        logger.info(f'Generated thumbnail at {poster_path}')
+        logger.info(f'Generated poster at {poster_path}')
     except subprocess.CalledProcessError as e:
-        logger.warning(f'FFMPEG thumbnail generation failed with stdout: {e.stdout.decode()}')
-        logger.warning(f'FFMPEG thumbnail generation failed with stdout: {e.stderr.decode()}')
+        logger.warning(f'FFMPEG poster generation failed with stdout: {e.stdout.decode()}')
+        logger.warning(f'FFMPEG poster generation failed with stdout: {e.stderr.decode()}')
         raise
 
 
-async def generate_bulk_thumbnails(video_ids: List[int]):
+async def generate_bulk_posters(video_ids: List[int]):
     """
-    Generate all thumbnails for the provided videos.  Update the video object with the new jpg file location.  Do not
+    Generate all posters for the provided videos.  Update the video object with the new jpg file location.  Do not
     clobber existing jpg files.
     """
     with get_db_context(commit=True) as (db_conn, db):
-        logger.info(f'Generating {len(video_ids)} video thumbnails')
+        logger.info(f'Generating {len(video_ids)} video posters')
         Video = db['video']
         for idx, video_id in enumerate(video_ids):
             video = Video.get_one(id=video_id)
@@ -413,7 +413,7 @@ async def generate_bulk_thumbnails(video_ids: List[int]):
 
             poster_path = replace_extension(video_path, '.jpg')
             if not poster_path.exists():
-                generate_video_thumbnail(video_path)
+                generate_video_poster(video_path)
             channel_dir = get_absolute_media_path(channel['directory'])
             poster_path = poster_path.relative_to(channel_dir)
             video['poster_path'] = str(poster_path)
@@ -474,7 +474,7 @@ async def get_bulk_video_size(video_ids: List[int]):
         Video = db['video']
         for video_id in video_ids:
             video = Video.get_one(id=video_id)
-            logger.debug(f'Getting video size: {video["id"]} {video["video_path "]}')
+            logger.debug(f'Getting video size: {video["id"]} {video["video_path"]}')
             video_path = get_absolute_video_path(video)
 
             size = video_path.stat().st_size
@@ -482,7 +482,7 @@ async def get_bulk_video_size(video_ids: List[int]):
             video.flush()
 
 
-def toggle_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
+def set_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
     """
     Toggle the timestamp on Video.favorite on a video.
     """

@@ -274,7 +274,6 @@ def _refresh_videos(q: Queue, channel_links: list = None):
 
     Yields status updates to be passed to the UI.
 
-    :param db:
     :return:
     """
     logger.info('Refreshing video files')
@@ -393,8 +392,10 @@ async def statistics(_: Request):
         monthly_videos = [dict(i) for i in curs.fetchall()]
 
         historical_stats = dict(monthly_videos=monthly_videos)
-        historical_stats['average_count'] = sum(i['count'] for i in monthly_videos) // len(monthly_videos)
-        historical_stats['average_size'] = sum(i['size'] for i in monthly_videos) // len(monthly_videos)
+        historical_stats['average_count'] = (sum(i['count'] for i in monthly_videos) // len(monthly_videos)) \
+            if monthly_videos else 0
+        historical_stats['average_size'] = (sum(i['size'] for i in monthly_videos) // len(monthly_videos)) \
+            if monthly_videos else 0
 
         curs.execute('''
         SELECT

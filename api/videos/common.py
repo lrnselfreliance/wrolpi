@@ -13,7 +13,8 @@ from api.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify
 from api.db import get_db_context
 from api.errors import UnknownFile, UnknownChannel, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
-from api.vars import DOCKERIZED, PROJECT_DIR, VIDEO_EXTENSIONS
+from api.vars import DOCKERIZED, PROJECT_DIR, VIDEO_EXTENSIONS, MINIMUM_CHANNEL_KEYS, MINIMUM_INFO_JSON_KEYS, \
+    MINIMUM_VIDEO_KEYS
 
 logger = logger.getChild(__name__)
 
@@ -495,26 +496,16 @@ def set_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
     return _favorite
 
 
-def minimize_dict(d: dict, keys: Union[Set, List]) -> dict:
+def minimize_dict(d: dict, keys: Iterable) -> dict:
     """
     Return a new dictionary that contains only the keys provided.
     """
     return {k: d[k] for k in d if k in keys}
 
 
-def minimize_channel(channel: dict) -> dict:
-    """
-    Return a Channel dictionary that contains only the key/values typically used.
-    """
-    minimal_keys = {'id', 'name', 'directory', 'url', 'video_count', 'link'}
-    channel = minimize_dict(channel, minimal_keys)
-    return channel
-
-
-def minimize_video_info_json(info_json: dict) -> dict:
-    minimal_keys = {'description'}
-    info_json = minimize_dict(info_json, minimal_keys)
-    return info_json
+minimize_channel = partial(minimize_dict, keys=MINIMUM_CHANNEL_KEYS)
+minimize_video_info_json = partial(minimize_dict, keys=MINIMUM_INFO_JSON_KEYS)
+_minimize_video = partial(minimize_dict, keys=MINIMUM_VIDEO_KEYS)
 
 
 def minimize_video(video: dict) -> dict:
@@ -522,9 +513,7 @@ def minimize_video(video: dict) -> dict:
     Return a Video dictionary that contains only the key/values typically used.  Minimize the Channel and info_json,
     if they are present.
     """
-    minimal_keys = {'id', 'title', 'upload_date', 'duration', 'channel', 'channel_id', 'favorite', 'size',
-                    'poster_path', 'caption_path', 'video_path', 'info_json', 'channel', 'viewed'}
-    video = minimize_dict(video, minimal_keys)
+    video = _minimize_video(video)
 
     if video.get('channel'):
         video['channel'] = minimize_channel(video['channel'])

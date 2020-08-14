@@ -254,7 +254,7 @@ def remove_duplicate_video_paths(paths: Iterable[Path]) -> Set[Path]:
             else:
                 # Somehow no format was found, yield back the first one.  This is probably caused by an unexpected video
                 # format in the paths.
-                yield paths[0]
+                yield sorted(paths)[0]
 
 
 def check_for_channel_conflicts(db, id=None, url=None, name=None, link=None, directory=None):

@@ -6,6 +6,7 @@ WROLPi is intended to be run on a Raspberry Pi with an optional external drive a
 network so that any person with a laptop/tablet/phone can connect and use the data previously collected by the user.
 """
 import argparse
+import asyncio
 import logging
 import sys
 
@@ -73,4 +74,6 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    loop = asyncio.get_event_loop()
+    result = loop.run_until_complete(main())
+    sys.exit(result)

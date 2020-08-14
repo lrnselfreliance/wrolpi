@@ -82,7 +82,7 @@ async def refresh(_, link: str = None):
             refresh_logger.info('refresh started')
 
             channel_links = [link] if link else None
-            refresh_videos_with_db(channel_links)
+            refresh_videos(channel_links)
 
             refresh_logger.info('refresh complete')
         except Exception as e:
@@ -308,18 +308,8 @@ def _refresh_videos(q: Queue, channel_links: list = None):
 
 
 @wraps(_refresh_videos)
-def refresh_videos(channel_links: list = None):
+async def refresh_videos(channel_links: list = None):
     return _refresh_videos(refresh_queue, channel_links=channel_links)
-
-
-@wraps(_refresh_videos)
-def refresh_videos_with_db(channel_links: list = None):
-    return refresh_videos(channel_links=channel_links)
-
-
-@wraps(refresh_videos_with_db)
-async def async_refresh_videos_with_db(channel_links: list = None):
-    return refresh_videos_with_db(channel_links)
 
 
 @content_bp.post(':favorite')

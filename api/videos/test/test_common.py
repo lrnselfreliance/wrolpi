@@ -1,8 +1,11 @@
 import pathlib
 
+import pytest
+
 from api.db import get_db_context
 from api.test.common import ExtendedTestCase, wrap_test_db, create_db_structure, build_test_directories
-from api.videos.common import get_absolute_media_path, get_matching_directories, delete_video
+from api.videos.common import get_absolute_media_path, get_matching_directories, delete_video, \
+    remove_duplicate_video_paths
 
 
 class TestCommon(ExtendedTestCase):
@@ -85,3 +88,16 @@ class TestCommon(ExtendedTestCase):
 
             # A video can be deleted again.  This is because its only marked as deleted.
             delete_video(vid2)
+
+
+@pytest.mark.parametrize(
+    'paths,expected',
+    (
+            (['1.mp4', ], ['1.mp4', ]),
+            (['1.mp4', '2.mp4'], ['1.mp4', '2.mp4']),
+            (['1.mp4', '1.ogg'], ['1.mp4']),
+    )
+)
+def test_remove_duplicate_video_paths(paths, expected):
+    result = remove_duplicate_video_paths(map(pathlib.Path, paths))
+    assert sorted(result) == sorted(map(pathlib.Path, expected))

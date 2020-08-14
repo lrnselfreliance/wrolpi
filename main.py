@@ -25,7 +25,7 @@ def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):
             choices_to_mains[choice] = sub_main
 
 
-def main():
+async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='count')
     parser.add_argument('--verify-config', action='store_true', default=False,

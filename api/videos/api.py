@@ -40,7 +40,7 @@ from api.videos.channel import channel_bp
 from api.videos.video import video_bp
 from .captions import insert_bulk_captions
 from .common import logger, generate_video_paths, get_absolute_media_path, generate_bulk_thumbnails, \
-    get_bulk_video_duration, toggle_video_favorite, get_bulk_video_size
+    get_bulk_video_duration, toggle_video_favorite, get_bulk_video_size, remove_duplicate_video_paths
 from .downloader import update_channels, download_all_missing_videos, upsert_video
 from .schema import StreamResponse, \
     JSONErrorResponse, FavoriteRequest, FavoriteResponse, VideosStatisticsResponse
@@ -232,7 +232,8 @@ def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
     directory = get_absolute_media_path(channel['directory'])
 
     # A set of absolute paths that exist in the file system
-    possible_new_paths = set(generate_video_paths(directory))
+    possible_new_paths = generate_video_paths(directory)
+    possible_new_paths = remove_duplicate_video_paths(possible_new_paths)
     reporter.message('Found all possible video files')
 
     # Update all videos that match the current video paths
@@ -347,7 +348,7 @@ async def statistics(_: Request):
             -- sum of all video lengths in seconds
             COALESCE(SUM(duration), 0) AS "sum_duration",
             -- sum of all video file sizes
-            COALESCE(SUM(size)::BIGINT, 0) AS "sum_size",
+            COALESCE(SUM(size), 0)::BIGINT AS "sum_size",
             -- largest video
             COALESCE(MAX(size), 0) AS "max_size"
         FROM

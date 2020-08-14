@@ -10,3 +10,6 @@ PUBLIC_PORT = os.environ.get('PUBLIC_PORT')
 
 LAST_MODIFIED_DATE_FORMAT = '%a, %d %b %Y %H:%M:%S GMT'
 DATE_FORMAT = '%Y-%M-%D'
+
+# These are the supported video formats.  These are in order of their preference.
+VIDEO_EXTENSIONS = ('mp4', 'ogg', 'webm', 'flv')

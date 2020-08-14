@@ -5,15 +5,15 @@ import subprocess
 from datetime import datetime
 from functools import partial, lru_cache
 from pathlib import Path
-from typing import Union, Tuple, List, Optional, Set
+from typing import Union, Tuple, List, Optional, Set, Iterable
 
 from dictorm import Dict, DictDB
 
-from api.common import sanitize_link, logger, CONFIG_PATH, get_config
+from api.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify
 from api.db import get_db_context
 from api.errors import UnknownFile, UnknownChannel, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
-from api.vars import DOCKERIZED, PROJECT_DIR
+from api.vars import DOCKERIZED, PROJECT_DIR, VIDEO_EXTENSIONS
 
 logger = logger.getChild(__name__)
 
@@ -186,12 +186,15 @@ def get_video_info_json(video: Dict) -> Union[dict, None]:
         return
 
 
-def any_extensions(filename: str, extensions=None):
-    """Return True only if a file ends with any of the possible extensions"""
-    return any(filename.endswith(ext) for ext in extensions or [])
+def any_extensions(filename: str, extensions: Iterable = ()):
+    """
+    Return True only if the file name ends with any of the possible extensions.
+    Matches lower or upper case of the extension.
+    """
+    return any(filename.lower().endswith(ext) for ext in extensions)
 
 
-match_video_extensions = partial(any_extensions, extensions={'mp4', 'webm', 'flv'})
+match_video_extensions = partial(any_extensions, extensions=VIDEO_EXTENSIONS)
 
 
 def generate_video_paths(directory: Union[str, pathlib.Path], relative_to=None) -> Tuple[str, pathlib.Path]:
@@ -201,7 +204,7 @@ def generate_video_paths(directory: Union[str, pathlib.Path], relative_to=None) 
     directory = pathlib.Path(directory)
 
     for child in directory.iterdir():
-        if child.is_file() and match_video_extensions(str(child)):
+        if child.is_file() and match_video_extensions(child.name):
             child = child.absolute()
             if relative_to:
                 yield child.relative_to(relative_to)
@@ -209,6 +212,46 @@ def generate_video_paths(directory: Union[str, pathlib.Path], relative_to=None) 
                 yield child
         elif child.is_dir():
             yield from generate_video_paths(child)
+
+
+@iterify(set)
+def remove_duplicate_video_paths(paths: Iterable[Path]) -> Set[Path]:
+    """
+    Remove any duplicate paths from a given list.  Duplicate is defined as any file that shares the EXACT same
+    name as another file, but with a different extension.  If a duplicate is found, only yield one of the paths.  The
+    path that will be yielded will be whichever is first in the VIDEO_EXTESIONS tuple.
+
+    i.e.
+    >>> remove_duplicate_video_paths([Path('one.mp4'), Path('two.mp4'), Path('one.ogg')])
+    {'one.mp4, 'two.mp4'}
+    """
+    new_paths = {}
+
+    # Group all paths by their name, but without their extension.
+    for path in set(paths):
+        name, _, _ = path.name.rpartition(path.suffix)
+        try:
+            new_paths[name].append(path)
+        except KeyError:
+            new_paths[name] = [path]
+
+    # Yield back the first occurrence of the preferred format for each video.
+    for name, paths in new_paths.items():
+        if len(paths) == 1:
+            # This should be the most common case.  Most videos will only have one format.
+            yield paths[0]
+        else:
+            path_strings = [i.name for i in paths]
+            for ext in VIDEO_EXTENSIONS:
+                try:
+                    index = path_strings.index(f'{name}.{ext}')
+                    yield paths[index]
+                    break
+                except ValueError:
+                    # That extension is not in the paths.
+                    pass
+            else:
+                yield paths[0]
 
 
 def check_for_channel_conflicts(db, id=None, url=None, name=None, link=None, directory=None):
@@ -429,7 +472,7 @@ async def get_bulk_video_size(video_ids: List[int]):
         Video = db['video']
         for video_id in video_ids:
             video = Video.get_one(id=video_id)
-            logger.debug(f'Getting video size: {video["id"]} {video["title"]}')
+            logger.debug(f'Getting video size: {video["id"]} {video["video_path "]}')
             video_path = get_absolute_video_path(video)
 
             size = video_path.stat().st_size

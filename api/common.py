@@ -489,7 +489,7 @@ def wrol_mode_check(func):
 
 def insert_parameter(func: Callable, parameter_name: str, item, args: Tuple, kwargs: Dict) -> Tuple[Tuple, Dict]:
     """
-    Insert a parameter wherever it fits in the func's signature.
+    Insert a parameter wherever it fits in the Callable's signature.
     """
     sig = inspect.signature(func)
     if parameter_name not in sig.parameters:
@@ -502,3 +502,19 @@ def insert_parameter(func: Callable, parameter_name: str, item, args: Tuple, kwa
     args = tuple(args)
 
     return args, kwargs
+
+
+def iterify(kind: type = list):
+    """
+    Convenience function to convert the output of the wrapped function to the type provided.
+    """
+
+    def wrapper(func):
+        @wraps(func)
+        def wrapped(*a, **kw):
+            result = func(*a, **kw)
+            return kind(result)
+
+        return wrapped
+
+    return wrapper

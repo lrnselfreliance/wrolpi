@@ -212,27 +212,33 @@ class TestVideoAPI(TestAPI):
 
     @wrap_test_db
     def test_refresh_videos(self):
-        # There should be no messages until a refresh is called
+        # There should be no messages until a refresh is called.
         pytest.raises(Empty, refresh_queue.get_nowait)
 
-        # Setup a fake channel directory
+        # Setup a fake channel directory.
         with get_db_context() as (db_conn, db), \
                 tempfile.TemporaryDirectory() as channel_dir:
             channel_path = pathlib.Path(channel_dir)
 
             Video, Channel = db['video'], db['channel']
 
-            # Files in subdirectories should be found and handled properly
-            subdir = (channel_path / 'subdir')
+            # Files in subdirectories should be found and handled properly.
+            subdir = channel_path / 'subdir'
             subdir.mkdir()
 
-            # These are the types of files that will be found first
+            # These are the types of files that will be found first.
             vid1 = pathlib.Path(subdir / 'channel name_20000101_abcdefghijk_title.mp4')
             vid1.touch()
             vid2 = pathlib.Path(channel_path / 'channel name_20000102_bcdefghijkl_title.webm')
             vid2.touch()
 
-            # These files are associated with the video files above, and should be found "near" them
+            # This video is named the same as vid1, except for the file extension.  Its possible that this was
+            # downloaded later, or maybe the old video format has fallen out of favor.  WROLPi should ignore this
+            # duplicate file.
+            vid1_alt = pathlib.Path(subdir / 'channel name_20000101_abcdefghijk_title.webm')
+            vid1_alt.touch()
+
+            # These files are associated with the video files above, and should be found "near" them.
             poster1 = pathlib.Path(subdir / 'channel name_20000101_abcdefghijk_title.jpg')
             poster1.touch()
             poster2 = pathlib.Path(channel_path / 'channel name_20000102_bcdefghijkl_title.jpg')
@@ -245,7 +251,7 @@ class TestVideoAPI(TestAPI):
             db_conn.commit()
             self.assertEqual({i['video_path'] for i in channel['videos']}, {'subdir/' + vid1.name, vid2.name})
 
-            # Poster files were found
+            # Poster files were found.
             self.assertEqual(video1['poster_path'], 'subdir/' + poster1.name)
             self.assertEqual(video2['poster_path'], poster2.name)
 
@@ -261,8 +267,7 @@ class TestVideoAPI(TestAPI):
             description3 = pathlib.Path(channel_path / 'channel name_20000103_cdefghijklm_title.description')
             description3.touch()
 
-            # A orphan meta-file should be ignored.  This shouldn't show up anywhere.  But, it shouldn't be deleted.
-            # WROLPi should never delete a file.
+            # An orphan meta-file should be ignored.  This shouldn't show up anywhere.  But, it shouldn't be deleted.
             poster3 = pathlib.Path(channel_path / 'channel name_20000104_defghijklmn_title.jpg')
             poster3.touch()
 
@@ -284,7 +289,7 @@ class TestVideoAPI(TestAPI):
                 expected
             )
 
-            assert poster3.is_file(), 'Orphan jpg file was deleted!  WROLPi should never delete files.'
+            assert poster3.is_file(), 'Orphan jpg file was deleted!'
 
         # During the refresh process, messages are pushed to a queue, make sure there are messages there
         messages = get_all_messages_in_queue(refresh_queue)

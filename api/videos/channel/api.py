@@ -1,21 +1,22 @@
 import asyncio
 from http import HTTPStatus
 
-from dictorm import DictDB
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from api.common import validate_doc, sanitize_link, logger, save_settings_config, json_response, wrol_mode_check
-from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
+from api.common import validate_doc, logger, json_response, wrol_mode_check
+from api.db import get_db_context
+from api.errors import UnknownDirectory
 from api.videos.common import check_for_channel_conflicts, \
     get_relative_to_media_directory, make_media_directory
-from api.videos.lib import get_minimal_channels, delete_channel, update_channel, get_channels_config
+from api.videos.lib import get_minimal_channels, delete_channel, update_channel, get_channel, \
+    create_channel
 from api.videos.schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
     ChannelPostResponse, ChannelPutRequest, SuccessResponse
 
 channel_bp = Blueprint('Channel', url_prefix='/channels')
 
-logger = logger.getChild('channel')
+logger = logger.getChild(__name__)
 
 
 @channel_bp.get('/')
@@ -37,13 +38,7 @@ async def get_channels(_: Request):
     ),
 )
 def channel_get(request: Request, link: str):
-    db: DictDB = request.ctx.get_db()
-    Channel = db['channel']
-    channel = Channel.get_one(link=link)
-    if not channel:
-        raise UnknownChannel()
-    # Remove the info_json stuff
-    channel = dict(channel)
+    channel = get_channel(link)
     channel.pop('info_json')
     return json_response({'channel': channel})
 
@@ -69,34 +64,7 @@ def channel_post(request: Request, data: dict):
         else:
             raise
 
-    db: DictDB = request.ctx.get_db()
-    Channel = db['channel']
-
-    # Verify that the URL/Name/Link aren't taken
-    try:
-        check_for_channel_conflicts(
-            db,
-            url=data.get('url'),
-            name=data['name'],
-            link=sanitize_link(data['name']),
-            directory=str(data['directory']),
-        )
-    except APIError as e:
-        raise ValidationError from e
-
-    with db.transaction(commit=True):
-        channel = Channel(
-            name=data['name'],
-            url=data.get('url'),
-            match=data.get('match_regex'),
-            link=sanitize_link(data['name']),
-            directory=str(data['directory']),
-        )
-        channel.flush()
-
-    # Save these changes to the local.yaml as well
-    channels = get_channels_config(db)
-    save_settings_config(channels)
+    channel = create_channel(data)
 
     # Refresh the videos asynchronously
     from api.videos.api import refresh_videos
@@ -146,8 +114,7 @@ def channel_delete(request, link: str):
     produces=ChannelsResponse,
 )
 def channel_conflict(request, data: dict):
-    db: DictDB = request.ctx.get_db()
-    check_for_channel_conflicts(db, url=data.get('url'), name=data.get('name'),
-                                directory=data.get('directory'))
-
+    with get_db_context() as (db_conn, db):
+        check_for_channel_conflicts(db, url=data.get('url'), name=data.get('name'),
+                                    directory=data.get('directory'))
     return response.raw('', HTTPStatus.NO_CONTENT)

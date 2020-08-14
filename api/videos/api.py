@@ -31,8 +31,8 @@ from sanic.request import Request
 
 from api.common import create_websocket_feed, get_sanic_url, \
     validate_doc, json_response, wrol_mode_check
-from api.videos.channel import channel_bp
-from api.videos.video import video_bp
+from api.videos.channel.api import channel_bp
+from api.videos.video.api import video_bp
 from .common import logger, set_video_favorite
 from .downloader import update_channels, download_all_missing_videos
 from .lib import process_video_meta_data, _refresh_videos, get_statistics

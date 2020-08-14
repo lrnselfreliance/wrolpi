@@ -1,3 +1,4 @@
+import pathlib
 from datetime import datetime, timedelta
 from http import HTTPStatus
 from json import dumps
@@ -7,7 +8,8 @@ from api.api import api_app
 from api.db import get_db_context
 from api.errors import API_ERRORS, WROLModeEnabled
 from api.test.common import wrap_test_db, TestAPI, create_db_structure
-from api.videos.video import get_surrounding_videos
+from api.videos.common import delete_video
+from api.videos.video.lib import get_surrounding_videos
 
 
 class TestVideoFunctions(TestAPI):
@@ -107,3 +109,46 @@ class TestVideoFunctions(TestAPI):
             # THE REST OF THESE METHODS ARE ALLOWED
             _, resp = api_app.test_client.post('/api/videos:favorite', data=favorite)
             self.assertEqual(resp.status_code, HTTPStatus.OK)
+
+    @wrap_test_db
+    @create_db_structure({
+        'channel1': [
+            'vid1.mp4',
+            'vid1.en.vtt',
+        ],
+        'channel2': [
+            'vid2.mp4',
+            'vid2.info.json',
+        ],
+    })
+    def test_delete_video(self, tempdir: pathlib.Path):
+        with get_db_context(commit=True) as (db_conn, db):
+            Channel, Video = db['channel'], db['video']
+
+            channel1 = Channel.get_one(name='channel1')
+            channel2 = Channel.get_one(name='channel2')
+            vid1, vid2 = Video.get_where().order_by('video_path ASC')
+
+            # No videos have been deleted yet.
+            self.assertIsNone(channel1['skip_download_videos'])
+            self.assertIsNone(channel2['skip_download_videos'])
+            self.assertTrue((tempdir / 'channel1/vid1.mp4').is_file())
+
+            delete_video(vid1)
+
+            channel1 = Channel.get_one(name='channel1')
+            # Video was added to skip list.
+            self.assertEqual(len(channel1['skip_download_videos']), 1)
+            # Deleting a video leaves it's entry in the DB, but its files are deleted.
+            self.assertEqual(Video.count(), 2)
+            self.assertFalse((tempdir / 'channel1/vid1.mp4').is_file())
+            self.assertTrue((tempdir / 'channel2/vid2.mp4').is_file())
+
+            delete_video(vid2)
+
+            self.assertEqual(Video.count(), 2)
+            self.assertFalse((tempdir / 'channel1/vid1.mp4').is_file())
+            self.assertFalse((tempdir / 'channel2/vid2.mp4').is_file())
+
+            # A video can be deleted again.  This is because its only marked as deleted.
+            delete_video(vid2)

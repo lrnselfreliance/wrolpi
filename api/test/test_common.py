@@ -7,9 +7,9 @@ from api.api import api_app, attach_routes
 from api.common import validate_data, combine_dicts, insert_parameter
 from api.db import get_db_context
 from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
-# Attach the default routes
 from api.test.common import create_db_structure, build_test_directories
 
+# Attach the default routes
 attach_routes(api_app)
 
 

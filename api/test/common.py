@@ -77,12 +77,11 @@ def wrap_test_db(func):
                 testing_db = DictDB(testing_db_conn)
                 setup_relationships(testing_db)
 
-                def _get_db():
+                def fake_get_db():
                     """Get the testing db"""
                     return FakePool(), testing_db_conn, testing_db, None
 
-                with mock.patch('api.db.get_db', _get_db), \
-                     mock.patch('api.api.get_db', _get_db):
+                with mock.patch('api.db.get_db', fake_get_db):
                     result = func(*a, **kw)
                     return result
 

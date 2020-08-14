@@ -15,7 +15,7 @@ from .common import get_downloader_config, get_absolute_media_path, add_video_to
 from ..errors import UnknownChannel, ChannelURLEmpty
 
 logger = logger.getChild(__name__)
-ydl_logger = logger.getChild('api:youtube-dl')
+ydl_logger = logger.getChild('youtube-dl')
 
 YDL = YoutubeDL()
 YDL.params['logger'] = ydl_logger

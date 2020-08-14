@@ -6,9 +6,9 @@ from uuid import uuid1
 
 from dictorm import Dict
 
-from api.common import FeedReporter, save_settings_config
+from api.common import FeedReporter, save_settings_config, sanitize_link
 from api.db import get_db_curs, get_db_context
-from api.errors import UnknownChannel, UnknownDirectory
+from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.videos.captions import insert_bulk_captions
 from api.videos.common import generate_bulk_posters, get_bulk_video_duration, get_bulk_video_size, \
     get_absolute_media_path, generate_video_paths, remove_duplicate_video_paths, get_relative_to_media_directory, \
@@ -375,3 +375,45 @@ def get_channels_config(db) -> dict:
         for i in Channel.get_where().order_by('link')
     }
     return dict(channels=channels)
+
+
+def get_channel(link) -> dict:
+    with get_db_context() as (db_conn, db):
+        Channel = db['channel']
+        channel = Channel.get_one(link=link)
+        if not channel:
+            raise UnknownChannel()
+        return dict(channel)
+
+
+def create_channel(data):
+    with get_db_context() as (db_conn, db):
+        Channel = db['channel']
+
+        # Verify that the URL/Name/Link aren't taken
+        try:
+            check_for_channel_conflicts(
+                db,
+                url=data.get('url'),
+                name=data['name'],
+                link=sanitize_link(data['name']),
+                directory=str(data['directory']),
+            )
+        except APIError as e:
+            raise ValidationError from e
+
+        with db.transaction(commit=True):
+            channel = Channel(
+                name=data['name'],
+                url=data.get('url'),
+                match=data.get('match_regex'),
+                link=sanitize_link(data['name']),
+                directory=str(data['directory']),
+            )
+            channel.flush()
+
+        # Save these changes to the local.yaml as well
+        channels = get_channels_config(db)
+        save_settings_config(channels)
+
+        return dict(channel)

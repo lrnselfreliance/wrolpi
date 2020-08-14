@@ -96,6 +96,7 @@ class TestCommon(ExtendedTestCase):
             (['1.mp4', ], ['1.mp4', ]),
             (['1.mp4', '2.mp4'], ['1.mp4', '2.mp4']),
             (['1.mp4', '1.ogg'], ['1.mp4']),
+            (['1.bad_ext', '1.other_ext'], ['1.bad_ext']),
     )
 )
 def test_remove_duplicate_video_paths(paths, expected):

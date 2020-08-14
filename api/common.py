@@ -375,27 +375,6 @@ def combine_dicts(*dicts: dict) -> dict:
     return new
 
 
-def get_channels_config(db) -> dict:
-    """
-    Create a dictionary that contains all the Channels from the DB.
-    """
-    Channel = db['channel']
-    channels = {
-        i['link']:
-            dict(
-                directory=i['directory'],
-                match_regex=i.get('match_regex', ''),
-                name=i['name'],
-                url=i.get('url', ''),
-                generate_posters=i['generate_posters'],
-                calculate_duration=i['calculate_duration'],
-                skip_download_videos=[j for j in i['skip_download_videos'] if j] if i['skip_download_videos'] else [],
-            )
-        for i in Channel.get_where().order_by('link')
-    }
-    return dict(channels=channels)
-
-
 def save_settings_config(config=None):
     """
     Save new settings to local.yaml, overwriting what is there.  This function updates the config file from three

@@ -3,7 +3,6 @@ import tempfile
 import unittest
 from contextlib import contextmanager
 from functools import wraps
-from http import HTTPStatus
 from queue import Empty, Queue
 from shutil import copyfile
 from typing import List
@@ -18,14 +17,14 @@ from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from api.api import api_app, attach_routes
 from api.common import EXAMPLE_CONFIG_PATH, get_config, FeedReporter, insert_parameter
 from api.db import setup_relationships, get_db_context
-from api.vars import DOCKERIZED
-from api.videos.api import refresh_queue, download_queue, refresh_channel_videos
+from api.vars import DOCKERIZED, PROJECT_DIR
+from api.videos.api import refresh_queue, download_queue
+from api.videos.lib import refresh_channel_videos
 
 # Attach the default routes
 attach_routes(api_app)
 
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
-cwd = pathlib.Path(__file__).parents[2]
 
 
 def wrap_test_db(func):
@@ -135,7 +134,7 @@ class TestAPI(ExtendedTestCase):
         copyfile(str(EXAMPLE_CONFIG_PATH), TEST_CONFIG_PATH.name)
         # Setup the testing video root directory
         config = get_config()
-        config['media_directory'] = cwd / 'test'
+        config['media_directory'] = PROJECT_DIR / 'test'
         with open(TEST_CONFIG_PATH.name, 'wt') as fh:
             fh.write(yaml.dump(config))
 

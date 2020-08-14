@@ -11,7 +11,7 @@ from youtube_dl import YoutubeDL
 from api.common import make_progress_calculator, logger, today
 from api.db import get_db_context
 from .captions import process_captions
-from .common import get_downloader_config, get_absolute_media_path, replace_extension, add_video_to_skip_list
+from .common import get_downloader_config, get_absolute_media_path, add_video_to_skip_list
 from ..errors import UnknownChannel, ChannelURLEmpty
 
 logger = logger.getChild(__name__)

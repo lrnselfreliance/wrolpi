@@ -9,7 +9,7 @@ import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
 import Table from "semantic-ui-react/dist/commonjs/collections/Table";
 import Popup from "semantic-ui-react/dist/commonjs/modules/Popup";
-import {FieldPlaceholder, ChannelPlaceholder} from "./Placeholder";
+import {ChannelPlaceholder, FieldPlaceholder} from "./Placeholder";
 
 
 class ChannelPage extends React.Component {
@@ -419,7 +419,7 @@ function ChannelRow(props) {
                 <Link to={videosTo}>{props.channel.name}</Link>
             </Table.Cell>
             <Table.Cell>
-                Videos: {props.channel.video_count}
+                {props.channel.video_count}
             </Table.Cell>
             <Table.Cell textAlign='right'>
                 <Popup
@@ -517,60 +517,49 @@ export class Channels extends React.Component {
             </Grid>
         );
 
-        let table_header = (
+        let tableHeader = (
             <Table.Header>
                 <Table.Row>
                     <Table.HeaderCell width={8}>Name</Table.HeaderCell>
-                    <Table.HeaderCell width={2}>Details</Table.HeaderCell>
-                    <Table.HeaderCell width={2}/>
-                    <Table.HeaderCell width={2}/>
-                    <Table.HeaderCell width={2}/>
+                    <Table.HeaderCell width={2}>Videos</Table.HeaderCell>
+                    <Table.HeaderCell width={2} colSpan={3} textAlign='center'>Manage</Table.HeaderCell>
                 </Table.Row>
             </Table.Header>
         );
 
+        let body = null;
         if (this.state.channels === null) {
             // Placeholders while fetching
-            return (
-                <>
-                    {header}
-
-                    <Table celled>
-                        {table_header}
-
-                        <Table.Body>
-                            <Table.Row>
-                                <Table.Cell><ChannelPlaceholder/></Table.Cell>
-                                <Table.Cell/>
-                                <Table.Cell/>
-                                <Table.Cell/>
-                            </Table.Row>
-                        </Table.Body>
-                    </Table>
-                </>
-            )
+            body = <Table striped basic size='large'>
+                {tableHeader}
+                <Table.Body>
+                    <Table.Row>
+                        <Table.Cell><ChannelPlaceholder/></Table.Cell>
+                        <Table.Cell/>
+                        <Table.Cell/>
+                        <Table.Cell/>
+                    </Table.Row>
+                </Table.Body>
+            </Table>
         } else if (this.state.channels.length === 0) {
-            return (
-                <>
-                    {header}
-                    <Message>
-                        <Message.Header>No channels exist yet!</Message.Header>
-                        <Message.Content><Link to='/videos/channel/new'>Create one.</Link></Message.Content>
-                    </Message>
-                </>
-            )
+            body = <Message>
+                <Message.Header>No channels exist yet!</Message.Header>
+                <Message.Content><Link to='/videos/channel/new'>Create one.</Link></Message.Content>
+            </Message>
         } else {
-            return (
-                <>
-                    {header}
-                    <Table striped basic size='large'>
-                        {table_header}
-                        <Table.Body>
-                            {this.state.results.map((channel) => <ChannelRow channel={channel}/>)}
-                        </Table.Body>
-                    </Table>
-                </>
-            )
+            body = <Table striped basic size='large'>
+                {tableHeader}
+                <Table.Body>
+                    {this.state.results.map((channel) => <ChannelRow channel={channel}/>)}
+                </Table.Body>
+            </Table>
         }
+
+        return (
+            <>
+                {header}
+                {body}
+            </>
+        )
     }
 }

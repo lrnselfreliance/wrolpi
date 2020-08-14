@@ -82,7 +82,7 @@ async def refresh(_, link: str = None):
             refresh_logger.info('refresh started')
 
             channel_links = [link] if link else None
-            refresh_videos(channel_links)
+            await refresh_videos(channel_links)
 
             refresh_logger.info('refresh complete')
         except Exception as e:

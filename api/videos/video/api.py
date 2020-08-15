@@ -8,10 +8,11 @@ from api.common import validate_doc, logger, json_response, wrol_mode_check
 from api.db import get_db_context
 from api.errors import ValidationError, InvalidOrderBy
 from api.videos.common import get_video_info_json, get_matching_directories, get_media_directory, \
-    get_relative_to_media_directory, get_allowed_limit, minimize_video, delete_video
+    get_relative_to_media_directory, get_allowed_limit, minimize_video
 from api.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse, \
     DirectoriesResponse, DirectoriesRequest
-from api.videos.video.lib import get_video, get_surrounding_videos, VIDEO_ORDERS, DEFAULT_VIDEO_ORDER, video_search
+from api.videos.video.lib import get_video, get_surrounding_videos, VIDEO_ORDERS, DEFAULT_VIDEO_ORDER, video_search, \
+    delete_video
 
 video_bp = Blueprint('Video')
 

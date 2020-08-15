@@ -2,16 +2,15 @@ import json
 import os
 import pathlib
 import subprocess
-from datetime import datetime
 from functools import partial, lru_cache
 from pathlib import Path
-from typing import Union, Tuple, List, Optional, Set, Iterable
+from typing import Union, Tuple, List, Set, Iterable
 
-from dictorm import Dict, DictDB
+from dictorm import Dict
 
 from api.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify
 from api.db import get_db_context
-from api.errors import UnknownFile, UnknownChannel, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
+from api.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
 from api.vars import DOCKERIZED, PROJECT_DIR, VIDEO_EXTENSIONS, MINIMUM_CHANNEL_KEYS, MINIMUM_INFO_JSON_KEYS, \
     MINIMUM_VIDEO_KEYS
@@ -314,26 +313,6 @@ def verify_config():
         raise Exception(error)
 
 
-def get_channel_videos(db: DictDB, link: str, offset: int = 0, limit: int = 0) -> Tuple[List[Dict], int]:
-    """
-    Get all video objects for a particular channel that have a video file.  Also get the total videos that match this
-    criteria.
-    """
-    Channel, Video = db['channel'], db['video']
-    channel = Channel.get_one(link=link)
-    if not channel:
-        raise UnknownChannel('Unknown Channel')
-
-    videos = Video.get_where(channel_id=channel['id']).refine(
-        Video['video_path'].IsNotNull())
-    total = len(videos)
-
-    videos = videos.order_by(
-        'upload_date DESC, LOWER(title) ASC, LOWER(video_path) ASC').limit(limit).offset(offset)
-
-    return videos, total
-
-
 def get_matching_directories(path: Union[str, Path]) -> List[str]:
     """
     Return a list of directory strings that start with the provided path.  If the path is a directory, return it's
@@ -483,19 +462,6 @@ async def get_bulk_video_size(video_ids: List[int]):
             video.flush()
 
 
-def set_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
-    """
-    Toggle the timestamp on Video.favorite on a video.
-    """
-    with get_db_context(commit=True) as (db_conn, db):
-        Video = db['video']
-        video = Video.get_one(id=video_id)
-        _favorite = video['favorite'] = datetime.now() if favorite else None
-        video.flush()
-
-    return _favorite
-
-
 def minimize_dict(d: dict, keys: Iterable) -> dict:
     """
     Return a new dictionary that contains only the keys provided.
@@ -530,32 +496,3 @@ def add_video_to_skip_list(channel: Dict, video: Dict):
     except AttributeError:
         channel['skip_download_videos'] = [video['source_id'], ]
         channel.flush()
-
-
-def delete_video(video: Dict):
-    """
-    Delete any and all video files for a particular video.  If deletion succeeds, mark it as "do-not-download".
-    """
-    video_files = get_absolute_video_files(video)
-    for path in video_files:
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
-
-    if not video_files:
-        raise UnknownFile('No video files were deleted')
-
-    with get_db_context(commit=True) as (db_conn, db):
-        Video = db['video']
-        video = Video.get_one(id=video['id'])
-
-        video['video_path'] = None
-        video['poster_path'] = None
-        video['caption_path'] = None
-        video['description_path'] = None
-        video['info_json_path'] = None
-        video.flush()
-
-        channel = video['channel']
-        add_video_to_skip_list(channel, video)

@@ -1,8 +1,11 @@
-from typing import Tuple, Optional, Dict, List
+from datetime import datetime
+from typing import Tuple, Optional, List
 
-from dictorm import Dict as orm_Dict, DictDB
+from dictorm import Dict as orm_Dict, DictDB, Dict
 
-from api.errors import UnknownVideo
+from api.db import get_db_context
+from api.errors import UnknownVideo, UnknownFile
+from api.videos.common import get_absolute_video_files, add_video_to_skip_list
 from api.videos.video.api import logger
 
 
@@ -175,3 +178,45 @@ def video_search(
         results = Video.get_where(Video['id'].In(ranked_ids))
         results = sorted(results, key=lambda r: ranked_ids.index(r['id']))
     return results, total
+
+
+def set_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
+    """
+    Toggle the timestamp on Video.favorite on a video.
+    """
+    with get_db_context(commit=True) as (db_conn, db):
+        Video = db['video']
+        video = Video.get_one(id=video_id)
+        _favorite = video['favorite'] = datetime.now() if favorite else None
+        video.flush()
+
+    return _favorite
+
+
+def delete_video(video: Dict):
+    """
+    Delete any and all video files for a particular video.  If deletion succeeds, mark it as "do-not-download".
+    """
+    video_files = get_absolute_video_files(video)
+    for path in video_files:
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+
+    if not video_files:
+        raise UnknownFile('No video files were deleted')
+
+    with get_db_context(commit=True) as (db_conn, db):
+        Video = db['video']
+        video = Video.get_one(id=video['id'])
+
+        video['video_path'] = None
+        video['poster_path'] = None
+        video['caption_path'] = None
+        video['description_path'] = None
+        video['info_json_path'] = None
+        video.flush()
+
+        channel = video['channel']
+        add_video_to_skip_list(channel, video)

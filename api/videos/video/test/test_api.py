@@ -8,8 +8,7 @@ from api.api import api_app
 from api.db import get_db_context
 from api.errors import API_ERRORS, WROLModeEnabled
 from api.test.common import wrap_test_db, TestAPI, create_db_structure
-from api.videos.common import delete_video
-from api.videos.video.lib import get_surrounding_videos
+from api.videos.video.lib import get_surrounding_videos, delete_video
 
 
 class TestVideoFunctions(TestAPI):

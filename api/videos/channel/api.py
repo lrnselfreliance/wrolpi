@@ -9,8 +9,7 @@ from api.db import get_db_context
 from api.errors import UnknownDirectory
 from api.videos.common import check_for_channel_conflicts, \
     get_relative_to_media_directory, make_media_directory
-from api.videos.lib import get_minimal_channels, delete_channel, update_channel, get_channel, \
-    create_channel
+from api.videos.channel.lib import get_minimal_channels, delete_channel, update_channel, get_channel, create_channel
 from api.videos.schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
     ChannelPostResponse, ChannelPutRequest, SuccessResponse
 

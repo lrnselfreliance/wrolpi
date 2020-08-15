@@ -35,7 +35,8 @@ from api.videos.channel.api import channel_bp
 from api.videos.video.api import video_bp
 from .common import logger
 from .downloader import update_channels, download_all_missing_videos
-from .lib import process_video_meta_data, _refresh_videos, get_statistics
+from .lib import process_video_meta_data, _refresh_videos
+from .channel.lib import get_statistics
 from .schema import StreamResponse, \
     JSONErrorResponse, FavoriteRequest, FavoriteResponse, VideosStatisticsResponse
 from .video.lib import set_video_favorite

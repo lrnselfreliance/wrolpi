@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Tuple, Optional, List
 
-from dictorm import Dict as orm_Dict, DictDB, Dict
+from dictorm import Dict, DictDB
 
 from api.db import get_db_context
 from api.errors import UnknownVideo, UnknownFile
@@ -9,7 +9,7 @@ from api.videos.common import get_absolute_video_files, add_video_to_skip_list
 from api.videos.video.api import logger
 
 
-def get_video(db, video_id: int) -> orm_Dict:
+def get_video(db, video_id: int) -> Dict:
     Video = db['video']
     video = Video.get_one(id=video_id)
     if not video:

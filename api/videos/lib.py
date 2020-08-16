@@ -9,7 +9,7 @@ from api.common import FeedReporter
 from api.db import get_db_curs, get_db_context
 from api.videos.captions import insert_bulk_captions
 from api.videos.common import generate_bulk_posters, get_bulk_video_duration, get_bulk_video_size, \
-    get_absolute_media_path, generate_video_paths, remove_duplicate_video_paths
+    get_absolute_media_path, generate_video_paths, remove_duplicate_video_paths, bulk_replace_invalid_posters
 from api.videos.downloader import upsert_video
 from ..common import logger
 
@@ -43,6 +43,23 @@ def refresh_channel_generate_posters() -> bool:
         return True
     else:
         logger.debug('No missing posters to generate.')
+        return False
+
+
+def convert_invalid_posters() -> bool:
+    """
+    Searches the DB for all videos with an invalid poster type (i.e. webp) and converts them to JPEGs.
+    """
+    with get_db_curs() as curs:
+        query = "SELECT id FROM video WHERE video_path IS NOT NULL AND poster_path ILIKE '%webp'"
+        curs.execute(query)
+        invalid_posters = [i for (i,) in curs.fetchall()]
+
+    if invalid_posters:
+        coro = bulk_replace_invalid_posters(invalid_posters)
+        asyncio.ensure_future(coro)
+    else:
+        logger.debug('No invalid posters to replace.')
         return False
 
 
@@ -82,6 +99,7 @@ def process_video_meta_data():
     """
     refresh_channel_video_captions()
     refresh_channel_generate_posters()
+    convert_invalid_posters()
     refresh_channel_calculate_duration()
     refresh_channel_calculate_size()
 

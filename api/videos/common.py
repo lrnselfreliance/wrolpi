@@ -6,6 +6,7 @@ from functools import partial, lru_cache
 from pathlib import Path
 from typing import Union, Tuple, List, Set, Iterable
 
+from PIL import Image
 from dictorm import Dict
 
 from api.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify
@@ -400,6 +401,46 @@ async def generate_bulk_posters(video_ids: List[int]):
 
             video.flush()
             db_conn.commit()
+
+
+def convert_image(existing_image: Path, destination_image: Path, remove: bool = False, ext: str = 'jpeg'):
+    """
+    Convert an image from one format to another.  Remove the old image if "remove" is True.
+    """
+    if existing_image == destination_image:
+        raise ValueError(
+            'Cannot convert an image over itself.  existing_img and destination_image must be different paths.')
+
+    img = Image.open(existing_image).convert('RGB')
+    img.save(destination_image, ext)
+
+    if remove:
+        existing_image.unlink()
+
+
+def bulk_replace_invalid_posters(video_ids: List[int]):
+    logger.info(f'Replacing {len(video_ids)} video posters')
+    for idx, video_id in enumerate(video_ids):
+        with get_db_context(commit=True) as (db_conn, db):
+            Video = db['video']
+            video = Video.get_one(id=video_id)
+            channel = video['channel']
+            channel_dir = get_absolute_media_path(channel['directory'])
+            poster_path: Path = get_absolute_video_poster(video)
+
+            new_poster_path = poster_path.with_suffix('.jpg')
+            if new_poster_path.exists():
+                try:
+                    poster_path.unlink()
+                except FileNotFoundError:
+                    logger.warning(f'Failed to remove invalid poster: {poster_path}')
+            else:
+                # The new_poster_path does not exist, lets convert the existing image to a valid format.
+                convert_image(poster_path, new_poster_path, remove=True)
+
+            # This poster already exists, replace it in the DB.
+            video['poster_path'] = str(new_poster_path.relative_to(channel_dir))
+            video.flush()
 
 
 def get_video_duration(video_path: Path) -> int:

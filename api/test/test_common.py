@@ -1,13 +1,16 @@
+import tempfile
 from pathlib import Path
 
 import pytest
+from PIL import Image
 from sanic_openapi import doc
 
 from api.api import api_app, attach_routes
 from api.common import validate_data, combine_dicts, insert_parameter
 from api.db import get_db_context
 from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
-from api.test.common import create_db_structure, build_test_directories
+from api.test.common import create_db_structure, build_test_directories, wrap_test_db
+from api.videos.common import convert_image, bulk_replace_invalid_posters
 
 # Attach the default routes
 attach_routes(api_app)
@@ -242,3 +245,77 @@ def test_insert_parameter():
         pass
 
     pytest.raises(TypeError, insert_parameter, func, 'bar', 'bar', (1,), {})
+
+
+def test_convert_image():
+    foo = Image.new('RGB', (25, 25), color='grey')
+
+    with tempfile.TemporaryDirectory() as tempdir:
+        tempdir = Path(tempdir)
+
+        # Save the new image to "foo.webp", convert it to a JPEG at "foo.jpg".
+        existing_image = tempdir / 'foo.webp'
+        foo.save(existing_image)
+
+        destination_image = tempdir / 'foo.jpg'
+        assert not destination_image.is_file()
+
+        convert_image(existing_image, destination_image)
+        assert destination_image.is_file()
+        assert existing_image.is_file()
+
+        # Test deletion
+        destination_image.unlink()
+        assert not destination_image.is_file()
+        convert_image(existing_image, destination_image, remove=True)
+        assert destination_image.is_file()
+        assert not existing_image.is_file()
+
+
+@wrap_test_db
+@create_db_structure(
+    {
+        'channel1': ['vid1.mp4', 'vid1.jpg'],
+        'channel2': ['vid2.flv', 'vid2.webp'],
+    }
+)
+def test_bulk_replace_invalid_posters(tempdir: Path):
+    """
+    Test that when a video has an invalid poster format, we convert it to JPEG.
+    """
+    channel1, channel2 = tempdir.iterdir()
+    jpg, mp4 = sorted(channel1.iterdir())
+    flv, webp = sorted(channel2.iterdir())
+
+    assert jpg.is_file() and mp4.is_file() and webp.is_file() and flv.is_file()
+
+    Image.new('RGB', (25, 25)).save(jpg)
+    Image.new('RGB', (25, 25)).save(webp)
+
+    with open(jpg, 'rb') as jpg_fh, open(webp, 'rb') as webp_fh:
+        # Files are different formats.
+        jpg_fh_contents = jpg_fh.read()
+        webp_fh_contents = webp_fh.read()
+        assert jpg_fh_contents != webp_fh_contents
+
+    with get_db_context() as (db_conn, db):
+        Video = db['video']
+        vid2 = Video.get_one(poster_path='vid2.webp')
+
+    video_ids = [vid2['id'], ]
+    bulk_replace_invalid_posters(video_ids)
+
+    with get_db_context() as (db_conn, db):
+        Video = db['video']
+        # Get the video by ID because it's poster is now a JPEG.
+        vid2 = Video.get_one(id=vid2['id'])
+        assert vid2['poster_path'] == 'vid2.jpg'
+        assert all('webp' not in i['poster_path'] for i in Video.get_where())
+
+    # Old webp was removed
+    assert not webp.is_file()
+    new_jpg = tempdir / 'channel2/vid2.jpg'
+    assert new_jpg.is_file()
+    with open(new_jpg, 'rb') as new_jpg_fh:
+        # The converted image is the same as the other JPEG because both are black 25x25 pixel images.
+        assert jpg_fh_contents == new_jpg_fh.read()

@@ -33,10 +33,10 @@ from api.common import create_websocket_feed, get_sanic_url, \
     validate_doc, json_response, wrol_mode_check
 from api.videos.channel.api import channel_bp
 from api.videos.video.api import video_bp
+from .channel.lib import get_statistics
 from .common import logger
 from .downloader import update_channels, download_all_missing_videos
 from .lib import process_video_meta_data, _refresh_videos
-from .channel.lib import get_statistics
 from .schema import StreamResponse, \
     JSONErrorResponse, FavoriteRequest, FavoriteResponse, VideosStatisticsResponse
 from .video.lib import set_video_favorite
@@ -128,7 +128,7 @@ async def download(_, link: str = None):
                 download_queue.put(msg)
 
             # Fill in any missing data for all videos.
-            process_video_meta_data()
+            process_video_meta_data([link, ] if link else None)
 
             download_logger.info('download complete')
         except Exception as e:

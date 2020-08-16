@@ -89,7 +89,7 @@ export function VideoCard({video}) {
 
     return (
         <Card style={{'width': '18em', 'margin': '1em'}}>
-            <Link to={video_url}>
+            <Link to={video_url} offset={250}>
                 <LazyLoad>
                     <Image src={poster_url} wrapped style={{position: 'relative', width: '100%'}}/>
                 </LazyLoad>

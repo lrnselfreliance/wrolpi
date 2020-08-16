@@ -5,7 +5,7 @@ from dictorm import Dict, DictDB
 
 from api.db import get_db_context
 from api.errors import UnknownVideo, UnknownFile
-from api.videos.common import get_absolute_video_files, add_video_to_skip_list
+from api.videos.common import get_absolute_video_files, add_video_to_skip_list, get_video_info_json, minimize_video
 from api.videos.video.api import logger
 
 
@@ -16,6 +16,28 @@ def get_video(db, video_id: int) -> Dict:
         raise UnknownVideo()
     _ = video['channel']
     return video
+
+
+def mark_video_as_viewed(video_id: int):
+    with get_db_context(commit=True) as (db_conn, db):
+        video = get_video(db, video_id)
+        video['viewed'] = datetime.now()
+        video.flush()
+
+
+def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dict]]:
+    with get_db_context(commit=True) as (db_conn, db):
+        video = get_video(db, video_id)
+        info_json = get_video_info_json(video)
+        video = dict(video)
+        video['info_json'] = info_json
+        video = minimize_video(video)
+
+        previous_video, next_video = get_surrounding_videos(db, video_id, video['channel_id'])
+        previous_video = minimize_video(previous_video) if previous_video else None
+        next_video = minimize_video(next_video) if next_video else None
+
+    return video, previous_video, next_video
 
 
 def get_surrounding_videos(db: DictDB, video_id: int, channel_id: int) -> Tuple[Optional[Dict], Optional[Dict]]:
@@ -112,7 +134,6 @@ VIDEO_QUERY_LIMIT = 20
 
 
 def video_search(
-        db: DictDB,
         search_str: str = None,
         offset: int = None,
         limit: int = VIDEO_QUERY_LIMIT,
@@ -120,63 +141,65 @@ def video_search(
         order_by: str = None,
         favorites: bool = None,
 ) -> Tuple[List[Dict], int]:
-    curs = db.get_cursor()
+    with get_db_context() as (db_conn, db):
+        curs = db.get_cursor()
 
-    args = dict(search_str=search_str, offset=offset)
-    channel_where = ''
-    if channel_link:
-        channel_where = 'AND channel_id = (select id from channel where link=%(channel_link)s)'
-        args['channel_link'] = channel_link
+        args = dict(search_str=search_str, offset=offset)
+        channel_where = ''
+        if channel_link:
+            channel_where = 'AND channel_id = (select id from channel where link=%(channel_link)s)'
+            args['channel_link'] = channel_link
 
-    # Filter for/against favorites, if it was provided
-    favorites_where = ''
-    if favorites is not None:
-        favorites_where = f'AND favorite IS {"NOT" if favorites else ""} NULL'
+        # Filter for/against favorites, if it was provided
+        favorites_where = ''
+        if favorites is not None:
+            favorites_where = f'AND favorite IS {"NOT" if favorites else ""} NULL'
 
-    where = ''
-    if search_str:
-        # A search_str was provided by the user, modify the query to filter by it.
-        columns = 'id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
-        where = 'AND textsearch @@ websearch_to_tsquery(%(search_str)s)'
-        args['search_str'] = search_str
-    else:
-        # No search_str provided.  Get id and total only.
-        columns = 'id, COUNT(*) OVER() AS total'
+        where = ''
+        if search_str:
+            # A search_str was provided by the user, modify the query to filter by it.
+            columns = 'id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
+            where = 'AND textsearch @@ websearch_to_tsquery(%(search_str)s)'
+            args['search_str'] = search_str
+        else:
+            # No search_str provided.  Get id and total only.
+            columns = 'id, COUNT(*) OVER() AS total'
 
-    # Convert the user-friendly order by into a real order by, restrict what can be interpolated by using the whitelist.
-    order = VIDEO_ORDERS[DEFAULT_VIDEO_ORDER]
-    if order_by:
-        try:
-            order = VIDEO_ORDERS[order_by]
-        except KeyError:
-            raise
-        if order_by in NO_NULL_ORDERS:
-            where += NO_NULL_ORDERS[order_by]
+        # Convert the user-friendly order by into a real order by, restrict what can be interpolated by using the whitelist.
+        order = VIDEO_ORDERS[DEFAULT_VIDEO_ORDER]
+        if order_by:
+            try:
+                order = VIDEO_ORDERS[order_by]
+            except KeyError:
+                raise
+            if order_by in NO_NULL_ORDERS:
+                where += NO_NULL_ORDERS[order_by]
 
-    query = f'''
-        SELECT
-            {columns}
-        FROM video
-        WHERE
-            video_path IS NOT NULL
-            {where}
-            {channel_where}
-            {favorites_where}
-        ORDER BY {order}
-        OFFSET %(offset)s LIMIT {int(limit)}
-    '''
-    logger.debug(query)
+        query = f'''
+            SELECT
+                {columns}
+            FROM video
+            WHERE
+                video_path IS NOT NULL
+                {where}
+                {channel_where}
+                {favorites_where}
+            ORDER BY {order}
+            OFFSET %(offset)s LIMIT {int(limit)}
+        '''
+        logger.debug(query)
 
-    curs.execute(query, args)
-    results = [dict(i) for i in curs.fetchall()]
-    total = results[0]['total'] if results else 0
-    ranked_ids = [i['id'] for i in results]
+        curs.execute(query, args)
+        results = [dict(i) for i in curs.fetchall()]
+        total = results[0]['total'] if results else 0
+        ranked_ids = [i['id'] for i in results]
 
-    results = []
-    if ranked_ids:
-        Video = db['video']
-        results = Video.get_where(Video['id'].In(ranked_ids))
-        results = sorted(results, key=lambda r: ranked_ids.index(r['id']))
+        results = []
+        if ranked_ids:
+            Video = db['video']
+            results = Video.get_where(Video['id'].In(ranked_ids))
+            results = sorted(results, key=lambda r: ranked_ids.index(r['id']))
+
     return results, total
 
 

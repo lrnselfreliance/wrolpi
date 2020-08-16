@@ -13,6 +13,7 @@ from api.db import get_db_context
 from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path, add_video_to_skip_list
 from ..errors import UnknownChannel, ChannelURLEmpty
+from ..vars import UNRECOVERABLE_ERRORS
 
 logger = logger.getChild(__name__)
 ydl_logger = logger.getChild('youtube-dl')
@@ -306,14 +307,6 @@ def upsert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
         process_captions(video)
 
     return video
-
-
-UNRECOVERABLE_ERRORS = {
-    '404: Not Found',
-    'requires payment',
-    'Content Warning',
-    'Did not get any data blocks',
-}
 
 
 def _skip_download(error):

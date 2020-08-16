@@ -36,7 +36,7 @@ async def get_channels(_: Request):
             (HTTPStatus.NOT_FOUND, JSONErrorResponse),
     ),
 )
-def channel_get(request: Request, link: str):
+def channel_get(_: Request, link: str):
     channel = get_channel(link)
     channel.pop('info_json')
     return json_response({'channel': channel})
@@ -52,8 +52,7 @@ def channel_get(request: Request, link: str):
     ),
 )
 @wrol_mode_check
-def channel_post(request: Request, data: dict):
-    """Create a new channel"""
+def channel_post(_: Request, data: dict):
     try:
         data['directory'] = get_relative_to_media_directory(data['directory'])
     except UnknownDirectory:
@@ -86,7 +85,7 @@ def channel_post(request: Request, data: dict):
     ),
 )
 @wrol_mode_check
-def channel_update(request: Request, link: str, data: dict):
+def channel_update(_: Request, link: str, data: dict):
     channel = update_channel(data, link)
     return response.raw('', HTTPStatus.NO_CONTENT,
                         headers={'Location': f'/api/videos/channels/{channel["link"]}'})
@@ -101,7 +100,7 @@ def channel_update(request: Request, link: str, data: dict):
     ),
 )
 @wrol_mode_check
-def channel_delete(request, link: str):
+def channel_delete(_: Request, link: str):
     delete_channel(link)
     return response.raw('', HTTPStatus.NO_CONTENT)
 
@@ -112,7 +111,7 @@ def channel_delete(request, link: str):
     consumes=ChannelPutRequest,
     produces=ChannelsResponse,
 )
-def channel_conflict(request, data: dict):
+def channel_conflict(_: Request, data: dict):
     with get_db_context() as (db_conn, db):
         check_for_channel_conflicts(db, url=data.get('url'), name=data.get('name'),
                                     directory=data.get('directory'))

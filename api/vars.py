@@ -17,3 +17,10 @@ MINIMUM_VIDEO_KEYS = {'id', 'title', 'upload_date', 'duration', 'channel', 'chan
 
 # These are the supported video formats.  These are in order of their preference.
 VIDEO_EXTENSIONS = ('mp4', 'ogg', 'webm', 'flv')
+
+UNRECOVERABLE_ERRORS = {
+    '404: Not Found',
+    'requires payment',
+    'Content Warning',
+    'Did not get any data blocks',
+}

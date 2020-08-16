@@ -1,4 +1,3 @@
-from datetime import datetime
 from http import HTTPStatus
 
 from sanic import response, Blueprint
@@ -7,12 +6,12 @@ from sanic.request import Request
 from api.common import validate_doc, logger, json_response, wrol_mode_check
 from api.db import get_db_context
 from api.errors import ValidationError, InvalidOrderBy
-from api.videos.common import get_video_info_json, get_matching_directories, get_media_directory, \
+from api.videos.common import get_matching_directories, get_media_directory, \
     get_relative_to_media_directory, get_allowed_limit, minimize_video
 from api.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse, \
     DirectoriesResponse, DirectoriesRequest
-from api.videos.video.lib import get_video, get_surrounding_videos, VIDEO_ORDERS, DEFAULT_VIDEO_ORDER, video_search, \
-    delete_video
+from api.videos.video.lib import get_video, VIDEO_ORDERS, DEFAULT_VIDEO_ORDER, video_search, \
+    delete_video, get_video_for_app, mark_video_as_viewed
 
 video_bp = Blueprint('Video')
 
@@ -27,21 +26,9 @@ logger = logger.getChild(__name__)
             (HTTPStatus.NOT_FOUND, JSONErrorResponse),
     ),
 )
-def video_get(request, video_id: int):
-    with get_db_context(commit=True) as (db_conn, db):
-        video = get_video(db, video_id)
-        video['viewed'] = datetime.now()
-        video.flush()
-
-        info_json = get_video_info_json(video)
-        video = dict(video)
-        video['info_json'] = info_json
-        video = minimize_video(video)
-
-        previous_video, next_video = get_surrounding_videos(db, video_id, video['channel_id'])
-        previous_video = minimize_video(previous_video) if previous_video else None
-        next_video = minimize_video(next_video) if next_video else None
-
+def video_get(_: Request, video_id: int):
+    mark_video_as_viewed(video_id)
+    video, previous_video, next_video = get_video_for_app(video_id)
     return json_response({'video': video, 'prev': previous_video, 'next': next_video})
 
 
@@ -65,13 +52,9 @@ async def search(_: Request, data: dict):
     if order_by not in VIDEO_ORDERS:
         raise InvalidOrderBy('Invalid order by')
 
-    with get_db_context() as (db_conn, db):
-        videos, videos_total = video_search(db, search_str, offset, limit, channel_link, order_by, favorites)
+    videos, videos_total = video_search(search_str, offset, limit, channel_link, order_by, favorites)
 
-        # Get each Channel for each Video, this will be converted to a dict by the response
-        videos = [minimize_video(i) for i in videos]
-
-    ret = {'videos': videos, 'totals': {'videos': videos_total}}
+    ret = {'videos': list(map(minimize_video, videos)), 'totals': {'videos': videos_total}}
     return json_response(ret)
 
 
@@ -86,7 +69,6 @@ async def search(_: Request, data: dict):
 )
 def directories(_, data):
     search_str = str(get_media_directory() / data['search_str'])
-    logger.debug(f'Searching for: {search_str}')
     dirs = get_matching_directories(search_str)
     dirs = [str(get_relative_to_media_directory(i)) for i in dirs]
     return response.json({'directories': dirs})

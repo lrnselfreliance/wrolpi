@@ -303,7 +303,7 @@ class ChannelPage extends React.Component {
                                 name="generate_posters"
                                 disabled={this.state.disabled}
                                 checked={this.state.generate_posters}
-                                ref={this.generateposters}
+                                ref={this.generatePosters}
                                 onClick={() => this.handleCheckbox(this.generatePosters)}
                             />
                         </Form.Field>

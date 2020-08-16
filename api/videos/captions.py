@@ -37,7 +37,7 @@ def get_unique_caption_lines(caption_path: Union[str, Path]) -> Generator:
             if line and line != last_line:
                 last_line = line
                 yield line
-    
+
 
 def process_captions(video: Dict):
     """

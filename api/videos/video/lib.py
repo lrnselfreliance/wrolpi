@@ -140,7 +140,7 @@ def video_search(
         channel_link: str = None,
         order_by: str = None,
         favorites: bool = None,
-) -> Tuple[List[Dict], int]:
+) -> Tuple[List[dict], int]:
     with get_db_context() as (db_conn, db):
         curs = db.get_cursor()
 
@@ -199,6 +199,8 @@ def video_search(
             Video = db['video']
             results = Video.get_where(Video['id'].In(ranked_ids))
             results = sorted(results, key=lambda r: ranked_ids.index(r['id']))
+
+        results = list(map(minimize_video, results))
 
     return results, total
 

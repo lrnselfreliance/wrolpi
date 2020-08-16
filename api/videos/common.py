@@ -442,6 +442,8 @@ def bulk_replace_invalid_posters(video_ids: List[int]):
             video['poster_path'] = str(new_poster_path.relative_to(channel_dir))
             video.flush()
 
+            logger.debug(f'Converted invalid poster {poster_path} to {new_poster_path}')
+
 
 def get_video_duration(video_path: Path) -> int:
     """

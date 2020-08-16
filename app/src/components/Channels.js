@@ -1,6 +1,15 @@
 import React from "react";
 import {Button, Checkbox, Form, Grid, Header, Input, Loader, Placeholder} from "semantic-ui-react";
-import {createChannel, deleteChannel, getChannel, getChannels, getConfig, updateChannel, validateRegex} from "../api";
+import {
+    createChannel,
+    deleteChannel,
+    getChannel,
+    getChannels,
+    getConfig,
+    getDirectories,
+    updateChannel,
+    validateRegex
+} from "../api";
 import _ from "lodash";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {RequiredAsterisk, VIDEOS_API} from "./Common";
@@ -10,6 +19,62 @@ import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
 import Table from "semantic-ui-react/dist/commonjs/collections/Table";
 import Popup from "semantic-ui-react/dist/commonjs/modules/Popup";
 import {ChannelPlaceholder, FieldPlaceholder} from "./Placeholder";
+
+
+class DirectoryInput extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            directories: [],
+            mediaDirectory: null,
+            directory: '',
+        }
+
+        this.handleChange = this.handleChange.bind(this);
+    }
+
+    async componentDidMount() {
+        let global_config = await getConfig();
+        let directories = await getDirectories(this.state.directory);
+        this.setState({
+            directories,
+            mediaDirectory: `${global_config.media_directory}/`,
+            directory: this.props.value,
+        });
+    }
+
+    async componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevState.directory !== this.state.directory) {
+            let directories = await getDirectories(this.state.directory);
+            this.setState({directories});
+        }
+    }
+
+    async handleChange(e, {name, value}) {
+        e.preventDefault();
+        this.setState({[name]: value}, () => this.props.setInput(value));
+    }
+
+    render() {
+        let {directories, mediaDirectory, directory} = this.state;
+
+        return (
+            <div>
+                <Input
+                    name='directory'
+                    list='directories'
+                    label={mediaDirectory}
+                    value={directory}
+                    onChange={this.handleChange}
+                    placeholder='videos/channel directory'
+                />
+                <datalist id='directories'>
+                    {directories.map((i) => <option key={i} value={i}>{i}</option>)}
+                </datalist>
+            </div>
+        );
+    }
+}
 
 
 class ChannelPage extends React.Component {
@@ -87,46 +152,40 @@ class ChannelPage extends React.Component {
     }
 
     async componentDidMount() {
-        let global_config = await getConfig();
-        let newState = {
-            media_directory: `${global_config.media_directory}`
-        };
         if (!this.state.create) {
             let channel_link = this.props.match.params.channel_link;
             let channel = await getChannel(channel_link);
-            newState = {
-                channel: channel,
-                name: channel.name,
-                directory: channel.directory,
-                url: channel.url,
-                match_regex: channel.match_regex,
-                generate_posters: channel.generate_posters,
+            this.setState({
                 calculate_duration: channel.calculate_duration,
-                media_directory: newState.media_directory,
-            };
+                channel: channel,
+                directory: channel.directory,
+                generate_posters: channel.generate_posters,
+                match_regex: channel.match_regex || '',
+                name: channel.name,
+                url: channel.url,
+            });
         }
-        this.setState(newState);
     }
 
     setLoading = () => {
         this.setState({
-            name_error: null,
             directory_error: null,
-            url_error: null,
-            match_regex_error: null,
-            loading: true,
             disabled: true,
             error: false,
-            success: false,
-            message_header: '',
+            loading: true,
+            match_regex_error: null,
             message_content: '',
+            message_header: '',
+            name_error: null,
+            success: false,
+            url_error: null,
         })
     }
 
     clearLoading = () => {
         this.setState({
-            loading: false,
             disabled: false,
+            loading: false,
         })
     }
 
@@ -212,6 +271,7 @@ class ChannelPage extends React.Component {
                         onSubmit={this.handleSubmit}
                         error={this.state.error}
                         success={this.state.success}
+                        autoComplete="off"
                     >
 
                         <Form.Group>
@@ -231,19 +291,9 @@ class ChannelPage extends React.Component {
                                 <label>
                                     Directory <RequiredAsterisk/>
                                 </label>
-                                <Input
-                                    required
-                                    name="directory"
-                                    type="text"
-                                    disabled={this.state.disabled}
-                                    label={this.state.media_directory}
-                                    placeholder='videos/channel/directory'
+                                <DirectoryInput
                                     value={this.state.directory}
-                                    onChange={this.handleInputChange}
-                                    error={{
-                                        content: 'Please enter a valid directory',
-                                        pointing: 'below',
-                                    }}
+                                    setInput={(v) => this.setState({directory: v})}
                                 />
                             </Form.Field>
                         </Form.Group>
@@ -550,7 +600,7 @@ export class Channels extends React.Component {
             body = <Table striped basic size='large'>
                 {tableHeader}
                 <Table.Body>
-                    {this.state.results.map((channel) => <ChannelRow channel={channel}/>)}
+                    {this.state.results.map((channel) => <ChannelRow key={channel.link} channel={channel}/>)}
                 </Table.Body>
             </Table>
         }

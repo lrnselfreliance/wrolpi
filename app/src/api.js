@@ -147,11 +147,8 @@ export async function deleteVideo(video_id) {
 }
 
 export async function getDirectories(search_str) {
-    let form_data = {search_str};
-    let response = await apiGet(`${VIDEOS_API}/directories`, {
-        method: 'post',
-        body: JSON.stringify(form_data),
-    });
+    let form_data = {'search_str': search_str || null};
+    let response = await apiPost(`${VIDEOS_API}/directories`, form_data);
     if (response.status === 200) {
         return (await response.json())['directories'];
     }

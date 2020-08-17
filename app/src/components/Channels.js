@@ -12,13 +12,14 @@ import {
 } from "../api";
 import _ from "lodash";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
-import {APIForm, RequiredAsterisk, VIDEOS_API} from "./Common";
+import {APIForm, frequencyOptions, RequiredAsterisk, VIDEOS_API} from "./Common";
 import {Link} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
 import Table from "semantic-ui-react/dist/commonjs/collections/Table";
 import Popup from "semantic-ui-react/dist/commonjs/modules/Popup";
 import {ChannelPlaceholder} from "./Placeholder";
+import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
 
 
 class DirectoryInput extends React.Component {
@@ -96,6 +97,7 @@ class ChannelPage extends APIForm {
                 match_regex: '',
                 generate_posters: true,
                 calculate_duration: true,
+                download_frequency: 604800,
             },
         };
 
@@ -289,6 +291,18 @@ class ChannelPage extends APIForm {
                             onClick={() => this.handleCheckbox(this.calculateDuration)}
                         />
                     </Form.Field>
+                    <Form.Group>
+                        <Form.Field>
+                            <label>Download Frequency</label>
+                            <Dropdown selection
+                                name='download_frequency'
+                                placeholder='Frequency'
+                                value={this.state.inputs.download_frequency}
+                                options={frequencyOptions}
+                                onChange={this.handleInputChange}
+                            />
+                        </Form.Field>
+                    </Form.Group>
 
                     <Message error
                              header={this.state.message_header}

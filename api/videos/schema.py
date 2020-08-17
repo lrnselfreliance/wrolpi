@@ -11,6 +11,7 @@ class ChannelPostRequest:
     mkdir = doc.Boolean()
     generate_posters = doc.Boolean()
     calculate_duration = doc.Boolean()
+    download_frequency = doc.Integer()
 
 
 class ChannelPutRequest:
@@ -22,6 +23,7 @@ class ChannelPutRequest:
     generate_posters = doc.Boolean()
     calculate_duration = doc.Boolean()
     mkdir = doc.Boolean()
+    download_frequency = doc.Integer()
 
 
 class RefreshRequest:

@@ -155,6 +155,12 @@ const secondsToDays = 86400;
 const secondsToHours = 3600;
 const secondsToMinutes = 60;
 
+export const frequencyOptions = [
+    {key: 'daily', text: 'Daily', value: 86400},
+    {key: 'weekly', text: 'Weekly', value: 604800},
+    {key: 'monthly', text: 'Monthly', value: 2592000},
+    {key: 'yearly', text: 'Yearly', value: 31536000},
+];
 
 export function secondsToString(seconds) {
     let s = '';

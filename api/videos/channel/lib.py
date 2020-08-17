@@ -163,6 +163,12 @@ def update_channel(data, link):
             if 'directory' in data:
                 data['directory'] = str(data['directory'])
 
+            if 'download_frequency' in data:
+                try:
+                    data['download_frequency'] = int(data['download_frequency'])
+                except ValueError:
+                    raise APIError('Invalid download frequency')
+
             # Verify that the URL/Name/Link aren't taken
             check_for_channel_conflicts(
                 db=db,
@@ -216,6 +222,7 @@ def create_channel(data):
                 match=data.get('match_regex'),
                 link=sanitize_link(data['name']),
                 directory=str(data['directory']),
+                download_frequency=data['download_frequency'],
             )
             channel.flush()
 

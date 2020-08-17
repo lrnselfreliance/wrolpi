@@ -287,8 +287,6 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
     jpg, mp4 = sorted(channel1.iterdir())
     flv, webp = sorted(channel2.iterdir())
 
-    assert jpg.is_file() and mp4.is_file() and webp.is_file() and flv.is_file()
-
     Image.new('RGB', (25, 25)).save(jpg)
     Image.new('RGB', (25, 25)).save(webp)
 

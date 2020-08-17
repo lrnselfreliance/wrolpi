@@ -418,7 +418,7 @@ def convert_image(existing_image: Path, destination_image: Path, remove: bool = 
         existing_image.unlink()
 
 
-def bulk_replace_invalid_posters(video_ids: List[int]):
+async def bulk_replace_invalid_posters(video_ids: List[int]):
     logger.info(f'Replacing {len(video_ids)} video posters')
     for idx, video_id in enumerate(video_ids):
         with get_db_context(commit=True) as (db_conn, db):

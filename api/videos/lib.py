@@ -25,6 +25,7 @@ def refresh_channel_video_captions() -> bool:
     if missing_captions:
         coro = insert_bulk_captions(missing_captions)
         asyncio.ensure_future(coro)
+        logger.info('Scheduled insert_bulk_captions()')
         return True
     else:
         logger.debug('No missing captions to process.')
@@ -40,6 +41,7 @@ def refresh_channel_generate_posters() -> bool:
     if missing_posters:
         coro = generate_bulk_posters(missing_posters)
         asyncio.ensure_future(coro)
+        logger.info('Scheduled generate_bulk_posters()')
         return True
     else:
         logger.debug('No missing posters to generate.')
@@ -58,6 +60,8 @@ def convert_invalid_posters() -> bool:
     if invalid_posters:
         coro = bulk_replace_invalid_posters(invalid_posters)
         asyncio.ensure_future(coro)
+        logger.info('Scheduled bulk_replace_invalid_posters()')
+        return True
     else:
         logger.debug('No invalid posters to replace.')
         return False
@@ -72,6 +76,7 @@ def refresh_channel_calculate_duration() -> bool:
     if missing_duration:
         coro = get_bulk_video_duration(missing_duration)
         asyncio.ensure_future(coro)
+        logger.info('Scheduled get_bulk_video_duration()')
         return True
     else:
         logger.debug('No videos missing duration.')
@@ -87,6 +92,7 @@ def refresh_channel_calculate_size() -> bool:
     if missing_size:
         coro = get_bulk_video_size(missing_size)
         asyncio.ensure_future(coro)
+        logger.info('Scheduled get_bulk_video_size()')
         return True
     else:
         logger.debug('No videos missing size.')

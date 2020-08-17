@@ -199,3 +199,106 @@ export function humanFileSize(bytes, si = false, dp = 1) {
 
     return bytes.toFixed(dp) + ' ' + units[u];
 }
+
+export class APIForm extends React.Component {
+
+    constructor(props) {
+        super(props);
+
+        this.state = {
+            dirty: false,
+            disabled: false,
+            error: false,
+            loading: false,
+            message_content: '',
+            message_header: '',
+            success: false,
+        }
+    }
+
+    setError = (header, content) => {
+        this.setState({
+            error: true,
+            message_content: content,
+            message_header: header,
+            success: false,
+        });
+    }
+
+    setSuccess = (header, content) => {
+        this.setState({
+            error: false,
+            message_content: content,
+            message_header: header,
+            success: true,
+        });
+    }
+
+    initFormValues = (original) => {
+        // Set the "original" values in state to the provided values.  This will be used to compare against any form
+        // changes.
+        let inputs = {};
+        let inputKeys = Object.keys(this.state.inputs);
+        for (let i = 0; i < inputKeys.length; i++) {
+            let key = inputKeys[i];
+            inputs[key] = original[key];
+        }
+
+        this.setState({original: {...original}, inputs: inputs});
+    }
+
+    isDirty = () => {
+        // Compare dictionaries "inputs" and "original".  "original" should never change once it is set.
+        let inputKeys = Object.keys(this.state.inputs);
+        for (let i = 0; i < inputKeys.length; i++) {
+            let name = inputKeys[i];
+            if (!this.state.original && this.state.inputs[name]) {
+                // Form has changed from it's empty value.
+                return true;
+            } else if (this.state.original && this.state.original[name] !== this.state.inputs[name]) {
+                // Form has changed from it's initial value.
+                return true;
+            }
+        }
+        return false;
+    }
+
+    checkDirty = () => {
+        this.setState({dirty: this.isDirty()})
+    }
+
+    setLoading = () => {
+        this.setState({
+            disabled: true,
+            error: false,
+            loading: true,
+            ready: false,
+            success: false,
+        })
+    }
+
+    clearLoading = () => {
+        this.setState({
+            disabled: false,
+            loading: false,
+            ready: true,
+        })
+    }
+
+    handleInputChange = async (event, {name, value}) => {
+        let inputs = this.state.inputs;
+        inputs[name] = value;
+        this.setState({inputs: inputs}, this.checkDirty);
+    }
+
+    handleCheckbox = async (checkbox) => {
+        let checked = checkbox.current.state.checked;
+        let name = checkbox.current.props.name;
+
+        let inputs = this.state.inputs;
+        inputs[name] = !checked;
+
+        this.setState({inputs: inputs}, this.checkDirty);
+    }
+
+}

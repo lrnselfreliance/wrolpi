@@ -1,5 +1,5 @@
 import React from "react";
-import {Button, Checkbox, Form, Grid, Header, Input, Loader, Placeholder} from "semantic-ui-react";
+import {Button, Checkbox, Form, Grid, Header, Input, Loader} from "semantic-ui-react";
 import {
     createChannel,
     deleteChannel,
@@ -12,13 +12,13 @@ import {
 } from "../api";
 import _ from "lodash";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
-import {RequiredAsterisk, VIDEOS_API} from "./Common";
+import {APIForm, RequiredAsterisk, VIDEOS_API} from "./Common";
 import {Link} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
 import Table from "semantic-ui-react/dist/commonjs/collections/Table";
 import Popup from "semantic-ui-react/dist/commonjs/modules/Popup";
-import {ChannelPlaceholder, FieldPlaceholder} from "./Placeholder";
+import {ChannelPlaceholder} from "./Placeholder";
 
 
 class DirectoryInput extends React.Component {
@@ -52,7 +52,7 @@ class DirectoryInput extends React.Component {
 
     async handleChange(e, {name, value}) {
         e.preventDefault();
-        this.setState({[name]: value}, () => this.props.setInput(value));
+        this.setState({[name]: value}, () => this.props.setInput(e, {name, value}));
     }
 
     render() {
@@ -77,126 +77,38 @@ class DirectoryInput extends React.Component {
 }
 
 
-class ChannelPage extends React.Component {
+class ChannelPage extends APIForm {
 
     constructor(props) {
         super(props);
+
         this.state = {
-            channel: {},
-            media_directory: null,
-            disabled: false,
-            open: false,
-            dirty: false,
-            inputs: ['name', 'directory', 'url', 'match_regex', 'generate_posters', 'calculate_duration'],
+            ...this.state,
+            deleteOpen: false,
             validRegex: true,
-            create: !!this.props.create,
-            error: false,
-            success: false,
-            message_header: '',
-            message_content: '',
-
-            // The properties to edit/submit
-            name: '',
-            directory: '',
-            url: '',
-            match_regex: '',
-            generate_posters: null,
-            calculate_duration: null,
-            mkdir: null,
-
-            // Error handling
-            name_error: null,
-            directory_error: null,
-            url_error: null,
-            match_regex_error: null,
+            original: {},
+            inputs: {
+                name: '',
+                directory: '',
+                mkdir: false,
+                url: '',
+                match_regex: '',
+                generate_posters: true,
+                calculate_duration: true,
+            },
         };
 
-        this.generatePosters = React.createRef();
         this.calculateDuration = React.createRef();
+        this.generatePosters = React.createRef();
         this.mkdir = React.createRef();
     }
 
-    show = (e) => {
-        e.preventDefault();
-        this.setState({open: true});
-    }
-
-    handleConfirm = async () => {
-        this.setState({open: false});
-        let response = await deleteChannel(this.props.match.params.channel_link);
-        if (response.status === 204) {
-            this.props.history.push({
-                pathname: '/videos/channel'
-            });
-        } else {
-            this.setState({
-                error: true,
-                message_header: 'Failed to delete',
-                message_content: 'Failed to delete this channel, check logs.'
-            })
-        }
-    }
-
-    isDirty = () => {
-        for (let i = 0; i < this.state.inputs.length; i++) {
-            let name = this.state.inputs[i];
-            if (this.state.channel[name] !== this.state[name]) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    checkDirty = () => {
-        this.setState({dirty: this.isDirty()})
-    }
-
     async componentDidMount() {
-        if (!this.state.create) {
+        if (!this.props.create) {
             let channel_link = this.props.match.params.channel_link;
             let channel = await getChannel(channel_link);
-            this.setState({
-                calculate_duration: channel.calculate_duration,
-                channel: channel,
-                directory: channel.directory,
-                generate_posters: channel.generate_posters,
-                match_regex: channel.match_regex || '',
-                name: channel.name,
-                url: channel.url,
-            });
+            this.initFormValues(channel);
         }
-    }
-
-    setLoading = () => {
-        this.setState({
-            directory_error: null,
-            disabled: true,
-            error: false,
-            loading: true,
-            match_regex_error: null,
-            message_content: '',
-            message_header: '',
-            name_error: null,
-            success: false,
-            url_error: null,
-        })
-    }
-
-    clearLoading = () => {
-        this.setState({
-            disabled: false,
-            loading: false,
-        })
-    }
-
-    handleInputChange = async (event, {name, value}) => {
-        this.setState({[name]: value}, this.checkDirty);
-    }
-
-    handleCheckbox = async (checkbox) => {
-        let checked = checkbox.current.state.checked;
-        let name = checkbox.current.props.name;
-        this.setState({[name]: !checked}, this.checkDirty);
     }
 
     checkRegex = async (event, {name, value}) => {
@@ -206,25 +118,29 @@ class ChannelPage extends React.Component {
         this.setState({validRegex: valid});
     }
 
+    handleConfirm = async () => {
+        this.setState({deleteOpen: false});
+        let response = await deleteChannel(this.props.match.params.channel_link);
+        if (response.status === 204) {
+            this.props.history.push({
+                pathname: '/videos/channel'
+            });
+        } else {
+            this.setError('Failed to delete', 'Failed to delete this channel, check logs.');
+        }
+    }
+
     handleSubmit = async (e) => {
         e.preventDefault();
-        let channel = {
-            name: this.state.name,
-            directory: this.state.directory,
-            url: this.state.url,
-            match_regex: this.state.match_regex,
-            generate_posters: this.state.generate_posters,
-            calculate_duration: this.state.calculate_duration,
-            mkdir: this.state.mkdir,
-        };
+        let {inputs} = this.state;
         let response = null;
         try {
             this.setLoading();
 
-            if (this.state.create) {
-                response = await createChannel(channel);
+            if (this.props.create) {
+                response = await createChannel(inputs);
             } else {
-                response = await updateChannel(this.state.channel.link, channel);
+                response = await updateChannel(this.props.match.params.channel_link, inputs);
             }
         } finally {
             this.clearLoading();
@@ -246,192 +162,162 @@ class ChannelPage extends React.Component {
             } else if (response !== null) {
                 // Some error occurred.
                 let message = await response.json();
-                let error = {
-                    error: true,
-                    message_header: 'Invalid channel',
-                    message_content: message.error,
-                };
-
                 if (message.code === 3) {
-                    error.message_header = 'Invalid directory';
+                    this.setError('Invalid channel', message.error)
+                } else {
+                    this.setError('Invalid channel', 'Unable to save channel.  See logs.')
                 }
-
-                this.setState(error);
             }
         }
     }
 
     render() {
-        if (this.state.create || this.state.channel) {
-            return (
-                <Container>
-                    <Header as="h1">{this.props.header}</Header>
-                    <Form
-                        id="editChannel"
-                        onSubmit={this.handleSubmit}
-                        error={this.state.error}
-                        success={this.state.success}
-                        autoComplete="off"
-                    >
+        return (
+            <Container>
+                <Header as="h1">{this.props.header}</Header>
+                <Form
+                    id="editChannel"
+                    onSubmit={this.handleSubmit}
+                    error={this.state.error}
+                    success={this.state.success}
+                    autoComplete="off"
+                >
 
-                        <Form.Group>
-                            <Form.Field width={8}>
-                                <Form.Input
-                                    required
-                                    label="Channel Name"
-                                    name="name"
-                                    type="text"
-                                    placeholder="Short Channel Name"
-                                    disabled={this.state.disabled}
-                                    value={this.state.name}
-                                    onChange={this.handleInputChange}
-                                />
-                            </Form.Field>
-                            <Form.Field width={8}>
-                                <label>
-                                    Directory <RequiredAsterisk/>
-                                </label>
-                                <DirectoryInput
-                                    value={this.state.directory}
-                                    setInput={(v) => this.setState({directory: v})}
-                                />
-                            </Form.Field>
-                        </Form.Group>
-                        {
-                            this.state.create &&
-                            <Form.Group>
-                                <Form.Field width={8}/>
-                                <Form.Field width={8}>
-                                    <Form.Field>
-                                        <Checkbox
-                                            toggle
-                                            label="Create this directory, if it doesn't exist."
-                                            name="mkdir"
-                                            disabled={this.state.disabled}
-                                            checked={this.state.mkdir}
-                                            ref={this.mkdir}
-                                            onClick={() => this.handleCheckbox(this.mkdir)}
-                                        />
-                                    </Form.Field>
-                                </Form.Field>
-                            </Form.Group>
-                        }
-                        <Form.Group>
-                            <Form.Field width={16}>
-                                <Form.Input
-                                    label="URL"
-                                    name="url"
-                                    type="url"
-                                    disabled={this.state.disabled}
-                                    placeholder='https://example.com/channel/videos'
-                                    value={this.state.url}
-                                    onChange={this.handleInputChange}
-                                />
-                            </Form.Field>
-                        </Form.Group>
-
-                        <Header as="h4" style={{'marginTop': '3em'}}>
-                            The following settings are encouraged by default, modify them at your own risk.
-                        </Header>
-                        <Form.Field>
+                    <Form.Group>
+                        <Form.Field width={8}>
                             <Form.Input
-                                label="Title Match Regex"
-                                name="match_regex"
+                                required
+                                label="Channel Name"
+                                name="name"
                                 type="text"
+                                placeholder="Short Channel Name"
                                 disabled={this.state.disabled}
-                                error={!this.state.validRegex}
-                                placeholder='.*([Nn]ame Matching).*'
-                                value={this.state.match_regex}
-                                onChange={this.checkRegex}
+                                value={this.state.inputs.name}
+                                onChange={this.handleInputChange}
                             />
                         </Form.Field>
+                        <Form.Field width={8}>
+                            <label>
+                                Directory <RequiredAsterisk/>
+                            </label>
+                            <DirectoryInput
+                                value={this.state.inputs.directory}
+                                setInput={this.handleInputChange}
+                            />
+                        </Form.Field>
+                    </Form.Group>
+                    {
+                        this.props.create &&
+                        <Form.Group>
+                            <Form.Field width={8}/>
+                            <Form.Field width={8}>
+                                <Form.Field>
+                                    <Checkbox
+                                        toggle
+                                        label="Create this directory, if it doesn't exist."
+                                        name="mkdir"
+                                        ref={this.mkdir}
+                                        disabled={this.state.disabled}
+                                        checked={this.state.inputs.mkdir}
+                                        onClick={() => this.handleCheckbox(this.mkdir)}
+                                    />
+                                </Form.Field>
+                            </Form.Field>
+                        </Form.Group>
+                    }
+                    <Form.Group>
+                        <Form.Field width={16}>
+                            <Form.Input
+                                label="URL"
+                                name="url"
+                                type="url"
+                                disabled={this.state.disabled}
+                                placeholder='https://example.com/channel/videos'
+                                value={this.state.inputs.url}
+                                onChange={this.handleInputChange}
+                            />
+                        </Form.Field>
+                    </Form.Group>
 
-                        <Form.Field>
-                            <Checkbox
-                                toggle
-                                label="Generate posters, if not found"
-                                name="generate_posters"
-                                disabled={this.state.disabled}
-                                checked={this.state.generate_posters}
-                                ref={this.generatePosters}
-                                onClick={() => this.handleCheckbox(this.generatePosters)}
-                            />
-                        </Form.Field>
-                        <Form.Field>
-                            <Checkbox
-                                toggle
-                                label="Calculate video duration"
-                                name="calculate_duration"
-                                disabled={this.state.disabled}
-                                checked={this.state.calculate_duration}
-                                ref={this.calculateDuration}
-                                onClick={() => this.handleCheckbox(this.calculateDuration)}
-                            />
-                        </Form.Field>
-
-                        <Message error
-                                 header={this.state.message_header}
-                                 content={this.state.message_content}
+                    <Header as="h4" style={{'marginTop': '3em'}}>
+                        The following settings are encouraged by default, modify them at your own risk.
+                    </Header>
+                    <Form.Field>
+                        <Form.Input
+                            label="Title Match Regex"
+                            name="match_regex"
+                            type="text"
+                            disabled={this.state.disabled}
+                            error={!this.state.validRegex}
+                            placeholder='.*([Nn]ame Matching).*'
+                            value={this.state.match_regex}
+                            onChange={this.checkRegex}
                         />
-                        <Message success
-                                 header={this.state.message_header}
-                                 content={this.state.message_content}
+                    </Form.Field>
+
+                    <Form.Field>
+                        <Checkbox
+                            toggle
+                            label="Generate posters, if not found"
+                            name="generate_posters"
+                            disabled={this.state.disabled}
+                            checked={this.state.inputs.generate_posters}
+                            ref={this.generatePosters}
+                            onClick={() => this.handleCheckbox(this.generatePosters)}
                         />
+                    </Form.Field>
+                    <Form.Field>
+                        <Checkbox
+                            toggle
+                            label="Calculate video duration"
+                            name="calculate_duration"
+                            disabled={this.state.disabled}
+                            checked={this.state.inputs.calculate_duration}
+                            ref={this.calculateDuration}
+                            onClick={() => this.handleCheckbox(this.calculateDuration)}
+                        />
+                    </Form.Field>
 
-                        <Button
-                            color="blue"
-                            type="submit"
-                            disabled={this.state.disabled || !this.state.dirty}
-                            floated='right'
-                        >
-                            {this.state.disabled ? <Loader active inline/> : 'Save'}
-                        </Button>
+                    <Message error
+                             header={this.state.message_header}
+                             content={this.state.message_content}
+                    />
+                    <Message success
+                             header={this.state.message_header}
+                             content={this.state.message_content}
+                    />
 
-                        <Button
-                            secondary
-                            floated='right'
-                            onClick={() => this.props.history.goBack()}
-                        >
-                            Cancel
-                        </Button>
+                    <Button
+                        color="blue"
+                        type="submit"
+                        disabled={this.state.disabled || !this.state.dirty}
+                        floated='right'
+                    >
+                        {this.state.disabled ? <Loader active inline/> : 'Save'}
+                    </Button>
 
-                        {!this.state.create && <>
-                            <Button color='red' onClick={this.show}>Delete</Button>
-                            <Confirm
-                                open={this.state.open}
-                                content='Are you sure you want to delete this channel?  No video files will be deleted.'
-                                confirmButton='Delete'
-                                onCancel={() => this.setState({open: false})}
-                                onConfirm={this.handleConfirm}
-                            />
-                        </>
-                        }
-                    </Form>
-                </Container>
-            )
-        } else {
-            // Channel not loaded yet
-            return (
-                <Container>
-                    <Header as="h1">{this.props.header}</Header>
-                    <Form>
-                        <div className="two fields">
-                            <FieldPlaceholder/>
-                            <FieldPlaceholder/>
-                        </div>
-                        <FieldPlaceholder/>
+                    <Button
+                        secondary
+                        floated='right'
+                        onClick={() => this.props.history.goBack()}
+                    >
+                        Cancel
+                    </Button>
 
-                        <Header as="h4" style={{'marginTop': '3em'}}>
-                            <Placeholder>
-                                <Placeholder.Line length="very long"/>
-                            </Placeholder>
-                        </Header>
-                        <FieldPlaceholder/>
-                        <FieldPlaceholder/>
-                    </Form>
-                </Container>
-            )
-        }
+                    {!this.state.create && <>
+                        <Button color='red' onClick={() => this.setState({deleteOpen: true})}>Delete</Button>
+                        <Confirm
+                            open={this.state.deleteOpen}
+                            content='Are you sure you want to delete this channel?  No video files will be deleted.'
+                            confirmButton='Delete'
+                            onCancel={() => this.setState({deleteOpen: false})}
+                            onConfirm={this.handleConfirm}
+                        />
+                    </>
+                    }
+                </Form>
+            </Container>
+        )
     }
 }
 
@@ -443,7 +329,7 @@ export function EditChannel(props) {
 
 export function NewChannel(props) {
     return (
-        <ChannelPage header="Create New Channel" {...props} create/>
+        <ChannelPage header='New Channel' create/>
     )
 }
 

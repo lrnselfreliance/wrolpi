@@ -28,7 +28,7 @@ def refresh_channel_video_captions() -> bool:
         logger.info('Scheduled insert_bulk_captions()')
         return True
     else:
-        logger.debug('No missing captions to process.')
+        logger.info('No missing captions to process.')
         return False
 
 
@@ -44,7 +44,7 @@ def refresh_channel_generate_posters() -> bool:
         logger.info('Scheduled generate_bulk_posters()')
         return True
     else:
-        logger.debug('No missing posters to generate.')
+        logger.info('No missing posters to generate.')
         return False
 
 
@@ -63,7 +63,7 @@ def convert_invalid_posters() -> bool:
         logger.info('Scheduled bulk_replace_invalid_posters()')
         return True
     else:
-        logger.debug('No invalid posters to replace.')
+        logger.info('No invalid posters to replace.')
         return False
 
 
@@ -79,7 +79,7 @@ def refresh_channel_calculate_duration() -> bool:
         logger.info('Scheduled get_bulk_video_duration()')
         return True
     else:
-        logger.debug('No videos missing duration.')
+        logger.info('No videos missing duration.')
         return False
 
 
@@ -95,7 +95,7 @@ def refresh_channel_calculate_size() -> bool:
         logger.info('Scheduled get_bulk_video_size()')
         return True
     else:
-        logger.debug('No videos missing size.')
+        logger.info('No videos missing size.')
         return False
 
 

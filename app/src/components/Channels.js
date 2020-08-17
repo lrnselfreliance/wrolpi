@@ -61,6 +61,7 @@ class DirectoryInput extends React.Component {
         return (
             <div>
                 <Input
+                    disabled={this.props.disabled}
                     name='directory'
                     list='directories'
                     label={mediaDirectory}
@@ -211,6 +212,7 @@ class ChannelPage extends APIForm {
                                 Directory <RequiredAsterisk/>
                             </label>
                             <DirectoryInput
+                                disabled={!this.props.create}
                                 value={this.state.inputs.directory}
                                 setInput={this.handleInputChange}
                             />

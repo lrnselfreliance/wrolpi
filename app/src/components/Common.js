@@ -272,7 +272,6 @@ export class APIForm extends React.Component {
             disabled: true,
             error: false,
             loading: true,
-            ready: false,
             success: false,
         })
     }
@@ -281,7 +280,6 @@ export class APIForm extends React.Component {
         this.setState({
             disabled: false,
             loading: false,
-            ready: true,
         })
     }
 

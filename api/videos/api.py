@@ -128,7 +128,7 @@ async def download(_, link: str = None):
                 download_queue.put(msg)
 
             # Fill in any missing data for all videos.
-            process_video_meta_data([link, ] if link else None)
+            process_video_meta_data()
 
             download_logger.info('download complete')
         except Exception as e:

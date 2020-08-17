@@ -142,31 +142,41 @@ class ChannelPage extends APIForm {
             } else {
                 response = await updateChannel(this.props.match.params.channel_link, inputs);
             }
+
         } finally {
             this.clearLoading();
+        }
 
-            if (response !== null && response.status === 201) {
-                let location = response.headers.get('Location');
-                let channelResponse = await fetch(location);
-                let data = await channelResponse.json();
-                let channel = data['channel'];
+        if (response === null) {
+            throw Error('Response was null');
+        }
 
-                this.setState({
-                    success: true,
-                    message_header: 'Channel created',
-                    message_content: <span>
+        if (response.status >= 200 && response.status < 300) {
+            let location = response.headers.get('Location');
+            let channelResponse = await fetch(location);
+            let data = await channelResponse.json();
+            let channel = data['channel'];
+
+            if (response.status === 201) {
+                this.setSuccess(
+                    'Channel created',
+                    <span>
                         Your channel was created.  View it <Link to={`/videos/channel/${channel.link}/edit`}>here</Link>
-                    </span>,
-                });
+                    </span>
+                );
+            } else {
+                this.initFormValues(channel);
+                this.setSuccess('Channel updated', 'Your channel was updated');
+                this.checkDirty();
+            }
 
-            } else if (response !== null) {
-                // Some error occurred.
-                let message = await response.json();
-                if (message.code === 3) {
-                    this.setError('Invalid channel', message.error)
-                } else {
-                    this.setError('Invalid channel', 'Unable to save channel.  See logs.')
-                }
+        } else {
+            // Some error occurred.
+            let message = await response.json();
+            if (message.code === 3) {
+                this.setError('Invalid channel', message.error)
+            } else {
+                this.setError('Invalid channel', 'Unable to save channel.  See logs.')
             }
         }
     }
@@ -250,7 +260,7 @@ class ChannelPage extends APIForm {
                             disabled={this.state.disabled}
                             error={!this.state.validRegex}
                             placeholder='.*([Nn]ame Matching).*'
-                            value={this.state.match_regex}
+                            value={this.state.inputs.match_regex}
                             onChange={this.checkRegex}
                         />
                     </Form.Field>
@@ -329,7 +339,7 @@ export function EditChannel(props) {
 
 export function NewChannel(props) {
     return (
-        <ChannelPage header='New Channel' create/>
+        <ChannelPage header='New Channel' {...props} create/>
     )
 }
 

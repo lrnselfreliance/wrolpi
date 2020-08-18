@@ -100,6 +100,9 @@ def update_channel(data, link):
                 except ValueError:
                     raise APIError('Invalid download frequency')
 
+            if data.get('match_regex') in ('None', 'null'):
+                data['match_regex'] = None
+
             # Verify that the URL/Name/Link aren't taken
             check_for_channel_conflicts(
                 db=db,

@@ -218,6 +218,7 @@ def get_channels_config(db) -> dict:
                 generate_posters=i['generate_posters'],
                 calculate_duration=i['calculate_duration'],
                 skip_download_videos=[j for j in i['skip_download_videos'] if j] if i['skip_download_videos'] else [],
+                download_frequency=i.get('download_frequency'),
             )
         for i in Channel.get_where().order_by('link')
     }

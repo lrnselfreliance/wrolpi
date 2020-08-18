@@ -60,6 +60,7 @@ def convert_invalid_posters() -> bool:
     if invalid_posters:
         async def _():
             return bulk_replace_invalid_posters(invalid_posters)
+
         coro = _()
         asyncio.ensure_future(coro)
         logger.info('Scheduled bulk_replace_invalid_posters()')

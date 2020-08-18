@@ -1,11 +1,11 @@
 #! /usr/bin/env python3
 import pathlib
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from random import shuffle
 from typing import Tuple, List
 
-from dictorm import DictDB, Dict, And
+from dictorm import DictDB, Dict, And, Or
 from youtube_dl import YoutubeDL
 
 from api.common import make_progress_calculator, logger, today
@@ -51,8 +51,11 @@ def update_channel(channel: Dict = None, link: str = None):
         Channel = db['channel']
         channel = Channel.get_one(id=channel['id'])
 
+        download_frequency = channel['download_frequency']
+
         channel['info_json'] = info
         channel['info_date'] = datetime.now()
+        channel['next_download'] = today() + timedelta(seconds=download_frequency)
         channel.flush()
 
         # Insert any new videos.
@@ -75,6 +78,10 @@ def update_channels(link: str = None):
 
     with get_db_context() as (db_conn, db):
         Channel = db['channel']
+
+        if Channel.count() == 0:
+            raise UnknownChannel('No channels exist yet')
+
         if link:
             channel = Channel.get_one(link=link)
             if not channel:
@@ -82,10 +89,18 @@ def update_channels(link: str = None):
             channels = [channel, ]
         else:
             channels = list(Channel.get_where(
-                And(Channel['url'].IsNotNull(), Channel['url'] != '', Channel['info_date'] != today())))
+                And(
+                    Channel['url'].IsNotNull(),
+                    Channel['url'] != '',
+                    Or(
+                        Channel['next_download'].IsNull(),
+                        Channel['next_download'] < today(),
+                    )
+                )
+            ))
 
         if len(channels) == 0:
-            logger.warning(f'All channels have been updated today, or none exist.')
+            logger.warning(f'All channels are up to date')
 
     # Randomize downloading of channels.
     shuffle(channels)

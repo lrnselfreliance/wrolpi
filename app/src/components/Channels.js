@@ -1,5 +1,5 @@
 import React from "react";
-import {Button, Checkbox, Form, Grid, Header, Input, Loader} from "semantic-ui-react";
+import {Accordion, Button, Checkbox, Form, Grid, Header, Input, Loader, Segment} from "semantic-ui-react";
 import {
     createChannel,
     deleteChannel,
@@ -12,7 +12,7 @@ import {
 } from "../api";
 import _ from "lodash";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
-import {APIForm, frequencyOptions, RequiredAsterisk, VIDEOS_API} from "./Common";
+import {APIForm, frequencyOptions, RequiredAsterisk, secondsToFrequency, VIDEOS_API} from "./Common";
 import {Link} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
@@ -20,6 +20,7 @@ import Table from "semantic-ui-react/dist/commonjs/collections/Table";
 import Popup from "semantic-ui-react/dist/commonjs/modules/Popup";
 import {ChannelPlaceholder} from "./Placeholder";
 import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
+import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 
 
 class DirectoryInput extends React.Component {
@@ -89,6 +90,7 @@ class ChannelPage extends APIForm {
             deleteOpen: false,
             validRegex: true,
             original: {},
+            activeIndex: -1,
             inputs: {
                 name: '',
                 directory: '',
@@ -184,6 +186,15 @@ class ChannelPage extends APIForm {
         }
     }
 
+    handleAdvancedClick = (e, titleProps) => {
+        console.log('handleAdvancedClick');
+        const {index} = titleProps
+        const {activeIndex} = this.state
+        const newIndex = activeIndex === index ? -1 : index
+
+        this.setState({activeIndex: newIndex})
+    }
+
     render() {
         return (
             <Container>
@@ -253,94 +264,113 @@ class ChannelPage extends APIForm {
                         </Form.Field>
                     </Form.Group>
 
-                    <Header as="h4" style={{'marginTop': '3em'}}>
-                        The following settings are encouraged by default, modify them at your own risk.
-                    </Header>
-                    <Form.Field>
-                        <Form.Input
-                            label="Title Match Regex"
-                            name="match_regex"
-                            type="text"
-                            disabled={this.state.disabled}
-                            error={!this.state.validRegex}
-                            placeholder='.*([Nn]ame Matching).*'
-                            value={this.state.inputs.match_regex}
-                            onChange={this.checkRegex}
-                        />
-                    </Form.Field>
-
-                    <Form.Field>
-                        <Checkbox
-                            toggle
-                            label="Generate posters, if not found"
-                            name="generate_posters"
-                            disabled={this.state.disabled}
-                            checked={this.state.inputs.generate_posters}
-                            ref={this.generatePosters}
-                            onClick={() => this.handleCheckbox(this.generatePosters)}
-                        />
-                    </Form.Field>
-                    <Form.Field>
-                        <Checkbox
-                            toggle
-                            label="Calculate video duration"
-                            name="calculate_duration"
-                            disabled={this.state.disabled}
-                            checked={this.state.inputs.calculate_duration}
-                            ref={this.calculateDuration}
-                            onClick={() => this.handleCheckbox(this.calculateDuration)}
-                        />
-                    </Form.Field>
                     <Form.Group>
                         <Form.Field>
                             <label>Download Frequency</label>
                             <Dropdown selection
-                                name='download_frequency'
-                                placeholder='Frequency'
-                                value={this.state.inputs.download_frequency}
-                                options={frequencyOptions}
-                                onChange={this.handleInputChange}
+                                      name='download_frequency'
+                                      placeholder='Frequency'
+                                      value={this.state.inputs.download_frequency}
+                                      options={frequencyOptions}
+                                      onChange={this.handleInputChange}
                             />
                         </Form.Field>
                     </Form.Group>
 
-                    <Message error
-                             header={this.state.message_header}
-                             content={this.state.message_content}
-                    />
-                    <Message success
-                             header={this.state.message_header}
-                             content={this.state.message_content}
-                    />
+                    <Accordion>
+                        <Accordion.Title
+                            onClick={this.handleAdvancedClick}
+                            index={0}
+                            active={this.state.activeIndex === 0}
+                        >
+                            <Icon name='dropdown'/>
+                            Advanced Settings
+                        </Accordion.Title>
+                        <Accordion.Content
+                            active={this.state.activeIndex === 0}
+                        >
+                            <Segment secondary>
+                                <Header as="h4">
+                                    The following settings are encouraged by default, modify them at your own risk.
+                                </Header>
+                                <Form.Field>
+                                    <Form.Input
+                                        label="Title Match Regex"
+                                        name="match_regex"
+                                        type="text"
+                                        disabled={this.state.disabled}
+                                        error={!this.state.validRegex}
+                                        placeholder='.*([Nn]ame Matching).*'
+                                        value={this.state.inputs.match_regex}
+                                        onChange={this.checkRegex}
+                                    />
+                                </Form.Field>
 
-                    <Button
-                        color="blue"
-                        type="submit"
-                        disabled={this.state.disabled || !this.state.dirty}
-                        floated='right'
-                    >
-                        {this.state.disabled ? <Loader active inline/> : 'Save'}
-                    </Button>
+                                <Form.Field>
+                                    <Checkbox
+                                        toggle
+                                        label="Generate posters, if not found"
+                                        name="generate_posters"
+                                        disabled={this.state.disabled}
+                                        checked={this.state.inputs.generate_posters}
+                                        ref={this.generatePosters}
+                                        onClick={() => this.handleCheckbox(this.generatePosters)}
+                                    />
+                                </Form.Field>
+                                <Form.Field>
+                                    <Checkbox
+                                        toggle
+                                        label="Calculate video duration"
+                                        name="calculate_duration"
+                                        disabled={this.state.disabled}
+                                        checked={this.state.inputs.calculate_duration}
+                                        ref={this.calculateDuration}
+                                        onClick={() => this.handleCheckbox(this.calculateDuration)}
+                                    />
+                                </Form.Field>
+                            </Segment>
+                        </Accordion.Content>
+                    </Accordion>
 
-                    <Button
-                        secondary
-                        floated='right'
-                        onClick={() => this.props.history.goBack()}
-                    >
-                        Cancel
-                    </Button>
-
-                    {!this.state.create && <>
-                        <Button color='red' onClick={() => this.setState({deleteOpen: true})}>Delete</Button>
-                        <Confirm
-                            open={this.state.deleteOpen}
-                            content='Are you sure you want to delete this channel?  No video files will be deleted.'
-                            confirmButton='Delete'
-                            onCancel={() => this.setState({deleteOpen: false})}
-                            onConfirm={this.handleConfirm}
+                    <Container style={{marginTop: '2em'}}>
+                        <Message error
+                                 header={this.state.message_header}
+                                 content={this.state.message_content}
                         />
-                    </>
-                    }
+                        <Message success
+                                 header={this.state.message_header}
+                                 content={this.state.message_content}
+                        />
+
+                        <Button
+                            color="blue"
+                            type="submit"
+                            disabled={this.state.disabled || !this.state.dirty}
+                            floated='right'
+                        >
+                            {this.state.disabled ? <Loader active inline/> : 'Save'}
+                        </Button>
+
+                        <Button
+                            secondary
+                            floated='right'
+                            onClick={() => this.props.history.goBack()}
+                        >
+                            Cancel
+                        </Button>
+
+                        {!this.state.create && <>
+                            <Button color='red' onClick={() => this.setState({deleteOpen: true})}>Delete</Button>
+                            <Confirm
+                                open={this.state.deleteOpen}
+                                content='Are you sure you want to delete this channel?  No video files will be deleted.'
+                                confirmButton='Delete'
+                                onCancel={() => this.setState({deleteOpen: false})}
+                                onConfirm={this.handleConfirm}
+                            />
+                        </>
+                        }
+                    </Container>
                 </Form>
             </Container>
         )
@@ -382,6 +412,9 @@ function ChannelRow(props) {
             </Table.Cell>
             <Table.Cell>
                 {props.channel.video_count}
+            </Table.Cell>
+            <Table.Cell>
+                {secondsToFrequency(props.channel.download_frequency)}
             </Table.Cell>
             <Table.Cell textAlign='right'>
                 <Popup
@@ -484,6 +517,7 @@ export class Channels extends React.Component {
                 <Table.Row>
                     <Table.HeaderCell width={8}>Name</Table.HeaderCell>
                     <Table.HeaderCell width={2}>Videos</Table.HeaderCell>
+                    <Table.HeaderCell width={2}>Frequency</Table.HeaderCell>
                     <Table.HeaderCell width={2} colSpan={3} textAlign='center'>Manage</Table.HeaderCell>
                 </Table.Row>
             </Table.Header>

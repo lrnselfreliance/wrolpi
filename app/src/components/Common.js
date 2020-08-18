@@ -162,6 +162,16 @@ export const frequencyOptions = [
     {key: 'yearly', text: 'Yearly', value: 31536000},
 ];
 
+export function secondsToFrequency(seconds) {
+    for (let i=0; i < Object.keys(frequencyOptions).length; i++) {
+        let d = frequencyOptions[i];
+        if (d.value === seconds) {
+            return d.text;
+        }
+    }
+    return null;
+}
+
 export function secondsToString(seconds) {
     let s = '';
 

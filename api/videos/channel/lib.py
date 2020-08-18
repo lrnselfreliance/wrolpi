@@ -18,7 +18,7 @@ async def get_minimal_channels() -> List[dict]:
         # Get all channels, even if they don't have videos.
         query = '''
             SELECT
-                c.id, name, link, directory, url
+                c.id, name, link, directory, url, download_frequency
             FROM
                 channel AS c
             ORDER BY LOWER(name)

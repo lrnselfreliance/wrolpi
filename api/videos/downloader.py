@@ -94,7 +94,7 @@ def update_channels(link: str = None):
                     Channel['url'] != '',
                     Or(
                         Channel['next_download'].IsNull(),
-                        Channel['next_download'] < today(),
+                        Channel['next_download'] <= today(),
                     )
                 )
             ))

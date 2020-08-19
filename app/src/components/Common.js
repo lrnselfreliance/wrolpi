@@ -150,16 +150,12 @@ export let searchOrders = [
     {key: 'rank', value: 'rank', text: 'Search Rank', title: 'Search Results'},
 ];
 
-const secondsToYears = 31536000;
-const secondsToDays = 86400;
-const secondsToHours = 3600;
-const secondsToMinutes = 60;
-
 export const frequencyOptions = [
     {key: 'daily', text: 'Daily', value: 86400},
     {key: 'weekly', text: 'Weekly', value: 604800},
-    {key: 'monthly', text: 'Monthly', value: 2592000},
-    {key: 'yearly', text: 'Yearly', value: 31536000},
+    {key: 'biweekly', text: 'Biweekly', value: 1209600},
+    {key: '30days', text: '30 Days', value: 2592000},
+    {key: '90days', text: '90 Days', value: 7776000},
 ];
 
 export function secondsToFrequency(seconds) {
@@ -171,6 +167,11 @@ export function secondsToFrequency(seconds) {
     }
     return null;
 }
+
+const secondsToYears = 31536000;
+const secondsToDays = 86400;
+const secondsToHours = 3600;
+const secondsToMinutes = 60;
 
 export function secondsToString(seconds) {
     let s = '';

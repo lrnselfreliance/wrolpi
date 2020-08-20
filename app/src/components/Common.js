@@ -233,9 +233,14 @@ export class APIForm extends React.Component {
         }
     }
 
-    setError = (header, content) => {
+    setError = (header, content, errorName) => {
+        let errors = {...this.state.errors};
+        if (errorName) {
+            errors[errorName] = true;
+        }
         this.setState({
             error: true,
+            errors: errors,
             message_content: content,
             message_header: header,
             success: false,
@@ -255,13 +260,15 @@ export class APIForm extends React.Component {
         // Set the "original" values in state to the provided values.  This will be used to compare against any form
         // changes.
         let inputs = {};
+        let errors = {};
         let inputKeys = Object.keys(this.state.inputs);
         for (let i = 0; i < inputKeys.length; i++) {
             let key = inputKeys[i];
-            inputs[key] = original[key];
+            inputs[key] = original[key] || '';
+            errors[key] = false;
         }
 
-        this.setState({original: {...original}, inputs: inputs});
+        this.setState({original: {...original}, inputs: inputs, errors: errors});
     }
 
     isDirty = () => {
@@ -284,10 +291,21 @@ export class APIForm extends React.Component {
         this.setState({dirty: this.isDirty()})
     }
 
+    getEmptyErrors = () => {
+        let errors = {};
+        let inputKeys = Object.keys(this.state.inputs);
+        for (let i = 0; i < inputKeys.length; i++) {
+            let key = inputKeys[i];
+            errors[key] = false;
+        }
+        return errors;
+    }
+
     setLoading = () => {
         this.setState({
             disabled: true,
             error: false,
+            errors: this.getEmptyErrors,
             loading: true,
             success: false,
         })

@@ -40,7 +40,7 @@ class DirectoryInput extends React.Component {
         let directories = await getDirectories(this.state.directory);
         this.setState({
             directories,
-            mediaDirectory: `${global_config.media_directory}/`,
+            mediaDirectory: global_config.media_directory,
             directory: this.props.value,
         });
     }
@@ -66,6 +66,7 @@ class DirectoryInput extends React.Component {
                     disabled={this.props.disabled}
                     name='directory'
                     list='directories'
+                    error={this.props.error}
                     label={mediaDirectory}
                     value={directory}
                     onChange={this.handleChange}
@@ -101,6 +102,7 @@ class ChannelPage extends APIForm {
                 calculate_duration: true,
                 download_frequency: 604800,
             },
+            errors: {},
         };
 
         this.calculateDuration = React.createRef();
@@ -177,11 +179,28 @@ class ChannelPage extends APIForm {
 
         } else {
             // Some error occurred.
-            let message = await response.json();
-            if (message.code === 3) {
-                this.setError('Invalid channel', message.error)
+            let error = await response.json();
+            let cause = error.cause;
+            if (error.code === 3 || (cause && cause.code === 3)) {
+                this.setError(
+                    'Invalid directory',
+                    'This directory does not exist.',
+                    'directory',
+                );
+            } else if (cause && cause.code === 7) {
+                this.setError(
+                    'Invalid directory',
+                    'This directory is already used by another channel',
+                    'directory',
+                );
+            } else if (cause && cause.code === 5) {
+                this.setError(
+                    'Invalid name',
+                    'This channel name is already taken',
+                    'name',
+                );
             } else {
-                this.setError('Invalid channel', 'Unable to save channel.  See logs.')
+                this.setError('Invalid channel', 'Unable to save channel.  See logs.');
             }
         }
     }
@@ -215,6 +234,7 @@ class ChannelPage extends APIForm {
                                 type="text"
                                 placeholder="Short Channel Name"
                                 disabled={this.state.disabled}
+                                error={this.state.errors.name}
                                 value={this.state.inputs.name}
                                 onChange={this.handleInputChange}
                             />
@@ -242,6 +262,7 @@ class ChannelPage extends APIForm {
                                         name="mkdir"
                                         ref={this.mkdir}
                                         disabled={this.state.disabled}
+                                        error={this.state.errors.mkdir}
                                         checked={this.state.inputs.mkdir}
                                         onClick={() => this.handleCheckbox(this.mkdir)}
                                     />
@@ -257,6 +278,7 @@ class ChannelPage extends APIForm {
                                 type="url"
                                 disabled={this.state.disabled}
                                 placeholder='https://example.com/channel/videos'
+                                error={this.state.errors.url}
                                 value={this.state.inputs.url}
                                 onChange={this.handleInputChange}
                             />
@@ -270,6 +292,7 @@ class ChannelPage extends APIForm {
                                       name='download_frequency'
                                       disabled={this.state.disabled}
                                       placeholder='Frequency'
+                                      error={this.state.errors.download_frequency}
                                       value={this.state.inputs.download_frequency}
                                       options={frequencyOptions}
                                       onChange={this.handleInputChange}

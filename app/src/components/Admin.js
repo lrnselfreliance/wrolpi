@@ -8,8 +8,8 @@ class Settings extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            WROLMode: false,
             disabled: false,
+            ready: false,
         }
         this.mediaDirectory = React.createRef();
 
@@ -18,8 +18,8 @@ class Settings extends React.Component {
 
     async componentDidMount() {
         let config = await getConfig();
+        this.setState({ready: true, disabled: config.wrol_mode});
         this.mediaDirectory.current.value = config.media_directory;
-        this.setState({WROLMode: config.wrol_mode, disabled: config.wrol_mode});
     }
 
     async handleSubmit(e) {
@@ -30,16 +30,11 @@ class Settings extends React.Component {
         await saveConfig(config);
     }
 
-    toggleWROLMode = async () => {
-        // Handle WROL Mode toggling by itself so that other settings are not modified.
-        let config = {
-            wrol_mode: !this.state.WROLMode,
-        }
-        await saveConfig(config);
-        this.setState({disabled: !this.state.WROLMode, WROLMode: !this.state.WROLMode});
-    }
-
     render() {
+        if (this.state.ready === false) {
+            return <Loader active inline='centered'/>
+        }
+
         return (
             <Container>
                 <p>
@@ -53,21 +48,6 @@ class Settings extends React.Component {
                 <Divider/>
                 <Form id="settings" onSubmit={this.handleSubmit}>
 
-                    <Header as="h2">WROL Mode</Header>
-                    <h4>
-                        Enable read-only mode. No content can be deleted or modified. Enable this when the SHTF and you
-                        want to prevent any potential loss of data.
-                    </h4>
-                    <p>
-                        Note: User settings and favorites can still be modified.
-                    </p>
-                    <Checkbox toggle
-                              checked={this.state.WROLMode}
-                              onChange={this.toggleWROLMode}
-                              label={this.state.WROLMode ? 'WROL Mode Enabled' : 'WROL Mode Disabled'}
-                    />
-
-                    <Divider/>
                     <Form.Field>
                         <label>Media Directory</label>
                         <input
@@ -87,7 +67,58 @@ class Settings extends React.Component {
                     <Button color="blue" type="submit" disabled={this.state.disabled}>
                         Save
                     </Button>
+
                 </Form>
+            </Container>
+        )
+    }
+}
+
+class WROLMode extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            WROLMode: false,
+        }
+    }
+
+    async componentDidMount() {
+        let config = await getConfig();
+        this.setState({ready: true, WROLMode: config.wrol_mode});
+    }
+
+    toggleWROLMode = async () => {
+        // Handle WROL Mode toggling by itself so that other settings are not modified.
+        let config = {
+            wrol_mode: !this.state.WROLMode,
+        }
+        await saveConfig(config);
+        this.setState({disabled: !this.state.WROLMode, WROLMode: !this.state.WROLMode});
+    }
+
+    render() {
+        if (this.state.ready === false) {
+            return <Loader active inline='centered'/>
+        }
+
+        return (
+            <Container>
+
+                <Header as="h1">WROL Mode</Header>
+                <h4>
+                    Enable read-only mode. No content can be deleted or modified. Enable this when the SHTF and you
+                    want to prevent any potential loss of data.
+                </h4>
+                <p>
+                    Note: User settings and favorites can still be modified.
+                </p>
+                <Checkbox toggle
+                          checked={this.state.WROLMode}
+                          onChange={this.toggleWROLMode}
+                          label={this.state.WROLMode ? 'WROL Mode Enabled' : 'WROL Mode Disabled'}
+                />
+
             </Container>
         )
     }
@@ -97,7 +128,11 @@ class Statistics extends React.Component {
 
     constructor(props) {
         super(props);
-        this.state = {};
+        this.state = {
+            videos: null,
+            historical: null,
+            channels: null,
+        };
         this.videoNames = [
             {key: 'videos', label: 'Downloaded Videos'},
             {key: 'favorites', label: 'Favorite Videos'},
@@ -108,12 +143,12 @@ class Statistics extends React.Component {
             {key: 'year', label: 'Downloads Past Year'},
             {key: 'sum_duration', label: 'Total Duration'},
         ];
-        this.channelNames = [
-            {key: 'channels', label: 'Channels'},
-        ];
         this.historicalNames = [
             {key: 'average_count', label: 'Average Monthly Downloads'},
             {key: 'average_size', label: 'Average Monthly Usage'},
+        ];
+        this.channelNames = [
+            {key: 'channels', label: 'Channels'},
         ];
     }
 
@@ -122,57 +157,36 @@ class Statistics extends React.Component {
     }
 
     async fetchStatistics() {
-        let data = await getStatistics();
-        data.statistics.videos.sum_duration = secondsToString(data.statistics.videos.sum_duration);
-        data.statistics.videos.sum_size = humanFileSize(data.statistics.videos.sum_size, true);
-        data.statistics.videos.max_size = humanFileSize(data.statistics.videos.max_size, true);
-        data.statistics.historical.average_size = humanFileSize(data.statistics.historical.average_size, true);
-        this.setState(data);
+        let stats = await getStatistics();
+        stats.videos.sum_duration = secondsToString(stats.videos.sum_duration);
+        stats.videos.sum_size = humanFileSize(stats.videos.sum_size, true);
+        stats.videos.max_size = humanFileSize(stats.videos.max_size, true);
+        stats.historical.average_size = humanFileSize(stats.historical.average_size, true);
+        this.setState({...stats});
+    }
+
+    buildSegment(title, names, stats) {
+        return <Segment secondary>
+            <Header textAlign='center' as='h1'>{title}</Header>
+            <Statistic.Group>
+                {names.map(
+                    ({key, label}) =>
+                        <Statistic key={key} style={{margin: '2em'}}>
+                            <Statistic.Value>{stats[key]}</Statistic.Value>
+                            <Statistic.Label>{label}</Statistic.Label>
+                        </Statistic>
+                )}
+            </Statistic.Group>
+        </Segment>
     }
 
     render() {
-        if (this.state.statistics) {
-            let videoStatistics = this.videoNames.map(
-                ({key, label}) =>
-                    <Statistic key={key} style={{margin: '2em'}}>
-                        <Statistic.Value>{this.state.statistics.videos[key]}</Statistic.Value>
-                        <Statistic.Label>{label}</Statistic.Label>
-                    </Statistic>
-            );
-            let channelStatistics = this.channelNames.map(
-                ({key, label}) =>
-                    <Statistic key={key} style={{margin: '2em'}}>
-                        <Statistic.Value>{this.state.statistics.channels[key]}</Statistic.Value>
-                        <Statistic.Label>{label}</Statistic.Label>
-                    </Statistic>
-            );
-            let historicalStatistics = this.historicalNames.map(
-                ({key, label}) =>
-                    <Statistic key={key} style={{margin: '2em'}}>
-                        <Statistic.Value>{this.state.statistics.historical[key]}</Statistic.Value>
-                        <Statistic.Label>{label}</Statistic.Label>
-                    </Statistic>
-            );
+        if (this.state.videos) {
             return (
                 <>
-                    <Segment secondary>
-                        <Header textAlign='center' as='h1'>Videos</Header>
-                        <Statistic.Group>
-                            {videoStatistics}
-                        </Statistic.Group>
-                    </Segment>
-                    <Segment secondary>
-                        <Header textAlign='center' as='h1'>Historical Video</Header>
-                        <Statistic.Group>
-                            {historicalStatistics}
-                        </Statistic.Group>
-                    </Segment>
-                    <Segment secondary style={{marginTop: '2em'}}>
-                        <Header textAlign='center' as='h1'>Channels</Header>
-                        <Statistic.Group>
-                            {channelStatistics}
-                        </Statistic.Group>
-                    </Segment>
+                    {this.buildSegment('Videos', this.videoNames, this.state.videos)}
+                    {this.buildSegment('Historical Video', this.historicalNames, this.state.historical)}
+                    {this.buildSegment('Channels', this.channelNames, this.state.channels)}
                 </>
             )
         } else {
@@ -187,6 +201,7 @@ class Admin extends React.Component {
 
         const panes = [
             {menuItem: 'Settings', render: () => <Tab.Pane><Settings/></Tab.Pane>},
+            {menuItem: 'WROL Mode', render: () => <Tab.Pane><WROLMode/></Tab.Pane>},
             {menuItem: 'Statistics', render: () => <Tab.Pane><Statistics/></Tab.Pane>},
         ];
 

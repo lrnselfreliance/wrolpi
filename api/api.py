@@ -1,8 +1,6 @@
 import argparse
 import logging
-import pathlib
 import re
-from functools import wraps
 from http import HTTPStatus
 
 from sanic import Blueprint, Sanic, response
@@ -12,14 +10,12 @@ from sanic_openapi import swagger_blueprint
 
 from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_config, get_config, EVENTS, \
     wrol_mode_enabled
-from api.db import get_db
 from api.errors import WROLModeEnabled
 from api.modules import MODULES
 from api.videos.schema import EventsResponse, EchoResponse
 from api.videos.schema import SettingsRequest, SettingsResponse, RegexRequest, RegexResponse
 
 logger = logger.getChild(__name__)
-cwd = pathlib.Path(__file__).parent
 
 api_app = Sanic(name='api_app')
 
@@ -27,35 +23,6 @@ api_app = Sanic(name='api_app')
 api_app.blueprint(swagger_blueprint)
 
 DEFAULT_HOST, DEFAULT_PORT = '127.0.0.1', '8081'
-
-
-# Add DB middleware
-@api_app.middleware('request')
-def setup_db_context(request):
-    @wraps(get_db)
-    def _get_db():
-        pool, conn, db, key = get_db()
-        request.ctx.pool = pool
-        request.ctx.conn = conn
-        request.ctx.db = db
-        request.ctx.key = key
-        return db
-
-    request.ctx.get_db = _get_db
-
-
-@api_app.middleware('response')
-def teardown_db_context(request, _):
-    try:
-        pool, conn, key = request.ctx.pool, request.ctx.conn, request.ctx.key
-        try:
-            pool.putconn(conn, key=key, close=True)
-        except KeyError:
-            logger.debug(f'Failed to return db connection {key}')
-    except AttributeError:
-        # get_db was never called
-        pass
-
 
 index_html = '''
     <html>

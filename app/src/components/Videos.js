@@ -3,8 +3,8 @@ import {Link, Route} from "react-router-dom";
 import Paginator, {
     DEFAULT_LIMIT,
     defaultSearchOrder,
+    defaultVideoOrder,
     searchOrders,
-    searchSearchOrder,
     VideoCards,
     videoOrders,
     VIDEOS_API
@@ -138,8 +138,8 @@ class VideosPreview extends React.Component {
 
 export class FavoriteVideosPreview extends VideosPreview {
 
-    constructor() {
-        super();
+    constructor(props) {
+        super(props);
         this.title = 'Favorite Videos'
     }
 
@@ -153,8 +153,8 @@ export class FavoriteVideosPreview extends VideosPreview {
 
 export class ViewedVideosPreview extends VideosPreview {
 
-    constructor() {
-        super();
+    constructor(props) {
+        super(props);
         this.title = 'Recently Viewed Videos'
     }
 
@@ -174,22 +174,21 @@ class Videos extends React.Component {
         const query = QueryString.parse(this.props.location.search);
         let activePage = query.page ? parseInt(query.page) : 1; // First page is 1 by default, of course.
         let searchStr = query.q || '';
-        let searchOrder = query.o || defaultSearchOrder;
+        let searchOrder = query.o || defaultVideoOrder;
 
         this.state = {
             channel: null,
             videos: null,
-            video: null,
             queryStr: searchStr,
             searchStr: '',
             limit: DEFAULT_LIMIT,
             activePage: activePage,
-            total: null,
             totalPages: null,
             prev: null,
             next: null,
             videoOrders: searchStr === '' ? videoOrders : searchOrders,
             searchOrder: searchOrder,
+            title: '',
         };
     }
 
@@ -199,6 +198,7 @@ class Videos extends React.Component {
         } else {
             await this.fetchVideos();
         }
+        this.setTitle();
     }
 
     async componentDidUpdate(prevProps, prevState, snapshot) {
@@ -219,6 +219,24 @@ class Videos extends React.Component {
         }
     }
 
+    setTitle() {
+        let title = '';
+        if (this.props.filter === 'favorites') {
+            title = 'Favorite Videos';
+        } else if (this.state.channel) {
+            title = this.state.channel.name;
+        } else {
+            // Find the matching title from the search orders.
+            for (let i = 0; i < this.state.videoOrders.length; i++) {
+                let item = this.state.videoOrders[i];
+                if (item.value === this.state.searchOrder) {
+                    title = item.title;
+                }
+            }
+        }
+        this.setState({title: title});
+    }
+
     async fetchChannel() {
         // Get and display the channel specified in the Router match
         let channel_link = this.props.match.params.channel_link;
@@ -228,6 +246,7 @@ class Videos extends React.Component {
         }
         this.setState({
                 channel,
+                title: channel ? channel.title : '',
                 offset: 0,
                 total: null,
                 videos: null,
@@ -244,7 +263,7 @@ class Videos extends React.Component {
             offset, this.state.limit, channel_link, this.state.queryStr, favorites, this.state.searchOrder);
 
         let totalPages = Math.round(total / this.state.limit) || 1;
-        this.setState({videos, total, totalPages});
+        this.setState({videos, totalPages});
     }
 
     changePage = async (activePage) => {
@@ -252,7 +271,7 @@ class Videos extends React.Component {
     }
 
     clearSearch = async () => {
-        this.setState({searchStr: '', queryStr: '', searchOrder: defaultSearchOrder, activePage: 1});
+        this.setState({searchStr: '', queryStr: '', searchOrder: defaultVideoOrder, activePage: 1});
     }
 
     applyStateToHistory = () => {
@@ -263,7 +282,7 @@ class Videos extends React.Component {
 
     handleSearch = async (e) => {
         e && e.preventDefault();
-        this.setState({activePage: 1, searchOrder: searchSearchOrder, queryStr: this.state.searchStr},
+        this.setState({activePage: 1, searchOrder: defaultSearchOrder, queryStr: this.state.searchStr},
             this.applyStateToHistory);
     }
 
@@ -276,64 +295,70 @@ class Videos extends React.Component {
     }
 
     render() {
-        let videos = this.state.videos;
-        let body = <VideoPlaceholder/>;
-        let pagination = null;
+        let {
+            activePage,
+            channel,
+            queryStr,
+            searchOrder,
+            searchStr,
+            title,
+            totalPages,
+            videoOrders,
+            videos,
+        } = this.state;
 
-        if (videos && videos.length === 0 && this.props.filter !== 'favorites') {
-            body = <p>No videos retrieved. Have you downloaded videos yet?</p>;
-        } else if (videos && videos.length === 0 && this.props.filter === 'favorites') {
-            body = <p>You haven't tagged any videos as favorite.</p>;
+        let body = <VideoPlaceholder/>;
+
+        if (videos && videos.length === 0) {
+            // API didn't send back any videos, tell the user what to do.
+            if (this.props.filter === 'favorites') {
+                body = <p>You haven't tagged any videos as favorite.</p>;
+            } else {
+                // default empty body.
+                body = <p>No videos retrieved. Have you downloaded videos yet?</p>;
+            }
         } else if (videos) {
             body = <VideoCards videos={videos}/>;
         }
 
-        let channelName = this.props.title;
-        if (!this.props.title && this.state.channel) {
-            // No title specified, but a channel is selected, use it's name for the title.
-            channelName = this.state.channel.name;
-        }
-
-        if (this.state.totalPages) {
+        let pagination = null;
+        if (totalPages) {
             pagination = (
                 <div style={{marginTop: '3em', textAlign: 'center'}}>
                     <Paginator
-                        activePage={this.state.activePage}
+                        activePage={activePage}
                         changePage={this.changePage}
-                        totalPages={this.state.totalPages}
+                        totalPages={totalPages}
                     />
                 </div>
             );
         }
 
-        let clearSearchButton = null;
-        if (this.state.queryStr) {
-            clearSearchButton = (
-                <Button icon labelPosition='right' onClick={this.clearSearch}>
-                    Search: {this.state.queryStr}
-                    <Icon name='close'/>
-                </Button>
-            )
-        }
+        let clearSearchButton = (
+            <Button icon labelPosition='right' onClick={this.clearSearch}>
+                Search: {queryStr}
+                <Icon name='close'/>
+            </Button>
+        );
 
         return (
             <Container textAlign='center'>
                 <Grid columns={3} stackable>
                     <Grid.Column textAlign='left'>
                         <h1>
-                            {channelName}
+                            {title}
                             {
-                                this.state.channel &&
+                                channel &&
                                 <>
                                     &nbsp;
                                     &nbsp;
-                                    <Link to={`/videos/channel/${this.state.channel.link}/edit`}>
+                                    <Link to={`/videos/channel/${channel.link}/edit`}>
                                         <Icon name="edit"/>
                                     </Link>
                                 </>
                             }
                         </h1>
-                        {clearSearchButton}
+                        {queryStr && clearSearchButton}
                     </Grid.Column>
                     <Grid.Column textAlign='right'>
                         <Form onSubmit={this.handleSearch}>
@@ -342,7 +367,7 @@ class Videos extends React.Component {
                                 icon='search'
                                 placeholder='Search...'
                                 name="searchStr"
-                                value={this.state.searchStr}
+                                value={searchStr}
                                 onChange={this.handleInputChange}/>
                         </Form>
                     </Grid.Column>
@@ -354,9 +379,9 @@ class Videos extends React.Component {
                             fluid
                             name='searchOrder'
                             onChange={this.changeSearchOrder}
-                            value={this.state.searchOrder}
-                            options={this.state.videoOrders}
-                            disabled={this.state.searchOrder === searchSearchOrder}
+                            value={searchOrder}
+                            options={videoOrders}
+                            disabled={searchOrder === defaultSearchOrder}
                         />
                     </Grid.Column>
                 </Grid>
@@ -378,7 +403,6 @@ export class VideosRoute extends React.Component {
                     <Route path='/videos' exact
                            component={(i) =>
                                <Videos
-                                   title="Newest Videos"
                                    match={i.match}
                                    history={i.history}
                                    location={i.location}
@@ -387,7 +411,6 @@ export class VideosRoute extends React.Component {
                     <Route path='/videos/favorites' exact
                            component={(i) =>
                                <Videos
-                                   title="Favorite Videos"
                                    match={i.match}
                                    history={i.history}
                                    location={i.location}

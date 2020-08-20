@@ -2,6 +2,7 @@ cachetools==4.1.1
 dictorm>=4.2
 docker>=4.2.2
 mock>=4.0.2
+Pillow==7.2.0
 psycopg2-binary>=2.8.5
 pytest-cov>=2.10.0
 pytest>=6.0.1

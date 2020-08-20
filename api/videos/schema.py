@@ -9,8 +9,9 @@ class ChannelPostRequest:
     match_regex = doc.String(description='Regex that the video title will have to match')
     directory = doc.String(required=True)
     mkdir = doc.Boolean()
-    generate_thumbnails = doc.Boolean()
+    generate_posters = doc.Boolean()
     calculate_duration = doc.Boolean()
+    download_frequency = doc.Integer()
 
 
 class ChannelPutRequest:
@@ -19,9 +20,10 @@ class ChannelPutRequest:
     match_regex = doc.String()
     link = doc.String()
     directory = doc.String()
-    generate_thumbnails = doc.Boolean()
+    generate_posters = doc.Boolean()
     calculate_duration = doc.Boolean()
     mkdir = doc.Boolean()
+    download_frequency = doc.Integer()
 
 
 class RefreshRequest:

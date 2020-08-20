@@ -9,7 +9,7 @@ from datetime import datetime, date
 from functools import wraps
 from multiprocessing import Event, Queue
 from pathlib import Path
-from typing import Union, Callable, Tuple, Dict
+from typing import Union, Callable, Tuple, Dict, Mapping
 from urllib.parse import urlunsplit
 from uuid import UUID
 
@@ -365,7 +365,7 @@ def combine_dicts(*dicts: dict) -> dict:
     keys = set(a.keys())
     keys = keys.union(b.keys())
     for k in keys:
-        if k in b and k in a and isinstance(b[k], collections.Mapping):
+        if k in b and k in a and isinstance(b[k], Mapping):
             value = combine_dicts(a[k], b[k])
         else:
             value = a.get(k, b.get(k))
@@ -373,27 +373,6 @@ def combine_dicts(*dicts: dict) -> dict:
     if c:
         return combine_dicts(*c, new)
     return new
-
-
-def get_channels_config(db) -> dict:
-    """
-    Create a dictionary that contains all the Channels from the DB.
-    """
-    Channel = db['channel']
-    channels = {
-        i['link']:
-            dict(
-                directory=i['directory'],
-                match_regex=i.get('match_regex', ''),
-                name=i['name'],
-                url=i.get('url', ''),
-                generate_thumbnails=i['generate_thumbnails'],
-                calculate_duration=i['calculate_duration'],
-                skip_download_videos=[j for j in i['skip_download_videos'] if j] if i['skip_download_videos'] else [],
-            )
-        for i in Channel.get_where().order_by('link')
-    }
-    return dict(channels=channels)
 
 
 def save_settings_config(config=None):
@@ -489,7 +468,7 @@ def wrol_mode_check(func):
 
 def insert_parameter(func: Callable, parameter_name: str, item, args: Tuple, kwargs: Dict) -> Tuple[Tuple, Dict]:
     """
-    Insert a parameter wherever it fits in the func's signature.
+    Insert a parameter wherever it fits in the Callable's signature.
     """
     sig = inspect.signature(func)
     if parameter_name not in sig.parameters:
@@ -502,3 +481,19 @@ def insert_parameter(func: Callable, parameter_name: str, item, args: Tuple, kwa
     args = tuple(args)
 
     return args, kwargs
+
+
+def iterify(kind: type = list):
+    """
+    Convenience function to convert the output of the wrapped function to the type provided.
+    """
+
+    def wrapper(func):
+        @wraps(func)
+        def wrapped(*a, **kw):
+            result = func(*a, **kw)
+            return kind(result)
+
+        return wrapped
+
+    return wrapper

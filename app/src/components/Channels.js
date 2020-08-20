@@ -1,143 +1,121 @@
 import React from "react";
-import {Button, Checkbox, Form, Grid, Header, Input, Loader, Placeholder} from "semantic-ui-react";
-import {createChannel, deleteChannel, getChannel, getChannels, getConfig, updateChannel, validateRegex} from "../api";
+import {Accordion, Button, Checkbox, Form, Grid, Header, Input, Loader, Segment} from "semantic-ui-react";
+import {
+    createChannel,
+    deleteChannel,
+    getChannel,
+    getChannels,
+    getConfig,
+    getDirectories,
+    updateChannel,
+    validateRegex
+} from "../api";
 import _ from "lodash";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
-import {RequiredAsterisk, VIDEOS_API} from "./Common";
+import {APIForm, frequencyOptions, RequiredAsterisk, secondsToFrequency, VIDEOS_API} from "./Common";
 import {Link} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
 import Table from "semantic-ui-react/dist/commonjs/collections/Table";
 import Popup from "semantic-ui-react/dist/commonjs/modules/Popup";
-import {FieldPlaceholder, ChannelPlaceholder} from "./Placeholder";
+import {ChannelPlaceholder} from "./Placeholder";
+import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
+import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 
 
-class ChannelPage extends React.Component {
-
+class DirectoryInput extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            channel: {},
-            media_directory: null,
-            disabled: false,
-            open: false,
-            dirty: false,
-            inputs: ['name', 'directory', 'url', 'match_regex', 'generate_thumbnails', 'calculate_duration'],
-            validRegex: true,
-            create: !!this.props.create,
-            error: false,
-            success: false,
-            message_header: '',
-            message_content: '',
-
-            // The properties to edit/submit
-            name: '',
+            directories: [],
+            mediaDirectory: null,
             directory: '',
-            url: '',
-            match_regex: '',
-            generate_thumbnails: null,
-            calculate_duration: null,
-            mkdir: null,
-
-            // Error handling
-            name_error: null,
-            directory_error: null,
-            url_error: null,
-            match_regex_error: null,
-        };
-
-        this.generateThumbnails = React.createRef();
-        this.calculateDuration = React.createRef();
-        this.mkdir = React.createRef();
-    }
-
-    show = (e) => {
-        e.preventDefault();
-        this.setState({open: true});
-    }
-
-    handleConfirm = async () => {
-        this.setState({open: false});
-        let response = await deleteChannel(this.props.match.params.channel_link);
-        if (response.status === 204) {
-            this.props.history.push({
-                pathname: '/videos/channel'
-            });
-        } else {
-            this.setState({
-                error: true,
-                message_header: 'Failed to delete',
-                message_content: 'Failed to delete this channel, check logs.'
-            })
         }
-    }
 
-    isDirty = () => {
-        for (let i = 0; i < this.state.inputs.length; i++) {
-            let name = this.state.inputs[i];
-            if (this.state.channel[name] !== this.state[name]) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    checkDirty = () => {
-        this.setState({dirty: this.isDirty()})
+        this.handleChange = this.handleChange.bind(this);
     }
 
     async componentDidMount() {
         let global_config = await getConfig();
-        let newState = {
-            media_directory: `${global_config.media_directory}`
+        let directories = await getDirectories(this.state.directory);
+        this.setState({
+            directories,
+            mediaDirectory: global_config.media_directory,
+            directory: this.props.value,
+        });
+    }
+
+    async componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevState.directory !== this.state.directory) {
+            let directories = await getDirectories(this.state.directory);
+            this.setState({directories});
+        }
+    }
+
+    async handleChange(e, {name, value}) {
+        e.preventDefault();
+        this.setState({[name]: value}, () => this.props.setInput(e, {name, value}));
+    }
+
+    render() {
+        let {directories, mediaDirectory, directory} = this.state;
+
+        return (
+            <div>
+                <Input
+                    disabled={this.props.disabled}
+                    name='directory'
+                    list='directories'
+                    error={this.props.error}
+                    label={mediaDirectory}
+                    value={directory}
+                    onChange={this.handleChange}
+                    placeholder='videos/channel directory'
+                />
+                <datalist id='directories'>
+                    {directories.map((i) => <option key={i} value={i}>{i}</option>)}
+                </datalist>
+            </div>
+        );
+    }
+}
+
+
+class ChannelPage extends APIForm {
+
+    constructor(props) {
+        super(props);
+
+        this.state = {
+            ...this.state,
+            deleteOpen: false,
+            validRegex: true,
+            original: {},
+            activeIndex: -1,
+            inputs: {
+                name: '',
+                directory: '',
+                mkdir: false,
+                url: '',
+                match_regex: '',
+                generate_posters: true,
+                calculate_duration: true,
+                download_frequency: 604800,
+            },
+            errors: {},
         };
-        if (!this.state.create) {
+
+        this.calculateDuration = React.createRef();
+        this.generatePosters = React.createRef();
+        this.mkdir = React.createRef();
+    }
+
+    async componentDidMount() {
+        if (!this.props.create) {
             let channel_link = this.props.match.params.channel_link;
             let channel = await getChannel(channel_link);
-            newState = {
-                channel: channel,
-                name: channel.name,
-                directory: channel.directory,
-                url: channel.url,
-                match_regex: channel.match_regex,
-                generate_thumbnails: channel.generate_thumbnails,
-                calculate_duration: channel.calculate_duration,
-                media_directory: newState.media_directory,
-            };
+            this.initFormValues(channel);
         }
-        this.setState(newState);
-    }
-
-    setLoading = () => {
-        this.setState({
-            name_error: null,
-            directory_error: null,
-            url_error: null,
-            match_regex_error: null,
-            loading: true,
-            disabled: true,
-            error: false,
-            success: false,
-            message_header: '',
-            message_content: '',
-        })
-    }
-
-    clearLoading = () => {
-        this.setState({
-            loading: false,
-            disabled: false,
-        })
-    }
-
-    handleInputChange = async (event, {name, value}) => {
-        this.setState({[name]: value}, this.checkDirty);
-    }
-
-    handleCheckbox = async (checkbox) => {
-        let checked = checkbox.current.state.checked;
-        let name = checkbox.current.props.name;
-        this.setState({[name]: !checked}, this.checkDirty);
     }
 
     checkRegex = async (event, {name, value}) => {
@@ -147,178 +125,237 @@ class ChannelPage extends React.Component {
         this.setState({validRegex: valid});
     }
 
+    handleConfirm = async () => {
+        this.setState({deleteOpen: false});
+        let response = await deleteChannel(this.props.match.params.channel_link);
+        if (response.status === 204) {
+            this.props.history.push({
+                pathname: '/videos/channel'
+            });
+        } else {
+            this.setError('Failed to delete', 'Failed to delete this channel, check logs.');
+        }
+    }
+
     handleSubmit = async (e) => {
         e.preventDefault();
-        let channel = {
-            name: this.state.name,
-            directory: this.state.directory,
-            url: this.state.url,
-            match_regex: this.state.match_regex,
-            generate_thumbnails: this.state.generate_thumbnails,
-            calculate_duration: this.state.calculate_duration,
-            mkdir: this.state.mkdir,
-        };
+        let {inputs} = this.state;
         let response = null;
         try {
             this.setLoading();
 
-            if (this.state.create) {
-                response = await createChannel(channel);
+            if (this.props.create) {
+                response = await createChannel(inputs);
             } else {
-                response = await updateChannel(this.state.channel.link, channel);
+                response = await updateChannel(this.props.match.params.channel_link, inputs);
             }
+
         } finally {
             this.clearLoading();
+        }
 
-            if (response !== null && response.status === 201) {
-                let location = response.headers.get('Location');
-                let channelResponse = await fetch(location);
-                let data = await channelResponse.json();
-                let channel = data['channel'];
+        if (response === null) {
+            throw Error('Response was null');
+        }
 
-                this.setState({
-                    success: true,
-                    message_header: 'Channel created',
-                    message_content: <span>
+        if (response.status >= 200 && response.status < 300) {
+            let location = response.headers.get('Location');
+            let channelResponse = await fetch(location);
+            let data = await channelResponse.json();
+            let channel = data['channel'];
+
+            if (response.status === 201) {
+                this.setSuccess(
+                    'Channel created',
+                    <span>
                         Your channel was created.  View it <Link to={`/videos/channel/${channel.link}/edit`}>here</Link>
-                    </span>,
-                });
+                    </span>
+                );
+            } else {
+                this.initFormValues(channel);
+                this.setSuccess('Channel updated', 'Your channel was updated');
+                this.checkDirty();
+            }
 
-            } else if (response !== null) {
-                // Some error occurred.
-                let message = await response.json();
-                let error = {
-                    error: true,
-                    message_header: 'Invalid channel',
-                    message_content: message.error,
-                };
-
-                if (message.code === 3) {
-                    error.message_header = 'Invalid directory';
-                }
-
-                this.setState(error);
+        } else {
+            // Some error occurred.
+            let error = await response.json();
+            let cause = error.cause;
+            if (error.code === 3 || (cause && cause.code === 3)) {
+                this.setError(
+                    'Invalid directory',
+                    'This directory does not exist.',
+                    'directory',
+                );
+            } else if (cause && cause.code === 7) {
+                this.setError(
+                    'Invalid directory',
+                    'This directory is already used by another channel',
+                    'directory',
+                );
+            } else if (cause && cause.code === 5) {
+                this.setError(
+                    'Invalid name',
+                    'This channel name is already taken',
+                    'name',
+                );
+            } else {
+                this.setError('Invalid channel', 'Unable to save channel.  See logs.');
             }
         }
     }
 
+    handleAdvancedClick = (e, titleProps) => {
+        const {index} = titleProps
+        const {activeIndex} = this.state
+        const newIndex = activeIndex === index ? -1 : index
+
+        this.setState({activeIndex: newIndex})
+    }
+
     render() {
-        if (this.state.create || this.state.channel) {
-            return (
-                <Container>
-                    <Header as="h1">{this.props.header}</Header>
-                    <Form
-                        id="editChannel"
-                        onSubmit={this.handleSubmit}
-                        error={this.state.error}
-                        success={this.state.success}
-                    >
+        return (
+            <Container>
+                <Header as="h1">{this.props.header}</Header>
+                <Form
+                    id="editChannel"
+                    onSubmit={this.handleSubmit}
+                    error={this.state.error}
+                    success={this.state.success}
+                    autoComplete="off"
+                >
 
-                        <Form.Group>
-                            <Form.Field width={8}>
-                                <Form.Input
-                                    required
-                                    label="Channel Name"
-                                    name="name"
-                                    type="text"
-                                    placeholder="Short Channel Name"
-                                    disabled={this.state.disabled}
-                                    value={this.state.name}
-                                    onChange={this.handleInputChange}
-                                />
-                            </Form.Field>
-                            <Form.Field width={8}>
-                                <label>
-                                    Directory <RequiredAsterisk/>
-                                </label>
-                                <Input
-                                    required
-                                    name="directory"
-                                    type="text"
-                                    disabled={this.state.disabled}
-                                    label={this.state.media_directory}
-                                    placeholder='videos/channel/directory'
-                                    value={this.state.directory}
-                                    onChange={this.handleInputChange}
-                                    error={{
-                                        content: 'Please enter a valid directory',
-                                        pointing: 'below',
-                                    }}
-                                />
-                            </Form.Field>
-                        </Form.Group>
-                        {
-                            this.state.create &&
-                            <Form.Group>
-                                <Form.Field width={8}/>
-                                <Form.Field width={8}>
-                                    <Form.Field>
-                                        <Checkbox
-                                            toggle
-                                            label="Create this directory, if it doesn't exist."
-                                            name="mkdir"
-                                            disabled={this.state.disabled}
-                                            checked={this.state.mkdir}
-                                            ref={this.mkdir}
-                                            onClick={() => this.handleCheckbox(this.mkdir)}
-                                        />
-                                    </Form.Field>
-                                </Form.Field>
-                            </Form.Group>
-                        }
-                        <Form.Group>
-                            <Form.Field width={16}>
-                                <Form.Input
-                                    label="URL"
-                                    name="url"
-                                    type="url"
-                                    disabled={this.state.disabled}
-                                    placeholder='https://example.com/channel/videos'
-                                    value={this.state.url}
-                                    onChange={this.handleInputChange}
-                                />
-                            </Form.Field>
-                        </Form.Group>
-
-                        <Header as="h4" style={{'marginTop': '3em'}}>
-                            The following settings are encouraged by default, modify them at your own risk.
-                        </Header>
-                        <Form.Field>
+                    <Form.Group>
+                        <Form.Field width={8}>
                             <Form.Input
-                                label="Title Match Regex"
-                                name="match_regex"
+                                required
+                                label="Channel Name"
+                                name="name"
                                 type="text"
+                                placeholder="Short Channel Name"
                                 disabled={this.state.disabled}
-                                error={!this.state.validRegex}
-                                placeholder='.*([Nn]ame Matching).*'
-                                value={this.state.match_regex}
-                                onChange={this.checkRegex}
+                                error={this.state.errors.name}
+                                value={this.state.inputs.name}
+                                onChange={this.handleInputChange}
                             />
                         </Form.Field>
+                        <Form.Field width={8}>
+                            <label>
+                                Directory <RequiredAsterisk/>
+                            </label>
+                            <DirectoryInput
+                                disabled={!this.props.create}
+                                value={this.state.inputs.directory}
+                                setInput={this.handleInputChange}
+                            />
+                        </Form.Field>
+                    </Form.Group>
+                    {
+                        this.props.create &&
+                        <Form.Group>
+                            <Form.Field width={8}/>
+                            <Form.Field width={8}>
+                                <Form.Field>
+                                    <Checkbox
+                                        toggle
+                                        label="Create this directory, if it doesn't exist."
+                                        name="mkdir"
+                                        ref={this.mkdir}
+                                        disabled={this.state.disabled}
+                                        error={this.state.errors.mkdir}
+                                        checked={this.state.inputs.mkdir}
+                                        onClick={() => this.handleCheckbox(this.mkdir)}
+                                    />
+                                </Form.Field>
+                            </Form.Field>
+                        </Form.Group>
+                    }
+                    <Form.Group>
+                        <Form.Field width={16}>
+                            <Form.Input
+                                label="URL"
+                                name="url"
+                                type="url"
+                                disabled={this.state.disabled}
+                                placeholder='https://example.com/channel/videos'
+                                error={this.state.errors.url}
+                                value={this.state.inputs.url}
+                                onChange={this.handleInputChange}
+                            />
+                        </Form.Field>
+                    </Form.Group>
 
+                    <Form.Group>
                         <Form.Field>
-                            <Checkbox
-                                toggle
-                                label="Generate thumbnails, if not found"
-                                name="generate_thumbnails"
-                                disabled={this.state.disabled}
-                                checked={this.state.generate_thumbnails}
-                                ref={this.generateThumbnails}
-                                onClick={() => this.handleCheckbox(this.generateThumbnails)}
+                            <label>Download Frequency</label>
+                            <Dropdown selection
+                                      name='download_frequency'
+                                      disabled={this.state.disabled}
+                                      placeholder='Frequency'
+                                      error={this.state.errors.download_frequency}
+                                      value={this.state.inputs.download_frequency}
+                                      options={frequencyOptions}
+                                      onChange={this.handleInputChange}
                             />
                         </Form.Field>
-                        <Form.Field>
-                            <Checkbox
-                                toggle
-                                label="Calculate video duration"
-                                name="calculate_duration"
-                                disabled={this.state.disabled}
-                                checked={this.state.calculate_duration}
-                                ref={this.calculateDuration}
-                                onClick={() => this.handleCheckbox(this.calculateDuration)}
-                            />
-                        </Form.Field>
+                    </Form.Group>
 
+                    <Accordion>
+                        <Accordion.Title
+                            onClick={this.handleAdvancedClick}
+                            index={0}
+                            active={this.state.activeIndex === 0}
+                        >
+                            <Icon name='dropdown'/>
+                            Advanced Settings
+                        </Accordion.Title>
+                        <Accordion.Content
+                            active={this.state.activeIndex === 0}
+                        >
+                            <Segment secondary>
+                                <Header as="h4">
+                                    The following settings are encouraged by default, modify them at your own risk.
+                                </Header>
+                                <Form.Field>
+                                    <Form.Input
+                                        label="Title Match Regex"
+                                        name="match_regex"
+                                        type="text"
+                                        disabled={this.state.disabled}
+                                        error={!this.state.validRegex}
+                                        placeholder='.*([Nn]ame Matching).*'
+                                        value={this.state.inputs.match_regex}
+                                        onChange={this.checkRegex}
+                                    />
+                                </Form.Field>
+
+                                <Form.Field>
+                                    <Checkbox
+                                        toggle
+                                        label="Generate posters, if not found"
+                                        name="generate_posters"
+                                        disabled={this.state.disabled}
+                                        checked={this.state.inputs.generate_posters}
+                                        ref={this.generatePosters}
+                                        onClick={() => this.handleCheckbox(this.generatePosters)}
+                                    />
+                                </Form.Field>
+                                <Form.Field>
+                                    <Checkbox
+                                        toggle
+                                        label="Calculate video duration"
+                                        name="calculate_duration"
+                                        disabled={this.state.disabled}
+                                        checked={this.state.inputs.calculate_duration}
+                                        ref={this.calculateDuration}
+                                        onClick={() => this.handleCheckbox(this.calculateDuration)}
+                                    />
+                                </Form.Field>
+                            </Segment>
+                        </Accordion.Content>
+                    </Accordion>
+
+                    <Container style={{marginTop: '2em'}}>
                         <Message error
                                  header={this.state.message_header}
                                  content={this.state.message_content}
@@ -345,43 +382,22 @@ class ChannelPage extends React.Component {
                             Cancel
                         </Button>
 
-                        {!this.state.create && <>
-                            <Button color='red' onClick={this.show}>Delete</Button>
+                        {!this.props.create &&
+                        <>
+                            <Button color='red' onClick={() => this.setState({deleteOpen: true})}>Delete</Button>
                             <Confirm
-                                open={this.state.open}
+                                open={this.state.deleteOpen}
                                 content='Are you sure you want to delete this channel?  No video files will be deleted.'
                                 confirmButton='Delete'
-                                onCancel={() => this.setState({open: false})}
+                                onCancel={() => this.setState({deleteOpen: false})}
                                 onConfirm={this.handleConfirm}
                             />
                         </>
                         }
-                    </Form>
-                </Container>
-            )
-        } else {
-            // Channel not loaded yet
-            return (
-                <Container>
-                    <Header as="h1">{this.props.header}</Header>
-                    <Form>
-                        <div className="two fields">
-                            <FieldPlaceholder/>
-                            <FieldPlaceholder/>
-                        </div>
-                        <FieldPlaceholder/>
-
-                        <Header as="h4" style={{'marginTop': '3em'}}>
-                            <Placeholder>
-                                <Placeholder.Line length="very long"/>
-                            </Placeholder>
-                        </Header>
-                        <FieldPlaceholder/>
-                        <FieldPlaceholder/>
-                    </Form>
-                </Container>
-            )
-        }
+                    </Container>
+                </Form>
+            </Container>
+        )
     }
 }
 
@@ -393,7 +409,7 @@ export function EditChannel(props) {
 
 export function NewChannel(props) {
     return (
-        <ChannelPage header="Create New Channel" {...props} create/>
+        <ChannelPage header='New Channel' {...props} create/>
     )
 }
 
@@ -419,7 +435,10 @@ function ChannelRow(props) {
                 <Link to={videosTo}>{props.channel.name}</Link>
             </Table.Cell>
             <Table.Cell>
-                Videos: {props.channel.video_count}
+                {props.channel.video_count}
+            </Table.Cell>
+            <Table.Cell>
+                {secondsToFrequency(props.channel.download_frequency)}
             </Table.Cell>
             <Table.Cell textAlign='right'>
                 <Popup
@@ -517,60 +536,50 @@ export class Channels extends React.Component {
             </Grid>
         );
 
-        let table_header = (
+        let tableHeader = (
             <Table.Header>
                 <Table.Row>
                     <Table.HeaderCell width={8}>Name</Table.HeaderCell>
-                    <Table.HeaderCell width={2}>Details</Table.HeaderCell>
-                    <Table.HeaderCell width={2}/>
-                    <Table.HeaderCell width={2}/>
-                    <Table.HeaderCell width={2}/>
+                    <Table.HeaderCell width={2}>Videos</Table.HeaderCell>
+                    <Table.HeaderCell width={2}>Frequency</Table.HeaderCell>
+                    <Table.HeaderCell width={2} colSpan={3} textAlign='center'>Manage</Table.HeaderCell>
                 </Table.Row>
             </Table.Header>
         );
 
+        let body = null;
         if (this.state.channels === null) {
             // Placeholders while fetching
-            return (
-                <>
-                    {header}
-
-                    <Table celled>
-                        {table_header}
-
-                        <Table.Body>
-                            <Table.Row>
-                                <Table.Cell><ChannelPlaceholder/></Table.Cell>
-                                <Table.Cell/>
-                                <Table.Cell/>
-                                <Table.Cell/>
-                            </Table.Row>
-                        </Table.Body>
-                    </Table>
-                </>
-            )
+            body = <Table striped basic size='large'>
+                {tableHeader}
+                <Table.Body>
+                    <Table.Row>
+                        <Table.Cell><ChannelPlaceholder/></Table.Cell>
+                        <Table.Cell/>
+                        <Table.Cell/>
+                        <Table.Cell/>
+                    </Table.Row>
+                </Table.Body>
+            </Table>
         } else if (this.state.channels.length === 0) {
-            return (
-                <>
-                    {header}
-                    <Message>
-                        <Message.Header>No channels exist yet!</Message.Header>
-                        <Message.Content><Link to='/videos/channel/new'>Create one.</Link></Message.Content>
-                    </Message>
-                </>
-            )
+            body = <Message>
+                <Message.Header>No channels exist yet!</Message.Header>
+                <Message.Content><Link to='/videos/channel/new'>Create one.</Link></Message.Content>
+            </Message>
         } else {
-            return (
-                <>
-                    {header}
-                    <Table striped basic size='large'>
-                        {table_header}
-                        <Table.Body>
-                            {this.state.results.map((channel) => <ChannelRow channel={channel}/>)}
-                        </Table.Body>
-                    </Table>
-                </>
-            )
+            body = <Table striped basic size='large'>
+                {tableHeader}
+                <Table.Body>
+                    {this.state.results.map((channel) => <ChannelRow key={channel.link} channel={channel}/>)}
+                </Table.Body>
+            </Table>
         }
+
+        return (
+            <>
+                {header}
+                {body}
+            </>
+        )
     }
 }

@@ -1,21 +1,22 @@
 #! /usr/bin/env python3
 import pathlib
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from random import shuffle
 from typing import Tuple, List
 
-from dictorm import DictDB, Dict, And
+from dictorm import DictDB, Dict, And, Or
 from youtube_dl import YoutubeDL
 
 from api.common import make_progress_calculator, logger, today
 from api.db import get_db_context
 from .captions import process_captions
-from .common import get_downloader_config, get_absolute_media_path, replace_extension, add_video_to_skip_list
+from .common import get_downloader_config, get_absolute_media_path, add_video_to_skip_list
 from ..errors import UnknownChannel, ChannelURLEmpty
+from ..vars import UNRECOVERABLE_ERRORS
 
 logger = logger.getChild(__name__)
-ydl_logger = logger.getChild('api:youtube-dl')
+ydl_logger = logger.getChild('youtube-dl')
 
 YDL = YoutubeDL()
 YDL.params['logger'] = ydl_logger
@@ -50,8 +51,11 @@ def update_channel(channel: Dict = None, link: str = None):
         Channel = db['channel']
         channel = Channel.get_one(id=channel['id'])
 
+        download_frequency = channel['download_frequency']
+
         channel['info_json'] = info
         channel['info_date'] = datetime.now()
+        channel['next_download'] = today() + timedelta(seconds=download_frequency)
         channel.flush()
 
         # Insert any new videos.
@@ -74,6 +78,10 @@ def update_channels(link: str = None):
 
     with get_db_context() as (db_conn, db):
         Channel = db['channel']
+
+        if Channel.count() == 0:
+            raise UnknownChannel('No channels exist yet')
+
         if link:
             channel = Channel.get_one(link=link)
             if not channel:
@@ -81,10 +89,18 @@ def update_channels(link: str = None):
             channels = [channel, ]
         else:
             channels = list(Channel.get_where(
-                And(Channel['url'].IsNotNull(), Channel['url'] != '', Channel['info_date'] != today())))
+                And(
+                    Channel['url'].IsNotNull(),
+                    Channel['url'] != '',
+                    Or(
+                        Channel['next_download'].IsNull(),
+                        Channel['next_download'] <= today(),
+                    )
+                )
+            ))
 
         if len(channels) == 0:
-            logger.warning(f'All channels have been updated today, or none exist.')
+            logger.warning(f'All channels are up to date')
 
     # Randomize downloading of channels.
     shuffle(channels)
@@ -196,7 +212,7 @@ def find_all_missing_videos(link: str = None) -> Tuple[Dict, dict]:
 
 def download_video(channel: dict, video: dict) -> pathlib.Path:
     """
-    Download a video (and associated thumbnail/etc) to it's channel's directory.
+    Download a video (and associated posters/etc) to it's channel's directory.
 
     :param channel: A DictORM Channel entry
     :param video: A YoutubeDL info entry dictionary
@@ -235,7 +251,7 @@ def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
     meta_file_exts = (('.jpg', '.webp', '.png'), ('.description',), ('.en.vtt', '.en.srt'), ('.info.json',))
     for meta_exts in meta_file_exts:
         for meta_ext in meta_exts:
-            meta_path = replace_extension(path, meta_ext)
+            meta_path = path.with_suffix(meta_ext)
             if meta_path.exists():
                 if relative_to:
                     yield meta_path.relative_to(relative_to)
@@ -306,14 +322,6 @@ def upsert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
         process_captions(video)
 
     return video
-
-
-UNRECOVERABLE_ERRORS = {
-    '404: Not Found',
-    'requires payment',
-    'Content Warning',
-    'Did not get any data blocks',
-}
 
 
 def _skip_download(error):

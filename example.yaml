@@ -6,8 +6,6 @@ downloader:
   # Most of these names were decided by Youtube-DL project, we pass these to any calls to that project.
   continue_dl: true
   dateafter: 19900101
-  embedsubtitles: true
-  embedthumbnail: true
   file_name_format: "%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s"
   format: 22/135/18/43
   nooverwrites: true

@@ -2,18 +2,19 @@ import json
 import os
 import pathlib
 import subprocess
-from datetime import datetime
 from functools import partial, lru_cache
 from pathlib import Path
-from typing import Union, Tuple, List, Optional, Set
+from typing import Union, Tuple, List, Set, Iterable
 
-from dictorm import Dict, DictDB
+from PIL import Image
+from dictorm import Dict
 
-from api.common import sanitize_link, logger, CONFIG_PATH, get_config
+from api.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify
 from api.db import get_db_context
-from api.errors import UnknownFile, UnknownChannel, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
+from api.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
-from api.vars import DOCKERIZED, PROJECT_DIR
+from api.vars import DOCKERIZED, PROJECT_DIR, VIDEO_EXTENSIONS, MINIMUM_CHANNEL_KEYS, MINIMUM_INFO_JSON_KEYS, \
+    MINIMUM_VIDEO_KEYS
 
 logger = logger.getChild(__name__)
 
@@ -186,12 +187,15 @@ def get_video_info_json(video: Dict) -> Union[dict, None]:
         return
 
 
-def any_extensions(filename: str, extensions=None):
-    """Return True only if a file ends with any of the possible extensions"""
-    return any(filename.endswith(ext) for ext in extensions or [])
+def any_extensions(filename: str, extensions: Iterable = ()):
+    """
+    Return True only if the file name ends with any of the possible extensions.
+    Matches lower or upper case of the extension.
+    """
+    return any(filename.lower().endswith(ext) for ext in extensions)
 
 
-match_video_extensions = partial(any_extensions, extensions={'mp4', 'webm', 'flv'})
+match_video_extensions = partial(any_extensions, extensions=VIDEO_EXTENSIONS)
 
 
 def generate_video_paths(directory: Union[str, pathlib.Path], relative_to=None) -> Tuple[str, pathlib.Path]:
@@ -201,7 +205,7 @@ def generate_video_paths(directory: Union[str, pathlib.Path], relative_to=None) 
     directory = pathlib.Path(directory)
 
     for child in directory.iterdir():
-        if child.is_file() and match_video_extensions(str(child)):
+        if child.is_file() and match_video_extensions(child.name):
             child = child.absolute()
             if relative_to:
                 yield child.relative_to(relative_to)
@@ -209,6 +213,48 @@ def generate_video_paths(directory: Union[str, pathlib.Path], relative_to=None) 
                 yield child
         elif child.is_dir():
             yield from generate_video_paths(child)
+
+
+@iterify(set)
+def remove_duplicate_video_paths(paths: Iterable[Path]) -> Set[Path]:
+    """
+    Remove any duplicate paths from a given list.  Duplicate is defined as any file that shares the EXACT same
+    name as another file, but with a different extension.  If a duplicate is found, only yield one of the paths.  The
+    path that will be yielded will be whichever is first in the VIDEO_EXTESIONS tuple.
+
+    i.e.
+    >>> remove_duplicate_video_paths([Path('one.mp4'), Path('two.mp4'), Path('one.ogg')])
+    {'one.mp4, 'two.mp4'}
+    """
+    new_paths = {}
+
+    # Group all paths by their name, but without their extension.
+    for path in set(paths):
+        name, _, _ = path.name.rpartition(path.suffix)
+        try:
+            new_paths[name].append(path)
+        except KeyError:
+            new_paths[name] = [path]
+
+    # Yield back the first occurrence of the preferred format for each video.
+    for name, paths in new_paths.items():
+        if len(paths) == 1:
+            # This should be the most common case.  Most videos will only have one format.
+            yield paths[0]
+        else:
+            path_strings = [i.name for i in paths]
+            for ext in VIDEO_EXTENSIONS:
+                try:
+                    index = path_strings.index(f'{name}.{ext}')
+                    yield paths[index]
+                    break
+                except ValueError:
+                    # That extension is not in the paths.
+                    pass
+            else:
+                # Somehow no format was found, yield back the first one.  This is probably caused by an unexpected video
+                # format in the paths.
+                yield sorted(paths)[0]
 
 
 def check_for_channel_conflicts(db, id=None, url=None, name=None, link=None, directory=None):
@@ -268,26 +314,6 @@ def verify_config():
         raise Exception(error)
 
 
-def get_channel_videos(db: DictDB, link: str, offset: int = 0, limit: int = 0) -> Tuple[List[Dict], int]:
-    """
-    Get all video objects for a particular channel that have a video file.  Also get the total videos that match this
-    criteria.
-    """
-    Channel, Video = db['channel'], db['video']
-    channel = Channel.get_one(link=link)
-    if not channel:
-        raise UnknownChannel('Unknown Channel')
-
-    videos = Video.get_where(channel_id=channel['id']).refine(
-        Video['video_path'].IsNotNull())
-    total = len(videos)
-
-    videos = videos.order_by(
-        'upload_date DESC, LOWER(title) ASC, LOWER(video_path) ASC').limit(limit).offset(offset)
-
-    return videos, total
-
-
 def get_matching_directories(path: Union[str, Path]) -> List[str]:
     """
     Return a list of directory strings that start with the provided path.  If the path is a directory, return it's
@@ -337,29 +363,29 @@ def replace_extension(path: pathlib.Path, new_ext) -> pathlib.Path:
     return path
 
 
-def generate_video_thumbnail(video_path: Path):
+def generate_video_poster(video_path: Path):
     """
-    Create a thumbnail next to the provided video_path.
+    Create a poster (aka thumbnail) next to the provided video_path.
     """
     poster_path = replace_extension(video_path, '.jpg')
     cmd = ['/usr/bin/ffmpeg', '-n', '-i', str(video_path), '-f', 'mjpeg', '-vframes', '1', '-ss', '00:00:05.000',
            str(poster_path)]
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        logger.info(f'Generated thumbnail at {poster_path}')
+        logger.info(f'Generated poster at {poster_path}')
     except subprocess.CalledProcessError as e:
-        logger.warning(f'FFMPEG thumbnail generation failed with stdout: {e.stdout.decode()}')
-        logger.warning(f'FFMPEG thumbnail generation failed with stdout: {e.stderr.decode()}')
+        logger.warning(f'FFMPEG poster generation failed with stdout: {e.stdout.decode()}')
+        logger.warning(f'FFMPEG poster generation failed with stdout: {e.stderr.decode()}')
         raise
 
 
-async def generate_bulk_thumbnails(video_ids: List[int]):
+async def generate_bulk_posters(video_ids: List[int]):
     """
-    Generate all thumbnails for the provided videos.  Update the video object with the new jpg file location.  Do not
+    Generate all posters for the provided videos.  Update the video object with the new jpg file location.  Do not
     clobber existing jpg files.
     """
     with get_db_context(commit=True) as (db_conn, db):
-        logger.info(f'Generating {len(video_ids)} video thumbnails')
+        logger.info(f'Generating {len(video_ids)} video posters')
         Video = db['video']
         for idx, video_id in enumerate(video_ids):
             video = Video.get_one(id=video_id)
@@ -368,13 +394,55 @@ async def generate_bulk_thumbnails(video_ids: List[int]):
 
             poster_path = replace_extension(video_path, '.jpg')
             if not poster_path.exists():
-                generate_video_thumbnail(video_path)
+                generate_video_poster(video_path)
             channel_dir = get_absolute_media_path(channel['directory'])
             poster_path = poster_path.relative_to(channel_dir)
             video['poster_path'] = str(poster_path)
 
             video.flush()
             db_conn.commit()
+
+
+def convert_image(existing_image: Path, destination_image: Path, remove: bool = False, ext: str = 'jpeg'):
+    """
+    Convert an image from one format to another.  Remove the old image if "remove" is True.
+    """
+    if existing_image == destination_image:
+        raise ValueError(
+            'Cannot convert an image over itself.  existing_img and destination_image must be different paths.')
+
+    img = Image.open(existing_image).convert('RGB')
+    img.save(destination_image, ext)
+
+    if remove:
+        existing_image.unlink()
+
+
+def bulk_replace_invalid_posters(video_ids: List[int]):
+    logger.info(f'Replacing {len(video_ids)} video posters')
+    for idx, video_id in enumerate(video_ids):
+        with get_db_context(commit=True) as (db_conn, db):
+            Video = db['video']
+            video = Video.get_one(id=video_id)
+            channel = video['channel']
+            channel_dir = get_absolute_media_path(channel['directory'])
+            poster_path: Path = get_absolute_video_poster(video)
+
+            new_poster_path = poster_path.with_suffix('.jpg')
+            if new_poster_path.exists():
+                try:
+                    poster_path.unlink()
+                except FileNotFoundError:
+                    logger.warning(f'Failed to remove invalid poster: {poster_path}')
+            else:
+                # The new_poster_path does not exist, lets convert the existing image to a valid format.
+                convert_image(poster_path, new_poster_path, remove=True)
+
+            # This poster already exists, replace it in the DB.
+            video['poster_path'] = str(new_poster_path.relative_to(channel_dir))
+            video.flush()
+
+            logger.debug(f'Converted invalid poster {poster_path} to {new_poster_path}')
 
 
 def get_video_duration(video_path: Path) -> int:
@@ -429,7 +497,7 @@ async def get_bulk_video_size(video_ids: List[int]):
         Video = db['video']
         for video_id in video_ids:
             video = Video.get_one(id=video_id)
-            logger.debug(f'Getting video size: {video["id"]} {video["title"]}')
+            logger.debug(f'Getting video size: {video["id"]} {video["video_path"]}')
             video_path = get_absolute_video_path(video)
 
             size = video_path.stat().st_size
@@ -437,39 +505,16 @@ async def get_bulk_video_size(video_ids: List[int]):
             video.flush()
 
 
-def toggle_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
-    """
-    Toggle the timestamp on Video.favorite on a video.
-    """
-    with get_db_context(commit=True) as (db_conn, db):
-        Video = db['video']
-        video = Video.get_one(id=video_id)
-        _favorite = video['favorite'] = datetime.now() if favorite else None
-        video.flush()
-
-    return _favorite
-
-
-def minimize_dict(d: dict, keys: Union[Set, List]) -> dict:
+def minimize_dict(d: dict, keys: Iterable) -> dict:
     """
     Return a new dictionary that contains only the keys provided.
     """
     return {k: d[k] for k in d if k in keys}
 
 
-def minimize_channel(channel: dict) -> dict:
-    """
-    Return a Channel dictionary that contains only the key/values typically used.
-    """
-    minimal_keys = {'id', 'name', 'directory', 'url', 'video_count', 'link'}
-    channel = minimize_dict(channel, minimal_keys)
-    return channel
-
-
-def minimize_video_info_json(info_json: dict) -> dict:
-    minimal_keys = {'description'}
-    info_json = minimize_dict(info_json, minimal_keys)
-    return info_json
+minimize_channel = partial(minimize_dict, keys=MINIMUM_CHANNEL_KEYS)
+minimize_video_info_json = partial(minimize_dict, keys=MINIMUM_INFO_JSON_KEYS)
+_minimize_video = partial(minimize_dict, keys=MINIMUM_VIDEO_KEYS)
 
 
 def minimize_video(video: dict) -> dict:
@@ -477,9 +522,7 @@ def minimize_video(video: dict) -> dict:
     Return a Video dictionary that contains only the key/values typically used.  Minimize the Channel and info_json,
     if they are present.
     """
-    minimal_keys = {'id', 'title', 'upload_date', 'duration', 'channel', 'channel_id', 'favorite', 'size',
-                    'poster_path', 'caption_path', 'video_path', 'info_json', 'channel', 'viewed'}
-    video = minimize_dict(video, minimal_keys)
+    video = _minimize_video(video)
 
     if video.get('channel'):
         video['channel'] = minimize_channel(video['channel'])
@@ -496,32 +539,3 @@ def add_video_to_skip_list(channel: Dict, video: Dict):
     except AttributeError:
         channel['skip_download_videos'] = [video['source_id'], ]
         channel.flush()
-
-
-def delete_video(video: Dict):
-    """
-    Delete any and all video files for a particular video.  If deletion succeeds, mark it as "do-not-download".
-    """
-    video_files = get_absolute_video_files(video)
-    for path in video_files:
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
-
-    if not video_files:
-        raise UnknownFile('No video files were deleted')
-
-    with get_db_context(commit=True) as (db_conn, db):
-        Video = db['video']
-        video = Video.get_one(id=video['id'])
-
-        video['video_path'] = None
-        video['poster_path'] = None
-        video['caption_path'] = None
-        video['description_path'] = None
-        video['info_json_path'] = None
-        video.flush()
-
-        channel = video['channel']
-        add_video_to_skip_list(channel, video)

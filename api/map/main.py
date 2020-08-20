@@ -11,7 +11,7 @@ import logging
 # Pretty Name will be displayed when your plugin is linked to in the UI
 
 PRETTY_NAME = 'Map'
-logger = logging.getLogger('api')
+logger = logging.getLogger(__name__)
 
 
 def init_parser(sub_commands):

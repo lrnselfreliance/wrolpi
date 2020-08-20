@@ -1,0 +1,1 @@
+ALTER TABLE channel RENAME COLUMN generate_thumbnails TO generate_posters;

@@ -1,8 +1,9 @@
 #! /usr/bin/env python3
 import argparse
+import asyncio
 
-import api.videos.common
-from . import downloader, api
+from api.videos.api import refresh_videos
+from . import downloader
 
 PRETTY_NAME = 'Videos'
 
@@ -20,13 +21,13 @@ def init_parser(sub_commands):
                                 help='Search for new videos files.  Specify a channel name.')
 
 
-def main(args):
+async def main(args):
     if args.sub_commands and 'download' in args.sub_commands:
         downloader.main(args)
         return 0
     elif args.sub_commands and 'content' in args.sub_commands:
         refresh = args.refresh
-        api.videos.common.refresh_videos_with_db(refresh)
+        await refresh_videos(refresh)
         return 0
 
 
@@ -36,4 +37,5 @@ if __name__ == '__main__':
     sub_commands = parser.add_subparsers(title='sub-commands', dest='sub_commands')
     init_parser(sub_commands)
     args = parser.parse_args()
-    main(args)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main(args))

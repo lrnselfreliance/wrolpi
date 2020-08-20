@@ -187,7 +187,6 @@ class ChannelPage extends APIForm {
     }
 
     handleAdvancedClick = (e, titleProps) => {
-        console.log('handleAdvancedClick');
         const {index} = titleProps
         const {activeIndex} = this.state
         const newIndex = activeIndex === index ? -1 : index
@@ -269,6 +268,7 @@ class ChannelPage extends APIForm {
                             <label>Download Frequency</label>
                             <Dropdown selection
                                       name='download_frequency'
+                                      disabled={this.state.disabled}
                                       placeholder='Frequency'
                                       value={this.state.inputs.download_frequency}
                                       options={frequencyOptions}

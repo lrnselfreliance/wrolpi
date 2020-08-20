@@ -382,7 +382,8 @@ class ChannelPage extends APIForm {
                             Cancel
                         </Button>
 
-                        {!this.state.create && <>
+                        {!this.props.create &&
+                        <>
                             <Button color='red' onClick={() => this.setState({deleteOpen: true})}>Delete</Button>
                             <Confirm
                                 open={this.state.deleteOpen}

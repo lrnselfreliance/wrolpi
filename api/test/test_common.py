@@ -283,7 +283,7 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
     """
     Test that when a video has an invalid poster format, we convert it to JPEG.
     """
-    channel1, channel2 = tempdir.iterdir()
+    channel1, channel2 = sorted(tempdir.iterdir())
     jpg, mp4 = sorted(channel1.iterdir())
     flv, webp = sorted(channel2.iterdir())
 

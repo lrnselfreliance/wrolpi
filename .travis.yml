@@ -6,5 +6,6 @@ before_install:
   - docker-compose -f docker-compose.yml -f docker-compose.dev.yml build db
   - docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d db
   - docker-compose -f docker-compose.yml -f docker-compose.dev.yml build api
+  - docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d api
 script:
   - docker-compose -f docker-compose.yml -f docker-compose.dev.yml exec api pytest ./api

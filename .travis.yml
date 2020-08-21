@@ -7,3 +7,6 @@ before_install:
   - docker-compose -f docker-compose.dev.yml up -d api
 script:
   - docker-compose -f docker-compose.dev.yml exec api pytest ./api
+after_success:
+  # Submit coverage report to coveralls
+  - coveralls

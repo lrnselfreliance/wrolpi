@@ -1,5 +1,5 @@
 import React from "react";
-import {Accordion, Button, Checkbox, Form, Grid, Header, Input, Loader, Segment} from "semantic-ui-react";
+import {Accordion, Button, Checkbox, Form, Grid, Header, Input, Loader, Responsive, Segment} from "semantic-ui-react";
 import {
     createChannel,
     deleteChannel,
@@ -413,58 +413,111 @@ export function NewChannel(props) {
     )
 }
 
-function ChannelRow(props) {
-    let editTo = `/videos/channel/${props.channel.link}/edit`;
-    let videosTo = `/videos/channel/${props.channel.link}/video`;
+class ChannelRow extends React.Component {
+    constructor(props) {
+        super(props);
+        this.editTo = `/videos/channel/${props.channel.link}/edit`;
+        this.videosTo = `/videos/channel/${props.channel.link}/video`;
+    }
 
-    async function downloadVideos(e) {
+    downloadVideos = async (e) => {
         e.preventDefault();
-        let url = `${VIDEOS_API}:download/${props.channel.link}`;
+        let url = `${VIDEOS_API}:download/${this.props.channel.link}`;
         await fetch(url, {method: 'POST'});
     }
 
-    async function refreshVideos(e) {
+    refreshVideos = async (e) => {
         e.preventDefault();
-        let url = `${VIDEOS_API}:refresh/${props.channel.link}`;
+        let url = `${VIDEOS_API}:refresh/${this.props.channel.link}`;
         await fetch(url, {method: 'POST'});
     }
 
-    return (
-        <Table.Row>
-            <Table.Cell>
-                <Link to={videosTo}>{props.channel.name}</Link>
+    render() {
+        return (
+            <Table.Row>
+                <Table.Cell>
+                    <Link to={this.videosTo}>{this.props.channel.name}</Link>
+                </Table.Cell>
+                <Table.Cell>
+                    {this.props.channel.video_count}
+                </Table.Cell>
+                <Table.Cell>
+                    {secondsToFrequency(this.props.channel.download_frequency)}
+                </Table.Cell>
+                <Table.Cell textAlign='right'>
+                    <Popup
+                        header="Download any missing videos"
+                        on="hover"
+                        trigger={<Button
+                            primary
+                            onClick={this.downloadVideos}
+                            disabled={!!!this.props.channel.url}
+                        >
+                            Download Videos
+                        </Button>}
+                    />
+                </Table.Cell>
+                <Table.Cell textAlign='right'>
+                    <Popup
+                        header="Search for any local videos"
+                        on="hover"
+                        trigger={<Button primary inverted onClick={this.refreshVideos}>Refresh Files</Button>}
+                    />
+                </Table.Cell>
+                <Table.Cell textAlign='right'>
+                    <Link className="ui button secondary" to={this.editTo}>Edit</Link>
+                </Table.Cell>
+            </Table.Row>
+        )
+    }
+}
+
+class MobileChannelRow extends ChannelRow {
+
+    render() {
+        return <Table.Row verticalAlign='top'>
+            <Table.Cell width={10} colSpan={2}>
+                <p>
+                    <Link as='h3' to={this.videosTo}>
+                        <h3>
+                            {this.props.channel.name}
+                        </h3>
+                    </Link>
+                </p>
+                <p>
+                    Videos: {this.props.channel.video_count}
+                </p>
+                <p>
+                    Frequency: {secondsToFrequency(this.props.channel.download_frequency)}
+                </p>
             </Table.Cell>
-            <Table.Cell>
-                {props.channel.video_count}
+            <Table.Cell width={6} colSpan={2} textAlign='right'>
+                <p>
+                    <Popup
+                        header="Download any missing videos"
+                        on="hover"
+                        trigger={<Button
+                            primary
+                            onClick={this.downloadVideos}
+                            disabled={!!!this.props.channel.url}
+                        >
+                            Download
+                        </Button>}
+                    />
+                </p>
+                <p>
+                    <Popup
+                        header="Search for any local videos"
+                        on="hover"
+                        trigger={<Button primary inverted onClick={this.refreshVideos}>Refresh</Button>}
+                    />
+                </p>
+                <p>
+                    <Link className="ui button secondary" to={this.editTo}>Edit</Link>
+                </p>
             </Table.Cell>
-            <Table.Cell>
-                {secondsToFrequency(props.channel.download_frequency)}
-            </Table.Cell>
-            <Table.Cell textAlign='right'>
-                <Popup
-                    header="Download any missing videos"
-                    on="hover"
-                    trigger={<Button
-                        primary
-                        onClick={downloadVideos}
-                        disabled={!!!props.channel.url}
-                    >
-                        Download Videos
-                    </Button>}
-                />
-            </Table.Cell>
-            <Table.Cell textAlign='right'>
-                <Popup
-                    header="Search for any local videos"
-                    on="hover"
-                    trigger={<Button primary inverted onClick={refreshVideos}>Refresh Files</Button>}
-                />
-            </Table.Cell>
-            <Table.Cell textAlign='right'>
-                <Link className="ui button secondary" to={editTo}>Edit</Link>
-            </Table.Cell>
-        </Table.Row>
-    )
+        </Table.Row>;
+    }
 }
 
 function NewChannelButton() {
@@ -517,7 +570,7 @@ export class Channels extends React.Component {
 
     render() {
         let header = (
-            <Grid columns={2}>
+            <Grid columns={2} style={{marginBottom: '1em'}}>
                 <Grid.Column>
                     <Header as='h1'>Channels</Header>
                 </Grid.Column>
@@ -567,12 +620,27 @@ export class Channels extends React.Component {
                 <Message.Content><Link to='/videos/channel/new'>Create one.</Link></Message.Content>
             </Message>
         } else {
-            body = <Table striped basic size='large'>
-                {tableHeader}
-                <Table.Body>
-                    {this.state.results.map((channel) => <ChannelRow key={channel.link} channel={channel}/>)}
-                </Table.Body>
-            </Table>
+            body = (
+                <>
+                    <Responsive minWidth={770}>
+                        <Table striped basic size='large'>
+                            {tableHeader}
+                            <Table.Body>
+                                {this.state.results.map((channel) => <ChannelRow key={channel.link}
+                                                                                 channel={channel}/>)}
+                            </Table.Body>
+                        </Table>
+                    </Responsive>
+                    <Responsive maxWidth={769}>
+                        <Table striped basic unstackable size='medium'>
+                            <Table.Body>
+                                {this.state.results.map((channel) =>
+                                    <MobileChannelRow key={channel.link} channel={channel}/>)}
+                            </Table.Body>
+                        </Table>
+                    </Responsive>
+                </>
+            )
         }
 
         return (

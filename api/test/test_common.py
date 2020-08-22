@@ -327,9 +327,9 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                 [25],
                 [],
                 [
-                    {'message': 'foo', 'who': 0, 'progresses': [{'now': 0, 'total': 25}]},
-                    {'code': 'bar', 'progresses': [{'now': 0, 'total': 25}]},
-                    {'code': 'error', 'message': 'baz', 'progresses': [{'now': 0, 'total': 25}]},
+                    {'message': 'foo', 'who': 0, 'progresses': [{'percent': 0, 'total': 25}]},
+                    {'code': 'bar', 'progresses': [{'percent': 0, 'total': 25}]},
+                    {'code': 'error', 'message': 'baz', 'progresses': [{'percent': 0, 'total': 25}]},
                 ],
         ),
         (
@@ -343,15 +343,15 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                     (0, 25),
                 ],
                 [
-                    {'message': 'foo', 'who': 0, 'progresses': [{'now': 0, 'total': 25}]},
-                    {'code': 'bar', 'progresses': [{'now': 0, 'total': 25}]},
-                    {'message': None, 'progresses': [{'now': 4, 'total': 25}]},
-                    {'message': None, 'progresses': [{'now': 8, 'total': 25}]},
-                    {'message': None, 'progresses': [{'now': 16, 'total': 25}]},
-                    {'message': None, 'progresses': [{'now': 32, 'total': 25}]},
-                    {'message': None, 'progresses': [{'now': 64, 'total': 25}]},
-                    {'message': None, 'progresses': [{'now': 100, 'total': 25}]},
-                    {'code': 'error', 'message': 'baz', 'progresses': [{'now': 100, 'total': 25}]},
+                    {'message': 'foo', 'who': 0, 'progresses': [{'percent': 0, 'total': 25}]},
+                    {'code': 'bar', 'progresses': [{'percent': 0, 'total': 25}]},
+                    {'progresses': [{'percent': 4, 'total': 25}]},
+                    {'progresses': [{'percent': 8, 'total': 25}]},
+                    {'progresses': [{'percent': 16, 'total': 25}]},
+                    {'progresses': [{'percent': 32, 'total': 25}]},
+                    {'progresses': [{'percent': 64, 'total': 25}]},
+                    {'progresses': [{'percent': 100, 'total': 25}]},
+                    {'code': 'error', 'message': 'baz', 'progresses': [{'percent': 100, 'total': 25}]},
                 ]
         ),
         (
@@ -365,36 +365,36 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                 ],
                 [
                     {'message': 'foo', 'who': 0, 'progresses': [
-                        {'now': 0, 'total': 25},
-                        {'now': 0, 'total': 10},
+                        {'percent': 0, 'total': 25},
+                        {'percent': 0, 'total': 10},
                     ]},
                     {'code': 'bar', 'progresses': [
-                        {'now': 0, 'total': 25},
-                        {'now': 0, 'total': 10},
+                        {'percent': 0, 'total': 25},
+                        {'percent': 0, 'total': 10},
                     ]},
-                    {'message': None, 'progresses': [
-                        {'now': 0, 'total': 25},
-                        {'now': 30, 'total': 10},
+                    {'progresses': [
+                        {'percent': 0, 'total': 25},
+                        {'percent': 30, 'total': 10},
                     ]},
-                    {'message': None, 'progresses': [
-                        {'now': 0, 'total': 25},
-                        {'now': 80, 'total': 10},
+                    {'progresses': [
+                        {'percent': 0, 'total': 25},
+                        {'percent': 80, 'total': 10},
                     ]},
-                    {'message': None, 'progresses': [
-                        {'now': 72, 'total': 25},
-                        {'now': 80, 'total': 10},
+                    {'progresses': [
+                        {'percent': 72, 'total': 25},
+                        {'percent': 80, 'total': 10},
                     ]},
-                    {'message': None, 'progresses': [
-                        {'now': 72, 'total': 25},
-                        {'now': 100, 'total': 10},
+                    {'progresses': [
+                        {'percent': 72, 'total': 25},
+                        {'percent': 100, 'total': 10},
                     ]},
-                    {'message': None, 'progresses': [
-                        {'now': 100, 'total': 25},
-                        {'now': 100, 'total': 10},
+                    {'progresses': [
+                        {'percent': 100, 'total': 25},
+                        {'percent': 100, 'total': 10},
                     ]},
                     {
                         'code': 'error',
-                        'message': 'baz', 'progresses': [{'now': 100, 'total': 25}, {'now': 100, 'total': 10}]
+                        'message': 'baz', 'progresses': [{'percent': 100, 'total': 25}, {'percent': 100, 'total': 10}]
                     },
                 ]
         ),

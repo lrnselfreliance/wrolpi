@@ -342,7 +342,6 @@ export class Progresses extends React.Component {
         super(props);
         this.state = {
             progresses: [],
-            message: '',
         }
         this.socket = null;
     }
@@ -354,27 +353,53 @@ export class Progresses extends React.Component {
 
     handleMessage = async (e) => {
         let data = await JSON.parse(e.data);
-        let newState = {};
         if (data.progresses) {
-            console.log(data.progresses);
-            newState.progresses = data.progresses;
+            let newState = {};
+
+            let who = data.who !== undefined ? data.who : null;
+
+            newState.progresses = [];
+
+            for (let i = 0; i < data.progresses.length; i++) {
+                let newProgress = data.progresses[i];
+                let existingProgress = this.state.progresses[i] || {};
+                let updatedProgress = {key: i};
+                let dataKeys = Object.keys(newProgress);
+
+                // Apply any changes in the new progress object to the existing progress.
+                for (let j = 0; j < dataKeys.length; j++) {
+                    let key = dataKeys[j];
+                    updatedProgress[key] = newProgress[key] !== undefined ? newProgress[key] : existingProgress[key];
+                }
+
+                // Change message only if "who" is provided.
+                updatedProgress.message = existingProgress.message || '';
+                if (who !== null && data.message !== undefined) {
+                    updatedProgress.message = data.message;
+                }
+
+                // Active only when percent is less than 100%
+                updatedProgress.active = updatedProgress.percent < 100;
+                // Success when percent is 100%
+                updatedProgress.success = updatedProgress.percent === 100;
+
+                newState.progresses = newState.progresses.concat([updatedProgress]);
+            }
+
+            this.setState(newState);
         }
-        if (data.message && data.message !== '') {
-            newState.message = data.message;
-        }
-        this.setState(newState);
     }
 
     render() {
-        let {progresses, message, who} = this.state;
-        if (progresses.length === 0) {
-            return <></>
-        }
-        let [p1] = progresses;
         return <>
-            <Progress active
-                      percent={p1.now}
-            >{message}</Progress>
+            {this.state.progresses.map((i) =>
+                <Progress
+                    key={i.key}
+                    percent={i.percent}
+                    active={i.active}
+                    success={i.success}
+                >{i.message || ''}</Progress>
+            )}
         </>
     }
 

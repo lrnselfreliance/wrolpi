@@ -354,8 +354,15 @@ export class Progresses extends React.Component {
 
     handleMessage = async (e) => {
         let data = await JSON.parse(e.data);
-        this.setState(data);
-        console.log(this.state);
+        let newState = {};
+        if (data.progresses) {
+            console.log(data.progresses);
+            newState.progresses = data.progresses;
+        }
+        if (data.message && data.message !== '') {
+            newState.message = data.message;
+        }
+        this.setState(newState);
     }
 
     calcPercent = (progress) => {
@@ -363,7 +370,7 @@ export class Progresses extends React.Component {
         if (progress.total ===0) {
             return 100;
         }
-        return progress.now / progress.total;
+        return Math.floor(progress.now / progress.total);
     }
 
     render() {
@@ -374,10 +381,10 @@ export class Progresses extends React.Component {
         let [p1, p2] = progresses;
         return <>
             <Progress indicating
-                      percent={this.calcPercent(p1)}
+                      percent={p1.now}
             />
             <Progress indicating
-                      percent={this.calcPercent(p2)}
+                      percent={p2.now}
             >{message}</Progress>
         </>
     }

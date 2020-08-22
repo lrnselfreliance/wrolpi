@@ -357,13 +357,13 @@ def download_all_missing_videos(reporter: FeedReporter, link: str = None):
                     channel = db['channel'].get_one(id=channel['id'])
                     add_video_to_skip_list(channel, {'source_id': source_id})
 
-            reporter.error(f'Failed to download "{missing_video["title"]}", see logs...')
+            reporter.error(f'Failed to download "{missing_video["title"]}", see server logs...')
             continue
         with get_db_context(commit=True) as (db_conn, db):
             upsert_video(db, video_path, channel, id_=id_)
-        reporter.set_progress_total(1, idx, f'{channel["name"]}: Downloaded: {missing_video["title"]}')
+        reporter.set_progress(1, idx, f'{channel["name"]}: Downloaded: {missing_video["title"]}')
 
-    yield reporter.set_progress(1, len(missing_videos), 'All videos are downloaded')
+    reporter.finish(1, 'All videos are downloaded')
 
 
 def main(args=None):
@@ -372,6 +372,5 @@ def main(args=None):
     reporter = FeedReporter(q, 2)
     for status in update_channels(reporter):
         logger.info(str(status))
-    for status in download_all_missing_videos(reporter):
-        logger.info(status)
+    download_all_missing_videos(reporter)
     return 0

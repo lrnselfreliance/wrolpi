@@ -366,7 +366,7 @@ export class Progresses extends React.Component {
     }
 
     render() {
-        let {progresses, message} = this.state;
+        let {progresses, message, who} = this.state;
         if (progresses.length === 0) {
             return <></>
         }

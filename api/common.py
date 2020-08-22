@@ -279,7 +279,7 @@ class FeedReporter:
 
     def message(self, idx: int, msg: str):
         progresses = deepcopy(self.progresses)
-        msg = {'message': msg, 'for': idx, 'progresses': progresses}
+        msg = {'message': msg, 'who': idx, 'progresses': progresses}
         self.queue.put(msg)
 
     def error(self, msg: str):

@@ -192,7 +192,7 @@ def _refresh_videos(q: Queue, channel_links: list = None):
     # Fill in any missing data for all videos.
     process_video_meta_data()
 
-    reporter.set_progress(0, 100, 'All videos refreshed.')
+    reporter.set_progress(0, len(channels), 'All videos refreshed.')
     reporter.code('refresh-complete')
 
 

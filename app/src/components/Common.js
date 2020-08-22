@@ -353,7 +353,6 @@ export class Progresses extends React.Component {
 
     handleMessage = async (e) => {
         let data = await JSON.parse(e.data);
-        console.log('data', data);
         if (data.progresses) {
             let newState = {};
 
@@ -386,8 +385,6 @@ export class Progresses extends React.Component {
 
                 newState.progresses = newState.progresses.concat([updatedProgress]);
             }
-
-            console.log('newState', newState);
 
             this.setState(newState);
         }

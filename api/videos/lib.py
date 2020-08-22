@@ -113,13 +113,19 @@ def process_video_meta_data():
     refresh_channel_calculate_size()
 
 
-def refresh_channel_videos(channel: Dict):
+def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
     """
     Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
     """
+    # This function is hard to predict, so we will simply progress in chunks :(
+    reporter.set_progress_total(1, 6)
+    reporter.set_progress(1, 0)
+
     # Set the idempotency key so we can remove any videos not touched during this search
     with get_db_curs(commit=True) as curs:
         curs.execute('UPDATE video SET idempotency=NULL WHERE channel_id=%s', (channel['id'],))
+
+    reporter.set_progress(1, 1)
 
     idempotency = str(uuid1())
     directory = get_absolute_media_path(channel['directory'])
@@ -128,6 +134,8 @@ def refresh_channel_videos(channel: Dict):
     possible_new_paths = generate_video_paths(directory)
     possible_new_paths = remove_duplicate_video_paths(possible_new_paths)
 
+    reporter.set_progress(1, 2)
+
     # Update all videos that match the current video paths
     relative_new_paths = [str(i.relative_to(directory)) for i in possible_new_paths]
     with get_db_curs(commit=True) as curs:
@@ -135,14 +143,20 @@ def refresh_channel_videos(channel: Dict):
         curs.execute(query, (idempotency, channel['id'], relative_new_paths))
         existing_paths = {i for (i,) in curs.fetchall()}
 
+    reporter.set_progress(1, 3)
+
     # Get the paths for any video not yet in the DB
     # (paths in DB are relative, but we need to pass an absolute path)
     new_videos = {p for p in possible_new_paths if str(p.relative_to(directory)) not in existing_paths}
+
+    reporter.set_progress(1, 4)
 
     for video_path in new_videos:
         with get_db_context(commit=True) as (db_conn, db):
             upsert_video(db, pathlib.Path(video_path), channel, idempotency=idempotency)
             logger.debug(f'{channel["name"]}: Added {video_path}')
+
+    reporter.set_progress(1, 5)
 
     with get_db_curs(commit=True) as curs:
         curs.execute('DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL RETURNING id', (channel['id'],))
@@ -154,6 +168,8 @@ def refresh_channel_videos(channel: Dict):
 
     status = f'{channel["name"]}: {len(new_videos)} new videos, {len(existing_paths)} already existed. '
     logger.info(status)
+
+    reporter.set_progress(1, 6)
 
 
 def _refresh_videos(q: Queue, channel_links: list = None):
@@ -169,7 +185,7 @@ def _refresh_videos(q: Queue, channel_links: list = None):
     with get_db_context() as (db_conn, db):
         Channel = db['channel']
 
-        reporter = FeedReporter(q)
+        reporter = FeedReporter(q, 2)
         reporter.code('refresh-started')
         reporter.set_progress_total(0, Channel.count())
 
@@ -187,7 +203,7 @@ def _refresh_videos(q: Queue, channel_links: list = None):
 
     for idx, channel in enumerate(channels):
         reporter.set_progress(0, idx, f'Checking {channel["name"]} directory for new videos')
-        refresh_channel_videos(channel)
+        refresh_channel_videos(channel, reporter)
 
     # Fill in any missing data for all videos.
     process_video_meta_data()

@@ -185,3 +185,8 @@ export async function refresh() {
     let response = await apiPost(`${VIDEOS_API}:refresh`);
     return await response.json();
 }
+
+export async function download() {
+    let response = await apiPost(`${VIDEOS_API}:download`);
+    return await response.json();
+}

@@ -2,13 +2,14 @@
 import pathlib
 import re
 from datetime import datetime, timedelta
+from queue import Queue
 from random import shuffle
 from typing import Tuple, List
 
 from dictorm import DictDB, Dict, And, Or
 from youtube_dl import YoutubeDL
 
-from api.common import make_progress_calculator, logger, today
+from api.common import logger, today, FeedReporter
 from api.db import get_db_context
 from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path, add_video_to_skip_list
@@ -73,7 +74,7 @@ def update_channel(channel: Dict = None, link: str = None):
             Video(source_id=source_id, channel_id=channel_id).flush()
 
 
-def update_channels(link: str = None):
+def update_channels(reporter: FeedReporter, link: str = None):
     """Update all information for each channel.  (No downloads performed)"""
 
     with get_db_context() as (db_conn, db):
@@ -102,20 +103,22 @@ def update_channels(link: str = None):
         if len(channels) == 0:
             logger.warning(f'All channels are up to date')
 
+    reporter.set_progress_total(0, len(channels))
+    reporter.set_progress(0, 0, f'{len(channels)} channels scheduled for update')
+
     # Randomize downloading of channels.
     shuffle(channels)
 
     logger.debug(f'Getting info for {len(channels)} channels')
-    calc_progress = make_progress_calculator(len(channels))
     for idx, channel in enumerate(channels):
-        yield {'progress': calc_progress(idx), 'message': f'Getting video list for {channel["name"]}'}
+        reporter.set_progress(0, idx, f'Getting video list for {channel["name"]}')
         try:
             update_channel(channel)
         except Exception:
             logger.critical('Unable to fetch channel videos', exc_info=True)
             continue
 
-    yield {'progress': 100, 'message': 'All video lists updated.'}
+    reporter.set_progress(0, len(channels), 'Done downloading video lists')
 
 
 def _find_all_missing_videos(link: str = None) -> List[Tuple]:
@@ -333,22 +336,19 @@ def _skip_download(error):
     return False
 
 
-def download_all_missing_videos(link: str = None):
+def download_all_missing_videos(reporter: FeedReporter, link: str = None):
     """Find any videos identified by the info packet that haven't yet been downloaded, download them."""
-    yield {'progress': 0, 'message': 'Comparing local videos to available videos...'}
     missing_videos = list(find_all_missing_videos(link))
-    logger.info(f'Found {len(missing_videos)} missing videos.')
+    reporter.set_progress_total(1, len(missing_videos))
+    reporter.message(1, f'Found {len(missing_videos)} missing videos.')
 
-    calc_progress = make_progress_calculator(len(missing_videos))
-
-    for index, (channel, id_, missing_video) in enumerate(missing_videos):
+    for idx, (channel, id_, missing_video) in enumerate(missing_videos):
         try:
             video_path = download_video(channel, missing_video)
         except Exception as e:
             logger.warning(f'Failed to download "{missing_video["title"]}" with exception: {e}')
             if _skip_download(e):
                 # The video failed to download, and the error will never be fixed.  Skip it forever.
-                skip_download_videos = channel['skip_download_videos']
                 source_id = missing_video.get('id')
                 logger.warning(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
                                f'attempt to download it again.')
@@ -357,19 +357,21 @@ def download_all_missing_videos(link: str = None):
                     channel = db['channel'].get_one(id=channel['id'])
                     add_video_to_skip_list(channel, {'source_id': source_id})
 
-            yield f'Failed to download "{missing_video["title"]}", see logs...'
+            reporter.error(f'Failed to download "{missing_video["title"]}", see logs...')
             continue
         with get_db_context(commit=True) as (db_conn, db):
             upsert_video(db, video_path, channel, id_=id_)
-        yield {'progress': calc_progress(index), 'message': f'{channel["name"]}: Downloaded: {missing_video["title"]}'}
+        reporter.set_progress_total(1, idx, f'{channel["name"]}: Downloaded: {missing_video["title"]}')
 
-    yield {'progress': 100, 'message': 'All videos are downloaded'}
+    yield reporter.set_progress(1, len(missing_videos), 'All videos are downloaded')
 
 
 def main(args=None):
     """Find and download any missing videos.  Parse any arguments passed by the cmd-line."""
-    for status in update_channels():
+    q = Queue()
+    reporter = FeedReporter(q, 2)
+    for status in update_channels(reporter):
         logger.info(str(status))
-    for status in download_all_missing_videos():
+    for status in download_all_missing_videos(reporter):
         logger.info(status)
     return 0

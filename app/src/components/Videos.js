@@ -7,11 +7,10 @@ import Paginator, {
     Progresses,
     searchOrders,
     VideoCards,
-    videoOrders,
-    VIDEOS_API
+    videoOrders
 } from "./Common"
 import VideoPage from "./VideoPlayer";
-import {getChannel, getVideo, refresh, searchVideos} from "../api";
+import {download, getChannel, getVideo, refresh, searchVideos} from "../api";
 import {Button, Dropdown, Form, Grid, Header, Icon, Input} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
@@ -36,7 +35,10 @@ class ManageVideos extends React.Component {
 
     download = async (e) => {
         e.preventDefault();
-        await fetch(`${VIDEOS_API}:download`, {method: 'POST'});
+        let response = await download();
+        if (response.code === 'stream-started') {
+            this.setState({streamUrl: response.stream_url});
+        }
     }
 
     refresh = async (e) => {

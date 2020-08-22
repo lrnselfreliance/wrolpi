@@ -211,6 +211,10 @@ def create_db_structure(structure):
         @wraps(func)
         @wrap_test_db
         def wrapped(*args, **kwargs):
+            # Dummy queue and reporter to receive messages.
+            q = Queue()
+            reporter = FeedReporter(q, 2)
+
             # Convert the channel/video structure to a file structure for the test.
             file_structure = []
             for channel, paths in structure.items():
@@ -225,7 +229,7 @@ def create_db_structure(structure):
                     Channel, Video = db['channel'], db['video']
                     for channel in structure:
                         channel = Channel(directory=str(tempdir / channel), name=channel).flush()
-                        refresh_channel_videos(channel)
+                        refresh_channel_videos(channel, reporter)
 
                 return func(*args, **kwargs)
 

@@ -124,8 +124,7 @@ async def download(_, link: str = None):
             update_channels(reporter, link)
             download_logger.info('Updated all channel catalogs')
             download_all_missing_videos(reporter, link)
-            reporter.set_progress_total(1, 1)
-            reporter.set_progress(1, 1, 'All videos have been downloaded')
+            reporter.finish(1, 'All videos have been downloaded')
 
             # Fill in any missing data for all videos.
             reporter.message(0, 'Processing and cleaning files')

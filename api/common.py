@@ -1,3 +1,4 @@
+import asyncio
 import collections
 import inspect
 import json
@@ -92,6 +93,7 @@ def create_websocket_feed(name: str, uri: str, blueprint: Blueprint, maxsize: in
                 any_messages = True
                 feed_logger.debug(f'got message {msg}')
                 dump = json.dumps(msg)
+                await asyncio.sleep(0.01)
                 await ws.send(dump)
             except queue.Empty:
                 # No messages yet, try again while event is set

@@ -1,5 +1,5 @@
 import React from "react";
-import {Card, Container, Image, Pagination} from 'semantic-ui-react';
+import {Card, Container, Image, Pagination, Progress} from 'semantic-ui-react';
 import {Link} from "react-router-dom";
 import LazyLoad from 'react-lazy-load';
 
@@ -159,7 +159,7 @@ export const frequencyOptions = [
 ];
 
 export function secondsToFrequency(seconds) {
-    for (let i=0; i < Object.keys(frequencyOptions).length; i++) {
+    for (let i = 0; i < Object.keys(frequencyOptions).length; i++) {
         let d = frequencyOptions[i];
         if (d.value === seconds) {
             return d.text;
@@ -332,6 +332,54 @@ export class APIForm extends React.Component {
         inputs[name] = !checked;
 
         this.setState({inputs: inputs}, this.checkDirty);
+    }
+
+}
+
+export class Progresses extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            progresses: [],
+            message: '',
+        }
+        this.socket = null;
+    }
+
+    componentDidMount() {
+        this.socket = new WebSocket(this.props.streamUrl);
+        this.socket.onmessage = this.handleMessage;
+    }
+
+    handleMessage = async (e) => {
+        let data = await JSON.parse(e.data);
+        this.setState(data);
+        console.log(this.state);
+    }
+
+    calcPercent = (progress) => {
+        console.log(progress.total, progress.now, progress.now / progress.total);
+        if (progress.total ===0) {
+            return 100;
+        }
+        return progress.now / progress.total;
+    }
+
+    render() {
+        let {progresses, message} = this.state;
+        if (progresses.length === 0) {
+            return <></>
+        }
+        let [p1, p2] = progresses;
+        return <>
+            <Progress indicating
+                      percent={this.calcPercent(p1)}
+            />
+            <Progress indicating
+                      percent={this.calcPercent(p2)}
+            >{message}</Progress>
+        </>
     }
 
 }

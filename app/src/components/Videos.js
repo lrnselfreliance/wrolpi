@@ -4,13 +4,14 @@ import Paginator, {
     DEFAULT_LIMIT,
     defaultSearchOrder,
     defaultVideoOrder,
+    Progresses,
     searchOrders,
     VideoCards,
     videoOrders,
     VIDEOS_API
 } from "./Common"
 import VideoPage from "./VideoPlayer";
-import {getChannel, getVideo, searchVideos} from "../api";
+import {getChannel, getVideo, refresh, searchVideos} from "../api";
 import {Button, Dropdown, Form, Grid, Header, Icon, Input} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
@@ -26,6 +27,13 @@ function scrollToTop() {
 
 class ManageVideos extends React.Component {
 
+    constructor(props) {
+        super(props);
+        this.state = {
+            streamUrl: null,
+        }
+    }
+
     download = async (e) => {
         e.preventDefault();
         await fetch(`${VIDEOS_API}:download`, {method: 'POST'});
@@ -33,7 +41,10 @@ class ManageVideos extends React.Component {
 
     refresh = async (e) => {
         e.preventDefault();
-        await fetch(`${VIDEOS_API}:refresh`, {method: 'POST'});
+        let response = await refresh();
+        if (response.code === 'stream-started') {
+            this.setState({streamUrl: response.stream_url});
+        }
     }
 
     render() {
@@ -42,14 +53,24 @@ class ManageVideos extends React.Component {
                 <Header as="h1">Manage Videos</Header>
 
                 <p>
-                    <Button primary onClick={this.download}>Download Videos</Button>
+                    <Button primary
+                            onClick={this.download}
+                    >
+                        Download Videos
+                    </Button>
                     <label>Download any missing videos</label>
                 </p>
 
                 <p>
-                    <Button secondary onClick={this.refresh}>Refresh Video Files</Button>
+                    <Button secondary
+                            onClick={this.refresh}
+                    >
+                        Refresh Video Files
+                    </Button>
                     <label>Search for any videos in the media directory</label>
                 </p>
+
+                {this.state.streamUrl && <Progresses streamUrl={this.state.streamUrl}/>}
             </Container>
         )
     }

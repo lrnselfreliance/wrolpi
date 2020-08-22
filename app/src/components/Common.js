@@ -364,9 +364,9 @@ export class Progresses extends React.Component {
                 let newProgress = data.progresses[i];
                 let existingProgress = this.state.progresses[i] || {};
                 let updatedProgress = {key: i};
-                let dataKeys = Object.keys(newProgress);
 
                 // Apply any changes in the new progress object to the existing progress.
+                let dataKeys = Object.keys(newProgress);
                 for (let j = 0; j < dataKeys.length; j++) {
                     let key = dataKeys[j];
                     updatedProgress[key] = newProgress[key] !== undefined ? newProgress[key] : existingProgress[key];

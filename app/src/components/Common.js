@@ -372,7 +372,7 @@ export class Progresses extends React.Component {
         }
         let [p1] = progresses;
         return <>
-            <Progress indicating
+            <Progress active
                       percent={p1.now}
             >{message}</Progress>
         </>

@@ -307,6 +307,14 @@ class FeedReporter:
             message['who'] = idx
         self.queue.put(message)
 
+    def finish(self, idx: int, msg: str = None):
+        self.progresses[idx]['percent'] = 100
+        progresses = deepcopy(self.progresses)
+        message = {'progresses': progresses}
+        if msg:
+            message['message'] = msg
+        self.queue.put(message)
+
 
 class FileNotModified(Exception):
     pass

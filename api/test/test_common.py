@@ -426,3 +426,31 @@ def test_feed_reporter(totals, progresses, messages):
         assert message == received, f'Message {count} did not match'
 
         count += 1
+
+
+def test_feed_reporter_finish():
+    q = Queue()
+    reporter = FeedReporter(q)
+    reporter.set_progress_total(0, 50)
+    reporter.set_progress(0, 0)
+    reporter.set_progress(0, 20)
+    reporter.finish(0, 'completed')
+
+    expected = [
+        {'progresses': [{'percent': 0, 'total': 50}]},
+        {'progresses': [{'percent': 40, 'total': 50}]},
+        {'message': 'completed', 'progresses': [{'percent': 100, 'total': 50}]},
+    ]
+
+    count = 0
+
+    while not q.empty():
+        received = q.get_nowait()
+        try:
+            message = expected.pop(0)
+        except IndexError:
+            raise AssertionError(f'Queue ({count}) had excess message: {received}')
+
+        assert message == received, f'Message {count} did not match'
+
+        count += 1

@@ -327,7 +327,7 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                 [25],
                 [],
                 [
-                    {'message': 'foo', 'progresses': [{'now': 0, 'total': 25}]},
+                    {'message': 'foo', 'for': 0, 'progresses': [{'now': 0, 'total': 25}]},
                     {'code': 'bar', 'progresses': [{'now': 0, 'total': 25}]},
                     {'code': 'error', 'message': 'baz', 'progresses': [{'now': 0, 'total': 25}]},
                 ],
@@ -343,7 +343,7 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                     (0, 25),
                 ],
                 [
-                    {'message': 'foo', 'progresses': [{'now': 0, 'total': 25}]},
+                    {'message': 'foo', 'for': 0, 'progresses': [{'now': 0, 'total': 25}]},
                     {'code': 'bar', 'progresses': [{'now': 0, 'total': 25}]},
                     {'message': None, 'progresses': [{'now': 4, 'total': 25}]},
                     {'message': None, 'progresses': [{'now': 8, 'total': 25}]},
@@ -364,7 +364,7 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                     (0, 30),  # This is higher than the total of 25, percent should be 100.
                 ],
                 [
-                    {'message': 'foo', 'progresses': [
+                    {'message': 'foo', 'for': 0, 'progresses': [
                         {'now': 0, 'total': 25},
                         {'now': 0, 'total': 10},
                     ]},
@@ -407,7 +407,7 @@ def test_feed_reporter(totals, progresses, messages):
     for idx, total in enumerate(totals):
         reporter.set_progress_total(idx, total)
 
-    reporter.message('foo')
+    reporter.message(0, 'foo')
     reporter.code('bar')
 
     for progress in progresses:

@@ -277,9 +277,9 @@ class FeedReporter:
         self.progresses = [{'now': 0, 'total': 0} for _ in range(progress_count)]
         self.calculators = [lambda _: None for _ in range(progress_count)]
 
-    def message(self, msg: str):
+    def message(self, idx: int, msg: str):
         progresses = deepcopy(self.progresses)
-        msg = dict(message=msg, progresses=progresses)
+        msg = {'message': msg, 'for': idx, 'progresses': progresses}
         self.queue.put(msg)
 
     def error(self, msg: str):
@@ -296,9 +296,11 @@ class FeedReporter:
         self.progresses[idx]['total'] = total
         self.calculators[idx] = make_progress_calculator(total)
 
-    def set_progress(self, idx: int, progress: int, message: str = None):
+    def set_progress(self, idx: int, progress: int, msg: str = None):
         self.progresses[idx]['now'] = self.calculators[idx](progress)
-        self.message(message)
+        progresses = deepcopy(self.progresses)
+        msg = {'message': msg, 'progresses': progresses}
+        self.queue.put(msg)
 
 
 class FileNotModified(Exception):

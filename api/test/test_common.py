@@ -439,7 +439,7 @@ def test_feed_reporter_finish():
     expected = [
         {'progresses': [{'percent': 0, 'total': 50}]},
         {'progresses': [{'percent': 40, 'total': 50}]},
-        {'message': 'completed', 'progresses': [{'percent': 100, 'total': 50}]},
+        {'message': 'completed', 'who': 0, 'progresses': [{'percent': 100, 'total': 50}]},
     ]
 
     count = 0

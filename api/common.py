@@ -313,6 +313,7 @@ class FeedReporter:
         message = {'progresses': progresses}
         if msg:
             message['message'] = msg
+            message['who'] = idx
         self.queue.put(message)
 
 

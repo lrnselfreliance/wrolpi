@@ -256,6 +256,7 @@ def make_progress_calculator(total):
     """
     Create a function that calculates the percentage of completion.
     """
+
     def progress_calculator(current) -> int:
         if current >= total:
             # Progress doesn't make sense, just return 100
@@ -282,11 +283,13 @@ class FeedReporter:
         self.queue.put(msg)
 
     def error(self, msg: str):
-        msg = dict(code='error', error=msg, progresses=self.progresses)
+        progresses = deepcopy(self.progresses)
+        msg = dict(code='error', message=msg, progresses=progresses)
         self.queue.put(msg)
 
     def code(self, code: str):
-        msg = dict(code=code, progresses=self.progresses)
+        progresses = deepcopy(self.progresses)
+        msg = dict(code=code, progresses=progresses)
         self.queue.put(msg)
 
     def set_progress_total(self, idx: int, total: int):

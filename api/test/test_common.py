@@ -328,7 +328,8 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                 [],
                 [
                     {'message': 'foo', 'progresses': [{'now': 0, 'total': 25}]},
-                    {'message': 'bar', 'progresses': [{'now': 0, 'total': 25}]},
+                    {'code': 'bar', 'progresses': [{'now': 0, 'total': 25}]},
+                    {'code': 'error', 'message': 'baz', 'progresses': [{'now': 0, 'total': 25}]},
                 ],
         ),
         (
@@ -343,13 +344,14 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                 ],
                 [
                     {'message': 'foo', 'progresses': [{'now': 0, 'total': 25}]},
+                    {'code': 'bar', 'progresses': [{'now': 0, 'total': 25}]},
                     {'message': None, 'progresses': [{'now': 4, 'total': 25}]},
                     {'message': None, 'progresses': [{'now': 8, 'total': 25}]},
                     {'message': None, 'progresses': [{'now': 16, 'total': 25}]},
                     {'message': None, 'progresses': [{'now': 32, 'total': 25}]},
                     {'message': None, 'progresses': [{'now': 64, 'total': 25}]},
                     {'message': None, 'progresses': [{'now': 100, 'total': 25}]},
-                    {'message': 'bar', 'progresses': [{'now': 100, 'total': 25}]},
+                    {'code': 'error', 'message': 'baz', 'progresses': [{'now': 100, 'total': 25}]},
                 ]
         ),
         (
@@ -363,6 +365,10 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                 ],
                 [
                     {'message': 'foo', 'progresses': [
+                        {'now': 0, 'total': 25},
+                        {'now': 0, 'total': 10},
+                    ]},
+                    {'code': 'bar', 'progresses': [
                         {'now': 0, 'total': 25},
                         {'now': 0, 'total': 10},
                     ]},
@@ -386,12 +392,12 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                         {'now': 100, 'total': 25},
                         {'now': 100, 'total': 10},
                     ]},
-                    {'message': 'bar', 'progresses': [
-                        {'now': 100, 'total': 25},
-                        {'now': 100, 'total': 10},
-                    ]},
+                    {
+                        'code': 'error',
+                        'message': 'baz', 'progresses': [{'now': 100, 'total': 25}, {'now': 100, 'total': 10}]
+                    },
                 ]
-        )
+        ),
     ]
 )
 def test_feed_reporter(totals, progresses, messages):
@@ -402,11 +408,12 @@ def test_feed_reporter(totals, progresses, messages):
         reporter.set_progress_total(idx, total)
 
     reporter.message('foo')
+    reporter.code('bar')
 
     for progress in progresses:
         reporter.set_progress(*progress)
 
-    reporter.message('bar')
+    reporter.error('baz')
 
     count = 0
     while not q.empty():

@@ -343,6 +343,7 @@ def download_all_missing_videos(reporter: FeedReporter, link: str = None):
     reporter.message(1, f'Found {len(missing_videos)} missing videos.')
 
     for idx, (channel, id_, missing_video) in enumerate(missing_videos):
+        reporter.set_progress(1, idx, f'Downloading {channel["name"]}: {missing_video["title"]}')
         try:
             video_path = download_video(channel, missing_video)
         except Exception as e:
@@ -361,7 +362,6 @@ def download_all_missing_videos(reporter: FeedReporter, link: str = None):
             continue
         with get_db_context(commit=True) as (db_conn, db):
             upsert_video(db, video_path, channel, id_=id_)
-        reporter.set_progress(1, idx, f'{channel["name"]}: Downloaded: {missing_video["title"]}')
 
     reporter.finish(1, 'All videos are downloaded')
 

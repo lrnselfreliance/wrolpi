@@ -6,6 +6,7 @@ import logging
 import os
 import queue
 import string
+from copy import deepcopy
 from datetime import datetime, date
 from functools import wraps
 from multiprocessing import Event, Queue
@@ -139,20 +140,6 @@ def get_sanic_url(scheme: str = 'http', path: str = None, query: list = None, fr
     return unparsed
 
 
-def make_progress_calculator(total):
-    """
-    Create a function that calculates the percentage of completion.
-    """
-
-    def progress_calculator(current) -> int:
-        if current >= total:
-            # Progress doesn't make sense, just return 100
-            return 100
-        return int((current / total) * 100)
-
-    return progress_calculator
-
-
 def validate_data(model: type, data: dict):
     """
     Convert a JSON object to the model's specification.  If the JSON object matches the model's specification, this
@@ -265,6 +252,20 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
     return wrapper
 
 
+def make_progress_calculator(total):
+    """
+    Create a function that calculates the percentage of completion.
+    """
+    def progress_calculator(current) -> int:
+        if current >= total:
+            # Progress doesn't make sense, just return 100
+            return 100
+        percent = int((current / total) * 100)
+        return percent
+
+    return progress_calculator
+
+
 class FeedReporter:
     """
     I am used to consistently send messages and progress(s) to a Websocket Feed.
@@ -276,7 +277,8 @@ class FeedReporter:
         self.calculators = [lambda _: None for _ in range(progress_count)]
 
     def message(self, msg: str):
-        msg = dict(message=msg, progresses=self.progresses)
+        progresses = deepcopy(self.progresses)
+        msg = dict(message=msg, progresses=progresses)
         self.queue.put(msg)
 
     def error(self, msg: str):
@@ -293,7 +295,7 @@ class FeedReporter:
 
     def set_progress(self, idx: int, progress: int, message: str = None):
         self.progresses[idx]['now'] = self.calculators[idx](progress)
-        self.queue.put({'progresses': self.progresses, 'message': message})
+        self.message(message)
 
 
 class FileNotModified(Exception):

@@ -195,6 +195,7 @@ def _refresh_videos(q: Queue, channel_links: list = None):
     for idx, channel in enumerate(channels):
         reporter.set_progress(0, idx, f'Checking {channel["name"]} directory for new videos')
         refresh_channel_videos(channel, reporter)
+    reporter.set_progress(1, 100)
 
     # Fill in any missing data for all videos.
     process_video_meta_data()

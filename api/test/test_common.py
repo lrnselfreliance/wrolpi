@@ -1,12 +1,13 @@
 import tempfile
 from pathlib import Path
+from queue import Queue
 
 import pytest
 from PIL import Image
 from sanic_openapi import doc
 
 from api.api import api_app, attach_routes
-from api.common import validate_data, combine_dicts, insert_parameter
+from api.common import validate_data, combine_dicts, insert_parameter, FeedReporter
 from api.db import get_db_context
 from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
 from api.test.common import create_db_structure, build_test_directories, wrap_test_db
@@ -317,3 +318,104 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
     with open(new_jpg, 'rb') as new_jpg_fh:
         # The converted image is the same as the other JPEG because both are black 25x25 pixel images.
         assert jpg_fh_contents == new_jpg_fh.read()
+
+
+@pytest.mark.parametrize(
+    'totals, progresses,messages',
+    [
+        (
+                [25],
+                [],
+                [
+                    {'message': 'foo', 'progresses': [{'now': 0, 'total': 25}]},
+                    {'message': 'bar', 'progresses': [{'now': 0, 'total': 25}]},
+                ],
+        ),
+        (
+                [25],
+                [
+                    (0, 1),
+                    (0, 2),
+                    (0, 4),
+                    (0, 8),
+                    (0, 16),
+                    (0, 25),
+                ],
+                [
+                    {'message': 'foo', 'progresses': [{'now': 0, 'total': 25}]},
+                    {'message': None, 'progresses': [{'now': 4, 'total': 25}]},
+                    {'message': None, 'progresses': [{'now': 8, 'total': 25}]},
+                    {'message': None, 'progresses': [{'now': 16, 'total': 25}]},
+                    {'message': None, 'progresses': [{'now': 32, 'total': 25}]},
+                    {'message': None, 'progresses': [{'now': 64, 'total': 25}]},
+                    {'message': None, 'progresses': [{'now': 100, 'total': 25}]},
+                    {'message': 'bar', 'progresses': [{'now': 100, 'total': 25}]},
+                ]
+        ),
+        (
+                [25, 10],
+                [
+                    (1, 3),
+                    (1, 8),
+                    (0, 18),
+                    (1, 10),
+                    (0, 30),  # This is higher than the total of 25, percent should be 100.
+                ],
+                [
+                    {'message': 'foo', 'progresses': [
+                        {'now': 0, 'total': 25},
+                        {'now': 0, 'total': 10},
+                    ]},
+                    {'message': None, 'progresses': [
+                        {'now': 0, 'total': 25},
+                        {'now': 30, 'total': 10},
+                    ]},
+                    {'message': None, 'progresses': [
+                        {'now': 0, 'total': 25},
+                        {'now': 80, 'total': 10},
+                    ]},
+                    {'message': None, 'progresses': [
+                        {'now': 72, 'total': 25},
+                        {'now': 80, 'total': 10},
+                    ]},
+                    {'message': None, 'progresses': [
+                        {'now': 72, 'total': 25},
+                        {'now': 100, 'total': 10},
+                    ]},
+                    {'message': None, 'progresses': [
+                        {'now': 100, 'total': 25},
+                        {'now': 100, 'total': 10},
+                    ]},
+                    {'message': 'bar', 'progresses': [
+                        {'now': 100, 'total': 25},
+                        {'now': 100, 'total': 10},
+                    ]},
+                ]
+        )
+    ]
+)
+def test_feed_reporter(totals, progresses, messages):
+    q = Queue()
+    reporter = FeedReporter(q, len(totals))
+
+    for idx, total in enumerate(totals):
+        reporter.set_progress_total(idx, total)
+
+    reporter.message('foo')
+
+    for progress in progresses:
+        reporter.set_progress(*progress)
+
+    reporter.message('bar')
+
+    count = 0
+    while not q.empty():
+        received = q.get_nowait()
+        try:
+            message = messages.pop(0)
+        except IndexError:
+            raise AssertionError(f'Queue ({count}) had excess message: {received}')
+
+        assert message == received, f'Message {count} did not match'
+
+        count += 1

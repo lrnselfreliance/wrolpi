@@ -365,26 +365,15 @@ export class Progresses extends React.Component {
         this.setState(newState);
     }
 
-    calcPercent = (progress) => {
-        console.log(progress.total, progress.now, progress.now / progress.total);
-        if (progress.total ===0) {
-            return 100;
-        }
-        return Math.floor(progress.now / progress.total);
-    }
-
     render() {
         let {progresses, message} = this.state;
         if (progresses.length === 0) {
             return <></>
         }
-        let [p1, p2] = progresses;
+        let [p1] = progresses;
         return <>
             <Progress indicating
                       percent={p1.now}
-            />
-            <Progress indicating
-                      percent={p2.now}
             >{message}</Progress>
         </>
     }

@@ -113,12 +113,10 @@ def process_video_meta_data():
     refresh_channel_calculate_size()
 
 
-def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
+def refresh_channel_videos(channel: Dict):
     """
     Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
     """
-    reporter.set_progress(1, 0)
-
     # Set the idempotency key so we can remove any videos not touched during this search
     with get_db_curs(commit=True) as curs:
         curs.execute('UPDATE video SET idempotency=NULL WHERE channel_id=%s', (channel['id'],))
@@ -129,7 +127,6 @@ def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
     # A set of absolute paths that exist in the file system
     possible_new_paths = generate_video_paths(directory)
     possible_new_paths = remove_duplicate_video_paths(possible_new_paths)
-    reporter.message('Found all possible video files')
 
     # Update all videos that match the current video paths
     relative_new_paths = [str(i.relative_to(directory)) for i in possible_new_paths]
@@ -147,8 +144,6 @@ def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
             upsert_video(db, pathlib.Path(video_path), channel, idempotency=idempotency)
             logger.debug(f'{channel["name"]}: Added {video_path}')
 
-    reporter.message('Matched all existing video files')
-
     with get_db_curs(commit=True) as curs:
         curs.execute('DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL RETURNING id', (channel['id'],))
         deleted_count = len(curs.fetchall())
@@ -156,11 +151,9 @@ def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
     if deleted_count:
         deleted_status = f'Deleted {deleted_count} video records from channel {channel["name"]}'
         logger.info(deleted_status)
-        reporter.message(deleted_status)
 
     status = f'{channel["name"]}: {len(new_videos)} new videos, {len(existing_paths)} already existed. '
     logger.info(status)
-    reporter.message(status)
 
 
 def _refresh_videos(q: Queue, channel_links: list = None):
@@ -176,7 +169,7 @@ def _refresh_videos(q: Queue, channel_links: list = None):
     with get_db_context() as (db_conn, db):
         Channel = db['channel']
 
-        reporter = FeedReporter(q, 2)
+        reporter = FeedReporter(q)
         reporter.code('refresh-started')
         reporter.set_progress_total(0, Channel.count())
 
@@ -194,8 +187,7 @@ def _refresh_videos(q: Queue, channel_links: list = None):
 
     for idx, channel in enumerate(channels):
         reporter.set_progress(0, idx, f'Checking {channel["name"]} directory for new videos')
-        refresh_channel_videos(channel, reporter)
-    reporter.set_progress(1, 100)
+        refresh_channel_videos(channel)
 
     # Fill in any missing data for all videos.
     process_video_meta_data()

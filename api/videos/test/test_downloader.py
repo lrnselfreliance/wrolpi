@@ -36,8 +36,7 @@ def test_update_channels(tempdir):
         channel1, channel2 = Channel.get_where().order_by('id')
         with mock.patch('api.videos.downloader.update_channel') as update_channel:
             update_channel: MagicMock
-            # update_channels() is a generator, call it and fetch all of it's results.
-            assert list(update_channels(reporter)), 'update_channels() was empty'
+            update_channels(reporter)
 
             # Both channels would have been updated.
             assert update_channel.call_count == 2
@@ -52,7 +51,7 @@ def test_update_channels(tempdir):
 
         with mock.patch('api.videos.downloader.update_channel') as update_channel:
             update_channel: MagicMock
-            assert list(update_channels(reporter)), 'update_channels() was empty'
+            update_channels(reporter)
 
             # Channel1 is not ready for an update
             update_channel.assert_called_once()
@@ -65,7 +64,7 @@ def test_update_channels(tempdir):
 
         with mock.patch('api.videos.downloader.update_channel') as update_channel:
             update_channel: MagicMock
-            assert list(update_channels(reporter)), 'update_channels() was empty'
+            update_channels(reporter)
 
             # No channels needed to be updated
             assert update_channel.call_count == 0

@@ -276,12 +276,16 @@ class FeedReporter:
 
     def __init__(self, q: Queue, progress_count: int = 1):
         self.queue: Queue = q
-        self.progresses = [{'percent': 0, 'total': 0} for _ in range(progress_count)]
+        self.progresses = [{'percent': 0, 'total': 0, 'value': 0} for _ in range(progress_count)]
         self.calculators = [lambda _: None for _ in range(progress_count)]
 
     def message(self, idx: int, msg: str):
         progresses = deepcopy(self.progresses)
-        msg = {'message': msg, 'who': idx, 'progresses': progresses}
+        msg = {
+            'message': msg,
+            'who': idx,
+            'progresses': progresses,
+        }
         self.queue.put(msg)
 
     def error(self, msg: str):
@@ -298,8 +302,10 @@ class FeedReporter:
         self.progresses[idx]['total'] = total
         self.calculators[idx] = make_progress_calculator(total)
 
-    def set_progress(self, idx: int, progress: int, msg: str = None):
-        self.progresses[idx]['percent'] = self.calculators[idx](progress)
+    def set_progress(self, idx: int, value: int, msg: str = None):
+        self.progresses[idx]['percent'] = self.calculators[idx](value)
+        self.progresses[idx]['value'] = value
+
         progresses = deepcopy(self.progresses)
         message = dict(progresses=progresses)
         if msg:
@@ -309,6 +315,8 @@ class FeedReporter:
 
     def finish(self, idx: int, msg: str = None):
         self.progresses[idx]['percent'] = 100
+        self.progresses[idx]['value'] = self.progresses[idx]['total']
+
         progresses = deepcopy(self.progresses)
         message = {'progresses': progresses}
         if msg:

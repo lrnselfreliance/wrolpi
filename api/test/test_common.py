@@ -321,15 +321,15 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
 
 
 @pytest.mark.parametrize(
-    'totals, progresses,messages',
+    'totals,progresses,messages',
     [
         (
                 [25],
                 [],
                 [
-                    {'message': 'foo', 'who': 0, 'progresses': [{'percent': 0, 'total': 25}]},
-                    {'code': 'bar', 'progresses': [{'percent': 0, 'total': 25}]},
-                    {'code': 'error', 'message': 'baz', 'progresses': [{'percent': 0, 'total': 25}]},
+                    {'message': 'foo', 'who': 0, 'progresses': [{'percent': 0, 'total': 25, 'value': 0}]},
+                    {'code': 'bar', 'progresses': [{'percent': 0, 'total': 25, 'value': 0}]},
+                    {'code': 'error', 'message': 'baz', 'progresses': [{'percent': 0, 'total': 25, 'value': 0}]},
                 ],
         ),
         (
@@ -343,15 +343,15 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                     (0, 25),
                 ],
                 [
-                    {'message': 'foo', 'who': 0, 'progresses': [{'percent': 0, 'total': 25}]},
-                    {'code': 'bar', 'progresses': [{'percent': 0, 'total': 25}]},
-                    {'progresses': [{'percent': 4, 'total': 25}]},
-                    {'progresses': [{'percent': 8, 'total': 25}]},
-                    {'progresses': [{'percent': 16, 'total': 25}]},
-                    {'progresses': [{'percent': 32, 'total': 25}]},
-                    {'progresses': [{'percent': 64, 'total': 25}]},
-                    {'progresses': [{'percent': 100, 'total': 25}]},
-                    {'code': 'error', 'message': 'baz', 'progresses': [{'percent': 100, 'total': 25}]},
+                    {'message': 'foo', 'who': 0, 'progresses': [{'percent': 0, 'total': 25, 'value': 0}]},
+                    {'code': 'bar', 'progresses': [{'percent': 0, 'total': 25, 'value': 0}]},
+                    {'progresses': [{'percent': 4, 'total': 25, 'value': 1}]},
+                    {'progresses': [{'percent': 8, 'total': 25, 'value': 2}]},
+                    {'progresses': [{'percent': 16, 'total': 25, 'value': 4}]},
+                    {'progresses': [{'percent': 32, 'total': 25, 'value': 8}]},
+                    {'progresses': [{'percent': 64, 'total': 25, 'value': 16}]},
+                    {'progresses': [{'percent': 100, 'total': 25, 'value': 25}]},
+                    {'code': 'error', 'message': 'baz', 'progresses': [{'percent': 100, 'total': 25, 'value': 25}]},
                 ]
         ),
         (
@@ -365,36 +365,40 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                 ],
                 [
                     {'message': 'foo', 'who': 0, 'progresses': [
-                        {'percent': 0, 'total': 25},
-                        {'percent': 0, 'total': 10},
+                        {'percent': 0, 'total': 25, 'value': 0},
+                        {'percent': 0, 'total': 10, 'value': 0},
                     ]},
                     {'code': 'bar', 'progresses': [
-                        {'percent': 0, 'total': 25},
-                        {'percent': 0, 'total': 10},
+                        {'percent': 0, 'total': 25, 'value': 0},
+                        {'percent': 0, 'total': 10, 'value': 0},
                     ]},
                     {'progresses': [
-                        {'percent': 0, 'total': 25},
-                        {'percent': 30, 'total': 10},
+                        {'percent': 0, 'total': 25, 'value': 0},
+                        {'percent': 30, 'total': 10, 'value': 3},
                     ]},
                     {'progresses': [
-                        {'percent': 0, 'total': 25},
-                        {'percent': 80, 'total': 10},
+                        {'percent': 0, 'total': 25, 'value': 0},
+                        {'percent': 80, 'total': 10, 'value': 8},
                     ]},
                     {'progresses': [
-                        {'percent': 72, 'total': 25},
-                        {'percent': 80, 'total': 10},
+                        {'percent': 72, 'total': 25, 'value': 18},
+                        {'percent': 80, 'total': 10, 'value': 8},
                     ]},
                     {'progresses': [
-                        {'percent': 72, 'total': 25},
-                        {'percent': 100, 'total': 10},
+                        {'percent': 72, 'total': 25, 'value': 18},
+                        {'percent': 100, 'total': 10, 'value': 10},
                     ]},
                     {'progresses': [
-                        {'percent': 100, 'total': 25},
-                        {'percent': 100, 'total': 10},
+                        {'percent': 100, 'total': 25, 'value': 30},
+                        {'percent': 100, 'total': 10, 'value': 10},
                     ]},
                     {
                         'code': 'error',
-                        'message': 'baz', 'progresses': [{'percent': 100, 'total': 25}, {'percent': 100, 'total': 10}]
+                        'message': 'baz',
+                        'progresses': [
+                            {'percent': 100, 'total': 25, 'value': 30},
+                            {'percent': 100, 'total': 10, 'value': 10},
+                        ]
                     },
                 ]
         ),
@@ -437,9 +441,9 @@ def test_feed_reporter_finish():
     reporter.finish(0, 'completed')
 
     expected = [
-        {'progresses': [{'percent': 0, 'total': 50}]},
-        {'progresses': [{'percent': 40, 'total': 50}]},
-        {'message': 'completed', 'who': 0, 'progresses': [{'percent': 100, 'total': 50}]},
+        {'progresses': [{'percent': 0, 'total': 50, 'value': 0}]},
+        {'progresses': [{'percent': 40, 'total': 50, 'value': 20}]},
+        {'message': 'completed', 'who': 0, 'progresses': [{'percent': 100, 'value': 50, 'total': 50}]},
     ]
 
     count = 0

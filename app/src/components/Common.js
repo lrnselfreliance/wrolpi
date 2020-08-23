@@ -354,39 +354,23 @@ export class Progresses extends React.Component {
     handleMessage = async (e) => {
         let data = await JSON.parse(e.data);
         if (data.progresses) {
-            let newState = {};
+            let progresses = [];
+            for (let i =0; i<data.progresses.length; i++) {
+                let progress = data.progresses[i];
+                // Add a key to each progress.
+                progress.key = i;
 
-            let who = data.who !== undefined ? data.who : null;
-
-            newState.progresses = [];
-
-            for (let i = 0; i < data.progresses.length; i++) {
-                let newProgress = data.progresses[i];
-                let existingProgress = this.state.progresses[i] || {};
-                let updatedProgress = {key: i};
-
-                // Apply any changes in the new progress object to the existing progress.
-                let dataKeys = Object.keys(newProgress);
-                for (let j = 0; j < dataKeys.length; j++) {
-                    let key = dataKeys[j];
-                    updatedProgress[key] = newProgress[key] !== undefined ? newProgress[key] : existingProgress[key];
+                if (progress.percent === 100) {
+                    progress.active = false;
+                    progress.success = true;
+                } else {
+                    progress.active = true;
+                    progress.success = false;
                 }
 
-                // Change message only if "who" is provided.
-                updatedProgress.message = existingProgress.message || '';
-                if (who === i && data.message !== undefined) {
-                    updatedProgress.message = data.message;
-                }
-
-                // Active only when percent is less than 100%
-                updatedProgress.active = updatedProgress.percent < 100;
-                // Success when percent is 100%
-                updatedProgress.success = updatedProgress.percent === 100;
-
-                newState.progresses = newState.progresses.concat([updatedProgress]);
+                progresses = progresses.concat([progress]);
             }
-
-            this.setState(newState);
+            this.setState({progresses: progresses});
         }
     }
 

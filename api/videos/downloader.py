@@ -118,7 +118,10 @@ def update_channels(reporter: ProgressReporter, link: str = None):
             logger.critical('Unable to fetch channel videos', exc_info=True)
             continue
 
-    reporter.send_progress(0, len(channels), 'Done downloading video lists')
+    if channels:
+        reporter.send_progress(0, len(channels), 'Done downloading video lists')
+    else:
+        reporter.finish(0, 'Done downloading video lists')
 
 
 def _find_all_missing_videos(link: str = None) -> List[Tuple]:
@@ -358,7 +361,7 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
                     channel = db['channel'].get_one(id=channel['id'])
                     add_video_to_skip_list(channel, {'source_id': source_id})
 
-            reporter.error(f'Failed to download "{missing_video["title"]}", see server logs...')
+            reporter.error(1, f'Failed to download "{missing_video["title"]}", see server logs...')
             continue
         with get_db_context(commit=True) as (db_conn, db):
             upsert_video(db, video_path, channel, id_=id_)

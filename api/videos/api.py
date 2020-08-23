@@ -134,7 +134,7 @@ async def download(_, link: str = None):
             download_logger.info('download complete')
         except Exception as e:
             logger.fatal(f'Download failed: {e}')
-            reporter.error('Download failed.  See server logs.')
+            reporter.error(0, 'Download failed.  See server logs.')
             raise
         finally:
             download_event.clear()

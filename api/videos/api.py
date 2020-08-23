@@ -30,7 +30,7 @@ from sanic import Blueprint, response
 from sanic.request import Request
 
 from api.common import create_websocket_feed, get_sanic_url, \
-    validate_doc, json_response, wrol_mode_check, FeedReporter
+    validate_doc, json_response, wrol_mode_check, ProgressReporter
 from api.videos.channel.api import channel_bp
 from api.videos.video.api import video_bp
 from .common import logger
@@ -116,9 +116,9 @@ async def download(_, link: str = None):
     download_event.set()
 
     async def do_download():
-        reporter = FeedReporter(download_queue, 2)
+        reporter = ProgressReporter(download_queue, 2)
         reporter.set_progress_total(0, 1)
-        reporter.set_progress(0, 1, 'Download started')
+        reporter.send_progress(0, 1, 'Download started')
 
         try:
             update_channels(reporter, link)

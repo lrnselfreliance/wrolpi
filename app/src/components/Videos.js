@@ -36,7 +36,7 @@ class ManageVideos extends React.Component {
     download = async (e) => {
         e.preventDefault();
         let response = await download();
-        if (response.code === 'stream-started' || response.error === 'download already running') {
+        if (response.stream_url) {
             this.setState({streamUrl: response.stream_url});
         }
     }
@@ -44,7 +44,7 @@ class ManageVideos extends React.Component {
     refresh = async (e) => {
         e.preventDefault();
         let response = await refresh();
-        if (response.code === 'stream-started' || response.error === 'Refresh already running') {
+        if (response.stream_url) {
             this.setState({streamUrl: response.stream_url});
         }
     }

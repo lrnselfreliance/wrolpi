@@ -9,7 +9,7 @@ from typing import Tuple, List
 from dictorm import DictDB, Dict, And, Or
 from youtube_dl import YoutubeDL
 
-from api.common import logger, today, FeedReporter
+from api.common import logger, today, ProgressReporter
 from api.db import get_db_context
 from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path, add_video_to_skip_list
@@ -74,7 +74,7 @@ def update_channel(channel: Dict = None, link: str = None):
             Video(source_id=source_id, channel_id=channel_id).flush()
 
 
-def update_channels(reporter: FeedReporter, link: str = None):
+def update_channels(reporter: ProgressReporter, link: str = None):
     """Update all information for each channel.  (No downloads performed)"""
 
     with get_db_context() as (db_conn, db):
@@ -104,21 +104,21 @@ def update_channels(reporter: FeedReporter, link: str = None):
             logger.warning(f'All channels are up to date')
 
     reporter.set_progress_total(0, len(channels))
-    reporter.set_progress(0, 0, f'{len(channels)} channels scheduled for update')
+    reporter.send_progress(0, 0, f'{len(channels)} channels scheduled for update')
 
     # Randomize downloading of channels.
     shuffle(channels)
 
     logger.debug(f'Getting info for {len(channels)} channels')
     for idx, channel in enumerate(channels):
-        reporter.set_progress(0, idx, f'Getting video list for {channel["name"]}')
+        reporter.send_progress(0, idx, f'Getting video list for {channel["name"]}')
         try:
             update_channel(channel)
         except Exception:
             logger.critical('Unable to fetch channel videos', exc_info=True)
             continue
 
-    reporter.set_progress(0, len(channels), 'Done downloading video lists')
+    reporter.send_progress(0, len(channels), 'Done downloading video lists')
 
 
 def _find_all_missing_videos(link: str = None) -> List[Tuple]:
@@ -336,14 +336,14 @@ def _skip_download(error):
     return False
 
 
-def download_all_missing_videos(reporter: FeedReporter, link: str = None):
+def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
     """Find any videos identified by the info packet that haven't yet been downloaded, download them."""
     missing_videos = list(find_all_missing_videos(link))
     reporter.set_progress_total(1, len(missing_videos))
     reporter.message(1, f'Found {len(missing_videos)} missing videos.')
 
     for idx, (channel, id_, missing_video) in enumerate(missing_videos):
-        reporter.set_progress(1, idx, f'Downloading {channel["name"]}: {missing_video["title"]}')
+        reporter.send_progress(1, idx, f'Downloading {channel["name"]}: {missing_video["title"]}')
         try:
             video_path = download_video(channel, missing_video)
         except Exception as e:
@@ -369,7 +369,7 @@ def download_all_missing_videos(reporter: FeedReporter, link: str = None):
 def main(args=None):
     """Find and download any missing videos.  Parse any arguments passed by the cmd-line."""
     q = Queue()
-    reporter = FeedReporter(q, 2)
+    reporter = ProgressReporter(q, 2)
     for status in update_channels(reporter):
         logger.info(str(status))
     download_all_missing_videos(reporter)

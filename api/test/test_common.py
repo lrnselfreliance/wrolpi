@@ -7,7 +7,7 @@ from PIL import Image
 from sanic_openapi import doc
 
 from api.api import api_app, attach_routes
-from api.common import validate_data, combine_dicts, insert_parameter, FeedReporter
+from api.common import validate_data, combine_dicts, insert_parameter, ProgressReporter
 from api.db import get_db_context
 from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
 from api.test.common import create_db_structure, build_test_directories, wrap_test_db
@@ -327,9 +327,9 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                 [25],
                 [],
                 [
-                    {'message': 'foo', 'who': 0, 'progresses': [{'percent': 0, 'total': 25, 'value': 0}]},
-                    {'code': 'bar', 'progresses': [{'percent': 0, 'total': 25, 'value': 0}]},
-                    {'code': 'error', 'message': 'baz', 'progresses': [{'percent': 0, 'total': 25, 'value': 0}]},
+                    {'progresses': [dict(message='foo', percent=0, total=25, value=0)]},
+                    {'code': 'bar', 'progresses': [dict(message='foo', percent=0, total=25, value=0)]},
+                    {'code': 'error', 'progresses': [dict(message='baz', percent=0, total=25, value=0)]},
                 ],
         ),
         (
@@ -343,15 +343,15 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                     (0, 25),
                 ],
                 [
-                    {'message': 'foo', 'who': 0, 'progresses': [{'percent': 0, 'total': 25, 'value': 0}]},
-                    {'code': 'bar', 'progresses': [{'percent': 0, 'total': 25, 'value': 0}]},
-                    {'progresses': [{'percent': 4, 'total': 25, 'value': 1}]},
-                    {'progresses': [{'percent': 8, 'total': 25, 'value': 2}]},
-                    {'progresses': [{'percent': 16, 'total': 25, 'value': 4}]},
-                    {'progresses': [{'percent': 32, 'total': 25, 'value': 8}]},
-                    {'progresses': [{'percent': 64, 'total': 25, 'value': 16}]},
-                    {'progresses': [{'percent': 100, 'total': 25, 'value': 25}]},
-                    {'code': 'error', 'message': 'baz', 'progresses': [{'percent': 100, 'total': 25, 'value': 25}]},
+                    {'progresses': [dict(message='foo', percent=0, total=25, value=0)]},
+                    {'code': 'bar', 'progresses': [dict(message='foo', percent=0, total=25, value=0)]},
+                    {'progresses': [dict(message='foo', percent=4, total=25, value=1)]},
+                    {'progresses': [dict(message='foo', percent=8, total=25, value=2)]},
+                    {'progresses': [dict(message='foo', percent=16, total=25, value=4)]},
+                    {'progresses': [dict(message='foo', percent=32, total=25, value=8)]},
+                    {'progresses': [dict(message='foo', percent=64, total=25, value=16)]},
+                    {'progresses': [dict(message='foo', percent=100, total=25, value=25)]},
+                    {'code': 'error', 'progresses': [dict(message='baz', percent=100, total=25, value=25)]},
                 ]
         ),
         (
@@ -364,40 +364,39 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
                     (0, 30),  # This is higher than the total of 25, percent should be 100.
                 ],
                 [
-                    {'message': 'foo', 'who': 0, 'progresses': [
-                        {'percent': 0, 'total': 25, 'value': 0},
-                        {'percent': 0, 'total': 10, 'value': 0},
+                    {'progresses': [
+                        dict(message='foo', percent=0, total=25, value=0),
+                        dict(percent=0, total=10, value=0),
                     ]},
                     {'code': 'bar', 'progresses': [
-                        {'percent': 0, 'total': 25, 'value': 0},
-                        {'percent': 0, 'total': 10, 'value': 0},
+                        dict(message='foo', percent=0, total=25, value=0),
+                        dict(percent=0, total=10, value=0),
                     ]},
                     {'progresses': [
-                        {'percent': 0, 'total': 25, 'value': 0},
-                        {'percent': 30, 'total': 10, 'value': 3},
+                        dict(message='foo', percent=0, total=25, value=0),
+                        dict(percent=30, total=10, value=3),
                     ]},
                     {'progresses': [
-                        {'percent': 0, 'total': 25, 'value': 0},
-                        {'percent': 80, 'total': 10, 'value': 8},
+                        dict(message='foo', percent=0, total=25, value=0),
+                        dict(percent=80, total=10, value=8),
                     ]},
                     {'progresses': [
-                        {'percent': 72, 'total': 25, 'value': 18},
-                        {'percent': 80, 'total': 10, 'value': 8},
+                        dict(message='foo', percent=72, total=25, value=18),
+                        dict(percent=80, total=10, value=8),
                     ]},
                     {'progresses': [
-                        {'percent': 72, 'total': 25, 'value': 18},
-                        {'percent': 100, 'total': 10, 'value': 10},
+                        dict(message='foo', percent=72, total=25, value=18),
+                        dict(percent=100, total=10, value=10),
                     ]},
                     {'progresses': [
-                        {'percent': 100, 'total': 25, 'value': 30},
-                        {'percent': 100, 'total': 10, 'value': 10},
+                        dict(message='foo', percent=100, total=25, value=30),
+                        dict(percent=100, total=10, value=10),
                     ]},
                     {
                         'code': 'error',
-                        'message': 'baz',
                         'progresses': [
-                            {'percent': 100, 'total': 25, 'value': 30},
-                            {'percent': 100, 'total': 10, 'value': 10},
+                            dict(message='baz', percent=100, total=25, value=30),
+                            dict(percent=100, total=10, value=10),
                         ]
                     },
                 ]
@@ -406,7 +405,7 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
 )
 def test_feed_reporter(totals, progresses, messages):
     q = Queue()
-    reporter = FeedReporter(q, len(totals))
+    reporter = ProgressReporter(q, len(totals))
 
     for idx, total in enumerate(totals):
         reporter.set_progress_total(idx, total)
@@ -415,9 +414,9 @@ def test_feed_reporter(totals, progresses, messages):
     reporter.code('bar')
 
     for progress in progresses:
-        reporter.set_progress(*progress)
+        reporter.send_progress(*progress)
 
-    reporter.error('baz')
+    reporter.error(0, 'baz')
 
     count = 0
     while not q.empty():
@@ -434,16 +433,17 @@ def test_feed_reporter(totals, progresses, messages):
 
 def test_feed_reporter_finish():
     q = Queue()
-    reporter = FeedReporter(q)
+    reporter = ProgressReporter(q)
+
     reporter.set_progress_total(0, 50)
-    reporter.set_progress(0, 0)
-    reporter.set_progress(0, 20)
+    reporter.send_progress(0, 0)
+    reporter.send_progress(0, 20)
     reporter.finish(0, 'completed')
 
     expected = [
         {'progresses': [{'percent': 0, 'total': 50, 'value': 0}]},
         {'progresses': [{'percent': 40, 'total': 50, 'value': 20}]},
-        {'message': 'completed', 'who': 0, 'progresses': [{'percent': 100, 'value': 50, 'total': 50}]},
+        {'progresses': [{'message': 'completed', 'percent': 100, 'value': 50, 'total': 50}]},
     ]
 
     count = 0

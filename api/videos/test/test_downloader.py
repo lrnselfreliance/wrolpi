@@ -3,7 +3,7 @@ from queue import Queue
 from unittest import mock
 from unittest.mock import MagicMock
 
-from api.common import today, FeedReporter
+from api.common import today, ProgressReporter
 from api.db import get_db_context
 from api.test.common import wrap_test_db, create_db_structure
 from api.vars import DEFAULT_DOWNLOAD_FREQUENCY
@@ -22,7 +22,7 @@ def test_update_channels(tempdir):
     Channels are only updated if their "next_download" has expired, or if they have never been updated.
     """
     q = Queue()
-    reporter = FeedReporter(q, 2)
+    reporter = ProgressReporter(q, 2)
 
     with get_db_context(commit=True) as (db_conn, db):
         Channel = db['channel']

@@ -269,7 +269,7 @@ def make_progress_calculator(total):
     return progress_calculator
 
 
-class FeedReporter:
+class ProgressReporter:
     """
     I am used to consistently send messages and progress(s) to a Websocket Feed.
     """
@@ -279,54 +279,49 @@ class FeedReporter:
         self.progresses = [{'percent': 0, 'total': 0, 'value': 0} for _ in range(progress_count)]
         self.calculators = [lambda _: None for _ in range(progress_count)]
 
-    def message(self, idx: int, msg: str):
-        progresses = deepcopy(self.progresses)
-        msg = {
-            'message': msg,
-            'who': idx,
-            'progresses': progresses,
-        }
+    def _update(self, idx: int, **kwargs):
+        if 'message' in kwargs and kwargs['message'] is None:
+            # Message can't be cleared.
+            kwargs.pop('message')
+        self.progresses[idx].update(kwargs)
+
+    def _send(self, code: str = None):
+        msg = dict(
+            progresses=deepcopy(self.progresses)
+        )
+        if code:
+            msg['code'] = code
         self.queue.put(msg)
 
-    def error(self, msg: str):
-        progresses = deepcopy(self.progresses)
-        msg = dict(code='error', message=msg, progresses=progresses)
-        self.queue.put(msg)
+    def message(self, idx: int, msg: str, code: str = None):
+        self._update(idx, message=msg)
+        self._send(code)
 
     def code(self, code: str):
-        progresses = deepcopy(self.progresses)
-        msg = dict(code=code, progresses=progresses)
-        self.queue.put(msg)
+        self._send(code)
+
+    def error(self, idx: int, msg: str = None):
+        self.message(idx, msg, 'error')
 
     def set_progress_total(self, idx: int, total: int):
         self.progresses[idx]['total'] = total
         self.calculators[idx] = make_progress_calculator(total)
 
-    def set_progress(self, idx: int, value: int, msg: str = None):
-        self.progresses[idx]['percent'] = self.calculators[idx](value)
-        self.progresses[idx]['value'] = value
-
-        progresses = deepcopy(self.progresses)
-        message = dict(progresses=progresses)
-        if msg:
-            message['message'] = msg
-            message['who'] = idx
-        self.queue.put(message)
+    def send_progress(self, idx: int, value: int, msg: str = None):
+        kwargs = dict(value=value, percent=self.calculators[idx](value), message=msg)
+        self._update(idx, **kwargs)
+        self._send()
 
     def finish(self, idx: int, msg: str = None):
-        self.progresses[idx]['percent'] = 100
-        if self.progresses[idx]['total'] == 0:
-            self.progresses[idx]['value'] = 1
-            self.progresses[idx]['total'] = 1
-        else:
-            self.progresses[idx]['value'] = self.progresses[idx]['total']
+        kwargs = dict(percent=100, message=msg)
 
-        progresses = deepcopy(self.progresses)
-        message = {'progresses': progresses}
-        if msg:
-            message['message'] = msg
-            message['who'] = idx
-        self.queue.put(message)
+        if self.progresses[idx]['total'] == 0:
+            kwargs.update(dict(value=1, total=1))
+        else:
+            kwargs.update(dict(value=self.progresses[idx]['total']))
+
+        self._update(idx, **kwargs)
+        self._send()
 
 
 class FileNotModified(Exception):

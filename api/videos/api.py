@@ -117,8 +117,8 @@ async def download(_, link: str = None):
 
     async def do_download():
         reporter = FeedReporter(download_queue, 2)
-        reporter.set_progress_total(0, 10)
-        reporter.message(0, 'Download started')
+        reporter.set_progress_total(0, 1)
+        reporter.set_progress(0, 1, 'Download started')
 
         try:
             update_channels(reporter, link)
@@ -129,6 +129,7 @@ async def download(_, link: str = None):
             # Fill in any missing data for all videos.
             reporter.message(0, 'Processing and cleaning files')
             process_video_meta_data()
+            reporter.finish(0, 'Processing and cleaning complete')
 
             download_logger.info('download complete')
         except Exception as e:

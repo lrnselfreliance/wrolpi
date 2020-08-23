@@ -315,7 +315,11 @@ class FeedReporter:
 
     def finish(self, idx: int, msg: str = None):
         self.progresses[idx]['percent'] = 100
-        self.progresses[idx]['value'] = self.progresses[idx]['total']
+        if self.progresses[idx]['total'] == 0:
+            self.progresses[idx]['value'] = 1
+            self.progresses[idx]['total'] = 1
+        else:
+            self.progresses[idx]['value'] = self.progresses[idx]['total']
 
         progresses = deepcopy(self.progresses)
         message = {'progresses': progresses}

@@ -394,10 +394,12 @@ export class Progresses extends React.Component {
         return <>
             {this.state.progresses.map((i) =>
                 <Progress
+                    progress='ratio'
                     key={i.key}
-                    percent={i.percent}
                     active={i.active}
                     success={i.success}
+                    total={i.total}
+                    value={i.value}
                 >{i.message || ''}</Progress>
             )}
         </>

@@ -1,3 +1,4 @@
+import asyncio
 import collections
 import inspect
 import json
@@ -5,6 +6,7 @@ import logging
 import os
 import queue
 import string
+from copy import deepcopy
 from datetime import datetime, date
 from functools import wraps
 from multiprocessing import Event, Queue
@@ -93,6 +95,9 @@ def create_websocket_feed(name: str, uri: str, blueprint: Blueprint, maxsize: in
                 feed_logger.debug(f'got message {msg}')
                 dump = json.dumps(msg)
                 await ws.send(dump)
+
+                # yield back to the event loop
+                await asyncio.sleep(0)
             except queue.Empty:
                 # No messages yet, try again while event is set
                 feed_logger.debug(f'no messages in queue')
@@ -135,20 +140,6 @@ def get_sanic_url(scheme: str = 'http', path: str = None, query: list = None, fr
                                 query=query, fragment=fragment)
     unparsed = str(urlunsplit(components))
     return unparsed
-
-
-def make_progress_calculator(total):
-    """
-    Create a function that calculates the percentage of completion.
-    """
-
-    def progress_calculator(current) -> int:
-        if current >= total:
-            # Progress doesn't make sense, just return 100
-            return 100
-        return int((current / total) * 100)
-
-    return progress_calculator
 
 
 def validate_data(model: type, data: dict):
@@ -263,35 +254,74 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
     return wrapper
 
 
-class FeedReporter:
+def make_progress_calculator(total):
+    """
+    Create a function that calculates the percentage of completion.
+    """
+
+    def progress_calculator(current) -> int:
+        if current >= total:
+            # Progress doesn't make sense, just return 100
+            return 100
+        percent = int((current / total) * 100)
+        return percent
+
+    return progress_calculator
+
+
+class ProgressReporter:
     """
     I am used to consistently send messages and progress(s) to a Websocket Feed.
     """
 
     def __init__(self, q: Queue, progress_count: int = 1):
         self.queue: Queue = q
-        self.progresses = [{'now': 0, 'total': 0} for _ in range(progress_count)]
+        self.progresses = [{'percent': 0, 'total': 0, 'value': 0} for _ in range(progress_count)]
         self.calculators = [lambda _: None for _ in range(progress_count)]
 
-    def message(self, msg: str):
-        msg = dict(message=msg, progresses=self.progresses)
+    def _update(self, idx: int, **kwargs):
+        if 'message' in kwargs and kwargs['message'] is None:
+            # Message can't be cleared.
+            kwargs.pop('message')
+        self.progresses[idx].update(kwargs)
+
+    def _send(self, code: str = None):
+        msg = dict(
+            progresses=deepcopy(self.progresses)
+        )
+        if code:
+            msg['code'] = code
         self.queue.put(msg)
 
-    def error(self, msg: str):
-        msg = dict(code='error', error=msg, progresses=self.progresses)
-        self.queue.put(msg)
+    def message(self, idx: int, msg: str, code: str = None):
+        self._update(idx, message=msg)
+        self._send(code)
 
     def code(self, code: str):
-        msg = dict(code=code, progresses=self.progresses)
-        self.queue.put(msg)
+        self._send(code)
+
+    def error(self, idx: int, msg: str = None):
+        self.message(idx, msg, 'error')
 
     def set_progress_total(self, idx: int, total: int):
         self.progresses[idx]['total'] = total
         self.calculators[idx] = make_progress_calculator(total)
 
-    def set_progress(self, idx: int, progress: int, message: str = None):
-        self.progresses[idx]['now'] = self.calculators[idx](progress)
-        self.queue.put({'progresses': self.progresses, 'message': message})
+    def send_progress(self, idx: int, value: int, msg: str = None):
+        kwargs = dict(value=value, percent=self.calculators[idx](value), message=msg)
+        self._update(idx, **kwargs)
+        self._send()
+
+    def finish(self, idx: int, msg: str = None):
+        kwargs = dict(percent=100, message=msg)
+
+        if self.progresses[idx]['total'] == 0:
+            kwargs.update(dict(value=1, total=1))
+        else:
+            kwargs.update(dict(value=self.progresses[idx]['total']))
+
+        self._update(idx, **kwargs)
+        self._send()
 
 
 class FileNotModified(Exception):

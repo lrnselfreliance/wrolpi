@@ -30,7 +30,7 @@ from sanic import Blueprint, response
 from sanic.request import Request
 
 from api.common import create_websocket_feed, get_sanic_url, \
-    validate_doc, json_response, wrol_mode_check
+    validate_doc, json_response, wrol_mode_check, ProgressReporter
 from api.videos.channel.api import channel_bp
 from api.videos.video.api import video_bp
 from .common import logger
@@ -114,25 +114,27 @@ async def download(_, link: str = None):
         return response.json({'error': 'download already running', 'stream_url': stream_url}, HTTPStatus.CONFLICT)
 
     download_event.set()
-    download_queue.put('download-started')
 
     async def do_download():
-        try:
-            download_logger.info('download started')
+        reporter = ProgressReporter(download_queue, 2)
+        reporter.set_progress_total(0, 1)
+        reporter.send_progress(0, 1, 'Download started')
 
-            for msg in update_channels(link):
-                download_queue.put(msg)
+        try:
+            update_channels(reporter, link)
             download_logger.info('Updated all channel catalogs')
-            for msg in download_all_missing_videos(link):
-                download_queue.put(msg)
+            download_all_missing_videos(reporter, link)
+            reporter.finish(1, 'All videos have been downloaded')
 
             # Fill in any missing data for all videos.
+            reporter.message(0, 'Processing and cleaning files')
             process_video_meta_data()
+            reporter.finish(0, 'Processing and cleaning complete')
 
             download_logger.info('download complete')
         except Exception as e:
             logger.fatal(f'Download failed: {e}')
-            download_queue.put({'error': 'Download failed.  See server logs.'})
+            reporter.error(0, 'Download failed.  See server logs.')
             raise
         finally:
             download_event.clear()

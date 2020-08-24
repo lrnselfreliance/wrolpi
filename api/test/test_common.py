@@ -1,12 +1,13 @@
 import tempfile
 from pathlib import Path
+from queue import Queue
 
 import pytest
 from PIL import Image
 from sanic_openapi import doc
 
 from api.api import api_app, attach_routes
-from api.common import validate_data, combine_dicts, insert_parameter
+from api.common import validate_data, combine_dicts, insert_parameter, ProgressReporter
 from api.db import get_db_context
 from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
 from api.test.common import create_db_structure, build_test_directories, wrap_test_db
@@ -283,7 +284,7 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
     """
     Test that when a video has an invalid poster format, we convert it to JPEG.
     """
-    channel1, channel2 = tempdir.iterdir()
+    channel1, channel2 = sorted(tempdir.iterdir())
     jpg, mp4 = sorted(channel1.iterdir())
     flv, webp = sorted(channel2.iterdir())
 
@@ -317,3 +318,143 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
     with open(new_jpg, 'rb') as new_jpg_fh:
         # The converted image is the same as the other JPEG because both are black 25x25 pixel images.
         assert jpg_fh_contents == new_jpg_fh.read()
+
+
+@pytest.mark.parametrize(
+    'totals,progresses,messages',
+    [
+        (
+                [25],
+                [],
+                [
+                    {'progresses': [dict(message='foo', percent=0, total=25, value=0)]},
+                    {'code': 'bar', 'progresses': [dict(message='foo', percent=0, total=25, value=0)]},
+                    {'code': 'error', 'progresses': [dict(message='baz', percent=0, total=25, value=0)]},
+                ],
+        ),
+        (
+                [25],
+                [
+                    (0, 1),
+                    (0, 2),
+                    (0, 4),
+                    (0, 8),
+                    (0, 16),
+                    (0, 25),
+                ],
+                [
+                    {'progresses': [dict(message='foo', percent=0, total=25, value=0)]},
+                    {'code': 'bar', 'progresses': [dict(message='foo', percent=0, total=25, value=0)]},
+                    {'progresses': [dict(message='foo', percent=4, total=25, value=1)]},
+                    {'progresses': [dict(message='foo', percent=8, total=25, value=2)]},
+                    {'progresses': [dict(message='foo', percent=16, total=25, value=4)]},
+                    {'progresses': [dict(message='foo', percent=32, total=25, value=8)]},
+                    {'progresses': [dict(message='foo', percent=64, total=25, value=16)]},
+                    {'progresses': [dict(message='foo', percent=100, total=25, value=25)]},
+                    {'code': 'error', 'progresses': [dict(message='baz', percent=100, total=25, value=25)]},
+                ]
+        ),
+        (
+                [25, 10],
+                [
+                    (1, 3),
+                    (1, 8),
+                    (0, 18),
+                    (1, 10),
+                    (0, 30),  # This is higher than the total of 25, percent should be 100.
+                ],
+                [
+                    {'progresses': [
+                        dict(message='foo', percent=0, total=25, value=0),
+                        dict(percent=0, total=10, value=0),
+                    ]},
+                    {'code': 'bar', 'progresses': [
+                        dict(message='foo', percent=0, total=25, value=0),
+                        dict(percent=0, total=10, value=0),
+                    ]},
+                    {'progresses': [
+                        dict(message='foo', percent=0, total=25, value=0),
+                        dict(percent=30, total=10, value=3),
+                    ]},
+                    {'progresses': [
+                        dict(message='foo', percent=0, total=25, value=0),
+                        dict(percent=80, total=10, value=8),
+                    ]},
+                    {'progresses': [
+                        dict(message='foo', percent=72, total=25, value=18),
+                        dict(percent=80, total=10, value=8),
+                    ]},
+                    {'progresses': [
+                        dict(message='foo', percent=72, total=25, value=18),
+                        dict(percent=100, total=10, value=10),
+                    ]},
+                    {'progresses': [
+                        dict(message='foo', percent=100, total=25, value=30),
+                        dict(percent=100, total=10, value=10),
+                    ]},
+                    {
+                        'code': 'error',
+                        'progresses': [
+                            dict(message='baz', percent=100, total=25, value=30),
+                            dict(percent=100, total=10, value=10),
+                        ]
+                    },
+                ]
+        ),
+    ]
+)
+def test_feed_reporter(totals, progresses, messages):
+    q = Queue()
+    reporter = ProgressReporter(q, len(totals))
+
+    for idx, total in enumerate(totals):
+        reporter.set_progress_total(idx, total)
+
+    reporter.message(0, 'foo')
+    reporter.code('bar')
+
+    for progress in progresses:
+        reporter.send_progress(*progress)
+
+    reporter.error(0, 'baz')
+
+    count = 0
+    while not q.empty():
+        received = q.get_nowait()
+        try:
+            message = messages.pop(0)
+        except IndexError:
+            raise AssertionError(f'Queue ({count}) had excess message: {received}')
+
+        assert message == received, f'Message {count} did not match'
+
+        count += 1
+
+
+def test_feed_reporter_finish():
+    q = Queue()
+    reporter = ProgressReporter(q)
+
+    reporter.set_progress_total(0, 50)
+    reporter.send_progress(0, 0)
+    reporter.send_progress(0, 20)
+    reporter.finish(0, 'completed')
+
+    expected = [
+        {'progresses': [{'percent': 0, 'total': 50, 'value': 0}]},
+        {'progresses': [{'percent': 40, 'total': 50, 'value': 20}]},
+        {'progresses': [{'message': 'completed', 'percent': 100, 'value': 50, 'total': 50}]},
+    ]
+
+    count = 0
+
+    while not q.empty():
+        received = q.get_nowait()
+        try:
+            message = expected.pop(0)
+        except IndexError:
+            raise AssertionError(f'Queue ({count}) had excess message: {received}')
+
+        assert message == received, f'Message {count} did not match'
+
+        count += 1

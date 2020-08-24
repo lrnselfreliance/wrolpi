@@ -15,7 +15,7 @@ from dictorm import DictDB
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from api.api import api_app, attach_routes
-from api.common import EXAMPLE_CONFIG_PATH, get_config, FeedReporter, insert_parameter
+from api.common import EXAMPLE_CONFIG_PATH, get_config, ProgressReporter, insert_parameter
 from api.db import setup_relationships, get_db_context
 from api.vars import DOCKERIZED, PROJECT_DIR
 from api.videos.api import refresh_queue, download_queue
@@ -211,9 +211,9 @@ def create_db_structure(structure):
         @wraps(func)
         @wrap_test_db
         def wrapped(*args, **kwargs):
-            # Filler queue and reporter, these aren't used.
+            # Dummy queue and reporter to receive messages.
             q = Queue()
-            reporter = FeedReporter(q, 2)
+            reporter = ProgressReporter(q, 2)
 
             # Convert the channel/video structure to a file structure for the test.
             file_structure = []

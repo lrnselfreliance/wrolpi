@@ -180,3 +180,13 @@ export async function getStatistics() {
     let response = await apiGet(`${VIDEOS_API}/statistics`);
     return (await response.json())['statistics'];
 }
+
+export async function refresh() {
+    let response = await apiPost(`${VIDEOS_API}:refresh`);
+    return await response.json();
+}
+
+export async function download() {
+    let response = await apiPost(`${VIDEOS_API}:download`);
+    return await response.json();
+}

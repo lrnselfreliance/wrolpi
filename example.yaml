@@ -18,8 +18,7 @@ downloader:
 
 channels:
   # These are channels or playlists that will be downloaded.  You can configure them in the UI, or in your local.yaml.
-  bigbuckbunny:
-    name: Big Buck Bunny # the pretty name for the channel
-    url: https://www.youtube.com/user/BlenderFoundation/videos
-    directory: videos/blender  # relative to `media_directory`
-    match_regex: .*b?Bunny.*  # only download the video if the title matches this regex
+  wrolpi:
+    name: WROLPi # the pretty name for the channel
+    url: https://www.youtube.com/channel/UC4t8bw1besFTyjW7ZBCOIrw/videos
+    directory: videos/wrolpi  # relative to `media_directory`

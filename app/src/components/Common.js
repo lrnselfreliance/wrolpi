@@ -1,5 +1,5 @@
 import React from "react";
-import {Card, Container, Image, Pagination} from 'semantic-ui-react';
+import {Card, Container, Image, Pagination, Progress} from 'semantic-ui-react';
 import {Link} from "react-router-dom";
 import LazyLoad from 'react-lazy-load';
 
@@ -159,7 +159,7 @@ export const frequencyOptions = [
 ];
 
 export function secondsToFrequency(seconds) {
-    for (let i=0; i < Object.keys(frequencyOptions).length; i++) {
+    for (let i = 0; i < Object.keys(frequencyOptions).length; i++) {
         let d = frequencyOptions[i];
         if (d.value === seconds) {
             return d.text;
@@ -332,6 +332,61 @@ export class APIForm extends React.Component {
         inputs[name] = !checked;
 
         this.setState({inputs: inputs}, this.checkDirty);
+    }
+
+}
+
+export class Progresses extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            progresses: [],
+        }
+        this.socket = null;
+    }
+
+    componentDidMount() {
+        this.socket = new WebSocket(this.props.streamUrl);
+        this.socket.onmessage = this.handleMessage;
+    }
+
+    handleMessage = async (e) => {
+        let data = await JSON.parse(e.data);
+        if (data.progresses) {
+            let progresses = [];
+            for (let i =0; i<data.progresses.length; i++) {
+                let progress = data.progresses[i];
+                // Add a key to each progress.
+                progress.key = i;
+
+                if (progress.percent === 100) {
+                    progress.active = false;
+                    progress.success = true;
+                } else {
+                    progress.active = true;
+                    progress.success = false;
+                }
+
+                progresses = progresses.concat([progress]);
+            }
+            this.setState({progresses: progresses});
+        }
+    }
+
+    render() {
+        return <>
+            {this.state.progresses.map((i) =>
+                <Progress
+                    progress='ratio'
+                    key={i.key}
+                    active={i.active}
+                    success={i.success}
+                    total={i.total}
+                    value={i.value}
+                >{i.message || ''}</Progress>
+            )}
+        </>
     }
 
 }

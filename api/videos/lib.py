@@ -5,7 +5,7 @@ from uuid import uuid1
 
 from dictorm import Dict
 
-from api.common import FeedReporter
+from api.common import ProgressReporter
 from api.db import get_db_curs, get_db_context
 from api.videos.captions import insert_bulk_captions
 from api.videos.common import generate_bulk_posters, get_bulk_video_duration, get_bulk_video_size, \
@@ -113,15 +113,19 @@ def process_video_meta_data():
     refresh_channel_calculate_size()
 
 
-def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
+def refresh_channel_videos(channel: Dict, reporter: ProgressReporter):
     """
     Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
     """
-    reporter.set_progress(1, 0)
+    # This function is hard to predict, so we will simply progress in chunks :(
+    reporter.set_progress_total(1, 6)
+    reporter.send_progress(1, 0, 'Preparing channel.')
 
     # Set the idempotency key so we can remove any videos not touched during this search
     with get_db_curs(commit=True) as curs:
         curs.execute('UPDATE video SET idempotency=NULL WHERE channel_id=%s', (channel['id'],))
+
+    reporter.send_progress(1, 1, 'Finding all videos, checking for duplicates.')
 
     idempotency = str(uuid1())
     directory = get_absolute_media_path(channel['directory'])
@@ -129,7 +133,8 @@ def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
     # A set of absolute paths that exist in the file system
     possible_new_paths = generate_video_paths(directory)
     possible_new_paths = remove_duplicate_video_paths(possible_new_paths)
-    reporter.message('Found all possible video files')
+
+    reporter.send_progress(1, 2, 'Matching all videos to the database.')
 
     # Update all videos that match the current video paths
     relative_new_paths = [str(i.relative_to(directory)) for i in possible_new_paths]
@@ -138,16 +143,20 @@ def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
         curs.execute(query, (idempotency, channel['id'], relative_new_paths))
         existing_paths = {i for (i,) in curs.fetchall()}
 
+    reporter.send_progress(1, 3)
+
     # Get the paths for any video not yet in the DB
     # (paths in DB are relative, but we need to pass an absolute path)
     new_videos = {p for p in possible_new_paths if str(p.relative_to(directory)) not in existing_paths}
+
+    reporter.send_progress(1, 4, 'Inserting new videos.')
 
     for video_path in new_videos:
         with get_db_context(commit=True) as (db_conn, db):
             upsert_video(db, pathlib.Path(video_path), channel, idempotency=idempotency)
             logger.debug(f'{channel["name"]}: Added {video_path}')
 
-    reporter.message('Matched all existing video files')
+    reporter.send_progress(1, 5, 'Deleting unnecessary video entries.')
 
     with get_db_curs(commit=True) as curs:
         curs.execute('DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL RETURNING id', (channel['id'],))
@@ -156,11 +165,11 @@ def refresh_channel_videos(channel: Dict, reporter: FeedReporter):
     if deleted_count:
         deleted_status = f'Deleted {deleted_count} video records from channel {channel["name"]}'
         logger.info(deleted_status)
-        reporter.message(deleted_status)
 
     status = f'{channel["name"]}: {len(new_videos)} new videos, {len(existing_paths)} already existed. '
     logger.info(status)
-    reporter.message(status)
+
+    reporter.send_progress(1, 6, f'Processed all videos for {channel["name"]}')
 
 
 def _refresh_videos(q: Queue, channel_links: list = None):
@@ -176,7 +185,7 @@ def _refresh_videos(q: Queue, channel_links: list = None):
     with get_db_context() as (db_conn, db):
         Channel = db['channel']
 
-        reporter = FeedReporter(q, 2)
+        reporter = ProgressReporter(q, 2)
         reporter.code('refresh-started')
         reporter.set_progress_total(0, Channel.count())
 
@@ -193,13 +202,13 @@ def _refresh_videos(q: Queue, channel_links: list = None):
         raise Exception(f'No channels in DB.  Have you created any?')
 
     for idx, channel in enumerate(channels):
-        reporter.set_progress(0, idx, f'Checking {channel["name"]} directory for new videos')
+        reporter.send_progress(0, idx, f'Checking {channel["name"]} directory for new videos')
         refresh_channel_videos(channel, reporter)
 
     # Fill in any missing data for all videos.
     process_video_meta_data()
 
-    reporter.set_progress(0, 100, 'All videos refreshed.')
+    reporter.send_progress(0, len(channels), 'All videos refreshed.')
     reporter.code('refresh-complete')
 
 

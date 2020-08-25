@@ -1,3 +1,4 @@
+import json
 import pathlib
 import tempfile
 import unittest
@@ -11,6 +12,7 @@ from uuid import uuid1
 
 import mock
 import psycopg2
+import websockets
 import yaml
 from dictorm import DictDB
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
@@ -245,3 +247,14 @@ def create_db_structure(structure):
         return wrapped
 
     return wrapper
+
+
+async def get_all_ws_messages(ws) -> List[dict]:
+    messages = []
+    while True:
+        try:
+            message = await ws.recv()
+        except websockets.exceptions.ConnectionClosedOK:
+            break
+        messages.append(json.loads(message))
+    return messages

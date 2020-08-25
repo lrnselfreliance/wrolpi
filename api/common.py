@@ -35,11 +35,6 @@ formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(messag
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
-
-def get_loop():
-    return sanic.Sanic.loop
-
-
 URL_CHARS = string.ascii_lowercase + string.digits
 
 
@@ -51,12 +46,6 @@ def sanitize_link(link: str) -> str:
 
 def string_to_boolean(s: str) -> bool:
     return str(s).lower() in {'true', 't', '1', 'on'}
-
-
-def boolean_arg(request, arg_name):
-    """Return True only if the specified query arg is truthy"""
-    value = request.args.get(arg_name)
-    return string_to_boolean(value)
 
 
 DEFAULT_QUEUE_SIZE = 1000
@@ -98,7 +87,7 @@ def create_websocket_feed(name: str, uri: str, blueprint: Blueprint, maxsize: in
 
                 # yield back to the event loop
                 await asyncio.sleep(0)
-            except queue.Empty:
+            except queue.Empty:  # pragma: no cover
                 # No messages yet, try again while event is set
                 feed_logger.debug(f'no messages in queue')
                 pass

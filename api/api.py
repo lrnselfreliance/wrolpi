@@ -46,11 +46,6 @@ def index(_):
 root_api = Blueprint('Root API')
 
 
-@root_api.get('/')
-def index(_):
-    return response.html(index_html)
-
-
 @root_api.route('/echo', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
 @validate_doc(
     summary='Echo whatever is sent to this',

@@ -81,7 +81,7 @@ async def refresh(_, link: str = None):
 
             refresh_logger.info('refresh complete')
         except Exception as e:
-            refresh_queue.put({'error': 'Refresh failed.  See server logs.'})
+            refresh_queue.put({'error': 'Refresh failed.  See server logs.', 'message': str(e)})
             raise
         finally:
             refresh_event.clear()

@@ -149,7 +149,7 @@ def refresh_channel_videos(channel: Dict, reporter: ProgressReporter):
     # (paths in DB are relative, but we need to pass an absolute path)
     new_videos = {p for p in possible_new_paths if str(p.relative_to(directory)) not in existing_paths}
 
-    reporter.send_progress(1, 4, 'Inserting new videos.')
+    reporter.send_progress(1, 4, f'Inserting {len(new_videos)} new videos.')
 
     for video_path in new_videos:
         with get_db_context(commit=True) as (db_conn, db):
@@ -166,8 +166,7 @@ def refresh_channel_videos(channel: Dict, reporter: ProgressReporter):
         deleted_status = f'Deleted {deleted_count} video records from channel {channel["name"]}'
         logger.info(deleted_status)
 
-    status = f'{channel["name"]}: {len(new_videos)} new videos, {len(existing_paths)} already existed. '
-    logger.info(status)
+    logger.info(f'{channel["name"]}: {len(new_videos)} new videos, {len(existing_paths)} already existed. ')
 
     reporter.send_progress(1, 6, f'Processed all videos for {channel["name"]}')
 

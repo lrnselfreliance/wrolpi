@@ -1,8 +1,10 @@
+import json
 import pathlib
 import tempfile
 import unittest
 from contextlib import contextmanager
-from functools import wraps
+from functools import wraps, partialmethod
+from http import HTTPStatus
 from queue import Empty, Queue
 from shutil import copyfile
 from typing import List
@@ -10,9 +12,11 @@ from uuid import uuid1
 
 import mock
 import psycopg2
+import websockets
 import yaml
 from dictorm import DictDB
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+from sanic_openapi.api import Response
 
 from api.api import api_app, attach_routes
 from api.common import EXAMPLE_CONFIG_PATH, get_config, ProgressReporter, insert_parameter
@@ -133,7 +137,7 @@ class TestAPI(ExtendedTestCase):
         copyfile(str(EXAMPLE_CONFIG_PATH), TEST_CONFIG_PATH.name)
         # Setup the testing video root directory
         config = get_config()
-        config['media_directory'] = PROJECT_DIR / 'test'
+        config['media_directory'] = str(PROJECT_DIR / 'test')
         with open(TEST_CONFIG_PATH.name, 'wt') as fh:
             fh.write(yaml.dump(config))
 
@@ -142,6 +146,13 @@ class TestAPI(ExtendedTestCase):
         # Clear out any messages in queues
         get_all_messages_in_queue(refresh_queue)
         get_all_messages_in_queue(download_queue)
+
+    def assertHTTPStatus(self, response: Response, status: int):
+        self.assertEqual(response.status_code, status)
+
+    assertOK = partialmethod(assertHTTPStatus, status=HTTPStatus.OK)
+    assertCONFLICT = partialmethod(assertHTTPStatus, status=HTTPStatus.CONFLICT)
+    assertNO_CONTENT = partialmethod(assertHTTPStatus, status=HTTPStatus.NO_CONTENT)
 
 
 @contextmanager
@@ -236,3 +247,14 @@ def create_db_structure(structure):
         return wrapped
 
     return wrapper
+
+
+async def get_all_ws_messages(ws) -> List[dict]:
+    messages = []
+    while True:
+        try:
+            message = await ws.recv()
+        except websockets.exceptions.ConnectionClosedOK:
+            break
+        messages.append(json.loads(message))
+    return messages

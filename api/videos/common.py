@@ -7,6 +7,7 @@ from functools import partial, lru_cache
 from pathlib import Path
 from typing import Union, Tuple, List, Set, Iterable
 
+import PIL
 from PIL import Image
 from dictorm import Dict
 
@@ -420,8 +421,11 @@ def convert_image(existing_path: Path, destination_path: Path, ext: str = 'jpeg'
 def is_valid_poster(poster_path: Path) -> bool:
     """Return True only if poster file exists, and is of a JPEG format."""
     if poster_path.is_file():
-        img = Image.open(poster_path)
-        return img.format == 'JPEG'
+        try:
+            img = Image.open(poster_path)
+            return img.format == 'JPEG'
+        except PIL.UnidentifiedImageError:
+            pass
 
     return False
 

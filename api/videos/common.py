@@ -425,6 +425,7 @@ def is_valid_poster(poster_path: Path) -> bool:
             img = Image.open(poster_path)
             return img.format == 'JPEG'
         except PIL.UnidentifiedImageError:
+            logger.error(f'Failed to identify poster: {poster_path}', exc_info=True)
             pass
 
     return False

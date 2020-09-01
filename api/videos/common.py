@@ -449,9 +449,11 @@ def bulk_validate_posters(video_ids: List[int]):
                 # Poster is not valid, convert it and place it in the new location.
                 try:
                     convert_image(poster_path, new_poster_path)
-                    logger.debug(f'Converted invalid poster {poster_path} to {new_poster_path}')
+                    logger.info(f'Converted invalid poster {poster_path} to {new_poster_path}')
                 except Exception:
                     logger.error(f'Failed to convert invalid poster {poster_path} to {new_poster_path}', exc_info=True)
+            else:
+                logger.debug(f'Poster was already valid: {new_poster_path}')
 
             channel_dir = get_absolute_media_path(channel['directory'])
 

@@ -9,7 +9,7 @@ from api.common import ProgressReporter
 from api.db import get_db_curs, get_db_context
 from api.videos.captions import insert_bulk_captions
 from api.videos.common import generate_bulk_posters, get_bulk_video_duration, get_bulk_video_size, \
-    get_absolute_media_path, generate_video_paths, remove_duplicate_video_paths, bulk_replace_invalid_posters
+    get_absolute_media_path, generate_video_paths, remove_duplicate_video_paths, bulk_validate_posters
 from api.videos.downloader import upsert_video
 from ..common import logger
 
@@ -50,16 +50,17 @@ def refresh_channel_generate_posters() -> bool:
 
 def convert_invalid_posters() -> bool:
     """
-    Searches the DB for all videos with an invalid poster type (i.e. webp) and converts them to JPEGs.
+    Searches the DB for all videos with an invalid poster type (i.e. webp) and converts them to JPEGs.  A video with a
+    valid poster will be marked as such in it's column "validated_poster".
     """
     with get_db_curs() as curs:
-        query = "SELECT id FROM video WHERE video_path IS NOT NULL AND poster_path ILIKE '%webp'"
+        query = "SELECT id FROM video WHERE validated_poster = FALSE"
         curs.execute(query)
         invalid_posters = [i for (i,) in curs.fetchall()]
 
     if invalid_posters:
         async def _():
-            return bulk_replace_invalid_posters(invalid_posters)
+            return bulk_validate_posters(invalid_posters)
 
         coro = _()
         asyncio.ensure_future(coro)

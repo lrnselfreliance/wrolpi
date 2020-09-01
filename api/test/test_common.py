@@ -1,6 +1,8 @@
 import tempfile
 from pathlib import Path
 from queue import Queue
+from unittest import mock
+from unittest.mock import Mock
 
 import pytest
 from PIL import Image
@@ -11,7 +13,7 @@ from api.common import validate_data, combine_dicts, insert_parameter, ProgressR
 from api.db import get_db_context
 from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
 from api.test.common import create_db_structure, build_test_directories, wrap_test_db
-from api.videos.common import convert_image, bulk_replace_invalid_posters
+from api.videos.common import convert_image, bulk_validate_posters
 
 # Attach the default routes
 attach_routes(api_app)
@@ -249,28 +251,27 @@ def test_insert_parameter():
 
 
 def test_convert_image():
+    """
+    An image's format can be changed.  This tests that convert_image() converts from a WEBP format, to a JPEG format.
+    """
     foo = Image.new('RGB', (25, 25), color='grey')
 
     with tempfile.TemporaryDirectory() as tempdir:
         tempdir = Path(tempdir)
 
-        # Save the new image to "foo.webp", convert it to a JPEG at "foo.jpg".
-        existing_image = tempdir / 'foo.webp'
-        foo.save(existing_image)
+        # Save the new image to "foo.webp".
+        existing_path = tempdir / 'foo.webp'
+        foo.save(existing_path)
+        assert Image.open(existing_path).format == 'WEBP'
 
-        destination_image = tempdir / 'foo.jpg'
-        assert not destination_image.is_file()
+        destination_path = tempdir / 'foo.jpg'
+        assert not destination_path.is_file()
 
-        convert_image(existing_image, destination_image)
-        assert destination_image.is_file()
-        assert existing_image.is_file()
-
-        # Test deletion
-        destination_image.unlink()
-        assert not destination_image.is_file()
-        convert_image(existing_image, destination_image, remove=True)
-        assert destination_image.is_file()
-        assert not existing_image.is_file()
+        # Convert the WEBP to a JPEG.  The WEBP image should be removed.
+        convert_image(existing_path, destination_path)
+        assert not existing_path.is_file()
+        assert destination_path.is_file()
+        assert Image.open(destination_path).format == 'JPEG'
 
 
 @wrap_test_db
@@ -296,13 +297,24 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
         jpg_fh_contents = jpg_fh.read()
         webp_fh_contents = webp_fh.read()
         assert jpg_fh_contents != webp_fh_contents
+        assert Image.open(jpg_fh).format == 'JPEG'
+        assert Image.open(webp_fh).format == 'WEBP'
 
     with get_db_context() as (db_conn, db):
         Video = db['video']
-        vid2 = Video.get_one(poster_path='vid2.webp')
+        vid1 = Video.get_one(poster_path='vid1.jpg')
+        assert vid1['validated_poster'] is False
 
-    video_ids = [vid2['id'], ]
-    bulk_replace_invalid_posters(video_ids)
+        vid2 = Video.get_one(poster_path='vid2.webp')
+        assert vid2['validated_poster'] is False
+
+    # Convert the WEBP image.  convert_image() should only be called once.
+    mocked_convert_image = Mock(wraps=convert_image)
+    with mock.patch('api.videos.common.convert_image', mocked_convert_image):
+        video_ids = [vid1['id'], vid2['id']]
+        bulk_validate_posters(video_ids)
+
+    mocked_convert_image.assert_called_once_with(webp, tempdir / 'channel2/vid2.jpg')
 
     with get_db_context() as (db_conn, db):
         Video = db['video']
@@ -310,6 +322,12 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
         vid2 = Video.get_one(id=vid2['id'])
         assert vid2['poster_path'] == 'vid2.jpg'
         assert all('webp' not in i['poster_path'] for i in Video.get_where())
+        assert vid2['validated_poster'] is True
+
+        # Vid1's image was validated, but not converted.
+        vid1 = Video.get_one(id=vid1['id'])
+        assert vid1['poster_path'] == 'vid1.jpg'
+        assert vid1['validated_poster'] is True
 
     # Old webp was removed
     assert not webp.is_file()
@@ -318,6 +336,15 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
     with open(new_jpg, 'rb') as new_jpg_fh:
         # The converted image is the same as the other JPEG because both are black 25x25 pixel images.
         assert jpg_fh_contents == new_jpg_fh.read()
+        assert Image.open(new_jpg_fh).format == 'JPEG'
+
+    # Calling convert again has no effect.
+    mocked_convert_image.reset_mock()
+    with mock.patch('api.videos.common.convert_image', mocked_convert_image):
+        video_ids = [vid1['id'], vid2['id']]
+        bulk_validate_posters(video_ids)
+
+    mocked_convert_image.assert_not_called()
 
 
 @pytest.mark.parametrize(

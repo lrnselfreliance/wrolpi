@@ -333,6 +333,8 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
     assert not webp.is_file()
     new_jpg = tempdir / 'channel2/vid2.jpg'
     assert new_jpg.is_file()
+    # chmod 644
+    assert new_jpg.stat().st_mode == 0o100644
     with open(new_jpg, 'rb') as new_jpg_fh:
         # The converted image is the same as the other JPEG because both are black 25x25 pixel images.
         assert jpg_fh_contents == new_jpg_fh.read()

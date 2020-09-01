@@ -16,7 +16,7 @@ from api.db import get_db_context
 from api.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
 from api.vars import DOCKERIZED, PROJECT_DIR, VIDEO_EXTENSIONS, MINIMUM_CHANNEL_KEYS, MINIMUM_INFO_JSON_KEYS, \
-    MINIMUM_VIDEO_KEYS
+    MINIMUM_VIDEO_KEYS, DEFAULT_FILE_PERMISSIONS
 
 logger = logger.getChild(__name__)
 
@@ -416,6 +416,7 @@ def convert_image(existing_path: Path, destination_path: Path, ext: str = 'jpeg'
 
         existing_path.unlink()
         os.rename(fh.name, destination_path)
+        os.chmod(destination_path, DEFAULT_FILE_PERMISSIONS)
 
 
 def is_valid_poster(poster_path: Path) -> bool:

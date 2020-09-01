@@ -54,7 +54,7 @@ def convert_invalid_posters() -> bool:
     valid poster will be marked as such in it's column "validated_poster".
     """
     with get_db_curs() as curs:
-        query = "SELECT id FROM video WHERE validated_poster = FALSE"
+        query = "SELECT id FROM video WHERE poster_path IS NOT NULL AND validated_poster = FALSE"
         curs.execute(query)
         invalid_posters = [i for (i,) in curs.fetchall()]
 

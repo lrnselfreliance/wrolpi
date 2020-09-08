@@ -1,7 +1,6 @@
 import React from "react";
 import {Card, Container, Image, Pagination, Progress} from 'semantic-ui-react';
 import {Link} from "react-router-dom";
-import LazyLoad from 'react-lazy-load';
 
 export const API_URI = process.env.REACT_APP_API ? process.env.REACT_APP_API : '127.0.0.1:8080';
 export const VIDEOS_API = `http://${API_URI}/api/videos`;
@@ -89,10 +88,8 @@ export function VideoCard({video}) {
 
     return (
         <Card style={{'width': '18em', 'margin': '1em'}}>
-            <Link to={video_url} offset={250}>
-                <LazyLoad>
-                    <Image src={poster_url} wrapped style={{position: 'relative', width: '100%'}}/>
-                </LazyLoad>
+            <Link to={video_url}>
+                <Image src={poster_url} wrapped style={{position: 'relative', width: '100%'}}/>
             </Link>
             <Duration video={video}/>
             <Card.Content>
@@ -355,7 +352,7 @@ export class Progresses extends React.Component {
         let data = await JSON.parse(e.data);
         if (data.progresses) {
             let progresses = [];
-            for (let i =0; i<data.progresses.length; i++) {
+            for (let i = 0; i < data.progresses.length; i++) {
                 let progress = data.progresses[i];
                 // Add a key to each progress.
                 progress.key = i;

@@ -2,10 +2,12 @@ import json
 import os
 import pathlib
 import subprocess
+import tempfile
 from functools import partial, lru_cache
 from pathlib import Path
 from typing import Union, Tuple, List, Set, Iterable
 
+import PIL
 from PIL import Image
 from dictorm import Dict
 
@@ -14,7 +16,7 @@ from api.db import get_db_context
 from api.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
 from api.vars import DOCKERIZED, PROJECT_DIR, VIDEO_EXTENSIONS, MINIMUM_CHANNEL_KEYS, MINIMUM_INFO_JSON_KEYS, \
-    MINIMUM_VIDEO_KEYS
+    MINIMUM_VIDEO_KEYS, DEFAULT_FILE_PERMISSIONS
 
 logger = logger.getChild(__name__)
 
@@ -403,46 +405,68 @@ async def generate_bulk_posters(video_ids: List[int]):
             db_conn.commit()
 
 
-def convert_image(existing_image: Path, destination_image: Path, remove: bool = False, ext: str = 'jpeg'):
+def convert_image(existing_path: Path, destination_path: Path, ext: str = 'jpeg'):
     """
-    Convert an image from one format to another.  Remove the old image if "remove" is True.
+    Convert an image from one format to another.  Remove the existing image file.  This will safely overwrite an image
+    if the existing path is the same as the destination path.
     """
-    if existing_image == destination_image:
-        raise ValueError(
-            'Cannot convert an image over itself.  existing_img and destination_image must be different paths.')
+    with tempfile.NamedTemporaryFile(dir=destination_path.parent, delete=False) as fh:
+        img = Image.open(existing_path).convert('RGB')
+        img.save(fh.name, ext)
 
-    img = Image.open(existing_image).convert('RGB')
-    img.save(destination_image, ext)
-
-    if remove:
-        existing_image.unlink()
+        existing_path.unlink()
+        os.rename(fh.name, destination_path)
+        os.chmod(destination_path, DEFAULT_FILE_PERMISSIONS)
 
 
-def bulk_replace_invalid_posters(video_ids: List[int]):
-    logger.info(f'Replacing {len(video_ids)} video posters')
-    for idx, video_id in enumerate(video_ids):
+def is_valid_poster(poster_path: Path) -> bool:
+    """Return True only if poster file exists, and is of a JPEG format."""
+    if poster_path.is_file():
+        try:
+            img = Image.open(poster_path)
+            return img.format == 'JPEG'
+        except PIL.UnidentifiedImageError:
+            logger.error(f'Failed to identify poster: {poster_path}', exc_info=True)
+            pass
+
+    return False
+
+
+def bulk_validate_posters(video_ids: List[int]):
+    """
+    Replace all posters for the provided videos if a video's poster is not a JPEG format.
+    """
+    logger.info(f'Validating {len(video_ids)} video posters')
+    for video_id in video_ids:
         with get_db_context(commit=True) as (db_conn, db):
             Video = db['video']
             video = Video.get_one(id=video_id)
             channel = video['channel']
-            channel_dir = get_absolute_media_path(channel['directory'])
+
             poster_path: Path = get_absolute_video_poster(video)
-
             new_poster_path = poster_path.with_suffix('.jpg')
-            if new_poster_path.exists():
+
+            if poster_path != new_poster_path and new_poster_path.exists():
+                # Destination JPEG already exists (it may have the wrong format), lets overwrite it with a valid JPEG.
+                poster_path.unlink()
+                poster_path = new_poster_path
+
+            if not is_valid_poster(poster_path):
+                # Poster is not valid, convert it and place it in the new location.
                 try:
-                    poster_path.unlink()
-                except FileNotFoundError:
-                    logger.warning(f'Failed to remove invalid poster: {poster_path}')
+                    convert_image(poster_path, new_poster_path)
+                    logger.info(f'Converted invalid poster {poster_path} to {new_poster_path}')
+                except Exception:
+                    logger.error(f'Failed to convert invalid poster {poster_path} to {new_poster_path}', exc_info=True)
             else:
-                # The new_poster_path does not exist, lets convert the existing image to a valid format.
-                convert_image(poster_path, new_poster_path, remove=True)
+                logger.debug(f'Poster was already valid: {new_poster_path}')
 
-            # This poster already exists, replace it in the DB.
+            channel_dir = get_absolute_media_path(channel['directory'])
+
+            # Update the video with the new poster path.  Mark it as validated.
             video['poster_path'] = str(new_poster_path.relative_to(channel_dir))
+            video['validated_poster'] = True
             video.flush()
-
-            logger.debug(f'Converted invalid poster {poster_path} to {new_poster_path}')
 
 
 def get_video_duration(video_path: Path) -> int:

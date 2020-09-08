@@ -25,3 +25,5 @@ UNRECOVERABLE_ERRORS = {
     'Content Warning',
     'Did not get any data blocks',
 }
+
+DEFAULT_FILE_PERMISSIONS = 0o644

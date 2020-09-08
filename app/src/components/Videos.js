@@ -299,8 +299,8 @@ class Videos extends React.Component {
 
     applyStateToHistory = () => {
         let {history, location} = this.props;
-        let {activePage, searchStr, searchOrder} = this.state;
-        changePageHistory(history, location, activePage, searchStr, searchOrder);
+        let {activePage, queryStr, searchOrder} = this.state;
+        changePageHistory(history, location, activePage, queryStr, searchOrder);
     }
 
     handleSearch = async (e) => {

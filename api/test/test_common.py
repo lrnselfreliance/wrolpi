@@ -539,12 +539,12 @@ class TestCommon(unittest.TestCase):
         ]
 
         # Large date spans are supported.
-        result = date_range(date(1970, 1, 1), date(1970, 5, 1), 4)
+        result = date_range(date(1970, 1, 1), date(2020, 5, 1), 4)
         assert result == [
             date(1970, 1, 1),
-            date(1970, 1, 31),
-            date(1970, 3, 2),
-            date(1970, 4, 1),
+            date(1982, 8, 1),
+            date(1995, 3, 2),
+            date(2007, 10, 1),
         ]
 
         result = date_range(datetime(1970, 1, 1, 0, 0, 0), datetime(1970, 1, 1, 10, 0), 8)

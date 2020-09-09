@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 import pathlib
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from queue import Queue
 from random import shuffle
 from typing import Tuple, List
@@ -369,23 +369,24 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
     reporter.finish(1, 'All videos are downloaded')
 
 
-def distribute_download_days():
+def distribute_download_days(start: date = None):
     common_frequency = {}
 
-    min_day = datetime.max.date()
+    # Start distributing on the day provided, or start today.
+    start = start or today()
+
     with get_db_context(commit=True) as (db_conn, db):
         Channel = db['channel']
         # Sort channels by their download frequency.
         for channel in Channel.get_where(Channel['next_download'].IsNotNull()):
             download_frequency = channel['download_frequency']
-            min_day = min(min_day, channel['next_download'])
             try:
                 common_frequency[download_frequency].append(channel)
             except KeyError:
                 common_frequency[download_frequency] = [channel, ]
 
-        # Start one day after the minimum day, this way at least one will download the next day (hopefully tomorrow).
-        start = min_day + timedelta(days=1)
+        # Start one day after the start, this way at least one will download the next day (hopefully tomorrow).
+        start += timedelta(days=1)
         for frequency, channels in common_frequency.items():
             last_day = start + timedelta(seconds=frequency)
             date_ranges = iter(date_range(start, last_day, len(channels)))

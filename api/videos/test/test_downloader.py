@@ -129,12 +129,13 @@ def test_distribute_download_days(tempdir):
         channel10['next_download'] = None
         channel10.flush()
 
-    distribute_download_days()
+    distribute_download_days(date(2020, 9, 8))
 
     with get_db_context() as (db_conn, db):
         Channel = db['channel']
-        # Next downloads are spread out (as evenly as possible) over the next week.
+        # Next downloads are spread out over the next week.
         next_downloads = sorted([i['next_download'] for i in Channel.get_where(Channel['next_download'].IsNotNull())])
+        # There are more channels than days in a week, so their distribution is as even as possible.
         assert next_downloads == [
             date(2020, 9, 9),
             date(2020, 9, 9),

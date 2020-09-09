@@ -500,6 +500,26 @@ class TestCommon(unittest.TestCase):
             date(1970, 1, 1),
         ]
 
+        # Many steps on a single day results in the same day.
+        result = date_range(date(1970, 1, 1), date(1970, 1, 1), 5)
+        assert result == [
+            date(1970, 1, 1),
+            date(1970, 1, 1),
+            date(1970, 1, 1),
+            date(1970, 1, 1),
+            date(1970, 1, 1),
+        ]
+
+        # Many steps on a single datetime results in a range of times.
+        result = date_range(datetime(1970, 1, 1), datetime(1970, 1, 1, 23, 59, 59), 5)
+        assert result == [
+            datetime(1970, 1, 1, 0, 0),
+            datetime(1970, 1, 1, 4, 47, 59, 800000),
+            datetime(1970, 1, 1, 9, 35, 59, 600000),
+            datetime(1970, 1, 1, 14, 23, 59, 400000),
+            datetime(1970, 1, 1, 19, 11, 59, 200000),
+        ]
+
         # date_range is not inclusive, like range().
         result = date_range(date(1970, 1, 1), date(1970, 1, 5), 4)
         assert result == [

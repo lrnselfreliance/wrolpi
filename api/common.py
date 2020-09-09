@@ -518,6 +518,9 @@ def iterify(kind: type = list):
     return wrapper
 
 
-def date_range(start: datetime, end: datetime, steps: int) -> List[datetime]:
+dt_or_d = Union[datetime, date]
+
+
+def date_range(start: dt_or_d, end: dt_or_d, steps: int) -> List[dt_or_d]:
     delta = (end - start) // steps
     return [start + (delta * i) for i in range(steps)]

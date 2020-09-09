@@ -385,8 +385,6 @@ def distribute_download_days(start: date = None):
             except KeyError:
                 common_frequency[download_frequency] = [channel, ]
 
-        # Start one day after the start, this way at least one will download the next day (hopefully tomorrow).
-        start += timedelta(days=1)
         for frequency, channels in common_frequency.items():
             last_day = start + timedelta(seconds=frequency)
             date_ranges = iter(date_range(start, last_day, len(channels)))

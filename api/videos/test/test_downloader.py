@@ -137,13 +137,13 @@ def test_distribute_download_days(tempdir):
         next_downloads = sorted([i['next_download'] for i in Channel.get_where(Channel['next_download'].IsNotNull())])
         # There are more channels than days in a week, so their distribution is as even as possible.
         assert next_downloads == [
-            date(2020, 9, 9),
+            date(2020, 9, 8),
+            date(2020, 9, 8),
             date(2020, 9, 9),
             date(2020, 9, 10),
             date(2020, 9, 11),
-            date(2020, 9, 12),
+            date(2020, 9, 11),
             date(2020, 9, 12),
             date(2020, 9, 13),
             date(2020, 9, 14),
-            date(2020, 9, 15),
         ]

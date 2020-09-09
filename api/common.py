@@ -11,7 +11,7 @@ from datetime import datetime, date
 from functools import wraps
 from multiprocessing import Event, Queue
 from pathlib import Path
-from typing import Union, Callable, Tuple, Dict, Mapping
+from typing import Union, Callable, Tuple, Dict, Mapping, List
 from urllib.parse import urlunsplit
 from uuid import UUID
 
@@ -516,3 +516,8 @@ def iterify(kind: type = list):
         return wrapped
 
     return wrapper
+
+
+def date_range(start: datetime, end: datetime, steps: int) -> List[datetime]:
+    delta = (end - start) // steps
+    return [start + (delta * i) for i in range(steps)]

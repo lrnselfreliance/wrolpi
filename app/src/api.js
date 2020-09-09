@@ -190,3 +190,8 @@ export async function download() {
     let response = await apiPost(`${VIDEOS_API}:download`);
     return await response.json();
 }
+
+export async function distributeDownloadDays() {
+    let response = await apiPost(`${VIDEOS_API}:distribute_download_days`);
+    return response;
+}

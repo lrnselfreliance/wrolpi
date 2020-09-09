@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import timedelta, date
 from queue import Queue
 from unittest import mock
 from unittest.mock import MagicMock
@@ -7,7 +7,7 @@ from api.common import today, ProgressReporter
 from api.db import get_db_context
 from api.test.common import wrap_test_db, create_db_structure
 from api.vars import DEFAULT_DOWNLOAD_FREQUENCY
-from api.videos.downloader import update_channels, update_channel
+from api.videos.downloader import update_channels, update_channel, distribute_download_days
 
 
 @wrap_test_db
@@ -95,3 +95,48 @@ def test_update_channel(tempdir):
             channel = Channel.get_one()
             # After and update, the next_download should be incremented by the download_frequency.
             assert channel['next_download'] > today()
+
+
+@wrap_test_db
+@create_db_structure(
+    {
+        'channel1': [],
+        'channel2': [],
+        'channel3': [],
+        'channel4': [],
+        'channel5': [],
+        'channel6': [],
+        'channel7': [],
+        'channel8': [],
+        'channel9': [],
+    }
+)
+def test_distribute_download_days(tempdir):
+    with get_db_context(commit=True) as (db_conn, db):
+        Channel = db['channel']
+
+        curs = db_conn.cursor()
+        curs.execute('update channel set download_frequency = %s, next_download = %s', (
+            # Weekly downloads.
+            60 * 60 * 24 * 7,
+            # This will be used as the start of the date range.
+            date(2020, 9, 8)
+        ))
+
+    distribute_download_days()
+
+    with get_db_context() as (db_conn, db):
+        Channel = db['channel']
+        # Next downloads are spread out (as evenly as possible) over the next week.
+        next_downloads = sorted([i['next_download'] for i in Channel.get_where()])
+        assert next_downloads == [
+            date(2020, 9, 9),
+            date(2020, 9, 9),
+            date(2020, 9, 10),
+            date(2020, 9, 11),
+            date(2020, 9, 12),
+            date(2020, 9, 12),
+            date(2020, 9, 13),
+            date(2020, 9, 14),
+            date(2020, 9, 15),
+        ]

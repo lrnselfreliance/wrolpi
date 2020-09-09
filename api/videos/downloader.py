@@ -9,7 +9,7 @@ from typing import Tuple, List
 from dictorm import DictDB, Dict, And, Or
 from youtube_dl import YoutubeDL
 
-from api.common import logger, today, ProgressReporter
+from api.common import logger, today, ProgressReporter, date_range
 from api.db import get_db_context
 from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path, add_video_to_skip_list
@@ -367,6 +367,31 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
             upsert_video(db, video_path, channel, id_=id_)
 
     reporter.finish(1, 'All videos are downloaded')
+
+
+def distribute_download_days():
+    common_frequency = {}
+
+    min_day = datetime.max.date()
+    with get_db_context(commit=True) as (db_conn, db):
+        Channel = db['channel']
+        # Sort channels by their download frequency.
+        for channel in Channel.get_where():
+            download_frequency = channel['download_frequency']
+            min_day = min(min_day, channel['next_download'])
+            try:
+                common_frequency[download_frequency].append(channel)
+            except KeyError:
+                common_frequency[download_frequency] = [channel, ]
+
+        # Start one day after the minimum day, this way at least one will download the next day (hopefully tomorrow).
+        start = min_day + timedelta(days=1)
+        for frequency, channels in common_frequency.items():
+            last_day = start + timedelta(seconds=frequency)
+            date_ranges = iter(date_range(start, last_day, len(channels)))
+            for channel in channels:
+                channel['next_download'] = next(date_ranges)
+                channel.flush()
 
 
 def main(args=None):

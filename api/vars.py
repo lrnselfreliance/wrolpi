@@ -13,7 +13,7 @@ DATE_FORMAT = '%Y-%M-%D'
 MINIMUM_CHANNEL_KEYS = {'id', 'name', 'directory', 'url', 'video_count', 'link'}
 MINIMUM_INFO_JSON_KEYS = {'description'}
 MINIMUM_VIDEO_KEYS = {'id', 'title', 'upload_date', 'duration', 'channel', 'channel_id', 'favorite', 'size',
-                      'poster_path', 'caption_path', 'video_path', 'info_json', 'channel', 'viewed'}
+                      'poster_path', 'caption_path', 'video_path', 'info_json', 'channel', 'viewed', 'source_id'}
 DEFAULT_DOWNLOAD_FREQUENCY = 60 * 60 * 24 * 7  # weekly
 
 # These are the supported video formats.  These are in order of their preference.

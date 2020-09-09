@@ -48,7 +48,7 @@ export default class Paginator extends React.Component {
     }
 }
 
-export function Duration({video}) {
+export function secondsToDuration(video) {
     let duration = video.duration;
     let hours = Math.floor(duration / 3600);
     duration -= hours * 3600;
@@ -58,6 +58,12 @@ export function Duration({video}) {
     hours = String('00' + hours).slice(-2);
     minutes = String('00' + minutes).slice(-2);
     seconds = String('00' + seconds).slice(-2);
+
+    return [duration, hours, minutes, seconds];
+}
+
+export function Duration({video}) {
+    let [duration, hours, minutes, seconds] = secondsToDuration(video);
 
     if (hours > 0) {
         return <div className="duration-overlay">{hours}:{minutes}:{seconds}</div>

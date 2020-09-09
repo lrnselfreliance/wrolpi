@@ -376,7 +376,7 @@ def distribute_download_days():
     with get_db_context(commit=True) as (db_conn, db):
         Channel = db['channel']
         # Sort channels by their download frequency.
-        for channel in Channel.get_where():
+        for channel in Channel.get_where(Channel['next_download'].IsNotNull()):
             download_frequency = channel['download_frequency']
             min_day = min(min_day, channel['next_download'])
             try:

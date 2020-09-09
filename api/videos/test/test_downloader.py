@@ -109,6 +109,7 @@ def test_update_channel(tempdir):
         'channel7': [],
         'channel8': [],
         'channel9': [],
+        'channel10': [],
     }
 )
 def test_distribute_download_days(tempdir):
@@ -123,12 +124,17 @@ def test_distribute_download_days(tempdir):
             date(2020, 9, 8)
         ))
 
+        # Sometimes a channel hasn't been downloaded, or won't be downloaded.
+        channel10 = Channel.get_one(name='channel10')
+        channel10['next_download'] = None
+        channel10.flush()
+
     distribute_download_days()
 
     with get_db_context() as (db_conn, db):
         Channel = db['channel']
         # Next downloads are spread out (as evenly as possible) over the next week.
-        next_downloads = sorted([i['next_download'] for i in Channel.get_where()])
+        next_downloads = sorted([i['next_download'] for i in Channel.get_where(Channel['next_download'].IsNotNull())])
         assert next_downloads == [
             date(2020, 9, 9),
             date(2020, 9, 9),

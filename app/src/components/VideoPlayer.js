@@ -66,7 +66,7 @@ function VideoPage(props) {
         );
     }
 
-    let [duration, hours, minutes, seconds] = secondsToDuration(video);
+    let [hours, minutes, seconds] = secondsToDuration(video);
 
     let descriptionPane = {
         menuItem: 'Description', render: () => <Tab.Pane>
@@ -78,9 +78,6 @@ function VideoPage(props) {
 
     let statisticsPane = {
         menuItem: 'Statistics', render: () => <Tab.Pane>
-            <h3>Duration</h3>
-            <p>{hours}:{minutes}:{seconds}</p>
-
             <h3>Size</h3>
             <p>{humanFileSize(video.size)}</p>
 

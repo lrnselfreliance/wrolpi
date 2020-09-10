@@ -129,6 +129,8 @@ export class VideoWrapper extends React.Component {
 
     async componentDidUpdate(prevProps, prevState) {
         if (prevProps.match.params.video_id !== this.props.match.params.video_id) {
+            // Clear the current video so that it will change, even if the video is playing.
+            this.setState({video: null, prev: null, next: null, channel: null});
             await this.fetchVideo();
         }
     }

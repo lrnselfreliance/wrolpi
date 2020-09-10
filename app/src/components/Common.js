@@ -59,15 +59,15 @@ export function secondsToDuration(video) {
     minutes = String('00' + minutes).slice(-2);
     seconds = String('00' + seconds).slice(-2);
 
-    return [duration, hours, minutes, seconds];
+    return [hours, minutes, seconds];
 }
 
 export function Duration({video}) {
-    let [duration, hours, minutes, seconds] = secondsToDuration(video);
+    let [hours, minutes, seconds] = secondsToDuration(video);
 
     if (hours > 0) {
         return <div className="duration-overlay">{hours}:{minutes}:{seconds}</div>
-    } else if (duration) {
+    } else if (video.duration) {
         return <div className="duration-overlay">{minutes}:{seconds}</div>
     } else {
         return <></>

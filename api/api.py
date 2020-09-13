@@ -12,7 +12,8 @@ from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_
     wrol_mode_enabled
 from api.errors import WROLModeEnabled
 from api.modules import MODULES
-from api.videos.schema import EventsResponse, EchoResponse
+from api.otp import encrypt_otp, decrypt_otp, generate_page
+from api.videos.schema import EventsResponse, EchoResponse, EncryptOTPRequest, DecryptOTPRequest
 from api.videos.schema import SettingsRequest, SettingsResponse, RegexRequest, RegexResponse
 
 logger = logger.getChild(__name__)
@@ -116,6 +117,31 @@ def valid_regex(_: Request, data: dict):
 def events(_: Request):
     e = [{'name': name, 'is_set': event.is_set()} for (name, event) in EVENTS]
     return response.json({'events': e})
+
+
+@root_api.post(':encrypt_otp')
+@validate_doc(
+    summary='Encrypt a message with OTP',
+    consumes=EncryptOTPRequest,
+)
+def post_encrypt_otp(_: Request, data: dict):
+    data = encrypt_otp(data['otp'], data['plaintext'])
+    return response.json(data)
+
+
+@root_api.post(':decrypt_otp')
+@validate_doc(
+    summary='Decrypt a message with OTP',
+    consumes=DecryptOTPRequest,
+)
+def post_decrypt_otp(_: Request, data: dict):
+    data = decrypt_otp(data['otp'], data['ciphertext'])
+    return response.json(data)
+
+
+@root_api.get('/otp/new')
+def get_new_otp(_: Request):
+    return response.html(generate_page())
 
 
 ROUTES_ATTACHED = False

@@ -77,6 +77,18 @@ class ChannelURLEmpty(APIError):
     pass
 
 
+class InvalidOTP(APIError):
+    pass
+
+
+class InvalidPlaintext(APIError):
+    pass
+
+
+class InvalidCiphertext(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -168,6 +180,21 @@ API_ERRORS = {
     ChannelURLEmpty: {
         'code': next(error_codes),
         'message': 'This channel has no URL',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    InvalidOTP: {
+        'code': next(error_codes),
+        'message': 'OTP has invalid characters',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    InvalidPlaintext: {
+        'code': next(error_codes),
+        'message': 'Plaintext has invalid characters',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    InvalidCiphertext: {
+        'code': next(error_codes),
+        'message': 'Ciphertext has invalid characters',
         'status': HTTPStatus.BAD_REQUEST,
     },
 }

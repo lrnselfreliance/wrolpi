@@ -195,3 +195,33 @@ export async function distributeDownloadDays() {
     let response = await apiPost(`${VIDEOS_API}:distribute_download_days`);
     return response;
 }
+
+export async function encryptOTP(otp, plaintext) {
+    let body = {otp, plaintext};
+    let response = await apiPost(`http://${API_URI}/api:encrypt_otp`, body);
+    if (response.status !== 200) {
+        toast({
+            type: 'error',
+            title: 'Error!',
+            description: 'Failed to encrypt OTP',
+            time: 5000,
+        });
+        return;
+    }
+    return await response.json();
+}
+
+export async function decryptOTP(otp, ciphertext) {
+    let body = {otp, ciphertext};
+    let response = await apiPost(`http://${API_URI}/api:decrypt_otp`, body);
+    if (response.status !== 200) {
+        toast({
+            type: 'error',
+            title: 'Error!',
+            description: 'Failed to decrypt OTP',
+            time: 5000,
+        });
+        return;
+    }
+    return await response.json();
+}

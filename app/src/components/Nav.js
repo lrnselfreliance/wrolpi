@@ -13,6 +13,11 @@ const links = [
             {to: '/videos/manage', text: 'Manage', exact: true},
         ]
     },
+    {
+        text: 'Apps', links: [
+            {to: '/apps/otp', text: 'One Time Pad', exact: true},
+        ]
+    },
 ];
 const admin = {to: '/admin', text: 'Admin', exact: true};
 const rightLinks = [admin,];

@@ -3,7 +3,7 @@ import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {deleteVideo, favoriteVideo} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link} from "react-router-dom";
-import {humanFileSize, secondsToDuration, uploadDate, VideoCard} from "./Common";
+import {humanFileSize, uploadDate, VideoCard} from "./Common";
 import {Confirm, Container, Segment, Tab} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
@@ -65,8 +65,6 @@ function VideoPage(props) {
             </Button>
         );
     }
-
-    let [hours, minutes, seconds] = secondsToDuration(video);
 
     let descriptionPane = {
         menuItem: 'Description', render: () => <Tab.Pane>

@@ -1,7 +1,4 @@
-a.video {
-    color: #161616;
-    text-decoration: none;
-}
-a.video:hover {
-    color: #385271;
+textarea.otp {
+    width: 100%;
+    color: #333;
 }

@@ -5,10 +5,12 @@ import json
 import logging
 import os
 import queue
+import re
 import string
 from copy import deepcopy
 from datetime import datetime, date
 from functools import wraps
+from itertools import islice
 from multiprocessing import Event, Queue
 from pathlib import Path
 from typing import Union, Callable, Tuple, Dict, Mapping, List
@@ -524,3 +526,15 @@ dt_or_d = Union[datetime, date]
 def date_range(start: dt_or_d, end: dt_or_d, steps: int) -> List[dt_or_d]:
     delta = (end - start) // steps
     return [start + (delta * i) for i in range(steps)]
+
+
+def chunk(it, size):
+    it = iter(it)
+    return iter(lambda: tuple(islice(it, size)), ())
+
+
+WHITESPACE = re.compile(r'\s')
+
+
+def remove_whitespace(s: str) -> str:
+    return WHITESPACE.sub('', s)

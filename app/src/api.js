@@ -156,17 +156,17 @@ export async function getDirectories(search_str) {
 }
 
 export async function getConfig() {
-    let response = await apiGet(`http://${API_URI}/api/settings`);
+    let response = await apiGet(`${API_URI}/settings`);
     let data = await response.json();
     return data['config'];
 }
 
 export async function saveConfig(config) {
-    return await apiPatch(`http://${API_URI}/api/settings`, config);
+    return await apiPatch(`${API_URI}/settings`, config);
 }
 
 export async function validateRegex(regex) {
-    let response = await apiPost(`http://${API_URI}/api/valid_regex`, {regex});
+    let response = await apiPost(`${API_URI}/valid_regex`, {regex});
     return (await response.json())['valid'];
 }
 
@@ -198,7 +198,7 @@ export async function distributeDownloadDays() {
 
 export async function encryptOTP(otp, plaintext) {
     let body = {otp, plaintext};
-    let response = await apiPost(`http://${API_URI}/api:encrypt_otp`, body);
+    let response = await apiPost(`${API_URI}:encrypt_otp`, body);
     if (response.status !== 200) {
         toast({
             type: 'error',
@@ -213,7 +213,7 @@ export async function encryptOTP(otp, plaintext) {
 
 export async function decryptOTP(otp, ciphertext) {
     let body = {otp, ciphertext};
-    let response = await apiPost(`http://${API_URI}/api:decrypt_otp`, body);
+    let response = await apiPost(`${API_URI}:decrypt_otp`, body);
     if (response.status !== 200) {
         toast({
             type: 'error',

@@ -2,8 +2,8 @@ import React from "react";
 import {Card, Container, Image, Pagination, Progress} from 'semantic-ui-react';
 import {Link} from "react-router-dom";
 
-export const API_URI = process.env.REACT_APP_API ? process.env.REACT_APP_API : '127.0.0.1:8080';
-export const VIDEOS_API = `http://${API_URI}/api/videos`;
+export const API_URI = `http://${window.location.host}/api`;
+export const VIDEOS_API = `${API_URI}/videos`;
 export const DEFAULT_LIMIT = 20;
 
 export default class Paginator extends React.Component {

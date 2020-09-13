@@ -148,7 +148,7 @@ def get_new_otp(_: Request):
 @root_api.get('/otp/pdf')
 def get_new_otp_pdf(_: Request):
     with tempfile.NamedTemporaryFile() as fh:
-        filename = f'one-time-pad-{fh.name[7:]}.pdf'
+        filename = f'one-time-pad-{fh.name[8:]}.pdf'
         headers = {
             'Content-type': 'application/pdf',
             'Content-Disposition': f'attachment;filename={filename}'

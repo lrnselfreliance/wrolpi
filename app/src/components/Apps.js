@@ -1,7 +1,7 @@
 import React from 'react';
 import {Button, Divider, Segment, TextArea} from "semantic-ui-react";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
-import {Link, Route} from "react-router-dom";
+import {Route} from "react-router-dom";
 import "../static/wrolpi.css";
 import {decryptOTP, encryptOTP} from "../api";
 
@@ -121,14 +121,17 @@ class Decrypt extends React.Component {
 
 class OTP extends React.Component {
     render() {
-        let newUrl=`http://${window.location.host}/api/otp/new`;
+        let newPadURL = `http://${window.location.host}/api/otp/new`;
+        let cheatSheetURL = `http://${window.location.host}/downloads/one-time-pad-cheat-sheet.pdf`;
+
         return (
             <div>
                 <h1>One-Time Pad</h1>
                 <h4>One-Time Pads can be used to encrypt your communications. This can be done by hand (yes, really) or
                     in this app.</h4>
                 <p>These messages are never stored and cannot be retrieved.</p>
-                <Button primary href={newUrl}>Generate New Pad</Button>
+                <Button primary href={newPadURL}>Generate New Pad</Button>
+                <Button secondary href={cheatSheetURL}>Cheat Sheet PDF</Button>
 
                 <Divider/>
                 <Encrypt/>

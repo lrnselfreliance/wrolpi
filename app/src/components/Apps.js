@@ -122,7 +122,7 @@ class Decrypt extends React.Component {
 class OTP extends React.Component {
     render() {
         let newPadURL = `http://${window.location.host}/api/otp/new`;
-        let cheatSheetURL = `http://${window.location.host}/downloads/one-time-pad-cheat-sheet.pdf`;
+        let cheatSheetURL = `${process.env.PUBLIC_URL}/one-time-pad-cheat-sheet.pdf`;
 
         return (
             <div>

@@ -5,7 +5,7 @@ WORKDIR /opt/wrolpi
 
 # Install dependencies
 RUN apt update
-RUN apt install -y ffmpeg
+RUN apt install -y ffmpeg wkhtmltopdf
 COPY requirements.txt /opt/wrolpi/
 RUN find -name requirements.txt -exec pip install --upgrade -q -r {} \;
 

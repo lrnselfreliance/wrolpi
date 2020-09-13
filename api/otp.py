@@ -1,7 +1,10 @@
 # The characters available for the One Time Pad
 import secrets
+import tempfile
 from functools import partial
 from typing import Dict
+
+import pdfkit
 
 from api.common import chunk, remove_whitespace
 from api.errors import InvalidOTP, InvalidPlaintext, InvalidCiphertext
@@ -67,13 +70,17 @@ To learn how to use this page, please visit: <a href="https://lrnsr.co/H7Za">htt
 '''
 
 
-def generate_page() -> str:
+def generate_html() -> str:
     """
     Create an HTML One-Time Pad page.   This page will have instructions on how to use the OTP.
     """
     messages = [generate_message() for _ in range(9)]
     messages = '\n\n'.join(f'<pre>MESSAGE {i}</pre><pre>{j}</pre>' for i, j in enumerate(messages, 1))
     return PAGE_HTML.format(messages=messages)
+
+
+def generate_pdf(location: str):
+    pdfkit.from_string(generate_html(), location)
 
 
 def validate_message(otp, error_class):

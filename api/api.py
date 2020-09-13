@@ -1,6 +1,7 @@
 import argparse
 import logging
 import re
+import tempfile
 from http import HTTPStatus
 
 from sanic import Blueprint, Sanic, response
@@ -12,7 +13,7 @@ from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_
     wrol_mode_enabled
 from api.errors import WROLModeEnabled
 from api.modules import MODULES
-from api.otp import encrypt_otp, decrypt_otp, generate_page
+from api.otp import encrypt_otp, decrypt_otp, generate_html, generate_pdf
 from api.videos.schema import EventsResponse, EchoResponse, EncryptOTPRequest, DecryptOTPRequest
 from api.videos.schema import SettingsRequest, SettingsResponse, RegexRequest, RegexResponse
 
@@ -139,9 +140,23 @@ def post_decrypt_otp(_: Request, data: dict):
     return response.json(data)
 
 
-@root_api.get('/otp/new')
+@root_api.get('/otp/html')
 def get_new_otp(_: Request):
-    return response.html(generate_page())
+    return response.html(generate_html())
+
+
+@root_api.get('/otp/pdf')
+def get_new_otp_pdf(_: Request):
+    with tempfile.NamedTemporaryFile() as fh:
+        filename = f'one-time-pad-{fh.name[7:]}.pdf'
+        headers = {
+            'Content-type': 'application/pdf',
+            'Content-Disposition': f'attachment;filename={filename}'
+        }
+        generate_pdf(fh.name)
+        fh.seek(0)
+        contents = fh.read()
+        return response.raw(contents, HTTPStatus.OK, headers)
 
 
 ROUTES_ATTACHED = False

@@ -36,6 +36,8 @@ WROLPi runs in a couple Docker containers.  Lets get the prerequisites installed
 - [ ] Wifi Hotspot
 - [ ] Universal search
 - [ ] Map viewer/downloader
+- [ ] Food storage calculator
+- [ ] Inventory management
 - [ ] Podcast player/downloader
 - [ ] eBook viewer/downloader
 - [ ] Wiki viewer/downloader

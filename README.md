@@ -30,6 +30,17 @@ WROLPi runs in a couple Docker containers.  Lets get the prerequisites installed
     * http://0.0.0.0:8080
 
 
+# Features
+- [x] Video player/downloader
+- [x] One-Time pad generator, encrypter/decrypter
+- [ ] Wifi Hotspot
+- [ ] Map viewer/downloader
+- [ ] Podcast player/downloader
+- [ ] eBook viewer/downloader
+- [ ] Wiki viewer/downloader
+- [ ] Syncronizer and/or duplicator
+
+
 # Charter
 ## Physical properties
 1. A WROLPi instance should be capable of running with a minimal of hardware:

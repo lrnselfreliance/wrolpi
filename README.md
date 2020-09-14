@@ -34,6 +34,7 @@ WROLPi runs in a couple Docker containers.  Lets get the prerequisites installed
 - [x] Video player/downloader
 - [x] One-Time pad generator, encrypter/decrypter
 - [ ] Wifi Hotspot
+- [ ] Universal search
 - [ ] Map viewer/downloader
 - [ ] Podcast player/downloader
 - [ ] eBook viewer/downloader

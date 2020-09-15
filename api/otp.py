@@ -1,6 +1,5 @@
 # The characters available for the One Time Pad
 import secrets
-import tempfile
 from functools import partial
 from typing import Dict
 

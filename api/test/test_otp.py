@@ -19,7 +19,7 @@ from api.otp import encrypt_otp, decrypt_otp, format_message
                 # The message is shorter than the OTP, this is fine.  The ciphertext should be the same
                 # length as the message.
                 'V4YPT RCJLZ QZVSD 0U2E6 OOKNU\nZDH8F 4XQ76 OR6EK J0TRG 0G0HU\nS4BUJ',
-                    'TESTT HEENC RYPTI ONOFA LONGM\nESSAG ETHES PACES SHOUL DNTMA\nTTER',
+                'TESTT HEENC RYPTI ONOFA LONGM\nESSAG ETHES PACES SHOUL DNTMA\nTTER',
                 'E8G8C YGNY1 7NABL E7GJ6 Z2XT6\n3VZ8L 8GXBO 3R8I2 177BR 3TJTU\nBNFB'
         ),
     ],

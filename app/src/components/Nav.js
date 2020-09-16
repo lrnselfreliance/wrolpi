@@ -14,6 +14,12 @@ const links = [
         ]
     },
     {
+        text: 'Inventory', links: [
+            {to: '/inventory', text: 'Summary', exact: true},
+            {to: '/inventory/new', text: 'New Entries', exact: true},
+        ]
+    },
+    {
         text: 'Apps', links: [
             {to: '/apps/otp', text: 'One Time Pad', exact: true},
         ]

@@ -225,3 +225,8 @@ export async function decryptOTP(otp, ciphertext) {
     }
     return await response.json();
 }
+
+export async function getInventory() {
+    let response = await apiGet(`${API_URI}/inventory`);
+    return await response.json();
+}

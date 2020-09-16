@@ -2,10 +2,14 @@ from decimal import Decimal
 from functools import partial
 from typing import List, Dict, Tuple
 
+import pint
 from dictorm import Table
 
+from api.common import iterify
 from api.db import get_db_context
 from api.inventory.common import DEFAULT_CATEGORIES
+
+unit_registry = pint.UnitRegistry()
 
 CATEGORIES_INITIALIZED = False
 
@@ -67,3 +71,49 @@ def get_inventory_by_keys(keys: Tuple):
 
 get_inventory_by_category = partial(get_inventory_by_keys, ('category', 'subcategory', 'unit'))
 get_inventory_by_name = partial(get_inventory_by_keys, ('brand', 'name', 'unit'))
+
+INVENTORY_UNITS = {
+    ('ounce', 1): (16, unit_registry.pound),
+    ('pound', 1): (2000, unit_registry.ton),
+}
+
+UNIT_PRECISION = 5
+
+
+def compact_unit(quantity: unit_registry.Quantity) -> unit_registry.Quantity:
+    """
+    Convert a Quantity to it's more readable format.  Such as 2000 pounds to 1 ton.
+    """
+    number, (units,) = quantity.to_tuple()
+    next_unit = INVENTORY_UNITS.get(units)
+    if not next_unit:
+        # No units after this one, return as is.
+        return quantity
+
+    max_quantity, next_unit = next_unit
+    if number >= max_quantity:
+        # Number is too high for this unit, move to the next unit.
+        return compact_unit(quantity.to(next_unit))
+
+    # No units were necessary, return as is.
+    return quantity
+
+
+def quantity_to_tuple(quantity: unit_registry.Quantity) -> Tuple[Decimal, str]:
+    decimal, (units,) = quantity.to_tuple()
+    unit, _ = units
+    return round(decimal, UNIT_PRECISION).normalize(), unit
+
+
+@iterify(list)
+def human_units(items: List[dict], key: str) -> List[dict]:
+    for item in items:
+        quantity = item[key] * unit_registry(item['unit'])
+        quantity = compact_unit(quantity)
+        decimal, unit = quantity_to_tuple(quantity)
+        if unit_registry(item['unit']) == unit_registry(unit):
+            # The unit was unchanged, lets preserve the user's format
+            # i.e. ounce vs oz
+            unit = item['unit']
+        item.update({key: decimal, 'unit': unit})
+        yield item

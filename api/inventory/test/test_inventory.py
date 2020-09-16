@@ -2,11 +2,13 @@ import unittest
 from decimal import Decimal
 from itertools import zip_longest
 
+import pytest
 from dictorm import Table
 
 from api.db import get_db_context
 from api.test.common import wrap_test_db
-from ..inventory import init_categories, get_inventory_by_category, get_inventory_by_name
+from ..inventory import init_categories, get_inventory_by_category, get_inventory_by_name, unit_registry, \
+    compact_unit, human_units
 
 TEST_ITEMS_COLUMNS = (
     'brand',
@@ -75,3 +77,47 @@ class TestInventory(unittest.TestCase):
 
         for i, j in zip_longest(inventory, expected):
             self.assertEqual(i, j)
+
+
+@pytest.mark.parametrize(
+    'quantity,expected',
+    [
+        (Decimal(5) * unit_registry.ounce, unit_registry.ounce * 5),
+        (Decimal(16) * unit_registry.ounce, unit_registry.pound * 1),
+        (Decimal(500) * unit_registry.pound, unit_registry.pound * 500),
+        (Decimal(2000) * unit_registry.pound, unit_registry.ton * 1),
+        (Decimal(128000) * unit_registry.ounce, unit_registry.ton * 4),
+    ]
+)
+def test_compact_unit(quantity, expected):
+    # Round the result so we don't have to specify all those zeros for the test definition.
+    assert round(compact_unit(quantity), 5) == expected
+
+
+@pytest.mark.parametrize(
+    'items,expected',
+    [
+        (
+                [{'total_size': Decimal('0'), 'unit': 'oz'}],
+                [{'total_size': Decimal('0'), 'unit': 'oz'}],
+        ),
+        (
+                [{'total_size': Decimal('-500'), 'unit': 'oz'}],
+                [{'total_size': Decimal('-500'), 'unit': 'oz'}],
+        ),
+        (
+                [{'total_size': Decimal('1'), 'unit': 'oz'}],
+                [{'total_size': Decimal('1'), 'unit': 'oz'}],
+        ),
+        (
+                [{'total_size': Decimal('16'), 'unit': 'oz'}],
+                [{'total_size': Decimal('1'), 'unit': 'pound'}],
+        ),
+        (
+                [{'total_size': Decimal('16'), 'unit': 'oz'}, {'total_size': Decimal('5000'), 'unit': 'lb'}],
+                [{'total_size': Decimal('1'), 'unit': 'pound'}, {'total_size': Decimal('2.5'), 'unit': 'ton'}],
+        ),
+    ]
+)
+def test_human_units(items, expected):
+    assert human_units(items, 'total_size') == expected

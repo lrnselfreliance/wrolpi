@@ -346,7 +346,7 @@ class TestVideoAPI(TestAPI):
             # Test that a 404 is returned when no video exists
             _, response = api_app.test_client.get('/api/videos/video/10')
             assert response.status_code == HTTPStatus.NOT_FOUND, response.json
-            assert response.json == {'code': 1, 'error': 'The video could not be found.'}
+            assert response.json == {'code': 1, 'api_error': 'The video could not be found.', 'message': ''}
 
             # Get the video info we inserted
             _, response = api_app.test_client.get('/api/videos/video/1')

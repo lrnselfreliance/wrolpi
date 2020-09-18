@@ -29,7 +29,7 @@ from websocket import WebSocket
 
 from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents, \
     WROLModeEnabled
-from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT
+from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT, DATE_FORMAT
 
 logger = logging.getLogger(__name__)
 ch = logging.StreamHandler()
@@ -172,6 +172,10 @@ def validate_data(model: type, data: dict):
                 if val is not None:
                     val = string_to_boolean(val)
                 new_data[attr] = val
+            elif isinstance(field, doc.Date):
+                val = data.pop(attr)
+                if val:
+                    new_data[attr] = datetime.strptime(val, DATE_FORMAT)
             else:
                 raise ValidationError(f'Bad field type {field} specified in the API model!')
         except KeyError:
@@ -224,7 +228,8 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
             except APIError as e:
                 # The endpoint returned a standardized APIError, convert it to a json response
                 error = API_ERRORS[type(e)]
-                r = response.json({'error': error['message'], 'code': error['code']}, error['status'])
+                r = response.json({'message': str(e), 'api_error': error['message'], 'code': error['code']},
+                                  error['status'])
                 return r
 
         # Apply the docs to the wrapped function so sanic-openapi can find the wrapped function when

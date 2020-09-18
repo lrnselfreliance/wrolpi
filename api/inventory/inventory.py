@@ -37,10 +37,29 @@ def get_categories() -> List[Dict]:
         return list(Category.get_where())
 
 
-ITEM_ORDER = 'subcategory, category'
+def get_items() -> List[Dict]:
+    with get_db_context() as (db_conn, db):
+        Item: Table = db['item']
+        return list(Item.get_where())
+
+
+def save_item(item):
+    with get_db_context(commit=True) as (db_conn, db):
+        Item: Table = db['item']
+        Item(**item).flush()
+
+
+def delete_items(items_ids: List[int]):
+    with get_db_context(commit=True) as (db_conn, db):
+        curs = db_conn.cursor()
+        curs.execute('DELETE FROM item WHERE ID = ANY(%s)', (items_ids,))
 
 
 def sum_by_key(items: List, key: callable):
+    """
+    Sum the total size of each item by the provided key function.  Returns a dict containing the key, and the total_size
+    for that key.
+    """
     summed = dict()
     for item in items:
         k = key(item)

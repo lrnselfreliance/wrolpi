@@ -7,11 +7,12 @@ from dictorm import Table
 
 from api.db import get_db_context
 from api.test.common import wrap_test_db
+from .. import init
 from ..inventory import get_inventory_by_category, get_inventory_by_name, unit_registry, \
     compact_unit, human_units
-from .. import init
 
 TEST_ITEMS_COLUMNS = (
+    'inventory_id',
     'brand',
     'name',
     'item_size',
@@ -24,13 +25,13 @@ TEST_ITEMS_COLUMNS = (
     'purchase_date',
 )
 TEST_ITEMS = [
-    ('Wheaters', 'Red Wheat', 45, 'pounds', 1, 'grains', 'wheat'),
-    ('Wheaters', 'Red Wheat', 55, 'pounds', 2, 'grains', 'wheat'),
-    ('Ricey', 'White Rice', 8, 'pounds', 1, 'grains', 'rice'),
-    ('Chewy', 'Chicken Breast', 16, 'oz', 8, 'meats', 'canned'),
-    ('Chewy', 'Beef', 16, 'oz', 12, 'meats', 'canned'),
-    ('Vibrant', 'Peaches', 24, 'oz', 2, 'fruits', 'canned'),
-    ('Vibrant', 'Pineapple', Decimal('22.3'), 'oz', 1, 'fruits', 'canned'),
+    (1, 'Wheaters', 'Red Wheat', 45, 'pounds', 1, 'grains', 'wheat'),
+    (1, 'Wheaters', 'Red Wheat', 55, 'pounds', 2, 'grains', 'wheat'),
+    (1, 'Ricey', 'White Rice', 8, 'pounds', 1, 'grains', 'rice'),
+    (1, 'Chewy', 'Chicken Breast', 16, 'oz', 8, 'meats', 'canned'),
+    (1, 'Chewy', 'Beef', 16, 'oz', 12, 'meats', 'canned'),
+    (1, 'Vibrant', 'Peaches', 24, 'oz', 2, 'fruits', 'canned'),
+    (1, 'Vibrant', 'Pineapple', Decimal('22.3'), 'oz', 1, 'fruits', 'canned'),
 ]
 
 
@@ -50,7 +51,7 @@ class TestInventory(unittest.TestCase):
     def test_get_inventory_by_category(self):
         self.prepare()
 
-        summary = get_inventory_by_category()
+        summary = get_inventory_by_category(1)
 
         self.assertEqual(
             summary,
@@ -74,10 +75,10 @@ class TestInventory(unittest.TestCase):
             dict(brand='Wheaters', name='Red Wheat', total_size=Decimal('155'), unit='pounds'),
         ]
 
-        inventory = get_inventory_by_name()
+        inventory = get_inventory_by_name(1)
 
-        for i, j in zip_longest(inventory, expected):
-            self.assertEqual(i, j)
+        for idx, (i, j) in enumerate(zip_longest(inventory, expected)):
+            self.assertEqual(i, j, f'named inventory {idx} is not equal')
 
 
 @pytest.mark.parametrize(

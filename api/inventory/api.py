@@ -1,8 +1,11 @@
+from http import HTTPStatus
+
 from sanic import Blueprint, response
 from sanic.request import Request
 
-from .inventory import get_inventory_by_category, get_inventory_by_name, get_items, save_item, delete_items
-from .schema import ItemPostRequest
+from .inventory import get_inventory_by_category, get_inventory_by_name, get_items, save_item, delete_items, \
+    get_inventories, save_inventory, delete_inventory, update_inventory
+from .schema import ItemPostRequest, InventoryPostRequest, InventoryPutRequest
 from ..common import validate_doc
 from ..errors import ValidationError
 
@@ -11,11 +14,43 @@ NAME = 'inventory'
 api_bp = Blueprint('Inventory', url_prefix='/inventory')
 
 
+@api_bp.get('/')
+def inventories_get(request: Request):
+    inventories = get_inventories()
+    return response.json(inventories)
+
+
 @api_bp.get('/<inventory_id:int>')
 def inventory_get(request: Request, inventory_id: int):
-    by_category = get_inventory_by_category()
-    by_name = get_inventory_by_name()
+    by_category = get_inventory_by_category(inventory_id)
+    by_name = get_inventory_by_name(inventory_id)
     return response.json(dict(by_category=by_category, by_name=by_name))
+
+
+@api_bp.post('/')
+@validate_doc(
+    'Save a new inventory',
+    consumes=InventoryPostRequest,
+)
+def post_inventory(request: Request, data: dict):
+    save_inventory(data)
+    return response.empty(HTTPStatus.CREATED)
+
+
+@api_bp.put('/<inventory_id:int>')
+@validate_doc(
+    'Update an inventory',
+    consumes=InventoryPutRequest,
+)
+def put_inventory(request: Request, inventory_id: int, data: dict):
+    update_inventory(inventory_id, data)
+    return response.empty()
+
+
+@api_bp.delete('/<inventory_id:int>')
+def inventory_delete(request: Request, inventory_id: int):
+    delete_inventory(inventory_id)
+    return response.empty()
 
 
 @api_bp.get('/<inventory_id:int>/item')
@@ -23,7 +58,7 @@ def inventory_get(request: Request, inventory_id: int):
     "Get all items from an inventory.",
 )
 def items_get(request: Request, inventory_id: int):
-    items = get_items()
+    items = get_items(inventory_id)
     return response.json({'items': items})
 
 
@@ -33,15 +68,15 @@ def items_get(request: Request, inventory_id: int):
     consumes=ItemPostRequest,
 )
 def post_item(request: Request, inventory_id: int, data: dict):
-    save_item(data)
+    save_item(inventory_id, data)
     return response.empty()
 
 
-@api_bp.delete('/<inventory_id:int>/item/<item_ids:[0-9,]+>')
+@api_bp.delete('/item/<item_ids:[0-9,]+>')
 @validate_doc(
     'Delete items from an inventory.',
 )
-def item_delete(request: Request, inventory_id: int, item_ids: str):
+def item_delete(request: Request, item_ids: str):
     try:
         item_ids = [int(i) for i in item_ids.split(',')]
     except ValueError:

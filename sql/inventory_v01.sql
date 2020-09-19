@@ -1,6 +1,15 @@
+CREATE TABLE inventory
+(
+    id         SERIAL PRIMARY KEY,
+    name       TEXT NOT NULL,
+    created_at TIMESTAMP,
+    deleted_at TIMESTAMP
+);
+
 CREATE TABLE item
 (
     id              SERIAL PRIMARY KEY,
+    inventory_id    INTEGER REFERENCES inventory (id) NOT NULL,
     brand           TEXT,
     name            TEXT,
     count           DECIMAL,
@@ -10,7 +19,9 @@ CREATE TABLE item
     category        TEXT,
     subcategory     TEXT,
     expiration_date DATE,
-    purchase_date   DATE
+    purchase_date   DATE,
+    created_at      TIMESTAMP,
+    deleted_at      TIMESTAMP
 );
 
 CREATE TABLE category

@@ -31,3 +31,7 @@ DEFAULT_CATEGORIES = [
     ('freeze-dried', 'vegetables'),
     ('water', 'water'),
 ]
+
+DEFAULT_INVENTORIES = [
+    'Food Storage',
+]

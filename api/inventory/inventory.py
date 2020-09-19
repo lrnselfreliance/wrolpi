@@ -5,30 +5,37 @@ from typing import List, Dict, Tuple
 import pint
 from dictorm import Table
 
-from api.common import iterify
+from api.common import iterify, logger
 from api.db import get_db_context
-from api.inventory.common import DEFAULT_CATEGORIES
 
 unit_registry = pint.UnitRegistry()
+logger = logger.getChild(__name__)
 
-CATEGORIES_INITIALIZED = False
+
+def get_inventories() -> List[Dict]:
+    with get_db_context() as (db_conn, db):
+        Inventory: Table = db['inventory']
+        return list(Inventory.get_where(Inventory['deleted_at'].IsNull()).order_by('name'))
 
 
-def init_categories(force=False):
-    """
-    Initialize inventory categories, but only if none already exist.
-    """
-    global CATEGORIES_INITIALIZED
-    if CATEGORIES_INITIALIZED and force is False:
-        return
-
+def save_inventory(inventory):
     with get_db_context(commit=True) as (db_conn, db):
-        Category: Table = db['category']
-        if Category.count() == 0:
-            for subcategory, category in DEFAULT_CATEGORIES:
-                Category(subcategory=subcategory, category=category).flush()
+        Inventory: Table = db['inventory']
+        Inventory(**inventory).flush()
 
-    CATEGORIES_INITIALIZED = True
+
+def update_inventory(inventory_id: int, inventory: dict):
+    with get_db_context(commit=True) as (db_conn, db):
+        Inventory: Table = db['inventory']
+        i = Inventory.get_one(id=inventory_id)
+        i.update(inventory)
+        i.flush()
+
+
+def delete_inventory(inventory_id: int):
+    with get_db_context(commit=True) as (db_conn, db):
+        Inventory: Table = db['inventory']
+        Inventory.get_one(id=inventory_id).delete()
 
 
 def get_categories() -> List[Dict]:
@@ -37,16 +44,16 @@ def get_categories() -> List[Dict]:
         return list(Category.get_where())
 
 
-def get_items() -> List[Dict]:
+def get_items(inventory_id: int) -> List[Dict]:
     with get_db_context() as (db_conn, db):
         Item: Table = db['item']
-        return list(Item.get_where())
+        return list(Item.get_where(inventory_id=inventory_id))
 
 
-def save_item(item):
+def save_item(inventory_id: int, item: dict):
     with get_db_context(commit=True) as (db_conn, db):
         Item: Table = db['item']
-        Item(**item).flush()
+        Item(inventory_id=inventory_id, **item).flush()
 
 
 def delete_items(items_ids: List[int]):
@@ -72,10 +79,10 @@ def sum_by_key(items: List, key: callable):
     return summed
 
 
-def get_inventory_by_keys(keys: Tuple):
+def get_inventory_by_keys(keys: Tuple, inventory_id: int):
     with get_db_context() as (db_conn, db):
         Item: Table = db['item']
-        items = list(Item.get_where())
+        items = list(Item.get_where(inventory_id=inventory_id))
 
     summed = sum_by_key(items, lambda i: tuple(i[k] for k in keys))
 

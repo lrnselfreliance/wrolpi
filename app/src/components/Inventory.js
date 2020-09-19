@@ -1,9 +1,19 @@
 import React from 'react';
 import "../static/wrolpi.css";
-import {deleteItems, getInventory, getItems, saveItem} from "../api";
-import {Button, Checkbox, Form, Grid, Tab, Table} from "semantic-ui-react";
+import {
+    deleteInventory,
+    deleteItems,
+    getInventories,
+    getInventory,
+    getItems,
+    saveInventory,
+    saveItem,
+    updateInventory
+} from "../api";
+import {Button, Checkbox, Dropdown, Form, Grid, Header, Portal, Segment, Tab, Table} from "semantic-ui-react";
 import {Route} from "react-router-dom";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
+import {toast} from 'react-semantic-toasts';
 
 class InventorySummary extends React.Component {
 
@@ -12,37 +22,89 @@ class InventorySummary extends React.Component {
         this.state = {
             by_category: null,
             by_name: null,
+            inventory: null,
         }
     }
 
     async componentDidMount() {
-        let inventory = await this.getInventory();
-        this.setState(inventory);
+        await this.fetchInventory();
     }
 
-    getInventory = async () => {
-        let response = await getInventory();
-        return response;
+    fetchInventory = async () => {
+        let inventorySummary = await getInventory(this.state.inventory.id);
+        this.setState(inventorySummary);
+    }
+
+    setInventory = async (inventory) => {
+        this.setState({inventory}, this.fetchInventory);
+    }
+
+    categoryTable = () => {
+        if (this.state.by_category === null || this.state.by_category.length === 0) {
+            return <p>No items have been added to this inventory.</p>;
+        }
+
+        function row(i) {
+            return <Table.Row>
+                <Table.Cell>{i.category}</Table.Cell>
+                <Table.Cell>{i.subcategory}</Table.Cell>
+                <Table.Cell>{i.total_size}</Table.Cell>
+                <Table.Cell>{i.unit}</Table.Cell>
+            </Table.Row>
+        }
+
+        return <Table>
+            <Table.Header>
+                <Table.Row>
+                    <Table.Cell>Category</Table.Cell>
+                    <Table.Cell>Subcategory</Table.Cell>
+                    <Table.Cell>Total Size</Table.Cell>
+                    <Table.Cell>Unit</Table.Cell>
+                </Table.Row>
+            </Table.Header>
+            <Table.Body>
+                {this.state.by_category.map((i) => row(i))}
+            </Table.Body>
+        </Table>;
+    }
+
+    nameTable = () => {
+        if (this.state.by_name === null || this.state.by_name.length === 0) {
+            return <p>No items have been added to this inventory.</p>;
+        }
+
+        function row(i) {
+            return <Table.Row>
+                <Table.Cell>{i.brand}</Table.Cell>
+                <Table.Cell>{i.name}</Table.Cell>
+                <Table.Cell>{i.total_size}</Table.Cell>
+                <Table.Cell>{i.unit}</Table.Cell>
+            </Table.Row>
+        }
+
+        return <Table>
+            <Table.Header>
+                <Table.Row>
+                    <Table.Cell>Brand</Table.Cell>
+                    <Table.Cell>Product Name</Table.Cell>
+                    <Table.Cell>Total Size</Table.Cell>
+                    <Table.Cell>Unit</Table.Cell>
+                </Table.Row>
+            </Table.Header>
+            <Table.Body>
+                {this.state.by_name.map((i) => row(i))}
+            </Table.Body>
+        </Table>;
     }
 
     render() {
-        let byCategory = <></>;
-        let byName = <></>;
-
-        if (this.state.by_category === null || this.state.by_category.length === 0) {
-            byCategory = <p>No items have been added to the inventory.</p>
-        }
-
-        if (this.state.by_name === null || this.state.by_name.length === 0) {
-            byName = <p>No items have been added to the inventory.</p>
-        }
-
         return (
             <>
+                <InventorySelector setInventory={this.setInventory}/>
                 <h3>Categorized</h3>
-                {byCategory}
+                {this.categoryTable()}
                 <h3>By Name</h3>
-                {byName}
+                {this.nameTable()}
             </>
         )
     }
@@ -69,7 +131,7 @@ class InventoryList extends React.Component {
                 checkboxes.splice(index, 1);
             }
         }
-        this.setState({checkboxes: checkboxes}, () => console.log(this.state.checkboxes));
+        this.setState({checkboxes: checkboxes});
     }
 
     handleRemove = async (e) => {
@@ -103,7 +165,7 @@ class InventoryList extends React.Component {
 
     render() {
         if (this.props.items.length === 0) {
-            return <p>Add some items in the form above!</p>
+            return <p>Add some items using the form above!</p>
         }
 
         return (
@@ -138,11 +200,263 @@ class InventoryList extends React.Component {
     }
 }
 
+class InventoryPortal extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            open: false,
+            inventory: null,
+            name: '',
+        };
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (this.props !== prevProps) {
+            this.setState({
+                inventory: this.props.inventory,
+                name: this.props.inventory ? this.props.inventory.name : '',
+            });
+        }
+    }
+
+    handleClose = () => this.setState({open: false});
+    handleOpen = () => this.setState({open: true});
+
+    handleInputChange = (e, {name, value}) => {
+        this.setState({[name]: value});
+    }
+
+    handleSubmit = async (e) => {
+        e.preventDefault();
+        let inventory = {
+            id: this.state.inventory ? this.state.inventory.id : null,
+            name: this.state.name || (this.state.inventory ? this.state.inventory.name : ''),
+        };
+        await this.props.handleSubmit(inventory, this.handleClose);
+    }
+
+    handleDelete = async (e) => {
+        e.preventDefault();
+        this.props.handleDelete(this.state.inventory, this.handleClose);
+    }
+
+    render() {
+        return (
+            <>
+                <Button
+                    disabled={this.props.open}
+                    onClick={this.handleOpen}
+                    {...this.props.buttonProps}
+                />
+                <Portal onClose={this.handleClose} open={this.state.open}>
+                    <Segment
+                        style={{
+                            left: '40%',
+                            position: 'fixed',
+                            top: '50%',
+                            zIndex: 1000,
+                        }}
+                    >
+                        <Header>{this.props.header}</Header>
+                        <Form onSubmit={this.handleSubmit}>
+                            <label>Name</label>
+                            <Form.Input
+                                name='name'
+                                value={this.state.name}
+                                onChange={this.handleInputChange}
+                            />
+                            <Button primary type='submit'>Save</Button>
+                            {
+                                this.props.deleteButton &&
+                                <Button color='red'
+                                        onClick={this.handleDelete}
+                                >
+                                    Delete
+                                </Button>
+                            }
+                            <Button secondary floated='right' onClick={this.handleClose}>Cancel</Button>
+                        </Form>
+                    </Segment>
+                </Portal>
+            </>
+        )
+    }
+}
+
+class EditInventory extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            open: false,
+            inventory: props.inventory,
+        }
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevProps !== this.props) {
+            this.setState({inventory: this.props.inventory});
+        }
+    }
+
+    handleSubmit = async (inventory, closeCallback) => {
+        let inventoryId = inventory.id;
+        delete inventory['id'];
+        let response = await updateInventory(inventoryId, inventory);
+
+        if (response.status === 204) {
+            await this.props.success();
+            closeCallback();
+        } else {
+            toast({
+                type: 'error',
+                title: 'Failed to save inventory!',
+                description: 'Server responded with an error.',
+                time: 5000,
+            })
+        }
+    }
+
+    handleDelete = async (inventory, closeCallback) => {
+        let response = await deleteInventory(inventory.id);
+
+        if (response.status === 204) {
+            await this.props.success();
+            closeCallback();
+        } else {
+            toast({
+                type: 'error',
+                title: 'Failed to delete inventory!',
+                description: 'Server responded with an error.',
+                time: 5000,
+            })
+        }
+    }
+
+    render() {
+        return (
+            <InventoryPortal
+                inventory={this.props.inventory}
+                header='Edit Inventory'
+                handleSubmit={this.handleSubmit}
+                handleDelete={this.handleDelete}
+                buttonProps={{icon: 'edit', color: 'red'}}
+                deleteButton={true}
+            />
+        )
+    }
+}
+
+class NewInventory extends React.Component {
+
+    handleSubmit = async (inventory, closeCallback) => {
+        let response = await saveInventory(inventory);
+
+        if (response.status === 201) {
+            await this.props.success();
+            closeCallback();
+        } else {
+            toast({
+                type: 'error',
+                title: 'Failed to save inventory!',
+                description: 'Server responded with an error.',
+                time: 5000,
+            })
+        }
+    }
+
+    render() {
+        return (
+            <InventoryPortal
+                header='Create a new Inventory list'
+                handleSubmit={this.handleSubmit}
+                buttonProps={{icon: 'plus'}}
+            />
+        )
+    }
+
+}
+
+class InventorySelector extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            options: [],
+            inventories: [],
+            selected: null,
+            newInventoryPortal: false,
+            editInventoryPortal: false,
+            name: '',
+        }
+    }
+
+    async componentDidMount() {
+        await this.fetchInventories();
+    }
+
+    async fetchInventories() {
+        let inventories = await getInventories();
+        let options = [];
+        for (let i = 0; i < inventories.length; i++) {
+            let inventory = inventories[i];
+            options = options.concat([{
+                key: inventory.id,
+                text: inventory.name,
+                value: inventory.id,
+                id: inventory.id,
+            }])
+        }
+        let selected = this.state.selected || inventories[0];
+        this.setState({inventories, options, selected},
+            () => this.props.setInventory(selected));
+    }
+
+    setInventory = (e, {value}) => {
+        let selected = null;
+        for (let i = 0; i < this.state.inventories.length; i++) {
+            if (value === this.state.inventories[i].id) {
+                selected = this.state.inventories[i];
+            }
+        }
+        this.setState({selected: selected},
+            () => this.props.setInventory(this.state.selected));
+    }
+
+    render() {
+        return (
+            <>
+                <h3>Inventory</h3>
+                <Grid>
+                    <Grid.Column width={14}>
+                        <Dropdown
+                            placeholder='Select an Inventory'
+                            fluid
+                            selection
+                            value={this.state.selected ? this.state.selected.id : null}
+                            options={this.state.options}
+                            onChange={this.setInventory}
+                        />
+                    </Grid.Column>
+                    <Grid.Column width={2}>
+                        <NewInventory success={() => this.fetchInventories}/>
+                        <EditInventory
+                            inventory={this.state.selected}
+                            success={() => this.fetchInventories()}
+                        />
+                    </Grid.Column>
+                </Grid>
+            </>
+        )
+    }
+}
+
 class InventoryAddList extends React.Component {
 
     constructor(props) {
         super(props);
         this.state = {
+            inventory: null,
             items: [],
             brand: '',
             name: '',
@@ -161,8 +475,12 @@ class InventoryAddList extends React.Component {
     }
 
     fetchItems = async () => {
-        let response = await getItems();
-        this.setState({items: response.items});
+        if (this.state.inventory) {
+            let response = await getItems(this.state.inventory.id);
+            let items = response.items;
+
+            this.setState({items: items});
+        }
     }
 
     handleInputChange = (e, {name, value}) => {
@@ -194,14 +512,28 @@ class InventoryAddList extends React.Component {
             subcategory: this.state.subcategory,
             expiration_date: this.state.expiration_date,
         };
-        await saveItem(item);
-        await this.clearValues();
-        await this.fetchItems();
+        let response = await saveItem(this.state.inventory.id, item);
+        if (response.status === 204) {
+            await this.clearValues();
+            await this.fetchItems();
+        } else {
+            toast({
+                type: 'error',
+                title: 'Failed to save item!',
+                description: 'Server responded with an error.',
+                time: 5000,
+            })
+        }
+    }
+
+    setInventory = async (inventory) => {
+        this.setState({inventory}, this.fetchItems);
     }
 
     render() {
         return (
             <>
+                <InventorySelector setInventory={this.setInventory}/>
                 <Form onSubmit={this.handleSubmit}>
                     <Form.Group widths='equal'>
                         <Grid>
@@ -287,7 +619,7 @@ class InventoryAddList extends React.Component {
                         </Grid>
                     </Form.Group>
                 </Form>
-                <h4>Items in Inventory</h4>
+                <h4>Items in: {this.state.inventory ? this.state.inventory.name : ''}</h4>
                 <InventoryList items={this.state.items} fetchItems={this.fetchItems}/>
             </>
         )

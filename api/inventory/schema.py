@@ -10,3 +10,11 @@ class ItemPostRequest:
     category = doc.String()
     subcategory = doc.String()
     expiration_date = doc.Date()
+
+
+class InventoryPostRequest:
+    name = doc.String(required=True)
+
+
+class InventoryPutRequest:
+    name = doc.String(required=True)

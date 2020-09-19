@@ -7,8 +7,9 @@ from dictorm import Table
 
 from api.db import get_db_context
 from api.test.common import wrap_test_db
-from ..inventory import init_categories, get_inventory_by_category, get_inventory_by_name, unit_registry, \
+from ..inventory import get_inventory_by_category, get_inventory_by_name, unit_registry, \
     compact_unit, human_units
+from .. import init
 
 TEST_ITEMS_COLUMNS = (
     'brand',
@@ -37,7 +38,7 @@ class TestInventory(unittest.TestCase):
 
     @staticmethod
     def prepare() -> None:
-        init_categories(force=True)
+        init(force=True)
 
         items = [dict(zip(TEST_ITEMS_COLUMNS, i)) for i in TEST_ITEMS]
         with get_db_context(commit=True) as (db_conn, db):

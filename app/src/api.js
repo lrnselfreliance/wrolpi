@@ -226,21 +226,39 @@ export async function decryptOTP(otp, ciphertext) {
     return await response.json();
 }
 
-export async function getInventory() {
-    let response = await apiGet(`${API_URI}/inventory/1`);
+export async function getInventories() {
+    let response = await apiGet(`${API_URI}/inventory`);
     return await response.json();
 }
 
-export async function getItems() {
-    let response = await apiGet(`${API_URI}/inventory/1/item`);
+export async function getInventory(inventoryId) {
+    let response = await apiGet(`${API_URI}/inventory/${inventoryId}`);
     return await response.json();
 }
 
-export async function saveItem(item) {
-    await apiPost(`${API_URI}/inventory/1/item`, item);
+export async function saveInventory(inventory) {
+    return await apiPost(`${API_URI}/inventory`, inventory);
+}
+
+export async function updateInventory(inventoryId, inventory) {
+    delete inventory['id'];
+    return await apiPut(`${API_URI}/inventory/${inventoryId}`, inventory);
+}
+
+export async function deleteInventory(inventoryId) {
+    return await apiDelete(`${API_URI}/inventory/${inventoryId}`);
+}
+
+export async function getItems(inventoryId) {
+    let response = await apiGet(`${API_URI}/inventory/${inventoryId}/item`);
+    return await response.json();
+}
+
+export async function saveItem(inventoryId, item) {
+    return await apiPost(`${API_URI}/inventory/${inventoryId}/item`, item);
 }
 
 export async function deleteItems(itemIds) {
     let i = itemIds.join(',');
-    await apiDelete(`${API_URI}/inventory/1/item/${i}`);
+    await apiDelete(`${API_URI}/inventory/item/${i}`);
 }

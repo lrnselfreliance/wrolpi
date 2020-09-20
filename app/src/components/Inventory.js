@@ -17,7 +17,7 @@ import {Button, Checkbox, Dropdown, Form, Grid, Header, Portal, Segment, Tab, Ta
 import {Route} from "react-router-dom";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {toast} from 'react-semantic-toasts';
-import {replaceNullValues} from './Common';
+import {enumerate, replaceNullValues} from './Common';
 
 class InventorySummary extends React.Component {
 
@@ -36,8 +36,13 @@ class InventorySummary extends React.Component {
     }
 
     fetchInventory = async () => {
-        let inventorySummary = await getInventory(this.state.inventory.id);
-        this.setState(inventorySummary);
+        if (this.state.inventory) {
+            let {by_category, by_subcategory, by_name} = await getInventory(this.state.inventory.id);
+            by_category = enumerate(by_category);
+            by_subcategory = enumerate(by_subcategory);
+            by_name = enumerate(by_name);
+            this.setState({by_category, by_subcategory, by_name});
+        }
     }
 
     setInventory = async (inventory) => {
@@ -49,8 +54,8 @@ class InventorySummary extends React.Component {
             return <p>No items have been added to this inventory.</p>;
         }
 
-        function row(i) {
-            return <Table.Row>
+        function row([key, i]) {
+            return <Table.Row key={key}>
                 <Table.Cell>{i.category}</Table.Cell>
                 <Table.Cell>{i.total_size}</Table.Cell>
                 <Table.Cell>{i.unit}</Table.Cell>
@@ -66,7 +71,7 @@ class InventorySummary extends React.Component {
                 </Table.Row>
             </Table.Header>
             <Table.Body>
-                {this.state.by_category.map((i) => row(i))}
+                {this.state.by_category.map(row)}
             </Table.Body>
         </Table>;
     }
@@ -76,8 +81,8 @@ class InventorySummary extends React.Component {
             return <p>No items have been added to this inventory.</p>;
         }
 
-        function row(i) {
-            return <Table.Row>
+        function row([key, i]) {
+            return <Table.Row key={key}>
                 <Table.Cell>{i.category}</Table.Cell>
                 <Table.Cell>{i.subcategory}</Table.Cell>
                 <Table.Cell>{i.total_size}</Table.Cell>
@@ -95,7 +100,7 @@ class InventorySummary extends React.Component {
                 </Table.Row>
             </Table.Header>
             <Table.Body>
-                {this.state.by_subcategory.map((i) => row(i))}
+                {this.state.by_subcategory.map(row)}
             </Table.Body>
         </Table>;
     }
@@ -105,8 +110,8 @@ class InventorySummary extends React.Component {
             return <p>No items have been added to this inventory.</p>;
         }
 
-        function row(i) {
-            return <Table.Row>
+        function row([key, i]) {
+            return <Table.Row key={key}>
                 <Table.Cell>{i.brand}</Table.Cell>
                 <Table.Cell>{i.name}</Table.Cell>
                 <Table.Cell>{i.total_size}</Table.Cell>
@@ -124,7 +129,7 @@ class InventorySummary extends React.Component {
                 </Table.Row>
             </Table.Header>
             <Table.Body>
-                {this.state.by_name.map((i) => row(i))}
+                {this.state.by_name.map(row)}
             </Table.Body>
         </Table>;
     }

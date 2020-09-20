@@ -402,3 +402,11 @@ export function replaceNullValues(obj, newValue) {
         obj[key] = obj[key] === null ? newValue : obj[key];
     }
 }
+
+export function enumerate(array) {
+    let newArray = [];
+    for (let i = 0; i < array.length; i++) {
+        newArray = newArray.concat([[i, array[i]]]);
+    }
+    return newArray;
+}

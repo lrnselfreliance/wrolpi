@@ -3,6 +3,7 @@ import "../static/wrolpi.css";
 import {
     deleteInventory,
     deleteItems,
+    getBrands,
     getCategories,
     getInventories,
     getInventory,
@@ -24,6 +25,7 @@ class InventorySummary extends React.Component {
         super(props);
         this.state = {
             by_category: null,
+            by_subcategory: null,
             by_name: null,
             inventory: null,
         }
@@ -50,6 +52,33 @@ class InventorySummary extends React.Component {
         function row(i) {
             return <Table.Row>
                 <Table.Cell>{i.category}</Table.Cell>
+                <Table.Cell>{i.total_size}</Table.Cell>
+                <Table.Cell>{i.unit}</Table.Cell>
+            </Table.Row>
+        }
+
+        return <Table>
+            <Table.Header>
+                <Table.Row>
+                    <Table.HeaderCell>Category</Table.HeaderCell>
+                    <Table.HeaderCell>Total Size</Table.HeaderCell>
+                    <Table.HeaderCell>Unit</Table.HeaderCell>
+                </Table.Row>
+            </Table.Header>
+            <Table.Body>
+                {this.state.by_category.map((i) => row(i))}
+            </Table.Body>
+        </Table>;
+    }
+
+    subcategoryTable = () => {
+        if (this.state.by_subcategory === null || this.state.by_subcategory.length === 0) {
+            return <p>No items have been added to this inventory.</p>;
+        }
+
+        function row(i) {
+            return <Table.Row>
+                <Table.Cell>{i.category}</Table.Cell>
                 <Table.Cell>{i.subcategory}</Table.Cell>
                 <Table.Cell>{i.total_size}</Table.Cell>
                 <Table.Cell>{i.unit}</Table.Cell>
@@ -59,14 +88,14 @@ class InventorySummary extends React.Component {
         return <Table>
             <Table.Header>
                 <Table.Row>
-                    <Table.Cell>Category</Table.Cell>
-                    <Table.Cell>Subcategory</Table.Cell>
-                    <Table.Cell>Total Size</Table.Cell>
-                    <Table.Cell>Unit</Table.Cell>
+                    <Table.HeaderCell>Category</Table.HeaderCell>
+                    <Table.HeaderCell>Subcategory</Table.HeaderCell>
+                    <Table.HeaderCell>Total Size</Table.HeaderCell>
+                    <Table.HeaderCell>Unit</Table.HeaderCell>
                 </Table.Row>
             </Table.Header>
             <Table.Body>
-                {this.state.by_category.map((i) => row(i))}
+                {this.state.by_subcategory.map((i) => row(i))}
             </Table.Body>
         </Table>;
     }
@@ -88,10 +117,10 @@ class InventorySummary extends React.Component {
         return <Table>
             <Table.Header>
                 <Table.Row>
-                    <Table.Cell>Brand</Table.Cell>
-                    <Table.Cell>Product Name</Table.Cell>
-                    <Table.Cell>Total Size</Table.Cell>
-                    <Table.Cell>Unit</Table.Cell>
+                    <Table.HeaderCell>Brand</Table.HeaderCell>
+                    <Table.HeaderCell>Product Name</Table.HeaderCell>
+                    <Table.HeaderCell>Total Size</Table.HeaderCell>
+                    <Table.HeaderCell>Unit</Table.HeaderCell>
                 </Table.Row>
             </Table.Header>
             <Table.Body>
@@ -106,8 +135,13 @@ class InventorySummary extends React.Component {
                 <InventorySelector setInventory={this.setInventory}/>
                 <h3>Categorized</h3>
                 {this.categoryTable()}
+
+                <h3>Categorized by Subcategory</h3>
+                {this.subcategoryTable()}
+
                 <h3>By Name</h3>
                 {this.nameTable()}
+
             </>
         )
     }
@@ -504,68 +538,6 @@ class NewInventory extends React.Component {
 
 }
 
-class SuggestionInput extends React.Component {
-
-    constructor(props) {
-        super(props);
-        this.state = {
-            value: '',
-        }
-    }
-
-    componentDidMount() {
-        this.setState({value: this.props.value !== undefined ? this.props.value : ''})
-    }
-
-    componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevProps !== this.props && this.props.value !== undefined) {
-            this.setState({value: this.props.value});
-        }
-    }
-
-    buildOptions() {
-        return this.props.options.map((i) => <option key={i[0]} value={i}>{i[2]}</option>)
-    }
-
-    handleInputChange = (e, option) => {
-        e.preventDefault();
-        let [key, value,] = option.value.split(',');
-        if (!isNaN(key)) {
-            // User chose from the suggestions.
-            this.setState({value: value});
-            this.props.handleInputChange(e, {name: option.name, key: key, value: value})
-        } else {
-            // User typed in something new.
-            value = key === undefined ? '' : key;
-            this.setState({value: value});
-            this.props.handleInputChange(e, {name: option.name, value: value});
-        }
-    }
-
-    clearInput() {
-        this.setState({value: ''});
-    }
-
-    render() {
-        return (
-            <>
-                <label>{this.props.label}</label>
-                <Form.Input
-                    fluid={this.props.fluid !== undefined ? this.props.fluid : false}
-                    list={this.props.list}
-                    name={this.props.name}
-                    placeholder={this.props.placeholder}
-                    onChange={this.handleInputChange}
-                    value={this.state.value}
-                />
-                <datalist id={this.props.list}>
-                    {this.buildOptions()}
-                </datalist>
-            </>
-        )
-    }
-}
-
 class InventorySelector extends React.Component {
     constructor(props) {
         super(props);
@@ -634,6 +606,68 @@ class InventorySelector extends React.Component {
                         />
                     </Grid.Column>
                 </Grid>
+            </>
+        )
+    }
+}
+
+class SuggestionInput extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            value: '',
+        }
+    }
+
+    componentDidMount() {
+        this.setState({value: this.props.value !== undefined ? this.props.value : ''})
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevProps !== this.props && this.props.value !== undefined) {
+            this.setState({value: this.props.value});
+        }
+    }
+
+    buildOptions() {
+        return this.props.options.map((i) => <option key={i[0]} value={i}>{i[2]}</option>)
+    }
+
+    handleInputChange = (e, option) => {
+        e.preventDefault();
+        let [key, value,] = option.value.split(',');
+        if (!isNaN(key)) {
+            // User chose from the suggestions.
+            this.setState({value: value});
+            this.props.handleInputChange(e, {name: option.name, key: key, value: value})
+        } else {
+            // User typed in something new.
+            value = key === undefined ? '' : key;
+            this.setState({value: value});
+            this.props.handleInputChange(e, {name: option.name, value: value});
+        }
+    }
+
+    clearInput() {
+        this.setState({value: ''});
+    }
+
+    render() {
+        return (
+            <>
+                <label>{this.props.label}</label>
+                <Form.Input
+                    fluid={this.props.fluid !== undefined ? this.props.fluid : false}
+                    list={this.props.list}
+                    name={this.props.name}
+                    placeholder={this.props.placeholder}
+                    onChange={this.handleInputChange}
+                    value={this.state.value}
+                />
+                <datalist id={this.props.list}>
+                    {this.buildOptions()}
+                </datalist>
             </>
         )
     }
@@ -752,6 +786,54 @@ class TableCategoryInputs extends CategoryInputs {
     }
 }
 
+class BrandInput extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            brand: '',
+            options: [],
+        }
+    }
+
+    async componentDidMount() {
+        await this.fetchBrands();
+    }
+
+    fetchBrands = async () => {
+        let brands = await getBrands();
+        let newBrands = [];
+        for (let i = 0; i < brands.length; i++) {
+            let [key, brand] = brands[i];
+            newBrands = newBrands.concat([[key, brand, brand]]);
+        }
+        this.setState({options: newBrands});
+    }
+
+    handleInputChange = (e, {name, value}) => {
+        this.setState({[name]: value});
+        this.props.handleInputChange(e, {name, value});
+    }
+
+    clearInput() {
+        this.setState({brand: ''});
+    }
+
+    render() {
+        return (
+            <SuggestionInput
+                name='brand'
+                fluid={true}
+                list='brand'
+                label='Brand'
+                placeholder='Brand'
+                value={this.state.brand}
+                options={this.state.options}
+                handleInputChange={this.handleInputChange}
+            />
+        )
+    }
+}
+
 class InventoryAddList extends React.Component {
 
     constructor(props) {
@@ -801,6 +883,7 @@ class InventoryAddList extends React.Component {
             expiration_date: '',
         });
         this.categoriesRef.current.clearInputs();
+        this.brandRef.current.clearInput();
     }
 
     handleSubmit = async (e) => {
@@ -820,6 +903,7 @@ class InventoryAddList extends React.Component {
             await this.clearInputs();
             await this.fetchItems();
             await this.fetchCategories();
+            await this.fetchBrands();
         } else {
             toast({
                 type: 'error',
@@ -838,8 +922,13 @@ class InventoryAddList extends React.Component {
         await this.categoriesRef.current.fetchCategories();
     }
 
+    fetchBrands = async () => {
+        await this.brandRef.current.fetchBrands();
+    }
+
     render() {
         this.categoriesRef = React.createRef();
+        this.brandRef = React.createRef();
         return (
             <>
                 <InventorySelector setInventory={this.setInventory}/>
@@ -847,12 +936,9 @@ class InventoryAddList extends React.Component {
                     <Form.Group widths='equal'>
                         <Grid>
                             <Grid.Column computer={2} mobile={16}>
-                                <label>Brand</label>
-                                <Form.Input
-                                    name="brand"
-                                    placeholder="Brand"
-                                    onChange={this.handleInputChange}
-                                    value={this.state.brand}
+                                <BrandInput
+                                    ref={this.brandRef}
+                                    handleInputChange={this.handleInputChange}
                                 />
                             </Grid.Column>
                             <Grid.Column computer={3} mobile={16}>

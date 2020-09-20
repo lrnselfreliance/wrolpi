@@ -5,7 +5,7 @@ from sanic.request import Request
 
 from .inventory import get_inventory_by_category, get_inventory_by_name, get_items, save_item, delete_items, \
     get_inventories, save_inventory, delete_inventory, update_inventory, update_item, get_inventory_by_subcategory, \
-    get_categories
+    get_categories, get_brands
 from .schema import ItemPostRequest, InventoryPostRequest, InventoryPutRequest, ItemPutRequest
 from ..common import validate_doc, json_response
 from ..errors import ValidationError
@@ -19,6 +19,12 @@ api_bp = Blueprint('Inventory', url_prefix='/inventory')
 def _get_categories(_: Request):
     categories = get_categories()
     return json_response(dict(categories=categories))
+
+
+@api_bp.get('/brands')
+def _get_brands(_: Request):
+    brands = get_brands()
+    return json_response(dict(brands=brands))
 
 
 @api_bp.get('/')

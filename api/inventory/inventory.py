@@ -64,13 +64,22 @@ def delete_inventory(inventory_id: int):
 
 def get_categories() -> List[Tuple[int, str, str]]:
     """
-    Get all distinct sets of subcategory and category.  Prepend an ID to each tuple, this is because javascript sucks.
+    Get all distinct sets of subcategory and category.
     """
     with get_db_context() as (db_conn, db):
         curs = db_conn.cursor()
         curs.execute('SELECT DISTINCT subcategory, category FROM item ORDER BY 1, 2')
         categories = curs.fetchall()
+        # Prepend an ID to each tuple, this is because javascript sucks.
         return [(i, j, k) for i, (j, k) in enumerate(categories)]
+
+
+def get_brands() -> List[Tuple[int, str]]:
+    with get_db_context() as (db_conn, db):
+        curs = db_conn.cursor()
+        curs.execute("SELECT DISTINCT brand FROM item WHERE brand IS NOT NULL AND brand != '' ORDER BY 1")
+        categories = curs.fetchall()
+        return [(i, j) for i, (j,) in enumerate(categories)]
 
 
 def get_items(inventory_id: int) -> List[Dict]:

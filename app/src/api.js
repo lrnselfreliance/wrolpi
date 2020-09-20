@@ -231,6 +231,11 @@ export async function getCategories() {
     return (await response.json())['categories'];
 }
 
+export async function getBrands() {
+    let response = await apiGet(`${API_URI}/inventory/brands`);
+    return (await response.json())['brands'];
+}
+
 export async function getInventories() {
     let response = await apiGet(`${API_URI}/inventory`);
     return (await response.json())['inventories'];

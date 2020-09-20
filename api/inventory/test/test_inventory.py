@@ -11,7 +11,7 @@ from api.test.common import wrap_test_db, ExtendedTestCase
 from .. import init
 from ..inventory import get_inventory_by_category, get_inventory_by_name, unit_registry, \
     compact_unit, human_units, get_inventory_by_subcategory, get_inventories, save_inventory, update_inventory, \
-    delete_inventory
+    delete_inventory, get_categories
 
 TEST_ITEMS_COLUMNS = (
     'inventory_id',
@@ -61,6 +61,13 @@ class TestInventory(ExtendedTestCase):
                 Item(item).flush()
 
     @wrap_test_db
+    def test_get_categories(self):
+        self.prepare()
+
+        categories = get_categories()
+        self.assertGreater(len(categories), 0)
+
+    @wrap_test_db
     def test_get_inventories(self):
         self.prepare()
 
@@ -105,10 +112,10 @@ class TestInventory(ExtendedTestCase):
         with get_db_context(commit=True) as (db_conn, db):
             Item: Table = db['item']
             before_item_count = Item.count()
-            Item(inventory_id=2, brand='Wheaters', name='Red Wheat', item_size=45, unit='pounds', count=1).flush()
-            Item(inventory_id=2, brand='Wheaters', name='Red Wheat', item_size=45, unit='pounds', count=1).flush()
-            Item(inventory_id=2, brand='Wheaters', name='Red Wheat', item_size=45, unit='pounds', count=1).flush()
-            Item(inventory_id=2, brand='Wheaters', name='Red Wheat', item_size=45, unit='pounds', count=1).flush()
+            Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
+            Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
+            Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
+            Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
 
         # You can rename a inventory to a conflicting name, if the other inventory is marked as deleted.
         with get_db_context(commit=True) as (db_conn, db):
@@ -117,7 +124,6 @@ class TestInventory(ExtendedTestCase):
             Item: Table = db['item']
             self.assertEqual(before_item_count + 4, Item.count())
 
-        with get_db_context() as (db_conn, db):
             Inventory: Table = db['inventory']
             i = Inventory.get_one(name='Super Inventory')
             inventory['name'] = 'New Inventory'

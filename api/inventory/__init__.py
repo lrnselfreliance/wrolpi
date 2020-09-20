@@ -26,10 +26,10 @@ def init(force=False):
     logger.info('Initializing inventory')
 
     with get_db_context(commit=True) as (db_conn, db):
-        Category: Table = db['category']
-        if Category.count() == 0:
+        Item: Table = db['item']
+        if Item.count() == 0:
             for subcategory, category in DEFAULT_CATEGORIES:
-                Category(subcategory=subcategory, category=category).flush()
+                Item(subcategory=subcategory, category=category).flush()
 
         Inventory: Table = db['inventory']
         if Inventory.count() == 0:

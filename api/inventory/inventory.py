@@ -128,10 +128,10 @@ def sum_by_key(items: List, key: callable):
 def get_inventory_by_keys(keys: Tuple, inventory_id: int):
     items = get_items(inventory_id)
 
-    summed = sum_by_key(items, lambda i: tuple(i[k] for k in keys))
+    summed = sum_by_key(items, lambda i: tuple(i[k] or '' for k in keys))
 
     inventory = []
-    for key, total_size in sorted(summed.items(), key=lambda i: i[0] or ''):
+    for key, total_size in sorted(summed.items(), key=lambda i: i[0]):
         d = dict(total_size=total_size)
         d.update(dict(zip(keys, key)))
         inventory.append(d)

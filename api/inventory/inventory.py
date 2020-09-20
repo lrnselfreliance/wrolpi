@@ -131,7 +131,7 @@ def get_inventory_by_keys(keys: Tuple, inventory_id: int):
     summed = sum_by_key(items, lambda i: tuple(i[k] for k in keys))
 
     inventory = []
-    for key, total_size in sorted(summed.items(), key=lambda i: i[0]):
+    for key, total_size in sorted(summed.items(), key=lambda i: i[0] or ''):
         d = dict(total_size=total_size)
         d.update(dict(zip(keys, key)))
         inventory.append(d)

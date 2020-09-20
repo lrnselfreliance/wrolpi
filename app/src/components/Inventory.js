@@ -264,11 +264,9 @@ class InventoryList extends React.Component {
             return <Table.Row key={item.id}>
                 {checkboxCell}
                 <Table.Cell>
-                    <Form.Input
-                        fluid
-                        name="brand"
+                    <BrandInput
                         value={editItem.brand}
-                        onChange={(i, j) => this.handleInputChange(i, j, item.id)}
+                        handleInputChange={(i, j) => this.handleInputChange(i, j, item.id)}
                     />
                 </Table.Cell>
                 <Table.Cell>
@@ -699,9 +697,11 @@ class CategoryInputs extends React.Component {
 
     fetchCategories = async () => {
         let categories = await getCategories();
+        categories = enumerate(categories);
         let newCategories = [];
         for (let i = 0; i < categories.length; i++) {
-            let [key, subcategory, category] = categories[i];
+            let [key, sc] = categories[i];
+            let [subcategory, category] = sc;
             newCategories = newCategories.concat([[key, subcategory, `${subcategory}/${category}`]]);
         }
         this.setState({categories: newCategories});
@@ -802,10 +802,12 @@ class BrandInput extends React.Component {
 
     async componentDidMount() {
         await this.fetchBrands();
+        this.setState({brand: this.props.value !== undefined ? this.props.value : ''});
     }
 
     fetchBrands = async () => {
         let brands = await getBrands();
+        brands = enumerate(brands);
         let newBrands = [];
         for (let i = 0; i < brands.length; i++) {
             let [key, brand] = brands[i];
@@ -829,7 +831,7 @@ class BrandInput extends React.Component {
                 name='brand'
                 fluid={true}
                 list='brand'
-                label='Brand'
+                label={this.props.label}
                 placeholder='Brand'
                 value={this.state.brand}
                 options={this.state.options}
@@ -942,6 +944,7 @@ class InventoryAddList extends React.Component {
                         <Grid>
                             <Grid.Column computer={2} mobile={16}>
                                 <BrandInput
+                                    label='Brand'
                                     ref={this.brandRef}
                                     handleInputChange={this.handleInputChange}
                                 />

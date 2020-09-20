@@ -4,9 +4,9 @@ from sanic import Blueprint, response
 from sanic.request import Request
 
 from .inventory import get_inventory_by_category, get_inventory_by_name, get_items, save_item, delete_items, \
-    get_inventories, save_inventory, delete_inventory, update_inventory
-from .schema import ItemPostRequest, InventoryPostRequest, InventoryPutRequest
-from ..common import validate_doc
+    get_inventories, save_inventory, delete_inventory, update_inventory, update_item, get_inventory_by_subcategory
+from .schema import ItemPostRequest, InventoryPostRequest, InventoryPutRequest, ItemPutRequest
+from ..common import validate_doc, json_response
 from ..errors import ValidationError
 
 NAME = 'inventory'
@@ -17,14 +17,15 @@ api_bp = Blueprint('Inventory', url_prefix='/inventory')
 @api_bp.get('/')
 def inventories_get(request: Request):
     inventories = get_inventories()
-    return response.json(inventories)
+    return json_response(dict(inventories=inventories))
 
 
 @api_bp.get('/<inventory_id:int>')
 def inventory_get(request: Request, inventory_id: int):
     by_category = get_inventory_by_category(inventory_id)
+    by_subcategory = get_inventory_by_subcategory(inventory_id)
     by_name = get_inventory_by_name(inventory_id)
-    return response.json(dict(by_category=by_category, by_name=by_name))
+    return json_response(dict(by_category=by_category, by_subcategory=by_subcategory, by_name=by_name))
 
 
 @api_bp.post('/')
@@ -59,7 +60,7 @@ def inventory_delete(request: Request, inventory_id: int):
 )
 def items_get(request: Request, inventory_id: int):
     items = get_items(inventory_id)
-    return response.json({'items': items})
+    return json_response({'items': items})
 
 
 @api_bp.post('/<inventory_id:int>/item')
@@ -69,6 +70,16 @@ def items_get(request: Request, inventory_id: int):
 )
 def post_item(request: Request, inventory_id: int, data: dict):
     save_item(inventory_id, data)
+    return response.empty()
+
+
+@api_bp.put('/item/<item_id:int>')
+@validate_doc(
+    "Update an item",
+    consumes=ItemPutRequest,
+)
+def put_item(request: Request, item_id: int, data: dict):
+    update_item(item_id, data)
     return response.empty()
 
 

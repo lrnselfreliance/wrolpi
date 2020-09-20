@@ -108,3 +108,7 @@ def setup_relationships(db):
     Video = db['video']
     Channel['videos'] = Channel['id'].many(Video['channel_id'])
     Video['channel'] = Video['channel_id'] == Channel['id']
+
+    Inventory = db['inventory']
+    Item = db['item']
+    Inventory['items'] = Inventory['id'].many(Item['inventory_id'])

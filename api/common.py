@@ -9,6 +9,7 @@ import re
 import string
 from copy import deepcopy
 from datetime import datetime, date
+from decimal import Decimal
 from functools import wraps
 from itertools import islice
 from multiprocessing import Event, Queue
@@ -162,7 +163,8 @@ def validate_data(model: type, data: dict):
             elif isinstance(field, doc.Boolean):
                 new_data[attr] = string_to_boolean(data.pop(attr))
             elif isinstance(field, doc.Float):
-                new_data[attr] = float(data.pop(attr))
+                val = data.pop(attr)
+                new_data[attr] = float(val) if val else None
             elif isinstance(field, doc.Dictionary):
                 new_data[attr] = dict(data.pop(attr))
             elif isinstance(field, doc.List):
@@ -176,6 +178,10 @@ def validate_data(model: type, data: dict):
                 val = data.pop(attr)
                 if val:
                     new_data[attr] = datetime.strptime(val, DATE_FORMAT)
+            elif isinstance(field, doc.DateTime):
+                val = data.pop(attr)
+                if val:
+                    new_data[attr] = datetime.utcfromtimestamp(val)
             else:
                 raise ValidationError(f'Bad field type {field} specified in the API model!')
         except KeyError:
@@ -217,6 +223,7 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
                     'error': error['message'],
                     'code': error['code'],
                 }
+                logger.error(e, exc_info=True)
 
                 if e.__cause__:
                     cause = e.__cause__
@@ -436,6 +443,8 @@ class JSONEncodeDate(json.JSONEncoder):
             return obj.timestamp()
         elif isinstance(obj, date):
             return datetime(obj.year, obj.month, obj.day).timestamp()
+        elif isinstance(obj, Decimal):
+            return str(obj)
         return super(JSONEncodeDate, self).default(obj)
 
 

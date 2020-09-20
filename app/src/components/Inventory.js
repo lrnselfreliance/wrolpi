@@ -3,17 +3,20 @@ import "../static/wrolpi.css";
 import {
     deleteInventory,
     deleteItems,
+    getCategories,
     getInventories,
     getInventory,
     getItems,
     saveInventory,
     saveItem,
-    updateInventory
+    updateInventory,
+    updateItem
 } from "../api";
 import {Button, Checkbox, Dropdown, Form, Grid, Header, Portal, Segment, Tab, Table} from "semantic-ui-react";
 import {Route} from "react-router-dom";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {toast} from 'react-semantic-toasts';
+import {replaceNullValues} from './Common';
 
 class InventorySummary extends React.Component {
 
@@ -116,22 +119,38 @@ class InventoryList extends React.Component {
         super(props);
         this.state = {
             checkboxes: [],
+            editItems: {},
         }
     }
 
-    handleCheckbox = (checkbox) => {
+    handleCheckbox = (checkbox, item) => {
         // Add or remove a checkbox ID from the checkboxes array.
-        let checkboxes = this.state.checkboxes.concat();
-        let id = checkbox.current.props.id;
-        if (!checkbox.current.state.checked) {
-            checkboxes = checkboxes.concat([id]);
+        let checkboxes = this.state.checkboxes;
+        let checked = checkbox.current.state.checked;
+
+        // Add the item id to the list of checked checkboxes.
+        let value = checkbox.current.props.value;
+        if (!checked) {
+            checkboxes = checkboxes.concat([value]);
         } else {
-            const index = checkboxes.indexOf(id);
+            const index = checkboxes.indexOf(value);
             if (index > -1) {
                 checkboxes.splice(index, 1);
             }
         }
-        this.setState({checkboxes: checkboxes});
+
+        // Create or remove the editItem.  This is a copy of the item which can then be modified and saved.
+        let editItems = this.state.editItems;
+        if (!checked) {
+            let editItem = {}
+            Object.assign(editItem, item);
+            replaceNullValues(editItem);
+            editItems[item.id] = editItem;
+        } else {
+            delete editItems[item.id];
+        }
+
+        this.setState({checkboxes: checkboxes, editItems: editItems});
     }
 
     handleRemove = async (e) => {
@@ -140,27 +159,137 @@ class InventoryList extends React.Component {
         await this.props.fetchItems();
     }
 
+    handleInputChange = (e, {name, value}, itemId) => {
+        let editItems = this.state.editItems;
+        editItems[itemId][name] = value;
+        this.setState({editItems});
+    }
+
+    handleSave = async (e) => {
+        e.preventDefault();
+        let keys = Object.keys(this.state.editItems);
+        for (let i = 0; i < keys.length; i++) {
+            let itemId = keys[i];
+            let item = this.state.editItems[itemId];
+            await updateItem(itemId, item);
+        }
+        this.setState({editItems: {}, checkboxes: []}, this.props.fetchItems);
+    }
+
     row = (item) => {
         let ref = React.createRef();
-        return (
-            <Table.Row key={item.id}>
+        let editable = this.state.checkboxes.indexOf(item.id) >= 0;
+
+        let checkboxCell = <Table.Cell>
+            <Checkbox
+                value={item.id}
+                ref={ref}
+                onClick={() => this.handleCheckbox(ref, item)}
+            />
+        </Table.Cell>;
+
+        if (!editable) {
+            // Show the user the non-editable version, until they check the checkbox.
+            return (
+                <Table.Row key={item.id}>
+                    {checkboxCell}
+                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                        {item.brand}
+                    </Table.Cell>
+                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                        {item.name}
+                    </Table.Cell>
+                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                        {item.item_size}
+                    </Table.Cell>
+                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                        {item.unit}
+                    </Table.Cell>
+                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                        {item.count}
+                    </Table.Cell>
+                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>{
+                        item.subcategory}
+                    </Table.Cell>
+                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                        {item.category}
+                    </Table.Cell>
+                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                        {item.expiration_date}
+                    </Table.Cell>
+                </Table.Row>
+            )
+        } else {
+            // Insert the modified table row so the user can edit this item.
+            let editItem = this.state.editItems[item.id];
+            return <Table.Row key={item.id}>
+                {checkboxCell}
                 <Table.Cell>
-                    <Checkbox
-                        id={item.id}
-                        ref={ref}
-                        onClick={() => this.handleCheckbox(ref)}
+                    <Form.Input
+                        fluid
+                        name="brand"
+                        value={editItem.brand}
+                        onChange={(i, j) => this.handleInputChange(i, j, item.id)}
                     />
                 </Table.Cell>
-                <Table.Cell>{item.brand}</Table.Cell>
-                <Table.Cell>{item.name}</Table.Cell>
-                <Table.Cell>{item.item_size}</Table.Cell>
-                <Table.Cell>{item.unit}</Table.Cell>
-                <Table.Cell>{item.count}</Table.Cell>
-                <Table.Cell>{item.subcategory}</Table.Cell>
-                <Table.Cell>{item.category}</Table.Cell>
-                <Table.Cell>{item.expiration_date}</Table.Cell>
+                <Table.Cell>
+                    <Form.Input
+                        fluid
+                        name="name"
+                        value={editItem.name}
+                        onChange={(i, j) => this.handleInputChange(i, j, item.id)}
+                    />
+                </Table.Cell>
+                <Table.Cell>
+                    <Form.Input
+                        fluid
+                        name="item_size"
+                        value={editItem.item_size}
+                        onChange={(i, j) => this.handleInputChange(i, j, item.id)}
+                    />
+                </Table.Cell>
+                <Table.Cell>
+                    <Form.Input
+                        fluid
+                        name="unit"
+                        value={editItem.unit}
+                        onChange={(i, j) => this.handleInputChange(i, j, item.id)}
+                    />
+                </Table.Cell>
+                <Table.Cell>
+                    <Form.Input
+                        fluid
+                        name="count"
+                        value={editItem.count}
+                        onChange={(i, j) => this.handleInputChange(i, j, item.id)}
+                    />
+                </Table.Cell>
+                <Table.Cell>
+                    <Form.Input
+                        fluid
+                        name="subcategory"
+                        value={editItem.subcategory}
+                        onChange={(i, j) => this.handleInputChange(i, j, item.id)}
+                    />
+                </Table.Cell>
+                <Table.Cell>
+                    <Form.Input
+                        fluid
+                        name="category"
+                        value={editItem.category}
+                        onChange={(i, j) => this.handleInputChange(i, j, item.id)}
+                    />
+                </Table.Cell>
+                <Table.Cell>
+                    <Form.Input
+                        fluid
+                        name="expiration_date"
+                        value={editItem.expiration_date}
+                        onChange={(i, j) => this.handleInputChange(i, j, item.id)}
+                    />
+                </Table.Cell>
             </Table.Row>
-        )
+        }
     }
 
     render() {
@@ -173,7 +302,7 @@ class InventoryList extends React.Component {
                 <Table celled>
                     <Table.Header>
                         <Table.Row>
-                            <Table.HeaderCell/>
+                            <Table.HeaderCell>Edit</Table.HeaderCell>
                             <Table.HeaderCell>Brand</Table.HeaderCell>
                             <Table.HeaderCell>Name</Table.HeaderCell>
                             <Table.HeaderCell>Size</Table.HeaderCell>
@@ -194,6 +323,13 @@ class InventoryList extends React.Component {
                     disabled={this.state.checkboxes.length === 0}
                 >
                     Remove
+                </Button>
+                <Button
+                    secondary
+                    onClick={this.handleSave}
+                    disabled={this.state.checkboxes.length === 0}
+                >
+                    Save
                 </Button>
             </>
         )
@@ -341,7 +477,7 @@ class EditInventory extends React.Component {
                 header='Edit Inventory'
                 handleSubmit={this.handleSubmit}
                 handleDelete={this.handleDelete}
-                buttonProps={{icon: 'edit', color: 'red'}}
+                buttonProps={{icon: 'edit', color: 'yellow'}}
                 deleteButton={true}
             />
         )
@@ -351,6 +487,7 @@ class EditInventory extends React.Component {
 class NewInventory extends React.Component {
 
     handleSubmit = async (inventory, closeCallback) => {
+        delete inventory.id;
         let response = await saveInventory(inventory);
 
         if (response.status === 201) {
@@ -439,7 +576,7 @@ class InventorySelector extends React.Component {
                         />
                     </Grid.Column>
                     <Grid.Column width={2}>
-                        <NewInventory success={() => this.fetchInventories}/>
+                        <NewInventory success={() => this.fetchInventories()}/>
                         <EditInventory
                             inventory={this.state.selected}
                             success={() => this.fetchInventories()}
@@ -451,12 +588,88 @@ class InventorySelector extends React.Component {
     }
 }
 
+class CategoryInputs extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            categories: [],
+            subcategory: '',
+            category: '',
+        }
+    }
+
+    componentDidMount = async () => {
+        await this.fetchCategories();
+    }
+
+    fetchCategories = async () => {
+        let categories = await getCategories();
+        this.setState({categories});
+    }
+
+    clearInputs = () => {
+        this.setState({
+            subcategory: '',
+            category: '',
+        });
+    }
+
+    handleInputChange = (event, {name, value}) => {
+        try {
+            let [_, subcategory, category] = this.state.categories[value];
+            this.setState({subcategory, category});
+            this.props.handleInputChange(event, {name: 'subcategory', value: subcategory});
+            this.props.handleInputChange(event, {name: 'category', value: category});
+        } catch (e) {
+            if (e.name === 'TypeError') {
+                // User has not yet finished typing, or has entered something new.
+                this.setState({[name]: value});
+                this.props.handleInputChange(event, {name: name, value: value});
+            } else {
+                throw e;
+            }
+        }
+    }
+
+    render() {
+        return (
+            <Grid>
+                <Grid.Column computer={8} mobile={16}>
+                    <label>Subcategory</label>
+                    <Form.Input
+                        list='subcategories'
+                        name="subcategory"
+                        placeholder="Subcategory"
+                        onChange={this.handleInputChange}
+                        value={this.state.subcategory}
+                    />
+                    <datalist id='subcategories'>
+                        {this.state.categories.map(([i, j, k]) => <option key={i} value={i}>{j}/{k}</option>)}
+                    </datalist>
+                </Grid.Column>
+                <Grid.Column computer={8} mobile={16}>
+                    <label>Category</label>
+                    <Form.Input
+                        name="category"
+                        placeholder="Category"
+                        onChange={this.handleInputChange}
+                        value={this.state.category}
+                    />
+                </Grid.Column>
+            </Grid>
+        )
+    }
+
+}
+
 class InventoryAddList extends React.Component {
 
     constructor(props) {
         super(props);
         this.state = {
             inventory: null,
+            categories: [],
             items: [],
             brand: '',
             name: '',
@@ -470,12 +683,12 @@ class InventoryAddList extends React.Component {
     }
 
     componentDidMount = async () => {
-        this.clearValues();
         await this.fetchItems();
     }
 
     fetchItems = async () => {
         if (this.state.inventory) {
+            this.setState({items: []});
             let response = await getItems(this.state.inventory.id);
             let items = response.items;
 
@@ -487,7 +700,7 @@ class InventoryAddList extends React.Component {
         this.setState({[name]: value});
     }
 
-    clearValues = () => {
+    clearInputs = () => {
         this.setState({
             brand: '',
             name: '',
@@ -498,6 +711,7 @@ class InventoryAddList extends React.Component {
             subcategory: '',
             expiration_date: '',
         });
+        this.categoriesRef.current.clearInputs();
     }
 
     handleSubmit = async (e) => {
@@ -514,8 +728,9 @@ class InventoryAddList extends React.Component {
         };
         let response = await saveItem(this.state.inventory.id, item);
         if (response.status === 204) {
-            await this.clearValues();
+            await this.clearInputs();
             await this.fetchItems();
+            await this.fetchCategories();
         } else {
             toast({
                 type: 'error',
@@ -530,11 +745,16 @@ class InventoryAddList extends React.Component {
         this.setState({inventory}, this.fetchItems);
     }
 
+    fetchCategories = async () => {
+        await this.categoriesRef.current.fetchCategories();
+    }
+
     render() {
+        this.categoriesRef = React.createRef();
         return (
             <>
                 <InventorySelector setInventory={this.setInventory}/>
-                <Form onSubmit={this.handleSubmit}>
+                <Form onSubmit={this.handleSubmit} style={{marginLeft: '0.5em', marginTop: '1em'}}>
                     <Form.Group widths='equal'>
                         <Grid>
                             <Grid.Column computer={2} mobile={16}>
@@ -586,22 +806,10 @@ class InventoryAddList extends React.Component {
                                     value={this.state.count}
                                 />
                             </Grid.Column>
-                            <Grid.Column computer={2} mobile={16}>
-                                <label>Subcategory</label>
-                                <Form.Input
-                                    name="subcategory"
-                                    placeholder="Subcategory"
-                                    onChange={this.handleInputChange}
-                                    value={this.state.subcategory}
-                                />
-                            </Grid.Column>
-                            <Grid.Column computer={2} mobile={16}>
-                                <label>Category</label>
-                                <Form.Input
-                                    name="category"
-                                    placeholder="Category"
-                                    onChange={this.handleInputChange}
-                                    value={this.state.category}
+                            <Grid.Column computer={4} mobile={16}>
+                                <CategoryInputs
+                                    ref={this.categoriesRef}
+                                    handleInputChange={this.handleInputChange}
                                 />
                             </Grid.Column>
                             <Grid.Column computer={2} mobile={16}>
@@ -614,7 +822,7 @@ class InventoryAddList extends React.Component {
                                 />
                             </Grid.Column>
                             <Grid.Column computer={1} mobile={16}>
-                                <Button icon='plus' type='submit' style={{marginTop: '1.4em'}}/>
+                                <Button primary icon='plus' type='submit' style={{marginTop: '1.4em'}}/>
                             </Grid.Column>
                         </Grid>
                     </Form.Group>

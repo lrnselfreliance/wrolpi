@@ -226,9 +226,14 @@ export async function decryptOTP(otp, ciphertext) {
     return await response.json();
 }
 
+export async function getCategories() {
+    let response = await apiGet(`${API_URI}/inventory/categories`);
+    return (await response.json())['categories'];
+}
+
 export async function getInventories() {
     let response = await apiGet(`${API_URI}/inventory`);
-    return await response.json();
+    return (await response.json())['inventories'];
 }
 
 export async function getInventory(inventoryId) {
@@ -256,6 +261,10 @@ export async function getItems(inventoryId) {
 
 export async function saveItem(inventoryId, item) {
     return await apiPost(`${API_URI}/inventory/${inventoryId}/item`, item);
+}
+
+export async function updateItem(itemId, item) {
+    return await apiPut(`${API_URI}/inventory/item/${itemId}`, item);
 }
 
 export async function deleteItems(itemIds) {

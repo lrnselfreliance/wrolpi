@@ -393,3 +393,12 @@ export class Progresses extends React.Component {
     }
 
 }
+
+export function replaceNullValues(obj, newValue) {
+    newValue = newValue === undefined ? '' : newValue;
+    let keys = Object.keys(obj);
+    for (let i = 0; i < keys.length; i++) {
+        let key = keys[i];
+        obj[key] = obj[key] === null ? newValue : obj[key];
+    }
+}

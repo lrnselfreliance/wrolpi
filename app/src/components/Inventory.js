@@ -517,6 +517,12 @@ class SuggestionInput extends React.Component {
         this.setState({value: this.props.value !== undefined ? this.props.value : ''})
     }
 
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevProps !== this.props && this.props.value !== undefined) {
+            this.setState({value: this.props.value});
+        }
+    }
+
     buildOptions() {
         return this.props.options.map((i) => <option key={i[0]} value={i}>{i[2]}</option>)
     }
@@ -721,17 +727,16 @@ class TableCategoryInputs extends CategoryInputs {
         return (
             <>
                 <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
-                    <Form.Input
-                        fluid
-                        list='subcategories'
-                        name="subcategory"
-                        placeholder="Subcategory"
-                        onChange={this.handleInputChange}
+                    <SuggestionInput
+                        ref={this.subcategoryRef}
+                        name='subcategory'
+                        fluid={true}
+                        list='subcategory'
+                        placeholder='Subcategory'
                         value={this.state.subcategory}
+                        options={this.state.categories}
+                        handleInputChange={this.handleInputChange}
                     />
-                    <datalist id='subcategories'>
-                        {this.state.categories.map(([i, j, k]) => <option key={i} value={i}>{j}/{k}</option>)}
-                    </datalist>
                 </Table.Cell>
                 <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
                     <Form.Input

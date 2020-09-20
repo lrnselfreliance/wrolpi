@@ -264,22 +264,11 @@ class InventoryList extends React.Component {
                         onChange={(i, j) => this.handleInputChange(i, j, item.id)}
                     />
                 </Table.Cell>
-                <Table.Cell>
-                    <Form.Input
-                        fluid
-                        name="subcategory"
-                        value={editItem.subcategory}
-                        onChange={(i, j) => this.handleInputChange(i, j, item.id)}
-                    />
-                </Table.Cell>
-                <Table.Cell>
-                    <Form.Input
-                        fluid
-                        name="category"
-                        value={editItem.category}
-                        onChange={(i, j) => this.handleInputChange(i, j, item.id)}
-                    />
-                </Table.Cell>
+                <TableCategoryInputs
+                    handleInputChange={(i, j) => this.handleInputChange(i, j, item.id)}
+                    subcategory={editItem.subcategory}
+                    category={editItem.category}
+                />
                 <Table.Cell>
                     <Form.Input
                         fluid
@@ -515,6 +504,62 @@ class NewInventory extends React.Component {
 
 }
 
+class SuggestionInput extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            value: '',
+        }
+    }
+
+    componentDidMount() {
+        this.setState({value: this.props.value !== undefined ? this.props.value : ''})
+    }
+
+    buildOptions() {
+        return this.props.options.map((i) => <option key={i[0]} value={i}>{i[2]}</option>)
+    }
+
+    handleInputChange = (e, option) => {
+        e.preventDefault();
+        let [key, value,] = option.value.split(',');
+        if (!isNaN(key)) {
+            // User chose from the suggestions.
+            this.setState({value: value});
+            this.props.handleInputChange(e, {name: option.name, key: key, value: value})
+        } else {
+            // User typed in something new.
+            value = key === undefined ? '' : key;
+            this.setState({value: value});
+            this.props.handleInputChange(e, {name: option.name, value: value});
+        }
+    }
+
+    clearInput() {
+        this.setState({value: ''});
+    }
+
+    render() {
+        return (
+            <>
+                <label>{this.props.label}</label>
+                <Form.Input
+                    fluid={this.props.fluid !== undefined ? this.props.fluid : false}
+                    list={this.props.list}
+                    name={this.props.name}
+                    placeholder={this.props.placeholder}
+                    onChange={this.handleInputChange}
+                    value={this.state.value}
+                />
+                <datalist id={this.props.list}>
+                    {this.buildOptions()}
+                </datalist>
+            </>
+        )
+    }
+}
+
 class InventorySelector extends React.Component {
     constructor(props) {
         super(props);
@@ -601,52 +646,61 @@ class CategoryInputs extends React.Component {
 
     componentDidMount = async () => {
         await this.fetchCategories();
+        this.setState({
+            subcategory: this.props.subcategory !== undefined ? this.props.subcategory : '',
+            category: this.props.category !== undefined ? this.props.category : '',
+        });
     }
 
     fetchCategories = async () => {
         let categories = await getCategories();
-        this.setState({categories});
+        let newCategories = [];
+        for (let i = 0; i < categories.length; i++) {
+            let [key, subcategory, category] = categories[i];
+            newCategories = newCategories.concat([[key, subcategory, `${subcategory}/${category}`]]);
+        }
+        this.setState({categories: newCategories});
     }
 
     clearInputs = () => {
+        this.subcategoryRef.current.clearInput();
+
         this.setState({
             subcategory: '',
             category: '',
         });
     }
 
-    handleInputChange = (event, {name, value}) => {
-        try {
-            let [_, subcategory, category] = this.state.categories[value];
-            this.setState({subcategory, category});
-            this.props.handleInputChange(event, {name: 'subcategory', value: subcategory});
-            this.props.handleInputChange(event, {name: 'category', value: category});
-        } catch (e) {
-            if (e.name === 'TypeError') {
-                // User has not yet finished typing, or has entered something new.
-                this.setState({[name]: value});
-                this.props.handleInputChange(event, {name: name, value: value});
-            } else {
-                throw e;
-            }
+    handleInputChange = (e, {name, value, key}) => {
+        this.setState({[name]: value});
+        if (key) {
+            // User chose from suggestions.  Set the associated category.
+            let [subcategory, category] = this.state.categories[key][2].split('/');
+            this.setState({subcategory: subcategory, category: category});
+            this.props.handleInputChange(e, {'name': 'subcategory', 'value': subcategory});
+            this.props.handleInputChange(e, {'name': 'category', 'value': category});
+        } else {
+            this.props.handleInputChange(e, {name, value});
         }
     }
 
     render() {
+        this.subcategoryRef = React.createRef();
+
         return (
             <Grid>
                 <Grid.Column computer={8} mobile={16}>
-                    <label>Subcategory</label>
-                    <Form.Input
-                        list='subcategories'
-                        name="subcategory"
-                        placeholder="Subcategory"
-                        onChange={this.handleInputChange}
+                    <SuggestionInput
+                        ref={this.subcategoryRef}
+                        name='subcategory'
+                        fluid={true}
+                        list='subcategory'
+                        label='Subcategory'
+                        placeholder='Subcategory'
                         value={this.state.subcategory}
+                        options={this.state.categories}
+                        handleInputChange={this.handleInputChange}
                     />
-                    <datalist id='subcategories'>
-                        {this.state.categories.map(([i, j, k]) => <option key={i} value={i}>{j}/{k}</option>)}
-                    </datalist>
                 </Grid.Column>
                 <Grid.Column computer={8} mobile={16}>
                     <label>Category</label>
@@ -660,7 +714,37 @@ class CategoryInputs extends React.Component {
             </Grid>
         )
     }
+}
 
+class TableCategoryInputs extends CategoryInputs {
+    render() {
+        return (
+            <>
+                <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    <Form.Input
+                        fluid
+                        list='subcategories'
+                        name="subcategory"
+                        placeholder="Subcategory"
+                        onChange={this.handleInputChange}
+                        value={this.state.subcategory}
+                    />
+                    <datalist id='subcategories'>
+                        {this.state.categories.map(([i, j, k]) => <option key={i} value={i}>{j}/{k}</option>)}
+                    </datalist>
+                </Table.Cell>
+                <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    <Form.Input
+                        fluid
+                        name="category"
+                        placeholder="Category"
+                        onChange={this.handleInputChange}
+                        value={this.state.category}
+                    />
+                </Table.Cell>
+            </>
+        )
+    }
 }
 
 class InventoryAddList extends React.Component {

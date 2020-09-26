@@ -33,8 +33,7 @@ class SemaphoreThreadedConnectionPool(ThreadedConnectionPool):
 POOL_SINGLETON = None
 
 
-def get_simple_db(dbname=None):
-    # Default database is local development
+def get_db_args(dbname=None):
     db_args = dict(
         dbname=dbname or 'wrolpi',
         user='postgres',
@@ -46,6 +45,13 @@ def get_simple_db(dbname=None):
         # Deployed in docker, use the docker db
         db_args['host'] = 'db'
         db_args['port'] = 5432
+
+    return db_args
+
+
+def get_simple_db(dbname=None):
+    # Default database is local development
+    db_args = get_db_args(dbname)
 
     global POOL_SINGLETON
     if not POOL_SINGLETON:

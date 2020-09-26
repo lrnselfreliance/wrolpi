@@ -19,18 +19,22 @@ def apply_db_migrations(modules):
     uri = f'postgres://{user}:{password}@{host}:{port}/{dbname}'
     backend = get_backend(uri)
 
+    migration_directories = []
     for module in modules.values():
         migrations = Path(module.__file__).parent / 'migrations'
-        if not migrations.is_dir():
-            continue
+        if migrations.is_dir():
+            migration_directories.append(str(migrations.absolute()))
 
-        migrations = read_migrations(str(migrations.absolute()))
+    if migration_directories:
+        migrations = read_migrations(*migration_directories)
 
         with backend.lock():
             # Get any outstanding migrations
             to_apply = backend.to_apply(migrations)
             # Apply them.
             backend.apply_migrations(to_apply)
+    else:
+        raise FileNotFoundError('Could not find any "migrations" directories.  This should not be possible...')
 
 
 def import_settings_configs(modules):

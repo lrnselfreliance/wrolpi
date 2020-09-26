@@ -1,8 +1,11 @@
 import argparse
 import logging
+import random
 import re
 import tempfile
 from http import HTTPStatus
+from random import choice
+from string import ascii_letters
 
 from sanic import Blueprint, Sanic, response
 from sanic.request import Request
@@ -148,16 +151,14 @@ def get_new_otp(_: Request):
 
 @root_api.get('/otp/pdf')
 def get_new_otp_pdf(_: Request):
-    with tempfile.NamedTemporaryFile() as fh:
-        filename = f'one-time-pad-{fh.name[8:]}.pdf'
-        headers = {
-            'Content-type': 'application/pdf',
-            'Content-Disposition': f'attachment;filename={filename}'
-        }
-        generate_pdf(fh.name)
-        fh.seek(0)
-        contents = fh.read()
-        return response.raw(contents, HTTPStatus.OK, headers)
+    random_name = ''.join(random.choice(ascii_letters) for _ in range(8))
+    filename = f'one-time-pad-{random_name}.pdf'
+    headers = {
+        'Content-type': 'application/pdf',
+        'Content-Disposition': f'attachment;filename={filename}'
+    }
+    contents = generate_pdf()
+    return response.raw(contents, HTTPStatus.OK, headers)
 
 
 ROUTES_ATTACHED = False

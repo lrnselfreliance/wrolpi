@@ -11,7 +11,7 @@ logger = logger.getChild(__name__)
 
 def apply_db_migrations(modules):
     """
-    Apply all migrations in all modules.
+    Apply any missing migrations in all modules.
     """
     db_args = get_db_args()
     dbname, user, password, host, port = \

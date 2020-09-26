@@ -78,8 +78,9 @@ def generate_html() -> str:
     return PAGE_HTML.format(messages=messages)
 
 
-def generate_pdf(location: str):
-    pdfkit.from_string(generate_html(), location)
+def generate_pdf():
+    # Use False to return bytes, rather than saving to file.
+    return pdfkit.from_string(generate_html(), False)
 
 
 def validate_message(otp, error_class):

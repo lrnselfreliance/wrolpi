@@ -111,17 +111,22 @@ def delete_items(items_ids: List[int]):
 def sum_by_key(items: List, key: callable):
     """
     Sum the total size of each item by the provided key function.  Returns a dict containing the key, and the total_size
-    for that key.
+    for that key.  Combine total of like units.  This means ounces and pounds will be in the same total.
     """
     summed = dict()
     for item in items:
         k = key(item)
-        total_size: Decimal = item['count'] * item['item_size']
-        try:
-            summed[k] += total_size
-        except KeyError:
-            summed[k] = total_size
+        item_size, count, unit = item['item_size'], item['count'], unit_registry(item['unit'])
+        key_dim = (k, unit.dimensionality)
 
+        total_size = item_size * count * unit
+
+        try:
+            summed[key_dim] += total_size
+        except KeyError:
+            summed[key_dim] = total_size
+
+    summed = {k[0]: compact_unit(v) for k, v in summed.items()}
     return summed
 
 
@@ -131,17 +136,18 @@ def get_inventory_by_keys(keys: Tuple, inventory_id: int):
     summed = sum_by_key(items, lambda i: tuple(i[k] or '' for k in keys))
 
     inventory = []
-    for key, total_size in sorted(summed.items(), key=lambda i: i[0]):
-        d = dict(total_size=total_size)
+    for key, quantity in sorted(summed.items(), key=lambda i: i[0]):
+        total_size, unit = quantity_to_tuple(quantity)
+        d = dict(total_size=total_size, unit=unit)
         d.update(dict(zip(keys, key)))
         inventory.append(d)
 
     return inventory
 
 
-get_inventory_by_category = partial(get_inventory_by_keys, ('category', 'unit'))
-get_inventory_by_subcategory = partial(get_inventory_by_keys, ('category', 'subcategory', 'unit'))
-get_inventory_by_name = partial(get_inventory_by_keys, ('brand', 'name', 'unit'))
+get_inventory_by_category = partial(get_inventory_by_keys, ('category',))
+get_inventory_by_subcategory = partial(get_inventory_by_keys, ('category', 'subcategory'))
+get_inventory_by_name = partial(get_inventory_by_keys, ('brand', 'name'))
 
 INVENTORY_UNITS = {
     ('ounce', 1): (16, unit_registry.pound),
@@ -159,7 +165,7 @@ def compact_unit(quantity: unit_registry.Quantity) -> unit_registry.Quantity:
     next_unit = INVENTORY_UNITS.get(units)
     if not next_unit:
         # No units after this one, return as is.
-        return quantity
+        return round(quantity, UNIT_PRECISION)
 
     max_quantity, next_unit = next_unit
     if number >= max_quantity:
@@ -167,7 +173,7 @@ def compact_unit(quantity: unit_registry.Quantity) -> unit_registry.Quantity:
         return compact_unit(quantity.to(next_unit))
 
     # No units were necessary, return as is.
-    return quantity
+    return round(quantity, UNIT_PRECISION)
 
 
 def quantity_to_tuple(quantity: unit_registry.Quantity) -> Tuple[Decimal, str]:

@@ -11,7 +11,7 @@ from api.test.common import wrap_test_db, ExtendedTestCase
 from .. import init
 from ..inventory import get_inventory_by_category, get_inventory_by_name, unit_registry, \
     compact_unit, human_units, get_inventory_by_subcategory, get_inventories, save_inventory, update_inventory, \
-    delete_inventory, get_categories
+    delete_inventory, get_categories, sum_by_key
 
 TEST_ITEMS_COLUMNS = (
     'inventory_id',
@@ -28,7 +28,7 @@ TEST_ITEMS_COLUMNS = (
     'purchase_date',
 )
 TEST_ITEMS = [
-    (1, 'Wheaters', 'Red Wheat', 45, 'pounds', 1, 'grains', 'wheat'),
+    (1, 'Wheaters', 'Red Wheat', 500, 'oz', 1, 'grains', 'wheat'),
     (1, 'Wheaters', 'Red Wheat', 55, 'pounds', 2, 'grains', 'wheat'),
     (1, 'Ricey', 'White Rice', 8, 'pounds', 1, 'grains', 'rice'),
     (1, 'Chewy', 'Chicken Breast', 16, 'oz', 8, 'meats', 'canned'),
@@ -142,37 +142,38 @@ class TestInventory(ExtendedTestCase):
         self.assertEqual(
             summary,
             [
-                dict(category='fruits', total_size=Decimal('70.3'), unit='oz'),
-                dict(category='grains', total_size=Decimal('163'), unit='pounds'),
-                dict(category='meats', total_size=Decimal('320'), unit='oz'),
+                dict(category='fruits', total_size=Decimal('4.39375'), unit='pound'),
+                dict(category='grains', total_size=Decimal('149.25'), unit='pound'),
+                dict(category='meats', total_size=Decimal('20'), unit='pound'),
             ])
 
     @wrap_test_db
     def test_get_inventory_by_subcategory(self):
         self.prepare()
 
-        summary = get_inventory_by_subcategory(1)
+        expected = [
+            dict(category='fruits', subcategory='canned', total_size=Decimal('4.39375'), unit='pound'),
+            dict(category='grains', subcategory='rice', total_size=Decimal('8'), unit='pound'),
+            dict(category='grains', subcategory='wheat', total_size=Decimal('141.25'), unit='pound'),
+            dict(category='meats', subcategory='canned', total_size=Decimal('20'), unit='pound'),
+        ]
 
-        self.assertEqual(
-            summary,
-            [
-                dict(category='fruits', subcategory='canned', total_size=Decimal('70.3'), unit='oz'),
-                dict(category='grains', subcategory='rice', total_size=Decimal('8'), unit='pounds'),
-                dict(category='grains', subcategory='wheat', total_size=Decimal('155'), unit='pounds'),
-                dict(category='meats', subcategory='canned', total_size=Decimal('320'), unit='oz'),
-            ])
+        inventory = get_inventory_by_subcategory(1)
+
+        for idx, (i, j) in enumerate(zip_longest(inventory, expected)):
+            self.assertEqual(i, j, f'subcategory inventory {idx} is not equal')
 
     @wrap_test_db
     def test_get_inventory_by_name(self):
         self.prepare()
 
         expected = [
-            dict(brand='Chewy', name='Beef', total_size=Decimal('192'), unit='oz'),
-            dict(brand='Chewy', name='Chicken Breast', total_size=Decimal('128'), unit='oz'),
-            dict(brand='Ricey', name='White Rice', total_size=Decimal('8'), unit='pounds'),
-            dict(brand='Vibrant', name='Peaches', total_size=Decimal('48'), unit='oz'),
-            dict(brand='Vibrant', name='Pineapple', total_size=Decimal('22.3'), unit='oz'),
-            dict(brand='Wheaters', name='Red Wheat', total_size=Decimal('155'), unit='pounds'),
+            dict(brand='Chewy', name='Beef', total_size=Decimal('12'), unit='pound'),
+            dict(brand='Chewy', name='Chicken Breast', total_size=Decimal('8'), unit='pound'),
+            dict(brand='Ricey', name='White Rice', total_size=Decimal('8'), unit='pound'),
+            dict(brand='Vibrant', name='Peaches', total_size=Decimal('3'), unit='pound'),
+            dict(brand='Vibrant', name='Pineapple', total_size=Decimal('1.39375'), unit='pound'),
+            dict(brand='Wheaters', name='Red Wheat', total_size=Decimal('141.25'), unit='pound'),
         ]
 
         inventory = get_inventory_by_name(1)
@@ -223,3 +224,56 @@ def test_compact_unit(quantity, expected):
 )
 def test_human_units(items, expected):
     assert human_units(items, 'total_size') == expected
+
+
+pound, oz, gram, gallon = unit_registry('pound'), unit_registry('oz'), unit_registry('gram'), unit_registry('gallon')
+pound, oz, gram, gallon = pound.units, oz.units, gram.units, gallon.units
+mass = pound.dimensionality
+length = gallon.dimensionality
+
+
+@pytest.mark.parametrize(
+    'items,expected',
+    [
+        (
+                # No conversion is necessary.
+                [{'category': 'grains', 'count': Decimal('1'), 'item_size': Decimal('1'), 'unit': 'oz'}],
+                {('grains',): Decimal('1') * oz},
+        ),
+        (
+                # The larger of the units is what is returned.
+                [
+                    {'category': 'grains', 'count': Decimal('1'), 'item_size': Decimal('1'), 'unit': 'oz'},
+                    {'category': 'grains', 'count': Decimal('1'), 'item_size': Decimal('1'), 'unit': 'lbs'},
+                ],
+                {('grains',): Decimal('1.0625') * pound},
+        ),
+        (
+                # Items are summed by category.
+                [
+                    {'category': 'grains', 'count': Decimal('8'), 'item_size': Decimal('24'), 'unit': 'oz'},
+                    {'category': 'grains', 'count': Decimal('2'), 'item_size': Decimal('45'), 'unit': 'lbs'},
+                    {'category': 'fruits', 'count': Decimal('4'), 'item_size': Decimal('1'), 'unit': 'gram'},
+                ],
+                {
+                    ('grains',): Decimal('102') * pound,
+                    ('fruits',): Decimal('4') * gram,
+                },
+        ),
+        (
+                [
+                    {'category': 'cooking ingredients', 'count': Decimal('1'), 'item_size': Decimal('1'),
+                     'unit': 'gallon'},
+                    {'category': 'cooking ingredients', 'count': Decimal('1'), 'item_size': Decimal('1'),
+                     'unit': 'quart'},
+                    {'category': 'cooking ingredients', 'count': Decimal('1'), 'item_size': Decimal('1'), 'unit': 'oz'},
+                ],
+                {
+                    ('cooking ingredients',): Decimal('1.25') * gallon,
+                    ('cooking ingredients',): Decimal('1') * oz,
+                },
+        ),
+    ]
+)
+def test_sum_by_key(items, expected):
+    assert sum_by_key(items, lambda i: (i['category'],)) == expected

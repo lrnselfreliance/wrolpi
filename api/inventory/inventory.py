@@ -5,8 +5,9 @@ from typing import List, Dict, Tuple
 
 import pint
 from dictorm import Table, DictDB
+from pint import Quantity
 
-from api.common import iterify, logger
+from api.common import logger
 from api.db import get_db_context
 
 unit_registry = pint.UnitRegistry()
@@ -137,7 +138,10 @@ def get_inventory_by_keys(keys: Tuple, inventory_id: int):
 
     inventory = []
     for key, quantity in sorted(summed.items(), key=lambda i: i[0]):
-        total_size, unit = quantity_to_tuple(quantity)
+        quantity = cleanup_quantity(quantity)
+        total_size, units = quantity.to_tuple()
+        unit = units[0][0]
+
         d = dict(total_size=total_size, unit=unit)
         d.update(dict(zip(keys, key)))
         inventory.append(d)
@@ -176,21 +180,17 @@ def compact_unit(quantity: unit_registry.Quantity) -> unit_registry.Quantity:
     return round(quantity, UNIT_PRECISION)
 
 
-def quantity_to_tuple(quantity: unit_registry.Quantity) -> Tuple[Decimal, str]:
+def quantity_to_tuple(quantity: unit_registry.Quantity) -> Tuple[Decimal, Quantity]:
     decimal, (units,) = quantity.to_tuple()
     unit, _ = units
-    return round(decimal, UNIT_PRECISION).normalize(), unit
+    return round(decimal, UNIT_PRECISION).normalize(), unit_registry(unit)
 
 
-@iterify(list)
-def human_units(items: List[dict], key: str) -> List[dict]:
-    for item in items:
-        quantity = item[key] * unit_registry(item['unit'])
-        quantity = compact_unit(quantity)
-        decimal, unit = quantity_to_tuple(quantity)
-        if unit_registry(item['unit']) == unit_registry(unit):
-            # The unit was unchanged, lets preserve the user's format
-            # i.e. ounce vs oz
-            unit = item['unit']
-        item.update({key: decimal, 'unit': unit})
-        yield item
+def cleanup_quantity(quantity: Quantity) -> Quantity:
+    """
+    Remove trailing zeros from a Quantity.
+    """
+    num, unit = quantity_to_tuple(quantity)
+    num = round(num, UNIT_PRECISION)
+    num = str(num).rstrip('0').rstrip('.')
+    return Decimal(num) * unit

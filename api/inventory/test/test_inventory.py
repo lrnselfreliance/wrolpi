@@ -5,13 +5,14 @@ from typing import List, Dict, Iterable
 import psycopg2
 import pytest
 from dictorm import Table
+from pint import Quantity
 
 from api.db import get_db_context
 from api.test.common import wrap_test_db, ExtendedTestCase
 from .. import init
 from ..inventory import get_inventory_by_category, get_inventory_by_name, unit_registry, \
-    compact_unit, human_units, get_inventory_by_subcategory, get_inventories, save_inventory, update_inventory, \
-    delete_inventory, get_categories, sum_by_key
+    compact_unit, get_inventory_by_subcategory, get_inventories, save_inventory, update_inventory, \
+    delete_inventory, get_categories, sum_by_key, cleanup_quantity
 
 TEST_ITEMS_COLUMNS = (
     'inventory_id',
@@ -137,15 +138,16 @@ class TestInventory(ExtendedTestCase):
     def test_get_inventory_by_category(self):
         self.prepare()
 
-        summary = get_inventory_by_category(1)
+        expected = [
+            dict(category='fruits', total_size=Decimal('4.39375'), unit='pound'),
+            dict(category='grains', total_size=Decimal('149.25'), unit='pound'),
+            dict(category='meats', total_size=Decimal('20'), unit='pound'),
+        ]
 
-        self.assertEqual(
-            summary,
-            [
-                dict(category='fruits', total_size=Decimal('4.39375'), unit='pound'),
-                dict(category='grains', total_size=Decimal('149.25'), unit='pound'),
-                dict(category='meats', total_size=Decimal('20'), unit='pound'),
-            ])
+        inventory = get_inventory_by_category(1)
+
+        for idx, (i, j) in enumerate(zip_longest(inventory, expected)):
+            self.assertEqual(i, j, f'category inventory {idx} is not equal')
 
     @wrap_test_db
     def test_get_inventory_by_subcategory(self):
@@ -182,48 +184,26 @@ class TestInventory(ExtendedTestCase):
             self.assertEqual(i, j, f'named inventory {idx} is not equal')
 
 
+def quantity_to_string(quantity: Quantity) -> str:
+    quantity = cleanup_quantity(quantity)
+    num, (units,) = quantity.to_tuple()
+    (unit, _) = units
+    return f'{num} {unit}'
+
+
 @pytest.mark.parametrize(
     'quantity,expected',
     [
-        (Decimal(5) * unit_registry.ounce, unit_registry.ounce * 5),
-        (Decimal(16) * unit_registry.ounce, unit_registry.pound * 1),
-        (Decimal(500) * unit_registry.pound, unit_registry.pound * 500),
-        (Decimal(2000) * unit_registry.pound, unit_registry.ton * 1),
-        (Decimal(128000) * unit_registry.ounce, unit_registry.ton * 4),
+        (Decimal(5) * unit_registry.ounce, '5 ounce'),
+        (Decimal(16) * unit_registry.ounce, '1 pound'),
+        (Decimal(500) * unit_registry.pound, '500 pound'),
+        (Decimal(2000) * unit_registry.pound, '1 ton'),
+        (Decimal(128000) * unit_registry.ounce, '4 ton'),
     ]
 )
 def test_compact_unit(quantity, expected):
     # Round the result so we don't have to specify all those zeros for the test definition.
-    assert round(compact_unit(quantity), 5) == expected
-
-
-@pytest.mark.parametrize(
-    'items,expected',
-    [
-        (
-                [{'total_size': Decimal('0'), 'unit': 'oz'}],
-                [{'total_size': Decimal('0'), 'unit': 'oz'}],
-        ),
-        (
-                [{'total_size': Decimal('-500'), 'unit': 'oz'}],
-                [{'total_size': Decimal('-500'), 'unit': 'oz'}],
-        ),
-        (
-                [{'total_size': Decimal('1'), 'unit': 'oz'}],
-                [{'total_size': Decimal('1'), 'unit': 'oz'}],
-        ),
-        (
-                [{'total_size': Decimal('16'), 'unit': 'oz'}],
-                [{'total_size': Decimal('1'), 'unit': 'pound'}],
-        ),
-        (
-                [{'total_size': Decimal('16'), 'unit': 'oz'}, {'total_size': Decimal('5000'), 'unit': 'lb'}],
-                [{'total_size': Decimal('1'), 'unit': 'pound'}, {'total_size': Decimal('2.5'), 'unit': 'ton'}],
-        ),
-    ]
-)
-def test_human_units(items, expected):
-    assert human_units(items, 'total_size') == expected
+    assert quantity_to_string(compact_unit(quantity)) == expected
 
 
 pound, oz, gram, gallon = unit_registry('pound'), unit_registry('oz'), unit_registry('gram'), unit_registry('gallon')

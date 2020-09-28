@@ -75,8 +75,12 @@ def import_settings_config():
             channel['name'] = config[section]['name']
             channel['directory'] = directory
 
-            channel['url'] = config[section].get('url')
+            channel['calculate_duration'] = config[section].get('calculate_duration')
+            channel['download_frequency'] = config[section].get('download_frequency')
+            channel['generate_posters'] = config[section].get('generate_posters')
             channel['match_regex'] = config[section].get('match_regex')
+            channel['skip_download_videos'] = list(set(config[section].get('skip_download_videos', {})))
+            channel['url'] = config[section].get('url')
             channel.flush()
     return 0
 

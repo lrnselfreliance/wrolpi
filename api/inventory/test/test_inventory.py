@@ -10,9 +10,11 @@ from pint import Quantity
 from api.db import get_db_context
 from api.test.common import wrap_test_db, ExtendedTestCase
 from .. import init
-from ..inventory import get_inventory_by_category, get_inventory_by_name, unit_registry, \
-    compact_unit, get_inventory_by_subcategory, get_inventories, save_inventory, update_inventory, \
-    delete_inventory, get_categories, sum_by_key, cleanup_quantity
+from ..inventory import unit_registry, \
+    get_inventories, save_inventory, update_inventory, \
+    delete_inventory, get_categories
+from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
+    compact_unit, cleanup_quantity
 
 TEST_ITEMS_COLUMNS = (
     'inventory_id',

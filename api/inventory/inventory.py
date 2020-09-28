@@ -1,11 +1,8 @@
 from datetime import datetime
-from decimal import Decimal
-from functools import partial
 from typing import List, Dict, Tuple
 
 import pint
 from dictorm import Table, DictDB
-from pint import Quantity
 
 from api.common import logger
 from api.db import get_db_context
@@ -108,89 +105,3 @@ def delete_items(items_ids: List[int]):
         curs = db_conn.cursor()
         curs.execute('UPDATE item SET deleted_at=current_timestamp WHERE id = ANY(%s)', (items_ids,))
 
-
-def sum_by_key(items: List, key: callable):
-    """
-    Sum the total size of each item by the provided key function.  Returns a dict containing the key, and the total_size
-    for that key.  Combine total of like units.  This means ounces and pounds will be in the same total.
-    """
-    summed = dict()
-    for item in items:
-        k = key(item)
-        item_size, count, unit = item['item_size'], item['count'], unit_registry(item['unit'])
-        key_dim = (k, unit.dimensionality)
-
-        total_size = item_size * count * unit
-
-        try:
-            summed[key_dim] += total_size
-        except KeyError:
-            summed[key_dim] = total_size
-
-    summed = {k[0]: compact_unit(v) for k, v in summed.items()}
-    return summed
-
-
-def get_inventory_by_keys(keys: Tuple, inventory_id: int):
-    items = get_items(inventory_id)
-
-    summed = sum_by_key(items, lambda i: tuple(i[k] or '' for k in keys))
-
-    inventory = []
-    for key, quantity in sorted(summed.items(), key=lambda i: i[0]):
-        quantity = cleanup_quantity(quantity)
-        total_size, units = quantity.to_tuple()
-        unit = units[0][0]
-
-        d = dict(total_size=total_size, unit=unit)
-        d.update(dict(zip(keys, key)))
-        inventory.append(d)
-
-    return inventory
-
-
-get_inventory_by_category = partial(get_inventory_by_keys, ('category',))
-get_inventory_by_subcategory = partial(get_inventory_by_keys, ('category', 'subcategory'))
-get_inventory_by_name = partial(get_inventory_by_keys, ('brand', 'name'))
-
-INVENTORY_UNITS = {
-    ('ounce', 1): (16, unit_registry.pound),
-    ('pound', 1): (2000, unit_registry.ton),
-}
-
-UNIT_PRECISION = 5
-
-
-def compact_unit(quantity: unit_registry.Quantity) -> unit_registry.Quantity:
-    """
-    Convert a Quantity to it's more readable format.  Such as 2000 pounds to 1 ton.
-    """
-    number, (units,) = quantity.to_tuple()
-    next_unit = INVENTORY_UNITS.get(units)
-    if not next_unit:
-        # No units after this one, return as is.
-        return round(quantity, UNIT_PRECISION)
-
-    max_quantity, next_unit = next_unit
-    if number >= max_quantity:
-        # Number is too high for this unit, move to the next unit.
-        return compact_unit(quantity.to(next_unit))
-
-    # No units were necessary, return as is.
-    return round(quantity, UNIT_PRECISION)
-
-
-def quantity_to_tuple(quantity: unit_registry.Quantity) -> Tuple[Decimal, Quantity]:
-    decimal, (units,) = quantity.to_tuple()
-    unit, _ = units
-    return round(decimal, UNIT_PRECISION).normalize(), unit_registry(unit)
-
-
-def cleanup_quantity(quantity: Quantity) -> Quantity:
-    """
-    Remove trailing zeros from a Quantity.
-    """
-    num, unit = quantity_to_tuple(quantity)
-    num = round(num, UNIT_PRECISION)
-    num = str(num).rstrip('0').rstrip('.')
-    return Decimal(num) * unit

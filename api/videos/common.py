@@ -72,7 +72,7 @@ def import_settings_config():
                 channel = Channel(link=link)
 
             # Only name and directory are required
-            channel['name'] = config[section]['name']
+            channel['name'] = name
             channel['directory'] = directory
 
             channel['calculate_duration'] = config[section].get('calculate_duration')

@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+import json
 import pathlib
 import re
 from datetime import datetime, timedelta, date
@@ -258,6 +259,7 @@ def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
     for meta_exts in meta_file_exts:
         for meta_ext in meta_exts:
             meta_path = path.with_suffix(meta_ext)
+            print(meta_path, meta_path.exists())
             if meta_path.exists():
                 if relative_to:
                     yield meta_path.relative_to(relative_to)
@@ -299,6 +301,13 @@ def upsert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
         logger.debug(f'Could not parse date from filename: {video_path}')
         upload_date = None
 
+    duration = None
+    if info_json_path:
+        path = (channel_dir / info_json_path).absolute()
+        with open(path) as fh:
+            json_contents = json.load(fh)
+            duration = json_contents['duration']
+
     video_dict = dict(
         channel_id=channel['id'],
         description_path=str(description_path) if description_path else None,
@@ -313,6 +322,7 @@ def upsert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
         idempotency=idempotency,
         info_json_path=str(info_json_path) if info_json_path else None,
         downloaded=True if video_path else False,
+        duration=duration,
     )
 
     if id_:

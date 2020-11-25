@@ -304,9 +304,12 @@ def upsert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
     duration = None
     if info_json_path:
         path = (channel_dir / info_json_path).absolute()
-        with open(path) as fh:
-            json_contents = json.load(fh)
-            duration = json_contents['duration']
+        try:
+            with open(path) as fh:
+                json_contents = json.load(fh)
+                duration = json_contents['duration']
+        except json.decoder.JSONDecodeError:
+            logger.warning(f'Failed to load JSON file to get duration: {path}')
 
     video_dict = dict(
         channel_id=channel['id'],

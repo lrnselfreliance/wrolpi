@@ -1,11 +1,15 @@
+from datetime import datetime
 from decimal import Decimal
 from functools import partial
 from pathlib import Path
 from typing import List, Tuple
 
+import yaml
 from pint import Quantity
 
-from api.inventory.inventory import unit_registry, get_items
+from api.db import get_db_context
+from api.inventory.inventory import unit_registry, get_items, get_inventories
+from api.vars import PROJECT_DIR
 
 MY_DIR: Path = Path(__file__).parent
 
@@ -127,3 +131,65 @@ def cleanup_quantity(quantity: Quantity) -> Quantity:
     num = round(num, UNIT_PRECISION)
     num = str(num).rstrip('0').rstrip('.')
     return Decimal(num) * unit
+
+
+DEFAULT_SAVE_PATH = PROJECT_DIR / 'inventories.yaml'
+
+
+def save_inventories_file(path: str = None):
+    """
+    Write all inventories and their respective items to a YAML file.
+    """
+    path: Path = Path(path) if path else DEFAULT_SAVE_PATH
+
+    inventories = []
+    for inventory in get_inventories():
+        inventory['items'] = [dict(i) for i in get_items(inventory['id'])]
+        inventories.append(dict(inventory))
+
+    if path.is_file():
+        # Check that we aren't overwriting our inventories with empty inventories.
+        with open(path, 'rt') as fh:
+            old = yaml.load(fh, Loader=yaml.Loader)
+            if old and not inventories:
+                raise FileExistsError(f'Refusing to overwrite non-empty inventories.yaml with empty inventories.'
+                                      f'  {path}')
+
+    with open(path, 'wt') as fh:
+        contents = dict(
+            utc_time=datetime.utcnow(),
+            inventories=inventories,
+        )
+
+        yaml.dump(contents, fh)
+
+
+def import_inventories_file(path: str = None):
+    path: Path = Path(path) if path else DEFAULT_SAVE_PATH
+
+    with open(path, 'rt') as fh:
+        contents = yaml.load(fh, Loader=yaml.Loader)
+
+    if not contents or 'inventories' not in contents:
+        raise ValueError('Inventories file does not contain the expected "inventories" list.')
+
+    inventories = get_inventories()
+    inventories_names = [i['name'] for i in inventories]
+    new_inventories = [i for i in contents['inventories'] if i['name'] not in inventories_names]
+    with get_db_context(commit=True) as (db_conn, db):
+        Inventory, Item = db['inventory'], db['item']
+        for inventory in new_inventories:
+            # Remove the id, we will just use the new one provided.
+            del inventory['id']
+
+            items = inventory['items']
+            inventory = Inventory(
+                name=inventory['name'],
+                created_at=inventory['created_at'],
+                deleted_at=inventory['deleted_at'],
+            ).flush()
+
+            for item in items:
+                del item['id']
+                del item['inventory_id']
+                item = Item(inventory_id=inventory['id'], **item).flush()

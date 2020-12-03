@@ -1,3 +1,4 @@
+import tempfile
 from decimal import Decimal
 from itertools import zip_longest
 from typing import List, Dict, Iterable
@@ -10,11 +11,11 @@ from pint import Quantity
 from api.db import get_db_context
 from api.test.common import wrap_test_db, ExtendedTestCase
 from .. import init
+from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
+    compact_unit, cleanup_quantity, save_inventories_file, import_inventories_file
 from ..inventory import unit_registry, \
     get_inventories, save_inventory, update_inventory, \
     delete_inventory, get_categories
-from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
-    compact_unit, cleanup_quantity
 
 TEST_ITEMS_COLUMNS = (
     'inventory_id',
@@ -184,6 +185,35 @@ class TestInventory(ExtendedTestCase):
 
         for idx, (i, j) in enumerate(zip_longest(inventory, expected)):
             self.assertEqual(i, j, f'named inventory {idx} is not equal')
+
+    @wrap_test_db
+    def test_inventories_file(self):
+        self.prepare()
+
+        with tempfile.NamedTemporaryFile() as tf:
+            # Can't import an empty file.
+            self.assertRaises(ValueError, import_inventories_file, tf.name)
+
+            save_inventories_file(tf.name)
+
+            # Clear out the DB so the import will be tested
+            with get_db_context(commit=True) as (db_conn, db):
+                curs = db_conn.cursor()
+                curs.execute('DELETE FROM item')
+                curs.execute('DELETE FROM inventory')
+
+            import_inventories_file(tf.name)
+
+        inventories = get_inventories()
+        self.assertEqual(len(inventories), 1)
+        # ID has increased because we did not reset the sequence when deleting from the table.
+        self.assertDictContains(inventories[0], {'id': 2, 'name': 'Food Storage'})
+
+        # All items in the DB match those in the test list.
+        self.assertEqual(len(inventories[0]['items']), len(TEST_ITEMS))
+        test_items = {(i['name'], i['brand'], i['count']) for i in TEST_ITEMS}
+        db_items = {(i['name'], i['brand'], i['count']) for i in inventories[0]['items']}
+        self.assertEqual(test_items, db_items)
 
 
 def quantity_to_string(quantity: Quantity) -> str:

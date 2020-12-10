@@ -209,9 +209,10 @@ class TestInventory(ExtendedTestCase):
         # ID has increased because we did not reset the sequence when deleting from the table.
         self.assertDictContains(inventories[0], {'id': 2, 'name': 'Food Storage'})
 
-        # All items in the DB match those in the test list.
-        self.assertEqual(len(inventories[0]['items']), len(TEST_ITEMS))
+        # All items in the DB match those in the test list, except for the "deleted" item.
+        self.assertEqual(len(inventories[0]['items']), len(TEST_ITEMS) - 1)
         test_items = {(i['name'], i['brand'], i['count']) for i in TEST_ITEMS}
+        test_items.remove(('deleted', 'deleted', 1))
         db_items = {(i['name'], i['brand'], i['count']) for i in inventories[0]['items']}
         self.assertEqual(test_items, db_items)
 

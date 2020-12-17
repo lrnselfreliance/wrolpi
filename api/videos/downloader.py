@@ -45,6 +45,17 @@ def update_channel(channel: Dict = None, link: str = None):
     # Resolve all entries to dictionaries.
     entries = info['entries'] = list(info['entries'])
 
+    # Youtube-DL may hand back a list of URLs, lets use the "Uploads" URL, if available.
+    try:
+        entries[0]['id']
+    except KeyError:
+        for entry in entries:
+            if entry['title'] == 'Uploads':
+                logger.info('Youtube-DL gave back a list of URLs, found the "Uploads" URL and using it.')
+                info = YDL.extract_info(entry['url'], download=False, process=False)
+                entries = info['entries'] = list(info['entries'])
+                break
+
     # This is all the source id's that are currently available.
     try:
         all_source_ids = {i['id'] for i in entries}

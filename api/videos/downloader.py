@@ -49,7 +49,7 @@ def update_channel(channel: Dict = None, link: str = None):
     try:
         all_source_ids = {i['id'] for i in entries}
     except KeyError as e:
-        logger.warning(f'No ids for entries!  Was the channel update successful?')
+        logger.warning(f'No ids for entries!  Was the channel update successful?  Is the channel URL correct?')
         logger.warning(f'entries: {entries}')
         raise KeyError('No id key for entry!') from e
 

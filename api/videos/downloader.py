@@ -264,7 +264,6 @@ def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
     for meta_exts in meta_file_exts:
         for meta_ext in meta_exts:
             meta_path = path.with_suffix(meta_ext)
-            print(meta_path, meta_path.exists())
             if meta_path.exists():
                 if relative_to:
                     yield meta_path.relative_to(relative_to)

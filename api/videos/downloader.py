@@ -46,7 +46,12 @@ def update_channel(channel: Dict = None, link: str = None):
     entries = info['entries'] = list(info['entries'])
 
     # This is all the source id's that are currently available.
-    all_source_ids = {i['id'] for i in entries}
+    try:
+        all_source_ids = {i['id'] for i in entries}
+    except KeyError as e:
+        logger.warning(f'No ids for entries!  Was the channel update successful?')
+        logger.warning(f'entries: {entries}')
+        raise KeyError('No id key for entry!') from e
 
     with get_db_context(commit=True) as (db_conn, db):
         # Get the channel in this new context.

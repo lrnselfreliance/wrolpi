@@ -2,11 +2,11 @@ import React from "react";
 import {Accordion, Button, Checkbox, Form, Grid, Header, Input, Loader, Responsive, Segment} from "semantic-ui-react";
 import {
     createChannel,
-    deleteChannel,
+    deleteChannel, download, downloadChannel,
     getChannel,
     getChannels,
     getConfig,
-    getDirectories,
+    getDirectories, refreshChannel,
     updateChannel,
     validateRegex
 } from "../api";
@@ -213,6 +213,21 @@ class ChannelPage extends APIForm {
         this.setState({activeIndex: newIndex})
     }
 
+    downloadChannel = async (e) => {
+        e.preventDefault();
+        return await downloadChannel(this.props.match.params.channel_link);
+    }
+
+    refreshChannel = async (e) => {
+        e.preventDefault();
+        return await refreshChannel(this.props.match.params.channel_link);
+    }
+
+    handleDeleteButton = (e) => {
+        e.preventDefault();
+        this.setState({deleteOpen: true});
+    }
+
     render() {
         return (
             <Container>
@@ -366,7 +381,7 @@ class ChannelPage extends APIForm {
                         />
 
                         <Button
-                            color="blue"
+                            color="green"
                             type="submit"
                             disabled={this.state.disabled || !this.state.dirty}
                             floated='right'
@@ -384,7 +399,9 @@ class ChannelPage extends APIForm {
 
                         {!this.props.create &&
                         <>
-                            <Button color='red' onClick={() => this.setState({deleteOpen: true})}>Delete</Button>
+                            <Button color='red' onClick={this.handleDeleteButton}>
+                                Delete
+                            </Button>
                             <Confirm
                                 open={this.state.deleteOpen}
                                 content='Are you sure you want to delete this channel?  No video files will be deleted.'
@@ -392,6 +409,12 @@ class ChannelPage extends APIForm {
                                 onCancel={() => this.setState({deleteOpen: false})}
                                 onConfirm={this.handleConfirm}
                             />
+                            <Button color='blue' onClick={this.downloadChannel}>
+                                Download
+                            </Button>
+                            <Button color='inverted blue' onClick={this.refreshChannel}>
+                                Refresh
+                            </Button>
                         </>
                         }
                     </Container>
@@ -420,18 +443,6 @@ class ChannelRow extends React.Component {
         this.videosTo = `/videos/channel/${props.channel.link}/video`;
     }
 
-    downloadVideos = async (e) => {
-        e.preventDefault();
-        let url = `${VIDEOS_API}:download/${this.props.channel.link}`;
-        await fetch(url, {method: 'POST'});
-    }
-
-    refreshVideos = async (e) => {
-        e.preventDefault();
-        let url = `${VIDEOS_API}:refresh/${this.props.channel.link}`;
-        await fetch(url, {method: 'POST'});
-    }
-
     render() {
         return (
             <Table.Row>
@@ -443,26 +454,6 @@ class ChannelRow extends React.Component {
                 </Table.Cell>
                 <Table.Cell>
                     {secondsToFrequency(this.props.channel.download_frequency)}
-                </Table.Cell>
-                <Table.Cell textAlign='right'>
-                    <Popup
-                        header="Download any missing videos"
-                        on="hover"
-                        trigger={<Button
-                            primary
-                            onClick={this.downloadVideos}
-                            disabled={!!!this.props.channel.url}
-                        >
-                            Download Videos
-                        </Button>}
-                    />
-                </Table.Cell>
-                <Table.Cell textAlign='right'>
-                    <Popup
-                        header="Search for any local videos"
-                        on="hover"
-                        trigger={<Button primary inverted onClick={this.refreshVideos}>Refresh Files</Button>}
-                    />
                 </Table.Cell>
                 <Table.Cell textAlign='right'>
                     <Link className="ui button secondary" to={this.editTo}>Edit</Link>

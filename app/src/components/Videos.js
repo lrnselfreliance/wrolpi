@@ -10,7 +10,7 @@ import Paginator, {
     videoOrders
 } from "./Common"
 import VideoPage from "./VideoPlayer";
-import {download, getChannel, getVideo, refresh, searchVideos} from "../api";
+import {download, getChannel, getVideo, distributeDownloadDays, refresh, searchVideos} from "../api";
 import {Button, Dropdown, Form, Grid, Header, Icon, Input} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
@@ -30,6 +30,7 @@ class ManageVideos extends React.Component {
         super(props);
         this.state = {
             streamUrl: null,
+            distributeSuccess: null,
         }
     }
 
@@ -46,6 +47,17 @@ class ManageVideos extends React.Component {
         let response = await refresh();
         if (response.stream_url) {
             this.setState({streamUrl: response.stream_url});
+        }
+    }
+
+    distributeDownloadDays = async (e) => {
+        e.preventDefault();
+        this.setState({distributeSuccess: null});
+        let response = await distributeDownloadDays();
+        if (response.status === 204) {
+            this.setState({distributeSuccess: true});
+        } else {
+            this.setState({distributeSuccess: false});
         }
     }
 
@@ -70,6 +82,20 @@ class ManageVideos extends React.Component {
                         Refresh Video Files
                     </Button>
                     <label>Search for any videos in the media directory</label>
+                </p>
+
+                <p>
+                    <Button secondary
+                            onClick={this.distributeDownloadDays}
+                    >
+                        Distribute Download Days
+                    </Button>
+                    <label>
+                        {this.state.distributeSuccess === true && <Icon name='checkmark'/>}
+                        {this.state.distributeSuccess === false && <Icon name='close'/>}
+                        Evenly distribute the days that all channels will be downloaded. This is to prevent
+                        the case when many channels are downloaded on a single day.
+                    </label>
                 </p>
 
                 {this.state.streamUrl && <Progresses streamUrl={this.state.streamUrl}/>}
@@ -103,6 +129,8 @@ export class VideoWrapper extends React.Component {
 
     async componentDidUpdate(prevProps, prevState) {
         if (prevProps.match.params.video_id !== this.props.match.params.video_id) {
+            // Clear the current video so that it will change, even if the video is playing.
+            this.setState({video: null, prev: null, next: null, channel: null});
             await this.fetchVideo();
         }
     }

@@ -5,13 +5,16 @@ import json
 import logging
 import os
 import queue
+import re
 import string
 from copy import deepcopy
 from datetime import datetime, date
+from decimal import Decimal
 from functools import wraps
+from itertools import islice
 from multiprocessing import Event, Queue
 from pathlib import Path
-from typing import Union, Callable, Tuple, Dict, Mapping
+from typing import Union, Callable, Tuple, Dict, Mapping, List
 from urllib.parse import urlunsplit
 from uuid import UUID
 
@@ -27,7 +30,7 @@ from websocket import WebSocket
 
 from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents, \
     WROLModeEnabled
-from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT
+from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT, DATE_FORMAT
 
 logger = logging.getLogger(__name__)
 ch = logging.StreamHandler()
@@ -160,7 +163,8 @@ def validate_data(model: type, data: dict):
             elif isinstance(field, doc.Boolean):
                 new_data[attr] = string_to_boolean(data.pop(attr))
             elif isinstance(field, doc.Float):
-                new_data[attr] = float(data.pop(attr))
+                val = data.pop(attr)
+                new_data[attr] = float(val) if val else None
             elif isinstance(field, doc.Dictionary):
                 new_data[attr] = dict(data.pop(attr))
             elif isinstance(field, doc.List):
@@ -170,6 +174,14 @@ def validate_data(model: type, data: dict):
                 if val is not None:
                     val = string_to_boolean(val)
                 new_data[attr] = val
+            elif isinstance(field, doc.Date):
+                val = data.pop(attr)
+                if val:
+                    new_data[attr] = datetime.strptime(val, DATE_FORMAT)
+            elif isinstance(field, doc.DateTime):
+                val = data.pop(attr)
+                if val:
+                    new_data[attr] = datetime.utcfromtimestamp(val)
             else:
                 raise ValidationError(f'Bad field type {field} specified in the API model!')
         except KeyError:
@@ -211,6 +223,7 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
                     'error': error['message'],
                     'code': error['code'],
                 }
+                logger.error(e, exc_info=True)
 
                 if e.__cause__:
                     cause = e.__cause__
@@ -222,7 +235,8 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
             except APIError as e:
                 # The endpoint returned a standardized APIError, convert it to a json response
                 error = API_ERRORS[type(e)]
-                r = response.json({'error': error['message'], 'code': error['code']}, error['status'])
+                r = response.json({'message': str(e), 'api_error': error['message'], 'code': error['code']},
+                                  error['status'])
                 return r
 
         # Apply the docs to the wrapped function so sanic-openapi can find the wrapped function when
@@ -429,6 +443,8 @@ class JSONEncodeDate(json.JSONEncoder):
             return obj.timestamp()
         elif isinstance(obj, date):
             return datetime(obj.year, obj.month, obj.day).timestamp()
+        elif isinstance(obj, Decimal):
+            return str(obj)
         return super(JSONEncodeDate, self).default(obj)
 
 
@@ -516,3 +532,23 @@ def iterify(kind: type = list):
         return wrapped
 
     return wrapper
+
+
+dt_or_d = Union[datetime, date]
+
+
+def date_range(start: dt_or_d, end: dt_or_d, steps: int) -> List[dt_or_d]:
+    delta = (end - start) // steps
+    return [start + (delta * i) for i in range(steps)]
+
+
+def chunk(it, size):
+    it = iter(it)
+    return iter(lambda: tuple(islice(it, size)), ())
+
+
+WHITESPACE = re.compile(r'\s')
+
+
+def remove_whitespace(s: str) -> str:
+    return WHITESPACE.sub('', s)

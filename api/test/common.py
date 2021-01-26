@@ -5,6 +5,7 @@ import unittest
 from contextlib import contextmanager
 from functools import wraps, partialmethod
 from http import HTTPStatus
+from itertools import zip_longest
 from queue import Empty, Queue
 from shutil import copyfile
 from typing import List
@@ -126,6 +127,24 @@ class ExtendedTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, http_status)
         if code:
             self.assertEqual(response.json['code'], code)
+
+    @staticmethod
+    def assertTruth(value, expected):
+        """
+        Check that a value is Truthy or Falsy.
+        """
+        if expected is True:
+            assert value, f'Value {value} should have been truthy'
+        else:
+            assert not value, f'Value {value} should have been falsey'
+
+    assertTruthy = partialmethod(assertTruth, expected=True)
+    assertFalsey = partialmethod(assertTruth, expected=False)
+
+    def assertItemsTruthyOrFalsey(self, items_list: List, expected_list: List):
+        for d1, d2 in zip_longest(items_list, expected_list):
+            for d2_key in d2:
+                self.assertTruth(d1[d2_key], d2[d2_key])
 
 
 class TestAPI(ExtendedTestCase):

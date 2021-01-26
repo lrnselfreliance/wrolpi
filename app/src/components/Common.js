@@ -2,8 +2,8 @@ import React from "react";
 import {Card, Container, Image, Pagination, Progress} from 'semantic-ui-react';
 import {Link} from "react-router-dom";
 
-export const API_URI = process.env.REACT_APP_API ? process.env.REACT_APP_API : '127.0.0.1:8080';
-export const VIDEOS_API = `http://${API_URI}/api/videos`;
+export const API_URI = `http://${window.location.host}/api`;
+export const VIDEOS_API = `${API_URI}/videos`;
 export const DEFAULT_LIMIT = 20;
 
 export default class Paginator extends React.Component {
@@ -48,7 +48,7 @@ export default class Paginator extends React.Component {
     }
 }
 
-export function Duration({video}) {
+export function secondsToDuration(video) {
     let duration = video.duration;
     let hours = Math.floor(duration / 3600);
     duration -= hours * 3600;
@@ -59,9 +59,15 @@ export function Duration({video}) {
     minutes = String('00' + minutes).slice(-2);
     seconds = String('00' + seconds).slice(-2);
 
+    return [hours, minutes, seconds];
+}
+
+export function Duration({video}) {
+    let [hours, minutes, seconds] = secondsToDuration(video);
+
     if (hours > 0) {
         return <div className="duration-overlay">{hours}:{minutes}:{seconds}</div>
-    } else if (duration) {
+    } else if (video.duration) {
         return <div className="duration-overlay">{minutes}:{seconds}</div>
     } else {
         return <></>
@@ -386,4 +392,21 @@ export class Progresses extends React.Component {
         </>
     }
 
+}
+
+export function replaceNullValues(obj, newValue) {
+    newValue = newValue === undefined ? '' : newValue;
+    let keys = Object.keys(obj);
+    for (let i = 0; i < keys.length; i++) {
+        let key = keys[i];
+        obj[key] = obj[key] === null ? newValue : obj[key];
+    }
+}
+
+export function enumerate(array) {
+    let newArray = [];
+    for (let i = 0; i < array.length; i++) {
+        newArray = newArray.concat([[i, array[i]]]);
+    }
+    return newArray;
 }

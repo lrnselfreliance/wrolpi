@@ -1,7 +1,8 @@
 #! /usr/bin/env python3
+import json
 import pathlib
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from queue import Queue
 from random import shuffle
 from typing import Tuple, List
@@ -9,7 +10,7 @@ from typing import Tuple, List
 from dictorm import DictDB, Dict, And, Or
 from youtube_dl import YoutubeDL
 
-from api.common import logger, today, ProgressReporter
+from api.common import logger, today, ProgressReporter, date_range
 from api.db import get_db_context
 from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path, add_video_to_skip_list
@@ -44,8 +45,24 @@ def update_channel(channel: Dict = None, link: str = None):
     # Resolve all entries to dictionaries.
     entries = info['entries'] = list(info['entries'])
 
+    # Youtube-DL may hand back a list of URLs, lets use the "Uploads" URL, if available.
+    try:
+        entries[0]['id']
+    except KeyError:
+        for entry in entries:
+            if entry['title'] == 'Uploads':
+                logger.info('Youtube-DL gave back a list of URLs, found the "Uploads" URL and using it.')
+                info = YDL.extract_info(entry['url'], download=False, process=False)
+                entries = info['entries'] = list(info['entries'])
+                break
+
     # This is all the source id's that are currently available.
-    all_source_ids = {i['id'] for i in entries}
+    try:
+        all_source_ids = {i['id'] for i in entries}
+    except KeyError as e:
+        logger.warning(f'No ids for entries!  Was the channel update successful?  Is the channel URL correct?')
+        logger.warning(f'entries: {entries}')
+        raise KeyError('No id key for entry!') from e
 
     with get_db_context(commit=True) as (db_conn, db):
         # Get the channel in this new context.
@@ -299,6 +316,16 @@ def upsert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
         logger.debug(f'Could not parse date from filename: {video_path}')
         upload_date = None
 
+    duration = None
+    if info_json_path:
+        path = (channel_dir / info_json_path).absolute()
+        try:
+            with open(path) as fh:
+                json_contents = json.load(fh)
+                duration = json_contents['duration']
+        except json.decoder.JSONDecodeError:
+            logger.warning(f'Failed to load JSON file to get duration: {path}')
+
     video_dict = dict(
         channel_id=channel['id'],
         description_path=str(description_path) if description_path else None,
@@ -313,6 +340,7 @@ def upsert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
         idempotency=idempotency,
         info_json_path=str(info_json_path) if info_json_path else None,
         downloaded=True if video_path else False,
+        duration=duration,
     )
 
     if id_:
@@ -367,6 +395,30 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
             upsert_video(db, video_path, channel, id_=id_)
 
     reporter.finish(1, 'All videos are downloaded')
+
+
+def distribute_download_days(start: date = None):
+    common_frequency = {}
+
+    # Start distributing on the day provided, or start today.
+    start = start or today()
+
+    with get_db_context(commit=True) as (db_conn, db):
+        Channel = db['channel']
+        # Sort channels by their download frequency.
+        for channel in Channel.get_where(Channel['next_download'].IsNotNull()):
+            download_frequency = channel['download_frequency']
+            try:
+                common_frequency[download_frequency].append(channel)
+            except KeyError:
+                common_frequency[download_frequency] = [channel, ]
+
+        for frequency, channels in common_frequency.items():
+            last_day = start + timedelta(seconds=frequency)
+            date_ranges = iter(date_range(start, last_day, len(channels)))
+            for channel in channels:
+                channel['next_download'] = next(date_ranges)
+                channel.flush()
 
 
 def main(args=None):

@@ -1,2 +1,0 @@
-ALTER TABLE video
-    ADD COLUMN validated_poster BOOLEAN DEFAULT FALSE;

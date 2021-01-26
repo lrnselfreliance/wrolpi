@@ -11,7 +11,7 @@ import logging
 import sys
 
 from api import api
-from api.cmd import import_settings_configs
+from api.cmd import import_settings_configs, apply_db_migrations
 from api.common import logger
 from api.modules import MODULES
 from api.videos.common import verify_config
@@ -60,6 +60,8 @@ async def main():
 
     # Always warn about the log level so we know what will be logged
     logger.warning(f'Logging level: {logger.getEffectiveLevel()}')
+
+    apply_db_migrations(MODULES)
 
     import_settings_configs(MODULES)
 

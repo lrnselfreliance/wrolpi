@@ -1,18 +1,24 @@
 import argparse
 import logging
+import random
 import re
+import tempfile
 from http import HTTPStatus
+from random import choice
+from string import ascii_letters
 
 from sanic import Blueprint, Sanic, response
 from sanic.request import Request
 from sanic_cors import CORS
 from sanic_openapi import swagger_blueprint
 
+import api.inventory
 from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_config, get_config, EVENTS, \
     wrol_mode_enabled
 from api.errors import WROLModeEnabled
 from api.modules import MODULES
-from api.videos.schema import EventsResponse, EchoResponse
+from api.otp import encrypt_otp, decrypt_otp, generate_html, generate_pdf
+from api.videos.schema import EventsResponse, EchoResponse, EncryptOTPRequest, DecryptOTPRequest
 from api.videos.schema import SettingsRequest, SettingsResponse, RegexRequest, RegexResponse
 
 logger = logger.getChild(__name__)
@@ -118,6 +124,43 @@ def events(_: Request):
     return response.json({'events': e})
 
 
+@root_api.post(':encrypt_otp')
+@validate_doc(
+    summary='Encrypt a message with OTP',
+    consumes=EncryptOTPRequest,
+)
+def post_encrypt_otp(_: Request, data: dict):
+    data = encrypt_otp(data['otp'], data['plaintext'])
+    return response.json(data)
+
+
+@root_api.post(':decrypt_otp')
+@validate_doc(
+    summary='Decrypt a message with OTP',
+    consumes=DecryptOTPRequest,
+)
+def post_decrypt_otp(_: Request, data: dict):
+    data = decrypt_otp(data['otp'], data['ciphertext'])
+    return response.json(data)
+
+
+@root_api.get('/otp/html')
+def get_new_otp(_: Request):
+    return response.html(generate_html())
+
+
+@root_api.get('/otp/pdf')
+def get_new_otp_pdf(_: Request):
+    random_name = ''.join(random.choice(ascii_letters) for _ in range(8))
+    filename = f'one-time-pad-{random_name}.pdf'
+    headers = {
+        'Content-type': 'application/pdf',
+        'Content-Disposition': f'attachment;filename={filename}'
+    }
+    contents = generate_pdf()
+    return response.raw(contents, HTTPStatus.OK, headers)
+
+
 ROUTES_ATTACHED = False
 
 
@@ -133,6 +176,11 @@ def attach_routes(app):
     blueprints = [module.api_bp for module in MODULES.values()]
     api_group = Blueprint.group(*blueprints, root_api, url_prefix='/api')
     app.blueprint(api_group)
+
+    # Initialization functions
+    inits = [api.inventory.init for module in MODULES.values() if 'init' in dir(module)]
+    for init in inits:
+        init()
 
     # TODO Allow all requests to this webapp during development.  This should be restricted later.
     CORS(

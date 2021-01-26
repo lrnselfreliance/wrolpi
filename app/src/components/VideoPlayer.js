@@ -3,8 +3,8 @@ import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {deleteVideo, favoriteVideo} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link} from "react-router-dom";
-import {uploadDate, VideoCard} from "./Common";
-import {Confirm, Container, Segment} from "semantic-ui-react";
+import {humanFileSize, uploadDate, VideoCard} from "./Common";
+import {Confirm, Container, Segment, Tab} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
 const MEDIA_PATH = '/media';
@@ -66,6 +66,29 @@ function VideoPage(props) {
         );
     }
 
+    let descriptionPane = {
+        menuItem: 'Description', render: () => <Tab.Pane>
+            <pre className="wrap-text">
+                {description}
+            </pre>
+        </Tab.Pane>
+    };
+
+    let statisticsPane = {
+        menuItem: 'Statistics', render: () => <Tab.Pane>
+            <h3>Size</h3>
+            <p>{humanFileSize(video.size)}</p>
+
+            <h3>Source ID</h3>
+            <p>{video.source_id}</p>
+
+            <h3>File Name</h3>
+            <pre style={{backgroundColor: '#ccc', padding: '0.4em'}}>{video.channel.directory}/{video.video_path}</pre>
+        </Tab.Pane>
+    }
+
+    let tabPanes = [descriptionPane, statisticsPane];
+
     return (
         <Container textAlign='left' style={{marginTop: '2em'}}>
             <Button
@@ -118,12 +141,7 @@ function VideoPage(props) {
                 </p>
             </Segment>
 
-            <Segment secondary>
-                <h3>Description</h3>
-                <pre className="wrap-text">
-                {description}
-            </pre>
-            </Segment>
+            <Tab panes={tabPanes}/>
 
             <Grid columns={2} stackable>
                 <Grid.Row>

@@ -112,6 +112,7 @@ test/videos
 *local.yaml
 *local.yml
 *local.yml.bak
+inventories.yaml
 
 app/package-lock.json
 

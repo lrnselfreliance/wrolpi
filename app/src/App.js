@@ -8,6 +8,8 @@ import {Container, Header, Segment} from "semantic-ui-react";
 import 'semantic-ui-css/semantic.min.css';
 import {SemanticToastContainer} from 'react-semantic-toasts';
 import 'react-semantic-toasts/styles/react-semantic-alert.css';
+import {AppsRoute} from "./components/Apps";
+import {InventoryRoute} from "./components/Inventory";
 
 function Welcome() {
     return (
@@ -46,6 +48,8 @@ function App() {
                 <Route path="/" exact={true} component={Welcome}/>
                 <Route path="/videos" component={VideosRoute}/>
                 <Route path="/admin" component={Admin}/>
+                <Route path="/apps" component={AppsRoute}/>
+                <Route path="/inventory" component={InventoryRoute}/>
                 <Route component={PageNotFound}/>
             </Switch>
             <SemanticToastContainer position="top-right"/>

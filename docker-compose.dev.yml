@@ -9,6 +9,12 @@ services:
       - 54321:5432
     environment:
       - POSTGRES_PASSWORD=wrolpi
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api:
     depends_on:
       - db
@@ -17,9 +23,16 @@ services:
       dockerfile: docker/api/Dockerfile
     volumes:
       - .:/opt/wrolpi
+      - './inventories.yaml:/opt/wrolpi/inventories.yaml'
     ports:
       - ${REACT_APP_API-127.0.0.1:8081}:8081
     command: "-vv api --host 0.0.0.0"
+    healthcheck:
+      test: [ "CMD-SHELL", "curl http://127.0.0.1:8081/echo" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   app:
     depends_on:
       - api
@@ -30,6 +43,7 @@ services:
       - './app:/app'
     command: "yarn start"
     stdin_open: true
+
   web:
     depends_on:
       - app
@@ -37,7 +51,7 @@ services:
       context: .
       dockerfile: docker/web/Dockerfile
     ports:
-      - ${WEB_HOST-127.0.0.1}:${WEB_PORT-8080}:80
+      - ${WEB_HOST-0.0.0.0}:${WEB_PORT-8080}:80
     volumes:
       - "./nginx.dev.conf:/etc/nginx/nginx.conf"
       - "./icon.ico:/etc/nginx/favicon.ico"

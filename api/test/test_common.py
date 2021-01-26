@@ -1,4 +1,6 @@
 import tempfile
+import unittest
+from datetime import date, datetime
 from pathlib import Path
 from queue import Queue
 from unittest import mock
@@ -9,7 +11,7 @@ from PIL import Image
 from sanic_openapi import doc
 
 from api.api import api_app, attach_routes
-from api.common import validate_data, combine_dicts, insert_parameter, ProgressReporter
+from api.common import validate_data, combine_dicts, insert_parameter, ProgressReporter, date_range
 from api.db import get_db_context
 from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
 from api.test.common import create_db_structure, build_test_directories, wrap_test_db
@@ -487,3 +489,87 @@ def test_feed_reporter_finish():
         assert message == received, f'Message {count} did not match'
 
         count += 1
+
+
+class TestCommon(unittest.TestCase):
+
+    def test_date_range(self):
+        # A single step results in the start.
+        result = date_range(date(1970, 1, 1), date(1970, 1, 2), 1)
+        assert result == [
+            date(1970, 1, 1),
+        ]
+
+        # Many steps on a single day results in the same day.
+        result = date_range(date(1970, 1, 1), date(1970, 1, 1), 5)
+        assert result == [
+            date(1970, 1, 1),
+            date(1970, 1, 1),
+            date(1970, 1, 1),
+            date(1970, 1, 1),
+            date(1970, 1, 1),
+        ]
+
+        # Many steps on a single datetime results in a range of times.
+        result = date_range(datetime(1970, 1, 1), datetime(1970, 1, 1, 23, 59, 59), 5)
+        assert result == [
+            datetime(1970, 1, 1, 0, 0),
+            datetime(1970, 1, 1, 4, 47, 59, 800000),
+            datetime(1970, 1, 1, 9, 35, 59, 600000),
+            datetime(1970, 1, 1, 14, 23, 59, 400000),
+            datetime(1970, 1, 1, 19, 11, 59, 200000),
+        ]
+
+        # date_range is not inclusive, like range().
+        result = date_range(date(1970, 1, 1), date(1970, 1, 5), 4)
+        assert result == [
+            date(1970, 1, 1),
+            date(1970, 1, 2),
+            date(1970, 1, 3),
+            date(1970, 1, 4),
+        ]
+
+        # Reversed dates are supported.
+        result = date_range(date(1970, 1, 5), date(1970, 1, 1), 4)
+        assert result == [
+            date(1970, 1, 5),
+            date(1970, 1, 4),
+            date(1970, 1, 3),
+            date(1970, 1, 2),
+        ]
+
+        # Large date spans are supported.
+        result = date_range(date(1970, 1, 1), date(2020, 5, 1), 4)
+        assert result == [
+            date(1970, 1, 1),
+            date(1982, 8, 1),
+            date(1995, 3, 2),
+            date(2007, 10, 1),
+        ]
+
+        result = date_range(datetime(1970, 1, 1, 0, 0, 0), datetime(1970, 1, 1, 10, 0), 8)
+        assert result == [
+            datetime(1970, 1, 1, 0, 0),
+            datetime(1970, 1, 1, 1, 15),
+            datetime(1970, 1, 1, 2, 30),
+            datetime(1970, 1, 1, 3, 45),
+            datetime(1970, 1, 1, 5, 0),
+            datetime(1970, 1, 1, 6, 15),
+            datetime(1970, 1, 1, 7, 30),
+            datetime(1970, 1, 1, 8, 45),
+        ]
+
+        # More steps than days
+        result = date_range(date(1970, 1, 1), date(1970, 1, 7), 10)
+        assert result == [
+            date(1970, 1, 1),
+            date(1970, 1, 1),
+            date(1970, 1, 2),
+            date(1970, 1, 2),
+            date(1970, 1, 3),
+            date(1970, 1, 4),
+            date(1970, 1, 4),
+            date(1970, 1, 5),
+            date(1970, 1, 5),
+            date(1970, 1, 6),
+        ]

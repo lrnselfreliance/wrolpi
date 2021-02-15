@@ -24,14 +24,14 @@ def test_update_channels(tempdir):
     q = Queue()
     reporter = ProgressReporter(q, 2)
 
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         Channel = db['channel']
         channel1, channel2 = Channel.get_where().order_by('id')
         channel1['url'] = channel2['url'] = 'some url'
         channel1.flush()
         channel2.flush()
 
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         Channel = db['channel']
         channel1, channel2 = Channel.get_where().order_by('id')
         with mock.patch('api.videos.downloader.update_channel') as update_channel:
@@ -43,7 +43,7 @@ def test_update_channels(tempdir):
             update_channel.assert_any_call(channel1)
             update_channel.assert_any_call(channel2)
 
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         Channel = db['channel']
         channel1, channel2 = Channel.get_where().order_by('id')
         channel1['next_download'] = today() + timedelta(days=1)
@@ -77,7 +77,7 @@ def test_update_channels(tempdir):
     },
 )
 def test_update_channel(tempdir):
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         Channel = db['channel']
         channel = Channel.get_one()
         channel['download_frequency'] = DEFAULT_DOWNLOAD_FREQUENCY
@@ -90,7 +90,7 @@ def test_update_channel(tempdir):
         }
         update_channel(channel)
 
-        with get_db_context() as (db_conn, db):
+        with get_db_context() as (engine, session):
             Channel = db['channel']
             channel = Channel.get_one()
             # After and update, the next_download should be incremented by the download_frequency.
@@ -113,7 +113,7 @@ def test_update_channel(tempdir):
     }
 )
 def test_distribute_download_days(tempdir):
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         Channel = db['channel']
 
         curs = db_conn.cursor()
@@ -131,7 +131,7 @@ def test_distribute_download_days(tempdir):
 
     distribute_download_days(date(2020, 9, 8))
 
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         Channel = db['channel']
         # Next downloads are spread out over the next week.
         next_downloads = sorted([i['next_download'] for i in Channel.get_where(Channel['next_download'].IsNotNull())])

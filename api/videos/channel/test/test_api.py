@@ -216,7 +216,7 @@ class TestVideoAPI(TestAPI):
         pytest.raises(Empty, refresh_queue.get_nowait)
 
         # Setup a fake channel directory.
-        with get_db_context() as (db_conn, db), \
+        with get_db_context() as (engine, session), \
                 tempfile.TemporaryDirectory() as channel_dir:
             channel_path = pathlib.Path(channel_dir)
 
@@ -297,7 +297,7 @@ class TestVideoAPI(TestAPI):
 
     @wrap_test_db
     def test_get_channel_videos(self):
-        with get_db_context(commit=True) as (db_conn, db):
+        with get_db_context(commit=True) as (engine, session):
             Channel, Video = db['channel'], db['video']
             channel1 = Channel(name='Foo', link='foo').flush()
             channel2 = Channel(name='Bar', link='bar').flush()
@@ -308,7 +308,7 @@ class TestVideoAPI(TestAPI):
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 0
 
-        with get_db_context(commit=True) as (db_conn, db):
+        with get_db_context(commit=True) as (engine, session):
             Channel, Video = db['channel'], db['video']
             Video(title='vid1', channel_id=channel2['id'], video_path='foo').flush()
             Video(title='vid2', channel_id=channel1['id'], video_path='foo').flush()
@@ -335,7 +335,7 @@ class TestVideoAPI(TestAPI):
         def raise_unknown_file(_):
             raise UnknownFile()
 
-        with get_db_context(commit=True) as (db_conn, db), \
+        with get_db_context(commit=True) as (engine, session), \
                 mock.patch('api.videos.common.get_absolute_video_info_json', raise_unknown_file):
             Channel, Video = db['channel'], db['video']
             channel = Channel(name='Foo', link='foo').flush()
@@ -359,7 +359,7 @@ class TestVideoAPI(TestAPI):
 
     @wrap_test_db
     def test_get_channel_videos_pagination(self):
-        with get_db_context(commit=True) as (db_conn, db):
+        with get_db_context(commit=True) as (engine, session):
             Channel, Video = db['channel'], db['video']
             channel1 = Channel(name='Foo', link='foo').flush()
 
@@ -400,7 +400,7 @@ class TestVideoAPI(TestAPI):
             ('4', 'b e e'),
             ('5', ''),
         ]
-        with get_db_context(commit=True) as (db_conn, db):
+        with get_db_context(commit=True) as (engine, session):
             Video = db['video']
             for title, caption in videos:
                 Video(title=title, caption=caption, video_path='foo').flush()

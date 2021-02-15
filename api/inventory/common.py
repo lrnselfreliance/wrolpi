@@ -176,7 +176,7 @@ def import_inventories_file(path: str = None):
     inventories = get_inventories()
     inventories_names = [i['name'] for i in inventories]
     new_inventories = [i for i in contents['inventories'] if i['name'] not in inventories_names]
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         Inventory, Item = db['inventory'], db['item']
         for inventory in new_inventories:
             # Remove the id, we will just use the new one provided.

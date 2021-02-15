@@ -19,7 +19,7 @@ class TestVideoFunctions(TestAPI):
         Test that the previous and next videos will be retrieved when fetching a video.
         """
 
-        with get_db_context(commit=True) as (db_conn, db):
+        with get_db_context(commit=True) as (engine, session):
             Channel, Video = db['channel'], db['video']
 
             channel1 = Channel().flush()
@@ -121,7 +121,7 @@ class TestVideoFunctions(TestAPI):
         ],
     })
     def test_delete_video(self, tempdir: pathlib.Path):
-        with get_db_context(commit=True) as (db_conn, db):
+        with get_db_context(commit=True) as (engine, session):
             Channel, Video = db['channel'], db['video']
 
             channel1 = Channel.get_one(name='channel1')

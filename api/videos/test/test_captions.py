@@ -34,7 +34,7 @@ class TestCaption(TestAPI):
 
     @wrap_test_db
     def test_process_captions(self):
-        with get_db_context() as (db_conn, db):
+        with get_db_context() as (engine, session):
             Video = db['video']
             video1 = Video(title='scream', caption_path=str(self.vtt_path1)).flush()
             with mock.patch('api.videos.captions.get_absolute_video_caption', lambda *a: self.vtt_path1):

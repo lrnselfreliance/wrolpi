@@ -8,12 +8,14 @@ from random import shuffle
 from typing import Tuple, List
 
 from dictorm import DictDB, Dict, And, Or
+from sqlalchemy.orm import Session
 from youtube_dl import YoutubeDL
 
 from api.common import logger, today, ProgressReporter, date_range
 from api.db import get_db_context
 from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path, add_video_to_skip_list
+from .models import Video
 from ..errors import UnknownChannel, ChannelURLEmpty
 from ..vars import UNRECOVERABLE_ERRORS
 
@@ -31,7 +33,7 @@ def update_channel(channel: Dict = None, link: str = None):
 
     It is expected that any missing videos will be downloaded later.
     """
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         if not channel:
             Channel = db['channel']
             channel = Channel.get_one(link=link)
@@ -64,7 +66,7 @@ def update_channel(channel: Dict = None, link: str = None):
         logger.warning(f'entries: {entries}')
         raise KeyError('No id key for entry!') from e
 
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         # Get the channel in this new context.
         Channel = db['channel']
         channel = Channel.get_one(id=channel['id'])
@@ -94,7 +96,7 @@ def update_channel(channel: Dict = None, link: str = None):
 def update_channels(reporter: ProgressReporter, link: str = None):
     """Update all information for each channel.  (No downloads performed)"""
 
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         Channel = db['channel']
 
         if Channel.count() == 0:
@@ -146,7 +148,7 @@ def _find_all_missing_videos(link: str = None) -> List[Tuple]:
     Get all Video entries which don't have the required media files (i.e. hasn't been downloaded).  Restrict to a
     single channel if "link" is provided.
     """
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         curs = db_conn.cursor()
 
         # Get all channels by default.
@@ -186,7 +188,7 @@ def find_all_missing_videos(link: str = None) -> Tuple[Dict, dict]:
 
     Yields a Channel Dict object, our Video id, and the "entry" of the video from the channel's info_json['entries'].
     """
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         Channel = db['channel']
 
         if link:
@@ -290,14 +292,13 @@ NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
                          r'(jpg|webp|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
 
 
-def upsert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotency: str = None,
-                 skip_captions=False, id_: str = None) -> Dict:
+def upsert_video(session: Session, video_path: pathlib.Path, channel: Dict, idempotency: str = None, skip_captions=False,
+                 id_: str = None) -> Dict:
     """
     Insert a video into the DB.  Also, find any meta-files near the video file and store them on the video row.
 
     If id_ is provided, update that entry.
     """
-    Video = db['video']
     channel_dir = get_absolute_media_path(channel['directory'])
     poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path, relative_to=channel_dir)
 
@@ -344,12 +345,12 @@ def upsert_video(db: DictDB, video_path: pathlib.Path, channel: Dict, idempotenc
     )
 
     if id_:
-        video = Video.get_one(id=id_)
+        video = session.query(Video).filter(id=id_).one()
         video.update(video_dict)
     else:
         video = Video(**video_dict)
 
-    video.flush()
+    session.flush(video)
 
     if skip_captions is False and caption_path:
         # Process captions only when requested
@@ -385,13 +386,13 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
                 logger.warning(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
                                f'attempt to download it again.')
 
-                with get_db_context(commit=True) as (db_conn, db):
+                with get_db_context(commit=True) as (engine, session):
                     channel = db['channel'].get_one(id=channel['id'])
                     add_video_to_skip_list(channel, {'source_id': source_id})
 
             reporter.error(1, f'Failed to download "{missing_video["title"]}", see server logs...')
             continue
-        with get_db_context(commit=True) as (db_conn, db):
+        with get_db_context(commit=True) as (engine, session):
             upsert_video(db, video_path, channel, id_=id_)
 
     reporter.finish(1, 'All videos are downloaded')
@@ -403,7 +404,7 @@ def distribute_download_days(start: date = None):
     # Start distributing on the day provided, or start today.
     start = start or today()
 
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         Channel = db['channel']
         # Sort channels by their download frequency.
         for channel in Channel.get_where(Channel['next_download'].IsNotNull()):

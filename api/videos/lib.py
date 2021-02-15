@@ -153,8 +153,8 @@ def refresh_channel_videos(channel: Dict, reporter: ProgressReporter):
     reporter.send_progress(1, 4, f'Inserting {len(new_videos)} new videos.')
 
     for video_path in new_videos:
-        with get_db_context(commit=True) as (db_conn, db):
-            upsert_video(db, pathlib.Path(video_path), channel, idempotency=idempotency)
+        with get_db_context(commit=True) as (engine, session):
+            upsert_video(session, pathlib.Path(video_path), channel, idempotency=idempotency)
             logger.debug(f'{channel["name"]}: Added {video_path}')
 
     reporter.send_progress(1, 5, 'Deleting unnecessary video entries.')
@@ -182,7 +182,7 @@ def _refresh_videos(q: Queue, channel_links: list = None):
     :return:
     """
     logger.info('Refreshing video files')
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         Channel = db['channel']
 
         reporter = ProgressReporter(q, 2)

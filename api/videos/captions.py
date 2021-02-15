@@ -61,7 +61,7 @@ def process_captions(video: Dict):
 
 
 async def insert_bulk_captions(video_ids: List[int]):
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         Video = db['video']
         for idx, video_id in enumerate(video_ids):
             video = Video.get_one(id=video_id)

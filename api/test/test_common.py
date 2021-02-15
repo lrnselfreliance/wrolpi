@@ -158,7 +158,7 @@ def test_create_db_structure(_structure, paths):
             assert path.exists()
             assert path.is_file()
 
-        with get_db_context() as (db_conn, db):
+        with get_db_context() as (engine, session):
             Channel = db['channel']
             for channel_name in _structure:
                 channel = Channel.get_one(name=channel_name)
@@ -302,7 +302,7 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
         assert Image.open(jpg_fh).format == 'JPEG'
         assert Image.open(webp_fh).format == 'WEBP'
 
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         Video = db['video']
         vid1 = Video.get_one(poster_path='vid1.jpg')
         assert vid1['validated_poster'] is False
@@ -318,7 +318,7 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
 
     mocked_convert_image.assert_called_once_with(webp, tempdir / 'channel2/vid2.jpg')
 
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         Video = db['video']
         # Get the video by ID because it's poster is now a JPEG.
         vid2 = Video.get_one(id=vid2['id'])

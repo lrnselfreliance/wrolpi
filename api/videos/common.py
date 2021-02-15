@@ -17,6 +17,7 @@ from api.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, Chann
     ChannelLinkConflict, ChannelDirectoryConflict
 from api.vars import DOCKERIZED, PROJECT_DIR, VIDEO_EXTENSIONS, MINIMUM_CHANNEL_KEYS, MINIMUM_INFO_JSON_KEYS, \
     MINIMUM_VIDEO_KEYS, DEFAULT_FILE_PERMISSIONS
+from .models import Channel
 
 logger = logger.getChild(__name__)
 
@@ -56,32 +57,32 @@ def import_settings_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
     config = get_channels_config()
 
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         for section in config:
-            for option in (o for o in REQUIRED_OPTIONS if o not in config[section]):
+            for option in (i for i in REQUIRED_OPTIONS if i not in config[section]):
                 raise ConfigError(f'Channel "{section}" is required to have "{option}"')
 
             name, directory = config[section]['name'], config[section]['directory']
 
             link = sanitize_link(name)
-            Channel = db['channel']
-            channel = Channel.get_one(link=link)
+            channel = session.query(Channel).filter(Channel.link == link).one()
 
             if not channel:
                 # Channel not yet in the DB, add it
                 channel = Channel(link=link)
 
             # Only name and directory are required
-            channel['name'] = name
-            channel['directory'] = directory
+            channel.name = name
+            channel.directory = directory
 
-            channel['calculate_duration'] = config[section].get('calculate_duration')
-            channel['download_frequency'] = config[section].get('download_frequency')
-            channel['generate_posters'] = config[section].get('generate_posters')
-            channel['match_regex'] = config[section].get('match_regex')
-            channel['skip_download_videos'] = list(set(config[section].get('skip_download_videos', {})))
-            channel['url'] = config[section].get('url')
-            channel.flush()
+            channel.calculate_duration = config[section].get('calculate_duration')
+            channel.download_frequency = config[section].get('download_frequency')
+            channel.generate_posters = config[section].get('generate_posters')
+            channel.match_regex = config[section].get('match_regex')
+            channel.skip_download_videos = list(set(config[section].get('skip_download_videos', {})))
+            channel.url = config[section].get('url')
+
+            session.add(channel)
     return 0
 
 
@@ -390,7 +391,7 @@ async def generate_bulk_posters(video_ids: List[int]):
     Generate all posters for the provided videos.  Update the video object with the new jpg file location.  Do not
     clobber existing jpg files.
     """
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         logger.info(f'Generating {len(video_ids)} video posters')
         Video = db['video']
         for idx, video_id in enumerate(video_ids):
@@ -442,7 +443,7 @@ def bulk_validate_posters(video_ids: List[int]):
     """
     logger.info(f'Validating {len(video_ids)} video posters')
     for video_id in video_ids:
-        with get_db_context(commit=True) as (db_conn, db):
+        with get_db_context(commit=True) as (engine, session):
             Video = db['video']
             video = Video.get_one(id=video_id)
             channel = video['channel']
@@ -495,7 +496,7 @@ async def get_bulk_video_duration(video_ids: List[int]):
     """
     Get and save the duration for each video provided.
     """
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         logger.info(f'Getting {len(video_ids)} video durations.')
         Video = db['video']
         for video_id in video_ids:
@@ -520,7 +521,7 @@ async def get_bulk_video_size(video_ids: List[int]):
     """
     Get and save the size for each video provided.
     """
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         logger.info(f'Getting {len(video_ids)} video sizes.')
         Video = db['video']
         for video_id in video_ids:

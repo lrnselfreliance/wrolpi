@@ -1,9 +1,8 @@
-from dictorm import Table
-
 from .api import api_bp
 from .common import DEFAULT_CATEGORIES, DEFAULT_INVENTORIES
 from .inventory import logger
 from .main import PRETTY_NAME, init_parser
+from .models import Item, Inventory
 from ..db import get_db_context
 
 
@@ -25,15 +24,15 @@ def init(force=False):
 
     logger.info('Initializing inventory')
 
-    with get_db_context(commit=True) as (db_conn, db):
-        Item: Table = db['item']
-        if Item.count() == 0:
+    with get_db_context(commit=True) as (engine, session):
+        if session.query(Item).count() == 0:
             for subcategory, category in DEFAULT_CATEGORIES:
-                Item(subcategory=subcategory, category=category).flush()
+                item = Item(subcategory=subcategory, category=category)
+                session.add(item)
 
-        Inventory: Table = db['inventory']
-        if Inventory.count() == 0:
+        if session.query(Inventory).count() == 0:
             for name in DEFAULT_INVENTORIES:
-                Inventory(name=name).flush()
+                inventory = Inventory(name=name)
+                session.add(inventory)
 
     INVENTORY_INITIALIZED = True

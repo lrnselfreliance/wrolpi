@@ -10,7 +10,7 @@ from pint import Quantity
 
 from api.db import get_db_context
 from api.test.common import wrap_test_db, ExtendedTestCase
-from .. import init
+from .. import init, Item
 from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
     compact_unit, cleanup_quantity, save_inventories_file, import_inventories_file
 from ..inventory import unit_registry, \
@@ -59,10 +59,10 @@ class TestInventory(ExtendedTestCase):
     def prepare() -> None:
         init(force=True)
 
-        with get_db_context(commit=True) as (db_conn, db):
-            Item: Table = db['item']
+        with get_db_context(commit=True) as (engine, session):
             for item in TEST_ITEMS:
-                Item(item).flush()
+                item = Item(**item)
+                session.add(item)
 
     @wrap_test_db
     def test_get_categories(self):
@@ -91,13 +91,13 @@ class TestInventory(ExtendedTestCase):
         }
         save_inventory(inventory)
 
-        with get_db_context() as (db_conn, db):
+        with get_db_context() as (engine, session):
             Inventory: Table = db['inventory']
             i1, i2 = Inventory.get_where().order_by('name')
             self.assertDictContains(i2, {'name': 'New Inventory', 'viewed_at': None})
 
         # Inventories cannot share a name.
-        with get_db_context() as (db_conn, db):
+        with get_db_context() as (engine, session):
             with db.transaction():
                 self.assertRaises(psycopg2.errors.UniqueViolation, save_inventory, inventory)
 
@@ -106,14 +106,14 @@ class TestInventory(ExtendedTestCase):
         save_inventory(inventory)
 
         # Cannot update the name to a name that is already used.
-        with get_db_context() as (db_conn, db):
+        with get_db_context() as (engine, session):
             Inventory: Table = db['inventory']
             i = Inventory.get_one(name='Super Inventory')
             inventory['name'] = 'New Inventory'
             self.assertRaises(psycopg2.errors.UniqueViolation, update_inventory, i['id'], inventory)
 
         # Add some items to "New Inventory"
-        with get_db_context(commit=True) as (db_conn, db):
+        with get_db_context(commit=True) as (engine, session):
             Item: Table = db['item']
             before_item_count = Item.count()
             Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
@@ -122,7 +122,7 @@ class TestInventory(ExtendedTestCase):
             Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
 
         # You can rename a inventory to a conflicting name, if the other inventory is marked as deleted.
-        with get_db_context(commit=True) as (db_conn, db):
+        with get_db_context(commit=True) as (engine, session):
             delete_inventory(2)
             # Check that the items from the deleted Inventory were not deleted, YET.
             Item: Table = db['item']
@@ -197,7 +197,7 @@ class TestInventory(ExtendedTestCase):
             save_inventories_file(tf.name)
 
             # Clear out the DB so the import will be tested
-            with get_db_context(commit=True) as (db_conn, db):
+            with get_db_context(commit=True) as (engine, session):
                 curs = db_conn.cursor()
                 curs.execute('DELETE FROM item')
                 curs.execute('DELETE FROM inventory')

@@ -12,7 +12,7 @@ async def get_minimal_channels() -> List[dict]:
     """
     Get the minimum amount of information necessary about all channels.
     """
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         curs = db.get_cursor()
 
         # Get all channels, even if they don't have videos.
@@ -52,7 +52,7 @@ async def get_minimal_channels() -> List[dict]:
 
 
 def delete_channel(link):
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         Channel = db['channel']
         channel = Channel.get_one(link=link)
         if not channel:
@@ -72,7 +72,7 @@ def delete_channel(link):
 
 
 def update_channel(data, link):
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         Channel = db['channel']
         with db.transaction(commit=True):
             channel = Channel.get_one(link=link)
@@ -125,7 +125,7 @@ def update_channel(data, link):
 
 
 def get_channel(link) -> dict:
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         Channel = db['channel']
         channel = Channel.get_one(link=link)
         if not channel:
@@ -134,7 +134,7 @@ def get_channel(link) -> dict:
 
 
 def create_channel(data):
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         Channel = db['channel']
 
         # Verify that the URL/Name/Link aren't taken

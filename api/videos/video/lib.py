@@ -19,14 +19,14 @@ def get_video(db, video_id: int) -> Dict:
 
 
 def mark_video_as_viewed(video_id: int):
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         video = get_video(db, video_id)
         video['viewed'] = datetime.now()
         video.flush()
 
 
 def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dict]]:
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         video = get_video(db, video_id)
         info_json = get_video_info_json(video)
         video = dict(video)
@@ -141,7 +141,7 @@ def video_search(
         order_by: str = None,
         favorites: bool = None,
 ) -> Tuple[List[dict], int]:
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         curs = db.get_cursor()
 
         args = dict(search_str=search_str, offset=offset)
@@ -209,7 +209,7 @@ def set_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
     """
     Toggle the timestamp on Video.favorite on a video.
     """
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         Video = db['video']
         video = Video.get_one(id=video_id)
         _favorite = video['favorite'] = datetime.now() if favorite else None
@@ -232,7 +232,7 @@ def delete_video(video: Dict):
     if not video_files:
         raise UnknownFile('No video files were deleted')
 
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         Video = db['video']
         video = Video.get_one(id=video['id'])
 

@@ -7,7 +7,7 @@ from typing import List, Tuple
 import yaml
 from pint import Quantity
 
-from api.db import get_db_context
+from api.db import get_db_context, Base
 from api.inventory.inventory import unit_registry, get_items, get_inventories
 from api.vars import PROJECT_DIR
 
@@ -48,7 +48,7 @@ DEFAULT_INVENTORIES = [
 ]
 
 
-def sum_by_key(items: List, key: callable):
+def sum_by_key(items: List[Base], key: callable):
     """
     Sum the total size of each item by the provided key function.  Returns a dict containing the key, and the total_size
     for that key.  Combine total of like units.  This means ounces and pounds will be in the same total.
@@ -56,7 +56,7 @@ def sum_by_key(items: List, key: callable):
     summed = dict()
     for item in items:
         k = key(item)
-        item_size, count, unit = item['item_size'], item['count'], unit_registry(item['unit'])
+        item_size, count, unit = item.item_size, item.count, unit_registry(item.unit)
         key_dim = (k, unit.dimensionality)
 
         total_size = item_size * count * unit
@@ -73,7 +73,7 @@ def sum_by_key(items: List, key: callable):
 def get_inventory_by_keys(keys: Tuple, inventory_id: int):
     items = get_items(inventory_id)
 
-    summed = sum_by_key(items, lambda i: tuple(i[k] or '' for k in keys))
+    summed = sum_by_key(items, lambda i: tuple(getattr(i, k) or '' for k in keys))
 
     inventory = []
     for key, quantity in sorted(summed.items(), key=lambda i: i[0]):
@@ -120,7 +120,7 @@ def compact_unit(quantity: unit_registry.Quantity) -> unit_registry.Quantity:
 def quantity_to_tuple(quantity: unit_registry.Quantity) -> Tuple[Decimal, Quantity]:
     decimal, (units,) = quantity.to_tuple()
     unit, _ = units
-    return round(decimal, UNIT_PRECISION).normalize(), unit_registry(unit)
+    return round(decimal, UNIT_PRECISION), unit_registry(unit)
 
 
 def cleanup_quantity(quantity: Quantity) -> Quantity:

@@ -65,11 +65,12 @@ def import_settings_config():
             name, directory = config[section]['name'], config[section]['directory']
 
             link = sanitize_link(name)
-            channel = session.query(Channel).filter(Channel.link == link).one()
-
-            if not channel:
+            matches = session.query(Channel).filter(Channel.link == link)
+            if not matches.count():
                 # Channel not yet in the DB, add it
                 channel = Channel(link=link)
+            else:
+                channel = matches.one()
 
             # Only name and directory are required
             channel.name = name

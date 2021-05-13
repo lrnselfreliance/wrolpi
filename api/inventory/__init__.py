@@ -32,7 +32,7 @@ def init(force=False):
 
         if session.query(Inventory).count() == 0:
             for name in DEFAULT_INVENTORIES:
-                inventory = Inventory(name=name)
-                session.add(inventory)
+                inv = Inventory(name=name)
+                session.add(inv)
 
     INVENTORY_INITIALIZED = True

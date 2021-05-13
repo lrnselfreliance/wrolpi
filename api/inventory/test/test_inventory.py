@@ -1,21 +1,21 @@
 import tempfile
 from decimal import Decimal
 from itertools import zip_longest
-from typing import List, Dict, Iterable
+from typing import List, Iterable
 
-import psycopg2
 import pytest
-from dictorm import Table
+import sqlalchemy
 from pint import Quantity
 
-from api.db import get_db_context
+from api.db import get_db_context, Base
 from api.test.common import wrap_test_db, ExtendedTestCase
-from .. import init, Item
+from .. import init
 from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
     compact_unit, cleanup_quantity, save_inventories_file, import_inventories_file
 from ..inventory import unit_registry, \
     get_inventories, save_inventory, update_inventory, \
     delete_inventory, get_categories
+from ..models import Item, Inventory
 
 TEST_ITEMS_COLUMNS = (
     'inventory_id',
@@ -45,10 +45,10 @@ TEST_ITEMS = [
 TEST_ITEMS = [dict(zip(TEST_ITEMS_COLUMNS, i)) for i in TEST_ITEMS]
 
 
-def extract_items(lst: List[Dict], keys: Iterable[str]) -> List[Dict]:
+def extract_items(lst: List[Base], keys: Iterable[str]) -> List[Base]:
     extracted = []
     for i in lst:
-        extracted.append({j: i.pop(j) for j in keys})
+        extracted.append({j: getattr(i, j) for j in keys})
 
     return extracted
 
@@ -76,12 +76,13 @@ class TestInventory(ExtendedTestCase):
         self.prepare()
 
         inventories = get_inventories()
-        dates = extract_items(inventories, {'created_at', 'deleted_at', 'viewed_at', 'items'})
+        dates = extract_items(inventories, {'created_at', 'deleted_at', 'viewed_at'})
         self.assertItemsTruthyOrFalsey(dates, [{'created_at': True, 'deleted_at': False, 'viewed_at': False}])
-        self.assertEqual(inventories, [{'id': 1, 'name': 'Food Storage'}])
+        self.assertEqual(inventories[0].id, 1)
+        self.assertEqual(inventories[0].name, 'Food Storage')
 
     @wrap_test_db
-    def test_inventory(self):
+    def test_inventory1(self):
         self.prepare()
 
         # Insert a new Inventory.
@@ -92,14 +93,11 @@ class TestInventory(ExtendedTestCase):
         save_inventory(inventory)
 
         with get_db_context() as (engine, session):
-            Inventory: Table = db['inventory']
-            i1, i2 = Inventory.get_where().order_by('name')
+            i1, i2 = session.query(Inventory).order_by(Inventory.name).all()
             self.assertDictContains(i2, {'name': 'New Inventory', 'viewed_at': None})
 
         # Inventories cannot share a name.
-        with get_db_context() as (engine, session):
-            with db.transaction():
-                self.assertRaises(psycopg2.errors.UniqueViolation, save_inventory, inventory)
+        self.assertRaises(sqlalchemy.exc.IntegrityError, save_inventory, inventory)
 
         # Insert a second inventory.
         inventory['name'] = 'Super Inventory'
@@ -107,14 +105,12 @@ class TestInventory(ExtendedTestCase):
 
         # Cannot update the name to a name that is already used.
         with get_db_context() as (engine, session):
-            Inventory: Table = db['inventory']
             i = Inventory.get_one(name='Super Inventory')
             inventory['name'] = 'New Inventory'
-            self.assertRaises(psycopg2.errors.UniqueViolation, update_inventory, i['id'], inventory)
+            self.assertRaises(sqlalchemy.exc.IntegrityError, update_inventory, i['id'], inventory)
 
         # Add some items to "New Inventory"
         with get_db_context(commit=True) as (engine, session):
-            Item: Table = db['item']
             before_item_count = Item.count()
             Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
             Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
@@ -125,16 +121,13 @@ class TestInventory(ExtendedTestCase):
         with get_db_context(commit=True) as (engine, session):
             delete_inventory(2)
             # Check that the items from the deleted Inventory were not deleted, YET.
-            Item: Table = db['item']
             self.assertEqual(before_item_count + 4, Item.count())
 
-            Inventory: Table = db['inventory']
             i = Inventory.get_one(name='Super Inventory')
             inventory['name'] = 'New Inventory'
             update_inventory(i['id'], inventory)
 
             # Check that the items from the deleted Inventory were really deleted.
-            Item: Table = db['item']
             self.assertEqual(before_item_count, Item.count())
 
     @wrap_test_db
@@ -142,7 +135,7 @@ class TestInventory(ExtendedTestCase):
         self.prepare()
 
         expected = [
-            dict(category='fruits', total_size=Decimal('4.39375'), unit='pound'),
+            dict(category='fruits', total_size=Decimal('4.375'), unit='pound'),
             dict(category='grains', total_size=Decimal('149.25'), unit='pound'),
             dict(category='meats', total_size=Decimal('20'), unit='pound'),
         ]
@@ -157,7 +150,7 @@ class TestInventory(ExtendedTestCase):
         self.prepare()
 
         expected = [
-            dict(category='fruits', subcategory='canned', total_size=Decimal('4.39375'), unit='pound'),
+            dict(category='fruits', subcategory='canned', total_size=Decimal('4.375'), unit='pound'),
             dict(category='grains', subcategory='rice', total_size=Decimal('8'), unit='pound'),
             dict(category='grains', subcategory='wheat', total_size=Decimal('141.25'), unit='pound'),
             dict(category='meats', subcategory='canned', total_size=Decimal('20'), unit='pound'),
@@ -177,7 +170,7 @@ class TestInventory(ExtendedTestCase):
             dict(brand='Chewy', name='Chicken Breast', total_size=Decimal('8'), unit='pound'),
             dict(brand='Ricey', name='White Rice', total_size=Decimal('8'), unit='pound'),
             dict(brand='Vibrant', name='Peaches', total_size=Decimal('3'), unit='pound'),
-            dict(brand='Vibrant', name='Pineapple', total_size=Decimal('1.39375'), unit='pound'),
+            dict(brand='Vibrant', name='Pineapple', total_size=Decimal('1.375'), unit='pound'),
             dict(brand='Wheaters', name='Red Wheat', total_size=Decimal('141.25'), unit='pound'),
         ]
 

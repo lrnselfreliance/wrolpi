@@ -38,16 +38,23 @@ postgres_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/po
 
 # This engine is used for all normal tasks (except testing).
 db_args = get_db_args()
-engine = create_engine('postgresql://{user}:{password}@{host}:{port}/postgres'.format(**db_args))
+uri = 'postgresql://{user}:{password}@{host}:{port}/postgres'.format(**db_args)
+engine = create_engine(uri)
 session_maker = sessionmaker(bind=engine)
+
+
+def _get_db_session():
+    """This function allows the database to be wrapped during testing.  See: api.test.common.wrap_test_db"""
+    session = session_maker()
+    return engine, session
 
 
 @contextmanager
 def get_db_context(commit: bool = False) -> Tuple[Engine, Session]:
     """Context manager that creates a DB session.  This will automatically rollback changes, unless `commit` is True."""
-    Base.metadata.create_all(engine)
-    session = session_maker()
-    yield engine, session
+    local_engine, session = _get_db_session()
+    Base.metadata.create_all(local_engine)
+    yield local_engine, session
     if commit:
         session.commit()
     else:

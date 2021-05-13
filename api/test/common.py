@@ -1,3 +1,4 @@
+import contextlib
 import json
 import pathlib
 import tempfile
@@ -12,10 +13,10 @@ from typing import List, Tuple
 from uuid import uuid1
 
 import mock
-import sqlalchemy
 import websockets
 import yaml
 from sanic_openapi.api import Response
+from sqlalchemy import MetaData
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -34,6 +35,26 @@ attach_routes(api_app)
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
 
 
+def reset_database_tables(engine):
+    """
+    Remove all rows from every table in a database.
+    """
+    # curs = conn.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+    # tables = curs.fetchall()
+    # if tables:
+    #     table_names = [i for (i,) in curs.fetchall()]
+    #     conn.execute('; '.join(f'TRUNCATE {table} RESTART IDENTITY CASCADE' for table in table_names))
+    #     conn.execute('commit')
+
+    meta = MetaData()
+
+    with contextlib.closing(engine.connect()) as con:
+        trans = con.begin()
+        for table in reversed(meta.sorted_tables):
+            con.execute(table.delete())
+        trans.commit()
+
+
 def get_test_db_engine():
     suffix = str(uuid1()).replace('-', '')
     db_name = f'wrolpi_testing_{suffix}'
@@ -44,6 +65,7 @@ def get_test_db_engine():
 
     test_args = get_db_args(db_name)
     test_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**test_args))
+    reset_database_tables(test_engine)
     return test_engine
 
 
@@ -71,11 +93,12 @@ def wrap_test_db(func):
             return test_engine, session
 
         try:
-            with mock.patch('api.db.get_db_context', fake_get_db_context):
+            with mock.patch('api.db._get_db_session', fake_get_db_context):
                 # Run the test.
                 result = func(*a, **kw)
                 return result
         finally:
+            session.close()
             test_engine.dispose()
             conn = postgres_engine.connect()
             conn.execute(f'DROP DATABASE IF EXISTS {test_engine.engine.url.database}')
@@ -102,6 +125,11 @@ class ExtendedTestCase(unittest.TestCase):
 
     @staticmethod
     def assertDictContains(d1: dict, d2: dict):
+        if hasattr(d1, '__dict__'):
+            d1 = d1.__dict__
+        if hasattr(d2, '__dict__'):
+            d2 = d2.__dict__
+
         for k2 in d2.keys():
             assert d1, f'dict 1 is empty: {d1}'
             assert d2, f'dict 1 is empty: {d2}'
@@ -129,6 +157,10 @@ class ExtendedTestCase(unittest.TestCase):
     def assertItemsTruthyOrFalsey(self, items_list: List, expected_list: List):
         for d1, d2 in zip_longest(items_list, expected_list):
             for d2_key in d2:
+                if d1 is None:
+                    raise ValueError('d1 is None')
+                if d2 is None:
+                    raise ValueError('d2 is None')
                 self.assertTruth(d1[d2_key], d2[d2_key])
 
 

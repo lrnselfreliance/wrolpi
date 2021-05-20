@@ -88,7 +88,7 @@ def channel_post(_: Request, data: dict):
 def channel_update(_: Request, link: str, data: dict):
     channel = update_channel(data, link)
     return response.raw('', HTTPStatus.NO_CONTENT,
-                        headers={'Location': f'/api/videos/channels/{channel["link"]}'})
+                        headers={'Location': f'/api/videos/channels/{channel.link}'})
 
 
 @channel_bp.delete('/<link:string>')

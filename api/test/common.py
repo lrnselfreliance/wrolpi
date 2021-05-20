@@ -98,6 +98,7 @@ def wrap_test_db(func):
                 result = func(*a, **kw)
                 return result
         finally:
+            session.rollback()
             session.close()
             test_engine.dispose()
             conn = postgres_engine.connect()
@@ -276,6 +277,8 @@ def create_db_structure(structure):
                     for channel in structure:
                         channel = Channel(directory=str(tempdir / channel), name=channel)
                         session.add(channel)
+                        session.flush()
+                        session.refresh(channel)
                         refresh_channel_videos(channel, reporter)
 
                 return func(*args, **kwargs)

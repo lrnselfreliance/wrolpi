@@ -7,15 +7,17 @@ from queue import Queue
 from random import shuffle
 from typing import Tuple, List
 
-from dictorm import DictDB, Dict, And, Or
+from dictorm import Dict
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import NoResultFound
 from youtube_dl import YoutubeDL
 
 from api.common import logger, today, ProgressReporter, date_range
-from api.db import get_db_context
+from api.db import get_db_context, get_db_curs
 from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path, add_video_to_skip_list
-from .models import Video
+from .models import Video, Channel
 from ..errors import UnknownChannel, ChannelURLEmpty
 from ..vars import UNRECOVERABLE_ERRORS
 
@@ -35,11 +37,10 @@ def update_channel(channel: Dict = None, link: str = None):
     """
     with get_db_context() as (engine, session):
         if not channel:
-            Channel = db['channel']
-            channel = Channel.get_one(link=link)
+            channel = session.query(Channel).filter_by(link=link).one()
 
-    logger.info(f'Downloading video list for {channel["name"]} at {channel["url"]}  This may take several minutes.')
-    info = YDL.extract_info(channel['url'], download=False, process=False)
+    logger.info(f'Downloading video list for {channel.name} at {channel.url}  This may take several minutes.')
+    info = YDL.extract_info(channel.url, download=False, process=False)
     if 'url' in info:
         url = info['url']
         info = YDL.extract_info(url, download=False, process=False)
@@ -50,7 +51,7 @@ def update_channel(channel: Dict = None, link: str = None):
     # Youtube-DL may hand back a list of URLs, lets use the "Uploads" URL, if available.
     try:
         entries[0]['id']
-    except KeyError:
+    except Exception:
         for entry in entries:
             if entry['title'] == 'Uploads':
                 logger.info('Youtube-DL gave back a list of URLs, found the "Uploads" URL and using it.')
@@ -68,56 +69,50 @@ def update_channel(channel: Dict = None, link: str = None):
 
     with get_db_context(commit=True) as (engine, session):
         # Get the channel in this new context.
-        Channel = db['channel']
-        channel = Channel.get_one(id=channel['id'])
+        channel = session.query(Channel).filter_by(id=channel.id).one()
 
-        download_frequency = channel['download_frequency']
+        download_frequency = channel.download_frequency
 
-        channel['info_json'] = info
-        channel['info_date'] = datetime.now()
-        channel['next_download'] = today() + timedelta(seconds=download_frequency)
-        channel.flush()
+        channel.info_json = info
+        channel.info_date = datetime.now()
+        channel.next_download = today() + timedelta(seconds=download_frequency)
 
-        # Insert any new videos.
-        curs = db_conn.cursor()
-        query = 'SELECT source_id FROM video WHERE channel_id=%s AND source_id IS NOT NULL'
-        curs.execute(query, (channel['id'],))
-        known_source_ids = {i[0] for i in curs.fetchall()}
+        with get_db_curs() as curs:
+            # Insert any new videos.
+            query = 'SELECT source_id FROM video WHERE channel_id=%s AND source_id IS NOT NULL'
+            curs.execute(query, (channel.id,))
+            known_source_ids = {i[0] for i in curs.fetchall()}
 
         new_source_ids = all_source_ids.difference(known_source_ids)
 
-        logger.info(f'Got {len(new_source_ids)} new videos for channel {channel["name"]}')
-        Video = db['video']
-        channel_id = channel['id']
+        logger.info(f'Got {len(new_source_ids)} new videos for channel {channel.name}')
+        channel_id = channel.id
         for source_id in new_source_ids:
-            Video(source_id=source_id, channel_id=channel_id).flush()
+            session.add(Video(source_id=source_id, channel_id=channel_id))
 
 
 def update_channels(reporter: ProgressReporter, link: str = None):
     """Update all information for each channel.  (No downloads performed)"""
 
     with get_db_context() as (engine, session):
-        Channel = db['channel']
-
-        if Channel.count() == 0:
+        if session.query(Channel).count() == 0:
             raise UnknownChannel('No channels exist yet')
 
         if link:
-            channel = Channel.get_one(link=link)
-            if not channel:
+            try:
+                channel = session.query(Channel).filter_by(link=link).one()
+            except NoResultFound:
                 raise UnknownChannel(f'No channel with link: {link}')
             channels = [channel, ]
         else:
-            channels = list(Channel.get_where(
-                And(
-                    Channel['url'].IsNotNull(),
-                    Channel['url'] != '',
-                    Or(
-                        Channel['next_download'].IsNull(),
-                        Channel['next_download'] <= today(),
-                    )
+            channels = session.query(Channel).filter(
+                Channel.url != None,  # noqa
+                Channel.url != '',
+                or_(
+                    Channel.next_download == None,  # noqa
+                    Channel.next_download <= today(),
                 )
-            ))
+            ).all()
 
         if len(channels) == 0:
             logger.warning(f'All channels are up to date')
@@ -130,7 +125,7 @@ def update_channels(reporter: ProgressReporter, link: str = None):
 
     logger.debug(f'Getting info for {len(channels)} channels')
     for idx, channel in enumerate(channels):
-        reporter.send_progress(0, idx, f'Getting video list for {channel["name"]}')
+        reporter.send_progress(0, idx, f'Getting video list for {channel.name}')
         try:
             update_channel(channel)
         except Exception:
@@ -292,14 +287,15 @@ NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
                          r'(jpg|webp|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
 
 
-def upsert_video(session: Session, video_path: pathlib.Path, channel: Dict, idempotency: str = None, skip_captions=False,
-                 id_: str = None) -> Dict:
+def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel, idempotency: str = None,
+                 skip_captions=False,
+                 id_: str = None) -> Video:
     """
     Insert a video into the DB.  Also, find any meta-files near the video file and store them on the video row.
 
     If id_ is provided, update that entry.
     """
-    channel_dir = get_absolute_media_path(channel['directory'])
+    channel_dir = get_absolute_media_path(channel.directory)
     poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path, relative_to=channel_dir)
 
     # Video paths should be relative to the channel's directory
@@ -328,7 +324,7 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Dict, idem
             logger.warning(f'Failed to load JSON file to get duration: {path}')
 
     video_dict = dict(
-        channel_id=channel['id'],
+        channel_id=channel.id,
         description_path=str(description_path) if description_path else None,
         ext=ext,
         poster_path=str(poster_path) if poster_path else None,
@@ -336,11 +332,9 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Dict, idem
         title=title,
         upload_date=upload_date,
         video_path=str(video_path),
-        name=video_path.name,
         caption_path=str(caption_path) if caption_path else None,
         idempotency=idempotency,
         info_json_path=str(info_json_path) if info_json_path else None,
-        downloaded=True if video_path else False,
         duration=duration,
     )
 
@@ -350,7 +344,8 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Dict, idem
     else:
         video = Video(**video_dict)
 
-    session.flush(video)
+    session.add(video)
+    session.flush()
 
     if skip_captions is False and caption_path:
         # Process captions only when requested
@@ -396,30 +391,6 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
             upsert_video(db, video_path, channel, id_=id_)
 
     reporter.finish(1, 'All videos are downloaded')
-
-
-def distribute_download_days(start: date = None):
-    common_frequency = {}
-
-    # Start distributing on the day provided, or start today.
-    start = start or today()
-
-    with get_db_context(commit=True) as (engine, session):
-        Channel = db['channel']
-        # Sort channels by their download frequency.
-        for channel in Channel.get_where(Channel['next_download'].IsNotNull()):
-            download_frequency = channel['download_frequency']
-            try:
-                common_frequency[download_frequency].append(channel)
-            except KeyError:
-                common_frequency[download_frequency] = [channel, ]
-
-        for frequency, channels in common_frequency.items():
-            last_day = start + timedelta(seconds=frequency)
-            date_ranges = iter(date_range(start, last_day, len(channels)))
-            for channel in channels:
-                channel['next_download'] = next(date_ranges)
-                channel.flush()
 
 
 def main(args=None):

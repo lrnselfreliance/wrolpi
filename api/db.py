@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from typing import Tuple
+from typing import Tuple, ContextManager
 
 import psycopg2
 from sqlalchemy import create_engine
@@ -13,6 +13,14 @@ from api.vars import DOCKERIZED
 db_logger = logger.getChild(__name__)
 
 Base = declarative_base()
+
+
+def base_dict(self):
+    d = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+    return d
+
+
+Base.dict = base_dict
 
 
 def get_db_args(dbname: str = None):
@@ -50,20 +58,22 @@ def _get_db_session():
 
 
 @contextmanager
-def get_db_context(commit: bool = False) -> Tuple[Engine, Session]:
+def get_db_context(commit: bool = False) -> ContextManager[Tuple[Engine, Session]]:
     """Context manager that creates a DB session.  This will automatically rollback changes, unless `commit` is True."""
     local_engine, session = _get_db_session()
     Base.metadata.create_all(local_engine)
-    yield local_engine, session
-    if commit:
-        session.commit()
-    else:
+    try:
+        yield local_engine, session
+        if commit:
+            session.commit()
+    finally:
         session.rollback()
 
 
 @contextmanager
 def get_db_curs(commit: bool = False):
-    connection = engine.raw_connection()
+    local_engine, session = _get_db_session()
+    connection = local_engine.raw_connection()
     Base.metadata.create_all(engine)
     curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
     yield curs

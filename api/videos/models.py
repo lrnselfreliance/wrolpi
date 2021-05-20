@@ -1,4 +1,8 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON, Date, ARRAY
+from typing import List
+
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON, Date, ARRAY, ForeignKey
+from sqlalchemy.orm import relationship
+from sqlalchemy.orm.collections import InstrumentedList
 
 from api.db import Base
 
@@ -6,7 +10,8 @@ from api.db import Base
 class Video(Base):
     __tablename__ = 'video'
     id = Column(Integer, primary_key=True)
-    channel_id = Column(Integer)
+    channel_id = Column(Integer, ForeignKey('channel.id'))
+    channel = relationship('Channel', primaryjoin='Video.channel_id==Channel.id')
     idempotency = Column(String)
 
     # File paths
@@ -24,18 +29,18 @@ class Video(Base):
     source_id = Column(String)
     title = Column(String)
     upload_date = Column(DateTime)
-    validated_poster = Column(Boolean)
+    validated_poster = Column(Boolean, default=False)
     viewed = Column(DateTime)
 
     def __repr__(self):
-        return f'<Video(id={self.id}, title={self.title}, path={self.video_path})>'
+        return f'<Video(id={self.id}, title={self.title}, path={self.video_path}, channel={self.channel_id})>'
 
 
 class Channel(Base):
     __tablename__ = 'channel'
     id = Column(Integer, primary_key=True)
     name = Column(String)
-    link = Column(String)
+    link = Column(String, nullable=False)
     idempotency = Column(String)
     url = Column(String)
     match_regex = Column(String)
@@ -48,6 +53,8 @@ class Channel(Base):
 
     info_json = Column(JSON)
     info_date = Column(Date)
+
+    videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
 
     def __repr__(self):
         return f'<Channel(id={self.id}, name={self.name})>'

@@ -1,4 +1,4 @@
-from datetime import timedelta, date
+from datetime import timedelta
 from queue import Queue
 from unittest import mock
 from unittest.mock import MagicMock
@@ -7,7 +7,8 @@ from api.common import today, ProgressReporter
 from api.db import get_db_context
 from api.test.common import wrap_test_db, create_db_structure
 from api.vars import DEFAULT_DOWNLOAD_FREQUENCY
-from api.videos.downloader import update_channels, update_channel, distribute_download_days
+from api.videos.downloader import update_channels, update_channel
+from api.videos.models import Channel
 
 
 @wrap_test_db
@@ -25,15 +26,11 @@ def test_update_channels(tempdir):
     reporter = ProgressReporter(q, 2)
 
     with get_db_context(commit=True) as (engine, session):
-        Channel = db['channel']
-        channel1, channel2 = Channel.get_where().order_by('id')
-        channel1['url'] = channel2['url'] = 'some url'
-        channel1.flush()
-        channel2.flush()
+        channel1, channel2 = session.query(Channel).order_by(Channel.id).all()
+        channel1.url = channel2.url = 'some url'
 
     with get_db_context() as (engine, session):
-        Channel = db['channel']
-        channel1, channel2 = Channel.get_where().order_by('id')
+        channel1, channel2 = session.query(Channel).order_by(Channel.id).all()
         with mock.patch('api.videos.downloader.update_channel') as update_channel:
             update_channel: MagicMock
             update_channels(reporter)
@@ -44,10 +41,9 @@ def test_update_channels(tempdir):
             update_channel.assert_any_call(channel2)
 
     with get_db_context() as (engine, session):
-        Channel = db['channel']
-        channel1, channel2 = Channel.get_where().order_by('id')
-        channel1['next_download'] = today() + timedelta(days=1)
-        channel1.flush()
+        channel1, channel2 = session.query(Channel).order_by(Channel.id).all()
+        channel1.next_download = today() + timedelta(days=1)
+        session.commit()
 
         with mock.patch('api.videos.downloader.update_channel') as update_channel:
             update_channel: MagicMock
@@ -57,10 +53,9 @@ def test_update_channels(tempdir):
             update_channel.assert_called_once()
             update_channel.assert_called_with(channel2)
 
-        channel1['next_download'] = today() + timedelta(days=1)
-        channel1.flush()
-        channel2['next_download'] = today() + timedelta(days=1)
-        channel2.flush()
+        channel1.next_download = today() + timedelta(days=1)
+        channel2.next_download = today() + timedelta(days=1)
+        session.commit()
 
         with mock.patch('api.videos.downloader.update_channel') as update_channel:
             update_channel: MagicMock
@@ -78,11 +73,9 @@ def test_update_channels(tempdir):
 )
 def test_update_channel(tempdir):
     with get_db_context(commit=True) as (engine, session):
-        Channel = db['channel']
-        channel = Channel.get_one()
-        channel['download_frequency'] = DEFAULT_DOWNLOAD_FREQUENCY
-        assert channel['next_download'] is None
-        channel.flush()
+        channel = session.query(Channel).one()
+        channel.download_frequency = DEFAULT_DOWNLOAD_FREQUENCY
+        assert channel.next_download is None
 
     with mock.patch('api.videos.downloader.YDL') as YDL:
         YDL.extract_info.return_value = {
@@ -91,59 +84,6 @@ def test_update_channel(tempdir):
         update_channel(channel)
 
         with get_db_context() as (engine, session):
-            Channel = db['channel']
-            channel = Channel.get_one()
+            channel = session.query(Channel).one()
             # After and update, the next_download should be incremented by the download_frequency.
-            assert channel['next_download'] > today()
-
-
-@wrap_test_db
-@create_db_structure(
-    {
-        'channel1': [],
-        'channel2': [],
-        'channel3': [],
-        'channel4': [],
-        'channel5': [],
-        'channel6': [],
-        'channel7': [],
-        'channel8': [],
-        'channel9': [],
-        'channel10': [],
-    }
-)
-def test_distribute_download_days(tempdir):
-    with get_db_context(commit=True) as (engine, session):
-        Channel = db['channel']
-
-        curs = db_conn.cursor()
-        curs.execute('update channel set download_frequency = %s, next_download = %s', (
-            # Weekly downloads.
-            60 * 60 * 24 * 7,
-            # This will be used as the start of the date range.
-            date(2020, 9, 8)
-        ))
-
-        # Sometimes a channel hasn't been downloaded, or won't be downloaded.
-        channel10 = Channel.get_one(name='channel10')
-        channel10['next_download'] = None
-        channel10.flush()
-
-    distribute_download_days(date(2020, 9, 8))
-
-    with get_db_context() as (engine, session):
-        Channel = db['channel']
-        # Next downloads are spread out over the next week.
-        next_downloads = sorted([i['next_download'] for i in Channel.get_where(Channel['next_download'].IsNotNull())])
-        # There are more channels than days in a week, so their distribution is as even as possible.
-        assert next_downloads == [
-            date(2020, 9, 8),
-            date(2020, 9, 8),
-            date(2020, 9, 9),
-            date(2020, 9, 10),
-            date(2020, 9, 11),
-            date(2020, 9, 11),
-            date(2020, 9, 12),
-            date(2020, 9, 13),
-            date(2020, 9, 14),
-        ]
+            assert channel.next_download > today()

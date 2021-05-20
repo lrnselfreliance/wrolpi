@@ -8,6 +8,7 @@ from api.api import api_app
 from api.db import get_db_context
 from api.errors import API_ERRORS, WROLModeEnabled
 from api.test.common import wrap_test_db, TestAPI, create_db_structure
+from api.videos.models import Channel, Video
 from api.videos.video.lib import get_surrounding_videos, delete_video
 
 
@@ -20,28 +21,27 @@ class TestVideoFunctions(TestAPI):
         """
 
         with get_db_context(commit=True) as (engine, session):
-            Channel, Video = db['channel'], db['video']
-
-            channel1 = Channel().flush()
-            channel2 = Channel().flush()
-            channel3 = Channel().flush()
-            channel4 = Channel().flush()
+            for _ in range(4):
+                session.add(Channel())
+            channel1, channel2, channel3, channel4 = session.query(Channel).all()
 
             now = datetime.utcnow()
             second = timedelta(seconds=1)
 
             # The upload_date decides the order of the prev/next videos.
-            Video(title=f'vid1', channel_id=channel1['id'], upload_date=now).flush()
-            Video(title=f'vid2', channel_id=channel1['id'], upload_date=now + second).flush()
-            Video(title=f'vid3', channel_id=channel2['id'], upload_date=now + (second * 4)).flush()
-            Video(title=f'vid4', channel_id=channel1['id'], upload_date=now + (second * 3)).flush()
-            Video(title=f'vid5', channel_id=channel2['id'], upload_date=now + (second * 2)).flush()
-            Video(title=f'vid6', channel_id=channel2['id'], upload_date=now + (second * 5)).flush()
-            Video(title=f'vid7', channel_id=channel1['id']).flush()
-            Video(title=f'vid8', channel_id=channel2['id'], upload_date=now + (second * 7)).flush()
-            Video(title=f'vid9', channel_id=channel3['id'], upload_date=now + (second * 8)).flush()
-            Video(title=f'vid10', channel_id=channel4['id']).flush()
-            Video(title=f'vid11', channel_id=channel4['id']).flush()
+            session.add(Video(title=f'vid1', channel_id=channel1.id, upload_date=now))
+            session.add(Video(title=f'vid2', channel_id=channel1.id, upload_date=now + second))
+            session.add(Video(title=f'vid3', channel_id=channel2.id, upload_date=now + (second * 4)))
+            session.add(Video(title=f'vid4', channel_id=channel1.id, upload_date=now + (second * 3)))
+            session.add(Video(title=f'vid5', channel_id=channel2.id, upload_date=now + (second * 2)))
+            session.add(Video(title=f'vid6', channel_id=channel2.id, upload_date=now + (second * 5)))
+            session.add(Video(title=f'vid7', channel_id=channel1.id))
+            session.add(Video(title=f'vid8', channel_id=channel2.id, upload_date=now + (second * 7)))
+            session.add(Video(title=f'vid9', channel_id=channel3.id, upload_date=now + (second * 8)))
+            session.add(Video(title=f'vid10', channel_id=channel4.id))
+            session.add(Video(title=f'vid11', channel_id=channel4.id))
+
+            session.commit()
 
             tests = [
                 # Channel 1's videos were inserted in upload_date order.
@@ -60,8 +60,8 @@ class TestVideoFunctions(TestAPI):
             ]
 
             for id_, (prev_title, next_title) in tests:
-                video = Video.get_one(id=id_)
-                prev_video, next_video = get_surrounding_videos(db, id_, video['channel_id'])
+                video = session.query(Video).filter_by(id=id_).one()
+                prev_video, next_video = get_surrounding_videos(session, id_, video.channel_id)
 
                 if prev_title is None:
                     self.assertIsNone(prev_video)
@@ -122,32 +122,27 @@ class TestVideoFunctions(TestAPI):
     })
     def test_delete_video(self, tempdir: pathlib.Path):
         with get_db_context(commit=True) as (engine, session):
-            Channel, Video = db['channel'], db['video']
-
-            channel1 = Channel.get_one(name='channel1')
-            channel2 = Channel.get_one(name='channel2')
-            vid1, vid2 = Video.get_where().order_by('video_path ASC')
+            channel1 = session.query(Channel).filter_by(name='channel1').one()
+            channel2 = session.query(Channel).filter_by(name='channel2').one()
+            vid1, vid2 = session.query(Video).order_by(Video.video_path).all()
 
             # No videos have been deleted yet.
-            self.assertIsNone(channel1['skip_download_videos'])
-            self.assertIsNone(channel2['skip_download_videos'])
+            self.assertIsNone(channel1.skip_download_videos)
+            self.assertIsNone(channel2.skip_download_videos)
             self.assertTrue((tempdir / 'channel1/vid1.mp4').is_file())
 
             delete_video(vid1)
 
-            channel1 = Channel.get_one(name='channel1')
+            channel1 = session.query(Channel).filter_by(name='channel1').one()
             # Video was added to skip list.
-            self.assertEqual(len(channel1['skip_download_videos']), 1)
+            self.assertEqual(len(channel1.skip_download_videos), 1)
             # Deleting a video leaves it's entry in the DB, but its files are deleted.
-            self.assertEqual(Video.count(), 2)
+            self.assertEqual(session.query(Video).count(), 2)
             self.assertFalse((tempdir / 'channel1/vid1.mp4').is_file())
             self.assertTrue((tempdir / 'channel2/vid2.mp4').is_file())
 
             delete_video(vid2)
 
-            self.assertEqual(Video.count(), 2)
+            self.assertEqual(session.query(Video).count(), 2)
             self.assertFalse((tempdir / 'channel1/vid1.mp4').is_file())
             self.assertFalse((tempdir / 'channel2/vid2.mp4').is_file())
-
-            # A video can be deleted again.  This is because its only marked as deleted.
-            delete_video(vid2)

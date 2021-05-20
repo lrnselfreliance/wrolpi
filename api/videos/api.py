@@ -34,7 +34,7 @@ from api.common import create_websocket_feed, get_sanic_url, \
 from api.videos.channel.api import channel_bp
 from api.videos.video.api import video_bp
 from .common import logger
-from .downloader import update_channels, download_all_missing_videos, distribute_download_days
+from .downloader import update_channels, download_all_missing_videos
 from .lib import process_video_meta_data, _refresh_videos, get_statistics
 from .schema import StreamResponse, \
     JSONErrorResponse, FavoriteRequest, FavoriteResponse, VideosStatisticsResponse
@@ -143,20 +143,6 @@ async def download(_, link: str = None):
     asyncio.ensure_future(coro)
     download_logger.debug('do_download scheduled')
     return response.json({'code': 'stream-started', 'stream_url': stream_url})
-
-
-@content_bp.post(':distribute_download_days')
-@validate_doc(
-    summary='Distribute download days',
-    produces=StreamResponse,
-    responses=[
-        (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
-    ],
-)
-@wrol_mode_check
-async def post_distribute_download_days(_):
-    distribute_download_days()
-    return response.empty()
 
 
 @wraps(_refresh_videos)

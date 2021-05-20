@@ -16,6 +16,7 @@ from api.db import get_db_context
 from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
 from api.test.common import create_db_structure, build_test_directories, wrap_test_db
 from api.videos.common import convert_image, bulk_validate_posters
+from api.videos.models import Video, Channel
 
 # Attach the default routes
 attach_routes(api_app)
@@ -159,13 +160,12 @@ def test_create_db_structure(_structure, paths):
             assert path.is_file()
 
         with get_db_context() as (engine, session):
-            Channel = db['channel']
             for channel_name in _structure:
-                channel = Channel.get_one(name=channel_name)
+                channel = session.query(Channel).filter_by(name=channel_name).one()
                 assert (tempdir / channel_name).is_dir()
                 assert channel
-                assert channel['directory'] == str(tempdir / channel_name)
-                assert len(list(channel['videos'])) == len([i for i in _structure[channel_name] if i.endswith('mp4')])
+                assert channel.directory == str(tempdir / channel_name)
+                assert len(channel.videos) == len([i for i in _structure[channel_name] if i.endswith('mp4')])
 
     test_func()
 
@@ -303,33 +303,31 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
         assert Image.open(webp_fh).format == 'WEBP'
 
     with get_db_context() as (engine, session):
-        Video = db['video']
-        vid1 = Video.get_one(poster_path='vid1.jpg')
-        assert vid1['validated_poster'] is False
+        vid1 = session.query(Video).filter_by(poster_path='vid1.jpg').one()
+        assert vid1.validated_poster is False
 
-        vid2 = Video.get_one(poster_path='vid2.webp')
-        assert vid2['validated_poster'] is False
+        vid2 = session.query(Video).filter_by(poster_path='vid2.webp').one()
+        assert vid2.validated_poster is False
 
     # Convert the WEBP image.  convert_image() should only be called once.
     mocked_convert_image = Mock(wraps=convert_image)
     with mock.patch('api.videos.common.convert_image', mocked_convert_image):
-        video_ids = [vid1['id'], vid2['id']]
+        video_ids = [vid1.id, vid2.id]
         bulk_validate_posters(video_ids)
 
     mocked_convert_image.assert_called_once_with(webp, tempdir / 'channel2/vid2.jpg')
 
     with get_db_context() as (engine, session):
-        Video = db['video']
         # Get the video by ID because it's poster is now a JPEG.
-        vid2 = Video.get_one(id=vid2['id'])
-        assert vid2['poster_path'] == 'vid2.jpg'
-        assert all('webp' not in i['poster_path'] for i in Video.get_where())
-        assert vid2['validated_poster'] is True
+        vid2 = session.query(Video).filter_by(id=vid2.id).one()
+        assert vid2.poster_path == 'vid2.jpg'
+        assert all('webp' not in i.poster_path for i in session.query(Video).all())
+        assert vid2.validated_poster is True
 
         # Vid1's image was validated, but not converted.
-        vid1 = Video.get_one(id=vid1['id'])
-        assert vid1['poster_path'] == 'vid1.jpg'
-        assert vid1['validated_poster'] is True
+        vid1 = session.query(Video).filter_by(id=vid1.id).one()
+        assert vid1.poster_path == 'vid1.jpg'
+        assert vid1.validated_poster is True
 
     # Old webp was removed
     assert not webp.is_file()
@@ -345,7 +343,7 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
     # Calling convert again has no effect.
     mocked_convert_image.reset_mock()
     with mock.patch('api.videos.common.convert_image', mocked_convert_image):
-        video_ids = [vid1['id'], vid2['id']]
+        video_ids = [vid1.id, vid2.id]
         bulk_validate_posters(video_ids)
 
     mocked_convert_image.assert_not_called()

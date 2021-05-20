@@ -10,6 +10,7 @@ from pint import Quantity
 from api.db import get_db_context, Base
 from api.inventory.inventory import unit_registry, get_items, get_inventories
 from api.vars import PROJECT_DIR
+from .models import Inventory, Item
 
 MY_DIR: Path = Path(__file__).parent
 
@@ -144,8 +145,7 @@ def save_inventories_file(path: str = None):
 
     inventories = []
     for inventory in get_inventories():
-        inventory['items'] = [dict(i) for i in get_items(inventory['id'])]
-        inventories.append(dict(inventory))
+        inventories.append(inventory.dict())
 
     if path.is_file():
         # Check that we aren't overwriting our inventories with empty inventories.
@@ -174,22 +174,23 @@ def import_inventories_file(path: str = None):
         raise ValueError('Inventories file does not contain the expected "inventories" list.')
 
     inventories = get_inventories()
-    inventories_names = [i['name'] for i in inventories]
+    inventories_names = {i.name for i in inventories}
     new_inventories = [i for i in contents['inventories'] if i['name'] not in inventories_names]
     with get_db_context(commit=True) as (engine, session):
-        Inventory, Item = db['inventory'], db['item']
         for inventory in new_inventories:
-            # Remove the id, we will just use the new one provided.
-            del inventory['id']
-
             items = inventory['items']
             inventory = Inventory(
                 name=inventory['name'],
                 created_at=inventory['created_at'],
                 deleted_at=inventory['deleted_at'],
-            ).flush()
+            )
+            session.add(inventory)
+            # Get the Inventory from the DB so we can use it's ID.
+            session.flush()
+            session.refresh(inventory)
 
             for item in items:
-                del item['id']
                 del item['inventory_id']
-                item = Item(inventory_id=inventory['id'], **item).flush()
+                item = Item(inventory_id=inventory.id, **item)
+                item.inventory_id = inventory.id
+                session.add(item)

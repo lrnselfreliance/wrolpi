@@ -1,20 +1,21 @@
 from typing import List
 
+from sqlalchemy.orm.exc import NoResultFound
+
 from api.common import save_settings_config, sanitize_link
-from api.db import get_db_context
+from api.db import get_db_context, get_db_curs
 from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.vars import DEFAULT_DOWNLOAD_FREQUENCY
 from api.videos.common import get_relative_to_media_directory, make_media_directory, check_for_channel_conflicts
 from api.videos.lib import get_channels_config
+from api.videos.models import Channel, Video
 
 
 async def get_minimal_channels() -> List[dict]:
     """
     Get the minimum amount of information necessary about all channels.
     """
-    with get_db_context() as (engine, session):
-        curs = db.get_cursor()
-
+    with get_db_curs() as curs:
         # Get all channels, even if they don't have videos.
         query = '''
             SELECT
@@ -52,73 +53,67 @@ async def get_minimal_channels() -> List[dict]:
 
 
 def delete_channel(link):
-    with get_db_context() as (engine, session):
-        Channel = db['channel']
-        channel = Channel.get_one(link=link)
-        if not channel:
+    with get_db_context(commit=True) as (engine, session):
+        try:
+            channel = session.query(Channel).filter_by(link=link).one()
+        except NoResultFound:
             raise UnknownChannel()
-        with db.transaction(commit=True):
-            # Delete all videos in this channel
-            curs = db.get_cursor()
-            query = 'DELETE FROM video WHERE channel_id = %s'
-            curs.execute(query, (channel['id'],))
 
-            # Finally, delete the channel
-            channel.delete()
+        # Delete all videos for this channel, then the channel itself.
+        session.query(Video).filter_by(channel_id=channel.id).delete()
+        session.query(Channel).filter_by(id=channel.id).delete()
 
         # Save these changes to the local.yaml as well
-        channels = get_channels_config(db)
+        channels = get_channels_config(session)
         save_settings_config(channels)
 
 
 def update_channel(data, link):
-    with get_db_context() as (engine, session):
-        Channel = db['channel']
-        with db.transaction(commit=True):
-            channel = Channel.get_one(link=link)
+    with get_db_context(commit=True) as (engine, session):
+        try:
+            channel = session.query(Channel).filter_by(link=link).one()
+        except NoResultFound:
+            raise UnknownChannel()
 
-            if not channel:
-                raise UnknownChannel()
-
-            # Only update directory if it was empty
-            if data.get('directory') and not channel['directory']:
-                try:
+        # Only update directory if it was empty
+        if data.get('directory') and not channel.directory:
+            try:
+                data['directory'] = get_relative_to_media_directory(data['directory'])
+            except UnknownDirectory:
+                if data['mkdir']:
+                    make_media_directory(data['directory'])
                     data['directory'] = get_relative_to_media_directory(data['directory'])
-                except UnknownDirectory:
-                    if data['mkdir']:
-                        make_media_directory(data['directory'])
-                        data['directory'] = get_relative_to_media_directory(data['directory'])
-                    else:
-                        raise
+                else:
+                    raise
 
-            if 'directory' in data:
-                data['directory'] = str(data['directory'])
+        if 'directory' in data:
+            data['directory'] = str(data['directory'])
 
-            if 'download_frequency' in data:
-                try:
-                    data['download_frequency'] = int(data['download_frequency'])
-                except ValueError:
-                    raise APIError('Invalid download frequency')
+        if 'download_frequency' in data:
+            try:
+                data['download_frequency'] = int(data['download_frequency'])
+            except ValueError:
+                raise APIError('Invalid download frequency')
 
-            if data.get('match_regex') in ('None', 'null'):
-                data['match_regex'] = None
+        if data.get('match_regex') in ('None', 'null'):
+            data['match_regex'] = None
 
-            # Verify that the URL/Name/Link aren't taken
-            check_for_channel_conflicts(
-                db=db,
-                id=channel.get('id'),
-                url=data.get('url'),
-                name=data.get('name'),
-                link=data.get('link'),
-                directory=data.get('directory'),
-            )
+        # Verify that the URL/Name/Link aren't taken
+        check_for_channel_conflicts(
+            session,
+            id=channel.id,
+            url=data.get('url'),
+            name=data.get('name'),
+            link=data.get('link'),
+            directory=data.get('directory'),
+        )
 
-            # Apply the changes now that we've OK'd them
-            channel.update(data)
-            channel.flush()
+        # Apply the changes now that we've OK'd them
+        for key, value in data.items():
+            setattr(channel, key, value)
 
         # Save these changes to the local.yaml as well
-        channels = get_channels_config(db)
+        channels = get_channels_config(session)
         save_settings_config(channels)
 
     return channel
@@ -126,21 +121,19 @@ def update_channel(data, link):
 
 def get_channel(link) -> dict:
     with get_db_context() as (engine, session):
-        Channel = db['channel']
-        channel = Channel.get_one(link=link)
-        if not channel:
+        try:
+            channel = session.query(Channel).filter_by(link=link).one()
+        except NoResultFound:
             raise UnknownChannel()
-        return dict(channel)
+        return channel.dict()
 
 
 def create_channel(data):
     with get_db_context() as (engine, session):
-        Channel = db['channel']
-
         # Verify that the URL/Name/Link aren't taken
         try:
             check_for_channel_conflicts(
-                db,
+                session,
                 url=data.get('url'),
                 name=data['name'],
                 link=sanitize_link(data['name']),
@@ -149,19 +142,21 @@ def create_channel(data):
         except APIError as e:
             raise ValidationError from e
 
-        with db.transaction(commit=True):
-            channel = Channel(
-                name=data['name'],
-                url=data.get('url'),
-                match=data.get('match_regex'),
-                link=sanitize_link(data['name']),
-                directory=str(data['directory']),
-                download_frequency=data.get('download_frequency', DEFAULT_DOWNLOAD_FREQUENCY),
-            )
-            channel.flush()
+        channel = Channel(
+            name=data['name'],
+            url=data.get('url'),
+            match_regex=data.get('match_regex'),
+            link=sanitize_link(data['name']),
+            directory=str(data['directory']),
+            download_frequency=data.get('download_frequency', DEFAULT_DOWNLOAD_FREQUENCY),
+        )
+        session.add(channel)
+        session.commit()
+        session.flush()
+        session.refresh(channel)
 
         # Save these changes to the local.yaml as well
-        channels = get_channels_config(db)
+        channels = get_channels_config(session)
         save_settings_config(channels)
 
-        return dict(channel)
+        return channel.dict()

@@ -15,10 +15,11 @@ logger = logger.getChild(__name__)
 def get_inventories() -> List[Base]:
     with get_db_context() as (engine, session):
         inventories = session.query(Inventory).filter(
-            Inventory.deleted_at == None
+            Inventory.deleted_at == None,  # noqa
         ).order_by(
-            Inventory.viewed_at.desc()
+            Inventory.viewed_at.desc(),
         ).all()
+        inventories = list(inventories)
         return inventories
 
 
@@ -26,18 +27,16 @@ IGNORED_INVENTORY_KEYS = {'viewed_at', 'created_at', 'deleted_at'}
 
 
 def _remove_conflicting_deleted_inventory(inventory: dict, session: Session):
+    """
+    Remove any Inventories that share the inventory's name, but are marked as deleted.
+    """
     inventories = session.query(Inventory).filter(
-        Inventory.deleted_at != None,
+        Inventory.deleted_at != None,  # noqa
         Inventory.name == inventory['name'],
     ).all()
-    removed = False
-    for inventory in inventories:
-        removed = True
-        if inventory.items:
-            for item in inventory.items():
-                session.delete(item)
-        session.delete(inventory)
-    return removed
+    for i in inventories:
+        session.query(Item).filter_by(inventory_id=i.id).delete()
+        session.query(Inventory).filter_by(id=i.id).delete()
 
 
 def save_inventory(inventory):
@@ -52,18 +51,17 @@ def update_inventory(inventory_id: int, inventory: dict):
     inventory = {k: v for k, v in inventory.items() if k not in IGNORED_INVENTORY_KEYS}
 
     with get_db_context(commit=True) as (engine, session):
-        _remove_conflicting_deleted_inventory(inventory, db)
+        _remove_conflicting_deleted_inventory(inventory, session)
 
-        i = Inventory.get_one(id=inventory_id)
-        i.update(inventory)
-        i.flush()
+        i = session.query(Inventory).filter_by(id=inventory_id).one()
+        for key, value in inventory.items():
+            setattr(i, key, value)
 
 
 def delete_inventory(inventory_id: int):
     with get_db_context(commit=True) as (engine, session):
-        inventory = Inventory.get_one(id=inventory_id)
-        inventory['deleted_at'] = datetime.now()
-        inventory.flush()
+        inventory = session.query(Inventory).filter_by(id=inventory_id).one()
+        inventory.deleted_at = datetime.now()
 
 
 def get_categories() -> List[Tuple[int, str, str]]:
@@ -89,7 +87,7 @@ def get_items(inventory_id: int) -> List[Base]:
     with get_db_context() as (engine, session):
         results = session.query(Item).filter(
             Item.inventory_id == inventory_id,
-            Item.deleted_at == None,
+            Item.deleted_at == None,  # noqa
         ).all()
         return results
 

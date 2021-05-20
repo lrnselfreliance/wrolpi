@@ -14,8 +14,9 @@ from api.errors import UnknownFile
 from api.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI, create_db_structure
 from api.videos.api import refresh_queue
 from api.videos.downloader import upsert_video
-
 # Attach the default routes
+from api.videos.models import Channel, Video
+
 attach_routes(api_app)
 
 
@@ -220,8 +221,6 @@ class TestVideoAPI(TestAPI):
                 tempfile.TemporaryDirectory() as channel_dir:
             channel_path = pathlib.Path(channel_dir)
 
-            Video, Channel = db['video'], db['channel']
-
             # Files in subdirectories should be found and handled properly.
             subdir = channel_path / 'subdir'
             subdir.mkdir()
@@ -245,21 +244,26 @@ class TestVideoAPI(TestAPI):
             poster2.touch()
 
             # Create a channel, associate videos with it.
-            channel = Channel(directory=channel_dir).flush()
-            video1 = upsert_video(db, vid1, channel)
-            video2 = upsert_video(db, vid2, channel)
-            db_conn.commit()
-            self.assertEqual({i['video_path'] for i in channel['videos']}, {'subdir/' + vid1.name, vid2.name})
+            channel = Channel(directory=channel_dir)
+            session.add(channel)
+            session.flush()
+            session.refresh(channel)
+            video1 = upsert_video(session, vid1, channel)
+            video2 = upsert_video(session, vid2, channel)
+            session.commit()
+            self.assertEqual({i.video_path for i in channel.videos}, {'subdir/' + vid1.name, vid2.name})
 
             # Poster files were found.
-            self.assertEqual(video1['poster_path'], 'subdir/' + poster1.name)
-            self.assertEqual(video2['poster_path'], poster2.name)
+            self.assertEqual(video1.poster_path, 'subdir/' + poster1.name)
+            self.assertEqual(video2.poster_path, poster2.name)
 
             # Add a bogus file, this should be removed during the refresh
-            self.assertNotIn('foo', {i['video_path'] for i in channel['videos']})
-            Video(video_path='foo', channel_id=channel['id']).flush()
-            self.assertIn('foo', {i['video_path'] for i in channel['videos']})
-            self.assertEqual(len(channel['videos']), 3)
+            self.assertNotIn('foo', {i.video_path for i in channel.videos})
+            session.add(Video(video_path='foo', channel_id=channel.id))
+            session.flush()
+            session.refresh(channel)
+            self.assertIn('foo', {i.video_path for i in channel.videos})
+            self.assertEqual(len(channel.videos), 3)
 
             # Add a video that isn't in the DB, it should be found and any meta files associated with it
             vid3 = pathlib.Path(channel_path / 'channel name_20000103_cdefghijklm_title.flv')
@@ -276,7 +280,7 @@ class TestVideoAPI(TestAPI):
             api_app.test_client.post('/api/videos:refresh')
 
             # Bogus file was removed
-            self.assertNotIn('foo', {i['video_path'] for i in channel['videos']})
+            self.assertNotIn('foo', {i.video_path for i in channel.videos})
 
             # Final channel video list we built
             expected = {
@@ -285,7 +289,7 @@ class TestVideoAPI(TestAPI):
                 (vid3.name, None, description3.name),  # no poster
             }
             self.assertEqual(
-                {(i['video_path'], i['poster_path'], i['description_path']) for i in channel['videos']},
+                {(i.video_path, i.poster_path, i.description_path) for i in channel.videos},
                 expected
             )
 
@@ -298,33 +302,38 @@ class TestVideoAPI(TestAPI):
     @wrap_test_db
     def test_get_channel_videos(self):
         with get_db_context(commit=True) as (engine, session):
-            Channel, Video = db['channel'], db['video']
-            channel1 = Channel(name='Foo', link='foo').flush()
-            channel2 = Channel(name='Bar', link='bar').flush()
+            channel1 = Channel(name='Foo', link='foo')
+            channel2 = Channel(name='Bar', link='bar')
+            session.add(channel1)
+            session.add(channel2)
+            session.flush()
+            session.refresh(channel1)
+            session.refresh(channel2)
 
         # Channels don't have videos yet
-        d = dict(channel_link=channel1['link'])
+        d = dict(channel_link=channel1.link)
         request, response = api_app.test_client.post(f'/api/videos/search', data=json.dumps(d))
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 0
 
         with get_db_context(commit=True) as (engine, session):
-            Channel, Video = db['channel'], db['video']
-            Video(title='vid1', channel_id=channel2['id'], video_path='foo').flush()
-            Video(title='vid2', channel_id=channel1['id'], video_path='foo').flush()
+            vid1 = Video(title='vid1', channel_id=channel2.id, video_path='foo')
+            vid2 = Video(title='vid2', channel_id=channel1.id, video_path='foo')
+            session.add(vid1)
+            session.add(vid2)
 
         # Videos are gotten by their respective channels
         request, response = api_app.test_client.post(f'/api/videos/search', data=json.dumps(d))
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 1
         assert response.json['totals']['videos'] == 1
-        self.assertDictContains(response.json['videos'][0], dict(id=2, title='vid2', channel_id=channel1['id']))
+        self.assertDictContains(response.json['videos'][0], dict(id=2, title='vid2', channel_id=channel1.id))
 
-        d = dict(channel_link=channel2['link'])
+        d = dict(channel_link=channel2.link)
         request, response = api_app.test_client.post(f'/api/videos/search', data=json.dumps(d))
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 1
-        self.assertDictContains(response.json['videos'][0], dict(id=1, title='vid1', channel_id=channel2['id']))
+        self.assertDictContains(response.json['videos'][0], dict(id=1, title='vid1', channel_id=channel2.id))
 
     @wrap_test_db
     def test_get_video(self):
@@ -337,37 +346,44 @@ class TestVideoAPI(TestAPI):
 
         with get_db_context(commit=True) as (engine, session), \
                 mock.patch('api.videos.common.get_absolute_video_info_json', raise_unknown_file):
-            Channel, Video = db['channel'], db['video']
-            channel = Channel(name='Foo', link='foo').flush()
+            channel = Channel(name='Foo', link='foo')
+            session.add(channel)
+            session.flush()
+            session.refresh(channel)
             now = datetime.utcnow()
-            Video(title='vid1', channel_id=channel['id'], upload_date=now).flush()
-            Video(title='vid2', channel_id=channel['id'], upload_date=now + timedelta(seconds=1)).flush()
+            session.add(Video(title='vid1', channel_id=channel.id, upload_date=now))
+            session.add(Video(title='vid2', channel_id=channel.id, upload_date=now + timedelta(seconds=1)))
 
-            # Test that a 404 is returned when no video exists
-            _, response = api_app.test_client.get('/api/videos/video/10')
-            assert response.status_code == HTTPStatus.NOT_FOUND, response.json
-            assert response.json == {'code': 1, 'api_error': 'The video could not be found.', 'message': ''}
+        # Test that a 404 is returned when no video exists
+        _, response = api_app.test_client.get('/api/videos/video/10')
+        assert response.status_code == HTTPStatus.NOT_FOUND, response.json
+        assert response.json == {'code': 1, 'api_error': 'The video could not be found.', 'message': ''}
 
-            # Get the video info we inserted
-            _, response = api_app.test_client.get('/api/videos/video/1')
-            assert response.status_code == HTTPStatus.OK, response.json
-            self.assertDictContains(response.json['video'], {'title': 'vid1'})
+        # Get the video info we inserted
+        _, response = api_app.test_client.get('/api/videos/video/1')
+        assert response.status_code == HTTPStatus.OK, response.json
+        self.assertDictContains(response.json['video'], {'title': 'vid1'})
 
-            # The next video is included.
-            self.assertIsNone(response.json['prev'])
-            self.assertDictContains(response.json['next'], {'title': 'vid2'})
+        # The next video is included.
+        self.assertIsNone(response.json['prev'])
+        self.assertDictContains(response.json['next'], {'title': 'vid2'})
 
     @wrap_test_db
     def test_get_channel_videos_pagination(self):
         with get_db_context(commit=True) as (engine, session):
-            Channel, Video = db['channel'], db['video']
-            channel1 = Channel(name='Foo', link='foo').flush()
+            channel1 = Channel(name='Foo', link='foo')
+            session.add(channel1)
+            session.flush()
+            session.refresh(channel1)
 
             for i in range(50):
-                Video(title=f'Foo.Video{i}', channel_id=channel1['id'], video_path='foo').flush()
+                session.add(Video(title=f'Foo.Video{i}', channel_id=channel1.id, video_path='foo'))
 
-            channel2 = Channel(name='Bar', link='bar').flush()
-            Video(title='vid2', channel_id=channel2['id'], video_path='foo').flush()
+            channel2 = Channel(name='Bar', link='bar')
+            session.add(channel2)
+            session.flush()
+            session.refresh(channel2)
+            session.add(Video(title='vid2', channel_id=channel2.id, video_path='foo'))
 
         # Get first, second, third, and empty pages of videos.
         tests = [
@@ -379,7 +395,7 @@ class TestVideoAPI(TestAPI):
         ]
         last_ids = []
         for offset, video_count in tests:
-            d = dict(channel_link=channel1['link'], order_by='id', offset=offset)
+            d = dict(channel_link=channel1.link, order_by='id', offset=offset)
             _, response = api_app.test_client.post(f'/api/videos/search', data=json.dumps(d))
             assert response.status_code == HTTPStatus.OK
             assert len(response.json['videos']) == video_count
@@ -401,9 +417,8 @@ class TestVideoAPI(TestAPI):
             ('5', ''),
         ]
         with get_db_context(commit=True) as (engine, session):
-            Video = db['video']
             for title, caption in videos:
-                Video(title=title, caption=caption, video_path='foo').flush()
+                session.add(Video(title=title, caption=caption, video_path='foo'))
 
         def do_search(search_str, limit=20):
             d = json.dumps({'search_str': search_str, 'limit': limit})

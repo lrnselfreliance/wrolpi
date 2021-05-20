@@ -105,37 +105,37 @@ class TestInventory(ExtendedTestCase):
 
         # Cannot update the name to a name that is already used.
         with get_db_context() as (engine, session):
-            i = Inventory.get_one(name='Super Inventory')
+            i = session.query(Inventory).filter_by(name='Super Inventory').one()
             inventory['name'] = 'New Inventory'
-            self.assertRaises(sqlalchemy.exc.IntegrityError, update_inventory, i['id'], inventory)
+            self.assertRaises(sqlalchemy.exc.IntegrityError, update_inventory, i.id, inventory)
 
         # Add some items to "New Inventory"
         with get_db_context(commit=True) as (engine, session):
-            before_item_count = Item.count()
-            Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
-            Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
-            Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
-            Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
+            before_item_count = session.query(Item).count()
+            session.add(Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1))
+            session.add(Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1))
+            session.add(Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1))
+            session.add(Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1))
 
         # You can rename a inventory to a conflicting name, if the other inventory is marked as deleted.
         with get_db_context(commit=True) as (engine, session):
             delete_inventory(2)
             # Check that the items from the deleted Inventory were not deleted, YET.
-            self.assertEqual(before_item_count + 4, Item.count())
+            self.assertEqual(before_item_count + 4, session.query(Item).count())
 
-            i = Inventory.get_one(name='Super Inventory')
+            i = session.query(Inventory).filter_by(name='Super Inventory').one()
             inventory['name'] = 'New Inventory'
-            update_inventory(i['id'], inventory)
+            update_inventory(i.id, inventory)
 
             # Check that the items from the deleted Inventory were really deleted.
-            self.assertEqual(before_item_count, Item.count())
+            self.assertEqual(before_item_count, session.query(Item).count())
 
     @wrap_test_db
     def test_get_inventory_by_category(self):
         self.prepare()
 
         expected = [
-            dict(category='fruits', total_size=Decimal('4.375'), unit='pound'),
+            dict(category='fruits', total_size=Decimal('4.39375'), unit='pound'),
             dict(category='grains', total_size=Decimal('149.25'), unit='pound'),
             dict(category='meats', total_size=Decimal('20'), unit='pound'),
         ]
@@ -150,7 +150,7 @@ class TestInventory(ExtendedTestCase):
         self.prepare()
 
         expected = [
-            dict(category='fruits', subcategory='canned', total_size=Decimal('4.375'), unit='pound'),
+            dict(category='fruits', subcategory='canned', total_size=Decimal('4.39375'), unit='pound'),
             dict(category='grains', subcategory='rice', total_size=Decimal('8'), unit='pound'),
             dict(category='grains', subcategory='wheat', total_size=Decimal('141.25'), unit='pound'),
             dict(category='meats', subcategory='canned', total_size=Decimal('20'), unit='pound'),
@@ -170,7 +170,7 @@ class TestInventory(ExtendedTestCase):
             dict(brand='Chewy', name='Chicken Breast', total_size=Decimal('8'), unit='pound'),
             dict(brand='Ricey', name='White Rice', total_size=Decimal('8'), unit='pound'),
             dict(brand='Vibrant', name='Peaches', total_size=Decimal('3'), unit='pound'),
-            dict(brand='Vibrant', name='Pineapple', total_size=Decimal('1.375'), unit='pound'),
+            dict(brand='Vibrant', name='Pineapple', total_size=Decimal('1.39375'), unit='pound'),
             dict(brand='Wheaters', name='Red Wheat', total_size=Decimal('141.25'), unit='pound'),
         ]
 
@@ -191,22 +191,22 @@ class TestInventory(ExtendedTestCase):
 
             # Clear out the DB so the import will be tested
             with get_db_context(commit=True) as (engine, session):
-                curs = db_conn.cursor()
-                curs.execute('DELETE FROM item')
-                curs.execute('DELETE FROM inventory')
+                session.query(Item).delete()
+                session.query(Inventory).delete()
 
             import_inventories_file(tf.name)
 
         inventories = get_inventories()
         self.assertEqual(len(inventories), 1)
         # ID has increased because we did not reset the sequence when deleting from the table.
-        self.assertDictContains(inventories[0], {'id': 2, 'name': 'Food Storage'})
+        self.assertEqual(inventories[0].id, 2)
+        self.assertEqual(inventories[0].name, 'Food Storage')
 
         # All items in the DB match those in the test list, except for the "deleted" item.
-        self.assertEqual(len(inventories[0]['items']), len(TEST_ITEMS) - 1)
-        test_items = {(i['name'], i['brand'], i['count']) for i in TEST_ITEMS}
-        test_items.remove(('deleted', 'deleted', 1))
-        db_items = {(i['name'], i['brand'], i['count']) for i in inventories[0]['items']}
+        non_deleted_items = [i for i in inventories[0].items if i.deleted_at is None]
+        self.assertEqual(len(non_deleted_items), len(TEST_ITEMS) - 1)
+        test_items = {(i['name'], i['brand'], i['count']) for i in TEST_ITEMS[:-1]}
+        db_items = {(i.name, i.brand, i.count) for i in non_deleted_items}
         self.assertEqual(test_items, db_items)
 
 
@@ -282,4 +282,5 @@ length = gallon.dimensionality
     ]
 )
 def test_sum_by_key(items, expected):
-    assert sum_by_key(items, lambda i: (i['category'],)) == expected
+    items = [Item(**i) for i in items]
+    assert sum_by_key(items, lambda i: (i.category,)) == expected

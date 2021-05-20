@@ -9,6 +9,7 @@ from dictorm import Dict
 from api.common import logger
 from api.errors import UnknownCaptionFile
 from .common import get_absolute_video_caption
+from .models import Video
 from ..db import get_db_context
 
 
@@ -39,7 +40,7 @@ def get_unique_caption_lines(caption_path: Union[str, Path]) -> Generator:
                 yield line
 
 
-def process_captions(video: Dict):
+def process_captions(video: Video):
     """
     Parse and insert captions for a video record.
     """
@@ -49,8 +50,7 @@ def process_captions(video: Dict):
     try:
         lines = get_unique_caption_lines(str(caption_path))
         block = '\n'.join(lines)
-        video['caption'] = block
-        video.flush()
+        video.caption = block
     except UnicodeDecodeError:
         # Failed to decode the caption file
         # TODO handle this error
@@ -62,8 +62,7 @@ def process_captions(video: Dict):
 
 async def insert_bulk_captions(video_ids: List[int]):
     with get_db_context(commit=True) as (engine, session):
-        Video = db['video']
         for idx, video_id in enumerate(video_ids):
-            video = Video.get_one(id=video_id)
+            video = session.query(Video).filter_by(id=video_id).one()
             process_captions(video)
     logger.debug(f'Inserted {len(video_ids)} captions')

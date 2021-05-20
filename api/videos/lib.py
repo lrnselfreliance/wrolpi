@@ -3,7 +3,7 @@ import pathlib
 from multiprocessing.queues import Queue
 from uuid import uuid1
 
-from dictorm import Dict
+from sqlalchemy.orm import Session
 
 from api.common import ProgressReporter
 from api.db import get_db_curs, get_db_context
@@ -11,6 +11,7 @@ from api.videos.captions import insert_bulk_captions
 from api.videos.common import generate_bulk_posters, get_bulk_video_duration, get_bulk_video_size, \
     get_absolute_media_path, generate_video_paths, remove_duplicate_video_paths, bulk_validate_posters
 from api.videos.downloader import upsert_video
+from .models import Channel
 from ..common import logger
 
 logger = logger.getChild(__name__)
@@ -114,7 +115,7 @@ def process_video_meta_data():
     refresh_channel_calculate_size()
 
 
-def refresh_channel_videos(channel: Dict, reporter: ProgressReporter):
+def refresh_channel_videos(channel: Channel, reporter: ProgressReporter):
     """
     Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
     """
@@ -124,12 +125,12 @@ def refresh_channel_videos(channel: Dict, reporter: ProgressReporter):
 
     # Set the idempotency key so we can remove any videos not touched during this search
     with get_db_curs(commit=True) as curs:
-        curs.execute('UPDATE video SET idempotency=NULL WHERE channel_id=%s', (channel['id'],))
+        curs.execute('UPDATE video SET idempotency=NULL WHERE channel_id=%s', (channel.id,))
 
     reporter.send_progress(1, 1, 'Finding all videos, checking for duplicates.')
 
     idempotency = str(uuid1())
-    directory = get_absolute_media_path(channel['directory'])
+    directory = get_absolute_media_path(channel.directory)
 
     # A set of absolute paths that exist in the file system
     possible_new_paths = generate_video_paths(directory)
@@ -141,7 +142,7 @@ def refresh_channel_videos(channel: Dict, reporter: ProgressReporter):
     relative_new_paths = [str(i.relative_to(directory)) for i in possible_new_paths]
     with get_db_curs(commit=True) as curs:
         query = 'UPDATE video SET idempotency = %s WHERE channel_id = %s AND video_path = ANY(%s) RETURNING video_path'
-        curs.execute(query, (idempotency, channel['id'], relative_new_paths))
+        curs.execute(query, (idempotency, channel.id, relative_new_paths))
         existing_paths = {i for (i,) in curs.fetchall()}
 
     reporter.send_progress(1, 3)
@@ -155,21 +156,21 @@ def refresh_channel_videos(channel: Dict, reporter: ProgressReporter):
     for video_path in new_videos:
         with get_db_context(commit=True) as (engine, session):
             upsert_video(session, pathlib.Path(video_path), channel, idempotency=idempotency)
-            logger.debug(f'{channel["name"]}: Added {video_path}')
+            logger.debug(f'{channel.name}: Added {video_path}')
 
     reporter.send_progress(1, 5, 'Deleting unnecessary video entries.')
 
     with get_db_curs(commit=True) as curs:
-        curs.execute('DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL RETURNING id', (channel['id'],))
+        curs.execute('DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL RETURNING id', (channel.id,))
         deleted_count = len(curs.fetchall())
 
     if deleted_count:
-        deleted_status = f'Deleted {deleted_count} video records from channel {channel["name"]}'
+        deleted_status = f'Deleted {deleted_count} video records from channel {channel.name}'
         logger.info(deleted_status)
 
-    logger.info(f'{channel["name"]}: {len(new_videos)} new videos, {len(existing_paths)} already existed. ')
+    logger.info(f'{channel.name}: {len(new_videos)} new videos, {len(existing_paths)} already existed. ')
 
-    reporter.send_progress(1, 6, f'Processed all videos for {channel["name"]}')
+    reporter.send_progress(1, 6, f'Processed all videos for {channel.name}')
 
 
 def _refresh_videos(q: Queue, channel_links: list = None):
@@ -183,16 +184,14 @@ def _refresh_videos(q: Queue, channel_links: list = None):
     """
     logger.info('Refreshing video files')
     with get_db_context() as (engine, session):
-        Channel = db['channel']
-
         reporter = ProgressReporter(q, 2)
         reporter.code('refresh-started')
-        reporter.set_progress_total(0, Channel.count())
+        reporter.set_progress_total(0, session.query(Channel).count())
 
         if channel_links:
-            channels = Channel.get_where(Channel['link'].In(channel_links))
+            channels = session.query(Channel).filter(Channel.link._in(channel_links))
         else:
-            channels = Channel.get_where()
+            channels = session.query(Channel).all()
 
         channels = list(channels)
 
@@ -202,7 +201,7 @@ def _refresh_videos(q: Queue, channel_links: list = None):
         raise Exception(f'No channels in DB.  Have you created any?')
 
     for idx, channel in enumerate(channels):
-        reporter.send_progress(0, idx, f'Checking {channel["name"]} directory for new videos')
+        reporter.send_progress(0, idx, f'Checking {channel.name} directory for new videos')
         refresh_channel_videos(channel, reporter)
 
     # Fill in any missing data for all videos.
@@ -212,24 +211,24 @@ def _refresh_videos(q: Queue, channel_links: list = None):
     reporter.code('refresh-complete')
 
 
-def get_channels_config(db) -> dict:
+def get_channels_config(session: Session) -> dict:
     """
     Create a dictionary that contains all the Channels from the DB.
     """
-    Channel = db['channel']
+    channels = session.query(Channel).order_by(Channel.link).all()
     channels = {
-        i['link']:
+        i.link:
             dict(
-                directory=i['directory'],
-                match_regex=i.get('match_regex', ''),
-                name=i['name'],
-                url=i.get('url', ''),
-                generate_posters=i['generate_posters'],
-                calculate_duration=i['calculate_duration'],
-                skip_download_videos=[j for j in i['skip_download_videos'] if j] if i['skip_download_videos'] else [],
-                download_frequency=i.get('download_frequency'),
+                directory=i.directory,
+                match_regex=i.match_regex or '',
+                name=i.name,
+                url=i.url or '',
+                generate_posters=i.generate_posters,
+                calculate_duration=i.calculate_duration,
+                skip_download_videos=[j for j in i.skip_download_videos if j] if i.skip_download_videos else [],
+                download_frequency=i.download_frequency,
             )
-        for i in Channel.get_where().order_by('link')
+        for i in channels
     }
     return dict(channels=channels)
 

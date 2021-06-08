@@ -1,4 +1,4 @@
-Pillow==7.2.0
+Pillow==8.2.0
 cachetools==4.1.1
 dictorm>=4.2
 docker>=4.2.2

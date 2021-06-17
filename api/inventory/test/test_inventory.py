@@ -1,14 +1,14 @@
 import tempfile
 from decimal import Decimal
 from itertools import zip_longest
-from typing import List, Dict, Iterable
+from typing import List, Iterable
 
-import psycopg2
 import pytest
-from dictorm import Table
+import sqlalchemy
 from pint import Quantity
 
 from api.db import get_db_context
+from ...common import Base
 from api.test.common import wrap_test_db, ExtendedTestCase
 from .. import init
 from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
@@ -16,6 +16,7 @@ from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_sub
 from ..inventory import unit_registry, \
     get_inventories, save_inventory, update_inventory, \
     delete_inventory, get_categories
+from ..models import Item, Inventory
 
 TEST_ITEMS_COLUMNS = (
     'inventory_id',
@@ -45,10 +46,10 @@ TEST_ITEMS = [
 TEST_ITEMS = [dict(zip(TEST_ITEMS_COLUMNS, i)) for i in TEST_ITEMS]
 
 
-def extract_items(lst: List[Dict], keys: Iterable[str]) -> List[Dict]:
+def extract_items(lst: List[Base], keys: Iterable[str]) -> List[Base]:
     extracted = []
     for i in lst:
-        extracted.append({j: i.pop(j) for j in keys})
+        extracted.append({j: getattr(i, j) for j in keys})
 
     return extracted
 
@@ -59,10 +60,10 @@ class TestInventory(ExtendedTestCase):
     def prepare() -> None:
         init(force=True)
 
-        with get_db_context(commit=True) as (db_conn, db):
-            Item: Table = db['item']
+        with get_db_context(commit=True) as (engine, session):
             for item in TEST_ITEMS:
-                Item(item).flush()
+                item = Item(**item)
+                session.add(item)
 
     @wrap_test_db
     def test_get_categories(self):
@@ -76,12 +77,13 @@ class TestInventory(ExtendedTestCase):
         self.prepare()
 
         inventories = get_inventories()
-        dates = extract_items(inventories, {'created_at', 'deleted_at', 'viewed_at', 'items'})
+        dates = extract_items(inventories, {'created_at', 'deleted_at', 'viewed_at'})
         self.assertItemsTruthyOrFalsey(dates, [{'created_at': True, 'deleted_at': False, 'viewed_at': False}])
-        self.assertEqual(inventories, [{'id': 1, 'name': 'Food Storage'}])
+        self.assertEqual(inventories[0].id, 1)
+        self.assertEqual(inventories[0].name, 'Food Storage')
 
     @wrap_test_db
-    def test_inventory(self):
+    def test_inventory1(self):
         self.prepare()
 
         # Insert a new Inventory.
@@ -91,51 +93,43 @@ class TestInventory(ExtendedTestCase):
         }
         save_inventory(inventory)
 
-        with get_db_context() as (db_conn, db):
-            Inventory: Table = db['inventory']
-            i1, i2 = Inventory.get_where().order_by('name')
+        with get_db_context() as (engine, session):
+            i1, i2 = session.query(Inventory).order_by(Inventory.name).all()
             self.assertDictContains(i2, {'name': 'New Inventory', 'viewed_at': None})
 
         # Inventories cannot share a name.
-        with get_db_context() as (db_conn, db):
-            with db.transaction():
-                self.assertRaises(psycopg2.errors.UniqueViolation, save_inventory, inventory)
+        self.assertRaises(sqlalchemy.exc.IntegrityError, save_inventory, inventory)
 
         # Insert a second inventory.
         inventory['name'] = 'Super Inventory'
         save_inventory(inventory)
 
         # Cannot update the name to a name that is already used.
-        with get_db_context() as (db_conn, db):
-            Inventory: Table = db['inventory']
-            i = Inventory.get_one(name='Super Inventory')
+        with get_db_context() as (engine, session):
+            i = session.query(Inventory).filter_by(name='Super Inventory').one()
             inventory['name'] = 'New Inventory'
-            self.assertRaises(psycopg2.errors.UniqueViolation, update_inventory, i['id'], inventory)
+            self.assertRaises(sqlalchemy.exc.IntegrityError, update_inventory, i.id, inventory)
 
         # Add some items to "New Inventory"
-        with get_db_context(commit=True) as (db_conn, db):
-            Item: Table = db['item']
-            before_item_count = Item.count()
-            Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
-            Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
-            Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
-            Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1).flush()
+        with get_db_context(commit=True) as (engine, session):
+            before_item_count = session.query(Item).count()
+            session.add(Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1))
+            session.add(Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1))
+            session.add(Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1))
+            session.add(Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1))
 
         # You can rename a inventory to a conflicting name, if the other inventory is marked as deleted.
-        with get_db_context(commit=True) as (db_conn, db):
+        with get_db_context(commit=True) as (engine, session):
             delete_inventory(2)
             # Check that the items from the deleted Inventory were not deleted, YET.
-            Item: Table = db['item']
-            self.assertEqual(before_item_count + 4, Item.count())
+            self.assertEqual(before_item_count + 4, session.query(Item).count())
 
-            Inventory: Table = db['inventory']
-            i = Inventory.get_one(name='Super Inventory')
+            i = session.query(Inventory).filter_by(name='Super Inventory').one()
             inventory['name'] = 'New Inventory'
-            update_inventory(i['id'], inventory)
+            update_inventory(i.id, inventory)
 
             # Check that the items from the deleted Inventory were really deleted.
-            Item: Table = db['item']
-            self.assertEqual(before_item_count, Item.count())
+            self.assertEqual(before_item_count, session.query(Item).count())
 
     @wrap_test_db
     def test_get_inventory_by_category(self):
@@ -197,23 +191,23 @@ class TestInventory(ExtendedTestCase):
             save_inventories_file(tf.name)
 
             # Clear out the DB so the import will be tested
-            with get_db_context(commit=True) as (db_conn, db):
-                curs = db_conn.cursor()
-                curs.execute('DELETE FROM item')
-                curs.execute('DELETE FROM inventory')
+            with get_db_context(commit=True) as (engine, session):
+                session.query(Item).delete()
+                session.query(Inventory).delete()
 
             import_inventories_file(tf.name)
 
         inventories = get_inventories()
         self.assertEqual(len(inventories), 1)
         # ID has increased because we did not reset the sequence when deleting from the table.
-        self.assertDictContains(inventories[0], {'id': 2, 'name': 'Food Storage'})
+        self.assertEqual(inventories[0].id, 2)
+        self.assertEqual(inventories[0].name, 'Food Storage')
 
         # All items in the DB match those in the test list, except for the "deleted" item.
-        self.assertEqual(len(inventories[0]['items']), len(TEST_ITEMS) - 1)
-        test_items = {(i['name'], i['brand'], i['count']) for i in TEST_ITEMS}
-        test_items.remove(('deleted', 'deleted', 1))
-        db_items = {(i['name'], i['brand'], i['count']) for i in inventories[0]['items']}
+        non_deleted_items = [i for i in inventories[0].items if i.deleted_at is None]
+        self.assertEqual(len(non_deleted_items), len(TEST_ITEMS) - 1)
+        test_items = {(i['name'], i['brand'], i['count']) for i in TEST_ITEMS[:-1]}
+        db_items = {(i.name, i.brand, i.count) for i in non_deleted_items}
         self.assertEqual(test_items, db_items)
 
 
@@ -289,4 +283,5 @@ length = gallon.dimensionality
     ]
 )
 def test_sum_by_key(items, expected):
-    assert sum_by_key(items, lambda i: (i['category'],)) == expected
+    items = [Item(**i) for i in items]
+    assert sum_by_key(items, lambda i: (i.category,)) == expected

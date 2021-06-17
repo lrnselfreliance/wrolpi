@@ -88,7 +88,7 @@ def channel_post(_: Request, data: dict):
 def channel_update(_: Request, link: str, data: dict):
     channel = update_channel(data, link)
     return response.raw('', HTTPStatus.NO_CONTENT,
-                        headers={'Location': f'/api/videos/channels/{channel["link"]}'})
+                        headers={'Location': f'/api/videos/channels/{channel.link}'})
 
 
 @channel_bp.delete('/<link:string>')
@@ -112,7 +112,7 @@ def channel_delete(_: Request, link: str):
     produces=ChannelsResponse,
 )
 def channel_conflict(_: Request, data: dict):
-    with get_db_context() as (db_conn, db):
+    with get_db_context() as (engine, session):
         check_for_channel_conflicts(db, url=data.get('url'), name=data.get('name'),
                                     directory=data.get('directory'))
     return response.raw('', HTTPStatus.NO_CONTENT)

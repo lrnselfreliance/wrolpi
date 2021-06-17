@@ -7,9 +7,11 @@ from typing import List, Tuple
 import yaml
 from pint import Quantity
 
+from api.common import logger, Base
 from api.db import get_db_context
 from api.inventory.inventory import unit_registry, get_items, get_inventories
 from api.vars import PROJECT_DIR
+from .models import Inventory, Item
 
 MY_DIR: Path = Path(__file__).parent
 
@@ -47,8 +49,10 @@ DEFAULT_INVENTORIES = [
     'Food Storage',
 ]
 
+logger = logger.getChild(__name__)
 
-def sum_by_key(items: List, key: callable):
+
+def sum_by_key(items: List[Base], key: callable):
     """
     Sum the total size of each item by the provided key function.  Returns a dict containing the key, and the total_size
     for that key.  Combine total of like units.  This means ounces and pounds will be in the same total.
@@ -56,7 +60,7 @@ def sum_by_key(items: List, key: callable):
     summed = dict()
     for item in items:
         k = key(item)
-        item_size, count, unit = item['item_size'], item['count'], unit_registry(item['unit'])
+        item_size, count, unit = item.item_size, item.count, unit_registry(item.unit)
         key_dim = (k, unit.dimensionality)
 
         total_size = item_size * count * unit
@@ -73,7 +77,7 @@ def sum_by_key(items: List, key: callable):
 def get_inventory_by_keys(keys: Tuple, inventory_id: int):
     items = get_items(inventory_id)
 
-    summed = sum_by_key(items, lambda i: tuple(i[k] or '' for k in keys))
+    summed = sum_by_key(items, lambda i: tuple(getattr(i, k) or '' for k in keys))
 
     inventory = []
     for key, quantity in sorted(summed.items(), key=lambda i: i[0]):
@@ -120,7 +124,7 @@ def compact_unit(quantity: unit_registry.Quantity) -> unit_registry.Quantity:
 def quantity_to_tuple(quantity: unit_registry.Quantity) -> Tuple[Decimal, Quantity]:
     decimal, (units,) = quantity.to_tuple()
     unit, _ = units
-    return round(decimal, UNIT_PRECISION).normalize(), unit_registry(unit)
+    return round(decimal, UNIT_PRECISION), unit_registry(unit)
 
 
 def cleanup_quantity(quantity: Quantity) -> Quantity:
@@ -144,8 +148,7 @@ def save_inventories_file(path: str = None):
 
     inventories = []
     for inventory in get_inventories():
-        inventory['items'] = [dict(i) for i in get_items(inventory['id'])]
-        inventories.append(dict(inventory))
+        inventories.append(inventory.dict())
 
     if path.is_file():
         # Check that we aren't overwriting our inventories with empty inventories.
@@ -154,6 +157,12 @@ def save_inventories_file(path: str = None):
             if old and not inventories:
                 raise FileExistsError(f'Refusing to overwrite non-empty inventories.yaml with empty inventories.'
                                       f'  {path}')
+
+    if path.is_dir():
+        logger.fatal(f'Cannot save inventories because {path} is a directory!  This is likely caused by Docker creating'
+                     'the directory.  You should stop WROLPi, remove the empty directory, create an empty file in'
+                     "it's place, then start WROLPi again.")
+        return
 
     with open(path, 'wt') as fh:
         contents = dict(
@@ -174,22 +183,23 @@ def import_inventories_file(path: str = None):
         raise ValueError('Inventories file does not contain the expected "inventories" list.')
 
     inventories = get_inventories()
-    inventories_names = [i['name'] for i in inventories]
+    inventories_names = {i.name for i in inventories}
     new_inventories = [i for i in contents['inventories'] if i['name'] not in inventories_names]
-    with get_db_context(commit=True) as (db_conn, db):
-        Inventory, Item = db['inventory'], db['item']
+    with get_db_context(commit=True) as (engine, session):
         for inventory in new_inventories:
-            # Remove the id, we will just use the new one provided.
-            del inventory['id']
-
             items = inventory['items']
             inventory = Inventory(
                 name=inventory['name'],
                 created_at=inventory['created_at'],
                 deleted_at=inventory['deleted_at'],
-            ).flush()
+            )
+            session.add(inventory)
+            # Get the Inventory from the DB so we can use it's ID.
+            session.flush()
+            session.refresh(inventory)
 
             for item in items:
-                del item['id']
                 del item['inventory_id']
-                item = Item(inventory_id=inventory['id'], **item).flush()
+                item = Item(inventory_id=inventory.id, **item)
+                item.inventory_id = inventory.id
+                session.add(item)

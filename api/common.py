@@ -26,6 +26,7 @@ from sanic.request import Request
 from sanic.response import HTTPResponse
 from sanic_openapi import doc
 from sanic_openapi.doc import Field
+from sqlalchemy.ext.declarative import declarative_base
 from websocket import WebSocket
 
 from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents, \
@@ -445,13 +446,16 @@ class JSONEncodeDate(json.JSONEncoder):
             return datetime(obj.year, obj.month, obj.day).timestamp()
         elif isinstance(obj, Decimal):
             return str(obj)
+        elif isinstance(obj, Base):
+            if hasattr(obj, 'dict'):
+                return obj.dict()
         return super(JSONEncodeDate, self).default(obj)
 
 
 @wraps(response.json)
 def json_response(*a, **kwargs) -> HTTPResponse:
     """
-    Handles encoding dates/datetimes in JSON.
+    Handles encoding date/datetime in JSON.
     """
     return response.json(*a, **kwargs, cls=JSONEncodeDate, dumps=json.dumps)
 
@@ -552,3 +556,15 @@ WHITESPACE = re.compile(r'\s')
 
 def remove_whitespace(s: str) -> str:
     return WHITESPACE.sub('', s)
+
+
+# Base is used for all SQLAlchemy models.
+Base = declarative_base()
+
+
+def base_dict(self):
+    d = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+    return d
+
+
+Base.dict = base_dict

@@ -10,6 +10,7 @@ from typing import Union, Tuple, List, Set, Iterable
 import PIL
 from PIL import Image
 from dictorm import Dict
+from sqlalchemy.orm import Session
 
 from api.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify
 from api.db import get_db_context
@@ -17,6 +18,7 @@ from api.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, Chann
     ChannelLinkConflict, ChannelDirectoryConflict
 from api.vars import DOCKERIZED, PROJECT_DIR, VIDEO_EXTENSIONS, MINIMUM_CHANNEL_KEYS, MINIMUM_INFO_JSON_KEYS, \
     MINIMUM_VIDEO_KEYS, DEFAULT_FILE_PERMISSIONS
+from .models import Channel, Video
 
 logger = logger.getChild(__name__)
 
@@ -56,32 +58,33 @@ def import_settings_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
     config = get_channels_config()
 
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         for section in config:
-            for option in (o for o in REQUIRED_OPTIONS if o not in config[section]):
+            for option in (i for i in REQUIRED_OPTIONS if i not in config[section]):
                 raise ConfigError(f'Channel "{section}" is required to have "{option}"')
 
             name, directory = config[section]['name'], config[section]['directory']
 
             link = sanitize_link(name)
-            Channel = db['channel']
-            channel = Channel.get_one(link=link)
-
-            if not channel:
+            matches = session.query(Channel).filter(Channel.link == link)
+            if not matches.count():
                 # Channel not yet in the DB, add it
                 channel = Channel(link=link)
+            else:
+                channel = matches.one()
 
             # Only name and directory are required
-            channel['name'] = name
-            channel['directory'] = directory
+            channel.name = name
+            channel.directory = directory
 
-            channel['calculate_duration'] = config[section].get('calculate_duration')
-            channel['download_frequency'] = config[section].get('download_frequency')
-            channel['generate_posters'] = config[section].get('generate_posters')
-            channel['match_regex'] = config[section].get('match_regex')
-            channel['skip_download_videos'] = list(set(config[section].get('skip_download_videos', {})))
-            channel['url'] = config[section].get('url')
-            channel.flush()
+            channel.calculate_duration = config[section].get('calculate_duration')
+            channel.download_frequency = config[section].get('download_frequency')
+            channel.generate_posters = config[section].get('generate_posters')
+            channel.match_regex = config[section].get('match_regex')
+            channel.skip_download_videos = list(set(config[section].get('skip_download_videos', {})))
+            channel.url = config[section].get('url')
+
+            session.add(channel)
     return 0
 
 
@@ -138,11 +141,11 @@ def get_relative_to_media_directory(path: str) -> Path:
 VALID_VIDEO_KINDS = {'video', 'caption', 'poster', 'description', 'info_json'}
 
 
-def get_absolute_video_path(video: Dict, kind: str = 'video') -> Path:
+def get_absolute_video_path(video: Video, kind: str = 'video') -> Path:
     if kind not in VALID_VIDEO_KINDS:
         raise Exception(f'Unknown video path kind {kind}')
-    directory = get_absolute_media_path(video['channel']['directory'])
-    path = video[kind + '_path']
+    directory = get_absolute_media_path(video.channel.directory)
+    path = getattr(video, f'{kind}_path')
     if directory and path:
         return directory / path
     raise UnknownFile()
@@ -154,7 +157,7 @@ get_absolute_video_description = partial(get_absolute_video_path, kind='descript
 get_absolute_video_info_json = partial(get_absolute_video_path, kind='info_json')
 
 
-def get_absolute_video_files(video: Dict) -> List[Path]:
+def get_absolute_video_files(video: Video) -> List[Path]:
     """
     Get all video files that exist.
     """
@@ -178,7 +181,7 @@ def get_absolute_video_files(video: Dict) -> List[Path]:
 
 def get_video_info_json(video: Dict) -> Union[dict, None]:
     """Get the info_json object from a video's meta-file.  Return an empty dict if not possible."""
-    if not video['channel']['directory']:
+    if not video.channel or not video.channel.directory:
         return
 
     try:
@@ -263,7 +266,7 @@ def remove_duplicate_video_paths(paths: Iterable[Path]) -> Set[Path]:
                 yield sorted(paths)[0]
 
 
-def check_for_channel_conflicts(db, id=None, url=None, name=None, link=None, directory=None):
+def check_for_channel_conflicts(session: Session, id=None, url=None, name=None, link=None, directory=None):
     """
     Search for any channels that conflict with the provided args, raise a relevant exception if any conflicts are found.
     """
@@ -272,27 +275,26 @@ def check_for_channel_conflicts(db, id=None, url=None, name=None, link=None, dir
 
     logger.debug(f'Checking for channel conflicts: id={id} url={url} name={name} link={link} directory={directory}')
 
-    Channel = db['channel']
     # A channel can't conflict with itself
     if id:
-        base_where = Channel.get_where(Channel['id'] != id)
+        base_where = session.query(Channel).filter(Channel.id != id)
     else:
-        base_where = Channel.get_where()
+        base_where = session.query(Channel)
 
     if url:
-        conflicts = base_where.refine(Channel['url'] == url)
+        conflicts = base_where.filter(Channel.url == url)
         if list(conflicts):
             raise ChannelURLConflict()
     if name:
-        conflicts = base_where.refine(Channel['name'] == name)
+        conflicts = base_where.filter(Channel.name == name)
         if list(conflicts):
             raise ChannelNameConflict()
     if link:
-        conflicts = base_where.refine(Channel['link'] == link)
+        conflicts = base_where.filter(Channel.link == link)
         if list(conflicts):
             raise ChannelLinkConflict()
     if directory:
-        conflicts = base_where.refine(Channel['directory'] == directory)
+        conflicts = base_where.filter(Channel.directory == directory)
         if list(conflicts):
             raise ChannelDirectoryConflict()
 
@@ -390,7 +392,7 @@ async def generate_bulk_posters(video_ids: List[int]):
     Generate all posters for the provided videos.  Update the video object with the new jpg file location.  Do not
     clobber existing jpg files.
     """
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         logger.info(f'Generating {len(video_ids)} video posters')
         Video = db['video']
         for idx, video_id in enumerate(video_ids):
@@ -442,10 +444,9 @@ def bulk_validate_posters(video_ids: List[int]):
     """
     logger.info(f'Validating {len(video_ids)} video posters')
     for video_id in video_ids:
-        with get_db_context(commit=True) as (db_conn, db):
-            Video = db['video']
-            video = Video.get_one(id=video_id)
-            channel = video['channel']
+        with get_db_context(commit=True) as (engine, session):
+            video = session.query(Video).filter_by(id=video_id).one()
+            channel = video.channel
 
             poster_path: Path = get_absolute_video_poster(video)
             new_poster_path = poster_path.with_suffix('.jpg')
@@ -465,12 +466,11 @@ def bulk_validate_posters(video_ids: List[int]):
             else:
                 logger.debug(f'Poster was already valid: {new_poster_path}')
 
-            channel_dir = get_absolute_media_path(channel['directory'])
+            channel_dir = get_absolute_media_path(channel.directory)
 
             # Update the video with the new poster path.  Mark it as validated.
-            video['poster_path'] = str(new_poster_path.relative_to(channel_dir))
-            video['validated_poster'] = True
-            video.flush()
+            video.poster_path = str(new_poster_path.relative_to(channel_dir))
+            video.validated_poster = True
 
 
 def get_video_duration(video_path: Path) -> int:
@@ -495,12 +495,11 @@ async def get_bulk_video_duration(video_ids: List[int]):
     """
     Get and save the duration for each video provided.
     """
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         logger.info(f'Getting {len(video_ids)} video durations.')
-        Video = db['video']
         for video_id in video_ids:
-            video = Video.get_one(id=video_id)
-            logger.debug(f'Getting video duration: {video["id"]} {video["title"]}')
+            video = session.query(Video).filter_by(id=video_id).one()
+            logger.debug(f'Getting video duration: {video.id} {video.title}')
             video_path = get_absolute_video_path(video)
 
             try:
@@ -511,26 +510,22 @@ async def get_bulk_video_duration(video_ids: List[int]):
             except UnknownFile:
                 duration = get_video_duration(video_path)
 
-            video['duration'] = duration
-            video.flush()
-            db_conn.commit()
+            video.duration = duration
 
 
 async def get_bulk_video_size(video_ids: List[int]):
     """
     Get and save the size for each video provided.
     """
-    with get_db_context(commit=True) as (db_conn, db):
+    with get_db_context(commit=True) as (engine, session):
         logger.info(f'Getting {len(video_ids)} video sizes.')
-        Video = db['video']
         for video_id in video_ids:
-            video = Video.get_one(id=video_id)
-            logger.debug(f'Getting video size: {video["id"]} {video["video_path"]}')
+            video = session.query(Video).filter_by(id=video_id).one()
+            logger.debug(f'Getting video size: {video.id} {video.video_path}')
             video_path = get_absolute_video_path(video)
 
             size = video_path.stat().st_size
-            video['size'] = size
-            video.flush()
+            video.size = size
 
 
 def minimize_dict(d: dict, keys: Iterable) -> dict:
@@ -553,7 +548,7 @@ def minimize_video(video: dict) -> dict:
     video = _minimize_video(video)
 
     if video.get('channel'):
-        video['channel'] = minimize_channel(video['channel'])
+        video['channel'] = minimize_channel(video['channel'].dict())
     if video.get('info_json'):
         video['info_json'] = minimize_video_info_json(video['info_json'])
 
@@ -562,8 +557,6 @@ def minimize_video(video: dict) -> dict:
 
 def add_video_to_skip_list(channel: Dict, video: Dict):
     try:
-        channel['skip_download_videos'].append(video['source_id'])
-        channel.flush()
+        channel.skip_download_videos.append(video.source_id)
     except AttributeError:
-        channel['skip_download_videos'] = [video['source_id'], ]
-        channel.flush()
+        channel.skip_download_videos = [video.source_id, ]

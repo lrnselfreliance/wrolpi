@@ -1,46 +1,48 @@
 from datetime import datetime
 from typing import Tuple, Optional, List
 
-from dictorm import Dict, DictDB
+from dictorm import Dict
+from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import NoResultFound
 
-from api.db import get_db_context
+from api.db import get_db_context, get_db_curs
 from api.errors import UnknownVideo, UnknownFile
 from api.videos.common import get_absolute_video_files, add_video_to_skip_list, get_video_info_json, minimize_video
+from api.videos.models import Video
 from api.videos.video.api import logger
 
 
-def get_video(db, video_id: int) -> Dict:
-    Video = db['video']
-    video = Video.get_one(id=video_id)
-    if not video:
+def get_video(session: Session, video_id: int) -> Video:
+    try:
+        video = session.query(Video).filter_by(id=video_id).one()
+    except NoResultFound:
         raise UnknownVideo()
-    _ = video['channel']
     return video
 
 
 def mark_video_as_viewed(video_id: int):
-    with get_db_context(commit=True) as (db_conn, db):
-        video = get_video(db, video_id)
-        video['viewed'] = datetime.now()
-        video.flush()
+    with get_db_context(commit=True) as (engine, session):
+        video = get_video(session, video_id)
+        video.viewed = datetime.now()
 
 
 def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dict]]:
-    with get_db_context(commit=True) as (db_conn, db):
-        video = get_video(db, video_id)
+    with get_db_context(commit=True) as (engine, session):
+        video = get_video(session, video_id)
         info_json = get_video_info_json(video)
-        video = dict(video)
+        video = video.dict()
         video['info_json'] = info_json
         video = minimize_video(video)
 
-        previous_video, next_video = get_surrounding_videos(db, video_id, video['channel_id'])
-        previous_video = minimize_video(previous_video) if previous_video else None
-        next_video = minimize_video(next_video) if next_video else None
+        previous_video, next_video = get_surrounding_videos(session, video_id, video['channel_id'])
+        previous_video = minimize_video(previous_video.dict()) if previous_video else None
+        next_video = minimize_video(next_video.dict()) if next_video else None
 
     return video, previous_video, next_video
 
 
-def get_surrounding_videos(db: DictDB, video_id: int, channel_id: int) -> Tuple[Optional[Dict], Optional[Dict]]:
+def get_surrounding_videos(session: Session, video_id: int, channel_id: int) -> Tuple[Optional[Dict], Optional[Dict]]:
     """
     Get the previous and next videos around the provided video.  The videos must be in the same channel.
 
@@ -50,42 +52,41 @@ def get_surrounding_videos(db: DictDB, video_id: int, channel_id: int) -> Tuple[
         vid3 = Video(id=3, upload_date=30)
         vid4 = Video(id=4)
 
-        >>> get_surrounding_videos(video_id=1, ...)
+        >>> get_surrounding_videos(session, video_id=1, ...)
         (None, vid2)
-        >>> get_surrounding_videos(video_id=2, ...)
+        >>> get_surrounding_videos(session, video_id=2, ...)
         (vid1, vid3)
-        >>> get_surrounding_videos(video_id=3, ...)
+        >>> get_surrounding_videos(session, video_id=3, ...)
         (vid2, None)
         Video 4 has no upload date, so we can't place it in order.
-        >>> get_surrounding_videos(video_id=4, ...)
+        >>> get_surrounding_videos(session, video_id=4, ...)
         (None, None)
     """
     video_id, channel_id = int(video_id), int(channel_id)
 
-    curs = db.get_cursor()
-
-    query = '''
-            WITH numbered_videos AS (
-                SELECT id,
-                    ROW_NUMBER() OVER (ORDER BY upload_date ASC) AS row_number
-                FROM video
-                WHERE
-                    channel_id = %(channel_id)s
-                    AND upload_date IS NOT NULL
-            )
-
-            SELECT id
-            FROM numbered_videos
-            WHERE row_number IN (
-                SELECT row_number+i
+    with get_db_curs() as curs:
+        query = '''
+                WITH numbered_videos AS (
+                    SELECT id,
+                        ROW_NUMBER() OVER (ORDER BY upload_date ASC) AS row_number
+                    FROM video
+                    WHERE
+                        channel_id = %(channel_id)s
+                        AND upload_date IS NOT NULL
+                )
+    
+                SELECT id
                 FROM numbered_videos
-                CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
-                WHERE
-                id = %(video_id)s
-            )
-    '''
-    curs.execute(query, dict(channel_id=channel_id, video_id=video_id))
-    results = [i[0] for i in curs.fetchall()]
+                WHERE row_number IN (
+                    SELECT row_number+i
+                    FROM numbered_videos
+                    CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
+                    WHERE
+                    id = %(video_id)s
+                )
+        '''
+        curs.execute(query, dict(channel_id=channel_id, video_id=video_id))
+        results = [i[0] for i in curs.fetchall()]
 
     # Assign the returned ID's to their respective positions relative to the ID that matches the video_id.
     previous_id = next_id = None
@@ -98,9 +99,8 @@ def get_surrounding_videos(db: DictDB, video_id: int, channel_id: int) -> Tuple[
             break
 
     # Fetch the videos by id, if they exist.
-    Video = db['video']
-    previous_video = Video.get_one(id=previous_id) if previous_id else None
-    next_video = Video.get_one(id=next_id) if next_id else None
+    previous_video = session.query(Video).filter_by(id=previous_id).one() if previous_id else None
+    next_video = session.query(Video).filter_by(id=next_id).one() if next_id else None
 
     return previous_video, next_video
 
@@ -141,9 +141,7 @@ def video_search(
         order_by: str = None,
         favorites: bool = None,
 ) -> Tuple[List[dict], int]:
-    with get_db_context() as (db_conn, db):
-        curs = db.get_cursor()
-
+    with get_db_curs() as curs:
         args = dict(search_str=search_str, offset=offset)
         channel_where = ''
         if channel_link:
@@ -190,15 +188,20 @@ def video_search(
         logger.debug(query)
 
         curs.execute(query, args)
-        results = [dict(i) for i in curs.fetchall()]
+        try:
+            results = [dict(i) for i in curs.fetchall()]
+        except ProgrammingError:
+            # No videos
+            return [], 0
         total = results[0]['total'] if results else 0
         ranked_ids = [i['id'] for i in results]
 
+    with get_db_context() as (engine, session):
         results = []
         if ranked_ids:
-            Video = db['video']
-            results = Video.get_where(Video['id'].In(ranked_ids))
-            results = sorted(results, key=lambda r: ranked_ids.index(r['id']))
+            results = session.query(Video).filter(Video.id.in_(ranked_ids)).all()
+            results = sorted(results, key=lambda r: ranked_ids.index(r.id))
+            results = [i.dict() for i in results]
 
         results = list(map(minimize_video, results))
 
@@ -209,16 +212,14 @@ def set_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
     """
     Toggle the timestamp on Video.favorite on a video.
     """
-    with get_db_context(commit=True) as (db_conn, db):
-        Video = db['video']
-        video = Video.get_one(id=video_id)
-        _favorite = video['favorite'] = datetime.now() if favorite else None
-        video.flush()
+    with get_db_context(commit=True) as (engine, session):
+        video = session.query(Video).filter_by(id=video_id).one()
+        _favorite = video.favorite = datetime.now() if favorite else None
 
     return _favorite
 
 
-def delete_video(video: Dict):
+def delete_video(video: Video):
     """
     Delete any and all video files for a particular video.  If deletion succeeds, mark it as "do-not-download".
     """
@@ -232,16 +233,14 @@ def delete_video(video: Dict):
     if not video_files:
         raise UnknownFile('No video files were deleted')
 
-    with get_db_context(commit=True) as (db_conn, db):
-        Video = db['video']
-        video = Video.get_one(id=video['id'])
+    with get_db_context(commit=True) as (engine, session):
+        video = session.query(Video).filter_by(id=video.id).one()
 
-        video['video_path'] = None
-        video['poster_path'] = None
-        video['caption_path'] = None
-        video['description_path'] = None
-        video['info_json_path'] = None
-        video.flush()
+        video.video_path = None
+        video.poster_path = None
+        video.caption_path = None
+        video.description_path = None
+        video.info_json_path = None
 
-        channel = video['channel']
+        channel = video.channel
         add_video_to_skip_list(channel, video)

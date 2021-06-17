@@ -1,3 +1,4 @@
+import contextlib
 import json
 import pathlib
 import tempfile
@@ -8,28 +9,74 @@ from http import HTTPStatus
 from itertools import zip_longest
 from queue import Empty, Queue
 from shutil import copyfile
-from typing import List
+from typing import List, Tuple
 from uuid import uuid1
 
 import mock
-import psycopg2
 import websockets
 import yaml
-from dictorm import DictDB
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from sanic_openapi.api import Response
+from sqlalchemy import MetaData
+from sqlalchemy import create_engine
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from api.api import api_app, attach_routes
-from api.common import EXAMPLE_CONFIG_PATH, get_config, ProgressReporter, insert_parameter
-from api.db import setup_relationships, get_db_context
-from api.vars import DOCKERIZED, PROJECT_DIR
+from api.common import EXAMPLE_CONFIG_PATH, get_config, ProgressReporter, insert_parameter, Base
+from api.db import get_db_context, postgres_engine, get_db_args
+from api.vars import PROJECT_DIR
 from api.videos.api import refresh_queue, download_queue
 from api.videos.lib import refresh_channel_videos
+from api.videos.models import Channel
 
 # Attach the default routes
 attach_routes(api_app)
 
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
+
+
+def reset_database_tables(engine):
+    """
+    Remove all rows from every table in a database.
+    """
+    # curs = conn.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
+    # tables = curs.fetchall()
+    # if tables:
+    #     table_names = [i for (i,) in curs.fetchall()]
+    #     conn.execute('; '.join(f'TRUNCATE {table} RESTART IDENTITY CASCADE' for table in table_names))
+    #     conn.execute('commit')
+
+    meta = MetaData()
+
+    with contextlib.closing(engine.connect()) as con:
+        trans = con.begin()
+        for table in reversed(meta.sorted_tables):
+            con.execute(table.delete())
+        trans.commit()
+
+
+def get_test_db_engine():
+    suffix = str(uuid1()).replace('-', '')
+    db_name = f'wrolpi_testing_{suffix}'
+    conn = postgres_engine.connect()
+    conn.execute(f'DROP DATABASE IF EXISTS {db_name}')
+    conn.execute(f'CREATE DATABASE {db_name} TEMPLATE wrolpi')
+    conn.execute('commit')
+
+    test_args = get_db_args(db_name)
+    test_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**test_args))
+    reset_database_tables(test_engine)
+    return test_engine
+
+
+def test_db() -> Tuple[Engine, Session]:
+    """
+    Create a unique SQLAlchemy engine/session for a test.
+    """
+    test_engine = get_test_db_engine()
+    Base.metadata.create_all(test_engine)
+    session = sessionmaker(bind=test_engine)()
+    return test_engine, session
 
 
 def wrap_test_db(func):
@@ -39,61 +86,23 @@ def wrap_test_db(func):
     """
 
     def wrapped(*a, **kw):
-        # This is the Docker db container
-        db_args = dict(
-            user='postgres',
-            password='wrolpi',
-            host='127.0.0.1',
-            port=54321,
-        )
+        test_engine, session = test_db()
 
-        if DOCKERIZED:
-            db_args['host'] = 'db'
-            db_args['port'] = 5432
+        def fake_get_db_context():
+            """Get the testing db"""
+            return test_engine, session
 
-        # Every test gets it's own DB
-        suffix = str(uuid1()).replace('-', '')
-        testing_db_name = f'wrolpi_testing_{suffix}'
-
-        # Set isolation level such that was can copy the schema of the "api" database for testing
-        with psycopg2.connect(dbname='postgres', **db_args) as db_conn:
-            db_conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-
-            # Cleanup the old testing db (if any), then copy the schema
-            curs = db_conn.cursor()
-            drop_testing = f'DROP DATABASE IF EXISTS {testing_db_name}'
-            curs.execute(drop_testing)
-            curs.execute(f'CREATE DATABASE {testing_db_name} TEMPLATE wrolpi')
-
-            class FakePool:
-
-                def putconn(self, conn, *a, **kw):
-                    pass
-
-            # Connect to the new testing DB.  Reset all tables and sequences
-            testing_db_conn = psycopg2.connect(dbname=testing_db_name, **db_args)
-            testing_curs = testing_db_conn.cursor()
-            testing_curs.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-            table_names = [i for (i,) in testing_curs.fetchall()]
-            testing_curs.execute('; '.join(f'TRUNCATE {table} RESTART IDENTITY CASCADE' for table in table_names))
-            testing_db_conn.commit()
-
-            try:
-                testing_db = DictDB(testing_db_conn)
-                setup_relationships(testing_db)
-
-                def fake_get_db():
-                    """Get the testing db"""
-                    return FakePool(), testing_db_conn, testing_db, None
-
-                with mock.patch('api.db.get_db', fake_get_db):
-                    result = func(*a, **kw)
-                    return result
-
-            finally:
-                testing_db_conn.close()
-                db_conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-                curs.execute(drop_testing)
+        try:
+            with mock.patch('api.db._get_db_session', fake_get_db_context):
+                # Run the test.
+                result = func(*a, **kw)
+                return result
+        finally:
+            session.rollback()
+            session.close()
+            test_engine.dispose()
+            conn = postgres_engine.connect()
+            conn.execute(f'DROP DATABASE IF EXISTS {test_engine.engine.url.database}')
 
     return wrapped
 
@@ -117,6 +126,11 @@ class ExtendedTestCase(unittest.TestCase):
 
     @staticmethod
     def assertDictContains(d1: dict, d2: dict):
+        if hasattr(d1, '__dict__'):
+            d1 = d1.__dict__
+        if hasattr(d2, '__dict__'):
+            d2 = d2.__dict__
+
         for k2 in d2.keys():
             assert d1, f'dict 1 is empty: {d1}'
             assert d2, f'dict 1 is empty: {d2}'
@@ -144,6 +158,10 @@ class ExtendedTestCase(unittest.TestCase):
     def assertItemsTruthyOrFalsey(self, items_list: List, expected_list: List):
         for d1, d2 in zip_longest(items_list, expected_list):
             for d2_key in d2:
+                if d1 is None:
+                    raise ValueError('d1 is None')
+                if d2 is None:
+                    raise ValueError('d2 is None')
                 self.assertTruth(d1[d2_key], d2[d2_key])
 
 
@@ -255,10 +273,12 @@ def create_db_structure(structure):
             with build_test_directories(file_structure) as tempdir:
                 args, kwargs = insert_parameter(func, 'tempdir', tempdir, args, kwargs)
 
-                with get_db_context(commit=True) as (db_conn, db):
-                    Channel, Video = db['channel'], db['video']
+                with get_db_context(commit=True) as (engine, session):
                     for channel in structure:
-                        channel = Channel(directory=str(tempdir / channel), name=channel).flush()
+                        channel = Channel(directory=str(tempdir / channel), name=channel)
+                        session.add(channel)
+                        session.flush()
+                        session.refresh(channel)
                         refresh_channel_videos(channel, reporter)
 
                 return func(*args, **kwargs)

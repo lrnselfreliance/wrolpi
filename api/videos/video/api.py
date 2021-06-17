@@ -83,7 +83,7 @@ def directories(_, data):
 )
 @wrol_mode_check
 def video_delete(request: Request, video_id: int):
-    with get_db_context(commit=True) as (db_conn, db):
-        video = get_video(db, video_id)
+    with get_db_context(commit=True) as (engine, session):
+        video = get_video(session, video_id)
     delete_video(video)
     return response.raw('', HTTPStatus.NO_CONTENT)

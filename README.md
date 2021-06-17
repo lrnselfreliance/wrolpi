@@ -1,5 +1,5 @@
 # WROLPi
-[![Build Status](https://img.shields.io/travis/lrnselfreliance/wrolpi?style=flat-square)](https://travis-ci.org/lrnselfreliance/wrolpi)
+[![Build Status](https://img.shields.io/travis/lrnselfreliance/wrolpi?style=flat-square)](https://travis-ci.com/lrnselfreliance/wrolpi)
 [![License: GPL v3](https://img.shields.io/github/license/lrnselfreliance/wrolpi?style=flat-square)](https://github.com/lrnselfreliance/wrolpi/blob/master/LICENSE)
 
 **Take your internet, off-grid.**

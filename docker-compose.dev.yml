@@ -43,6 +43,11 @@ services:
       - './app:/app'
     command: "yarn start"
     stdin_open: true
+    healthcheck:
+      test: [ "CMD-SHELL", "curl http://127.0.0.1:3000" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   web:
     depends_on:
@@ -57,3 +62,8 @@ services:
       - "./icon.ico:/etc/nginx/favicon.ico"
       - "./icon.png:/etc/nginx/icon.png"
       - "./test:/opt/media"
+    healthcheck:
+      test: [ "CMD-SHELL", "curl http://127.0.0.1:80" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5

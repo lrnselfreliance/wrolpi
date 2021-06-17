@@ -14,7 +14,7 @@ sanic-openapi==0.6.2
 sanic==20.12.0
 SQLAlchemy==1.3.22
 srt==3.4.1
-websockets==8.1
+websockets==9.1
 webvtt-py==0.4.6
 youtube-dl==2021.5.16
 yoyo-migrations==7.2.1

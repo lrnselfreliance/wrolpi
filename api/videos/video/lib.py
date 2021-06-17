@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import Tuple, Optional, List
 
-from dictorm import Dict
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
@@ -42,7 +41,7 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
     return video, previous_video, next_video
 
 
-def get_surrounding_videos(session: Session, video_id: int, channel_id: int) -> Tuple[Optional[Dict], Optional[Dict]]:
+def get_surrounding_videos(session: Session, video_id: int, channel_id: int):
     """
     Get the previous and next videos around the provided video.  The videos must be in the same channel.
 

@@ -1,5 +1,4 @@
 cachetools==4.2.0
-dictorm==4.2
 docker==4.4.1
 mock==4.0.3
 pdfkit==0.6.1

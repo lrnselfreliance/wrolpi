@@ -9,7 +9,6 @@ from typing import Union, Tuple, List, Set, Iterable
 
 import PIL
 from PIL import Image
-from dictorm import Dict
 from sqlalchemy.orm import Session
 
 from api.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify
@@ -179,7 +178,7 @@ def get_absolute_video_files(video: Video) -> List[Path]:
     return list(_get())
 
 
-def get_video_info_json(video: Dict) -> Union[dict, None]:
+def get_video_info_json(video) -> Union[dict, None]:
     """Get the info_json object from a video's meta-file.  Return an empty dict if not possible."""
     if not video.channel or not video.channel.directory:
         return
@@ -555,7 +554,7 @@ def minimize_video(video: dict) -> dict:
     return video
 
 
-def add_video_to_skip_list(channel: Dict, video: Dict):
+def add_video_to_skip_list(channel, video):
     try:
         channel.skip_download_videos.append(video.source_id)
     except AttributeError:

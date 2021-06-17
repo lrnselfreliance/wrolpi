@@ -4,7 +4,6 @@ from typing import Generator, List, Union
 
 import srt
 import webvtt
-from dictorm import Dict
 
 from api.common import logger
 from api.errors import UnknownCaptionFile

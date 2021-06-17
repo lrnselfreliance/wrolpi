@@ -2,18 +2,17 @@
 import json
 import pathlib
 import re
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta
 from queue import Queue
 from random import shuffle
 from typing import Tuple, List
 
-from dictorm import Dict
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 from youtube_dl import YoutubeDL
 
-from api.common import logger, today, ProgressReporter, date_range
+from api.common import logger, today, ProgressReporter
 from api.db import get_db_context, get_db_curs
 from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path, add_video_to_skip_list
@@ -29,7 +28,7 @@ YDL.params['logger'] = ydl_logger
 YDL.add_default_info_extractors()
 
 
-def update_channel(channel: Dict = None, link: str = None):
+def update_channel(channel=None, link: str = None):
     """
     Connect to the Channel's host website and pull a catalog of all videos.  Insert any new videos into the DB.
 
@@ -177,7 +176,7 @@ def _find_all_missing_videos(link: str = None) -> List[Tuple]:
         return missing_videos
 
 
-def find_all_missing_videos(link: str = None) -> Tuple[Dict, dict]:
+def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
     """
     Find all videos that don't have a video file, but are found in the DB (taken from the channel's info_json).
 
@@ -234,7 +233,7 @@ def download_video(channel: dict, video: dict) -> pathlib.Path:
     """
     Download a video (and associated posters/etc) to it's channel's directory.
 
-    :param channel: A DictORM Channel entry
+    :param channel:
     :param video: A YoutubeDL info entry dictionary
     :return:
     """

@@ -4,23 +4,12 @@ from typing import Tuple, ContextManager
 import psycopg2
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 
-from api.common import logger
+from api.common import logger, Base
 from api.vars import DOCKERIZED
 
 db_logger = logger.getChild(__name__)
-
-Base = declarative_base()
-
-
-def base_dict(self):
-    d = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
-    return d
-
-
-Base.dict = base_dict
 
 
 def get_db_args(dbname: str = None):

@@ -4,8 +4,8 @@ from typing import List, Tuple
 import pint
 from sqlalchemy.orm import Session
 
-from api.common import logger
-from api.db import get_db_context, get_db_curs, Base
+from api.common import logger, Base
+from api.db import get_db_context, get_db_curs
 from api.inventory.models import Inventory, Item
 
 unit_registry = pint.UnitRegistry()
@@ -76,8 +76,7 @@ def get_categories() -> List[Tuple[int, str, str]]:
 
 
 def get_brands() -> List[Tuple[int, str]]:
-    with get_db_context() as (engine, session):
-        curs = db_conn.cursor()
+    with get_db_curs() as curs:
         curs.execute("SELECT DISTINCT brand FROM item WHERE brand IS NOT NULL AND brand != '' ORDER BY 1")
         brands = curs.fetchall()
         return list(brands)

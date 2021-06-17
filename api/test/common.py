@@ -22,8 +22,8 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from api.api import api_app, attach_routes
-from api.common import EXAMPLE_CONFIG_PATH, get_config, ProgressReporter, insert_parameter
-from api.db import get_db_context, postgres_engine, get_db_args, Base
+from api.common import EXAMPLE_CONFIG_PATH, get_config, ProgressReporter, insert_parameter, Base
+from api.db import get_db_context, postgres_engine, get_db_args
 from api.vars import PROJECT_DIR
 from api.videos.api import refresh_queue, download_queue
 from api.videos.lib import refresh_channel_videos

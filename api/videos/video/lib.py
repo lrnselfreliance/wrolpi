@@ -1,7 +1,8 @@
 from datetime import datetime
 from typing import Tuple, Optional, List
 
-from dictorm import Dict, DictDB
+from dictorm import Dict
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -187,7 +188,11 @@ def video_search(
         logger.debug(query)
 
         curs.execute(query, args)
-        results = [dict(i) for i in curs.fetchall()]
+        try:
+            results = [dict(i) for i in curs.fetchall()]
+        except ProgrammingError:
+            # No videos
+            return [], 0
         total = results[0]['total'] if results else 0
         ranked_ids = [i['id'] for i in results]
 

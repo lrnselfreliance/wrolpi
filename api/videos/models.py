@@ -4,7 +4,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON, Date, A
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
-from api.db import Base
+from api.common import Base
 
 
 class Video(Base):

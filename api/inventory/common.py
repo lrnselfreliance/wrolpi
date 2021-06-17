@@ -7,7 +7,8 @@ from typing import List, Tuple
 import yaml
 from pint import Quantity
 
-from api.db import get_db_context, Base
+from api.common import logger, Base
+from api.db import get_db_context
 from api.inventory.inventory import unit_registry, get_items, get_inventories
 from api.vars import PROJECT_DIR
 from .models import Inventory, Item
@@ -47,6 +48,8 @@ DEFAULT_CATEGORIES = [
 DEFAULT_INVENTORIES = [
     'Food Storage',
 ]
+
+logger = logger.getChild(__name__)
 
 
 def sum_by_key(items: List[Base], key: callable):
@@ -154,6 +157,12 @@ def save_inventories_file(path: str = None):
             if old and not inventories:
                 raise FileExistsError(f'Refusing to overwrite non-empty inventories.yaml with empty inventories.'
                                       f'  {path}')
+
+    if path.is_dir():
+        logger.fatal(f'Cannot save inventories because {path} is a directory!  This is likely caused by Docker creating'
+                     'the directory.  You should stop WROLPi, remove the empty directory, create an empty file in'
+                     "it's place, then start WROLPi again.")
+        return
 
     with open(path, 'wt') as fh:
         contents = dict(

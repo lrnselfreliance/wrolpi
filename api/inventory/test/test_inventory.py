@@ -7,7 +7,8 @@ import pytest
 import sqlalchemy
 from pint import Quantity
 
-from api.db import get_db_context, Base
+from api.db import get_db_context
+from ...common import Base
 from api.test.common import wrap_test_db, ExtendedTestCase
 from .. import init
 from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \

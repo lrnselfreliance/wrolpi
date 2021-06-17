@@ -191,6 +191,16 @@ export async function download() {
     return await response.json();
 }
 
+export async function downloadChannel(link) {
+    let url = `${VIDEOS_API}:download/${link}`;
+    await fetch(url, {method: 'POST'});
+}
+
+export async function refreshChannel(link) {
+    let url = `${VIDEOS_API}:refresh/${link}`;
+    await fetch(url, {method: 'POST'});
+}
+
 export async function distributeDownloadDays() {
     let response = await apiPost(`${VIDEOS_API}:distribute_download_days`);
     return response;

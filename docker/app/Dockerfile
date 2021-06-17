@@ -8,6 +8,7 @@ ENV PATH /app/node_modules/.bin:$PATH
 COPY app .env* /app/
 RUN rm -rf /app/node_modules
 RUN npm install --silent
+RUN yarn
 
 # Create the production build
 RUN yarn run build

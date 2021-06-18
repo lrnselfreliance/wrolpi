@@ -13,7 +13,9 @@ import sys
 from api import api
 from api.cmd import import_settings_configs
 from api.common import logger
+from api.db import uri
 from api.modules import MODULES
+from api.vars import PROJECT_DIR
 from api.videos.common import verify_config
 
 
@@ -23,6 +25,26 @@ def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):
     for choice in sub_commands.choices:
         if choice not in choices_to_mains:
             choices_to_mains[choice] = sub_main
+
+
+def db_handler(args):
+    """
+    Handle database migrations.  Currently this uses Alembic, supported commands are "upgrade" and "downgrade".
+    """
+    from alembic.config import Config
+    from alembic import command
+
+    config = Config(PROJECT_DIR / 'alembic.ini')
+    # Overwrite the Alembic config, the is usually necessary when running in a docker container.
+    config.set_main_option('sqlalchemy.url', uri)
+
+    if args.command == 'upgrade':
+        command.upgrade(config, 'head')
+    elif args.command == 'downgrade':
+        command.downgrade(config, '-1')
+    else:
+        print(f'Unknown DB command: {args.command}')
+        return 2
 
 
 async def main():
@@ -39,6 +61,10 @@ async def main():
     choices_to_mains = {'api': api.main}
     api.init_parser(api_parser)
 
+    # DB Parser for running Alembic migrations
+    db_parser = sub_commands.add_parser('db')
+    db_parser.add_argument('command')
+
     # Setup the modules' sub-commands
     for module_name, module in MODULES.items():
         module.init_parser(sub_commands)
@@ -50,6 +76,10 @@ async def main():
         verify_config()
         print('Config verified')
         return 0
+
+    if args.sub_commands == 'db':
+        return_code = db_handler(args)
+        return return_code
 
     if args.verbose == 1:
         logger.info('Setting verbosity to INFO')

@@ -58,12 +58,13 @@ async def main():
     # API parser is always present
     api_parser = sub_commands.add_parser('api')
     # This dict keeps track of which main will be called for each sub-command
-    choices_to_mains = {'api': api.main}
     api.init_parser(api_parser)
 
     # DB Parser for running Alembic migrations
     db_parser = sub_commands.add_parser('db')
     db_parser.add_argument('command')
+
+    choices_to_mains = {'api': api.main, 'db': db_handler}
 
     # Setup the modules' sub-commands
     for module_name, module in MODULES.items():
@@ -76,10 +77,6 @@ async def main():
         verify_config()
         print('Config verified')
         return 0
-
-    if args.sub_commands == 'db':
-        return_code = db_handler(args)
-        return return_code
 
     if args.verbose == 1:
         logger.info('Setting verbosity to INFO')

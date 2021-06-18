@@ -275,7 +275,7 @@ def create_db_structure(structure):
 
                 with get_db_context(commit=True) as (engine, session):
                     for channel in structure:
-                        channel = Channel(directory=str(tempdir / channel), name=channel)
+                        channel = Channel(directory=str(tempdir / channel), name=channel, link=channel)
                         session.add(channel)
                         session.flush()
                         session.refresh(channel)

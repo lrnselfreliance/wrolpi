@@ -118,13 +118,15 @@ def compact_unit(quantity: unit_registry.Quantity) -> unit_registry.Quantity:
         return compact_unit(quantity.to(next_unit))
 
     # No units were necessary, return as is.
-    return round(quantity, UNIT_PRECISION)
+    quantity = round(quantity, UNIT_PRECISION)
+    return quantity
 
 
 def quantity_to_tuple(quantity: unit_registry.Quantity) -> Tuple[Decimal, Quantity]:
     decimal, (units,) = quantity.to_tuple()
     unit, _ = units
-    return round(decimal, UNIT_PRECISION), unit_registry(unit)
+    quantity, unit = round(decimal, UNIT_PRECISION), unit_registry(unit)
+    return quantity, unit
 
 
 def cleanup_quantity(quantity: Quantity) -> Quantity:

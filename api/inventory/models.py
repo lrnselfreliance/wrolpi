@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, DECIMAL
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
@@ -17,7 +17,7 @@ class Item(Base):
     created_at = Column(DateTime, default=datetime.now)
     deleted_at = Column(DateTime)
     expiration_date = Column(Date)
-    item_size = Column(Integer)
+    item_size = Column(DECIMAL)
     name = Column(String)
     purchase_date = Column(Date)
     serving = Column(Integer)
@@ -28,7 +28,8 @@ class Item(Base):
     inventory = relationship('Inventory', primaryjoin="Item.inventory_id==Inventory.id")
 
     def __repr__(self):
-        return f'<Item(id={self.id}, name={self.name}, brand={self.brand}, inventory={self.inventory_id})>'
+        return f'<Item(id={self.id}, name={self.name}, brand={self.brand}, ' \
+               f'count={self.count}, item_size={self.item_size}, unit={self.unit}, inventory={self.inventory_id})>'
 
     def dict(self):
         d = dict(

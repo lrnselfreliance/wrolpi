@@ -92,6 +92,9 @@ def get_brands() -> List[Tuple[int, str]]:
 
 
 def get_items(inventory_id: int) -> List[Base]:
+    """
+    Get all Items in an Inventory, except deleted items.
+    """
     with get_db_context() as (engine, session):
         results = session.query(Item).filter(
             Item.inventory_id == inventory_id,
@@ -102,7 +105,8 @@ def get_items(inventory_id: int) -> List[Base]:
 
 def save_item(inventory_id: int, item: dict):
     with get_db_context(commit=True) as (engine, session):
-        Item(inventory_id=inventory_id, **item).flush()
+        item = Item(inventory_id=inventory_id, **item)
+        session.add(item)
 
 
 def update_item(item_id: int, item: dict):
@@ -113,5 +117,5 @@ def update_item(item_id: int, item: dict):
 
 
 def delete_items(items_ids: List[int]):
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_curs(commit=True) as curs:
         curs.execute('UPDATE item SET deleted_at=current_timestamp WHERE id = ANY(%s)', (items_ids,))

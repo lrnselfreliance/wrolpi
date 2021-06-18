@@ -32,7 +32,7 @@ TEST_ITEMS_COLUMNS = (
     'expiration_date',
     'purchase_date',
 )
-TEST_ITEMS = [
+TEST_ITEMS_TUPLES = [
     (1, 'Wheaters', 'Red Wheat', 500, 'oz', 1, 'grains', 'wheat'),
     (1, 'Wheaters', 'Red Wheat', 55, 'pounds', 2, 'grains', 'wheat'),
     (1, 'Ricey', 'White Rice', 8, 'pounds', 1, 'grains', 'rice'),
@@ -43,7 +43,7 @@ TEST_ITEMS = [
     # This item is deleted, and should always be ignored.
     (1, 'deleted', 'deleted', Decimal('1'), 'oz', 1, 'fruits', 'canned', '2020-01-01'),
 ]
-TEST_ITEMS = [dict(zip(TEST_ITEMS_COLUMNS, i)) for i in TEST_ITEMS]
+TEST_ITEMS = [dict(zip(TEST_ITEMS_COLUMNS, i)) for i in TEST_ITEMS_TUPLES]
 
 
 def extract_items(lst: List[Base], keys: Iterable[str]) -> List[Base]:

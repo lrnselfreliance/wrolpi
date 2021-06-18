@@ -183,7 +183,7 @@ def video_search(
                 {favorites_where}
             ORDER BY {order}
             OFFSET %(offset)s LIMIT {int(limit)}
-        '''
+        '''.strip()
         logger.debug(query)
 
         curs.execute(query, args)

@@ -26,6 +26,8 @@ from sanic.request import Request
 from sanic.response import HTTPResponse
 from sanic_openapi import doc
 from sanic_openapi.doc import Field
+from sqlalchemy import types
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
 from websocket import WebSocket
 
@@ -38,6 +40,27 @@ ch = logging.StreamHandler()
 formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
 ch.setFormatter(formatter)
 logger.addHandler(ch)
+
+# Base is used for all SQLAlchemy models.
+Base = declarative_base()
+
+
+def base_dict(self):
+    d = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+    return d
+
+
+Base.dict = base_dict
+
+
+class tsvector(types.TypeDecorator):
+    impl = types.UnicodeText
+
+
+@compiles(tsvector, 'postgresql')
+def compile_tsvector(element, compiler, **kw):
+    return 'tsvector'
+
 
 URL_CHARS = string.ascii_lowercase + string.digits
 
@@ -556,15 +579,3 @@ WHITESPACE = re.compile(r'\s')
 
 def remove_whitespace(s: str) -> str:
     return WHITESPACE.sub('', s)
-
-
-# Base is used for all SQLAlchemy models.
-Base = declarative_base()
-
-
-def base_dict(self):
-    d = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
-    return d
-
-
-Base.dict = base_dict

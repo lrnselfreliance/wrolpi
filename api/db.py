@@ -50,7 +50,6 @@ def _get_db_session():
 def get_db_context(commit: bool = False) -> ContextManager[Tuple[Engine, Session]]:
     """Context manager that creates a DB session.  This will automatically rollback changes, unless `commit` is True."""
     local_engine, session = _get_db_session()
-    Base.metadata.create_all(local_engine)
     try:
         yield local_engine, session
         if commit:
@@ -63,7 +62,6 @@ def get_db_context(commit: bool = False) -> ContextManager[Tuple[Engine, Session
 def get_db_curs(commit: bool = False):
     local_engine, session = _get_db_session()
     connection = local_engine.raw_connection()
-    Base.metadata.create_all(engine)
     curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
     yield curs
     if commit:

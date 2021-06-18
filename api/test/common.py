@@ -39,13 +39,6 @@ def reset_database_tables(engine):
     """
     Remove all rows from every table in a database.
     """
-    # curs = conn.execute("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
-    # tables = curs.fetchall()
-    # if tables:
-    #     table_names = [i for (i,) in curs.fetchall()]
-    #     conn.execute('; '.join(f'TRUNCATE {table} RESTART IDENTITY CASCADE' for table in table_names))
-    #     conn.execute('commit')
-
     meta = MetaData()
 
     with contextlib.closing(engine.connect()) as con:

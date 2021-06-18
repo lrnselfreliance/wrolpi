@@ -10,7 +10,6 @@ from sanic.request import Request
 from sanic_cors import CORS
 from sanic_openapi import swagger_blueprint
 
-import api.inventory
 from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_config, get_config, EVENTS, \
     wrol_mode_enabled
 from api.errors import WROLModeEnabled
@@ -174,11 +173,6 @@ def attach_routes(app):
     blueprints = [module.api_bp for module in MODULES.values()]
     api_group = Blueprint.group(*blueprints, root_api, url_prefix='/api')
     app.blueprint(api_group)
-
-    # Initialization functions
-    inits = [api.inventory.init for module in MODULES.values() if 'init' in dir(module)]
-    for init in inits:
-        init()
 
     # TODO Allow all requests to this webapp during development.  This should be restricted later.
     CORS(

@@ -244,7 +244,7 @@ class TestVideoAPI(TestAPI):
             poster2.touch()
 
             # Create a channel, associate videos with it.
-            channel = Channel(directory=channel_dir, link='foo')
+            channel = Channel(directory=channel_dir, link='foo', name='foo')
             session.add(channel)
             session.flush()
             session.refresh(channel)

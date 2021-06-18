@@ -13,7 +13,7 @@ class Item(Base):
 
     brand = Column(String)
     category = Column(String)
-    count = Column(Integer)
+    count = Column(DECIMAL)
     created_at = Column(DateTime, default=datetime.now)
     deleted_at = Column(DateTime)
     expiration_date = Column(Date)

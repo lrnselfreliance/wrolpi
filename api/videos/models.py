@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON, Date, ARRAY, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON, Date, ARRAY, ForeignKey, Computed
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
@@ -29,7 +29,9 @@ class Video(Base):
     upload_date = Column(DateTime)
     validated_poster = Column(Boolean, default=False)
     viewed = Column(DateTime)
-    textsearch = Column(tsvector)
+    textsearch = Column(tsvector, Computed('''to_tsvector('english'::regconfig,
+                                               ((COALESCE(title, ''::text) || ' '::text) ||
+                                                COALESCE(caption, ''::text)))'''))
 
     def __repr__(self):
         return f'<Video(id={self.id}, title={self.title}, path={self.video_path}, channel={self.channel_id})>'

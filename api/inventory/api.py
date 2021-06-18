@@ -3,10 +3,10 @@ from http import HTTPStatus
 from sanic import Blueprint, response
 from sanic.request import Request
 
-from .inventory import get_items, save_item, delete_items, \
-    get_inventories, save_inventory, delete_inventory, update_inventory, update_item, get_categories, get_brands
 from .common import get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
     save_inventories_file
+from .inventory import get_items, save_item, delete_items, \
+    get_inventories, save_inventory, delete_inventory, update_inventory, update_item, get_categories, get_brands
 from .schema import ItemPostRequest, InventoryPostRequest, InventoryPutRequest, ItemPutRequest
 from ..common import validate_doc, json_response
 from ..errors import ValidationError

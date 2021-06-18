@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List, Tuple
 
 import pint
+import psycopg2
 from sqlalchemy.orm import Session
 
 from api.common import logger, Base
@@ -70,7 +71,11 @@ def get_categories() -> List[Tuple[int, str, str]]:
     """
     with get_db_curs() as curs:
         curs.execute('SELECT DISTINCT subcategory, category FROM item ORDER BY 1, 2')
-        categories = curs.fetchall()
+        try:
+            categories = curs.fetchall()
+        except psycopg2.ProgrammingError:
+            # No categories
+            return []
         # Prepend an ID to each tuple, this is because javascript sucks.
         return list(categories)
 
@@ -78,7 +83,11 @@ def get_categories() -> List[Tuple[int, str, str]]:
 def get_brands() -> List[Tuple[int, str]]:
     with get_db_curs() as curs:
         curs.execute("SELECT DISTINCT brand FROM item WHERE brand IS NOT NULL AND brand != '' ORDER BY 1")
-        brands = curs.fetchall()
+        try:
+            brands = curs.fetchall()
+        except psycopg2.ProgrammingError:
+            # No categories
+            return []
         return list(brands)
 
 

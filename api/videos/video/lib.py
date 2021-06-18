@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Tuple, Optional, List
 
-from sqlalchemy.exc import ProgrammingError
+import psycopg2
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -189,7 +189,7 @@ def video_search(
         curs.execute(query, args)
         try:
             results = [dict(i) for i in curs.fetchall()]
-        except ProgrammingError:
+        except psycopg2.ProgrammingError:
             # No videos
             return [], 0
         total = results[0]['total'] if results else 0

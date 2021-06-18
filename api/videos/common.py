@@ -547,7 +547,7 @@ def minimize_video(video: dict) -> dict:
     video = _minimize_video(video)
 
     if video.get('channel'):
-        video['channel'] = minimize_channel(video['channel'].dict())
+        video['channel'] = minimize_channel(video['channel'])
     if video.get('info_json'):
         video['info_json'] = minimize_video_info_json(video['info_json'])
 

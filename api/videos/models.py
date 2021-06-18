@@ -1,5 +1,3 @@
-from typing import List
-
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON, Date, ARRAY, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
@@ -34,6 +32,12 @@ class Video(Base):
 
     def __repr__(self):
         return f'<Video(id={self.id}, title={self.title}, path={self.video_path}, channel={self.channel_id})>'
+
+    def dict(self):
+        d = super().dict()
+        if self.channel_id:
+            d['channel'] = self.channel.dict()
+        return d
 
 
 class Channel(Base):

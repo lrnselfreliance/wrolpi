@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey
 from sqlalchemy.orm import relationship
+from sqlalchemy.orm.collections import InstrumentedList
 
 from api.common import Base
 
@@ -11,23 +12,42 @@ class Item(Base):
     id = Column(Integer, primary_key=True)
 
     brand = Column(String)
-    name = Column(String)
-    count = Column(Integer)
-    item_size = Column(Integer)
-    unit = Column(String)
-    serving = Column(Integer)
     category = Column(String)
-    subcategory = Column(String)
-    expiration_date = Column(Date)
-    purchase_date = Column(Date)
+    count = Column(Integer)
     created_at = Column(DateTime, default=datetime.now)
     deleted_at = Column(DateTime)
+    expiration_date = Column(Date)
+    item_size = Column(Integer)
+    name = Column(String)
+    purchase_date = Column(Date)
+    serving = Column(Integer)
+    subcategory = Column(String)
+    unit = Column(String)
 
     inventory_id = Column(Integer, ForeignKey('inventory.id'))
     inventory = relationship('Inventory', primaryjoin="Item.inventory_id==Inventory.id")
 
     def __repr__(self):
         return f'<Item(id={self.id}, name={self.name}, brand={self.brand}, inventory={self.inventory_id})>'
+
+    def dict(self):
+        d = dict(
+            id=self.id,
+            brand=self.brand,
+            category=self.category,
+            count=self.count,
+            created_at=self.created_at,
+            deleted_at=self.deleted_at,
+            expiration_date=self.expiration_date,
+            inventory_id=self.inventory_id,
+            item_size=self.item_size,
+            name=self.name,
+            purchase_date=self.purchase_date,
+            serving=self.serving,
+            subcategory=self.subcategory,
+            unit=self.unit,
+        )
+        return d
 
 
 class Inventory(Base):
@@ -39,7 +59,7 @@ class Inventory(Base):
     created_at = Column(DateTime, default=datetime.now)
     deleted_at = Column(DateTime)
 
-    items = relationship('Item', foreign_keys='Item.inventory_id')
+    items: InstrumentedList = relationship('Item', foreign_keys='Item.inventory_id')
 
     def __repr__(self):
         return f'<Inventory(id={self.id}, name={self.name!r}, deleted={self.deleted_at})>'

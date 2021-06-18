@@ -189,7 +189,7 @@ def _refresh_videos(q: Queue, channel_links: list = None):
         reporter.set_progress_total(0, session.query(Channel).count())
 
         if channel_links:
-            channels = session.query(Channel).filter(Channel.link._in(channel_links))
+            channels = session.query(Channel).filter(Channel.link.in_(channel_links))
         else:
             channels = session.query(Channel).all()
 

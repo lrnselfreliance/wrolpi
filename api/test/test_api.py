@@ -90,7 +90,7 @@ class TestRootAPI(TestAPI):
             calls.append((a, kw))
 
         with mock.patch('api.videos.api.refresh_videos', fake_refresh_videos), \
-             mock.patch('api.videos.api.refresh_event') as refresh_event:
+                mock.patch('api.videos.api.refresh_event') as refresh_event:
             refresh_event: MagicMock
 
             # Cannot start a second refresh while one is running.

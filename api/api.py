@@ -2,9 +2,7 @@ import argparse
 import logging
 import random
 import re
-import tempfile
 from http import HTTPStatus
-from random import choice
 from string import ascii_letters
 
 from sanic import Blueprint, Sanic, response

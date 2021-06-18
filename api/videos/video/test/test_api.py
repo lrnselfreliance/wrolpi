@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from http import HTTPStatus
 from json import dumps
 from unittest import mock
+from uuid import uuid4
 
 from api.api import api_app
 from api.db import get_db_context
@@ -22,7 +23,7 @@ class TestVideoFunctions(TestAPI):
 
         with get_db_context(commit=True) as (engine, session):
             for _ in range(4):
-                session.add(Channel())
+                session.add(Channel(link=str(uuid4())))
             channel1, channel2, channel3, channel4 = session.query(Channel).all()
 
             now = datetime.utcnow()

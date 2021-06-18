@@ -11,6 +11,5 @@ before_install:
   - docker-compose -p wrolpi -f docker-compose.dev.yml run api db upgrade
   - docker-compose -p wrolpi -f docker-compose.dev.yml up -d api
   - docker-compose -p wrolpi -f docker-compose.dev.yml ps
-  - docker-compose -p wrolpi -f docker-compose.dev.yml logs api
 script:
   - docker-compose -p wrolpi -f docker-compose.dev.yml exec api pytest ./api

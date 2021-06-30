@@ -25,6 +25,8 @@ UNRECOVERABLE_ERRORS = {
     'requires payment',
     'Content Warning',
     'Did not get any data blocks',
+    'Sign in to confirm your age',
+    'This live stream recording is not available.',
 }
 
 DEFAULT_FILE_PERMISSIONS = 0o644

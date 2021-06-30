@@ -65,3 +65,8 @@ class Channel(Base):
 
     def __repr__(self):
         return f'<Channel(id={self.id}, name={self.name})>'
+
+    def add_video_to_skip_list(self, source_id):
+        skip_download_videos = set(self.skip_download_videos or [])
+        skip_download_videos.add(source_id)
+        self.skip_download_videos = skip_download_videos

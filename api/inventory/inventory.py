@@ -76,7 +76,6 @@ def get_categories() -> List[Tuple[int, str, str]]:
         except psycopg2.ProgrammingError:
             # No categories
             return []
-        # Prepend an ID to each tuple, this is because javascript sucks.
         return list(categories)
 
 
@@ -86,7 +85,7 @@ def get_brands() -> List[Tuple[int, str]]:
         try:
             brands = curs.fetchall()
         except psycopg2.ProgrammingError:
-            # No categories
+            # No brands
             return []
         return list(brands)
 
@@ -111,9 +110,10 @@ def save_item(inventory_id: int, item: dict):
 
 def update_item(item_id: int, item: dict):
     with get_db_context(commit=True) as (engine, session):
-        i = Item.get_one(id=item_id)
-        i.update(item)
-        i.flush()
+        i = session.query(Item).filter_by(id=item_id).one()
+        del item['id']
+        for key, value in item.items():
+            setattr(i, key, value)
 
 
 def delete_items(items_ids: List[int]):

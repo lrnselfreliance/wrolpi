@@ -128,7 +128,7 @@ def update_channels(reporter: ProgressReporter, link: str = None):
         try:
             update_channel(channel)
         except Exception:
-            logger.critical('Unable to fetch channel videos', exc_info=True)
+            logger.critical(f'Unable to get video list for {channel.name}', exc_info=True)
             continue
 
     if channels:
@@ -142,9 +142,7 @@ def _find_all_missing_videos(link: str = None) -> List[Tuple]:
     Get all Video entries which don't have the required media files (i.e. hasn't been downloaded).  Restrict to a
     single channel if "link" is provided.
     """
-    with get_db_context() as (engine, session):
-        curs = db_conn.cursor()
-
+    with get_db_curs() as curs:
         # Get all channels by default.
         where = ''
         params = ()
@@ -183,37 +181,37 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
     Yields a Channel Dict object, our Video id, and the "entry" of the video from the channel's info_json['entries'].
     """
     with get_db_context() as (engine, session):
-        Channel = db['channel']
 
         if link:
-            channel = Channel.get_one(link=link)
-            if not channel:
+            try:
+                channel = session.query(Channel).filter_by(link=link).one()
+            except NoResultFound:
                 raise UnknownChannel(f'No channel with link: {link}')
-            if not channel['url']:
+            if not channel.url:
                 raise ChannelURLEmpty('No URL for this channel')
             channels = [channel, ]
         else:
-            channels = Channel.get_where(Channel['info_json'].IsNotNull())
+            channels = session.query(Channel).filter(Channel.info_json.IsNotNull()).fetchall()
 
         # Get all channels while in the db context.
         channels = list(channels)
 
-    channels = {i['id']: i for i in channels}
+    channels = {i.id: i for i in channels}
 
-    match_regexen = {i: re.compile(j['match_regex']) for i, j in channels.items() if j['match_regex']}
+    match_regexen = {i: re.compile(j.match_regex) for i, j in channels.items() if j.match_regex}
 
     # Convert the channel video entries into a form that allows them to be quickly retrieved without searching through
     # the entire entries list.
     channels_entries = {}
     for id_, channel in channels.items():
-        channels_entries[id_] = {i['id']: i for i in channel['info_json']['entries']}
+        channels_entries[id_] = {i['id']: i for i in channel.info_json.entries}
 
     missing_videos = _find_all_missing_videos(link)
 
     for id_, source_id, channel_id in missing_videos:
         channel = channels[channel_id]
 
-        if channel['skip_download_videos'] and source_id in channel['skip_download_videos']:
+        if channel.skip_download_videos and source_id in channel.skip_download_videos:
             # This video has been marked to skip.
             continue
 
@@ -229,7 +227,7 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
             yield channel, id_, missing_video
 
 
-def download_video(channel: dict, video: dict) -> pathlib.Path:
+def download_video(channel: Channel, video: Video) -> pathlib.Path:
     """
     Download a video (and associated posters/etc) to it's channel's directory.
 
@@ -240,12 +238,12 @@ def download_video(channel: dict, video: dict) -> pathlib.Path:
     # YoutubeDL expects specific options, add onto the default options
     config = get_downloader_config()
     options = dict(config)
-    directory = get_absolute_media_path(channel['directory'])
+    directory = get_absolute_media_path(channel.directory)
     options['outtmpl'] = f'{directory}/{config["file_name_format"]}'
 
     ydl = YoutubeDL(options)
     ydl.add_default_info_extractors()
-    source_id = video['id']
+    source_id = video.id
     url = f'https://www.youtube.com/watch?v={source_id}'
     entry = ydl.extract_info(url, download=True, process=True)
     final_filename = ydl.prepare_filename(entry)
@@ -373,21 +371,19 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
         try:
             video_path = download_video(channel, missing_video)
         except Exception as e:
-            logger.warning(f'Failed to download "{missing_video["title"]}" with exception: {e}')
+            logger.warning(f'Failed to download "{missing_video["title"]}"', exc_info=e)
             if _skip_download(e):
                 # The video failed to download, and the error will never be fixed.  Skip it forever.
                 source_id = missing_video.get('id')
                 logger.warning(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
                                f'attempt to download it again.')
 
-                with get_db_context(commit=True) as (engine, session):
-                    channel = db['channel'].get_one(id=channel['id'])
-                    add_video_to_skip_list(channel, {'source_id': source_id})
+                channel.add_video_to_skip_list(source_id)
 
             reporter.error(1, f'Failed to download "{missing_video["title"]}", see server logs...')
             continue
         with get_db_context(commit=True) as (engine, session):
-            upsert_video(db, video_path, channel, id_=id_)
+            upsert_video(session, video_path, channel, id_=id_)
 
     reporter.finish(1, 'All videos are downloaded')
 

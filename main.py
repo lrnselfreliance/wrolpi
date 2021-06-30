@@ -64,7 +64,7 @@ async def main():
 
     # DB Parser for running Alembic migrations
     db_parser = sub_commands.add_parser('db')
-    db_parser.add_argument('command')
+    db_parser.add_argument('command', help=f'Supported commands: upgrade, downgrade')
 
     choices_to_mains = {'api': api.main, }
 

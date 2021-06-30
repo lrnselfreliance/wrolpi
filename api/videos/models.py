@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
 from api.common import Base, tsvector
+from api.errors import UnknownVideo
 
 
 class Video(Base):
@@ -67,6 +68,9 @@ class Channel(Base):
         return f'<Channel(id={self.id}, name={self.name})>'
 
     def add_video_to_skip_list(self, source_id):
-        skip_download_videos = set(self.skip_download_videos or [])
-        skip_download_videos.add(source_id)
-        self.skip_download_videos = skip_download_videos
+        if source_id:
+            skip_download_videos = {i for i in self.skip_download_videos or [] if i}
+            skip_download_videos.add(source_id)
+            self.skip_download_videos = skip_download_videos
+        else:
+            raise UnknownVideo(f'Cannot skip video with empty source id: {source_id}')

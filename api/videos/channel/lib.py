@@ -128,8 +128,8 @@ def get_channel(link) -> dict:
         return channel.dict()
 
 
-def create_channel(data):
-    with get_db_context() as (engine, session):
+def create_channel(data) -> Channel:
+    with get_db_context(commit=True) as (engine, session):
         # Verify that the URL/Name/Link aren't taken
         try:
             check_for_channel_conflicts(
@@ -159,4 +159,4 @@ def create_channel(data):
         channels = get_channels_config(session)
         save_settings_config(channels)
 
-        return channel.dict()
+        return channel

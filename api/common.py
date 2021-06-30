@@ -46,6 +46,8 @@ Base = declarative_base()
 
 
 def base_dict(self):
+    # TODO hack to force SQLAlchemy to pull in all the values of a row.  What is the correct way to do this?
+    repr(self)
     d = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
     return d
 

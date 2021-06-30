@@ -63,6 +63,8 @@ def channel_post(_: Request, data: dict):
             raise
 
     channel = create_channel(data)
+    channel = channel.dict()
+    print(type(channel))
 
     # Refresh the videos asynchronously
     from api.videos.api import refresh_videos

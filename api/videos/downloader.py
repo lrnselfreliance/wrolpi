@@ -204,7 +204,7 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
     # the entire entries list.
     channels_entries = {}
     for id_, channel in channels.items():
-        channels_entries[id_] = {i['id']: i for i in channel.info_json.entries}
+        channels_entries[id_] = {i['id']: i for i in channel.info_json['entries']}
 
     missing_videos = _find_all_missing_videos(link)
 
@@ -218,7 +218,7 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
         try:
             missing_video = channels_entries[channel_id][source_id]
         except KeyError:
-            logger.warning(f'Video {id_} / {source_id} is not in {channel["name"]} info_json')
+            logger.warning(f'Video {id_} / {source_id} is not in {channel.name} info_json')
             continue
 
         match_regex: re.compile = match_regexen.get(channel_id)
@@ -227,7 +227,7 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
             yield channel, id_, missing_video
 
 
-def download_video(channel: Channel, video: Video) -> pathlib.Path:
+def download_video(channel: Channel, video: dict) -> pathlib.Path:
     """
     Download a video (and associated posters/etc) to it's channel's directory.
 
@@ -243,7 +243,7 @@ def download_video(channel: Channel, video: Video) -> pathlib.Path:
 
     ydl = YoutubeDL(options)
     ydl.add_default_info_extractors()
-    source_id = video.id
+    source_id = video['id']
     url = f'https://www.youtube.com/watch?v={source_id}'
     entry = ydl.extract_info(url, download=True, process=True)
     final_filename = ydl.prepare_filename(entry)
@@ -336,8 +336,9 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel, i
     )
 
     if id_:
-        video = session.query(Video).filter(id=id_).one()
-        video.update(video_dict)
+        video = session.query(Video).filter_by(id=id_).one()
+        for key, value in video_dict.items():
+            setattr(video, key, value)
     else:
         video = Video(**video_dict)
 
@@ -367,7 +368,7 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
     reporter.message(1, f'Found {len(missing_videos)} missing videos.')
 
     for idx, (channel, id_, missing_video) in enumerate(missing_videos):
-        reporter.send_progress(1, idx, f'Downloading {channel["name"]}: {missing_video["title"]}')
+        reporter.send_progress(1, idx, f'Downloading {channel.name}: {missing_video["title"]}')
         try:
             video_path = download_video(channel, missing_video)
         except Exception as e:

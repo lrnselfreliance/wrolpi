@@ -6,7 +6,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, Session
 
-from api.common import logger, Base
+from api.common import logger
 from api.vars import DOCKERIZED
 
 db_logger = logger.getChild(__name__)
@@ -63,8 +63,9 @@ def get_db_curs(commit: bool = False):
     local_engine, session = _get_db_session()
     connection = local_engine.raw_connection()
     curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
-    yield curs
-    if commit:
-        connection.commit()
-    else:
+    try:
+        yield curs
+        if commit:
+            connection.commit()
+    finally:
         connection.rollback()

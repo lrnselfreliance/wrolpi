@@ -50,13 +50,19 @@ def process_captions(video: Video):
         lines = get_unique_caption_lines(str(caption_path))
         block = '\n'.join(lines)
         video.caption = block
+        return
     except UnicodeDecodeError:
         # Failed to decode the caption file
         # TODO handle this error
-        logger.debug(f'Failed to decode caption file {caption_path}')
+        pass
     except webvtt.errors.MalformedFileError:
         # File format is broken
-        logger.debug(f'Failed to parse caption file {caption_path}')
+        pass
+    except webvtt.errors.MalformedCaptionError:
+        # Captions form is broken somehow
+        pass
+
+    logger.debug(f'Failed to parse caption file {caption_path}')
 
 
 async def insert_bulk_captions(video_ids: List[int]):

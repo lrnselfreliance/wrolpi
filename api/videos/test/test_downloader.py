@@ -1,3 +1,4 @@
+import unittest
 from datetime import timedelta
 from queue import Queue
 from unittest import mock
@@ -7,8 +8,8 @@ from api.common import today, ProgressReporter
 from api.db import get_db_context
 from api.test.common import wrap_test_db, create_db_structure
 from api.vars import DEFAULT_DOWNLOAD_FREQUENCY
-from api.videos.downloader import update_channels, update_channel
-from api.videos.models import Channel
+from api.videos.downloader import update_channels, update_channel, find_all_missing_videos
+from api.videos.models import Channel, Video
 
 
 @wrap_test_db
@@ -87,3 +88,37 @@ def test_update_channel(tempdir):
             channel = session.query(Channel).one()
             # After and update, the next_download should be incremented by the download_frequency.
             assert channel.next_download > today()
+
+
+class TestDownloader(unittest.TestCase):
+    @wrap_test_db
+    @create_db_structure(
+        {
+            'channel1': ['vid1.mp4'],
+            'channel2': ['vid2.mp4']
+        },
+    )
+    def test_find_all_missing_videos(self, tempdir):
+        with get_db_context(commit=True) as (engine, session):
+            channel1, channel2 = session.query(Channel).order_by(Channel.id).all()
+            channel1.url = channel2.url = 'some url'
+            channel1.info_json = {'entries': [{'id': 'foo'}]}
+
+        # No missing videos
+        self.assertEqual([], list(find_all_missing_videos()))
+
+        # Create a video that has no video file.
+        with get_db_context(commit=True) as (engine, session):
+            video = Video(title='needs to be downloaded', channel_id=channel1.id, source_id='foo')
+            session.add(video)
+
+        missing = list(find_all_missing_videos())
+        self.assertEqual(len(missing), 1)
+
+        # The video returned is the one we faked.
+        channel, id_, entry = missing[0]
+        self.assertEqual(channel, channel1)
+        # Two videos were created for this test already.
+        self.assertEqual(id_, 3)
+        # The fake entry we added is regurgitated back.
+        self.assertEqual(entry, channel1.info_json['entries'][0])

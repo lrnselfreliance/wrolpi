@@ -181,7 +181,6 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
     Yields a Channel Dict object, our Video id, and the "entry" of the video from the channel's info_json['entries'].
     """
     with get_db_context() as (engine, session):
-
         if link:
             try:
                 channel = session.query(Channel).filter_by(link=link).one()
@@ -191,7 +190,7 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
                 raise ChannelURLEmpty('No URL for this channel')
             channels = [channel, ]
         else:
-            channels = session.query(Channel).filter(Channel.info_json.IsNotNull()).fetchall()
+            channels = session.query(Channel).filter(Channel.info_json != None).all()  # noqa
 
         # Get all channels while in the db context.
         channels = list(channels)

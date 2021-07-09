@@ -45,14 +45,41 @@ logger.addHandler(ch)
 Base = declarative_base()
 
 
-def base_dict(self):
-    # TODO hack to force SQLAlchemy to pull in all the values of a row.  What is the correct way to do this?
-    repr(self)
-    d = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
-    return d
+class ModelHelper:
+
+    def dict(self):
+        # TODO hack to force SQLAlchemy to pull in all the values of a row.  What is the correct way to do this?
+        repr(self)
+        d = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+        return d
 
 
-Base.dict = base_dict
+class ChannelPath(types.TypeDecorator):
+    impl = types.String
+
+    def process_bind_param(self, value, dialect):
+        if isinstance(value, Path):
+            return value.relative_to(self.channel.directory)
+        elif value:
+            return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value:
+            return Path(value)
+
+
+class PathColumn(types.TypeDecorator):
+    impl = types.String
+
+    def process_bind_param(self, value, dialect):
+        if isinstance(value, Path):
+            return value
+        elif value:
+            return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value:
+            return Path(value)
 
 
 class tsvector(types.TypeDecorator):
@@ -474,6 +501,8 @@ class JSONEncodeDate(json.JSONEncoder):
         elif isinstance(obj, Base):
             if hasattr(obj, 'dict'):
                 return obj.dict()
+        elif isinstance(obj, Path):
+            return str(obj)
         return super(JSONEncodeDate, self).default(obj)
 
 

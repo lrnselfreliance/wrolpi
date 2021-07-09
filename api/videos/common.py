@@ -393,21 +393,16 @@ async def generate_bulk_posters(video_ids: List[int]):
     """
     with get_db_context(commit=True) as (engine, session):
         logger.info(f'Generating {len(video_ids)} video posters')
-        Video = db['video']
-        for idx, video_id in enumerate(video_ids):
-            video = Video.get_one(id=video_id)
-            channel = video['channel']
+        videos = session.query(Video).filter(Video.id.in_(video_ids))
+        for video in videos:
             video_path = get_absolute_video_path(video)
 
             poster_path = replace_extension(video_path, '.jpg')
             if not poster_path.exists():
                 generate_video_poster(video_path)
-            channel_dir = get_absolute_media_path(channel['directory'])
+            channel_dir = get_absolute_media_path(video.channel.directory)
             poster_path = poster_path.relative_to(channel_dir)
-            video['poster_path'] = str(poster_path)
-
-            video.flush()
-            db_conn.commit()
+            video.poster_path = str(poster_path)
 
 
 def convert_image(existing_path: Path, destination_path: Path, ext: str = 'jpeg'):

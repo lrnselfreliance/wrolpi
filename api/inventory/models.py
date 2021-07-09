@@ -4,10 +4,10 @@ from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, DECI
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
-from api.common import Base
+from api.common import Base, ModelHelper
 
 
-class Item(Base):
+class Item(Base, ModelHelper):
     __tablename__ = 'item'
     id = Column(Integer, primary_key=True)
 
@@ -32,7 +32,7 @@ class Item(Base):
                f'count={self.count}, item_size={self.item_size}, unit={self.unit}, inventory={self.inventory_id})>'
 
 
-class Inventory(Base):
+class Inventory(Base, ModelHelper):
     __tablename__ = 'inventory'
     id = Column(Integer, primary_key=True)
 

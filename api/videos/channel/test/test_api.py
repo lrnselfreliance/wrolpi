@@ -226,21 +226,21 @@ class TestVideoAPI(TestAPI):
             subdir.mkdir()
 
             # These are the types of files that will be found first.
-            vid1 = pathlib.Path(subdir / 'channel name_20000101_abcdefghijk_title.mp4')
+            vid1 = subdir / 'channel name_20000101_abcdefghijk_title.mp4'
             vid1.touch()
-            vid2 = pathlib.Path(channel_path / 'channel name_20000102_bcdefghijkl_title.webm')
+            vid2 = channel_path / 'channel name_20000102_bcdefghijkl_title.webm'
             vid2.touch()
 
             # This video is named the same as vid1, except for the file extension.  Its possible that this was
             # downloaded later, or maybe the old video format has fallen out of favor.  WROLPi should ignore this
             # duplicate file.
-            vid1_alt = pathlib.Path(subdir / 'channel name_20000101_abcdefghijk_title.webm')
+            vid1_alt = subdir / 'channel name_20000101_abcdefghijk_title.webm'
             vid1_alt.touch()
 
             # These files are associated with the video files above, and should be found "near" them.
-            poster1 = pathlib.Path(subdir / 'channel name_20000101_abcdefghijk_title.jpg')
+            poster1 = subdir / 'channel name_20000101_abcdefghijk_title.jpg'
             poster1.touch()
-            poster2 = pathlib.Path(channel_path / 'channel name_20000102_bcdefghijkl_title.jpg')
+            poster2 = channel_path / 'channel name_20000102_bcdefghijkl_title.jpg'
             poster2.touch()
 
             # Create a channel, associate videos with it.
@@ -251,18 +251,19 @@ class TestVideoAPI(TestAPI):
             video1 = upsert_video(session, vid1, channel)
             video2 = upsert_video(session, vid2, channel)
             session.commit()
-            self.assertEqual({i.video_path for i in channel.videos}, {'subdir/' + vid1.name, vid2.name})
+            self.assertEqual({i.video_path for i in channel.videos},
+                             {pathlib.Path('subdir/' + vid1.name), pathlib.Path(vid2.name)})
 
             # Poster files were found.
-            self.assertEqual(video1.poster_path, 'subdir/' + poster1.name)
-            self.assertEqual(video2.poster_path, poster2.name)
+            self.assertEqual(video1.poster_path, pathlib.Path('subdir/' + poster1.name))
+            self.assertEqual(video2.poster_path, pathlib.Path(poster2.name))
 
             # Add a bogus file, this should be removed during the refresh
             self.assertNotIn('foo', {i.video_path for i in channel.videos})
             session.add(Video(video_path='foo', channel_id=channel.id))
             session.flush()
             session.refresh(channel)
-            self.assertIn('foo', {i.video_path for i in channel.videos})
+            self.assertIn('foo', {str(i.video_path) for i in channel.videos})
             self.assertEqual(len(channel.videos), 3)
 
             # Add a video that isn't in the DB, it should be found and any meta files associated with it
@@ -288,8 +289,13 @@ class TestVideoAPI(TestAPI):
                 (vid2.name, poster2.name, None),  # no description
                 (vid3.name, None, description3.name),  # no poster
             }
+
+            def str_or_none(i):
+                return str(i) if i else None
+
             self.assertEqual(
-                {(i.video_path, i.poster_path, i.description_path) for i in channel.videos},
+                {(str_or_none(i.video_path), str_or_none(i.poster_path), str_or_none(i.description_path))
+                 for i in channel.videos},
                 expected
             )
 

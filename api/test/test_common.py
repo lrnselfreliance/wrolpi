@@ -164,7 +164,7 @@ def test_create_db_structure(_structure, paths):
                 channel = session.query(Channel).filter_by(name=channel_name).one()
                 assert (tempdir / channel_name).is_dir()
                 assert channel
-                assert channel.directory == str(tempdir / channel_name)
+                assert channel.directory == tempdir / channel_name
                 assert len(channel.videos) == len([i for i in _structure[channel_name] if i.endswith('mp4')])
 
     test_func()
@@ -320,13 +320,13 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
     with get_db_context() as (engine, session):
         # Get the video by ID because it's poster is now a JPEG.
         vid2 = session.query(Video).filter_by(id=vid2.id).one()
-        assert vid2.poster_path == 'vid2.jpg'
-        assert all('webp' not in i.poster_path for i in session.query(Video).all())
+        assert str(vid2.poster_path) == 'vid2.jpg'
+        assert all('webp' not in str(i.poster_path) for i in session.query(Video).all())
         assert vid2.validated_poster is True
 
         # Vid1's image was validated, but not converted.
         vid1 = session.query(Video).filter_by(id=vid1.id).one()
-        assert vid1.poster_path == 'vid1.jpg'
+        assert str(vid1.poster_path) == 'vid1.jpg'
         assert vid1.validated_poster is True
 
     # Old webp was removed

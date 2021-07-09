@@ -2,11 +2,11 @@ from sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON, Date, A
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
-from api.common import Base, tsvector
+from api.common import Base, tsvector, ModelHelper, ChannelPath, PathColumn
 from api.errors import UnknownVideo
 
 
-class Video(Base):
+class Video(ModelHelper, Base):
     __tablename__ = 'video'
     id = Column(Integer, primary_key=True)
     channel_id = Column(Integer, ForeignKey('channel.id'))
@@ -14,12 +14,12 @@ class Video(Base):
     idempotency = Column(String)
 
     # File paths
-    caption_path = Column(String)
-    description_path = Column(String)
+    caption_path = Column(ChannelPath)
+    description_path = Column(ChannelPath)
     ext = Column(String)
-    info_json_path = Column(String)
-    poster_path = Column(String)
-    video_path = Column(String)
+    info_json_path = Column(ChannelPath)
+    poster_path = Column(ChannelPath)
+    video_path = Column(ChannelPath)
 
     caption = Column(String)
     duration = Column(Integer)
@@ -44,7 +44,7 @@ class Video(Base):
         return d
 
 
-class Channel(Base):
+class Channel(ModelHelper, Base):
     __tablename__ = 'channel'
     id = Column(Integer, primary_key=True)
     name = Column(String)
@@ -52,7 +52,7 @@ class Channel(Base):
     idempotency = Column(String)
     url = Column(String)
     match_regex = Column(String)
-    directory = Column(String)
+    directory = Column(PathColumn)
     skip_download_videos = Column(ARRAY(String))
     generate_posters = Column(Boolean)
     calculate_duration = Column(Boolean)

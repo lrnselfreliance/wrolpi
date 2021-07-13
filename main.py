@@ -74,6 +74,7 @@ async def main():
         update_choices_to_mains(sub_commands, choices_to_mains, module.main.main)
 
     args = parser.parse_args()
+    logger.warning(f'Starting with: {sys.argv}')
 
     if args.verify_config:
         verify_config()
@@ -88,7 +89,9 @@ async def main():
         logger.setLevel(logging.DEBUG)
 
     # Always warn about the log level so we know what will be logged
-    logger.warning(f'Logging level: {logger.getEffectiveLevel()}')
+    effective_level = logger.getEffectiveLevel()
+    level_name = logging.getLevelName(effective_level)
+    logger.warning(f'Logging level: {level_name}')
 
     # Run DB migrations before anything else, if requested.
     if args.sub_commands == 'db':

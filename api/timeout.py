@@ -78,7 +78,7 @@ def timeout(seconds: float) -> callable:
                 time.sleep(0.1)
 
             attempts = 0
-            while worker.is_alive():
+            while worker.is_alive() and not result:
                 # Worker has run out of time.
                 worker.kill()
                 time.sleep(0.1)

@@ -67,18 +67,25 @@ def timeout(seconds: float) -> callable:
             worker.start()
 
             # Continually attempt to get a result until the timeout is reached.
-            result = None
             kill_time = datetime.utcnow() + timedelta(seconds=_seconds)
-            while worker.is_alive() and datetime.utcnow() < kill_time:
-                # Haven't reached kill time yet, check for result.
-                message_waiting = parent_conn.poll(0.1)
-                if message_waiting:
-                    result = parent_conn.recv()
+            while True:
+                if not worker.is_alive():
+                    # Worker exited.
                     break
-                time.sleep(0.1)
+                if not datetime.utcnow() < kill_time:
+                    # Timeout was reached.
+                    break
+                if parent_conn.poll(0.1):
+                    # Result is waiting.
+                    break
+
+            # Get the result, if any.
+            result = None
+            if parent_conn.poll(0):
+                result = parent_conn.recv()
 
             attempts = 0
-            while worker.is_alive() and not result:
+            while worker.is_alive():
                 # Worker has run out of time.
                 worker.kill()
                 time.sleep(0.1)
@@ -87,18 +94,19 @@ def timeout(seconds: float) -> callable:
                     logger.warning(f'Failed to kill worker! {func}')
                     break
 
-            try:
-                if attempts > 0:
-                    raise TimeoutError(f'Killed worker after {_seconds} seconds: {func}')
-            finally:
-                worker.join()
-                if result and 'result' in result:
+            worker.join()
+
+            if result:
+                if 'result' in result:
                     return result['result']
-                elif result and 'exception' in result:
+                elif 'exception' in result:
                     exception = result['exception']
                     _traceback = result['traceback']
                     logger.warning(f'Traceback from worker: {_traceback}')
                     raise WorkerException(f'Exception from worker: {exception}')
+
+            if attempts > 0:
+                raise TimeoutError(f'Killed worker after {_seconds} seconds: {func}')
 
         return wrapped
 

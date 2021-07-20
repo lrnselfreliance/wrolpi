@@ -3,7 +3,6 @@ import json
 import pathlib
 import re
 from datetime import datetime, timedelta
-from functools import wraps
 from queue import Queue
 from random import shuffle
 from typing import Tuple, List
@@ -385,6 +384,7 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
 
             reporter.error(1, f'Failed to download "{missing_video["title"]}", see server logs...')
             continue
+
         with get_db_context(commit=True) as (engine, session):
             upsert_video(session, video_path, channel, id_=id_)
 

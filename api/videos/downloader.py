@@ -395,7 +395,6 @@ def main(args=None):
     """Find and download any missing videos.  Parse any arguments passed by the cmd-line."""
     q = Queue()
     reporter = ProgressReporter(q, 2)
-    for status in update_channels(reporter):
-        logger.info(str(status))
+    update_channels(reporter)
     download_all_missing_videos(reporter)
     return 0

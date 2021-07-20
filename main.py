@@ -7,6 +7,7 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 """
 import argparse
 import asyncio
+import inspect
 import logging
 import sys
 
@@ -101,7 +102,12 @@ async def main():
 
     if args.sub_commands:
         module_main = choices_to_mains[args.sub_commands]
-        return_code = module_main(args)
+        return_code_or_coro = module_main(args)
+        if inspect.iscoroutine(return_code_or_coro):
+            # The main was actually async, await the coroutine.
+            return_code = await return_code_or_coro
+        else:
+            return_code = return_code_or_coro
     else:
         parser.print_help()
         return_code = 1

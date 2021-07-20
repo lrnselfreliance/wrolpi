@@ -12,7 +12,7 @@ import sys
 
 from api import api
 from api.cmd import import_settings_configs
-from api.common import logger
+from api.common import logger, set_child_log_levels
 from api.db import uri
 from api.modules import MODULES
 from api.vars import PROJECT_DIR
@@ -47,17 +47,6 @@ def db_main(args):
         return 2
 
     return 0
-
-
-def set_child_log_levels(logger_, level):
-    """
-    Set the log level of all child loggers.
-
-    This may be necessary when a child is created before a root logger's level is set.
-    """
-    loggers = filter(lambda i: isinstance(i, logging.Logger), logger_.manager.loggerDict.values())
-    for _logger in loggers:
-        _logger.setLevel(level)
 
 
 async def main():

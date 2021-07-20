@@ -49,6 +49,17 @@ def db_main(args):
     return 0
 
 
+def set_child_log_levels(logger_, level):
+    """
+    Set the log level of all child loggers.
+
+    This may be necessary when a child is created before a root logger's level is set.
+    """
+    loggers = filter(lambda i: isinstance(i, logging.Logger), logger_.manager.loggerDict.values())
+    for _logger in loggers:
+        _logger.setLevel(level)
+
+
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='count')
@@ -81,12 +92,17 @@ async def main():
         print('Config verified')
         return 0
 
-    if args.verbose == 1:
-        logger.info('Setting verbosity to INFO')
-        logger.setLevel(logging.INFO)
-    elif args.verbose and args.verbose >= 2:
-        logger.debug('Setting verbosity to DEBUG')
-        logger.setLevel(logging.DEBUG)
+    try:
+        if args.verbose == 1:
+            set_child_log_levels(logger, logging.INFO)
+        elif args.verbose and args.verbose >= 2:
+            set_child_log_levels(logger, logging.DEBUG)
+    except Exception:
+        logger.warning('Failed to set log level of children.  Defaulting to only root logger.', exc_info=True)
+        if args.verbose == 1:
+            logger.setLevel(logging.INFO)
+        elif args.verbose and args.verbose >= 2:
+            logger.setLevel(logging.DEBUG)
 
     # Always warn about the log level so we know what will be logged
     effective_level = logger.getEffectiveLevel()

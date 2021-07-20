@@ -15,7 +15,7 @@ from youtube_dl import YoutubeDL
 from api.common import logger, today, ProgressReporter
 from api.db import get_db_context, get_db_curs
 from .captions import process_captions
-from .common import get_downloader_config, get_absolute_media_path, add_video_to_skip_list
+from .common import get_downloader_config, get_absolute_media_path
 from .models import Video, Channel
 from ..errors import UnknownChannel, ChannelURLEmpty
 from ..vars import UNRECOVERABLE_ERRORS

@@ -1,3 +1,4 @@
+import time
 import unittest
 from datetime import timedelta
 from queue import Queue
@@ -7,8 +8,9 @@ from unittest.mock import MagicMock
 from api.common import today, ProgressReporter
 from api.db import get_db_context
 from api.test.common import wrap_test_db, create_db_structure
-from api.vars import DEFAULT_DOWNLOAD_FREQUENCY, UNRECOVERABLE_ERRORS
-from api.videos.downloader import update_channels, update_channel, find_all_missing_videos, download_all_missing_videos
+from api.vars import DEFAULT_DOWNLOAD_FREQUENCY
+from api.videos.downloader import update_channels, update_channel, find_all_missing_videos, download_all_missing_videos, \
+    download_video
 from api.videos.models import Channel, Video
 
 
@@ -146,3 +148,22 @@ class TestDownloader(unittest.TestCase):
         with get_db_context() as (engine, session):
             channel = session.query(Channel).one()
             self.assertIn(1, channel.skip_download_videos)
+
+    def test_download_timeout(self):
+        class FakeYoutubeDL:
+            def __init__(self, *a, **kw):
+                pass
+
+            def add_default_info_extractors(self):
+                pass
+
+            def extract_info(self, *a, **kw):
+                # Sleep longer than the 1 second timeout.
+                for i in range(10):
+                    time.sleep(1)
+
+        with mock.patch('api.timeout.TEST_TIMEOUT', 1), \
+                mock.patch('api.videos.downloader.YoutubeDL', FakeYoutubeDL), \
+                mock.patch('api.videos.downloader.get_absolute_media_path'):
+            channel = Channel()
+            self.assertRaises(TimeoutError, download_video, channel, {'id': 1})

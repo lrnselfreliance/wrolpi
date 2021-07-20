@@ -12,7 +12,7 @@ import sys
 
 from api import api
 from api.cmd import import_settings_configs
-from api.common import logger, set_child_log_levels
+from api.common import logger
 from api.db import uri
 from api.modules import MODULES
 from api.vars import PROJECT_DIR
@@ -81,17 +81,12 @@ async def main():
         print('Config verified')
         return 0
 
-    try:
-        if args.verbose == 1:
-            set_child_log_levels(logger, logging.INFO)
-        elif args.verbose and args.verbose >= 2:
-            set_child_log_levels(logger, logging.DEBUG)
-    except Exception:
-        logger.warning('Failed to set log level of children.  Defaulting to only root logger.', exc_info=True)
-        if args.verbose == 1:
-            logger.setLevel(logging.INFO)
-        elif args.verbose and args.verbose >= 2:
-            logger.setLevel(logging.DEBUG)
+    # Set the level at the root logger so all children that have been created (or will be created) share the same level.
+    root_logger = logging.getLogger()
+    if args.verbose == 1:
+        root_logger.setLevel(logging.INFO)
+    elif args.verbose and args.verbose >= 2:
+        root_logger.setLevel(logging.DEBUG)
 
     # Always warn about the log level so we know what will be logged
     effective_level = logger.getEffectiveLevel()

@@ -41,18 +41,6 @@ formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(messag
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
-
-def set_child_log_levels(logger_, level):
-    """
-    Set the log level of all child loggers.
-
-    This may be necessary when a child is created before a root logger's level is set.
-    """
-    loggers = filter(lambda i: isinstance(i, logging.Logger), logger_.manager.loggerDict.values())
-    for _logger in loggers:
-        _logger.setLevel(level)
-
-
 # Base is used for all SQLAlchemy models.
 Base = declarative_base()
 

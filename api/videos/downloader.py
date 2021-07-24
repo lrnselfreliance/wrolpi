@@ -18,8 +18,7 @@ from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path
 from .models import Video, Channel
 from ..errors import UnknownChannel, ChannelURLEmpty
-from ..timeout import timeout
-from ..vars import UNRECOVERABLE_ERRORS, DEFAULT_DOWNLOAD_TIMEOUT
+from ..vars import UNRECOVERABLE_ERRORS
 
 logger = logger.getChild(__name__)
 ydl_logger = logger.getChild('youtube-dl')
@@ -227,7 +226,6 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
             yield channel, id_, missing_video
 
 
-@timeout(DEFAULT_DOWNLOAD_TIMEOUT)
 def download_video(channel: Channel, video: dict) -> pathlib.Path:
     """
     Download a video (and associated posters/etc) to it's channel's directory.

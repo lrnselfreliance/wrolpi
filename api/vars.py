@@ -28,6 +28,7 @@ UNRECOVERABLE_ERRORS = {
     'Did not get any data blocks',
     'Sign in to confirm your age',
     'This live stream recording is not available.',
+    'members-only content',
 }
 
 DEFAULT_FILE_PERMISSIONS = 0o644

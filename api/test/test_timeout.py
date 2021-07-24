@@ -8,17 +8,22 @@ from api.timeout import timeout, WorkerException
 class TestTimeout(unittest.TestCase):
 
     def test_timeout(self):
+        """
+        The process will be killed if it takes too long.
+        """
+
         @timeout(2)
         def func():
-            count = 5
-            while count > 0:
-                count -= 1
-                time.sleep(1)
+            time.sleep(5)
             raise Exception('Was not killed!')
 
         self.assertRaises(TimeoutError, func)
 
     def test_timeout_exception(self):
+        """
+        If the wrapped function has an error, it will raise a WorkerException.
+        """
+
         @timeout(10)
         def func():
             raise ValueError('Cause a worker error!')
@@ -31,6 +36,7 @@ class TestTimeout(unittest.TestCase):
         @timeout(0.1)
         def func():
             time.sleep(1)
+            return True
 
         # Killed after 0.1 seconds
         self.assertRaises(TimeoutError, func)
@@ -38,4 +44,4 @@ class TestTimeout(unittest.TestCase):
         with mock.patch('api.timeout.TEST_TIMEOUT', 2):
             # New timeout allows the function to finish.
             result = func()
-            self.assertIsNone(result)
+            self.assertTrue(result)

@@ -75,7 +75,7 @@ def timeout(seconds: float) -> callable:
                 if not datetime.utcnow() < kill_time:
                     # Timeout was reached.
                     break
-                if parent_conn.poll(0.1):
+                if parent_conn.poll(0.1):  # This prevents a "busy loop"
                     # Result is waiting.
                     break
 

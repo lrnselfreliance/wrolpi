@@ -13,7 +13,7 @@ from api.db import get_db_context
 from api.errors import UnknownFile
 from api.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI, create_db_structure
 from api.videos.api import refresh_queue
-from api.videos.downloader import upsert_video
+from api.videos.lib import upsert_video
 # Attach the default routes
 from api.videos.models import Channel, Video
 

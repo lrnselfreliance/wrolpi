@@ -1,17 +1,19 @@
 import asyncio
+import json
 import pathlib
+import re
 from multiprocessing.queues import Queue
+from typing import Tuple
 from uuid import uuid1
 
 from sqlalchemy.orm import Session
 
-from api.common import ProgressReporter
+from api.common import ProgressReporter, save_settings_config
 from api.db import get_db_curs, get_db_context
-from api.videos.captions import insert_bulk_captions
+from api.videos.captions import insert_bulk_captions, process_captions
 from api.videos.common import generate_bulk_posters, get_bulk_video_duration, get_bulk_video_size, \
     get_absolute_media_path, generate_video_paths, remove_duplicate_video_paths, bulk_validate_posters
-from api.videos.downloader import upsert_video
-from .models import Channel
+from .models import Channel, Video
 from ..common import logger
 
 logger = logger.getChild(__name__)
@@ -233,6 +235,18 @@ def get_channels_config(session: Session) -> dict:
     return dict(channels=channels)
 
 
+def save_channels_config(session=None):
+    """
+    Pull the Channel information from the DB, save it to the config.
+    """
+    if session:
+        config = get_channels_config(session)
+    else:
+        with get_db_context() as (engine, session):
+            config = get_channels_config(session)
+    save_settings_config(config)
+
+
 async def get_statistics():
     with get_db_curs() as curs:
         curs.execute('''
@@ -301,3 +315,104 @@ async def get_statistics():
         historical=historical_stats,
     ))
     return ret
+
+
+NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
+                         r'(jpg|webp|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
+
+
+def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel, idempotency: str = None,
+                 skip_captions=False,
+                 id_: str = None) -> Video:
+    """
+    Insert a video into the DB.  Also, find any meta-files near the video file and store them on the video row.
+
+    If id_ is provided, update that entry.
+    """
+    channel_dir = get_absolute_media_path(channel.directory)
+    poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path, relative_to=channel_dir)
+
+    # Video paths should be relative to the channel's directory
+    if video_path.is_absolute():
+        video_path = video_path.relative_to(channel_dir)
+
+    name_match = NAME_PARSER.match(video_path.name)
+    _ = upload_date = source_id = title = ext = None
+    if name_match:
+        _, upload_date, source_id, title, ext = name_match.groups()
+
+    # Make sure the date is a valid date format, if not, leave it blank.  Youtube-DL sometimes puts an NA in the date.
+    # We may even get videos that weren't downloaded by WROLPi.
+    if not upload_date or not upload_date.isdigit() or len(upload_date) != 8:
+        logger.debug(f'Could not parse date from filename: {video_path}')
+        upload_date = None
+
+    duration = None
+    if info_json_path:
+        path = (channel_dir / info_json_path).absolute()
+        try:
+            with open(path) as fh:
+                json_contents = json.load(fh)
+                duration = json_contents['duration']
+        except json.decoder.JSONDecodeError:
+            logger.warning(f'Failed to load JSON file to get duration: {path}')
+
+    video_dict = dict(
+        channel_id=channel.id,
+        description_path=str(description_path) if description_path else None,
+        ext=ext,
+        poster_path=str(poster_path) if poster_path else None,
+        source_id=source_id,
+        title=title,
+        upload_date=upload_date,
+        video_path=str(video_path),
+        caption_path=str(caption_path) if caption_path else None,
+        idempotency=idempotency,
+        info_json_path=str(info_json_path) if info_json_path else None,
+        duration=duration,
+    )
+
+    if id_:
+        video = session.query(Video).filter_by(id=id_).one()
+        for key, value in video_dict.items():
+            setattr(video, key, value)
+    else:
+        video = Video(**video_dict)
+
+    session.add(video)
+    session.flush()
+
+    if skip_captions is False and caption_path:
+        # Process captions only when requested
+        process_captions(video)
+
+    return video
+
+
+def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
+        pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
+    """
+    Find all files that share a file's full path, except their extensions.  It is assumed that file with the
+    same name, but different extension is related to that file.  A None will be yielded if the meta file doesn't exist.
+
+    Example:
+        >>> foo = pathlib.Path('foo.bar')
+        >>> find_meta_files(foo)
+        (pathlib.Path('foo.jpg'), pathlib.Path('foo.description'),
+        pathlib.Path('foo.en.vtt'), pathlib.Path('foo.info.json'))
+    """
+    suffix = path.suffix
+    name, suffix, _ = str(path.name).rpartition(suffix)
+    meta_file_exts = (('.jpg', '.webp', '.png'), ('.description',), ('.en.vtt', '.en.srt'), ('.info.json',))
+    for meta_exts in meta_file_exts:
+        for meta_ext in meta_exts:
+            meta_path = path.with_suffix(meta_ext)
+            if meta_path.exists():
+                if relative_to:
+                    yield meta_path.relative_to(relative_to)
+                    break
+                else:
+                    yield meta_path
+                    break
+        else:
+            yield None

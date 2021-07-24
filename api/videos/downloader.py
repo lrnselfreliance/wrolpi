@@ -1,5 +1,4 @@
 #! /usr/bin/env python3
-import json
 import pathlib
 import re
 from datetime import datetime, timedelta
@@ -8,14 +7,13 @@ from random import shuffle
 from typing import Tuple, List
 
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 from youtube_dl import YoutubeDL
 
-from api.common import logger, today, ProgressReporter, save_settings_config
+from api.common import logger, today, ProgressReporter
 from api.db import get_db_context, get_db_curs
-from .captions import process_captions
-from .common import get_downloader_config, get_absolute_media_path
+from .common import load_downloader_config, get_absolute_media_path
+from .lib import save_channels_config, upsert_video
 from .models import Video, Channel
 from ..errors import UnknownChannel, ChannelURLEmpty
 from ..vars import UNRECOVERABLE_ERRORS
@@ -235,7 +233,7 @@ def download_video(channel: Channel, video: dict) -> pathlib.Path:
     :return:
     """
     # YoutubeDL expects specific options, add onto the default options
-    config = get_downloader_config()
+    config = load_downloader_config()
     options = dict(config)
     directory = get_absolute_media_path(channel.directory)
     options['outtmpl'] = f'{directory}/{config["file_name_format"]}'
@@ -248,107 +246,6 @@ def download_video(channel: Channel, video: dict) -> pathlib.Path:
     final_filename = ydl.prepare_filename(entry)
     final_filename = pathlib.Path(final_filename)
     return final_filename
-
-
-def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
-    pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
-    """
-    Find all files that share a file's full path, except their extensions.  It is assumed that file with the
-    same name, but different extension is related to that file.  A None will be yielded if the meta file doesn't exist.
-
-    Example:
-        >>> foo = pathlib.Path('foo.bar')
-        >>> find_meta_files(foo)
-        (pathlib.Path('foo.jpg'), pathlib.Path('foo.description'),
-        pathlib.Path('foo.en.vtt'), pathlib.Path('foo.info.json'))
-    """
-    suffix = path.suffix
-    name, suffix, _ = str(path.name).rpartition(suffix)
-    meta_file_exts = (('.jpg', '.webp', '.png'), ('.description',), ('.en.vtt', '.en.srt'), ('.info.json',))
-    for meta_exts in meta_file_exts:
-        for meta_ext in meta_exts:
-            meta_path = path.with_suffix(meta_ext)
-            if meta_path.exists():
-                if relative_to:
-                    yield meta_path.relative_to(relative_to)
-                    break
-                else:
-                    yield meta_path
-                    break
-        else:
-            yield None
-
-
-NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
-                         r'(jpg|webp|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
-
-
-def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel, idempotency: str = None,
-                 skip_captions=False,
-                 id_: str = None) -> Video:
-    """
-    Insert a video into the DB.  Also, find any meta-files near the video file and store them on the video row.
-
-    If id_ is provided, update that entry.
-    """
-    channel_dir = get_absolute_media_path(channel.directory)
-    poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path, relative_to=channel_dir)
-
-    # Video paths should be relative to the channel's directory
-    if video_path.is_absolute():
-        video_path = video_path.relative_to(channel_dir)
-
-    name_match = NAME_PARSER.match(video_path.name)
-    _ = upload_date = source_id = title = ext = None
-    if name_match:
-        _, upload_date, source_id, title, ext = name_match.groups()
-
-    # Make sure the date is a valid date format, if not, leave it blank.  Youtube-DL sometimes puts an NA in the date.
-    # We may even get videos that weren't downloaded by WROLPi.
-    if not upload_date or not upload_date.isdigit() or len(upload_date) != 8:
-        logger.debug(f'Could not parse date from filename: {video_path}')
-        upload_date = None
-
-    duration = None
-    if info_json_path:
-        path = (channel_dir / info_json_path).absolute()
-        try:
-            with open(path) as fh:
-                json_contents = json.load(fh)
-                duration = json_contents['duration']
-        except json.decoder.JSONDecodeError:
-            logger.warning(f'Failed to load JSON file to get duration: {path}')
-
-    video_dict = dict(
-        channel_id=channel.id,
-        description_path=str(description_path) if description_path else None,
-        ext=ext,
-        poster_path=str(poster_path) if poster_path else None,
-        source_id=source_id,
-        title=title,
-        upload_date=upload_date,
-        video_path=str(video_path),
-        caption_path=str(caption_path) if caption_path else None,
-        idempotency=idempotency,
-        info_json_path=str(info_json_path) if info_json_path else None,
-        duration=duration,
-    )
-
-    if id_:
-        video = session.query(Video).filter_by(id=id_).one()
-        for key, value in video_dict.items():
-            setattr(video, key, value)
-    else:
-        video = Video(**video_dict)
-
-    session.add(video)
-    session.flush()
-
-    if skip_captions is False and caption_path:
-        # Process captions only when requested
-        process_captions(video)
-
-    return video
 
 
 def _skip_download(error):
@@ -378,7 +275,9 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
                 logger.warning(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
                                f'attempt to download it again.')
 
-                channel.add_video_to_skip_list(source_id)
+                with get_db_context(commit=True) as (engine, session):
+                    channel = session.query(Channel).filter_by(id=channel.id).one()
+                    channel.add_video_to_skip_list(source_id)
 
             reporter.error(1, f'Failed to download "{missing_video["title"]}", see server logs...')
             continue
@@ -386,12 +285,7 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
         with get_db_context(commit=True) as (engine, session):
             upsert_video(session, video_path, channel, id_=id_)
 
-    # Save channels config if any videos have been skipped.
-    with get_db_context(commit=True) as (engine, session):
-        from .lib import get_channels_config
-        channels = get_channels_config(session)
-        save_settings_config(channels)
-
+    save_channels_config()
     reporter.finish(1, 'All videos are downloaded')
 
 

@@ -7,7 +7,7 @@ from api.db import get_db_context, get_db_curs
 from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.vars import DEFAULT_DOWNLOAD_FREQUENCY
 from api.videos.common import get_relative_to_media_directory, make_media_directory, check_for_channel_conflicts
-from api.videos.lib import get_channels_config
+from api.videos.lib import get_channels_config, save_channels_config
 from api.videos.models import Channel, Video
 
 
@@ -64,8 +64,7 @@ def delete_channel(link):
         session.query(Channel).filter_by(id=channel.id).delete()
 
         # Save these changes to the local.yaml as well
-        channels = get_channels_config(session)
-        save_settings_config(channels)
+        save_channels_config(session)
 
 
 def update_channel(data, link):
@@ -113,8 +112,7 @@ def update_channel(data, link):
             setattr(channel, key, value)
 
         # Save these changes to the local.yaml as well
-        channels = get_channels_config(session)
-        save_settings_config(channels)
+        save_channels_config(session)
 
     return channel
 
@@ -156,7 +154,6 @@ def create_channel(data) -> Channel:
         session.refresh(channel)
 
         # Save these changes to the local.yaml as well
-        channels = get_channels_config(session)
-        save_settings_config(channels)
+        save_channels_config(session)
 
         return channel

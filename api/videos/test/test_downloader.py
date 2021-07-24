@@ -1,5 +1,4 @@
 import time
-import unittest
 from datetime import timedelta
 from queue import Queue
 from unittest import mock
@@ -9,10 +8,12 @@ import pytest
 
 from api.common import today, ProgressReporter
 from api.db import get_db_context
-from api.test.common import wrap_test_db, create_db_structure
+from api.test.common import wrap_test_db, create_db_structure, TestAPI
 from api.vars import DEFAULT_DOWNLOAD_FREQUENCY
+from api.videos.common import load_channels_config
 from api.videos.downloader import update_channels, update_channel, find_all_missing_videos, download_all_missing_videos, \
     download_video
+from api.videos.lib import save_channels_config
 from api.videos.models import Channel, Video
 
 
@@ -94,7 +95,7 @@ def test_update_channel(tempdir):
             assert channel.next_download > today()
 
 
-class TestDownloader(unittest.TestCase):
+class TestDownloader(TestAPI):
     @wrap_test_db
     @create_db_structure(
         {
@@ -137,6 +138,11 @@ class TestDownloader(unittest.TestCase):
             video = dict(title='foo', id=1)
             session.add(channel)
 
+        # Save the config without the skipped video
+        save_channels_config()
+        config = load_channels_config()
+        self.assertEqual(config['channel']['skip_download_videos'], [])
+
         def _find_all_missing_videos(*a, **kw):
             return [(channel, video['id'], video)]
 
@@ -149,7 +155,10 @@ class TestDownloader(unittest.TestCase):
 
         with get_db_context() as (engine, session):
             channel = session.query(Channel).one()
-            self.assertIn(1, channel.skip_download_videos)
+            self.assertIn('1', channel.skip_download_videos)
+
+            config = load_channels_config()
+            self.assertEqual(config['channel']['skip_download_videos'], ['1'])
 
     @pytest.mark.skip
     def test_download_timeout(self):

@@ -27,13 +27,13 @@ VIDEO_QUERY_LIMIT = 20
 VIDEO_QUERY_MAX_LIMIT = 100
 
 
-def get_downloader_config() -> dict:
+def load_downloader_config() -> dict:
     config = get_config()
     downloader = config['downloader']
     return downloader
 
 
-def get_channels_config() -> dict:
+def load_channels_config() -> dict:
     config = get_config()
     channels = config['channels']
     return channels
@@ -55,7 +55,7 @@ class ConfigError(Exception):
 
 def import_settings_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
-    config = get_channels_config()
+    config = load_channels_config()
 
     with get_db_context(commit=True) as (engine, session):
         for section in config:

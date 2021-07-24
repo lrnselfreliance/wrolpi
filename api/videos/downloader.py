@@ -276,7 +276,7 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
                                f'attempt to download it again.')
 
                 with get_db_context(commit=True) as (engine, session):
-                    channel = session.query(Channel).filter_by(id=channel.id).one()
+                    session.add(channel)
                     channel.add_video_to_skip_list(source_id)
 
             reporter.error(1, f'Failed to download "{missing_video["title"]}", see server logs...')

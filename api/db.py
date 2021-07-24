@@ -5,6 +5,7 @@ import psycopg2
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.pool import NullPool
 
 from api.common import logger
 from api.vars import DOCKERIZED
@@ -36,7 +37,7 @@ postgres_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/po
 # This engine is used for all normal tasks (except testing).
 db_args = get_db_args()
 uri = 'postgresql://{user}:{password}@{host}:{port}/postgres'.format(**db_args)
-engine = create_engine(uri)
+engine = create_engine(uri, poolclass=NullPool)
 session_maker = sessionmaker(bind=engine)
 
 
@@ -55,11 +56,14 @@ def get_db_context(commit: bool = False) -> ContextManager[Tuple[Engine, Session
         if commit:
             session.commit()
     finally:
-        session.rollback()
+        # Rollback only if a transaction hasn't been committed.
+        if session.transaction.is_active:
+            session.rollback()
 
 
 @contextmanager
 def get_db_curs(commit: bool = False):
+    """Context manager that yields a DictCursor to execute raw SQL statements."""
     local_engine, session = _get_db_session()
     connection = local_engine.raw_connection()
     curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
@@ -68,4 +72,6 @@ def get_db_curs(commit: bool = False):
         if commit:
             connection.commit()
     finally:
-        connection.rollback()
+        # Rollback only if a transaction hasn't been committed.
+        if session.transaction.is_active:
+            connection.rollback()

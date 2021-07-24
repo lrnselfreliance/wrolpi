@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from typing import Tuple, ContextManager
 
 import psycopg2
+import sqlalchemy.exc
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, Session
@@ -55,6 +56,9 @@ def get_db_context(commit: bool = False) -> ContextManager[Tuple[Engine, Session
         yield local_engine, session
         if commit:
             session.commit()
+    except sqlalchemy.exc.DatabaseError:
+        session.rollback()
+        raise
     finally:
         # Rollback only if a transaction hasn't been committed.
         if session.transaction.is_active:
@@ -71,6 +75,9 @@ def get_db_curs(commit: bool = False):
         yield curs
         if commit:
             connection.commit()
+    except sqlalchemy.exc.DatabaseError:
+        session.rollback()
+        raise
     finally:
         # Rollback only if a transaction hasn't been committed.
         if session.transaction.is_active:

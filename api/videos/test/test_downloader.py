@@ -5,6 +5,8 @@ from queue import Queue
 from unittest import mock
 from unittest.mock import MagicMock
 
+import pytest
+
 from api.common import today, ProgressReporter
 from api.db import get_db_context
 from api.test.common import wrap_test_db, create_db_structure
@@ -149,6 +151,7 @@ class TestDownloader(unittest.TestCase):
             channel = session.query(Channel).one()
             self.assertIn(1, channel.skip_download_videos)
 
+    @pytest.mark.skip
     def test_download_timeout(self):
         class FakeYoutubeDL:
             def __init__(self, *a, **kw):

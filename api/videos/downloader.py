@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 from youtube_dl import YoutubeDL
 
-from api.common import logger, today, ProgressReporter
+from api.common import logger, today, ProgressReporter, save_settings_config
 from api.db import get_db_context, get_db_curs
 from .captions import process_captions
 from .common import get_downloader_config, get_absolute_media_path
@@ -385,6 +385,12 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
 
         with get_db_context(commit=True) as (engine, session):
             upsert_video(session, video_path, channel, id_=id_)
+
+    # Save channels config if any videos have been skipped.
+    with get_db_context(commit=True) as (engine, session):
+        from .lib import get_channels_config
+        channels = get_channels_config(session)
+        save_settings_config(channels)
 
     reporter.finish(1, 'All videos are downloaded')
 

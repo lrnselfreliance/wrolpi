@@ -221,7 +221,7 @@ def get_channels_config(session: Session) -> dict:
     channels = {
         i.link:
             dict(
-                directory=i.directory,
+                directory=str(i.directory),
                 match_regex=i.match_regex or '',
                 name=i.name,
                 url=i.url or '',

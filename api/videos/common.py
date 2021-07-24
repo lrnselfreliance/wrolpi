@@ -74,7 +74,7 @@ def import_settings_config():
 
             # Only name and directory are required
             channel.name = name
-            channel.directory = directory
+            channel.directory = str(directory)
 
             channel.calculate_duration = config[section].get('calculate_duration')
             channel.download_frequency = config[section].get('download_frequency')

@@ -175,11 +175,15 @@ class TestDownloader(TestAPI):
     @wrap_test_db
     @create_db_structure(
         {
-            'channel1': ['vid1.mp4'],
-            'channel2': ['vid2.mp4'],
-            'channel3': ['vid3.mp4'],
-            'channel4': ['vid4.mp4'],
-            'channel5': ['vid5.mp4'],
+            'channel1': [],  # More channels than days in a week.
+            'channel2': [],
+            'channel3': [],
+            'channel4': [],
+            'channel5': [],
+            'channel6': [],
+            'channel7': [],
+            'channel8': [],
+            'channel9': [],
         },
     )
     @mock.patch('api.videos.downloader.YDL', FakeYDL())
@@ -195,17 +199,19 @@ class TestDownloader(TestAPI):
                 channel.url = 'some url'
                 self.assertEqual(channel.next_download, None)
 
-        # Channels will download on different days the next week.
+        # Channels will download on different days the next week.  Except where there are not enough days.
         update_channels(reporter)
-        days = [8, 9, 11, 12, 14]
+        days = [7, 8, 9, 10, 10, 11, 12, 13, 14]
         for days_, channel in zip(days, channels):
-            self.assertEqual(channel.next_download, today() + timedelta(days=days_))
+            nd, expected = channel.next_download, today() + timedelta(days=days_)
+            self.assertEqual(nd, expected, f'Expected {(nd - expected).days} days for {channel}')
 
         # Even though all channels aren't updated, their order is the same.
         with get_db_context(commit=True):
             channels[0].next_download = None
             channels[1].next_download = None
             channels[4].next_download = None
+            channels[8].next_download = None
         update_channels(reporter)
         for days_, channel in zip(days, channels):
             self.assertEqual(channel.next_download, today() + timedelta(days=days_))
@@ -218,11 +224,18 @@ class TestDownloader(TestAPI):
                 'channel3': 1209600,  # bi-weekly
                 'channel4': 1209600,
                 'channel5': 2592000,  # 30 days
+                'channel6': 2592000,
+                'channel7': 2592000,
+                'channel8': 2592000,
+                'channel9': 2592000,
             }
             for channel in channels:
                 channel.download_frequency = frequency_map[channel.link]
                 channel.next_download = None
         update_channels(reporter)
-        days = [10, 14, 21, 28, 60]
+        days = [10, 14, 21, 28,
+                36, 42, 48, 54, 60  # 6 days apart = 30 days / 5
+                ]
         for days_, channel in zip(days, channels):
-            self.assertEqual(channel.next_download, today() + timedelta(days=days_))
+            nd, expected = channel.next_download, today() + timedelta(days=days_)
+            self.assertEqual(nd, expected, f'Expected {(nd - expected).days} days for {channel}')

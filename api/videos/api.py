@@ -23,17 +23,19 @@ Relative DB paths allow files to be moved without having to rebuild the entire c
 a file is moved, it will not be duplicated in the DB.
 """
 import asyncio
+import random
 from functools import wraps
 from http import HTTPStatus
+from multiprocessing import Event
 
-from sanic import Blueprint, response
+from sanic import Blueprint, response, Sanic
 from sanic.request import Request
 
 from api.common import create_websocket_feed, get_sanic_url, \
     validate_doc, json_response, wrol_mode_check, ProgressReporter
+from api.common import logger
 from api.videos.channel.api import channel_bp
 from api.videos.video.api import video_bp
-from .common import logger
 from .downloader import update_channels, download_all_missing_videos
 from .lib import process_video_meta_data, _refresh_videos, get_statistics
 from .schema import StreamResponse, \
@@ -173,3 +175,32 @@ async def favorite(_: Request, data: dict):
 async def statistics(_: Request):
     ret = await get_statistics()
     return json_response(ret, HTTPStatus.OK)
+
+
+MIN_DOWNLOAD_FREQUENCY = 60 * 60 * 4  # 4 hours
+MAX_DOWNLOAD_FREQUENCY = 60 * 60 * 12  # 12 hours
+PERIODIC_DOWNLOAD_EVENT = Event()
+
+
+async def _periodic_download():
+    """
+    Wait some amount of time, download, then schedule the next download.
+    """
+    sleep_seconds = random.randrange(MIN_DOWNLOAD_FREQUENCY, MAX_DOWNLOAD_FREQUENCY)
+    logger.debug(f'Waiting {sleep_seconds} seconds before next download')
+    await asyncio.sleep(sleep_seconds)
+    await download(None, None)
+
+    # Schedule the next download
+    asyncio.ensure_future(_periodic_download())
+
+
+@content_bp.listener('after_server_start')
+async def download(app: Sanic, loop):
+    """
+    Periodically download the videos.
+    """
+    if not PERIODIC_DOWNLOAD_EVENT.is_set():
+        PERIODIC_DOWNLOAD_EVENT.set()
+        logger.info(f'Starting periodic download')
+        asyncio.ensure_future(_periodic_download())

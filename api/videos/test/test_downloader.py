@@ -9,12 +9,22 @@ import pytest
 from api.common import today, ProgressReporter
 from api.db import get_db_context
 from api.test.common import wrap_test_db, create_db_structure, TestAPI
-from api.vars import DEFAULT_DOWNLOAD_FREQUENCY
 from api.videos.common import load_channels_config
-from api.videos.downloader import update_channels, update_channel, find_all_missing_videos, download_all_missing_videos, \
+from api.videos.downloader import update_channels, find_all_missing_videos, download_all_missing_videos, \
     download_video
 from api.videos.lib import save_channels_config
 from api.videos.models import Channel, Video
+
+
+class FakeYDL:
+
+    @staticmethod
+    def extract_info(*a, **kw):
+        return {
+            'entries': [
+                {'id': 1},
+            ],
+        }
 
 
 @wrap_test_db
@@ -69,30 +79,6 @@ def test_update_channels(tempdir):
 
             # No channels needed to be updated
             assert update_channel.call_count == 0
-
-
-@wrap_test_db
-@create_db_structure(
-    {
-        'channel1': ['vid1.mp4'],
-    },
-)
-def test_update_channel(tempdir):
-    with get_db_context(commit=True) as (engine, session):
-        channel = session.query(Channel).one()
-        channel.download_frequency = DEFAULT_DOWNLOAD_FREQUENCY
-        assert channel.next_download is None
-
-    with mock.patch('api.videos.downloader.YDL') as YDL:
-        YDL.extract_info.return_value = {
-            'entries': [],
-        }
-        update_channel(channel)
-
-        with get_db_context() as (engine, session):
-            channel = session.query(Channel).one()
-            # After and update, the next_download should be incremented by the download_frequency.
-            assert channel.next_download > today()
 
 
 class TestDownloader(TestAPI):
@@ -179,3 +165,64 @@ class TestDownloader(TestAPI):
                 mock.patch('api.videos.downloader.get_absolute_media_path'):
             channel = Channel()
             self.assertRaises(TimeoutError, download_video, channel, {'id': 1})
+
+    # {key: 'daily', text: 'Daily', value: 86400},
+    # {key: 'weekly', text: 'Weekly', value: 604800},
+    # {key: 'biweekly', text: 'Biweekly', value: 1209600},
+    # {key: '30days', text: '30 Days', value: 2592000},
+    # {key: '90days', text: '90 Days', value: 7776000},
+
+    @wrap_test_db
+    @create_db_structure(
+        {
+            'channel1': ['vid1.mp4'],
+            'channel2': ['vid2.mp4'],
+            'channel3': ['vid3.mp4'],
+            'channel4': ['vid4.mp4'],
+            'channel5': ['vid5.mp4'],
+        },
+    )
+    @mock.patch('api.videos.downloader.YDL', FakeYDL())
+    def test_update_channel_order(self, tempdir):
+        q = Queue()
+        reporter = ProgressReporter(q, 2)
+
+        # All channels are downloaded weekly.
+        with get_db_context(commit=True) as (engine, session):
+            channels = list(session.query(Channel).order_by(Channel.link).all())
+            for channel in channels:
+                channel.download_frequency = 604800  # one week
+                channel.url = 'some url'
+                self.assertEqual(channel.next_download, None)
+
+        # Channels will download on different days the next week.
+        update_channels(reporter)
+        days = [8, 9, 11, 12, 14]
+        for days_, channel in zip(days, channels):
+            self.assertEqual(channel.next_download, today() + timedelta(days=days_))
+
+        # Even though all channels aren't updated, their order is the same.
+        with get_db_context(commit=True):
+            channels[0].next_download = None
+            channels[1].next_download = None
+            channels[4].next_download = None
+        update_channels(reporter)
+        for days_, channel in zip(days, channels):
+            self.assertEqual(channel.next_download, today() + timedelta(days=days_))
+
+        # Multiple frequencies are supported.
+        with get_db_context(commit=True) as (engine, session):
+            frequency_map = {
+                'channel1': 604800,  # weekly
+                'channel2': 604800,
+                'channel3': 1209600,  # bi-weekly
+                'channel4': 1209600,
+                'channel5': 2592000,  # 30 days
+            }
+            for channel in channels:
+                channel.download_frequency = frequency_map[channel.link]
+                channel.next_download = None
+        update_channels(reporter)
+        days = [10, 14, 21, 28, 60]
+        for days_, channel in zip(days, channels):
+            self.assertEqual(channel.next_download, today() + timedelta(days=days_))

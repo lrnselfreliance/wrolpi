@@ -1,8 +1,10 @@
+from datetime import timedelta
+
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON, Date, ARRAY, ForeignKey, Computed
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
-from api.common import Base, tsvector, ModelHelper, ChannelPath, PathColumn
+from api.common import Base, tsvector, ModelHelper, ChannelPath, PathColumn, today
 from api.errors import UnknownVideo
 
 
@@ -74,3 +76,30 @@ class Channel(ModelHelper, Base):
             self.skip_download_videos = skip_download_videos
         else:
             raise UnknownVideo(f'Cannot skip video with empty source id: {source_id}')
+
+    def increment_next_download(self):
+        """
+        Set the next download predictably during the next download iteration.
+
+        For example, two channels that download weekly will need to be downloaded on different days.  We want a channel
+        to always be downloaded on it's day.  That may be Monday, or Tuesday, etc.
+
+        This is true for all download frequencies (30 days, 90 days, etc.).
+
+        The order that channels will be downloaded/distributed will be by `link`.
+        """
+        session = Session.object_session(self)
+
+        # All the channels that share the my frequency.
+        channel_group = session.query(self.__class__).filter_by(download_frequency=self.download_frequency)
+        channel_group = list(channel_group.order_by(self.__class__.link).all())
+
+        # My position in the channel group.
+        index = channel_group.index(self)
+
+        # The seconds between each download.
+        chunk = self.download_frequency // len(channel_group)
+
+        # My next download will be distributed by my frequency and my position.
+        position = chunk * (index + 1)
+        self.next_download = today() + timedelta(seconds=self.download_frequency + position)

@@ -1,7 +1,7 @@
 #! /usr/bin/env python3
 import pathlib
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from queue import Queue
 from random import shuffle
 from typing import Tuple, List
@@ -68,11 +68,9 @@ def update_channel(channel=None, link: str = None):
         # Get the channel in this new context.
         channel = session.query(Channel).filter_by(id=channel.id).one()
 
-        download_frequency = channel.download_frequency
-
         channel.info_json = info
         channel.info_date = datetime.now()
-        channel.next_download = today() + timedelta(seconds=download_frequency)
+        channel.increment_next_download()
 
         with get_db_curs() as curs:
             # Insert any new videos.

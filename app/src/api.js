@@ -201,11 +201,6 @@ export async function refreshChannel(link) {
     await fetch(url, {method: 'POST'});
 }
 
-export async function distributeDownloadDays() {
-    let response = await apiPost(`${VIDEOS_API}:distribute_download_days`);
-    return response;
-}
-
 export async function encryptOTP(otp, plaintext) {
     let body = {otp, plaintext};
     let response = await apiPost(`${API_URI}:encrypt_otp`, body);

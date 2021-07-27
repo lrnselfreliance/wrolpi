@@ -192,7 +192,8 @@ async def _periodic_download():
     await asyncio.sleep(sleep_seconds)
     url = get_sanic_url(path='/api/videos:download')
     resp = requests.post(url)
-    if resp.status_code != 200:
+    if resp.status_code != HTTPStatus.OK and resp.status_code != HTTPStatus.CONFLICT:
+        # Download failed and wasn't already running.
         logger.warning(f'Periodic download failed with status_code={resp.status_code}')
         logger.warning(f'Periodic download response={resp}')
 

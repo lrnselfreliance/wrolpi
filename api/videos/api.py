@@ -28,6 +28,7 @@ from functools import wraps
 from http import HTTPStatus
 from multiprocessing import Event
 
+import requests
 from sanic import Blueprint, response, Sanic
 from sanic.request import Request
 
@@ -189,7 +190,11 @@ async def _periodic_download():
     sleep_seconds = random.randrange(MIN_DOWNLOAD_FREQUENCY, MAX_DOWNLOAD_FREQUENCY)
     logger.debug(f'Waiting {sleep_seconds} seconds before next download')
     await asyncio.sleep(sleep_seconds)
-    await download(None, None)
+    url = get_sanic_url(path='/api/videos:download')
+    resp = requests.get(url)
+    if resp.status_code != 200:
+        logger.warning(f'Periodic download failed with status_code={resp.status_code}')
+        logger.warning(f'Periodic download response={resp}')
 
     # Schedule the next download
     asyncio.ensure_future(_periodic_download())

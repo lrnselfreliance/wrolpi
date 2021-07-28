@@ -21,7 +21,7 @@ function timeoutPromise(ms, promise) {
     })
 }
 
-async function apiCall(url, method, body, ms = 3000) {
+async function apiCall(url, method, body, ms = 10000) {
     let init = {method};
     if (body !== undefined) {
         init.body = JSON.stringify(body);

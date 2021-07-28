@@ -5,7 +5,7 @@ import {Route, Switch} from "react-router-dom";
 import {FavoriteVideosPreview, VideosRoute, VideoWrapper, ViewedVideosPreview} from "./components/Videos";
 import Admin from "./components/Admin";
 import {Container, Header, Segment} from "semantic-ui-react";
-import 'semantic-ui-css/semantic.min.css';
+import 'semantic-ui-offline/semantic.min.css';
 import {SemanticToastContainer} from 'react-semantic-toasts';
 import 'react-semantic-toasts/styles/react-semantic-alert.css';
 import {AppsRoute} from "./components/Apps";

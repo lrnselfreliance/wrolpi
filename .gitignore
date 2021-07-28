@@ -109,10 +109,9 @@ venv.bak/
 test/videos
 
 # local configs
-*local.yaml
-*local.yml
-*local.yml.bak
-inventories.yaml
+config/local.yaml
+config/local.yaml.bak
+config/inventories.yaml
 
 app/package-lock.json
 

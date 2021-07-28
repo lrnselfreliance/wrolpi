@@ -10,7 +10,7 @@ from pint import Quantity
 from api.common import logger, Base
 from api.db import get_db_context
 from api.inventory.inventory import unit_registry, get_items, get_inventories
-from api.vars import PROJECT_DIR
+from api.vars import CONFIG_DIR
 from .models import Inventory, Item
 
 MY_DIR: Path = Path(__file__).parent
@@ -139,7 +139,7 @@ def cleanup_quantity(quantity: Quantity) -> Quantity:
     return Decimal(num) * unit
 
 
-DEFAULT_SAVE_PATH = PROJECT_DIR / 'inventories.yaml'
+DEFAULT_SAVE_PATH = CONFIG_DIR / 'inventories.yaml'
 
 
 def save_inventories_file(path: str = None):

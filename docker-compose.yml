@@ -24,7 +24,7 @@ services:
       - .:/opt/wrolpi_media
       - './config:/opt/wrolpi/config'
     healthcheck:
-      test: [ "CMD-SHELL", "curl http://127.0.0.1:8081/echo" ]
+      test: [ "CMD-SHELL", "curl http://127.0.0.1:8081/api/echo" ]
 
   app:
     depends_on:

@@ -180,6 +180,9 @@ def attach_routes(app):
         expose_headers=[
             'Location',  # Expose this header so the App can send users to the location of a created object.
         ],
+        resources={
+            '/*': {'origins': '*'},
+        }
     )
 
 

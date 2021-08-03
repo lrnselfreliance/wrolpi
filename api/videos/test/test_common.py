@@ -9,8 +9,8 @@ from api.videos.common import get_absolute_media_path, get_matching_directories,
 class TestCommon(ExtendedTestCase):
 
     def test_get_absolute_media_path(self):
-        blender = get_absolute_media_path('videos/blender')
-        assert str(blender).endswith('blender')
+        wrolpi = get_absolute_media_path('videos/wrolpi')
+        assert str(wrolpi).endswith('wrolpi')
 
     def test_matching_directories(self):
         structure = [

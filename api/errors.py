@@ -89,6 +89,10 @@ class InvalidCiphertext(APIError):
     pass
 
 
+class NoFrequency(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -195,6 +199,11 @@ API_ERRORS = {
     InvalidCiphertext: {
         'code': next(error_codes),
         'message': 'Ciphertext has invalid characters',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    NoFrequency: {
+        'code': next(error_codes),
+        'message': 'Channel does not have a frequency',
         'status': HTTPStatus.BAD_REQUEST,
     },
 }

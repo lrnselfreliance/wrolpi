@@ -5,7 +5,7 @@ from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
 from api.common import Base, tsvector, ModelHelper, ChannelPath, PathColumn, today
-from api.errors import UnknownVideo
+from api.errors import UnknownVideo, NoFrequency
 
 
 class Video(ModelHelper, Base):
@@ -88,6 +88,9 @@ class Channel(ModelHelper, Base):
 
         The order that channels will be downloaded/distributed will be by `link`.
         """
+        if not self.download_frequency:
+            raise NoFrequency(f'{self} does not have a frequency!')
+
         session = Session.object_session(self)
 
         # All the channels that share the my frequency.

@@ -38,9 +38,9 @@ from api.common import logger
 from api.videos.channel.api import channel_bp
 from api.videos.video.api import video_bp
 from .downloader import update_channels, download_all_missing_videos
-from .lib import process_video_meta_data, _refresh_videos, get_statistics
+from .lib import process_video_meta_data, _refresh_videos, get_statistics, get_download_history
 from .schema import StreamResponse, \
-    JSONErrorResponse, FavoriteRequest, FavoriteResponse, VideosStatisticsResponse
+    JSONErrorResponse, FavoriteRequest, FavoriteResponse, VideosStatisticsResponse, DownloadHistoryResponse
 from .video.lib import set_video_favorite
 
 content_bp = Blueprint('Video Content')
@@ -175,6 +175,17 @@ async def favorite(_: Request, data: dict):
 )
 async def statistics(_: Request):
     ret = await get_statistics()
+    return json_response(ret, HTTPStatus.OK)
+
+
+@content_bp.get('/download_history')
+@validate_doc(
+    summary='Retrieve video download history',
+    produces=DownloadHistoryResponse,
+)
+async def download_history(_: Request):
+    history = await get_download_history()
+    ret = dict(history=history)
     return json_response(ret, HTTPStatus.OK)
 
 

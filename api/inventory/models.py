@@ -50,3 +50,8 @@ class Inventory(Base, ModelHelper):
         d = super().dict()
         d['items'] = [i.dict() for i in self.items]
         return d
+
+
+class InventoriesVersion(Base, ModelHelper):
+    __tablename__ = 'inventory_version'
+    version = Column(Integer, primary_key=True)

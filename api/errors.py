@@ -93,6 +93,14 @@ class NoFrequency(APIError):
     pass
 
 
+class NoInventories(APIError):
+    pass
+
+
+class InventoriesVersionMismatch(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -204,6 +212,16 @@ API_ERRORS = {
     NoFrequency: {
         'code': next(error_codes),
         'message': 'Channel does not have a frequency',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    NoInventories: {
+        'code': next(error_codes),
+        'message': 'No Inventories',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    InventoriesVersionMismatch: {
+        'code': next(error_codes),
+        'message': 'Inventories version in the DB does not match the inventories config',
         'status': HTTPStatus.BAD_REQUEST,
     },
 }

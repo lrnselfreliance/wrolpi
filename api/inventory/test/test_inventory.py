@@ -1,3 +1,4 @@
+import os
 import tempfile
 from decimal import Decimal
 from itertools import zip_longest
@@ -5,6 +6,7 @@ from typing import List, Iterable
 
 import pytest
 import sqlalchemy
+import yaml
 from pint import Quantity
 
 from api.db import get_db_context
@@ -17,6 +19,7 @@ from ..inventory import unit_registry, \
     delete_inventory, get_categories
 from ..models import Item, Inventory
 from ...common import Base
+from ...errors import NoInventories, InventoriesVersionMismatch
 
 TEST_ITEMS_COLUMNS = (
     'inventory_id',
@@ -58,6 +61,9 @@ class TestInventory(ExtendedTestCase):
 
     @staticmethod
     def prepare() -> None:
+        """
+        This exists rather than setUp because the DB is wrapped.
+        """
         init(force=True)
 
         with get_db_context(commit=True) as (engine, session):
@@ -209,6 +215,46 @@ class TestInventory(ExtendedTestCase):
         test_items = {(i['name'], i['brand'], i['count']) for i in TEST_ITEMS[:-1]}
         db_items = {(i.name, i.brand, i.count) for i in non_deleted_items}
         self.assertEqual(test_items, db_items)
+
+    @wrap_test_db
+    def test_inventories_version(self):
+        """
+        You can't save over a newer version of an inventory.
+        """
+        self.prepare()
+        with tempfile.NamedTemporaryFile(delete=False) as tf:
+            pass
+
+        try:
+            with open(tf.name, 'rt') as fh:
+                # Version is set to 1 on first save.
+                save_inventories_file(tf.name)
+                inventories_contents = yaml.load(fh, Loader=yaml.Loader)
+                self.assertEqual(inventories_contents['version'], 1)
+
+            with open(tf.name, 'rt') as fh:
+                # Version is incremented when saving.
+                save_inventories_file(tf.name)
+                inventories_contents = yaml.load(fh, Loader=yaml.Loader)
+                self.assertEqual(inventories_contents['version'], 2)
+
+            with open(tf.name, 'wt') as fh:
+                # Version is greater than what will be saved.
+                inventories_contents['version'] = 5
+                yaml.dump(inventories_contents, fh)
+
+                self.assertRaises(InventoriesVersionMismatch, save_inventories_file, tf.name)
+
+        finally:
+            os.unlink(tf.name)
+
+    @wrap_test_db
+    def test_no_inventories(self):
+        """
+        Can't save empty inventories.
+        """
+        with tempfile.NamedTemporaryFile() as tf:
+            self.assertRaises(NoInventories, save_inventories_file, tf.name)
 
 
 def quantity_to_string(quantity: Quantity) -> str:

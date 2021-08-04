@@ -1,13 +1,15 @@
+import contextlib
 from datetime import datetime
 from typing import List, Tuple
 
 import pint
 import psycopg2
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import NoResultFound
 
 from api.common import logger, Base
 from api.db import get_db_context, get_db_curs
-from api.inventory.models import Inventory, Item
+from api.inventory.models import Inventory, Item, InventoriesVersion
 
 unit_registry = pint.UnitRegistry()
 logger = logger.getChild(__name__)
@@ -119,3 +121,43 @@ def update_item(item_id: int, item: dict):
 def delete_items(items_ids: List[int]):
     with get_db_curs(commit=True) as curs:
         curs.execute('UPDATE item SET deleted_at=current_timestamp WHERE id = ANY(%s)', (items_ids,))
+
+
+def get_inventories_version():
+    """
+    The inventory_version table contains a single row with the Inventories version integer.
+    """
+    with get_db_context() as (engine, session):
+        try:
+            version = session.query(InventoriesVersion).one()
+            return version.version
+        except NoResultFound:
+            # No version is saved yet.
+            pass
+
+
+def get_next_inventories_version():
+    """
+    Get the current inventories version, increment it if there is one.
+    """
+    version = get_inventories_version()
+    if version:
+        return version + 1
+    return 1
+
+
+@contextlib.contextmanager
+def increment_inventories_version():
+    """
+    Context manager that will increment the Inventories Version by 1 when exiting.
+    """
+    version = get_next_inventories_version()
+    try:
+        yield version
+        with get_db_context(commit=True) as (engine, session):
+            if session.query(InventoriesVersion).count() == 0:
+                session.add(InventoriesVersion(version=version))
+            else:
+                session.query(InventoriesVersion).one().version = version
+    except Exception:
+        raise

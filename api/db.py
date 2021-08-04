@@ -11,7 +11,7 @@ from sqlalchemy.pool import NullPool
 from api.common import logger
 from api.vars import DOCKERIZED
 
-db_logger = logger.getChild(__name__)
+logger = logger.getChild(__name__)
 
 
 def get_db_args(dbname: str = None):
@@ -41,9 +41,19 @@ uri = 'postgresql://{user}:{password}@{host}:{port}/postgres'.format(**db_args)
 engine = create_engine(uri, poolclass=NullPool)
 session_maker = sessionmaker(bind=engine)
 
+LOGGED_ARGS = False
+
 
 def _get_db_session():
     """This function allows the database to be wrapped during testing.  See: api.test.common.wrap_test_db"""
+    global LOGGED_ARGS
+    if LOGGED_ARGS is False:
+        # Print the DB args for troubleshooting.
+        LOGGED_ARGS = True
+        logging_args = db_args.copy()
+        logging_args['password'] = '***'
+        logger.debug(f'DB args: {logging_args}')
+
     session = session_maker()
     return engine, session
 

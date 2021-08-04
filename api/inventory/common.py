@@ -1,4 +1,3 @@
-from datetime import datetime
 from decimal import Decimal
 from functools import partial
 from pathlib import Path
@@ -9,9 +8,11 @@ from pint import Quantity
 
 from api.common import logger, Base
 from api.db import get_db_context
-from api.inventory.inventory import unit_registry, get_items, get_inventories
+from api.inventory.inventory import unit_registry, get_items, get_inventories, increment_inventories_version, \
+    get_inventories_version
 from api.vars import CONFIG_DIR
 from .models import Inventory, Item
+from ..errors import NoInventories, InventoriesVersionMismatch
 
 MY_DIR: Path = Path(__file__).parent
 
@@ -152,27 +153,29 @@ def save_inventories_file(path: str = None):
     for inventory in get_inventories():
         inventories.append(inventory.dict())
 
-    if path.is_file():
-        # Check that we aren't overwriting our inventories with empty inventories.
-        with open(path, 'rt') as fh:
-            old = yaml.load(fh, Loader=yaml.Loader)
-            if old and not inventories:
-                raise FileExistsError(f'Refusing to overwrite non-empty inventories.yaml with empty inventories.'
-                                      f'  {path}')
+    if not inventories:
+        raise NoInventories('No Inventories are in the database!')
 
-    if path.is_dir():
-        logger.fatal(f'Cannot save inventories because {path} is a directory!  This is likely caused by Docker creating'
-                     'the directory.  You should stop WROLPi, remove the empty directory, create an empty file in'
-                     "it's place, then start WROLPi again.")
-        return
+    with increment_inventories_version() as version:
+        if path.is_file():
+            # Check that we aren't overwriting our inventories with empty inventories.
+            with open(path, 'rt') as fh:
+                old = yaml.load(fh, Loader=yaml.Loader)
+                if old and not inventories:
+                    raise FileExistsError(f'Refusing to overwrite non-empty inventories.yaml with empty inventories.'
+                                          f'  {path}')
 
-    with open(path, 'wt') as fh:
-        contents = dict(
-            utc_time=datetime.utcnow(),
-            inventories=inventories,
-        )
+                if old and old['version'] > version:
+                    raise InventoriesVersionMismatch(
+                        f'Inventories config version is {old["version"]} but DB version is {get_inventories_version()}')
 
-        yaml.dump(contents, fh)
+        with open(path, 'wt') as fh:
+            contents = dict(
+                version=version,
+                inventories=inventories,
+            )
+
+            yaml.dump(contents, fh)
 
 
 def import_inventories_file(path: str = None):

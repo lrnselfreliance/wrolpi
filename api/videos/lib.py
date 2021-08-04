@@ -318,9 +318,16 @@ async def get_statistics():
 
 
 async def get_download_history():
+    """
+    Get the info_date for all channels that have been downloaded.  Order by the most recent download first.
+    """
     query = '''
-    SELECT link, name, info_date
-    FROM channel
+    SELECT
+        link, name, info_date
+    FROM
+        channel
+    WHERE
+        info_date IS NOT NULL
     ORDER BY channel.info_date DESC
     '''
     with get_db_curs() as curs:

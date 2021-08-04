@@ -214,6 +214,16 @@ class VideosStatisticsResponse:
     channels = ChannelStatistics
 
 
+class DownloadHistory:
+    link = doc.String()
+    name = doc.String()
+    info_date = doc.Date()
+
+
+class DownloadHistoryResponse:
+    history = doc.List(doc.Object(DownloadHistory))
+
+
 class EncryptOTPRequest:
     otp = doc.String(required=True)
     plaintext = doc.String(required=True)

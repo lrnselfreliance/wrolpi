@@ -317,6 +317,18 @@ async def get_statistics():
     return ret
 
 
+async def get_download_history():
+    query = '''
+    SELECT link, name, info_date
+    FROM channel
+    ORDER BY channel.info_date DESC
+    '''
+    with get_db_curs() as curs:
+        curs.execute(query)
+        results = [dict(i) for i in curs.fetchall()]
+        return results
+
+
 NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
                          r'(jpg|webp|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
 
@@ -390,7 +402,7 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel, i
 
 
 def find_meta_files(path: pathlib.Path, relative_to=None) -> Tuple[
-        pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
+    pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
     """
     Find all files that share a file's full path, except their extensions.  It is assumed that file with the
     same name, but different extension is related to that file.  A None will be yielded if the meta file doesn't exist.

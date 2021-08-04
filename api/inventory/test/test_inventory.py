@@ -10,7 +10,6 @@ import yaml
 from pint import Quantity
 
 from api.db import get_db_context
-from api.test.common import wrap_test_db, ExtendedTestCase
 from .. import init
 from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
     compact_unit, cleanup_quantity, save_inventories_file, import_inventories_file
@@ -20,6 +19,7 @@ from ..inventory import unit_registry, \
 from ..models import Item, Inventory
 from ...common import Base
 from ...errors import NoInventories, InventoriesVersionMismatch
+from ...test.common import PytestCase
 
 TEST_ITEMS_COLUMNS = (
     'inventory_id',
@@ -57,7 +57,7 @@ def extract_items(lst: List[Base], keys: Iterable[str]) -> List[Base]:
     return extracted
 
 
-class TestInventory(ExtendedTestCase):
+class TestInventory(PytestCase):
 
     @staticmethod
     def prepare() -> None:
@@ -71,15 +71,13 @@ class TestInventory(ExtendedTestCase):
                 item = Item(**item)
                 session.add(item)
 
-    @wrap_test_db
-    def test_get_categories(self):
+    def test_get_categories(self, test_session):
         self.prepare()
 
         categories = get_categories()
         self.assertGreater(len(categories), 0)
 
-    @wrap_test_db
-    def test_get_inventories(self):
+    def test_get_inventories(self, test_session):
         self.prepare()
 
         inventories = get_inventories()
@@ -88,8 +86,7 @@ class TestInventory(ExtendedTestCase):
         self.assertEqual(inventories[0].id, 1)
         self.assertEqual(inventories[0].name, 'Food Storage')
 
-    @wrap_test_db
-    def test_inventory1(self):
+    def test_inventory1(self, test_session):
         self.prepare()
 
         # Insert a new Inventory.
@@ -137,8 +134,7 @@ class TestInventory(ExtendedTestCase):
             # Check that the items from the deleted Inventory were really deleted.
             self.assertEqual(before_item_count, session.query(Item).count())
 
-    @wrap_test_db
-    def test_get_inventory_by_category(self):
+    def test_get_inventory_by_category(self, test_session):
         self.prepare()
 
         expected = [
@@ -152,8 +148,7 @@ class TestInventory(ExtendedTestCase):
         for idx, (i, j) in enumerate(zip_longest(inventory, expected)):
             self.assertEqual(i, j, f'category inventory {idx} is not equal')
 
-    @wrap_test_db
-    def test_get_inventory_by_subcategory(self):
+    def test_get_inventory_by_subcategory(self, test_session):
         self.prepare()
 
         expected = [
@@ -168,8 +163,7 @@ class TestInventory(ExtendedTestCase):
         for idx, (i, j) in enumerate(zip_longest(inventory, expected)):
             self.assertEqual(i, j, f'subcategory inventory {idx} is not equal')
 
-    @wrap_test_db
-    def test_get_inventory_by_name(self):
+    def test_get_inventory_by_name(self, test_session):
         self.prepare()
 
         expected = [
@@ -186,8 +180,7 @@ class TestInventory(ExtendedTestCase):
         for idx, (i, j) in enumerate(zip_longest(inventory, expected)):
             self.assertEqual(i, j, f'named inventory {idx} is not equal')
 
-    @wrap_test_db
-    def test_inventories_file(self):
+    def test_inventories_file(self, test_session):
         self.prepare()
 
         with tempfile.NamedTemporaryFile() as tf:
@@ -216,8 +209,7 @@ class TestInventory(ExtendedTestCase):
         db_items = {(i.name, i.brand, i.count) for i in non_deleted_items}
         self.assertEqual(test_items, db_items)
 
-    @wrap_test_db
-    def test_inventories_version(self):
+    def test_inventories_version(self, test_session):
         """
         You can't save over a newer version of an inventory.
         """
@@ -248,13 +240,14 @@ class TestInventory(ExtendedTestCase):
         finally:
             os.unlink(tf.name)
 
-    @wrap_test_db
-    def test_no_inventories(self):
+    def test_no_inventories(self, test_session, tmp_path):
         """
         Can't save empty inventories.
         """
-        with tempfile.NamedTemporaryFile() as tf:
-            self.assertRaises(NoInventories, save_inventories_file, tf.name)
+        try:
+            save_inventories_file(tmp_path.name)
+        except NoInventories:
+            pass
 
 
 def quantity_to_string(quantity: Quantity) -> str:

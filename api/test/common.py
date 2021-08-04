@@ -112,10 +112,29 @@ def get_all_messages_in_queue(q):
     return messages
 
 
-class ExtendedTestCase(unittest.TestCase):
+class PytestCase:
     """
-    Add any specialized test methods to this class.
+    Replicate unittest.TestCase methods to bridge the gap between it and Pytest.
     """
+
+    @staticmethod
+    def assertGreater(a, b, msg: str = None):
+        assert a > b, msg
+
+    @staticmethod
+    def assertLess(a, b, msg: str = None):
+        assert a < b, msg
+
+    @staticmethod
+    def assertEqual(a, b, msg: str = None):
+        assert a == b, msg
+
+    @staticmethod
+    def assertRaises(exception, func, *args, **kwargs):
+        try:
+            func(*args, **kwargs)
+        except exception:
+            pass
 
     @staticmethod
     def assertDictContains(d1: dict, d2: dict):
@@ -156,6 +175,13 @@ class ExtendedTestCase(unittest.TestCase):
                 if d2 is None:
                     raise ValueError('d2 is None')
                 self.assertTruth(d1[d2_key], d2[d2_key])
+
+
+class ExtendedTestCase(PytestCase, unittest.TestCase):
+    """
+    Add any specialized test methods to this class.
+    """
+    pass
 
 
 class TestAPI(ExtendedTestCase):

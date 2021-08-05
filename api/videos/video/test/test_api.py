@@ -25,7 +25,6 @@ class TestVideoFunctions(TestAPI):
         with get_db_context(commit=True) as (engine, session):
             for _ in range(4):
                 session.add(Channel(link=str(uuid4())))
-            print('all channels', list(session.query(Channel).all()))
             channel1, channel2, channel3, channel4 = session.query(Channel).all()
 
             now_ = now()

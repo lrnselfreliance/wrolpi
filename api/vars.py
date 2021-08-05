@@ -9,7 +9,7 @@ EXAMPLE_CONFIG_PATH = CONFIG_DIR / 'example.yaml'
 PUBLIC_HOST = os.environ.get('PUBLIC_HOST')
 PUBLIC_PORT = os.environ.get('PUBLIC_PORT')
 
-DEFAULT_TIMEZONE_STR = 'US/Mountain'
+DEFAULT_TIMEZONE_STR = 'America/Boise'
 LAST_MODIFIED_DATE_FORMAT = '%a, %d %b %Y %H:%M:%S GMT'
 DATE_FORMAT = '%Y-%M-%d'
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'

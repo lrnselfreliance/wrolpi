@@ -1,5 +1,4 @@
 import contextlib
-from datetime import datetime
 from typing import List, Tuple
 
 import pint
@@ -7,7 +6,7 @@ import psycopg2
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
-from api.common import logger, Base
+from api.common import logger, Base, now
 from api.db import get_db_context, get_db_curs
 from api.inventory.models import Inventory, Item, InventoriesVersion
 
@@ -64,7 +63,7 @@ def update_inventory(inventory_id: int, inventory: dict):
 def delete_inventory(inventory_id: int):
     with get_db_context(commit=True) as (engine, session):
         inventory = session.query(Inventory).filter_by(id=inventory_id).one()
-        inventory.deleted_at = datetime.now()
+        inventory.deleted_at = now()
 
 
 def get_categories() -> List[Tuple[int, str, str]]:

@@ -1,7 +1,6 @@
 #! /usr/bin/env python3
 import pathlib
 import re
-from datetime import datetime
 from queue import Queue
 from random import shuffle
 from typing import Tuple, List
@@ -10,7 +9,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm.exc import NoResultFound
 from youtube_dl import YoutubeDL
 
-from api.common import logger, today, ProgressReporter
+from api.common import logger, today, ProgressReporter, now
 from api.db import get_db_context, get_db_curs
 from .common import load_downloader_config, get_absolute_media_path
 from .lib import save_channels_config, upsert_video
@@ -69,7 +68,7 @@ def update_channel(channel=None, link: str = None):
         channel = session.query(Channel).filter_by(id=channel.id).one()
 
         channel.info_json = info
-        channel.info_date = datetime.now()
+        channel.info_date = now()
         channel.increment_next_download()
 
         with get_db_curs() as curs:

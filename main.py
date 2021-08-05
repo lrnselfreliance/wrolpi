@@ -10,10 +10,13 @@ import asyncio
 import inspect
 import logging
 import sys
+from pprint import pprint
+
+import pytz
 
 from api import api
 from api.cmd import import_settings_configs
-from api.common import logger
+from api.common import logger, get_config, set_timezone
 from api.db import uri
 from api.modules import MODULES
 from api.vars import PROJECT_DIR
@@ -97,6 +100,12 @@ async def main():
     # Run DB migrations before anything else, if requested.
     if args.sub_commands == 'db':
         return db_main(args)
+
+    # Set the Timezone
+    config = get_config()
+    if 'timezone' in config:
+        tz = pytz.timezone(config['timezone'])
+        set_timezone(tz)
 
     import_settings_configs(MODULES)
 

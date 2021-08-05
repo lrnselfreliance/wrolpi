@@ -8,7 +8,7 @@ import queue
 import re
 import string
 from copy import deepcopy
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal
 from functools import wraps
 from itertools import islice
@@ -18,6 +18,7 @@ from typing import Union, Callable, Tuple, Dict, Mapping, List
 from urllib.parse import urlunsplit
 from uuid import UUID
 
+import pytz
 import sanic
 import yaml
 from cachetools import cached, TTLCache
@@ -32,8 +33,9 @@ from sqlalchemy.ext.declarative import declarative_base
 from websocket import WebSocket
 
 from api.errors import APIError, API_ERRORS, ValidationError, MissingRequiredField, ExcessJSONFields, NoBodyContents, \
-    WROLModeEnabled
-from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT, DATE_FORMAT
+    WROLModeEnabled, InvalidTimezone
+from api.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT, DATE_FORMAT, \
+    DEFAULT_TIMEZONE_STR
 
 logger = logging.getLogger(__name__)
 ch = logging.StreamHandler()
@@ -80,6 +82,73 @@ class PathColumn(types.TypeDecorator):
     def process_result_value(self, value, dialect):
         if value:
             return Path(value)
+
+
+DEFAULT_TIMEZONE = pytz.timezone(DEFAULT_TIMEZONE_STR)
+
+
+def set_timezone(tz: pytz.timezone):
+    """
+    Change the global timezone for WROLPi.  This does NOT save the config.
+    """
+    global DEFAULT_TIMEZONE
+
+    if not tz:
+        raise InvalidTimezone('Timezone cannot be blank!')
+
+    if isinstance(tz, str):
+        tz = pytz.timezone(tz)
+
+    logger.info(f'Setting timezone: {tz}')
+    DEFAULT_TIMEZONE = tz
+
+
+def utc_now():
+    """
+    Get the current DateTime in UTC.  Timezone aware.
+    """
+    return datetime.utcnow().astimezone(pytz.utc)
+
+
+def now(tz: pytz.timezone = None):
+    """
+    Get the current DateTime in the provided timezone.  Timezone aware.
+    """
+    tz = tz if tz else DEFAULT_TIMEZONE
+    return datetime.utcnow().astimezone(tz)
+
+
+def local_timezone(dt: datetime):
+    """
+    Convert the DateTime provided to the local Timezone.  Timezone aware.
+    """
+    return dt.astimezone(DEFAULT_TIMEZONE)
+
+
+def today():
+    """
+    Return today's date.
+    """
+    return now().date()
+
+
+class TZDateTime(types.TypeDecorator):
+    impl = types.DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if isinstance(value, datetime):
+            if not value.tzinfo:
+                raise TypeError("tzinfo is required")
+            value = value.astimezone(timezone.utc).replace(
+                tzinfo=None
+            )
+        return value
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            value = local_timezone(value)
+        return value
 
 
 class tsvector(types.TypeDecorator):
@@ -512,11 +581,6 @@ def json_response(*a, **kwargs) -> HTTPResponse:
     Handles encoding date/datetime in JSON.
     """
     return response.json(*a, **kwargs, cls=JSONEncodeDate, dumps=json.dumps)
-
-
-def today():
-    """Return today's date."""
-    return datetime.now().date()
 
 
 class Trinary(Field):

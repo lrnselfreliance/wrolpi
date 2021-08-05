@@ -17,11 +17,11 @@ TimeoutError()
 import multiprocessing.connection
 import time
 import traceback
-from datetime import datetime, timedelta
+from datetime import timedelta
 from functools import wraps
 from multiprocessing import Process, Pipe
 
-from api.common import logger
+from api.common import logger, utc_now
 
 logger = logger.getChild(__name__)
 
@@ -67,12 +67,12 @@ def timeout(seconds: float) -> callable:
             worker.start()
 
             # Continually attempt to get a result until the timeout is reached.
-            kill_time = datetime.utcnow() + timedelta(seconds=_seconds)
+            kill_time = utc_now() + timedelta(seconds=_seconds)
             while True:
                 if not worker.is_alive():
                     # Worker exited.
                     break
-                if not datetime.utcnow() < kill_time:
+                if not utc_now() < kill_time:
                     # Timeout was reached.
                     break
                 if parent_conn.poll(0.1):  # This prevents a "busy loop"

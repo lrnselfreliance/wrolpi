@@ -5,6 +5,7 @@ import psycopg2
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
+from api.common import now
 from api.db import get_db_context, get_db_curs
 from api.errors import UnknownVideo, UnknownFile
 from api.videos.common import get_absolute_video_files, add_video_to_skip_list, get_video_info_json, minimize_video
@@ -23,7 +24,7 @@ def get_video(session: Session, video_id: int) -> Video:
 def mark_video_as_viewed(video_id: int):
     with get_db_context(commit=True) as (engine, session):
         video = get_video(session, video_id)
-        video.viewed = datetime.now()
+        video.viewed = now()
 
 
 def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dict]]:
@@ -213,7 +214,7 @@ def set_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
     """
     with get_db_context(commit=True) as (engine, session):
         video = session.query(Video).filter_by(id=video_id).one()
-        _favorite = video.favorite = datetime.now() if favorite else None
+        _favorite = video.favorite = now() if favorite else None
 
     return _favorite
 

@@ -1,11 +1,12 @@
 import pathlib
-from datetime import datetime, timedelta
+from datetime import timedelta
 from http import HTTPStatus
 from json import dumps
 from unittest import mock
 from uuid import uuid4
 
 from api.api import api_app
+from api.common import now
 from api.db import get_db_context
 from api.errors import API_ERRORS, WROLModeEnabled
 from api.test.common import wrap_test_db, TestAPI, create_db_structure
@@ -26,19 +27,19 @@ class TestVideoFunctions(TestAPI):
                 session.add(Channel(link=str(uuid4())))
             channel1, channel2, channel3, channel4 = session.query(Channel).all()
 
-            now = datetime.utcnow()
+            now_ = now()
             second = timedelta(seconds=1)
 
             # The upload_date decides the order of the prev/next videos.
-            session.add(Video(title=f'vid1', channel_id=channel1.id, upload_date=now))
-            session.add(Video(title=f'vid2', channel_id=channel1.id, upload_date=now + second))
-            session.add(Video(title=f'vid3', channel_id=channel2.id, upload_date=now + (second * 4)))
-            session.add(Video(title=f'vid4', channel_id=channel1.id, upload_date=now + (second * 3)))
-            session.add(Video(title=f'vid5', channel_id=channel2.id, upload_date=now + (second * 2)))
-            session.add(Video(title=f'vid6', channel_id=channel2.id, upload_date=now + (second * 5)))
+            session.add(Video(title=f'vid1', channel_id=channel1.id, upload_date=now_))
+            session.add(Video(title=f'vid2', channel_id=channel1.id, upload_date=now_ + second))
+            session.add(Video(title=f'vid3', channel_id=channel2.id, upload_date=now_ + (second * 4)))
+            session.add(Video(title=f'vid4', channel_id=channel1.id, upload_date=now_ + (second * 3)))
+            session.add(Video(title=f'vid5', channel_id=channel2.id, upload_date=now_ + (second * 2)))
+            session.add(Video(title=f'vid6', channel_id=channel2.id, upload_date=now_ + (second * 5)))
             session.add(Video(title=f'vid7', channel_id=channel1.id))
-            session.add(Video(title=f'vid8', channel_id=channel2.id, upload_date=now + (second * 7)))
-            session.add(Video(title=f'vid9', channel_id=channel3.id, upload_date=now + (second * 8)))
+            session.add(Video(title=f'vid8', channel_id=channel2.id, upload_date=now_ + (second * 7)))
+            session.add(Video(title=f'vid9', channel_id=channel3.id, upload_date=now_ + (second * 8)))
             session.add(Video(title=f'vid10', channel_id=channel4.id))
             session.add(Video(title=f'vid11', channel_id=channel4.id))
 

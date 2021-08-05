@@ -41,10 +41,10 @@ def reset_database_tables(engine):
     """
     meta = MetaData()
 
-    with contextlib.closing(engine.connect()) as con:
-        trans = con.begin()
+    with contextlib.closing(engine.connect()) as conn:
+        trans = conn.begin()
         for table in reversed(meta.sorted_tables):
-            con.execute(table.delete())
+            conn.execute(table.delete())
         trans.commit()
 
 

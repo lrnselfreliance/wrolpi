@@ -1,4 +1,3 @@
-import contextlib
 import json
 import pathlib
 import tempfile
@@ -16,7 +15,6 @@ import mock
 import websockets
 import yaml
 from sanic_openapi.api import Response
-from sqlalchemy import MetaData
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -35,30 +33,16 @@ attach_routes(api_app)
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
 
 
-def reset_database_tables(engine):
-    """
-    Remove all rows from every table in a database.
-    """
-    meta = MetaData()
-
-    with contextlib.closing(engine.connect()) as conn:
-        trans = conn.begin()
-        for table in reversed(meta.sorted_tables):
-            conn.execute(table.delete())
-        trans.commit()
-
-
 def get_test_db_engine():
     suffix = str(uuid1()).replace('-', '')
     db_name = f'wrolpi_testing_{suffix}'
     conn = postgres_engine.connect()
     conn.execute(f'DROP DATABASE IF EXISTS {db_name}')
-    conn.execute(f'CREATE DATABASE {db_name} TEMPLATE wrolpi')
+    conn.execute(f'CREATE DATABASE {db_name}')
     conn.execute('commit')
 
     test_args = get_db_args(db_name)
     test_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**test_args))
-    reset_database_tables(test_engine)
     return test_engine
 
 
@@ -67,7 +51,11 @@ def test_db() -> Tuple[Engine, Session]:
     Create a unique SQLAlchemy engine/session for a test.
     """
     test_engine = get_test_db_engine()
-    Base.metadata.create_all(test_engine)
+    if test_engine.engine.url.database == 'wrolpi':
+        raise ValueError('Refusing the test on wrolpi database!')
+
+    # Create all tables.  No need to check if they exist because this is a test DB.
+    Base.metadata.create_all(test_engine, checkfirst=False)
     session = sessionmaker(bind=test_engine)()
     return test_engine, session
 

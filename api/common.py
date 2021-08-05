@@ -140,9 +140,7 @@ class TZDateTime(types.TypeDecorator):
         if isinstance(value, datetime):
             if not value.tzinfo:
                 raise TypeError("tzinfo is required")
-            value = value.astimezone(timezone.utc).replace(
-                tzinfo=None
-            )
+            value = value.astimezone(timezone.utc)
         return value
 
     def process_result_value(self, value, dialect):

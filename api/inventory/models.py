@@ -51,5 +51,5 @@ class Inventory(Base, ModelHelper):
 
 
 class InventoriesVersion(Base, ModelHelper):
-    __tablename__ = 'inventory_version'
+    __tablename__ = 'inventories_version'
     version = Column(Integer, primary_key=True)

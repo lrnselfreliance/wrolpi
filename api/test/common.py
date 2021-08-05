@@ -53,7 +53,7 @@ def get_test_db_engine():
     db_name = f'wrolpi_testing_{suffix}'
     conn = postgres_engine.connect()
     conn.execute(f'DROP DATABASE IF EXISTS {db_name}')
-    conn.execute(f'CREATE DATABASE {db_name} TEMPLATE wrolpi')
+    conn.execute(f'CREATE DATABASE {db_name}')
     conn.execute('commit')
 
     test_args = get_db_args(db_name)

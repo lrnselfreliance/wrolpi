@@ -32,7 +32,7 @@ def get_db_args(dbname: str = None):
 
 # This engine is used to modify the databases.
 postgres_args = get_db_args('postgres')
-postgres_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/postgres'.format(**postgres_args),
+postgres_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**postgres_args),
                                 execution_options={'isolation_level': 'AUTOCOMMIT'})
 
 # This engine is used for all normal tasks (except testing).

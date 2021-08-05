@@ -42,7 +42,7 @@ def db_main(args):
     # Overwrite the Alembic config, the is usually necessary when running in a docker container.
     config.set_main_option('sqlalchemy.url', uri)
 
-    logger.warning(f'Upgrading URI: {uri}')
+    logger.warning(f'DB URI: {uri}')
 
     if args.command == 'upgrade':
         command.upgrade(config, 'head')

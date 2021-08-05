@@ -37,7 +37,7 @@ postgres_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/po
 
 # This engine is used for all normal tasks (except testing).
 db_args = get_db_args()
-uri = 'postgresql://{user}:{password}@{host}:{port}/postgres'.format(**db_args)
+uri = 'postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**db_args)
 engine = create_engine(uri, poolclass=NullPool)
 session_maker = sessionmaker(bind=engine)
 

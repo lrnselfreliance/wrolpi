@@ -21,7 +21,11 @@ class Settings extends React.Component {
 
     async componentDidMount() {
         let config = await getConfig();
-        this.setState({ready: true, disabled: config.wrol_mode, timezone: config.timezone});
+        this.setState({
+            ready: true,
+            disabled: config.wrol_mode,
+            timezone: config.timezone || '',
+        });
         this.mediaDirectory.current.value = config.media_directory;
     }
 

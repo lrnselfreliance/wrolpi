@@ -2,6 +2,7 @@ import React from 'react';
 import {Button, Checkbox, Container, Divider, Form, Header, Loader, Segment, Statistic, Tab} from "semantic-ui-react";
 import {getConfig, getStatistics, saveConfig} from "../api";
 import {humanFileSize, secondsToString} from "./Common";
+import TimezoneSelect from 'react-timezone-select';
 
 class Settings extends React.Component {
 
@@ -10,6 +11,8 @@ class Settings extends React.Component {
         this.state = {
             disabled: false,
             ready: false,
+            validTimezone: true,
+            timezone: '',
         }
         this.mediaDirectory = React.createRef();
 
@@ -18,7 +21,7 @@ class Settings extends React.Component {
 
     async componentDidMount() {
         let config = await getConfig();
-        this.setState({ready: true, disabled: config.wrol_mode});
+        this.setState({ready: true, disabled: config.wrol_mode, timezone: config.timezone});
         this.mediaDirectory.current.value = config.media_directory;
     }
 
@@ -26,8 +29,20 @@ class Settings extends React.Component {
         e.preventDefault();
         let config = {
             media_directory: this.mediaDirectory.current.value,
+            timezone: this.state.timezone.value,
         };
-        await saveConfig(config);
+        this.setState({validTimezone: true});
+        let response = await saveConfig(config);
+        if (response.status !== 200) {
+            let json = await response.json();
+            if (json.api_error === 'Invalid timezone') {
+                this.setState({validTimezone: false});
+            }
+        }
+    }
+
+    handleTimezoneChange = async (timezone) => {
+        this.setState({timezone});
     }
 
     render() {
@@ -63,6 +78,16 @@ class Settings extends React.Component {
                         The directory in which your media will be stored. Typically, this will be some external
                         drive like <i>/media/wrolpi</i>.
                     </p>
+
+                    <Divider/>
+
+                    <Form.Field>
+                        <label>Timezone</label>
+                        <TimezoneSelect
+                            value={this.state.timezone}
+                            onChange={this.handleTimezoneChange}
+                        />
+                    </Form.Field>
 
                     <Button color="blue" type="submit" disabled={this.state.disabled}>
                         Save

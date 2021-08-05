@@ -1,10 +1,8 @@
-from datetime import datetime
-
-from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, DECIMAL
+from sqlalchemy import Column, Integer, String, Date, ForeignKey, DECIMAL
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
-from api.common import Base, ModelHelper
+from api.common import Base, ModelHelper, TZDateTime, now
 
 
 class Item(Base, ModelHelper):
@@ -14,8 +12,8 @@ class Item(Base, ModelHelper):
     brand = Column(String)
     category = Column(String)
     count = Column(DECIMAL)
-    created_at = Column(DateTime, default=datetime.now)
-    deleted_at = Column(DateTime)
+    created_at = Column(TZDateTime, default=now)
+    deleted_at = Column(TZDateTime)
     expiration_date = Column(Date)
     item_size = Column(DECIMAL)
     name = Column(String)
@@ -37,9 +35,9 @@ class Inventory(Base, ModelHelper):
     id = Column(Integer, primary_key=True)
 
     name = Column(String, unique=True)
-    viewed_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.now)
-    deleted_at = Column(DateTime)
+    viewed_at = Column(TZDateTime)
+    created_at = Column(TZDateTime, default=now)
+    deleted_at = Column(TZDateTime)
 
     items: InstrumentedList = relationship('Item', foreign_keys='Item.inventory_id')
 

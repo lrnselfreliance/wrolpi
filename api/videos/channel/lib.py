@@ -2,12 +2,12 @@ from typing import List
 
 from sqlalchemy.orm.exc import NoResultFound
 
-from api.common import save_settings_config, sanitize_link
+from api.common import sanitize_link
 from api.db import get_db_context, get_db_curs
 from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.vars import DEFAULT_DOWNLOAD_FREQUENCY
 from api.videos.common import get_relative_to_media_directory, make_media_directory, check_for_channel_conflicts
-from api.videos.lib import get_channels_config, save_channels_config
+from api.videos.lib import save_channels_config
 from api.videos.models import Channel, Video
 
 

@@ -5,14 +5,15 @@ import re
 from http import HTTPStatus
 from string import ascii_letters
 
+from pytz import UnknownTimeZoneError
 from sanic import Blueprint, Sanic, response
 from sanic.request import Request
 from sanic_cors import CORS
 from sanic_openapi import swagger_blueprint
 
 from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_config, get_config, EVENTS, \
-    wrol_mode_enabled
-from api.errors import WROLModeEnabled
+    wrol_mode_enabled, set_timezone
+from api.errors import WROLModeEnabled, InvalidTimezone
 from api.modules import MODULES
 from api.otp import encrypt_otp, decrypt_otp, generate_html, generate_pdf
 from api.videos.schema import EventsResponse, EchoResponse, EncryptOTPRequest, DecryptOTPRequest
@@ -88,6 +89,12 @@ def update_settings(_: Request, data: dict):
     if wrol_mode_enabled() and 'wrol_mode' not in data:
         # Cannot update settings while WROL Mode is enabled, unless you want to disable WROL Mode.
         raise WROLModeEnabled()
+
+    try:
+        if data.get('timezone'):
+            set_timezone(data['timezone'])
+    except UnknownTimeZoneError:
+        raise InvalidTimezone(f'Invalid timezone: {data["timezone"]}')
 
     save_settings_config(data)
 

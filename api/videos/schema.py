@@ -145,6 +145,7 @@ class SettingsResponse:
 class SettingsRequest:
     media_directory = doc.String()
     wrol_mode = doc.Boolean()
+    timezone = doc.String()
 
 
 class RegexRequest:

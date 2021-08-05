@@ -11,9 +11,10 @@ from PIL import Image
 from sanic_openapi import doc
 
 from api.api import api_app, attach_routes
-from api.common import validate_data, combine_dicts, insert_parameter, ProgressReporter, date_range
+from api.common import validate_data, combine_dicts, insert_parameter, ProgressReporter, date_range, set_timezone, \
+    now, today
 from api.db import get_db_context
-from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields
+from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields, InvalidTimezone
 from api.test.common import create_db_structure, build_test_directories, wrap_test_db
 from api.videos.common import convert_image, bulk_validate_posters
 from api.videos.models import Video, Channel
@@ -571,3 +572,19 @@ class TestCommon(unittest.TestCase):
             date(1970, 1, 5),
             date(1970, 1, 6),
         ]
+
+    def test_set_timezone(self):
+        """
+        The global timezone can be changed.  Invalid timezones are rejected.
+        """
+        original_timezone = now().tzinfo
+
+        try:
+            self.assertRaises(InvalidTimezone, set_timezone, '')
+            self.assertEqual(now().tzinfo, original_timezone)
+
+            set_timezone('US/Pacific')
+            self.assertNotEqual(now().tzinfo, original_timezone)
+        finally:
+            # Restore the timezone before the test.
+            set_timezone(original_timezone)

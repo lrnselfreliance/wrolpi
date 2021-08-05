@@ -101,6 +101,10 @@ class InventoriesVersionMismatch(APIError):
     pass
 
 
+class InvalidTimezone(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -222,6 +226,11 @@ API_ERRORS = {
     InventoriesVersionMismatch: {
         'code': next(error_codes),
         'message': 'Inventories version in the DB does not match the inventories config',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    InvalidTimezone: {
+        'code': next(error_codes),
+        'message': 'Invalid timezone',
         'status': HTTPStatus.BAD_REQUEST,
     },
 }

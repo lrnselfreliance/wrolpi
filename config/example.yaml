@@ -22,3 +22,5 @@ channels:
     name: WROLPi # the pretty name for the channel
     url: https://www.youtube.com/channel/UC4t8bw1besFTyjW7ZBCOIrw/videos
     directory: videos/wrolpi  # relative to `media_directory`
+
+timezone: America/Boise

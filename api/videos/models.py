@@ -1,10 +1,10 @@
 from datetime import timedelta
 
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, JSON, Date, ARRAY, ForeignKey, Computed
+from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, Computed
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
-from api.common import Base, tsvector, ModelHelper, ChannelPath, PathColumn, today
+from api.common import Base, tsvector, ModelHelper, ChannelPath, PathColumn, today, TZDateTime
 from api.errors import UnknownVideo, NoFrequency
 
 
@@ -25,13 +25,13 @@ class Video(ModelHelper, Base):
 
     caption = Column(String)
     duration = Column(Integer)
-    favorite = Column(DateTime)
+    favorite = Column(TZDateTime)
     size = Column(Integer)
     source_id = Column(String)
     title = Column(String)
-    upload_date = Column(DateTime)
+    upload_date = Column(TZDateTime)
     validated_poster = Column(Boolean, default=False)
-    viewed = Column(DateTime)
+    viewed = Column(TZDateTime)
     textsearch = Column(tsvector, Computed('''to_tsvector('english'::regconfig,
                                                ((COALESCE(title, ''::text) || ' '::text) ||
                                                 COALESCE(caption, ''::text)))'''))

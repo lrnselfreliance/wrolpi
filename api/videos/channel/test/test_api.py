@@ -1,7 +1,7 @@
 import json
 import pathlib
 import tempfile
-from datetime import datetime, timedelta
+from datetime import timedelta
 from http import HTTPStatus
 from queue import Empty
 
@@ -9,6 +9,7 @@ import mock
 import pytest
 
 from api.api import api_app, attach_routes
+from api.common import now
 from api.db import get_db_context
 from api.errors import UnknownFile
 from api.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI, create_db_structure
@@ -356,9 +357,9 @@ class TestVideoAPI(TestAPI):
             session.add(channel)
             session.flush()
             session.refresh(channel)
-            now = datetime.utcnow()
-            session.add(Video(title='vid1', channel_id=channel.id, upload_date=now))
-            session.add(Video(title='vid2', channel_id=channel.id, upload_date=now + timedelta(seconds=1)))
+            now_ = now()
+            session.add(Video(title='vid1', channel_id=channel.id, upload_date=now_))
+            session.add(Video(title='vid2', channel_id=channel.id, upload_date=now_ + timedelta(seconds=1)))
 
         # Test that a 404 is returned when no video exists
         _, response = api_app.test_client.get('/api/videos/video/10')

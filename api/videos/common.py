@@ -11,7 +11,7 @@ import PIL
 from PIL import Image
 from sqlalchemy.orm import Session
 
-from api.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify
+from api.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify, chunk
 from api.db import get_db_context
 from api.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
@@ -391,18 +391,19 @@ async def generate_bulk_posters(video_ids: List[int]):
     Generate all posters for the provided videos.  Update the video object with the new jpg file location.  Do not
     clobber existing jpg files.
     """
-    with get_db_context(commit=True) as (engine, session):
-        logger.info(f'Generating {len(video_ids)} video posters')
-        videos = session.query(Video).filter(Video.id.in_(video_ids))
-        for video in videos:
-            video_path = get_absolute_video_path(video)
+    logger.info(f'Generating {len(video_ids)} video posters')
+    with video_ids in chunk(video_ids, 10):
+        with get_db_context(commit=True) as (engine, session):
+            videos = session.query(Video).filter(Video.id.in_(video_ids))
+            for video in videos:
+                video_path = get_absolute_video_path(video)
 
-            poster_path = replace_extension(video_path, '.jpg')
-            if not poster_path.exists():
-                generate_video_poster(video_path)
-            channel_dir = get_absolute_media_path(video.channel.directory)
-            poster_path = poster_path.relative_to(channel_dir)
-            video.poster_path = str(poster_path)
+                poster_path = replace_extension(video_path, '.jpg')
+                if not poster_path.exists():
+                    generate_video_poster(video_path)
+                channel_dir = get_absolute_media_path(video.channel.directory)
+                poster_path = poster_path.relative_to(channel_dir)
+                video.poster_path = str(poster_path)
 
 
 def convert_image(existing_path: Path, destination_path: Path, ext: str = 'jpeg'):
@@ -489,37 +490,39 @@ async def get_bulk_video_duration(video_ids: List[int]):
     """
     Get and save the duration for each video provided.
     """
-    with get_db_context(commit=True) as (engine, session):
-        logger.info(f'Getting {len(video_ids)} video durations.')
-        for video_id in video_ids:
-            video = session.query(Video).filter_by(id=video_id).one()
-            logger.debug(f'Getting video duration: {video.id} {video.title}')
-            video_path = get_absolute_video_path(video)
+    for video_ids in chunk(video_ids, 10):
+        with get_db_context(commit=True) as (engine, session):
+            logger.info(f'Getting {len(video_ids)} video durations.')
+            for video_id in video_ids:
+                video = session.query(Video).filter_by(id=video_id).one()
+                logger.debug(f'Getting video duration: {video.id} {video.title}')
+                video_path = get_absolute_video_path(video)
 
-            try:
-                info_json = get_absolute_video_info_json(video)
-                with open(str(info_json), 'rt') as fh:
-                    contents = json.load(fh)
-                    duration = contents['duration']
-            except UnknownFile:
-                duration = get_video_duration(video_path)
+                try:
+                    info_json = get_absolute_video_info_json(video)
+                    with open(str(info_json), 'rt') as fh:
+                        contents = json.load(fh)
+                        duration = contents['duration']
+                except UnknownFile:
+                    duration = get_video_duration(video_path)
 
-            video.duration = duration
+                video.duration = duration
 
 
 async def get_bulk_video_size(video_ids: List[int]):
     """
     Get and save the size for each video provided.
     """
-    with get_db_context(commit=True) as (engine, session):
-        logger.info(f'Getting {len(video_ids)} video sizes.')
-        for video_id in video_ids:
-            video = session.query(Video).filter_by(id=video_id).one()
-            logger.debug(f'Getting video size: {video.id} {video.video_path}')
-            video_path = get_absolute_video_path(video)
+    for video_ids in chunk(video_ids, 10):
+        with get_db_context(commit=True) as (engine, session):
+            logger.info(f'Getting {len(video_ids)} video sizes.')
+            for video_id in video_ids:
+                video = session.query(Video).filter_by(id=video_id).one()
+                logger.debug(f'Getting video size: {video.id} {video.video_path}')
+                video_path = get_absolute_video_path(video)
 
-            size = video_path.stat().st_size
-            video.size = size
+                size = video_path.stat().st_size
+                video.size = size
 
 
 def minimize_dict(d: dict, keys: Iterable) -> dict:

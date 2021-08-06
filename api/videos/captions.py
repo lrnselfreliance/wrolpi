@@ -5,7 +5,7 @@ from typing import Generator, List, Union
 import srt
 import webvtt
 
-from api.common import logger
+from api.common import logger, chunk
 from api.errors import UnknownCaptionFile
 from .common import get_absolute_video_caption
 from .models import Video
@@ -66,8 +66,9 @@ def process_captions(video: Video):
 
 
 async def insert_bulk_captions(video_ids: List[int]):
-    with get_db_context(commit=True) as (engine, session):
-        for idx, video_id in enumerate(video_ids):
-            video = session.query(Video).filter_by(id=video_id).one()
-            process_captions(video)
+    for video_ids in chunk(video_ids, 10):
+        with get_db_context(commit=True) as (engine, session):
+            for idx, video_id in enumerate(video_ids):
+                video = session.query(Video).filter_by(id=video_id).one()
+                process_captions(video)
     logger.debug(f'Inserted {len(video_ids)} captions')

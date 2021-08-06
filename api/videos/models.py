@@ -138,6 +138,10 @@ class Video(ModelHelper, Base):
         """
         session = Session.object_session(self)
 
+        if not self.upload_date:
+            # We can't place a video that has no upload date.
+            return None, None
+
         with get_db_curs() as curs:
             query = '''
                     WITH numbered_videos AS (
@@ -239,3 +243,16 @@ class Channel(ModelHelper, Base):
         # My next download will be distributed by my frequency and my position.
         position = chunk * (index + 1)
         self.next_download = today() + timedelta(seconds=self.download_frequency + position)
+
+    def delete_with_videos(self):
+        """
+        Delete all Video records (but not video files) related to this Channel.  Then delete the Channel.
+        """
+        session = Session.object_session(self)
+        # Delete the video records, but not the video files!
+        session.query(Video).filter_by(channel_id=self.id).delete()
+        session.delete(self)
+
+    def update(self, data: dict):
+        for key, value in data.items():
+            setattr(self, key, value)

@@ -493,9 +493,9 @@ async def get_bulk_video_duration(video_ids: List[int]):
     """
     Get and save the duration for each video provided.
     """
+    logger.info(f'Getting {len(video_ids)} video durations.')
     for video_ids in chunk(video_ids, 10):
         with get_db_context(commit=True) as (engine, session):
-            logger.info(f'Getting {len(video_ids)} video durations.')
             for video_id in video_ids:
                 video = session.query(Video).filter_by(id=video_id).one()
                 logger.debug(f'Getting video duration: {video.id} {video.title}')
@@ -516,9 +516,9 @@ async def get_bulk_video_size(video_ids: List[int]):
     """
     Get and save the size for each video provided.
     """
+    logger.info(f'Getting {len(video_ids)} video sizes.')
     for video_ids in chunk(video_ids, 10):
         with get_db_context(commit=True) as (engine, session):
-            logger.info(f'Getting {len(video_ids)} video sizes.')
             for video_id in video_ids:
                 video = session.query(Video).filter_by(id=video_id).one()
                 logger.debug(f'Getting video size: {video.id} {video.video_path}')
@@ -553,10 +553,3 @@ def minimize_video(video: dict) -> dict:
         video['info_json'] = minimize_video_info_json(video['info_json'])
 
     return video
-
-
-def add_video_to_skip_list(channel, video):
-    try:
-        channel.skip_download_videos.append(video.source_id)
-    except AttributeError:
-        channel.skip_download_videos = [video.source_id, ]

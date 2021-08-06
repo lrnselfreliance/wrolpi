@@ -7,8 +7,8 @@ from sqlalchemy.orm.exc import NoResultFound
 
 from api.common import now
 from api.db import get_db_context, get_db_curs
-from api.errors import UnknownVideo, UnknownFile
-from api.videos.common import get_absolute_video_files, add_video_to_skip_list, get_video_info_json, minimize_video
+from api.errors import UnknownVideo
+from api.videos.common import get_video_info_json, minimize_video
 from api.videos.models import Video
 from api.videos.video.api import logger
 
@@ -214,33 +214,4 @@ def set_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
     """
     with get_db_context(commit=True) as (engine, session):
         video = session.query(Video).filter_by(id=video_id).one()
-        _favorite = video.favorite = now() if favorite else None
-
-    return _favorite
-
-
-def delete_video(video: Video):
-    """
-    Delete any and all video files for a particular video.  If deletion succeeds, mark it as "do-not-download".
-    """
-    video_files = get_absolute_video_files(video)
-    for path in video_files:
-        try:
-            path.unlink()
-        except FileNotFoundError:
-            pass
-
-    if not video_files:
-        raise UnknownFile('No video files were deleted')
-
-    with get_db_context(commit=True) as (engine, session):
-        video = session.query(Video).filter_by(id=video.id).one()
-
-        video.video_path = None
-        video.poster_path = None
-        video.caption_path = None
-        video.description_path = None
-        video.info_json_path = None
-
-        channel = video.channel
-        add_video_to_skip_list(channel, video)
+        return video.set_favorite(favorite)

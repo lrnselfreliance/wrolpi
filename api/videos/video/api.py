@@ -8,10 +8,11 @@ from api.db import get_db_context
 from api.errors import ValidationError, InvalidOrderBy
 from api.videos.common import get_matching_directories, get_media_directory, \
     get_relative_to_media_directory, get_allowed_limit, minimize_video
+from api.videos.lib import save_channels_config
 from api.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse, \
     DirectoriesResponse, DirectoriesRequest
 from api.videos.video.lib import get_video, VIDEO_ORDERS, DEFAULT_VIDEO_ORDER, video_search, \
-    delete_video, get_video_for_app, mark_video_as_viewed
+    get_video_for_app, mark_video_as_viewed
 
 video_bp = Blueprint('Video')
 
@@ -82,8 +83,9 @@ def directories(_, data):
     ),
 )
 @wrol_mode_check
-def video_delete(request: Request, video_id: int):
+def video_delete(_: Request, video_id: int):
     with get_db_context(commit=True) as (engine, session):
         video = get_video(session, video_id)
-    delete_video(video)
+        video.delete()
+    save_channels_config()
     return response.raw('', HTTPStatus.NO_CONTENT)

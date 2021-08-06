@@ -4,8 +4,8 @@ from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, Fore
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
-from api.common import Base, tsvector, ModelHelper, ChannelPath, PathColumn, today, TZDateTime
-from api.errors import UnknownVideo, NoFrequency
+from api.common import Base, tsvector, ModelHelper, ChannelPath, PathColumn, today, TZDateTime, now
+from api.errors import UnknownVideo, NoFrequency, UnknownFile
 
 
 class Video(ModelHelper, Base):
@@ -37,13 +37,53 @@ class Video(ModelHelper, Base):
                                                 COALESCE(caption, ''::text)))'''))
 
     def __repr__(self):
-        return f'<Video(id={self.id}, title={self.title}, path={self.video_path}, channel={self.channel_id})>'
+        return f'<Video(id={self.id}, title={self.title}, path={self.video_path}, channel={self.channel_id}) ' \
+               f'source_id={self.source_id}>'
 
     def dict(self):
         d = super().dict()
         if self.channel_id:
             d['channel'] = self.channel.dict()
         return d
+
+    def _clear_paths(self):
+        self.caption_path = None
+        self.description_path = None
+        self.ext = None
+        self.info_json_path = None
+        self.poster_path = None
+        self.video_path = None
+
+    def delete(self):
+        """
+        Remove all files related to this video.  Add it to it's Channel's skip list.
+
+        Raises: UnknownFile if a the video has no files.
+        """
+        from api.videos.common import get_absolute_video_files
+        video_files = get_absolute_video_files(self)
+        for path in video_files:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+
+        self._clear_paths()
+
+        if not video_files:
+            raise UnknownFile('No video files were deleted')
+
+        self.add_to_skip_list()
+
+    def add_to_skip_list(self):
+        """
+        Add this video to it's Channel's skip list.
+        """
+        self.channel.add_video_to_skip_list(self.source_id)
+
+    def set_favorite(self, favorite: bool):
+        self.favorite = now() if favorite else None
+        return self.favorite
 
 
 class Channel(ModelHelper, Base):
@@ -70,12 +110,12 @@ class Channel(ModelHelper, Base):
         return f'<Channel(id={self.id}, name={self.name})>'
 
     def add_video_to_skip_list(self, source_id):
-        if source_id:
-            skip_download_videos = {i for i in self.skip_download_videos or [] if i}
-            skip_download_videos.add(source_id)
-            self.skip_download_videos = skip_download_videos
-        else:
+        if not source_id:
             raise UnknownVideo(f'Cannot skip video with empty source id: {source_id}')
+
+        skip_download_videos = {i for i in self.skip_download_videos or [] if i}
+        skip_download_videos.add(source_id)
+        self.skip_download_videos = skip_download_videos
 
     def increment_next_download(self):
         """

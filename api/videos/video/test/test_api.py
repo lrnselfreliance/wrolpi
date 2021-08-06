@@ -11,7 +11,7 @@ from api.db import get_db_context
 from api.errors import API_ERRORS, WROLModeEnabled
 from api.test.common import wrap_test_db, TestAPI, create_db_structure
 from api.videos.models import Channel, Video
-from api.videos.video.lib import get_surrounding_videos, delete_video
+from api.videos.video.lib import get_surrounding_videos
 
 
 class TestVideoFunctions(TestAPI):
@@ -127,13 +127,15 @@ class TestVideoFunctions(TestAPI):
             channel1 = session.query(Channel).filter_by(name='channel1').one()
             channel2 = session.query(Channel).filter_by(name='channel2').one()
             vid1, vid2 = session.query(Video).order_by(Video.video_path).all()
+            vid1.source_id = 'foo'
+            vid2.source_id = 'bar'
 
             # No videos have been deleted yet.
             self.assertIsNone(channel1.skip_download_videos)
             self.assertIsNone(channel2.skip_download_videos)
             self.assertTrue((tempdir / 'channel1/vid1.mp4').is_file())
 
-            delete_video(vid1)
+            vid1.delete()
 
             channel1 = session.query(Channel).filter_by(name='channel1').one()
             # Video was added to skip list.
@@ -143,7 +145,7 @@ class TestVideoFunctions(TestAPI):
             self.assertFalse((tempdir / 'channel1/vid1.mp4').is_file())
             self.assertTrue((tempdir / 'channel2/vid2.mp4').is_file())
 
-            delete_video(vid2)
+            vid2.delete()
 
             self.assertEqual(session.query(Video).count(), 2)
             self.assertFalse((tempdir / 'channel1/vid1.mp4').is_file())

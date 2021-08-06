@@ -1,12 +1,13 @@
 import json
 from datetime import timedelta, datetime
-from typing import Union, Optional
+from typing import Optional
 
 from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, Computed
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
 from api.common import Base, tsvector, ModelHelper, ChannelPath, PathColumn, today, TZDateTime, now
+from api.db import get_db_curs
 from api.errors import UnknownVideo, NoFrequency, UnknownFile, UnknownDirectory
 
 
@@ -95,6 +96,9 @@ class Video(ModelHelper, Base):
         self.favorite = now() if favorite else None
         return self.favorite
 
+    def set_viewed(self):
+        self.viewed = now()
+
     def get_info_json(self) -> Optional[str]:
         """
         If this Video has an info_json file, return it's contents.  Otherwise, return None.
@@ -111,6 +115,68 @@ class Video(ModelHelper, Base):
             pass
         except UnknownDirectory:
             pass
+
+    def get_surrounding_videos(self):
+        """
+        Get the previous and next videos around this video.  The videos must be in the same channel.
+
+        Example:
+            >>> vid1 = Video(id=1, upload_date=10)
+            >>> vid2 = Video(id=2, upload_date=20)
+            >>> vid3 = Video(id=3, upload_date=30)
+            >>> vid4 = Video(id=4)
+
+            >>> vid1.get_surrounding_videos()
+            (None, vid2)
+            >>> vid2.get_surrounding_videos()
+            (vid1, vid3)
+            >>> vid3.get_surrounding_videos()
+            (vid2, None)
+            Video 4 has no upload date, so we can't place it in order.
+            >>> vid4.get_surrounding_videos()
+            (None, None)
+        """
+        session = Session.object_session(self)
+
+        with get_db_curs() as curs:
+            query = '''
+                    WITH numbered_videos AS (
+                        SELECT id,
+                            ROW_NUMBER() OVER (ORDER BY upload_date ASC) AS row_number
+                        FROM video
+                        WHERE
+                            channel_id = %(channel_id)s
+                            AND upload_date IS NOT NULL
+                    )
+
+                    SELECT id
+                    FROM numbered_videos
+                    WHERE row_number IN (
+                        SELECT row_number+i
+                        FROM numbered_videos
+                        CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
+                        WHERE
+                        id = %(video_id)s
+                    )
+            '''
+            curs.execute(query, dict(channel_id=self.channel_id, video_id=self.id))
+            results = [i[0] for i in curs.fetchall()]
+
+        # Assign the returned ID's to their respective positions relative to the ID that matches the video_id.
+        previous_id = next_id = None
+        for index, id_ in enumerate(results):
+            if id_ == self.id:
+                if index > 0:
+                    previous_id = results[index - 1]
+                if index + 1 < len(results):
+                    next_id = results[index + 1]
+                break
+
+        # Fetch the videos by id, if they exist.
+        previous_video = session.query(Video).filter_by(id=previous_id).one() if previous_id else None
+        next_video = session.query(Video).filter_by(id=next_id).one() if next_id else None
+
+        return previous_video, next_video
 
 
 class Channel(ModelHelper, Base):

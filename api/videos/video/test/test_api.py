@@ -11,7 +11,7 @@ from api.db import get_db_context
 from api.errors import API_ERRORS, WROLModeEnabled
 from api.test.common import wrap_test_db, TestAPI, create_db_structure
 from api.videos.models import Channel, Video
-from api.videos.video.lib import get_surrounding_videos, get_video_for_app
+from api.videos.video.lib import get_video_for_app
 
 
 class TestVideoFunctions(TestAPI):
@@ -43,37 +43,35 @@ class TestVideoFunctions(TestAPI):
             session.add(Video(title=f'vid10', channel_id=channel4.id))
             session.add(Video(title=f'vid11', channel_id=channel4.id))
 
-            session.commit()
+        tests = [
+            # Channel 1's videos were inserted in upload_date order.
+            (1, (None, 'vid2')),
+            (2, ('vid1', 'vid4')),
+            (4, ('vid2', None)),  # 7 has no upload_date, so it doesn't come after 4.
+            (7, (None, None)),  # 7 has no upload_date, so we don't know the order of it.
+            # Channel 3 has only one video.
+            (9, (None, None)),
+            # Channel 2 was inserted out of order.
+            (5, (None, 'vid3')),
+            (3, ('vid5', 'vid6')),
+            (8, ('vid6', None)),
+            # Channel 4's videos have no upload date, so we don't know what is previous/next.
+            (10, (None, None)),
+        ]
 
-            tests = [
-                # Channel 1's videos were inserted in upload_date order.
-                (1, (None, 'vid2')),
-                (2, ('vid1', 'vid4')),
-                (4, ('vid2', None)),  # 7 has no upload_date, so it doesn't come after 4.
-                (7, (None, None)),  # 7 has no upload_date, so we don't know the order of it.
-                # Channel 3 has only one video.
-                (9, (None, None)),
-                # Channel 2 was inserted out of order.
-                (5, (None, 'vid3')),
-                (3, ('vid5', 'vid6')),
-                (8, ('vid6', None)),
-                # Channel 4's videos have no upload date, so we don't know what is previous/next.
-                (10, (None, None)),
-            ]
+        for id_, (prev_title, next_title) in tests:
+            video = session.query(Video).filter_by(id=id_).one()
+            prev_video, next_video = video.get_surrounding_videos()
 
-            for id_, (prev_title, next_title) in tests:
-                video = session.query(Video).filter_by(id=id_).one()
-                prev_video, next_video = get_surrounding_videos(session, id_, video.channel_id)
+            if prev_title is None:
+                self.assertIsNone(prev_video)
+            else:
+                self.assertDictContains(prev_video, {'title': prev_title})
 
-                if prev_title is None:
-                    self.assertIsNone(prev_video)
-                else:
-                    self.assertDictContains(prev_video, {'title': prev_title})
-
-                if next_title is None:
-                    self.assertIsNone(next_video)
-                else:
-                    self.assertDictContains(next_video, {'title': next_title})
+            if next_title is None:
+                self.assertIsNone(next_video)
+            else:
+                self.assertDictContains(next_video, {'title': next_title})
 
     @wrap_test_db
     @create_db_structure({
@@ -123,7 +121,7 @@ class TestVideoFunctions(TestAPI):
             vid1 = session.query(Video).one()
 
         vid, prev, next_ = get_video_for_app(vid1.id)
-        self.assertEqual(vid['id'], vid1.id)
+        self.assertEqual(vid.id, vid1.id)
 
     @wrap_test_db
     @create_db_structure({

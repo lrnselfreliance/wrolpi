@@ -11,8 +11,7 @@ from api.videos.common import get_matching_directories, get_media_directory, \
 from api.videos.lib import save_channels_config
 from api.videos.schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse, \
     DirectoriesResponse, DirectoriesRequest
-from api.videos.video.lib import get_video, VIDEO_ORDERS, DEFAULT_VIDEO_ORDER, video_search, \
-    get_video_for_app, mark_video_as_viewed
+from api.videos.video.lib import get_video, VIDEO_ORDERS, DEFAULT_VIDEO_ORDER, video_search, get_video_for_app
 
 video_bp = Blueprint('Video')
 
@@ -28,8 +27,11 @@ logger = logger.getChild(__name__)
     ),
 )
 def video_get(_: Request, video_id: int):
-    mark_video_as_viewed(video_id)
     video, previous_video, next_video = get_video_for_app(video_id)
+    video.set_viewed()
+    video = video.get_minimize()
+    previous_video = previous_video.get_minimize() if previous_video else None
+    next_video = next_video.get_minimize() if next_video else None
     return json_response({'video': video, 'prev': previous_video, 'next': next_video})
 
 

@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Date, ForeignKey, DECIMAL
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
 from api.common import Base, ModelHelper, TZDateTime, now
@@ -48,6 +48,12 @@ class Inventory(Base, ModelHelper):
         d = super().dict()
         d['items'] = [i.dict() for i in self.items]
         return d
+
+    def delete(self):
+        """
+        Delete all Items of this Inventory.  Then delete this inventory.
+        """
+        self.deleted_at = now()
 
 
 class InventoriesVersion(Base, ModelHelper):

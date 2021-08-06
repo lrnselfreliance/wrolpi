@@ -8,7 +8,7 @@ from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationErr
 from api.vars import DEFAULT_DOWNLOAD_FREQUENCY
 from api.videos.common import get_relative_to_media_directory, make_media_directory, check_for_channel_conflicts
 from api.videos.lib import save_channels_config
-from api.videos.models import Channel, Video
+from api.videos.models import Channel
 
 
 async def get_minimal_channels() -> List[dict]:
@@ -59,12 +59,10 @@ def delete_channel(link):
         except NoResultFound:
             raise UnknownChannel()
 
-        # Delete all videos for this channel, then the channel itself.
-        session.query(Video).filter_by(channel_id=channel.id).delete()
-        session.query(Channel).filter_by(id=channel.id).delete()
+        channel.delete_with_videos()
 
-        # Save these changes to the local.yaml as well
-        save_channels_config(session)
+    # Save these changes to the local.yaml as well
+    save_channels_config()
 
 
 def update_channel(data, link):
@@ -100,7 +98,7 @@ def update_channel(data, link):
         # Verify that the URL/Name/Link aren't taken
         check_for_channel_conflicts(
             session,
-            id=channel.id,
+            id_=channel.id,
             url=data.get('url'),
             name=data.get('name'),
             link=data.get('link'),
@@ -108,28 +106,33 @@ def update_channel(data, link):
         )
 
         # Apply the changes now that we've OK'd them
-        for key, value in data.items():
-            setattr(channel, key, value)
+        channel.update(data)
 
-        # Save these changes to the local.yaml as well
-        save_channels_config(session)
+    # Save these changes to the local.yaml as well
+    save_channels_config()
 
     return channel
 
 
-def get_channel(link) -> dict:
+def get_channel(link) -> Channel:
+    """
+    Get a Channel by it's `link`.  Raise UnknownChannel if it does not exist.
+    """
     with get_db_context() as (engine, session):
         try:
             channel = session.query(Channel).filter_by(link=link).one()
         except NoResultFound:
             raise UnknownChannel()
-        return channel.dict()
+        return channel
 
 
-def create_channel(data) -> Channel:
+def create_channel(data: dict) -> Channel:
+    """
+    Create a new Channel.  Check for conflicts with existing Channels.
+    """
     with get_db_context(commit=True) as (engine, session):
-        # Verify that the URL/Name/Link aren't taken
         try:
+            # Verify that the URL/Name/Link aren't taken
             check_for_channel_conflicts(
                 session,
                 url=data.get('url'),
@@ -138,7 +141,7 @@ def create_channel(data) -> Channel:
                 directory=str(data['directory']),
             )
         except APIError as e:
-            raise ValidationError from e
+            raise ValidationError() from e
 
         channel = Channel(
             name=data['name'],
@@ -153,7 +156,7 @@ def create_channel(data) -> Channel:
         session.flush()
         session.refresh(channel)
 
-        # Save these changes to the local.yaml as well
-        save_channels_config(session)
+    # Save these changes to the local.yaml as well
+    save_channels_config()
 
-        return channel
+    return channel

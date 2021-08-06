@@ -5,11 +5,9 @@ from sanic import response, Blueprint
 from sanic.request import Request
 
 from api.common import validate_doc, logger, json_response, wrol_mode_check
-from api.db import get_db_context
 from api.errors import UnknownDirectory
 from api.videos.channel.lib import get_minimal_channels, delete_channel, update_channel, get_channel, create_channel
-from api.videos.common import check_for_channel_conflicts, \
-    get_relative_to_media_directory, make_media_directory
+from api.videos.common import get_relative_to_media_directory, make_media_directory
 from api.videos.schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
     ChannelPostResponse, ChannelPutRequest, SuccessResponse
 
@@ -38,6 +36,7 @@ async def get_channels(_: Request):
 )
 def channel_get(_: Request, link: str):
     channel = get_channel(link)
+    channel = channel.dict()
     channel.pop('info_json')
     return json_response({'channel': channel})
 
@@ -103,17 +102,4 @@ def channel_update(_: Request, link: str, data: dict):
 @wrol_mode_check
 def channel_delete(_: Request, link: str):
     delete_channel(link)
-    return response.raw('', HTTPStatus.NO_CONTENT)
-
-
-@channel_bp.post('/conflict')
-@validate_doc(
-    summary='Get any channels that conflict with the properties provided.',
-    consumes=ChannelPutRequest,
-    produces=ChannelsResponse,
-)
-def channel_conflict(_: Request, data: dict):
-    with get_db_context() as (engine, session):
-        check_for_channel_conflicts(db, url=data.get('url'), name=data.get('name'),
-                                    directory=data.get('directory'))
     return response.raw('', HTTPStatus.NO_CONTENT)

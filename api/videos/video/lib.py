@@ -5,7 +5,6 @@ import psycopg2
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
-from api.common import now
 from api.db import get_db_context, get_db_curs
 from api.errors import UnknownVideo
 from api.videos.models import Video
@@ -20,84 +19,13 @@ def get_video(session: Session, video_id: int) -> Video:
     return video
 
 
-def mark_video_as_viewed(video_id: int):
-    with get_db_context(commit=True) as (engine, session):
-        video = get_video(session, video_id)
-        video.viewed = now()
-
-
-def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dict]]:
+def get_video_for_app(video_id: int) -> Tuple[Video, Optional[Video], Optional[Video]]:
     with get_db_context() as (engine, session):
-        video = get_video(session, video_id).get_minimize()
-
-        previous_video, next_video = get_surrounding_videos(session, video_id, video['channel_id'])
-        previous_video = previous_video.get_minimize() if previous_video else None
-        next_video = next_video.get_minimize() if next_video else None
+        video = get_video(session, video_id)
+        video.set_viewed()
+        previous_video, next_video = video.get_surrounding_videos()
 
     return video, previous_video, next_video
-
-
-def get_surrounding_videos(session: Session, video_id: int, channel_id: int):
-    """
-    Get the previous and next videos around the provided video.  The videos must be in the same channel.
-
-    Example:
-        vid1 = Video(id=1, upload_date=10)
-        vid2 = Video(id=2, upload_date=20)
-        vid3 = Video(id=3, upload_date=30)
-        vid4 = Video(id=4)
-
-        >>> get_surrounding_videos(session, video_id=1, ...)
-        (None, vid2)
-        >>> get_surrounding_videos(session, video_id=2, ...)
-        (vid1, vid3)
-        >>> get_surrounding_videos(session, video_id=3, ...)
-        (vid2, None)
-        Video 4 has no upload date, so we can't place it in order.
-        >>> get_surrounding_videos(session, video_id=4, ...)
-        (None, None)
-    """
-    video_id, channel_id = int(video_id), int(channel_id)
-
-    with get_db_curs() as curs:
-        query = '''
-                WITH numbered_videos AS (
-                    SELECT id,
-                        ROW_NUMBER() OVER (ORDER BY upload_date ASC) AS row_number
-                    FROM video
-                    WHERE
-                        channel_id = %(channel_id)s
-                        AND upload_date IS NOT NULL
-                )
-    
-                SELECT id
-                FROM numbered_videos
-                WHERE row_number IN (
-                    SELECT row_number+i
-                    FROM numbered_videos
-                    CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
-                    WHERE
-                    id = %(video_id)s
-                )
-        '''
-        curs.execute(query, dict(channel_id=channel_id, video_id=video_id))
-        results = [i[0] for i in curs.fetchall()]
-
-    # Assign the returned ID's to their respective positions relative to the ID that matches the video_id.
-    previous_id = next_id = None
-    for idx, id_ in enumerate(results):
-        if id_ == video_id:
-            if idx > 0:
-                previous_id = results[idx - 1]
-            if idx + 1 < len(results):
-                next_id = results[idx + 1]
-            break
-
-    # Fetch the videos by id, if they exist.
-    previous_video = session.query(Video).filter_by(id=previous_id).one() if previous_id else None
-    next_video = session.query(Video).filter_by(id=next_id).one() if next_id else None
-
-    return previous_video, next_video
 
 
 VIDEO_ORDERS = {

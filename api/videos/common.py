@@ -265,18 +265,18 @@ def remove_duplicate_video_paths(paths: Iterable[Path]) -> Set[Path]:
                 yield sorted(paths)[0]
 
 
-def check_for_channel_conflicts(session: Session, id=None, url=None, name=None, link=None, directory=None):
+def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None, link=None, directory=None):
     """
     Search for any channels that conflict with the provided args, raise a relevant exception if any conflicts are found.
     """
-    if not any([id, url, name, link, directory]):
+    if not any([id_, url, name, link, directory]):
         raise Exception('Cannot search for channel with no arguments')
 
-    logger.debug(f'Checking for channel conflicts: id={id} url={url} name={name} link={link} directory={directory}')
+    logger.debug(f'Checking for channel conflicts: id={id_} url={url} name={name} link={link} directory={directory}')
 
     # A channel can't conflict with itself
-    if id:
-        base_where = session.query(Channel).filter(Channel.id != id)
+    if id_:
+        base_where = session.query(Channel).filter(Channel.id != id_)
     else:
         base_where = session.query(Channel)
 

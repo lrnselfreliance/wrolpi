@@ -63,7 +63,7 @@ def update_inventory(inventory_id: int, inventory: dict):
 def delete_inventory(inventory_id: int):
     with get_db_context(commit=True) as (engine, session):
         inventory = session.query(Inventory).filter_by(id=inventory_id).one()
-        inventory.deleted_at = now()
+        inventory.delete()
 
 
 def get_categories() -> List[Tuple[int, str, str]]:

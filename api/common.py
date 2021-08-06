@@ -103,14 +103,14 @@ def set_timezone(tz: pytz.timezone):
     DEFAULT_TIMEZONE = tz
 
 
-def utc_now():
+def utc_now() -> datetime:
     """
     Get the current DateTime in UTC.  Timezone aware.
     """
     return datetime.utcnow().astimezone(pytz.utc)
 
 
-def now(tz: pytz.timezone = None):
+def now(tz: pytz.timezone = None) -> datetime:
     """
     Get the current DateTime in the provided timezone.  Timezone aware.
     """
@@ -118,14 +118,14 @@ def now(tz: pytz.timezone = None):
     return datetime.utcnow().astimezone(tz)
 
 
-def local_timezone(dt: datetime):
+def local_timezone(dt: datetime) -> datetime:
     """
     Convert the DateTime provided to the local Timezone.  Timezone aware.
     """
     return dt.astimezone(DEFAULT_TIMEZONE)
 
 
-def today():
+def today() -> date:
     """
     Return today's date.
     """

@@ -8,7 +8,6 @@ from sqlalchemy.orm.exc import NoResultFound
 from api.common import now
 from api.db import get_db_context, get_db_curs
 from api.errors import UnknownVideo
-from api.videos.common import get_video_info_json, minimize_video
 from api.videos.models import Video
 from api.videos.video.api import logger
 
@@ -28,16 +27,12 @@ def mark_video_as_viewed(video_id: int):
 
 
 def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dict]]:
-    with get_db_context(commit=True) as (engine, session):
-        video = get_video(session, video_id)
-        info_json = get_video_info_json(video)
-        video = video.dict()
-        video['info_json'] = info_json
-        video = minimize_video(video)
+    with get_db_context() as (engine, session):
+        video = get_video(session, video_id).get_minimize()
 
         previous_video, next_video = get_surrounding_videos(session, video_id, video['channel_id'])
-        previous_video = minimize_video(previous_video.dict()) if previous_video else None
-        next_video = minimize_video(next_video.dict()) if next_video else None
+        previous_video = previous_video.get_minimize() if previous_video else None
+        next_video = next_video.get_minimize() if next_video else None
 
     return video, previous_video, next_video
 
@@ -201,9 +196,8 @@ def video_search(
         if ranked_ids:
             results = session.query(Video).filter(Video.id.in_(ranked_ids)).all()
             results = sorted(results, key=lambda r: ranked_ids.index(r.id))
-            results = [i.dict() for i in results]
 
-        results = list(map(minimize_video, results))
+        results = [i.get_minimize() for i in results]
 
     return results, total
 

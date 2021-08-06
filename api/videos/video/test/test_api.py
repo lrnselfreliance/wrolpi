@@ -11,7 +11,7 @@ from api.db import get_db_context
 from api.errors import API_ERRORS, WROLModeEnabled
 from api.test.common import wrap_test_db, TestAPI, create_db_structure
 from api.videos.models import Channel, Video
-from api.videos.video.lib import get_surrounding_videos
+from api.videos.video.lib import get_surrounding_videos, get_video_for_app
 
 
 class TestVideoFunctions(TestAPI):
@@ -110,6 +110,20 @@ class TestVideoFunctions(TestAPI):
             # THE REST OF THESE METHODS ARE ALLOWED
             _, resp = api_app.test_client.post('/api/videos:favorite', data=favorite)
             self.assertEqual(resp.status_code, HTTPStatus.OK)
+
+    @wrap_test_db
+    @create_db_structure({
+        'channel1': [
+            'vid1.mp4',
+            'vid1.en.vtt',
+        ],
+    })
+    def test_get_video_for_app(self, tempdir):
+        with get_db_context(commit=True) as (engine, session):
+            vid1 = session.query(Video).one()
+
+        vid, prev, next_ = get_video_for_app(vid1.id)
+        self.assertEqual(vid['id'], vid1.id)
 
     @wrap_test_db
     @create_db_structure({

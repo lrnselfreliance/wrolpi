@@ -438,34 +438,37 @@ def bulk_validate_posters(video_ids: List[int]):
     Replace all posters for the provided videos if a video's poster is not a JPEG format.
     """
     logger.info(f'Validating {len(video_ids)} video posters')
-    for video_id in video_ids:
-        with get_db_context(commit=True) as (engine, session):
-            video = session.query(Video).filter_by(id=video_id).one()
-            channel = video.channel
+    for video_ids in chunk(video_ids, 10):
+        for video_id in video_ids:
+            with get_db_context(commit=True) as (engine, session):
+                video = session.query(Video).filter_by(id=video_id).one()
+                channel = video.channel
 
-            poster_path: Path = get_absolute_video_poster(video)
-            new_poster_path = poster_path.with_suffix('.jpg')
+                poster_path: Path = get_absolute_video_poster(video)
+                new_poster_path = poster_path.with_suffix('.jpg')
 
-            if poster_path != new_poster_path and new_poster_path.exists():
-                # Destination JPEG already exists (it may have the wrong format), lets overwrite it with a valid JPEG.
-                poster_path.unlink()
-                poster_path = new_poster_path
+                if poster_path != new_poster_path and new_poster_path.exists():
+                    # Destination JPEG already exists (it may have the wrong format), lets overwrite it with a valid
+                    # JPEG.
+                    poster_path.unlink()
+                    poster_path = new_poster_path
 
-            if not is_valid_poster(poster_path):
-                # Poster is not valid, convert it and place it in the new location.
-                try:
-                    convert_image(poster_path, new_poster_path)
-                    logger.info(f'Converted invalid poster {poster_path} to {new_poster_path}')
-                except Exception:
-                    logger.error(f'Failed to convert invalid poster {poster_path} to {new_poster_path}', exc_info=True)
-            else:
-                logger.debug(f'Poster was already valid: {new_poster_path}')
+                if not is_valid_poster(poster_path):
+                    # Poster is not valid, convert it and place it in the new location.
+                    try:
+                        convert_image(poster_path, new_poster_path)
+                        logger.info(f'Converted invalid poster {poster_path} to {new_poster_path}')
+                    except Exception:
+                        logger.error(f'Failed to convert invalid poster {poster_path} to {new_poster_path}',
+                                     exc_info=True)
+                else:
+                    logger.debug(f'Poster was already valid: {new_poster_path}')
 
-            channel_dir = get_absolute_media_path(channel.directory)
+                channel_dir = get_absolute_media_path(channel.directory)
 
-            # Update the video with the new poster path.  Mark it as validated.
-            video.poster_path = str(new_poster_path.relative_to(channel_dir))
-            video.validated_poster = True
+                # Update the video with the new poster path.  Mark it as validated.
+                video.poster_path = str(new_poster_path.relative_to(channel_dir))
+                video.validated_poster = True
 
 
 def get_video_duration(video_path: Path) -> int:

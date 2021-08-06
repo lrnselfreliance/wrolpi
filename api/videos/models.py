@@ -1,11 +1,13 @@
-from datetime import timedelta
+import json
+from datetime import timedelta, datetime
+from typing import Union, Optional
 
 from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, Computed
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
 from api.common import Base, tsvector, ModelHelper, ChannelPath, PathColumn, today, TZDateTime, now
-from api.errors import UnknownVideo, NoFrequency, UnknownFile
+from api.errors import UnknownVideo, NoFrequency, UnknownFile, UnknownDirectory
 
 
 class Video(ModelHelper, Base):
@@ -40,11 +42,19 @@ class Video(ModelHelper, Base):
         return f'<Video(id={self.id}, title={self.title}, path={self.video_path}, channel={self.channel_id}) ' \
                f'source_id={self.source_id}>'
 
-    def dict(self):
+    def dict(self) -> dict:
         d = super().dict()
         if self.channel_id:
             d['channel'] = self.channel.dict()
+        d['info_json'] = self.get_info_json()
         return d
+
+    def get_minimize(self) -> dict:
+        """
+        Get a dictionary representation of this Video suitable for sending out the API.
+        """
+        from api.videos.common import minimize_video
+        return minimize_video(self.dict())
 
     def _clear_paths(self):
         self.caption_path = None
@@ -81,9 +91,26 @@ class Video(ModelHelper, Base):
         """
         self.channel.add_video_to_skip_list(self.source_id)
 
-    def set_favorite(self, favorite: bool):
+    def set_favorite(self, favorite: bool) -> Optional[datetime]:
         self.favorite = now() if favorite else None
         return self.favorite
+
+    def get_info_json(self) -> Optional[str]:
+        """
+        If this Video has an info_json file, return it's contents.  Otherwise, return None.
+        """
+        if not self.channel or not self.channel.directory:
+            return
+
+        try:
+            if self.info_json_path and self.info_json_path.exists():
+                with open(self.info_json_path, 'rb') as fh:
+                    contents = json.load(fh)
+                    return contents
+        except UnknownFile:
+            pass
+        except UnknownDirectory:
+            pass
 
 
 class Channel(ModelHelper, Base):

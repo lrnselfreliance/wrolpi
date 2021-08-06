@@ -22,6 +22,7 @@ def get_video(session: Session, video_id: int) -> Video:
 def get_video_for_app(video_id: int) -> Tuple[Video, Optional[Video], Optional[Video]]:
     with get_db_context() as (engine, session):
         video = get_video(session, video_id)
+        video.set_viewed()
         previous_video, next_video = video.get_surrounding_videos()
 
     return video, previous_video, next_video

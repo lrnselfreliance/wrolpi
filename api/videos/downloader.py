@@ -9,7 +9,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm.exc import NoResultFound
 from youtube_dl import YoutubeDL
 
-from api.common import logger, today, ProgressReporter, now
+from api.common import logger, today, ProgressReporter, now, run_after
 from api.db import get_db_context, get_db_curs
 from .common import load_downloader_config, get_absolute_media_path
 from .lib import save_channels_config, upsert_video
@@ -254,6 +254,7 @@ def _skip_download(error):
     return False
 
 
+@run_after(save_channels_config)
 def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
     """Find any videos identified by the info packet that haven't yet been downloaded, download them."""
     missing_videos = list(find_all_missing_videos(link))
@@ -282,7 +283,6 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
         with get_db_context(commit=True) as (engine, session):
             upsert_video(session, video_path, channel, id_=id_)
 
-    save_channels_config()
     reporter.finish(1, 'All videos are downloaded')
 
 

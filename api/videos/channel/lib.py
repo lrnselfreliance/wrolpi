@@ -2,7 +2,7 @@ from typing import List
 
 from sqlalchemy.orm.exc import NoResultFound
 
-from api.common import sanitize_link
+from api.common import sanitize_link, run_after
 from api.db import get_db_context, get_db_curs
 from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.vars import DEFAULT_DOWNLOAD_FREQUENCY
@@ -52,6 +52,7 @@ async def get_minimal_channels() -> List[dict]:
     return channels
 
 
+@run_after(save_channels_config)
 def delete_channel(link):
     with get_db_context(commit=True) as (engine, session):
         try:
@@ -61,10 +62,8 @@ def delete_channel(link):
 
         channel.delete_with_videos()
 
-    # Save these changes to the local.yaml as well
-    save_channels_config()
 
-
+@run_after(save_channels_config)
 def update_channel(data, link):
     with get_db_context(commit=True) as (engine, session):
         try:
@@ -108,9 +107,6 @@ def update_channel(data, link):
         # Apply the changes now that we've OK'd them
         channel.update(data)
 
-    # Save these changes to the local.yaml as well
-    save_channels_config()
-
     return channel
 
 
@@ -126,6 +122,7 @@ def get_channel(link) -> Channel:
         return channel
 
 
+@run_after(save_channels_config)
 def create_channel(data: dict) -> Channel:
     """
     Create a new Channel.  Check for conflicts with existing Channels.
@@ -155,8 +152,5 @@ def create_channel(data: dict) -> Channel:
         session.commit()
         session.flush()
         session.refresh(channel)
-
-    # Save these changes to the local.yaml as well
-    save_channels_config()
 
     return channel

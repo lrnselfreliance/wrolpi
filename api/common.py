@@ -551,7 +551,7 @@ def save_settings_config(config=None):
 
     new_config = combine_dicts(config, local_config, example_config)
 
-    logger.debug(f'Writing config to file: {CONFIG_PATH}')
+    logger.info(f'Writing config to file: {CONFIG_PATH}')
     with open(str(CONFIG_PATH), 'wt') as fh:
         yaml.dump(new_config, fh)
 
@@ -676,7 +676,7 @@ def remove_whitespace(s: str) -> str:
 
 def run_after(after: callable, *args, **kwargs) -> callable:
     """
-    Run the `after` function in the future ofter the wrapped function returns.
+    Run the `after` function sometime in the future ofter the wrapped function returns.
     """
     if not inspect.iscoroutinefunction(after):
         synchronous_after = after

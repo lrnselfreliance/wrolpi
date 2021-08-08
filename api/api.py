@@ -12,7 +12,7 @@ from sanic_cors import CORS
 from sanic_openapi import swagger_blueprint
 
 from api.common import logger, set_sanic_url_parts, validate_doc, save_settings_config, get_config, EVENTS, \
-    wrol_mode_enabled, set_timezone
+    wrol_mode_enabled, set_timezone, json_response
 from api.errors import WROLModeEnabled, InvalidTimezone
 from api.modules import MODULES
 from api.otp import encrypt_otp, decrypt_otp, generate_html, generate_pdf
@@ -77,7 +77,7 @@ async def echo(request: Request):
 )
 def get_settings(_: Request):
     config = dict(get_config())
-    return response.json({'config': config})
+    return json_response({'config': config})
 
 
 @root_api.patch('/settings')

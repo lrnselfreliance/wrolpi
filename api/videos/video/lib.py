@@ -14,13 +14,16 @@ from api.videos.video.api import logger
 def get_video(session: Session, video_id: int) -> Video:
     try:
         video = session.query(Video).filter_by(id=video_id).one()
+        return video
     except NoResultFound:
         raise UnknownVideo()
-    return video
 
 
 def get_video_for_app(video_id: int) -> Tuple[Video, Optional[Video], Optional[Video]]:
-    with get_db_context() as (engine, session):
+    """
+    Get a Video, with it's prev/next videos.  Mark the Video as viewed.
+    """
+    with get_db_context(commit=True) as (engine, session):
         video = get_video(session, video_id)
         video.set_viewed()
         previous_video, next_video = video.get_surrounding_videos()

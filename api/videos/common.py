@@ -88,9 +88,10 @@ def import_settings_config():
 
                 # Set favorite Videos of this Channel.
                 favorites = config[section].get('favorites', {})
-                videos = session.query(Video).filter(Video.source_id.in_(favorites.keys()))
-                for video in videos:
-                    video.favorite = favorites[video.source_id]['favorite']
+                if favorites:
+                    videos = session.query(Video).filter(Video.source_id.in_(favorites.keys()))
+                    for video in videos:
+                        video.favorite = favorites[video.source_id]['favorite']
 
         return 0
     except Exception:

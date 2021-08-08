@@ -121,7 +121,7 @@ class TestVideoFunctions(TestAPI):
             vid1 = session.query(Video).one()
 
         vid, prev, next_ = get_video_for_app(vid1.id)
-        self.assertEqual(vid.id, vid1.id)
+        self.assertEqual(vid['id'], vid1.id)
 
     @wrap_test_db
     @create_db_structure({

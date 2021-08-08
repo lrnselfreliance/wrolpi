@@ -21,7 +21,7 @@ def get_video(session: Session, video_id: int) -> Video:
         raise UnknownVideo()
 
 
-def get_video_for_app(video_id: int) -> Tuple[Video, Optional[Video], Optional[Video]]:
+def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dict]]:
     """
     Get a Video, with it's prev/next videos.  Mark the Video as viewed.
     """
@@ -29,6 +29,10 @@ def get_video_for_app(video_id: int) -> Tuple[Video, Optional[Video], Optional[V
         video = get_video(session, video_id)
         video.set_viewed()
         previous_video, next_video = video.get_surrounding_videos()
+
+        video = video.get_minimize()
+        previous_video = previous_video.get_minimize() if previous_video else None
+        next_video = next_video.get_minimize() if next_video else None
 
     return video, previous_video, next_video
 

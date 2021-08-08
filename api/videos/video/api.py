@@ -28,9 +28,6 @@ logger = logger.getChild(__name__)
 )
 def video_get(_: Request, video_id: int):
     video, previous_video, next_video = get_video_for_app(video_id)
-    video = video.get_minimize()
-    previous_video = previous_video.get_minimize() if previous_video else None
-    next_video = next_video.get_minimize() if next_video else None
     return json_response({'video': video, 'prev': previous_video, 'next': next_video})
 
 

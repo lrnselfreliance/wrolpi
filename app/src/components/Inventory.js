@@ -347,6 +347,7 @@ class InventoryList extends React.Component {
                     color='red'
                     onClick={this.handleRemove}
                     disabled={this.state.checkboxes.length === 0}
+                    floated='right'
                 >
                     Remove
                 </Button>

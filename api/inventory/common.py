@@ -165,7 +165,7 @@ def save_inventories_file(path: str = None):
                     raise FileExistsError(f'Refusing to overwrite non-empty inventories.yaml with empty inventories.'
                                           f'  {path}')
 
-                if old and old['version'] > version:
+                if old and old.get('version') > version:
                     raise InventoriesVersionMismatch(
                         f'Inventories config version is {old["version"]} but DB version is {get_inventories_version()}')
 

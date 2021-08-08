@@ -8,7 +8,7 @@ from .common import get_inventory_by_category, get_inventory_by_subcategory, get
 from .inventory import get_items, save_item, delete_items, \
     get_inventories, save_inventory, delete_inventory, update_inventory, update_item, get_categories, get_brands
 from .schema import ItemPostRequest, InventoryPostRequest, InventoryPutRequest, ItemPutRequest
-from ..common import validate_doc, json_response
+from ..common import validate_doc, json_response, run_after
 from ..errors import ValidationError
 
 NAME = 'inventory'
@@ -47,9 +47,9 @@ def inventory_get(_: Request, inventory_id: int):
     'Save a new inventory',
     consumes=InventoryPostRequest,
 )
+@run_after(save_inventories_file)
 def post_inventory(_: Request, data: dict):
     save_inventory(data)
-    save_inventories_file()
     return response.empty(HTTPStatus.CREATED)
 
 
@@ -58,16 +58,16 @@ def post_inventory(_: Request, data: dict):
     'Update an inventory',
     consumes=InventoryPutRequest,
 )
+@run_after(save_inventories_file)
 def put_inventory(_: Request, inventory_id: int, data: dict):
     update_inventory(inventory_id, data)
-    save_inventories_file()
     return response.empty()
 
 
 @api_bp.delete('/<inventory_id:int>')
+@run_after(save_inventories_file)
 def inventory_delete(_: Request, inventory_id: int):
     delete_inventory(inventory_id)
-    save_inventories_file()
     return response.empty()
 
 
@@ -85,9 +85,9 @@ def items_get(_: Request, inventory_id: int):
     "Save an item into it's inventory.",
     consumes=ItemPostRequest,
 )
+@run_after(save_inventories_file)
 def post_item(_: Request, inventory_id: int, data: dict):
     save_item(inventory_id, data)
-    save_inventories_file()
     return response.empty()
 
 
@@ -96,9 +96,9 @@ def post_item(_: Request, inventory_id: int, data: dict):
     "Update an item",
     consumes=ItemPutRequest,
 )
+@run_after(save_inventories_file)
 def put_item(_: Request, item_id: int, data: dict):
     update_item(item_id, data)
-    save_inventories_file()
     return response.empty()
 
 
@@ -106,6 +106,7 @@ def put_item(_: Request, item_id: int, data: dict):
 @validate_doc(
     'Delete items from an inventory.',
 )
+@run_after(save_inventories_file)
 def item_delete(_: Request, item_ids: str):
     try:
         item_ids = [int(i) for i in item_ids.split(',')]
@@ -113,5 +114,4 @@ def item_delete(_: Request, item_ids: str):
         raise ValidationError('Could not parse item_ids')
 
     delete_items(item_ids)
-    save_inventories_file()
     return response.empty()

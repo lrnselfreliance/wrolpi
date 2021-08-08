@@ -113,6 +113,7 @@ def update_item(item_id: int, item: dict):
     with get_db_context(commit=True) as (engine, session):
         i = session.query(Item).filter_by(id=item_id).one()
         del item['id']
+        del item['created_at']
         for key, value in item.items():
             setattr(i, key, value)
 

@@ -672,3 +672,34 @@ WHITESPACE = re.compile(r'\s')
 
 def remove_whitespace(s: str) -> str:
     return WHITESPACE.sub('', s)
+
+
+def run_after(after: callable, *args, **kwargs) -> callable:
+    """
+    Run the `after` function in the future ofter the wrapped function returns.
+    """
+    if not inspect.iscoroutinefunction(after):
+        synchronous_after = after
+
+        async def after(*a, **kw):
+            return synchronous_after(*a, **kw)
+
+    def wrapper(func: callable):
+        if inspect.iscoroutinefunction(func):
+            @wraps(func)
+            async def wrapped(*a, **kw):
+                results = await func(*a, **kw)
+                coro = after(*args, **kwargs)
+                asyncio.ensure_future(coro)
+                return results
+        else:
+            @wraps(func)
+            def wrapped(*a, **kw):
+                results = func(*a, **kw)
+                coro = after(*args, **kwargs)
+                asyncio.ensure_future(coro)
+                return results
+
+        return wrapped
+
+    return wrapper

@@ -6,7 +6,7 @@ import psycopg2
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
-from api.common import logger, Base, now
+from api.common import logger, Base
 from api.db import get_db_context, get_db_curs
 from api.inventory.models import Inventory, Item, InventoriesVersion
 
@@ -151,12 +151,9 @@ def increment_inventories_version():
     Context manager that will increment the Inventories Version by 1 when exiting.
     """
     version = get_next_inventories_version()
-    try:
-        yield version
-        with get_db_context(commit=True) as (engine, session):
-            if session.query(InventoriesVersion).count() == 0:
-                session.add(InventoriesVersion(version=version))
-            else:
-                session.query(InventoriesVersion).one().version = version
-    except Exception:
-        raise
+    yield version
+    with get_db_context(commit=True) as (engine, session):
+        if session.query(InventoriesVersion).count() == 0:
+            session.add(InventoriesVersion(version=version))
+        else:
+            session.query(InventoriesVersion).one().version = version

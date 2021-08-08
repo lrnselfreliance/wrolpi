@@ -2,17 +2,19 @@ import React from "react";
 import {Accordion, Button, Checkbox, Form, Grid, Header, Input, Loader, Responsive, Segment} from "semantic-ui-react";
 import {
     createChannel,
-    deleteChannel, download, downloadChannel,
+    deleteChannel,
+    downloadChannel,
     getChannel,
     getChannels,
     getConfig,
-    getDirectories, refreshChannel,
+    getDirectories,
+    refreshChannel,
     updateChannel,
     validateRegex
 } from "../api";
 import _ from "lodash";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
-import {APIForm, frequencyOptions, RequiredAsterisk, secondsToFrequency, VIDEOS_API} from "./Common";
+import {APIForm, frequencyOptions, RequiredAsterisk, secondsToFrequency} from "./Common";
 import {Link} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
@@ -484,26 +486,6 @@ class MobileChannelRow extends ChannelRow {
             </Table.Cell>
             <Table.Cell width={6} colSpan={2} textAlign='right'>
                 <p>
-                    <Popup
-                        header="Download any missing videos"
-                        on="hover"
-                        trigger={<Button
-                            primary
-                            onClick={this.downloadVideos}
-                            disabled={!!!this.props.channel.url}
-                        >
-                            Download
-                        </Button>}
-                    />
-                </p>
-                <p>
-                    <Popup
-                        header="Search for any local videos"
-                        on="hover"
-                        trigger={<Button primary inverted onClick={this.refreshVideos}>Refresh</Button>}
-                    />
-                </p>
-                <p>
                     <Link className="ui button secondary" to={this.editTo}>Edit</Link>
                 </p>
             </Table.Cell>
@@ -591,7 +573,7 @@ export class Channels extends React.Component {
             </Table.Header>
         );
 
-        let body = null;
+        let body;
         if (this.state.channels === null) {
             // Placeholders while fetching
             body = <Table striped basic size='large'>

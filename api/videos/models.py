@@ -107,8 +107,11 @@ class Video(ModelHelper, Base):
             return
 
         try:
-            if self.info_json_path and self.info_json_path.exists():
-                with open(self.info_json_path, 'rb') as fh:
+            if self.info_json_path:
+                from api.videos.common import get_absolute_media_path
+                channel_dir = get_absolute_media_path(self.channel.directory)
+                path = channel_dir / self.info_json_path
+                with open(path, 'rb') as fh:
                     contents = json.load(fh)
                     return contents
         except UnknownFile:

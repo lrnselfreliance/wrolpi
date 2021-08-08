@@ -268,7 +268,7 @@ class Channel(ModelHelper, Base):
             url=self.url or '',
             generate_posters=self.generate_posters,
             calculate_duration=self.calculate_duration,
-            skip_download_videos=self.skip_download_videos,
+            skip_download_videos=self.skip_download_videos or [],
             download_frequency=self.download_frequency,
             next_download=self.next_download,
             favorites={},

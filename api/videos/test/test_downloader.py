@@ -9,10 +9,7 @@ import pytest
 from api.common import today, ProgressReporter
 from api.db import get_db_context
 from api.test.common import wrap_test_db, create_db_structure, TestAPI
-from api.videos.common import load_channels_config
-from api.videos.downloader import update_channels, find_all_missing_videos, download_all_missing_videos, \
-    download_video
-from api.videos.lib import save_channels_config
+from api.videos.downloader import update_channels, find_all_missing_videos, download_video
 from api.videos.models import Channel, Video
 
 
@@ -113,38 +110,6 @@ class TestDownloader(TestAPI):
         self.assertEqual(id_, 3)
         # The fake entry we added is regurgitated back.
         self.assertEqual(entry, channel1.info_json['entries'][0])
-
-    @wrap_test_db
-    def test_skip_committed(self):
-        q = Queue()
-        r = ProgressReporter(q, 2)
-
-        with get_db_context(commit=True) as (engine, session):
-            channel = Channel(link='channel')
-            video = dict(title='foo', id=1)
-            session.add(channel)
-
-        # Save the config without the skipped video
-        save_channels_config()
-        config = load_channels_config()
-        self.assertEqual(config['channel']['skip_download_videos'], [])
-
-        def _find_all_missing_videos(*a, **kw):
-            return [(channel, video['id'], video)]
-
-        def _download_video(*a, **kw):
-            raise Exception('Force the video to be skipped with unrecoverable error: 404: Not Found')
-
-        with mock.patch('api.videos.downloader.find_all_missing_videos', _find_all_missing_videos), \
-                mock.patch('api.videos.downloader.download_video', _download_video):
-            download_all_missing_videos(r)
-
-        with get_db_context() as (engine, session):
-            channel = session.query(Channel).one()
-            self.assertIn('1', channel.skip_download_videos)
-
-            config = load_channels_config()
-            self.assertEqual(config['channel']['skip_download_videos'], ['1'])
 
     @pytest.mark.skip
     def test_download_timeout(self):

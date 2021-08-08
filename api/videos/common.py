@@ -55,36 +55,46 @@ class ConfigError(Exception):
 
 def import_settings_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
-    config = load_channels_config()
+    try:
+        config = load_channels_config()
 
-    with get_db_context(commit=True) as (engine, session):
-        for section in config:
-            for option in (i for i in REQUIRED_OPTIONS if i not in config[section]):
-                raise ConfigError(f'Channel "{section}" is required to have "{option}"')
+        with get_db_context(commit=True) as (engine, session):
+            for section in config:
+                for option in (i for i in REQUIRED_OPTIONS if i not in config[section]):
+                    raise ConfigError(f'Channel "{section}" is required to have "{option}"')
 
-            name, directory = config[section]['name'], config[section]['directory']
+                name, directory = config[section]['name'], config[section]['directory']
 
-            link = sanitize_link(name)
-            matches = session.query(Channel).filter(Channel.link == link)
-            if not matches.count():
-                # Channel not yet in the DB, add it
-                channel = Channel(link=link)
-            else:
-                channel = matches.one()
+                link = sanitize_link(name)
+                matches = session.query(Channel).filter(Channel.link == link)
+                if not matches.count():
+                    # Channel not yet in the DB, add it
+                    channel = Channel(link=link)
+                else:
+                    channel = matches.one()
 
-            # Only name and directory are required
-            channel.name = name
-            channel.directory = str(directory)
+                # Only name and directory are required
+                channel.name = name
+                channel.directory = str(directory)
 
-            channel.calculate_duration = config[section].get('calculate_duration')
-            channel.download_frequency = config[section].get('download_frequency')
-            channel.generate_posters = config[section].get('generate_posters')
-            channel.match_regex = config[section].get('match_regex')
-            channel.skip_download_videos = list(set(config[section].get('skip_download_videos', {})))
-            channel.url = config[section].get('url')
+                channel.calculate_duration = config[section].get('calculate_duration')
+                channel.download_frequency = config[section].get('download_frequency')
+                channel.generate_posters = config[section].get('generate_posters')
+                channel.match_regex = config[section].get('match_regex')
+                channel.skip_download_videos = list(set(config[section].get('skip_download_videos', {})))
+                channel.url = config[section].get('url')
 
-            session.add(channel)
-    return 0
+                session.add(channel)
+
+                # Set favorite Videos of this Channel.
+                favorites = config[section].get('favorites', {})
+                videos = session.query(Video).filter(Video.source_id.in_(favorites.keys()))
+                for video in videos:
+                    video.favorite = favorites[video.source_id]['favorite']
+
+        return 0
+    except Exception:
+        logger.warning('Failed to load channels config!', exc_info=True)
 
 
 @lru_cache(maxsize=1)

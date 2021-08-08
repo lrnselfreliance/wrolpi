@@ -218,20 +218,7 @@ def get_channels_config(session: Session) -> dict:
     Create a dictionary that contains all the Channels from the DB.
     """
     channels = session.query(Channel).order_by(Channel.link).all()
-    channels = {
-        i.link:
-            dict(
-                directory=str(i.directory),
-                match_regex=i.match_regex or '',
-                name=i.name,
-                url=i.url or '',
-                generate_posters=i.generate_posters,
-                calculate_duration=i.calculate_duration,
-                skip_download_videos=[j for j in i.skip_download_videos if j] if i.skip_download_videos else [],
-                download_frequency=i.download_frequency,
-            )
-        for i in channels
-    }
+    channels = {i.link: i.config_view() for i in channels}
     return dict(channels=channels)
 
 

@@ -7,6 +7,7 @@ from sqlalchemy.orm.exc import NoResultFound
 
 from api.db import get_db_context, get_db_curs
 from api.errors import UnknownVideo
+from api.videos.lib import save_channels_config
 from api.videos.models import Video
 from api.videos.video.api import logger
 
@@ -135,8 +136,12 @@ def video_search(
 
 def set_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
     """
-    Toggle the timestamp on Video.favorite on a video.
+    Set the Video.favorite to the current datetime if `favorite` is True, otherwise None.
     """
     with get_db_context(commit=True) as (engine, session):
         video = session.query(Video).filter_by(id=video_id).one()
-        return video.set_favorite(favorite)
+        favorite = video.set_favorite(favorite)
+
+    save_channels_config()
+
+    return favorite

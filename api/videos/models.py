@@ -256,3 +256,27 @@ class Channel(ModelHelper, Base):
     def update(self, data: dict):
         for key, value in data.items():
             setattr(self, key, value)
+
+    def config_view(self) -> dict:
+        """
+        Retrieve the data about this Channel that should be stored in a config file.
+        """
+        config = dict(
+            directory=str(self.directory),
+            match_regex=self.match_regex or '',
+            name=self.name,
+            url=self.url or '',
+            generate_posters=self.generate_posters,
+            calculate_duration=self.calculate_duration,
+            skip_download_videos=self.skip_download_videos,
+            download_frequency=self.download_frequency,
+            next_download=self.next_download,
+            favorites={},
+        )
+
+        session = Session.object_session(self)
+        favorites = session.query(Video).filter(Video.favorite != None, Video.channel_id == self.id).all()
+        if favorites:
+            config['favorites'] = {i.source_id: {'favorite': i.favorite} for i in favorites}
+
+        return config

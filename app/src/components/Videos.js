@@ -128,7 +128,7 @@ export class VideoWrapper extends React.Component {
 
     render() {
         if (this.state.video && this.state.channel) {
-            return <VideoPage {...this.state} history={this.props.history} autoplay={false}/>
+            return <VideoPage {...this.state} history={this.props.history} autoplay={true}/>
         } else {
             return <VideoPlaceholder/>
         }

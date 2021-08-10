@@ -43,6 +43,9 @@ TEST_ITEMS_TUPLES = [
     (1, 'Chewy', 'Beef', 16, 'oz', 12, 'meats', 'canned'),
     (1, 'Vibrant', 'Peaches', 24, 'oz', 2, 'fruits', 'canned'),
     (1, 'Vibrant', 'Pineapple', Decimal('22.3'), 'oz', 1, 'fruits', 'canned'),
+    # These are in the same category, but have conflicting unit types.  (gallon vs pound)
+    (1, 'White', 'Vinegar', 1, 'gallon', 1, 'cooking ingredients', 'vinegar'),
+    (1, 'Salty', 'Salt', 1, 'pound', 1, 'cooking ingredients', 'salt'),
     # This item is deleted, and should always be ignored.
     (1, 'deleted', 'deleted', Decimal('1'), 'oz', 1, 'fruits', 'canned', '2020-01-01'),
 ]
@@ -138,6 +141,8 @@ class TestInventory(PytestCase):
         self.prepare()
 
         expected = [
+            dict(category='cooking ingredients', total_size=Decimal('1'), unit='gallon'),
+            dict(category='cooking ingredients', total_size=Decimal('1'), unit='pound'),
             dict(category='fruits', total_size=Decimal('4.39375'), unit='pound'),
             dict(category='grains', total_size=Decimal('149.25'), unit='pound'),
             dict(category='meats', total_size=Decimal('20'), unit='pound'),
@@ -152,6 +157,8 @@ class TestInventory(PytestCase):
         self.prepare()
 
         expected = [
+            dict(category='cooking ingredients', subcategory='salt', total_size=Decimal('1'), unit='pound'),
+            dict(category='cooking ingredients', subcategory='vinegar', total_size=Decimal('1'), unit='gallon'),
             dict(category='fruits', subcategory='canned', total_size=Decimal('4.39375'), unit='pound'),
             dict(category='grains', subcategory='rice', total_size=Decimal('8'), unit='pound'),
             dict(category='grains', subcategory='wheat', total_size=Decimal('141.25'), unit='pound'),
@@ -170,9 +177,11 @@ class TestInventory(PytestCase):
             dict(brand='Chewy', name='Beef', total_size=Decimal('12'), unit='pound'),
             dict(brand='Chewy', name='Chicken Breast', total_size=Decimal('8'), unit='pound'),
             dict(brand='Ricey', name='White Rice', total_size=Decimal('8'), unit='pound'),
+            dict(brand='Salty', name='Salt', total_size=Decimal('1'), unit='pound'),
             dict(brand='Vibrant', name='Peaches', total_size=Decimal('3'), unit='pound'),
             dict(brand='Vibrant', name='Pineapple', total_size=Decimal('1.39375'), unit='pound'),
             dict(brand='Wheaters', name='Red Wheat', total_size=Decimal('141.25'), unit='pound'),
+            dict(brand='White', name='Vinegar', total_size=Decimal('1'), unit='gallon'),
         ]
 
         inventory = get_inventory_by_name(1)
@@ -284,7 +293,7 @@ length = gallon.dimensionality
         (
                 # No conversion is necessary.
                 [{'category': 'grains', 'count': Decimal('1'), 'item_size': Decimal('1'), 'unit': 'oz'}],
-                {('grains',): Decimal('1') * oz},
+                {(('grains',), oz.dimensionality): Decimal('1') * oz},
         ),
         (
                 # The larger of the units is what is returned.
@@ -292,7 +301,7 @@ length = gallon.dimensionality
                     {'category': 'grains', 'count': Decimal('1'), 'item_size': Decimal('1'), 'unit': 'oz'},
                     {'category': 'grains', 'count': Decimal('1'), 'item_size': Decimal('1'), 'unit': 'lbs'},
                 ],
-                {('grains',): Decimal('1.0625') * pound},
+                {(('grains',), pound.dimensionality): Decimal('1.0625') * pound},
         ),
         (
                 # Items are summed by category.
@@ -302,8 +311,8 @@ length = gallon.dimensionality
                     {'category': 'fruits', 'count': Decimal('4'), 'item_size': Decimal('1'), 'unit': 'gram'},
                 ],
                 {
-                    ('grains',): Decimal('102') * pound,
-                    ('fruits',): Decimal('4') * gram,
+                    (('grains',), pound.dimensionality): Decimal('102') * pound,
+                    (('fruits',), gram.dimensionality): Decimal('4') * gram,
                 },
         ),
         (
@@ -315,8 +324,8 @@ length = gallon.dimensionality
                     {'category': 'cooking ingredients', 'count': Decimal('1'), 'item_size': Decimal('1'), 'unit': 'oz'},
                 ],
                 {
-                    ('cooking ingredients',): Decimal('1.25') * gallon,
-                    ('cooking ingredients',): Decimal('1') * oz,
+                    (('cooking ingredients',), gallon.dimensionality): Decimal('1.25') * gallon,
+                    (('cooking ingredients',), oz.dimensionality): Decimal('1') * oz,
                 },
         ),
     ]

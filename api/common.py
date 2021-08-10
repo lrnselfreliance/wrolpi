@@ -674,6 +674,13 @@ def remove_whitespace(s: str) -> str:
     return WHITESPACE.sub('', s)
 
 
+def remove_dict_value_whitespace(d: Dict) -> Dict:
+    """
+    Remove the whitespace around a the values in a dictionary.  Handles if the value isn't a string.
+    """
+    return {k: v.strip() if hasattr(v, 'strip') else v for k, v in d.items()}
+
+
 def run_after(after: callable, *args, **kwargs) -> callable:
     """
     Run the `after` function sometime in the future ofter the wrapped function returns.

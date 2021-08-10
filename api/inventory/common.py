@@ -20,6 +20,7 @@ DEFAULT_CATEGORIES = [
     ('salt', 'cooking ingredients'),
     ('dry milk', 'dairy'),
     ('evaporated milk', 'dairy'),
+    ('freeze dried', 'dairy'),
     ('shortening', 'fats'),
     ('vegetable oil', 'fats'),
     ('canned', 'fruits'),
@@ -35,6 +36,7 @@ DEFAULT_CATEGORIES = [
     ('lentils', 'legumes'),
     ('canned', 'meats'),
     ('dried', 'meats'),
+    ('freeze dried', 'meals'),
     ('brown sugar', 'sugars'),
     ('corn syrup', 'sugars'),
     ('honey', 'sugars'),
@@ -42,7 +44,7 @@ DEFAULT_CATEGORIES = [
     ('white sugar', 'sugars'),
     ('canned', 'vegetables'),
     ('dehydrated', 'vegetables'),
-    ('freeze-dried', 'vegetables'),
+    ('freeze dried', 'vegetables'),
     ('water', 'water'),
     ('bottled', 'water'),
     ('barrel', 'water'),
@@ -51,8 +53,6 @@ DEFAULT_CATEGORIES = [
 DEFAULT_INVENTORIES = [
     'Food Storage',
 ]
-
-CATEGORIES_TYPE = Union[List[Tuple[str, str]], Set[Tuple[str, str]]]
 
 # Categories are sorted by category/sub-category.
 sort_categories = partial(sorted, key=lambda i: (i[1], i[0]))
@@ -78,7 +78,7 @@ def sum_by_key(items: List[Base], key: callable):
         except KeyError:
             summed[key_dim] = total_size
 
-    summed = {k[0]: compact_unit(v) for k, v in summed.items()}
+    summed = {k: compact_unit(v) for k, v in summed.items()}
     return summed
 
 
@@ -88,13 +88,13 @@ def get_inventory_by_keys(keys: Tuple, inventory_id: int):
     summed = sum_by_key(items, lambda i: tuple(getattr(i, k) or '' for k in keys))
 
     inventory = []
-    for key, quantity in sorted(summed.items(), key=lambda i: i[0]):
+    for key, quantity in sorted(summed.items(), key=lambda i: i[0][0]):
         quantity = cleanup_quantity(quantity)
         total_size, units = quantity.to_tuple()
         unit = units[0][0]
 
         d = dict(total_size=total_size, unit=unit)
-        d.update(dict(zip(keys, key)))
+        d.update(dict(zip(keys, key[0])))
         inventory.append(d)
 
     return inventory

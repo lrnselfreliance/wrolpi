@@ -44,6 +44,9 @@ def _remove_conflicting_deleted_inventory(inventory: dict, session: Session):
 def save_inventory(inventory):
     inventory = {k: v for k, v in inventory.items() if k not in IGNORED_INVENTORY_KEYS}
 
+    # Cleanup the whitespace.
+    inventory['name'] = inventory['name'].strip()
+
     with get_db_context(commit=True) as (engine, session):
         _remove_conflicting_deleted_inventory(inventory, session)
         session.add(Inventory(**inventory))
@@ -51,6 +54,9 @@ def save_inventory(inventory):
 
 def update_inventory(inventory_id: int, inventory: dict):
     inventory = {k: v for k, v in inventory.items() if k not in IGNORED_INVENTORY_KEYS}
+
+    # Cleanup the whitespace.
+    inventory['name'] = inventory['name'].strip()
 
     with get_db_context(commit=True) as (engine, session):
         _remove_conflicting_deleted_inventory(inventory, session)
@@ -75,7 +81,7 @@ def get_categories() -> List[Tuple[str, str]]:
 
     categories = DEFAULT_CATEGORIES.copy()
     with get_db_curs() as curs:
-        curs.execute('SELECT DISTINCT subcategory, category FROM item')
+        curs.execute('SELECT DISTINCT subcategory, category FROM item ORDER BY 1, 2')
         try:
             db_categories = curs.fetchall()
             db_categories = [tuple(i) for i in db_categories]

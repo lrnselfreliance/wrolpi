@@ -8,7 +8,7 @@ from .common import get_inventory_by_category, get_inventory_by_subcategory, get
 from .inventory import get_items, save_item, delete_items, \
     get_inventories, save_inventory, delete_inventory, update_inventory, update_item, get_categories, get_brands
 from .schema import ItemPostRequest, InventoryPostRequest, InventoryPutRequest, ItemPutRequest
-from ..common import validate_doc, json_response, run_after
+from ..common import validate_doc, json_response, run_after, remove_dict_value_whitespace
 from ..errors import ValidationError
 
 NAME = 'inventory'
@@ -49,6 +49,9 @@ def inventory_get(_: Request, inventory_id: int):
 )
 @run_after(save_inventories_file)
 def post_inventory(_: Request, data: dict):
+    # Cleanup the whitespace.
+    data = remove_dict_value_whitespace(data)
+
     save_inventory(data)
     return response.empty(HTTPStatus.CREATED)
 
@@ -60,6 +63,9 @@ def post_inventory(_: Request, data: dict):
 )
 @run_after(save_inventories_file)
 def put_inventory(_: Request, inventory_id: int, data: dict):
+    # Cleanup the whitespace.
+    data = remove_dict_value_whitespace(data)
+
     update_inventory(inventory_id, data)
     return response.empty()
 
@@ -87,6 +93,9 @@ def items_get(_: Request, inventory_id: int):
 )
 @run_after(save_inventories_file)
 def post_item(_: Request, inventory_id: int, data: dict):
+    # Cleanup the whitespace.
+    data = remove_dict_value_whitespace(data)
+
     save_item(inventory_id, data)
     return response.empty()
 
@@ -98,6 +107,9 @@ def post_item(_: Request, inventory_id: int, data: dict):
 )
 @run_after(save_inventories_file)
 def put_item(_: Request, item_id: int, data: dict):
+    # Cleanup the whitespace.
+    data = remove_dict_value_whitespace(data)
+
     update_item(item_id, data)
     return response.empty()
 

@@ -66,18 +66,25 @@ def delete_inventory(inventory_id: int):
         inventory.delete()
 
 
-def get_categories() -> List[Tuple[int, str, str]]:
+def get_categories() -> List[Tuple[str, str]]:
     """
     Get all distinct sets of subcategory and category.
     """
+    from api.inventory import DEFAULT_CATEGORIES
+    from api.inventory.common import sort_categories
+
+    categories = DEFAULT_CATEGORIES.copy()
     with get_db_curs() as curs:
-        curs.execute('SELECT DISTINCT subcategory, category FROM item ORDER BY 1, 2')
+        curs.execute('SELECT DISTINCT subcategory, category FROM item')
         try:
-            categories = curs.fetchall()
+            db_categories = curs.fetchall()
+            db_categories = [tuple(i) for i in db_categories]
+            categories = set(categories + db_categories)
         except psycopg2.ProgrammingError:
-            # No categories
-            return []
-        return list(categories)
+            # No categories in DB.
+            pass
+
+    return sort_categories(categories)
 
 
 def get_brands() -> List[Tuple[int, str]]:

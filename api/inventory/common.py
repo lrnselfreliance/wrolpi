@@ -1,7 +1,7 @@
 from decimal import Decimal
 from functools import partial
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Set, Union
 
 import yaml
 from pint import Quantity
@@ -17,38 +17,45 @@ from ..errors import NoInventories, InventoriesVersionMismatch
 MY_DIR: Path = Path(__file__).parent
 
 DEFAULT_CATEGORIES = [
-    ('wheat', 'grains'),
-    ('rice', 'grains'),
-    ('flour', 'grains'),
-    ('oats', 'grains'),
-    ('pasta', 'grains'),
-    ('corn meal', 'grains'),
-    ('canned', 'meats'),
-    ('dried', 'meats'),
-    ('vegetable oil', 'fats'),
-    ('shortening', 'fats'),
-    ('dry beans', 'legumes'),
-    ('lentils', 'legumes'),
+    ('salt', 'cooking ingredients'),
     ('dry milk', 'dairy'),
     ('evaporated milk', 'dairy'),
-    ('white sugar', 'sugars'),
-    ('brown sugar', 'sugars'),
-    ('honey', 'sugars'),
-    ('corn syrup', 'sugars'),
-    ('juice mix', 'sugars'),
-    ('salt', 'cooking ingredients'),
+    ('shortening', 'fats'),
+    ('vegetable oil', 'fats'),
     ('canned', 'fruits'),
     ('dehydrated', 'fruits'),
     ('freeze-dried', 'fruits'),
+    ('corn meal', 'grains'),
+    ('flour', 'grains'),
+    ('oats', 'grains'),
+    ('pasta', 'grains'),
+    ('rice', 'grains'),
+    ('wheat', 'grains'),
+    ('dry beans', 'legumes'),
+    ('lentils', 'legumes'),
+    ('canned', 'meats'),
+    ('dried', 'meats'),
+    ('brown sugar', 'sugars'),
+    ('corn syrup', 'sugars'),
+    ('honey', 'sugars'),
+    ('juice mix', 'sugars'),
+    ('white sugar', 'sugars'),
     ('canned', 'vegetables'),
     ('dehydrated', 'vegetables'),
     ('freeze-dried', 'vegetables'),
     ('water', 'water'),
+    ('bottled', 'water'),
+    ('barrel', 'water'),
 ]
 
 DEFAULT_INVENTORIES = [
     'Food Storage',
 ]
+
+CATEGORIES_TYPE = Union[List[Tuple[str, str]], Set[Tuple[str, str]]]
+
+# Categories are sorted by category/sub-category.
+sort_categories = partial(sorted, key=lambda i: (i[1], i[0]))
 
 logger = logger.getChild(__name__)
 

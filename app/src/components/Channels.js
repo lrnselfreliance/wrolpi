@@ -445,19 +445,20 @@ class ChannelRow extends React.Component {
     }
 
     render() {
+        let channel = this.props.channel;
         return (
             <Table.Row>
                 <Table.Cell>
-                    <Link to={this.videosTo}>{this.props.channel.name}</Link>
+                    <Link to={this.videosTo}>{channel.name}</Link>
                 </Table.Cell>
                 <Table.Cell>
-                    {this.props.channel.video_count}
+                    {channel.video_count}
                 </Table.Cell>
                 <Table.Cell>
-                    {secondsToDate(this.props.channel.info_date)}
+                    {channel.url ? secondsToDate(channel.info_date) : null}
                 </Table.Cell>
                 <Table.Cell>
-                    {secondsToFrequency(this.props.channel.download_frequency)}
+                    {channel.url ? secondsToFrequency(channel.download_frequency) : null}
                 </Table.Cell>
                 <Table.Cell textAlign='right'>
                     <Link className="ui button secondary" to={this.editTo}>Edit</Link>
@@ -470,23 +471,25 @@ class ChannelRow extends React.Component {
 class MobileChannelRow extends ChannelRow {
 
     render() {
+        let channel = this.props.channel;
+
         return <Table.Row verticalAlign='top'>
             <Table.Cell width={10} colSpan={2}>
                 <p>
                     <Link as='h3' to={this.videosTo}>
                         <h3>
-                            {this.props.channel.name}
+                            {channel.name}
                         </h3>
                     </Link>
                 </p>
                 <p>
-                    Next Download: {secondsToDate(this.props.channel.info_date)}
+                    Last Update: {channel.url ? secondsToDate(channel.info_date) : null}
                 </p>
                 <p>
-                    Videos: {this.props.channel.video_count}
+                    Videos: {channel.video_count}
                 </p>
                 <p>
-                    Frequency: {secondsToFrequency(this.props.channel.download_frequency)}
+                    Frequency: {channel.url ? secondsToFrequency(channel.download_frequency) : null}
                 </p>
             </Table.Cell>
             <Table.Cell width={6} colSpan={2} textAlign='right'>
@@ -572,7 +575,7 @@ export class Channels extends React.Component {
                 <Table.Row>
                     <Table.HeaderCell width={8}>Name</Table.HeaderCell>
                     <Table.HeaderCell width={2}>Videos</Table.HeaderCell>
-                    <Table.HeaderCell width={2}>Next Download</Table.HeaderCell>
+                    <Table.HeaderCell width={2}>Last Update</Table.HeaderCell>
                     <Table.HeaderCell width={2}>Frequency</Table.HeaderCell>
                     <Table.HeaderCell width={2} colSpan={3} textAlign='center'>Manage</Table.HeaderCell>
                 </Table.Row>

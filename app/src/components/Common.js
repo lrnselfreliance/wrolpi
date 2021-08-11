@@ -200,7 +200,7 @@ export function secondsToString(seconds) {
 
 export function secondsToDate(seconds) {
     let date = new Date(seconds * 1000);
-    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 }
 
 export function humanFileSize(bytes, si = false, dp = 1) {

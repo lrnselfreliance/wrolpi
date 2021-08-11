@@ -458,6 +458,9 @@ class ChannelRow extends React.Component {
                     {channel.url ? secondsToDate(channel.info_date) : null}
                 </Table.Cell>
                 <Table.Cell>
+                    {channel.url ? secondsToDate(channel.next_download) : null}
+                </Table.Cell>
+                <Table.Cell>
                     {channel.url ? secondsToFrequency(channel.download_frequency) : null}
                 </Table.Cell>
                 <Table.Cell textAlign='right'>
@@ -484,6 +487,9 @@ class MobileChannelRow extends ChannelRow {
                 </p>
                 <p>
                     Last Update: {channel.url ? secondsToDate(channel.info_date) : null}
+                </p>
+                <p>
+                    Next Update: {channel.url ? secondsToDate(channel.next_download) : null}
                 </p>
                 <p>
                     Videos: {channel.video_count}
@@ -576,6 +582,7 @@ export class Channels extends React.Component {
                     <Table.HeaderCell width={8}>Name</Table.HeaderCell>
                     <Table.HeaderCell width={2}>Videos</Table.HeaderCell>
                     <Table.HeaderCell width={2}>Last Update</Table.HeaderCell>
+                    <Table.HeaderCell width={2}>Next Update</Table.HeaderCell>
                     <Table.HeaderCell width={2}>Frequency</Table.HeaderCell>
                     <Table.HeaderCell width={2} colSpan={3} textAlign='center'>Manage</Table.HeaderCell>
                 </Table.Row>

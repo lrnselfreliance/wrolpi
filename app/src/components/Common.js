@@ -198,6 +198,11 @@ export function secondsToString(seconds) {
     return s;
 }
 
+export function secondsToDate(seconds) {
+    let date = new Date(seconds * 1000);
+    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
 export function humanFileSize(bytes, si = false, dp = 1) {
     const thresh = si ? 1000 : 1024;
 

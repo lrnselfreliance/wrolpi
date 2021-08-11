@@ -556,7 +556,7 @@ def save_settings_config(config=None):
         yaml.dump(new_config, fh)
 
 
-class JSONEncodeDate(json.JSONEncoder):
+class CustomJSONEncoder(json.JSONEncoder):
 
     def default(self, obj):
         if isinstance(obj, datetime):
@@ -570,7 +570,7 @@ class JSONEncodeDate(json.JSONEncoder):
                 return obj.dict()
         elif isinstance(obj, Path):
             return str(obj)
-        return super(JSONEncodeDate, self).default(obj)
+        return super(CustomJSONEncoder, self).default(obj)
 
 
 @wraps(response.json)
@@ -578,7 +578,8 @@ def json_response(*a, **kwargs) -> HTTPResponse:
     """
     Handles encoding date/datetime in JSON.
     """
-    return response.json(*a, **kwargs, cls=JSONEncodeDate, dumps=json.dumps)
+    resp = response.json(*a, **kwargs, cls=CustomJSONEncoder, dumps=json.dumps)
+    return resp
 
 
 class Trinary(Field):

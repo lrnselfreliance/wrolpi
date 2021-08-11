@@ -14,7 +14,7 @@ import {
 } from "../api";
 import _ from "lodash";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
-import {APIForm, frequencyOptions, RequiredAsterisk, secondsToFrequency} from "./Common";
+import {APIForm, frequencyOptions, RequiredAsterisk, secondsToDate, secondsToFrequency} from "./Common";
 import {Link} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
@@ -454,6 +454,9 @@ class ChannelRow extends React.Component {
                     {this.props.channel.video_count}
                 </Table.Cell>
                 <Table.Cell>
+                    {secondsToDate(this.props.channel.info_date)}
+                </Table.Cell>
+                <Table.Cell>
                     {secondsToFrequency(this.props.channel.download_frequency)}
                 </Table.Cell>
                 <Table.Cell textAlign='right'>
@@ -475,6 +478,9 @@ class MobileChannelRow extends ChannelRow {
                             {this.props.channel.name}
                         </h3>
                     </Link>
+                </p>
+                <p>
+                    Next Download: {secondsToDate(this.props.channel.info_date)}
                 </p>
                 <p>
                     Videos: {this.props.channel.video_count}
@@ -566,6 +572,7 @@ export class Channels extends React.Component {
                 <Table.Row>
                     <Table.HeaderCell width={8}>Name</Table.HeaderCell>
                     <Table.HeaderCell width={2}>Videos</Table.HeaderCell>
+                    <Table.HeaderCell width={2}>Next Download</Table.HeaderCell>
                     <Table.HeaderCell width={2}>Frequency</Table.HeaderCell>
                     <Table.HeaderCell width={2} colSpan={3} textAlign='center'>Manage</Table.HeaderCell>
                 </Table.Row>

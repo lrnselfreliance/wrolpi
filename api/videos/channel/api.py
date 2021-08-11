@@ -23,7 +23,7 @@ logger = logger.getChild(__name__)
 )
 async def get_channels(_: Request):
     channels = await get_minimal_channels()
-    return response.json({'channels': channels})
+    return json_response({'channels': channels})
 
 
 @channel_bp.route('/<link:string>', methods=['GET', 'OPTIONS'])

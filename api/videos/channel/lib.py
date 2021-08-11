@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List
 
 from sqlalchemy.orm.exc import NoResultFound
@@ -19,7 +20,7 @@ async def get_minimal_channels() -> List[dict]:
         # Get all channels, even if they don't have videos.
         query = '''
             SELECT
-                c.id, name, link, directory, url, download_frequency
+                c.id, name, link, directory, url, download_frequency, info_date
             FROM
                 channel AS c
             ORDER BY LOWER(name)

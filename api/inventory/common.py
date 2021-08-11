@@ -1,5 +1,6 @@
 from decimal import Decimal
 from functools import partial
+from operator import itemgetter
 from pathlib import Path
 from typing import List, Tuple, Set, Union
 
@@ -55,7 +56,7 @@ DEFAULT_INVENTORIES = [
 ]
 
 # Categories are sorted by category/sub-category.
-sort_categories = partial(sorted, key=lambda i: (i[1], i[0]))
+sort_categories = partial(sorted, key=itemgetter(1, 0))
 
 logger = logger.getChild(__name__)
 

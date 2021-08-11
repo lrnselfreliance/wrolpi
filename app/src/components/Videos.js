@@ -4,14 +4,17 @@ import Paginator, {
     DEFAULT_LIMIT,
     defaultSearchOrder,
     defaultVideoOrder,
+    humanFileSize,
     Progresses,
-    searchOrders, uploadDate,
+    searchOrders,
+    secondsToString,
+    uploadDate,
     VideoCards,
     videoOrders
 } from "./Common"
 import VideoPage from "./VideoPlayer";
-import {download, downloadHistory, getChannel, getVideo, refresh, searchVideos} from "../api";
-import {Button, Dropdown, Form, Grid, Header, Icon, Input} from "semantic-ui-react";
+import {download, downloadHistory, getChannel, getStatistics, getVideo, refresh, searchVideos} from "../api";
+import {Button, Dropdown, Form, Grid, Header, Icon, Input, Loader, Segment, Statistic, Tab} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {Channels, EditChannel, NewChannel} from "./Channels";
@@ -436,6 +439,20 @@ class Videos extends React.Component {
     }
 }
 
+class ManageTabs extends React.Component {
+    render() {
+        const panes = [
+            {menuItem: 'Manage', render: () => <Tab.Pane><ManageVideos/></Tab.Pane>},
+            {menuItem: 'Statistics', render: () => <Tab.Pane><Statistics/></Tab.Pane>},
+        ]
+        return (
+            <Container>
+                <Tab panes={panes}/>
+            </Container>
+        )
+    }
+}
+
 export class VideosRoute extends React.Component {
 
     render() {
@@ -460,7 +477,7 @@ export class VideosRoute extends React.Component {
                                />
                            }/>
                     <Route path='/videos/channel' exact component={Channels}/>
-                    <Route path='/videos/manage' exact component={ManageVideos}/>
+                    <Route path='/videos/manage' exact component={ManageTabs}/>
                     <Route path='/videos/channel/new' exact component={NewChannel}/>
                     <Route path='/videos/channel/:channel_link/edit' exact
                            component={(i) =>
@@ -471,8 +488,80 @@ export class VideosRoute extends React.Component {
                            }
                     />
                     <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
+                    <Route path='/videos/statistics' exact component={Statistics}/>
                 </Container>
             </>
         )
+    }
+}
+
+class Statistics extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            videos: null,
+            historical: null,
+            channels: null,
+        };
+        this.videoNames = [
+            {key: 'videos', label: 'Downloaded Videos'},
+            {key: 'favorites', label: 'Favorite Videos'},
+            {key: 'sum_size', label: 'Total Size'},
+            {key: 'max_size', label: 'Largest Video'},
+            {key: 'week', label: 'Downloads Past Week'},
+            {key: 'month', label: 'Downloads Past Month'},
+            {key: 'year', label: 'Downloads Past Year'},
+            {key: 'sum_duration', label: 'Total Duration'},
+        ];
+        this.historicalNames = [
+            {key: 'average_count', label: 'Average Monthly Downloads'},
+            {key: 'average_size', label: 'Average Monthly Usage'},
+        ];
+        this.channelNames = [
+            {key: 'channels', label: 'Channels'},
+        ];
+    }
+
+    async componentDidMount() {
+        await this.fetchStatistics();
+    }
+
+    async fetchStatistics() {
+        let stats = await getStatistics();
+        stats.videos.sum_duration = secondsToString(stats.videos.sum_duration);
+        stats.videos.sum_size = humanFileSize(stats.videos.sum_size, true);
+        stats.videos.max_size = humanFileSize(stats.videos.max_size, true);
+        stats.historical.average_size = humanFileSize(stats.historical.average_size, true);
+        this.setState({...stats});
+    }
+
+    buildSegment(title, names, stats) {
+        return <Segment secondary>
+            <Header textAlign='center' as='h1'>{title}</Header>
+            <Statistic.Group>
+                {names.map(
+                    ({key, label}) =>
+                        <Statistic key={key} style={{margin: '2em'}}>
+                            <Statistic.Value>{stats[key]}</Statistic.Value>
+                            <Statistic.Label>{label}</Statistic.Label>
+                        </Statistic>
+                )}
+            </Statistic.Group>
+        </Segment>
+    }
+
+    render() {
+        if (this.state.videos) {
+            return (
+                <>
+                    {this.buildSegment('Videos', this.videoNames, this.state.videos)}
+                    {this.buildSegment('Historical Video', this.historicalNames, this.state.historical)}
+                    {this.buildSegment('Channels', this.channelNames, this.state.channels)}
+                </>
+            )
+        } else {
+            return <Loader active inline='centered'/>
+        }
     }
 }

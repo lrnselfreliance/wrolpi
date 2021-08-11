@@ -1,7 +1,6 @@
 import React from 'react';
-import {Button, Checkbox, Container, Divider, Form, Header, Loader, Segment, Statistic, Tab} from "semantic-ui-react";
-import {getConfig, getStatistics, saveConfig} from "../api";
-import {humanFileSize, secondsToString} from "./Common";
+import {Button, Checkbox, Container, Divider, Form, Header, Loader, Tab} from "semantic-ui-react";
+import {getConfig, saveConfig} from "../api";
 import TimezoneSelect from 'react-timezone-select';
 
 class Settings extends React.Component {
@@ -153,77 +152,6 @@ class WROLMode extends React.Component {
     }
 }
 
-class Statistics extends React.Component {
-
-    constructor(props) {
-        super(props);
-        this.state = {
-            videos: null,
-            historical: null,
-            channels: null,
-        };
-        this.videoNames = [
-            {key: 'videos', label: 'Downloaded Videos'},
-            {key: 'favorites', label: 'Favorite Videos'},
-            {key: 'sum_size', label: 'Total Size'},
-            {key: 'max_size', label: 'Largest Video'},
-            {key: 'week', label: 'Downloads Past Week'},
-            {key: 'month', label: 'Downloads Past Month'},
-            {key: 'year', label: 'Downloads Past Year'},
-            {key: 'sum_duration', label: 'Total Duration'},
-        ];
-        this.historicalNames = [
-            {key: 'average_count', label: 'Average Monthly Downloads'},
-            {key: 'average_size', label: 'Average Monthly Usage'},
-        ];
-        this.channelNames = [
-            {key: 'channels', label: 'Channels'},
-        ];
-    }
-
-    async componentDidMount() {
-        await this.fetchStatistics();
-    }
-
-    async fetchStatistics() {
-        let stats = await getStatistics();
-        stats.videos.sum_duration = secondsToString(stats.videos.sum_duration);
-        stats.videos.sum_size = humanFileSize(stats.videos.sum_size, true);
-        stats.videos.max_size = humanFileSize(stats.videos.max_size, true);
-        stats.historical.average_size = humanFileSize(stats.historical.average_size, true);
-        this.setState({...stats});
-    }
-
-    buildSegment(title, names, stats) {
-        return <Segment secondary>
-            <Header textAlign='center' as='h1'>{title}</Header>
-            <Statistic.Group>
-                {names.map(
-                    ({key, label}) =>
-                        <Statistic key={key} style={{margin: '2em'}}>
-                            <Statistic.Value>{stats[key]}</Statistic.Value>
-                            <Statistic.Label>{label}</Statistic.Label>
-                        </Statistic>
-                )}
-            </Statistic.Group>
-        </Segment>
-    }
-
-    render() {
-        if (this.state.videos) {
-            return (
-                <>
-                    {this.buildSegment('Videos', this.videoNames, this.state.videos)}
-                    {this.buildSegment('Historical Video', this.historicalNames, this.state.historical)}
-                    {this.buildSegment('Channels', this.channelNames, this.state.channels)}
-                </>
-            )
-        } else {
-            return <Loader active inline='centered'/>
-        }
-    }
-}
-
 class Admin extends React.Component {
 
     render() {
@@ -231,7 +159,6 @@ class Admin extends React.Component {
         const panes = [
             {menuItem: 'Settings', render: () => <Tab.Pane><Settings/></Tab.Pane>},
             {menuItem: 'WROL Mode', render: () => <Tab.Pane><WROLMode/></Tab.Pane>},
-            {menuItem: 'Statistics', render: () => <Tab.Pane><Statistics/></Tab.Pane>},
         ];
 
         return (

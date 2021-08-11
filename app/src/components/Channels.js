@@ -19,7 +19,6 @@ import {Link} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
 import Table from "semantic-ui-react/dist/commonjs/collections/Table";
-import Popup from "semantic-ui-react/dist/commonjs/modules/Popup";
 import {ChannelPlaceholder} from "./Placeholder";
 import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";

@@ -13,6 +13,10 @@ WROLPi is a self-contained collection of software (on a Raspberry Pi) to help yo
 WROLPi is intended to be run on a Raspberry Pi with an optional external drive attached.  It serves up it's own wifi
 network so that any person with a laptop/tablet/phone can connect and use the data previously collected by the user.
 
+# WARNING WROLPi is under active development!
+- WROLPi is in early Alpha!
+- Expect things to change!
+
 
 # Minimal Install
 WROLPi runs in a couple Docker containers.  Lets get the prerequisites installed...

@@ -500,27 +500,24 @@ def get_video_duration(video_path: Path) -> int:
     return duration
 
 
-async def get_bulk_video_duration(video_ids: List[int]):
+async def get_bulk_video_info_json(video_ids: List[int]):
     """
-    Get and save the duration for each video provided.
+    Get and save the info_json data for each video provided.
     """
-    logger.info(f'Getting {len(video_ids)} video durations.')
+    logger.info(f'Getting {len(video_ids)} video info_json meta data.')
     for video_ids in chunk(video_ids, 10):
         with get_db_context(commit=True) as (engine, session):
             for video_id in video_ids:
                 video = session.query(Video).filter_by(id=video_id).one()
-                logger.debug(f'Getting video duration: {video.id} {video.title}')
+                logger.debug(f'Getting video info_json data: {video}')
                 video_path = get_absolute_video_path(video)
 
                 try:
-                    info_json = get_absolute_video_info_json(video)
-                    with open(str(info_json), 'rt') as fh:
-                        contents = json.load(fh)
-                        duration = contents['duration']
-                except UnknownFile:
-                    duration = get_video_duration(video_path)
-
-                video.duration = duration
+                    info_json = video.get_info_json()
+                    video.view_count = info_json.get('view_count') if info_json else None
+                    video.duration = info_json.get('duration') if info_json else get_video_duration(video_path)
+                except Exception:
+                    logger.warning(f'Unable to get meta data of {video}', exc_info=True)
 
 
 async def get_bulk_video_size(video_ids: List[int]):
@@ -543,7 +540,7 @@ def minimize_dict(d: dict, keys: Iterable) -> dict:
     """
     Return a new dictionary that contains only the keys provided.
     """
-    return {k: d[k] for k in d if k in keys}
+    return {k: d[k] for k in set(keys) & d.keys()}
 
 
 minimize_channel = partial(minimize_dict, keys=MINIMUM_CHANNEL_KEYS)

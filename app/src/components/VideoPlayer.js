@@ -37,8 +37,10 @@ function VideoPage(props) {
     }
 
     let description = 'No description available.';
+    let viewCount = null;
     if (video.info_json) {
         description = video.info_json['description'];
+        viewCount = video.info_json['view_count'];
     }
 
     let [favorite, setFavorite] = React.useState(video.favorite);
@@ -81,6 +83,9 @@ function VideoPage(props) {
 
             <h3>Source ID</h3>
             <p>{video.source_id}</p>
+
+            <h3>View Count</h3>
+            <p>{viewCount}</p>
 
             <h3>File Name</h3>
             <pre style={{backgroundColor: '#ccc', padding: '0.4em'}}>{video.channel.directory}/{video.video_path}</pre>

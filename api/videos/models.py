@@ -1,5 +1,6 @@
 import json
 from datetime import timedelta, datetime
+from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, Computed
@@ -35,6 +36,7 @@ class Video(ModelHelper, Base):
     upload_date = Column(TZDateTime)
     validated_poster = Column(Boolean, default=False)
     viewed = Column(TZDateTime)
+    view_count = Column(Integer)
     textsearch = Column(tsvector, Computed('''to_tsvector('english'::regconfig,
                                                ((COALESCE(title, ''::text) || ' '::text) ||
                                                 COALESCE(caption, ''::text)))'''))
@@ -99,7 +101,7 @@ class Video(ModelHelper, Base):
     def set_viewed(self):
         self.viewed = now()
 
-    def get_info_json(self) -> Optional[str]:
+    def get_info_json(self) -> Optional[JSON]:
         """
         If this Video has an info_json file, return it's contents.  Otherwise, return None.
         """
@@ -108,9 +110,7 @@ class Video(ModelHelper, Base):
 
         try:
             if self.info_json_path:
-                from api.videos.common import get_absolute_media_path
-                channel_dir = get_absolute_media_path(self.channel.directory)
-                path = channel_dir / self.info_json_path
+                path = self.channel.get_relative_path(self.info_json_path)
                 with open(path, 'rb') as fh:
                     contents = json.load(fh)
                     return contents
@@ -118,6 +118,24 @@ class Video(ModelHelper, Base):
             pass
         except UnknownDirectory:
             pass
+
+    def get_video_description(self) -> Optional[str]:
+        """
+        Get the Video description from the file system.
+        """
+        # First try to get description from info_json file.
+        info_json = self.get_info_json()
+        if info_json:
+            description = info_json.get('description')
+            if description:
+                return description
+
+        if self.description_path and self.channel_id:
+            path = self.channel.get_relative_path(self.description_path)
+            if path.exists():
+                with open(path, 'rt') as fh:
+                    contents = fh.read()
+                    return contents
 
     def get_surrounding_videos(self):
         """
@@ -204,6 +222,9 @@ class Channel(ModelHelper, Base):
     info_json = Column(JSON)
     info_date = Column(Date)
 
+    # Will be filled later by directory path relative to the media directory.
+    _directory = None
+
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
 
     def __repr__(self):
@@ -283,3 +304,18 @@ class Channel(ModelHelper, Base):
             config['favorites'] = {i.source_id: {'favorite': i.favorite} for i in favorites}
 
         return config
+
+    def get_directory(self):
+        if self._directory:
+            return self._directory
+
+        from api.videos.common import get_absolute_media_path
+        self._directory = get_absolute_media_path(self.directory)
+        return self._directory
+
+    def get_relative_path(self, path: Path, exists: bool = True):
+        channel_dir = self._directory or self.get_directory()
+        path = channel_dir / path
+        if exists and not path.exists():
+            raise FileNotFoundError(f'Channel path {path} does not exist!')
+        return path

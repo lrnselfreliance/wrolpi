@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from api.common import ProgressReporter, save_settings_config
 from api.db import get_db_curs, get_db_context
 from api.videos.captions import insert_bulk_captions, process_captions
-from api.videos.common import generate_bulk_posters, get_bulk_video_duration, get_bulk_video_size, \
+from api.videos.common import generate_bulk_posters, get_bulk_video_info_json, get_bulk_video_size, \
     get_absolute_media_path, generate_video_paths, remove_duplicate_video_paths, bulk_validate_posters
 from .models import Channel, Video
 from ..common import logger
@@ -74,14 +74,18 @@ def convert_invalid_posters() -> bool:
         return False
 
 
-def refresh_channel_calculate_duration() -> bool:
+def refresh_channel_info_json() -> bool:
+    """
+    Fill in Video columns that are extracted from the info_json.
+    """
     with get_db_curs() as curs:
-        query = 'SELECT id FROM video WHERE video_path IS NOT NULL AND duration IS NULL'
+        query = 'SELECT id FROM video WHERE video_path IS NOT NULL AND ' \
+                '(duration IS NULL OR view_count IS NULL)'
         curs.execute(query)
         missing_duration = [i for (i,) in curs.fetchall()]
 
     if missing_duration:
-        coro = get_bulk_video_duration(missing_duration)
+        coro = get_bulk_video_info_json(missing_duration)
         asyncio.ensure_future(coro)
         logger.info('Scheduled get_bulk_video_duration()')
         return True
@@ -113,7 +117,7 @@ def process_video_meta_data():
     refresh_channel_video_captions()
     refresh_channel_generate_posters()
     convert_invalid_posters()
-    refresh_channel_calculate_duration()
+    refresh_channel_info_json()
     refresh_channel_calculate_size()
 
 
@@ -329,7 +333,7 @@ NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
 
 def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel, idempotency: str = None,
                  skip_captions=False,
-                 id_: str = None) -> Video:
+                 id_: str = None, info_json: dict = None) -> Video:
     """
     Insert a video into the DB.  Also, find any meta-files near the video file and store them on the video row.
 

@@ -3,7 +3,7 @@ import pathlib
 import re
 from queue import Queue
 from random import shuffle
-from typing import Tuple, List
+from typing import Tuple, List, Dict
 
 from sqlalchemy import or_
 from sqlalchemy.orm.exc import NoResultFound
@@ -221,7 +221,7 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
             yield channel, id_, missing_video
 
 
-def download_video(channel: Channel, video: dict) -> pathlib.Path:
+def download_video(channel: Channel, video: Dict) -> Tuple[pathlib.Path, Dict]:
     """
     Download a video (and associated posters/etc) to it's channel's directory.
 
@@ -242,7 +242,7 @@ def download_video(channel: Channel, video: dict) -> pathlib.Path:
     entry = ydl.extract_info(url, download=True, process=True)
     final_filename = ydl.prepare_filename(entry)
     final_filename = pathlib.Path(final_filename)
-    return final_filename
+    return final_filename, entry
 
 
 def _skip_download(error):
@@ -264,7 +264,7 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
     for idx, (channel, id_, missing_video) in enumerate(missing_videos):
         reporter.send_progress(1, idx, f'Downloading {channel.name}: {missing_video["title"]}')
         try:
-            video_path = download_video(channel, missing_video)
+            video_path, info_json = download_video(channel, missing_video)
         except Exception as e:
             logger.warning(f'Failed to download "{missing_video["title"]}"', exc_info=e)
             if _skip_download(e):
@@ -281,7 +281,7 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
             continue
 
         with get_db_context(commit=True) as (engine, session):
-            upsert_video(session, video_path, channel, id_=id_)
+            upsert_video(session, video_path, channel, id_=id_, info_json=info_json)
 
     reporter.finish(1, 'All videos are downloaded')
 

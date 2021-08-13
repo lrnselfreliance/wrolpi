@@ -52,6 +52,8 @@ VIDEO_ORDERS = {
     '-favorite': 'favorite DESC, LOWER(video_path) DESC',
     'viewed': 'viewed ASC',
     '-viewed': 'viewed DESC',
+    'view_count': 'view_count ASC',
+    '-view_count': 'view_count DESC',
 }
 NO_NULL_ORDERS = {
     'viewed': '\nAND viewed IS NOT NULL',
@@ -60,6 +62,8 @@ NO_NULL_ORDERS = {
     '-duration': '\nAND duration IS NOT NULL',
     'size': '\nAND size IS NOT NULL',
     '-size': '\nAND size IS NOT NULL',
+    'view_count': '\nAND view_count IS NOT NULL',
+    '-view_count': '\nAND view_count IS NOT NULL',
 }
 DEFAULT_VIDEO_ORDER = 'rank'
 VIDEO_QUERY_LIMIT = 20

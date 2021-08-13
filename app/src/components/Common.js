@@ -147,6 +147,8 @@ export let videoOrders = [
     {key: '-viewed', value: '-viewed', text: 'Recently viewed', title: 'Recently Viewed Videos'},
     {key: '-size', value: '-size', text: 'Largest', title: 'Largest Videos'},
     {key: 'size', value: 'size', text: 'Smallest', title: 'Smallest Videos'},
+    {key: '-view_count', value: '-view_count', text: 'Most Views', title: 'Most Views'},
+    {key: 'view_count', value: 'view_count', text: 'Least Views', title: 'Least Views'},
 ];
 
 export let searchOrders = [

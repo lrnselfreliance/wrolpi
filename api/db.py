@@ -31,14 +31,16 @@ def get_db_args(dbname: str = None):
 
 
 # This engine is used to modify the databases.
+connect_args = dict(application_name='wrolpi_api_super')
 postgres_args = get_db_args('postgres')
 postgres_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**postgres_args),
-                                execution_options={'isolation_level': 'AUTOCOMMIT'})
+                                execution_options={'isolation_level': 'AUTOCOMMIT'}, connect_args=connect_args)
 
 # This engine is used for all normal tasks (except testing).
 db_args = get_db_args()
+connect_args = dict(application_name='wrolpi_api')
 uri = 'postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**db_args)
-engine = create_engine(uri, poolclass=NullPool)
+engine = create_engine(uri, poolclass=NullPool, connect_args=connect_args)
 session_maker = sessionmaker(bind=engine)
 
 LOGGED_ARGS = False

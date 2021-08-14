@@ -111,7 +111,7 @@ def update_channel(data, link):
     return channel
 
 
-def get_channel(link) -> Channel:
+def get_channel(link) -> dict:
     """
     Get a Channel by it's `link`.  Raise UnknownChannel if it does not exist.
     """

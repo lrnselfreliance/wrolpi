@@ -49,10 +49,8 @@ Base = declarative_base()
 
 class ModelHelper:
 
-    def dict(self):
-        # TODO hack to force SQLAlchemy to pull in all the values of a row.  What is the correct way to do this?
-        repr(self)
-        d = {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+    def dict(self) -> dict:
+        d = {i.name: getattr(self, i.name) for i in self.__table__.columns}  # noqa
         return d
 
 

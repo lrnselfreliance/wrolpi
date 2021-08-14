@@ -9,7 +9,7 @@ from uuid import uuid1
 from sqlalchemy.orm import Session
 
 from api.common import ProgressReporter, save_settings_config
-from api.db import get_db_curs, get_db_context
+from api.db import get_db_curs, get_db_session
 from api.videos.captions import insert_bulk_captions, process_captions
 from api.videos.common import generate_bulk_posters, get_bulk_video_info_json, get_bulk_video_size, \
     get_absolute_media_path, generate_video_paths, remove_duplicate_video_paths, bulk_validate_posters
@@ -160,7 +160,7 @@ def refresh_channel_videos(channel: Channel, reporter: ProgressReporter):
     reporter.send_progress(1, 4, f'Inserting {len(new_videos)} new videos.')
 
     for video_path in new_videos:
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             upsert_video(session, pathlib.Path(video_path), channel, idempotency=idempotency)
             logger.debug(f'{channel.name}: Added {video_path}')
 
@@ -189,7 +189,7 @@ def _refresh_videos(q: Queue, channel_links: list = None):
     :return:
     """
     logger.info('Refreshing video files')
-    with get_db_context() as (engine, session):
+    with get_db_session() as session:
         reporter = ProgressReporter(q, 2)
         reporter.code('refresh-started')
         reporter.set_progress_total(0, session.query(Channel).count())
@@ -233,7 +233,7 @@ def save_channels_config(session=None):
     if session:
         config = get_channels_config(session)
     else:
-        with get_db_context() as (engine, session):
+        with get_db_session() as session:
             config = get_channels_config(session)
     save_settings_config(config)
 

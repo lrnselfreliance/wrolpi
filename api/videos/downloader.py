@@ -10,7 +10,7 @@ from sqlalchemy.orm.exc import NoResultFound
 from youtube_dl import YoutubeDL
 
 from api.common import logger, today, ProgressReporter, now, run_after
-from api.db import get_db_context, get_db_curs
+from api.db import get_db_session, get_db_curs
 from .common import load_downloader_config, get_absolute_media_path
 from .lib import save_channels_config, upsert_video
 from .models import Video, Channel
@@ -31,7 +31,7 @@ def update_channel(channel=None, link: str = None):
 
     It is expected that any missing videos will be downloaded later.
     """
-    with get_db_context() as (engine, session):
+    with get_db_session() as session:
         if not channel:
             channel = session.query(Channel).filter_by(link=link).one()
 
@@ -63,7 +63,7 @@ def update_channel(channel=None, link: str = None):
         logger.warning(f'entries: {entries}')
         raise KeyError('No id key for entry!') from e
 
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         # Get the channel in this new context.
         channel = session.query(Channel).filter_by(id=channel.id).one()
 
@@ -88,7 +88,7 @@ def update_channel(channel=None, link: str = None):
 def update_channels(reporter: ProgressReporter, link: str = None):
     """Update all information for each channel.  (No downloads performed)"""
 
-    with get_db_context() as (engine, session):
+    with get_db_session() as session:
         if session.query(Channel).count() == 0:
             raise UnknownChannel('No channels exist yet')
 
@@ -175,7 +175,7 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
 
     Yields a Channel Dict object, our Video id, and the "entry" of the video from the channel's info_json['entries'].
     """
-    with get_db_context() as (engine, session):
+    with get_db_session() as session:
         if link:
             try:
                 channel = session.query(Channel).filter_by(link=link).one()
@@ -273,14 +273,14 @@ def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
                 logger.warning(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
                                f'attempt to download it again.')
 
-                with get_db_context(commit=True) as (engine, session):
+                with get_db_session(commit=True) as session:
                     channel = session.query(Channel).filter_by(id=channel.id).one()
                     channel.add_video_to_skip_list(source_id)
 
             reporter.error(1, f'Failed to download "{missing_video["title"]}", see server logs...')
             continue
 
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             upsert_video(session, video_path, channel, id_=id_, info_json=info_json)
 
     reporter.finish(1, 'All videos are downloaded')

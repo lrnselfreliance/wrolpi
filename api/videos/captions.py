@@ -9,7 +9,7 @@ from api.common import logger, chunk
 from api.errors import UnknownCaptionFile
 from .common import get_absolute_video_caption
 from .models import Video
-from ..db import get_db_context
+from ..db import get_db_session
 
 
 def get_caption_text(caption_path: Union[str, Path]) -> Generator:
@@ -67,7 +67,7 @@ def process_captions(video: Video):
 
 async def insert_bulk_captions(video_ids: List[int]):
     for video_ids in chunk(video_ids, 10):
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             for idx, video_id in enumerate(video_ids):
                 video = session.query(Video).filter_by(id=video_id).one()
                 process_captions(video)

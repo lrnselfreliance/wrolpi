@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
 from api.common import logger, Base
-from api.db import get_db_context, get_db_curs
+from api.db import get_db_session, get_db_curs
 from api.inventory.models import Inventory, Item, InventoriesVersion
 
 unit_registry = pint.UnitRegistry()
@@ -15,7 +15,7 @@ logger = logger.getChild(__name__)
 
 
 def get_inventories() -> List[Base]:
-    with get_db_context() as (engine, session):
+    with get_db_session() as session:
         inventories = session.query(Inventory).filter(
             Inventory.deleted_at == None,  # noqa
         ).order_by(
@@ -47,7 +47,7 @@ def save_inventory(inventory):
     # Cleanup the whitespace.
     inventory['name'] = inventory['name'].strip()
 
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         _remove_conflicting_deleted_inventory(inventory, session)
         session.add(Inventory(**inventory))
 
@@ -58,7 +58,7 @@ def update_inventory(inventory_id: int, inventory: dict):
     # Cleanup the whitespace.
     inventory['name'] = inventory['name'].strip()
 
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         _remove_conflicting_deleted_inventory(inventory, session)
 
         i = session.query(Inventory).filter_by(id=inventory_id).one()
@@ -67,7 +67,7 @@ def update_inventory(inventory_id: int, inventory: dict):
 
 
 def delete_inventory(inventory_id: int):
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         inventory = session.query(Inventory).filter_by(id=inventory_id).one()
         inventory.delete()
 
@@ -108,7 +108,7 @@ def get_items(inventory_id: int) -> List[Base]:
     """
     Get all Items in an Inventory, except deleted items.
     """
-    with get_db_context() as (engine, session):
+    with get_db_session() as session:
         results = session.query(Item).filter(
             Item.inventory_id == inventory_id,
             Item.deleted_at == None,  # noqa
@@ -117,13 +117,13 @@ def get_items(inventory_id: int) -> List[Base]:
 
 
 def save_item(inventory_id: int, item: dict):
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         item = Item(inventory_id=inventory_id, **item)
         session.add(item)
 
 
 def update_item(item_id: int, item: dict):
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         i = session.query(Item).filter_by(id=item_id).one()
         del item['id']
         del item['created_at']
@@ -140,7 +140,7 @@ def get_inventories_version():
     """
     The inventory_version table contains a single row with the Inventories version integer.
     """
-    with get_db_context() as (engine, session):
+    with get_db_session() as session:
         try:
             version = session.query(InventoriesVersion).one()
             return version.version
@@ -166,7 +166,7 @@ def increment_inventories_version():
     """
     version = get_next_inventories_version()
     yield version
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         if session.query(InventoriesVersion).count() == 0:
             session.add(InventoriesVersion(version=version))
         else:

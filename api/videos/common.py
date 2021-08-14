@@ -12,7 +12,7 @@ from PIL import Image
 from sqlalchemy.orm import Session
 
 from api.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify, chunk
-from api.db import get_db_context
+from api.db import get_db_session
 from api.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
 from api.vars import DOCKERIZED, PROJECT_DIR, VIDEO_EXTENSIONS, MINIMUM_CHANNEL_KEYS, MINIMUM_INFO_JSON_KEYS, \
@@ -58,7 +58,7 @@ def import_settings_config():
     try:
         config = load_channels_config()
 
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             for section in config:
                 for option in (i for i in REQUIRED_OPTIONS if i not in config[section]):
                     raise ConfigError(f'Channel "{section}" is required to have "{option}"')
@@ -404,7 +404,7 @@ async def generate_bulk_posters(video_ids: List[int]):
     """
     logger.info(f'Generating {len(video_ids)} video posters')
     with video_ids in chunk(video_ids, 10):
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             videos = session.query(Video).filter(Video.id.in_(video_ids))
             for video in videos:
                 video_path = get_absolute_video_path(video)
@@ -451,7 +451,7 @@ def bulk_validate_posters(video_ids: List[int]):
     logger.info(f'Validating {len(video_ids)} video posters')
     for video_ids in chunk(video_ids, 10):
         for video_id in video_ids:
-            with get_db_context(commit=True) as (engine, session):
+            with get_db_session(commit=True) as session:
                 video = session.query(Video).filter_by(id=video_id).one()
                 channel = video.channel
 
@@ -506,7 +506,7 @@ async def get_bulk_video_info_json(video_ids: List[int]):
     """
     logger.info(f'Getting {len(video_ids)} video info_json meta data.')
     for video_ids in chunk(video_ids, 10):
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             for video_id in video_ids:
                 video = session.query(Video).filter_by(id=video_id).one()
                 logger.debug(f'Getting video info_json data: {video}')
@@ -526,7 +526,7 @@ async def get_bulk_video_size(video_ids: List[int]):
     """
     logger.info(f'Getting {len(video_ids)} video sizes.')
     for video_ids in chunk(video_ids, 10):
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             for video_id in video_ids:
                 video = session.query(Video).filter_by(id=video_id).one()
                 logger.debug(f'Getting video size: {video.id} {video.video_path}')

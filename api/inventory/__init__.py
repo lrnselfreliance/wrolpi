@@ -3,7 +3,7 @@ from .common import DEFAULT_CATEGORIES, DEFAULT_INVENTORIES
 from .inventory import logger
 from .main import PRETTY_NAME, init_parser
 from .models import Item, Inventory
-from ..db import get_db_context
+from ..db import get_db_session
 
 
 def import_settings_config():
@@ -24,7 +24,7 @@ def init(force=False):
 
     logger.info('Initializing inventory')
 
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         if session.query(Item).count() == 0:
             for subcategory, category in DEFAULT_CATEGORIES:
                 item = Item(subcategory=subcategory, category=category)

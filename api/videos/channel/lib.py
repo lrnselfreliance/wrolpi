@@ -4,7 +4,7 @@ from typing import List
 from sqlalchemy.orm.exc import NoResultFound
 
 from api.common import sanitize_link, run_after
-from api.db import get_db_context, get_db_curs
+from api.db import get_db_session, get_db_curs
 from api.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from api.vars import DEFAULT_DOWNLOAD_FREQUENCY
 from api.videos.common import get_relative_to_media_directory, make_media_directory, check_for_channel_conflicts
@@ -55,7 +55,7 @@ async def get_minimal_channels() -> List[dict]:
 
 @run_after(save_channels_config)
 def delete_channel(link):
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         try:
             channel = session.query(Channel).filter_by(link=link).one()
         except NoResultFound:
@@ -66,7 +66,7 @@ def delete_channel(link):
 
 @run_after(save_channels_config)
 def update_channel(data, link):
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         try:
             channel = session.query(Channel).filter_by(link=link).one()
         except NoResultFound:
@@ -115,7 +115,7 @@ def get_channel(link) -> dict:
     """
     Get a Channel by it's `link`.  Raise UnknownChannel if it does not exist.
     """
-    with get_db_context() as (engine, session):
+    with get_db_session() as session:
         try:
             channel = session.query(Channel).filter_by(link=link).one()
         except NoResultFound:
@@ -128,7 +128,7 @@ def create_channel(data: dict) -> Channel:
     """
     Create a new Channel.  Check for conflicts with existing Channels.
     """
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         try:
             # Verify that the URL/Name/Link aren't taken
             check_for_channel_conflicts(

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
 from api.common import run_after
-from api.db import get_db_context, get_db_curs
+from api.db import get_db_session, get_db_curs
 from api.errors import UnknownVideo
 from api.videos.lib import save_channels_config
 from api.videos.models import Video
@@ -25,7 +25,7 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
     """
     Get a Video, with it's prev/next videos.  Mark the Video as viewed.
     """
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         video = get_video(session, video_id)
         video.set_viewed()
         previous_video, next_video = video.get_surrounding_videos()
@@ -132,7 +132,7 @@ def video_search(
         total = results[0]['total'] if results else 0
         ranked_ids = [i['id'] for i in results]
 
-    with get_db_context() as (engine, session):
+    with get_db_session() as session:
         results = []
         if ranked_ids:
             results = session.query(Video).filter(Video.id.in_(ranked_ids)).all()
@@ -148,7 +148,7 @@ def set_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
     """
     Set the Video.favorite to the current datetime if `favorite` is True, otherwise None.
     """
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         video = session.query(Video).filter_by(id=video_id).one()
         favorite = video.set_favorite(favorite)
 

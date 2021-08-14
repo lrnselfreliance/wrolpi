@@ -61,11 +61,11 @@ def _get_db_session():
 
 
 @contextmanager
-def get_db_context(commit: bool = False) -> ContextManager[Tuple[Engine, Session]]:
+def get_db_session(commit: bool = False) -> ContextManager[Session]:
     """Context manager that creates a DB session.  This will automatically rollback changes, unless `commit` is True."""
     local_engine, session = _get_db_session()
     try:
-        yield local_engine, session
+        yield session
         if commit:
             session.commit()
     except sqlalchemy.exc.DatabaseError:

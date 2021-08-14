@@ -4,7 +4,7 @@ from sanic import response, Blueprint
 from sanic.request import Request
 
 from api.common import validate_doc, logger, json_response, wrol_mode_check, run_after
-from api.db import get_db_context
+from api.db import get_db_session
 from api.errors import ValidationError, InvalidOrderBy
 from api.videos.common import get_matching_directories, get_media_directory, \
     get_relative_to_media_directory, get_allowed_limit, minimize_video
@@ -83,7 +83,7 @@ def directories(_, data):
 @wrol_mode_check
 @run_after(save_channels_config)
 def video_delete(_: Request, video_id: int):
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         video = get_video(session, video_id)
         video.delete()
     return response.raw('', HTTPStatus.NO_CONTENT)

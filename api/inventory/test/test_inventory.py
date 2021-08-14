@@ -9,7 +9,7 @@ import sqlalchemy
 import yaml
 from pint import Quantity
 
-from api.db import get_db_context
+from api.db import get_db_session
 from .. import init
 from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
     compact_unit, cleanup_quantity, save_inventories_file, import_inventories_file
@@ -69,7 +69,7 @@ class TestInventory(PytestCase):
         """
         init(force=True)
 
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             for item in TEST_ITEMS:
                 item = Item(**item)
                 session.add(item)
@@ -99,7 +99,7 @@ class TestInventory(PytestCase):
         }
         save_inventory(inventory)
 
-        with get_db_context() as (engine, session):
+        with get_db_session() as session:
             i1, i2 = session.query(Inventory).order_by(Inventory.name).all()
             self.assertDictContains(i2, {'name': 'New Inventory', 'viewed_at': None})
 
@@ -111,13 +111,13 @@ class TestInventory(PytestCase):
         save_inventory(inventory)
 
         # Cannot update the name to a name that is already used.
-        with get_db_context() as (engine, session):
+        with get_db_session() as session:
             i = session.query(Inventory).filter_by(name='Super Inventory').one()
             inventory['name'] = 'New Inventory'
             self.assertRaises(sqlalchemy.exc.IntegrityError, update_inventory, i.id, inventory)
 
         # Add some items to "New Inventory"
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             before_item_count = session.query(Item).count()
             session.add(Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1))
             session.add(Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1))
@@ -125,7 +125,7 @@ class TestInventory(PytestCase):
             session.add(Item(inventory_id=2, brand='a', name='b', item_size=45, unit='pounds', count=1))
 
         # You can rename a inventory to a conflicting name, if the other inventory is marked as deleted.
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             delete_inventory(2)
             # Check that the items from the deleted Inventory were not deleted, YET.
             self.assertEqual(before_item_count + 4, session.query(Item).count())
@@ -199,7 +199,7 @@ class TestInventory(PytestCase):
             save_inventories_file(tf.name)
 
             # Clear out the DB so the import will be tested
-            with get_db_context(commit=True) as (engine, session):
+            with get_db_session(commit=True) as session:
                 session.query(Item).delete()
                 session.query(Inventory).delete()
 

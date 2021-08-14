@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from api.api import api_app, attach_routes
 from api.common import EXAMPLE_CONFIG_PATH, get_config, ProgressReporter, insert_parameter, Base
-from api.db import get_db_context, postgres_engine, get_db_args
+from api.db import get_db_session, postgres_engine, get_db_args
 from api.vars import PROJECT_DIR
 from api.videos.api import refresh_queue, download_queue
 from api.videos.lib import refresh_channel_videos
@@ -280,7 +280,7 @@ def create_db_structure(structure):
             with build_test_directories(file_structure) as tempdir:
                 args, kwargs = insert_parameter(func, 'tempdir', tempdir, args, kwargs)
 
-                with get_db_context(commit=True) as (engine, session):
+                with get_db_session(commit=True) as session:
                     for channel in structure:
                         channel = Channel(directory=str(tempdir / channel), name=channel, link=channel)
                         session.add(channel)

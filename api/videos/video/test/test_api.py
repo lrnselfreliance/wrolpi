@@ -7,7 +7,7 @@ from uuid import uuid4
 
 from api.api import api_app
 from api.common import now
-from api.db import get_db_context
+from api.db import get_db_session
 from api.errors import API_ERRORS, WROLModeEnabled
 from api.test.common import wrap_test_db, TestAPI, create_db_structure
 from api.videos.models import Channel, Video
@@ -22,7 +22,7 @@ class TestVideoFunctions(TestAPI):
         Test that the previous and next videos will be retrieved when fetching a video.
         """
 
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             for _ in range(4):
                 session.add(Channel(link=str(uuid4())))
             channel1, channel2, channel3, channel4 = session.query(Channel).all()
@@ -117,7 +117,7 @@ class TestVideoFunctions(TestAPI):
         ],
     })
     def test_get_video_for_app(self, tempdir):
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             vid1 = session.query(Video).one()
 
         vid, prev, next_ = get_video_for_app(vid1.id)
@@ -135,7 +135,7 @@ class TestVideoFunctions(TestAPI):
         ],
     })
     def test_delete_video(self, tempdir: pathlib.Path):
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             channel1 = session.query(Channel).filter_by(name='channel1').one()
             channel2 = session.query(Channel).filter_by(name='channel2').one()
             vid1, vid2 = session.query(Video).order_by(Video.video_path).all()

@@ -1,6 +1,6 @@
 import mock
 
-from api.db import get_db_context, get_db_curs
+from api.db import get_db_session, get_db_curs
 from api.test.common import wrap_test_db, TestAPI
 from api.vars import PROJECT_DIR
 from api.videos import captions
@@ -35,7 +35,7 @@ class TestCaption(TestAPI):
 
     @wrap_test_db
     def test_process_captions(self):
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             video1 = Video(title='scream', caption_path=str(self.vtt_path1))
             session.add(video1)
             with mock.patch('api.videos.captions.get_absolute_video_caption', lambda *a: self.vtt_path1):

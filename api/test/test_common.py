@@ -13,7 +13,7 @@ from sanic_openapi import doc
 from api.api import api_app, attach_routes
 from api.common import validate_data, combine_dicts, insert_parameter, ProgressReporter, date_range, set_timezone, \
     now, today
-from api.db import get_db_context
+from api.db import get_db_session
 from api.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields, InvalidTimezone
 from api.test.common import create_db_structure, build_test_directories, wrap_test_db
 from api.videos.common import convert_image, bulk_validate_posters
@@ -160,7 +160,7 @@ def test_create_db_structure(_structure, paths):
             assert path.exists()
             assert path.is_file()
 
-        with get_db_context() as (engine, session):
+        with get_db_session() as session:
             for channel_name in _structure:
                 channel = session.query(Channel).filter_by(name=channel_name).one()
                 assert (tempdir / channel_name).is_dir()
@@ -303,7 +303,7 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
         assert Image.open(jpg_fh).format == 'JPEG'
         assert Image.open(webp_fh).format == 'WEBP'
 
-    with get_db_context() as (engine, session):
+    with get_db_session() as session:
         vid1 = session.query(Video).filter_by(poster_path='vid1.jpg').one()
         assert vid1.validated_poster is False
 
@@ -318,7 +318,7 @@ def test_bulk_replace_invalid_posters(tempdir: Path):
 
     mocked_convert_image.assert_called_once_with(webp, tempdir / 'channel2/vid2.jpg')
 
-    with get_db_context() as (engine, session):
+    with get_db_session() as session:
         # Get the video by ID because it's poster is now a JPEG.
         vid2 = session.query(Video).filter_by(id=vid2.id).one()
         assert str(vid2.poster_path) == 'vid2.jpg'

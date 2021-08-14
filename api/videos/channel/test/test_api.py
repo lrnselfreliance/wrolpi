@@ -10,7 +10,7 @@ import pytest
 
 from api.api import api_app, attach_routes
 from api.common import now
-from api.db import get_db_context
+from api.db import get_db_session
 from api.errors import UnknownFile
 from api.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI, create_db_structure
 from api.videos.api import refresh_queue
@@ -218,7 +218,7 @@ class TestVideoAPI(TestAPI):
         pytest.raises(Empty, refresh_queue.get_nowait)
 
         # Setup a fake channel directory.
-        with get_db_context() as (engine, session), \
+        with get_db_session() as session, \
                 tempfile.TemporaryDirectory() as channel_dir:
             channel_path = pathlib.Path(channel_dir)
 
@@ -308,7 +308,7 @@ class TestVideoAPI(TestAPI):
 
     @wrap_test_db
     def test_get_channel_videos(self):
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             channel1 = Channel(name='Foo', link='foo')
             channel2 = Channel(name='Bar', link='bar')
             session.add(channel1)
@@ -323,7 +323,7 @@ class TestVideoAPI(TestAPI):
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 0
 
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             vid1 = Video(title='vid1', channel_id=channel2.id, video_path='foo')
             vid2 = Video(title='vid2', channel_id=channel1.id, video_path='foo')
             session.add(vid1)
@@ -351,7 +351,7 @@ class TestVideoAPI(TestAPI):
         def raise_unknown_file(_):
             raise UnknownFile()
 
-        with get_db_context(commit=True) as (engine, session), \
+        with get_db_session(commit=True) as session, \
                 mock.patch('api.videos.common.get_absolute_video_info_json', raise_unknown_file):
             channel = Channel(name='Foo', link='foo')
             session.add(channel)
@@ -377,7 +377,7 @@ class TestVideoAPI(TestAPI):
 
     @wrap_test_db
     def test_get_channel_videos_pagination(self):
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             channel1 = Channel(name='Foo', link='foo')
             session.add(channel1)
             session.flush()
@@ -423,7 +423,7 @@ class TestVideoAPI(TestAPI):
             ('4', 'b e e'),
             ('5', ''),
         ]
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             for title, caption in videos:
                 session.add(Video(title=title, caption=caption, video_path='foo'))
 

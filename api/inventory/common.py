@@ -8,7 +8,7 @@ import yaml
 from pint import Quantity
 
 from api.common import logger, Base
-from api.db import get_db_context
+from api.db import get_db_session
 from api.inventory.inventory import unit_registry, get_items, get_inventories, increment_inventories_version, \
     get_inventories_version
 from api.vars import CONFIG_DIR
@@ -198,7 +198,7 @@ def import_inventories_file(path: str = None):
     inventories = get_inventories()
     inventories_names = {i.name for i in inventories}
     new_inventories = [i for i in contents['inventories'] if i['name'] not in inventories_names]
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         for inventory in new_inventories:
             items = inventory['items']
             inventory = Inventory(

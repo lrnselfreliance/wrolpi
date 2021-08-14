@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from api.common import today, ProgressReporter
-from api.db import get_db_context
+from api.db import get_db_session
 from api.test.common import wrap_test_db, create_db_structure, TestAPI
 from api.videos.downloader import update_channels, find_all_missing_videos, download_video
 from api.videos.models import Channel, Video
@@ -38,11 +38,11 @@ def test_update_channels(tempdir):
     q = Queue()
     reporter = ProgressReporter(q, 2)
 
-    with get_db_context(commit=True) as (engine, session):
+    with get_db_session(commit=True) as session:
         channel1, channel2 = session.query(Channel).order_by(Channel.id).all()
         channel1.url = channel2.url = 'some url'
 
-    with get_db_context() as (engine, session):
+    with get_db_session() as session:
         channel1, channel2 = session.query(Channel).order_by(Channel.id).all()
         with mock.patch('api.videos.downloader.update_channel') as update_channel:
             update_channel: MagicMock
@@ -53,7 +53,7 @@ def test_update_channels(tempdir):
             update_channel.assert_any_call(channel1)
             update_channel.assert_any_call(channel2)
 
-    with get_db_context() as (engine, session):
+    with get_db_session() as session:
         channel1, channel2 = session.query(Channel).order_by(Channel.id).all()
         channel1.next_download = today() + timedelta(days=1)
         session.commit()
@@ -87,7 +87,7 @@ class TestDownloader(TestAPI):
         },
     )
     def test_find_all_missing_videos(self, tempdir):
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             channel1, channel2 = session.query(Channel).order_by(Channel.id).all()
             channel1.url = channel2.url = 'some url'
             channel1.info_json = {'entries': [{'id': 'foo'}]}
@@ -96,7 +96,7 @@ class TestDownloader(TestAPI):
         self.assertEqual([], list(find_all_missing_videos()))
 
         # Create a video that has no video file.
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             video = Video(title='needs to be downloaded', channel_id=channel1.id, source_id='foo')
             session.add(video)
 
@@ -157,7 +157,7 @@ class TestDownloader(TestAPI):
         reporter = ProgressReporter(q, 2)
 
         # All channels are downloaded weekly.
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             channels = list(session.query(Channel).order_by(Channel.link).all())
             for channel in channels:
                 channel.download_frequency = 604800  # one week
@@ -172,7 +172,7 @@ class TestDownloader(TestAPI):
             self.assertEqual(nd, expected, f'Expected {(nd - expected).days} days for {channel}')
 
         # Even though all channels aren't updated, their order is the same.
-        with get_db_context(commit=True):
+        with get_db_session(commit=True):
             channels[0].next_download = None
             channels[1].next_download = None
             channels[4].next_download = None
@@ -182,7 +182,7 @@ class TestDownloader(TestAPI):
             self.assertEqual(channel.next_download, today() + timedelta(days=days_))
 
         # Multiple frequencies are supported.
-        with get_db_context(commit=True) as (engine, session):
+        with get_db_session(commit=True) as session:
             frequency_map = {
                 'channel1': 604800,  # weekly
                 'channel2': 604800,

@@ -16,7 +16,7 @@ class Video(ModelHelper, Base):
     __tablename__ = 'video'
     id = Column(Integer, primary_key=True)
     channel_id = Column(Integer, ForeignKey('channel.id'))
-    channel = relationship('Channel', primaryjoin='Video.channel_id==Channel.id')
+    channel = relationship('Channel', primaryjoin='Video.channel_id==Channel.id', back_populates='videos')
     idempotency = Column(String)
 
     # File paths

@@ -23,7 +23,7 @@ class Item(Base, ModelHelper):
     unit = Column(String)
 
     inventory_id = Column(Integer, ForeignKey('inventory.id'))
-    inventory = relationship('Inventory', primaryjoin="Item.inventory_id==Inventory.id")
+    inventory = relationship('Inventory', primaryjoin="Item.inventory_id==Inventory.id", back_populates='items')
 
     def __repr__(self):
         return f'<Item(id={self.id}, name={self.name}, brand={self.brand}, ' \

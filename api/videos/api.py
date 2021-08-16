@@ -33,7 +33,7 @@ from sanic import Blueprint, response, Sanic
 from sanic.request import Request
 
 from api.common import create_websocket_feed, get_sanic_url, \
-    validate_doc, json_response, wrol_mode_check, ProgressReporter
+    validate_doc, json_response, wrol_mode_check, ProgressReporter, get_config
 from api.common import logger
 from api.videos.channel.api import channel_bp
 from api.videos.video.api import video_bp
@@ -194,13 +194,14 @@ MAX_DOWNLOAD_FREQUENCY = 60 * 60 * 12  # 12 hours
 PERIODIC_DOWNLOAD_EVENT = Event()
 
 
-async def _periodic_download():
+async def _periodic_download(min_download_frequency: int, max_download_frequency: int):
     """
     Wait some amount of time, download, then schedule the next download.
     """
-    sleep_seconds = random.randint(MIN_DOWNLOAD_FREQUENCY, MAX_DOWNLOAD_FREQUENCY)
+    sleep_seconds = random.randint(min_download_frequency, max_download_frequency)
     logger.debug(f'Waiting {sleep_seconds} seconds before next download')
     await asyncio.sleep(sleep_seconds)
+
     url = get_sanic_url(path='/api/videos:download')
     resp = requests.post(url)
     if resp.status_code != HTTPStatus.OK and resp.status_code != HTTPStatus.CONFLICT:
@@ -209,7 +210,7 @@ async def _periodic_download():
         logger.warning(f'Periodic download response={resp}')
 
     # Schedule the next download
-    asyncio.ensure_future(_periodic_download())
+    asyncio.ensure_future(_periodic_download(min_download_frequency, max_download_frequency))
 
 
 @content_bp.listener('after_server_start')
@@ -220,4 +221,13 @@ async def download(app: Sanic, loop):
     if not PERIODIC_DOWNLOAD_EVENT.is_set():
         PERIODIC_DOWNLOAD_EVENT.set()
         logger.info(f'Starting periodic download')
-        asyncio.ensure_future(_periodic_download())
+
+        config = get_config()
+        try:
+            min_download_frequency = int(config.get('min_download_frequency', MIN_DOWNLOAD_FREQUENCY))
+            max_download_frequency = int(config.get('max_download_frequency', MAX_DOWNLOAD_FREQUENCY))
+        except Exception:
+            logger.fatal(f'Failed to get min/max download frequencies from config!', exc_info=True)
+            raise
+
+        asyncio.ensure_future(_periodic_download(min_download_frequency, max_download_frequency))

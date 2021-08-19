@@ -120,7 +120,7 @@ def get_channel(link) -> dict:
             channel = session.query(Channel).filter_by(link=link).one()
         except NoResultFound:
             raise UnknownChannel()
-        return channel
+        return channel.dict()
 
 
 @run_after(save_channels_config)

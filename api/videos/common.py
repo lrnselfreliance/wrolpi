@@ -403,7 +403,7 @@ async def generate_bulk_posters(video_ids: List[int]):
     clobber existing jpg files.
     """
     logger.info(f'Generating {len(video_ids)} video posters')
-    with video_ids in chunk(video_ids, 10):
+    for video_ids in chunk(video_ids, 10):
         with get_db_session(commit=True) as session:
             videos = session.query(Video).filter(Video.id.in_(video_ids))
             for video in videos:

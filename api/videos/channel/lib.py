@@ -124,7 +124,7 @@ def get_channel(link) -> dict:
 
 
 @run_after(save_channels_config)
-def create_channel(data: dict) -> Channel:
+def create_channel(data: dict) -> dict:
     """
     Create a new Channel.  Check for conflicts with existing Channels.
     """
@@ -154,4 +154,4 @@ def create_channel(data: dict) -> Channel:
         session.flush()
         session.refresh(channel)
 
-    return channel
+        return channel.dict()

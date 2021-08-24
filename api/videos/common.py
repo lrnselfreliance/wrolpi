@@ -548,8 +548,12 @@ def update_view_count(channel_id: int):
         channel = session.query(Channel).filter_by(id=channel_id).one()
         info = channel.info_json
 
+    if not info:
+        logger.info(f'No info_json for channel {channel.name}')
+        return
+
     view_counts = [(i['id'], i['view_count']) for i in info['entries']]
-    logger.debug(f'Updating {len(view_counts)} view counts for channel {channel.name}')
+    logger.info(f'Updating {len(view_counts)} view counts for channel {channel.name}')
     for chunk in chunks(view_counts, 20):
         with get_db_curs(commit=True) as curs:
             for id_, view_count in chunk:

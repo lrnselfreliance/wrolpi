@@ -5,7 +5,7 @@ from typing import Dict
 
 import pdfkit
 
-from api.common import chunk, remove_whitespace
+from api.common import chunks, remove_whitespace
 from api.errors import InvalidOTP, InvalidPlaintext, InvalidCiphertext
 
 # These are the only characters we support.
@@ -25,8 +25,8 @@ def format_message(message: str, group_count: int = GROUP_COUNT) -> str:
     >>> format_message('SOMEMESSAGE')
     'SOMEM ESSAG E'
     """
-    groups = [''.join(i) for i in chunk(message, GROUP_SIZE)]
-    rows = chunk(groups, group_count)
+    groups = [''.join(i) for i in chunks(message, GROUP_SIZE)]
+    rows = chunks(groups, group_count)
     message = '\n'.join(' '.join(group for group in groups) for groups in rows)
     return message
 

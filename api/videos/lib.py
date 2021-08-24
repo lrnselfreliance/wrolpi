@@ -12,7 +12,8 @@ from api.common import ProgressReporter, save_settings_config
 from api.db import get_db_curs, get_db_session
 from api.videos.captions import insert_bulk_captions, process_captions
 from api.videos.common import generate_bulk_posters, get_bulk_video_info_json, get_bulk_video_size, \
-    get_absolute_media_path, generate_video_paths, remove_duplicate_video_paths, bulk_validate_posters
+    get_absolute_media_path, generate_video_paths, remove_duplicate_video_paths, bulk_validate_posters, \
+    update_view_count
 from .models import Channel, Video
 from ..common import logger
 
@@ -175,6 +176,8 @@ def refresh_channel_videos(channel: Channel, reporter: ProgressReporter):
         logger.info(deleted_status)
 
     logger.info(f'{channel.name}: {len(new_videos)} new videos, {len(existing_paths)} already existed. ')
+
+    update_view_count(channel.id)
 
     reporter.send_progress(1, 6, f'Processed all videos for {channel.name}')
 

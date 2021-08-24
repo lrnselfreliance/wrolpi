@@ -11,8 +11,8 @@ import PIL
 from PIL import Image
 from sqlalchemy.orm import Session
 
-from api.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify, chunk
-from api.db import get_db_session
+from api.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify, chunks
+from api.db import get_db_session, get_db_curs
 from api.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
 from api.vars import DOCKERIZED, PROJECT_DIR, VIDEO_EXTENSIONS, MINIMUM_CHANNEL_KEYS, MINIMUM_INFO_JSON_KEYS, \
@@ -403,7 +403,7 @@ async def generate_bulk_posters(video_ids: List[int]):
     clobber existing jpg files.
     """
     logger.info(f'Generating {len(video_ids)} video posters')
-    for video_ids in chunk(video_ids, 10):
+    for video_ids in chunks(video_ids, 10):
         with get_db_session(commit=True) as session:
             videos = session.query(Video).filter(Video.id.in_(video_ids))
             for video in videos:
@@ -415,6 +415,7 @@ async def generate_bulk_posters(video_ids: List[int]):
                 channel_dir = get_absolute_media_path(video.channel.directory)
                 poster_path = poster_path.relative_to(channel_dir)
                 video.poster_path = str(poster_path)
+    logger.info('Done generating video posters')
 
 
 def convert_image(existing_path: Path, destination_path: Path, ext: str = 'jpeg'):
@@ -449,7 +450,7 @@ def bulk_validate_posters(video_ids: List[int]):
     Replace all posters for the provided videos if a video's poster is not a JPEG format.
     """
     logger.info(f'Validating {len(video_ids)} video posters')
-    for video_ids in chunk(video_ids, 10):
+    for video_ids in chunks(video_ids, 10):
         for video_id in video_ids:
             with get_db_session(commit=True) as session:
                 video = session.query(Video).filter_by(id=video_id).one()
@@ -480,6 +481,7 @@ def bulk_validate_posters(video_ids: List[int]):
                 # Update the video with the new poster path.  Mark it as validated.
                 video.poster_path = str(new_poster_path.relative_to(channel_dir))
                 video.validated_poster = True
+    logger.info('Done validating video posters.')
 
 
 def get_video_duration(video_path: Path) -> int:
@@ -505,7 +507,7 @@ async def get_bulk_video_info_json(video_ids: List[int]):
     Get and save the info_json data for each video provided.
     """
     logger.info(f'Getting {len(video_ids)} video info_json meta data.')
-    for video_ids in chunk(video_ids, 10):
+    for video_ids in chunks(video_ids, 10):
         with get_db_session(commit=True) as session:
             for video_id in video_ids:
                 video = session.query(Video).filter_by(id=video_id).one()
@@ -518,6 +520,7 @@ async def get_bulk_video_info_json(video_ids: List[int]):
                     video.duration = info_json.get('duration') if info_json else get_video_duration(video_path)
                 except Exception:
                     logger.warning(f'Unable to get meta data of {video}', exc_info=True)
+    logger.info('Done getting video info_json meta data.')
 
 
 async def get_bulk_video_size(video_ids: List[int]):
@@ -525,7 +528,7 @@ async def get_bulk_video_size(video_ids: List[int]):
     Get and save the size for each video provided.
     """
     logger.info(f'Getting {len(video_ids)} video sizes.')
-    for video_ids in chunk(video_ids, 10):
+    for video_ids in chunks(video_ids, 10):
         with get_db_session(commit=True) as session:
             for video_id in video_ids:
                 video = session.query(Video).filter_by(id=video_id).one()
@@ -534,6 +537,24 @@ async def get_bulk_video_size(video_ids: List[int]):
 
                 size = video_path.stat().st_size
                 video.size = size
+    logger.info('Done getting video sizes')
+
+
+def update_view_count(channel_id: int):
+    """
+    Update view_count for all Videos in a channel.
+    """
+    with get_db_session() as session:
+        channel = session.query(Channel).filter_by(id=channel_id).one()
+        info = channel.info_json
+
+    view_counts = [(i['id'], i['view_count']) for i in info['entries']]
+    logger.debug(f'Updating {len(view_counts)} view counts for channel {channel.name}')
+    for chunk in chunks(view_counts, 20):
+        with get_db_curs(commit=True) as curs:
+            for id_, view_count in chunk:
+                stmt = 'UPDATE video SET view_count = %s WHERE source_id=%s AND channel_id=%s'
+                curs.execute(stmt, (view_count, id_, channel_id))
 
 
 def minimize_dict(d: dict, keys: Iterable) -> dict:

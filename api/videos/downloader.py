@@ -9,9 +9,9 @@ from sqlalchemy import or_
 from sqlalchemy.orm.exc import NoResultFound
 from youtube_dl import YoutubeDL
 
-from api.common import logger, today, ProgressReporter, now, run_after, chunk
+from api.common import logger, today, ProgressReporter, now, run_after, chunks
 from api.db import get_db_session, get_db_curs
-from .common import load_downloader_config, get_absolute_media_path
+from .common import load_downloader_config, get_absolute_media_path, update_view_count
 from .lib import save_channels_config, upsert_video
 from .models import Video, Channel
 from ..errors import UnknownChannel, ChannelURLEmpty
@@ -85,13 +85,7 @@ def update_channel(channel=None, link: str = None):
             session.add(Video(source_id=source_id, channel_id=channel_id))
 
     # Update all view counts using the latest from the Channel's info_json.
-    view_counts = [(i['id'], i['view_count']) for i in info['entries']]
-    logger.debug(f'Updating {len(view_counts)} view counts for channel {channel["name"]}')
-    for view_count_chunk in chunk(view_counts, 20):
-        with get_db_curs(commit=True) as curs:
-            for id_, view_count in view_count_chunk:
-                stmt = 'UPDATE video SET view_count = %s WHERE source_id=%s'
-                curs.execute(stmt, (view_count, id_))
+    update_view_count(channel_id)
 
 
 def update_channels(reporter: ProgressReporter, link: str = None):

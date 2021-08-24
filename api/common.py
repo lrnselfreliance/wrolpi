@@ -661,7 +661,7 @@ def date_range(start: dt_or_d, end: dt_or_d, steps: int) -> List[dt_or_d]:
     return [start + (delta * i) for i in range(steps)]
 
 
-def chunk(it, size):
+def chunks(it, size):
     it = iter(it)
     return iter(lambda: tuple(islice(it, size)), ())
 

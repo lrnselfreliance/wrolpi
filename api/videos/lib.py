@@ -127,7 +127,7 @@ def refresh_channel_videos(channel: Channel, reporter: ProgressReporter):
     Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
     """
     # This function is hard to predict, so we will simply progress in chunks :(
-    reporter.set_progress_total(1, 6)
+    reporter.set_progress_total(1, 7)
     reporter.send_progress(1, 0, 'Preparing channel.')
 
     # Set the idempotency key so we can remove any videos not touched during this search
@@ -177,9 +177,11 @@ def refresh_channel_videos(channel: Channel, reporter: ProgressReporter):
 
     logger.info(f'{channel.name}: {len(new_videos)} new videos, {len(existing_paths)} already existed. ')
 
+    reporter.send_progress(1, 6, f'Updating video view counts')
+
     update_view_count(channel.id)
 
-    reporter.send_progress(1, 6, f'Processed all videos for {channel.name}')
+    reporter.send_progress(1, 7, f'Processed all videos for {channel.name}')
 
 
 def _refresh_videos(q: Queue, channel_links: list = None):

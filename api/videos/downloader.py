@@ -85,7 +85,8 @@ def update_channel(channel=None, link: str = None):
             session.add(Video(source_id=source_id, channel_id=channel_id))
 
     # Update all view counts using the latest from the Channel's info_json.
-    view_counts = ((i['id'], i['view_count']) for i in info['entries'])
+    view_counts = [(i['id'], i['view_count']) for i in info['entries']]
+    logger.debug(f'Updating {len(view_counts)} view counts for channel {channel["name"]}')
     for view_count_chunk in chunk(view_counts, 20):
         with get_db_curs(commit=True) as curs:
             for id_, view_count in view_count_chunk:

@@ -202,7 +202,6 @@ def create_websocket_feed(name: str, uri: str, blueprint: Blueprint, maxsize: in
             try:
                 msg = q.get(timeout=QUEUE_TIMEOUT)
                 any_messages = True
-                feed_logger.debug(f'got message {msg}')
                 dump = json.dumps(msg)
                 await ws.send(dump)
 
@@ -210,9 +209,8 @@ def create_websocket_feed(name: str, uri: str, blueprint: Blueprint, maxsize: in
                 await asyncio.sleep(0)
             except queue.Empty:  # pragma: no cover
                 # No messages yet, try again while event is set
-                feed_logger.debug(f'no messages in queue')
                 pass
-        feed_logger.debug(f'loop complete')
+        feed_logger.info(f'loop complete')
 
         if any_messages is False:
             await ws.send(json.dumps({'code': 'no-messages'}))

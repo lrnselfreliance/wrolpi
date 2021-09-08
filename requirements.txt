@@ -3,7 +3,7 @@ cachetools==4.2.0
 docker==4.4.1
 mock==4.0.3
 pdfkit==0.6.1
-Pillow==8.2.0
+Pillow==8.3.2
 psycopg2-binary==2.8.6
 pytest-cov==2.10.1
 pytest==6.2.1

@@ -11,7 +11,6 @@ services:
       - POSTGRES_PASSWORD=wrolpi
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U postgres" ]
-    user: "${UID-1000}:${GID-1000}"
 
   api:
     depends_on:
@@ -55,4 +54,3 @@ services:
       - "./test:/opt/media"
     healthcheck:
       test: [ "CMD-SHELL", "curl http://127.0.0.1:80" ]
-    user: "${UID-1000}:${GID-1000}"

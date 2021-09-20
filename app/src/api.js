@@ -287,3 +287,8 @@ export async function deleteItems(itemIds) {
     let i = itemIds.join(',');
     await apiDelete(`${API_URI}/inventory/item/${i}`);
 }
+
+export async function postArchive(url) {
+    let i = {url: url};
+    return await apiPost(`${API_URI}/archive`, i);
+}

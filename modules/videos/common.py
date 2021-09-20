@@ -16,16 +16,20 @@ from wrolpi.common import sanitize_link, logger, CONFIG_PATH, get_config, iterif
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
-from wrolpi.vars import DOCKERIZED, VIDEO_EXTENSIONS, MINIMUM_CHANNEL_KEYS, MINIMUM_INFO_JSON_KEYS, \
-    MINIMUM_VIDEO_KEYS, DEFAULT_FILE_PERMISSIONS
+from wrolpi.vars import DOCKERIZED, DEFAULT_FILE_PERMISSIONS
 from .models import Channel, Video
 
 logger = logger.getChild(__name__)
 
 REQUIRED_OPTIONS = ['name', 'directory']
-
+MINIMUM_CHANNEL_KEYS = {'id', 'name', 'directory', 'url', 'video_count', 'link'}
+MINIMUM_INFO_JSON_KEYS = {'description', 'view_count'}
+MINIMUM_VIDEO_KEYS = {'id', 'title', 'upload_date', 'duration', 'channel', 'channel_id', 'favorite', 'size',
+                      'poster_path', 'caption_path', 'video_path', 'info_json', 'channel', 'viewed', 'source_id'}
 VIDEO_QUERY_LIMIT = 20
 VIDEO_QUERY_MAX_LIMIT = 100
+# These are the supported video formats.  These are in order of their preference.
+VIDEO_EXTENSIONS = ('mp4', 'ogg', 'webm', 'flv')
 
 
 def load_downloader_config() -> dict:

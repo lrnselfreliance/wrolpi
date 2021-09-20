@@ -12,7 +12,6 @@ from youtube_dl import YoutubeDL
 from wrolpi.common import logger, today, ProgressReporter, now, run_after, get_absolute_media_path
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty
-from wrolpi.vars import UNRECOVERABLE_ERRORS
 from .common import load_downloader_config, update_view_count
 from .lib import save_channels_config, upsert_video
 from .models import Video, Channel
@@ -246,6 +245,17 @@ def download_video(channel: Channel, video: Dict) -> Tuple[pathlib.Path, Dict]:
     final_filename = ydl.prepare_filename(entry)
     final_filename = pathlib.Path(final_filename)
     return final_filename, entry
+
+
+UNRECOVERABLE_ERRORS = {
+    '404: Not Found',
+    'requires payment',
+    'Content Warning',
+    'Did not get any data blocks',
+    'Sign in to confirm your age',
+    'This live stream recording is not available.',
+    'members-only content',
+}
 
 
 def _skip_download(error):

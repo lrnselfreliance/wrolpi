@@ -3,15 +3,27 @@ from datetime import timedelta, datetime
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, Computed
+from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, Computed, types
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import Base, tsvector, ModelHelper, PathColumn, today, TZDateTime, now, \
-    get_absolute_media_path
-from modules.videos.common import ChannelPath
+from wrolpi.common import Base, tsvector, ModelHelper, PathColumn, today, TZDateTime, now, get_absolute_media_path
 from wrolpi.db import get_db_curs
 from wrolpi.errors import UnknownVideo, NoFrequency, UnknownFile, UnknownDirectory
+
+
+class ChannelPath(types.TypeDecorator):
+    impl = types.String
+
+    def process_bind_param(self, value, dialect):
+        if isinstance(value, Path):
+            return value.relative_to(self.channel.directory)
+        elif value:
+            return str(value)
+
+    def process_result_value(self, value, dialect):
+        if value:
+            return Path(value)
 
 
 class Video(ModelHelper, Base):

@@ -9,7 +9,6 @@ from typing import Union, Tuple, List, Set, Iterable
 
 import PIL
 from PIL import Image
-from sqlalchemy import types
 from sqlalchemy.orm import Session
 
 from wrolpi.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify, chunks, get_media_directory, \
@@ -542,17 +541,3 @@ def minimize_video(video: dict) -> dict:
         video['info_json'] = minimize_video_info_json(video['info_json'])
 
     return video
-
-
-class ChannelPath(types.TypeDecorator):
-    impl = types.String
-
-    def process_bind_param(self, value, dialect):
-        if isinstance(value, Path):
-            return value.relative_to(self.channel.directory)
-        elif value:
-            return str(value)
-
-    def process_result_value(self, value, dialect):
-        if value:
-            return Path(value)

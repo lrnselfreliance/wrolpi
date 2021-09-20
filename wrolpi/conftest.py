@@ -6,8 +6,8 @@ from unittest import mock
 import pytest
 from sqlalchemy.orm import Session
 
-from wrolpi.test.common import test_db
 from wrolpi.db import postgres_engine
+from wrolpi.test.common import test_db
 
 
 @pytest.fixture

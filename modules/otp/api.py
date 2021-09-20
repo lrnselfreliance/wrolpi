@@ -5,8 +5,8 @@ from string import ascii_letters
 from sanic import response
 from sanic.request import Request
 
-from wrolpi.schema import validate_doc
 from wrolpi.root_api import get_blueprint
+from wrolpi.schema import validate_doc
 from .common import generate_html, generate_pdf, encrypt_otp, decrypt_otp
 from .schema import EncryptOTPRequest, DecryptOTPRequest
 

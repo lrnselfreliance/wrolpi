@@ -1,17 +1,15 @@
-"""Initialize Inventory DB.
+"""Init inventory tables.
 
-Revision ID: 49bd087be3af
-Revises:
-Create Date: 2021-09-15 15:47:42.689990
+Revision ID: 053f17f07c4e
+Revises: f0d0086a73d1
+Create Date: 2021-09-20 16:21:00.322598
 
 """
 from alembic import op
-
 from sqlalchemy.orm import Session
 
-# revision identifiers, used by Alembic.
-revision = '49bd087be3af'
-down_revision = None
+revision = '053f17f07c4e'
+down_revision = 'f0d0086a73d1'
 branch_labels = None
 depends_on = None
 

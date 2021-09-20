@@ -12,7 +12,7 @@ from wrolpi.common import logger, get_config, set_timezone
 from wrolpi.db import uri
 from wrolpi.vars import PROJECT_DIR, MODULES_DIR
 
-logger = logger.getChild('wrolpi')
+logger = logger.getChild('wrolpi-main')
 
 
 def db_main(args):

@@ -1,5 +1,6 @@
 import asyncio
 import collections
+import glob
 import inspect
 import json
 import logging
@@ -30,7 +31,7 @@ from sqlalchemy.ext.declarative import declarative_base
 
 from wrolpi.errors import WROLModeEnabled, InvalidTimezone, UnknownDirectory
 from wrolpi.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT, \
-    DEFAULT_TIMEZONE_STR, PROJECT_DIR
+    DEFAULT_TIMEZONE_STR, PROJECT_DIR, MODULES_DIR
 
 logger = logging.getLogger(__name__)
 ch = logging.StreamHandler()
@@ -47,20 +48,6 @@ class ModelHelper:
     def dict(self) -> dict:
         d = {i.name: getattr(self, i.name) for i in self.__table__.columns}  # noqa
         return d
-
-
-class ChannelPath(types.TypeDecorator):
-    impl = types.String
-
-    def process_bind_param(self, value, dialect):
-        if isinstance(value, Path):
-            return value.relative_to(self.channel.directory)
-        elif value:
-            return str(value)
-
-    def process_result_value(self, value, dialect):
-        if value:
-            return Path(value)
 
 
 class PathColumn(types.TypeDecorator):
@@ -107,7 +94,7 @@ def now(tz: pytz.timezone = None) -> datetime:
     """
     Get the current DateTime in the provided timezone.  Timezone aware.
     """
-    tz = tz if tz else DEFAULT_TIMEZONE
+    tz = tz or DEFAULT_TIMEZONE
     return datetime.utcnow().astimezone(tz)
 
 
@@ -630,3 +617,8 @@ def get_relative_to_media_directory(path: str) -> Path:
     """
     absolute = get_absolute_media_path(path)
     return absolute.relative_to(get_media_directory())
+
+
+def get_alembic_configs():
+    alembic_configs = glob.glob(f'{MODULES_DIR}/*/alembic.ini')
+    return alembic_configs

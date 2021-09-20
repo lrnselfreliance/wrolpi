@@ -1,16 +1,14 @@
-"""Initialize Videos DB.
+"""Init videos tables.
 
-Revision ID: 7578d31666c2
+Revision ID: f0d0086a73d1
 Revises:
-Create Date: 2021-09-15 15:41:55.490039
+Create Date: 2021-09-20 16:19:36.576217
 
 """
 from alembic import op
-
-# revision identifiers, used by Alembic.
 from sqlalchemy.orm import Session
 
-revision = '7578d31666c2'
+revision = 'f0d0086a73d1'
 down_revision = None
 branch_labels = None
 depends_on = None

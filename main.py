@@ -9,7 +9,6 @@ import pytz
 
 from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS
 from wrolpi.common import logger, get_config, set_timezone
-from wrolpi.db import uri
 from wrolpi.vars import PROJECT_DIR, MODULES_DIR
 
 logger = logger.getChild('wrolpi-main')
@@ -21,6 +20,7 @@ def db_main(args):
     """
     from alembic.config import Config
     from alembic import command
+    from wrolpi.db import uri
 
     config = Config(PROJECT_DIR / 'alembic.ini')
     # Overwrite the Alembic config, the is usually necessary when running in a docker container.

@@ -107,6 +107,7 @@ venv.bak/
 
 # example videos
 test/videos
+test/archive
 
 # local configs
 config/local.yaml
@@ -114,6 +115,9 @@ config/local.yaml.bak
 config/inventories.yaml
 
 app/package-lock.json
+modules/node_modules/
+archive/node_modules/
+archive/package-lock.json
 
 # open street map files
 *.pbf

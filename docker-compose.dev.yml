@@ -10,7 +10,7 @@ services:
     environment:
       - POSTGRES_PASSWORD=wrolpi
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      test: [ 'CMD-SHELL', 'pg_isready -U postgres' ]
 
   api:
     depends_on:
@@ -23,12 +23,24 @@ services:
       - './wrolpi:/opt/wrolpi/wrolpi'
       - './modules:/opt/wrolpi/modules'
       - './config:/opt/wrolpi/config'
+      - './test:/opt/wrolpi/test'
     ports:
       - ${REACT_APP_API-127.0.0.1:8081}:8081
-    command: "-vv api --host 0.0.0.0"
+    command: '-vv api --host 0.0.0.0'
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8081/api/echo' ]
-    user: "${UID-1000}:${GID-1000}"
+    user: '${UID-1000}:${GID-1000}'
+
+  archive:
+    build:
+      context: .
+      dockerfile: archive/Dockerfile
+    volumes:
+      - './archive/main.py:/app/main.py'
+    ports:
+      - '8083:8080'
+    healthcheck:
+      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8081/api/echo' ]
 
   app:
     depends_on:
@@ -40,11 +52,11 @@ services:
       - '8082:8082'
     volumes:
       - './app:/app'
-    command: "yarn start"
+    command: 'yarn start'
     stdin_open: true
     healthcheck:
-      test: [ "CMD-SHELL", "curl http://127.0.0.1:3000" ]
-    user: "${UID-1000}:${GID-1000}"
+      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:3000' ]
+    user: '${UID-1000}:${GID-1000}'
 
   web:
     depends_on:

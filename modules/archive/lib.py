@@ -1,8 +1,7 @@
-import contextlib
+import base64
 import json
 import pathlib
 from functools import lru_cache
-from typing import Tuple
 from urllib.parse import urlparse
 
 import requests
@@ -40,7 +39,7 @@ def get_domain_directory(url: str) -> pathlib.Path:
     return directory
 
 
-def get_new_archive_file(url: str) -> Tuple[pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
+def get_new_archive_file(url: str):
     directory = get_domain_directory(url)
     dt = now().strftime(DATETIME_FORMAT_MS)
     singlefile = directory / f'{dt}-singlefile.html'
@@ -59,8 +58,12 @@ def get_new_archive_file(url: str) -> Tuple[pathlib.Path, pathlib.Path, pathlib.
     if readability_txt.exists():
         raise FileExistsError(f'Cannot get new archive file, it already exists: {readability_txt}')
 
+    screenshot_png = directory / f'{dt}.png'
+    if screenshot_png.exists():
+        raise FileExistsError(f'Cannot get new archive file, it already exists: {screenshot_png}')
+
     # Yield the file path because it does not exist
-    return singlefile, readability, readability_json, readability_txt
+    return singlefile, readability, readability_json, readability_txt, screenshot_png
 
 
 def request_archive(url: str):
@@ -75,22 +78,31 @@ def request_archive(url: str):
         raise
     singlefile = resp.json()['singlefile'].encode()
     readability = resp.json()['readability']
-    return singlefile, readability
+    screenshot = resp.json()['screenshot']
+    if screenshot:
+        screenshot = base64.b64decode(screenshot)
+    return singlefile, readability, screenshot
 
 
 def new_archive(url: str):
-    singlefile_path, readability_path, readability_json_path, readability_txt = get_new_archive_file(url)
+    singlefile_path, readability_path, readability_json_path, readability_txt, screenshot_png = \
+        get_new_archive_file(url)
 
-    singlefile, readability = request_archive(url)
+    singlefile, readability, screenshot = request_archive(url)
 
     # Store the single-file HTML in it's own file.
     with singlefile_path.open('wb') as fh:
         fh.write(singlefile)
 
+    if screenshot:
+        with screenshot_png.open('wb') as fh:
+            fh.write(screenshot)
+
     # Store the Readability into separate files.  This allows the user to view text-only or html articles.
-    with readability_path.open('wb') as fh:
-        fh.write(readability.pop('content').encode())
-    with readability_txt.open('wb') as fh:
-        fh.write(readability.pop('textContent').encode())
-    with readability_json_path.open('wt') as fh:
-        fh.write(json.dumps(readability))
+    if readability:
+        with readability_path.open('wb') as fh:
+            fh.write(readability.pop('content').encode())
+        with readability_txt.open('wb') as fh:
+            fh.write(readability.pop('textContent').encode())
+        with readability_json_path.open('wt') as fh:
+            fh.write(json.dumps(readability))

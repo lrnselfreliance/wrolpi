@@ -1,12 +1,13 @@
 import base64
-import json
 import pathlib
 from functools import lru_cache
 from urllib.parse import urlparse
 
 import requests
 
+from modules.archive.models import URL, Domain, Archive
 from wrolpi.common import get_media_directory, logger, now
+from wrolpi.db import get_db_session
 from wrolpi.vars import DATETIME_FORMAT_MS
 
 logger = logger.getChild(__name__)
@@ -39,31 +40,25 @@ def get_domain_directory(url: str) -> pathlib.Path:
     return directory
 
 
-def get_new_archive_file(url: str):
+def get_new_archive_files(url: str):
+    """
+    Create a list of archive files using a shared name schema.  Raise an error if any of them exist.
+    """
     directory = get_domain_directory(url)
     dt = now().strftime(DATETIME_FORMAT_MS)
-    singlefile = directory / f'{dt}-singlefile.html'
-    if singlefile.exists():
-        raise FileExistsError(f'Cannot get new archive file, it already exists: {singlefile}')
 
+    singlefile = directory / f'{dt}.html'
     readability = directory / f'{dt}-readability.html'
-    if readability.exists():
-        raise FileExistsError(f'Cannot get new archive file, it already exists: {readability}')
-
-    readability_json = directory / f'{dt}-readability.json'
-    if readability_json.exists():
-        raise FileExistsError(f'Cannot get new archive file, it already exists: {readability_json}')
-
     readability_txt = directory / f'{dt}-readability.txt'
-    if readability_txt.exists():
-        raise FileExistsError(f'Cannot get new archive file, it already exists: {readability_txt}')
-
     screenshot_png = directory / f'{dt}.png'
-    if screenshot_png.exists():
-        raise FileExistsError(f'Cannot get new archive file, it already exists: {screenshot_png}')
 
-    # Yield the file path because it does not exist
-    return singlefile, readability, readability_json, readability_txt, screenshot_png
+    ret = (singlefile, readability, readability_txt, screenshot_png)
+
+    for path in ret:
+        if path.exists():
+            raise FileExistsError(f'New archive file already exists: {path}')
+
+    return ret
 
 
 def request_archive(url: str):
@@ -74,7 +69,7 @@ def request_archive(url: str):
     try:
         resp = requests.post(f'{ARCHIVE_SERVICE}/json', json=data)
     except Exception as e:
-        logger.error('Error when requesting single-file', exc_info=e)
+        logger.error('Error when requesting archive', exc_info=e)
         raise
     singlefile = resp.json()['singlefile'].encode()
     readability = resp.json()['readability']
@@ -85,8 +80,11 @@ def request_archive(url: str):
 
 
 def new_archive(url: str):
-    singlefile_path, readability_path, readability_json_path, readability_txt, screenshot_png = \
-        get_new_archive_file(url)
+    """
+    Request archiving of the provided URL.  Store the returned files in their domain's directory.
+    """
+    singlefile_path, readability_path, readability_txt, screenshot_path = \
+        get_new_archive_files(url)
 
     singlefile, readability, screenshot = request_archive(url)
 
@@ -95,14 +93,49 @@ def new_archive(url: str):
         fh.write(singlefile)
 
     if screenshot:
-        with screenshot_png.open('wb') as fh:
+        with screenshot_path.open('wb') as fh:
             fh.write(screenshot)
 
     # Store the Readability into separate files.  This allows the user to view text-only or html articles.
+    title = None
     if readability:
         with readability_path.open('wb') as fh:
             fh.write(readability.pop('content').encode())
         with readability_txt.open('wb') as fh:
             fh.write(readability.pop('textContent').encode())
-        with readability_json_path.open('wt') as fh:
-            fh.write(json.dumps(readability))
+
+        title = readability.get('title')
+
+    with get_db_session(commit=True) as session:
+        # Get/create the Domain for this archive.
+        domain_ = get_domain(url)
+        domain = session.query(Domain).filter_by(domain=domain_).one_or_none()
+        if not domain:
+            domain = Domain(domain=domain_, directory=str(get_domain_directory(url)))
+            session.add(domain)
+            session.flush()
+
+        url_ = session.query(URL).filter_by(url=url).one_or_none()
+        if not url_:
+            url_ = URL(url=url, domain_id=domain.id)
+            session.add(url_)
+            session.flush()
+
+        archive = Archive(
+            singlefile_path=singlefile_path,
+            readability_path=readability_path if readability_path.is_file() else None,
+            readability_txt_path=readability_txt if readability_txt.is_file() else None,
+            screenshot_path=screenshot_path if screenshot_path.is_file() else None,
+            title=title,
+            archive_datetime=now(),
+            url_id=url_.id,
+            domain_id=domain.id,
+        )
+        session.add(archive)
+        session.flush()
+
+        # Update the latest for easy viewing.
+        url_.latest = archive.id
+        url_.latest_datetime = archive.archive_datetime
+
+        return archive

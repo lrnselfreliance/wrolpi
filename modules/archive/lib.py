@@ -1,4 +1,5 @@
 import contextlib
+import json
 import pathlib
 from functools import lru_cache
 from typing import Tuple
@@ -39,6 +40,29 @@ def get_domain_directory(url: str) -> pathlib.Path:
     return directory
 
 
+def get_new_archive_file(url: str) -> Tuple[pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
+    directory = get_domain_directory(url)
+    dt = now().strftime(DATETIME_FORMAT_MS)
+    singlefile = directory / f'{dt}-singlefile.html'
+    if singlefile.exists():
+        raise FileExistsError(f'Cannot get new archive file, it already exists: {singlefile}')
+
+    readability = directory / f'{dt}-readability.html'
+    if readability.exists():
+        raise FileExistsError(f'Cannot get new archive file, it already exists: {readability}')
+
+    readability_json = directory / f'{dt}-readability.json'
+    if readability_json.exists():
+        raise FileExistsError(f'Cannot get new archive file, it already exists: {readability_json}')
+
+    readability_txt = directory / f'{dt}-readability.txt'
+    if readability_txt.exists():
+        raise FileExistsError(f'Cannot get new archive file, it already exists: {readability_txt}')
+
+    # Yield the file path because it does not exist
+    return singlefile, readability, readability_json, readability_txt
+
+
 def request_archive(url: str):
     """
     Send a request to the archive service to archive the URL.
@@ -50,29 +74,23 @@ def request_archive(url: str):
         logger.error('Error when requesting single-file', exc_info=e)
         raise
     singlefile = resp.json()['singlefile'].encode()
-    readability = resp.json()['readability'].encode()
+    readability = resp.json()['readability']
     return singlefile, readability
 
 
-@contextlib.contextmanager
-def get_new_archive_file(url: str) -> Tuple[pathlib.Path, pathlib.Path]:
-    directory = get_domain_directory(url)
-    singlefile = directory / f'{now().strftime(DATETIME_FORMAT_MS)}-singlefile.html'
-    if singlefile.exists():
-        raise FileExistsError(f'Cannot get new archive file, it already exists: {singlefile}')
-
-    readability = directory / f'{now().strftime(DATETIME_FORMAT_MS)}-readability.html'
-    if readability.exists():
-        raise FileExistsError(f'Cannot get new archive file, it already exists: {readability}')
-
-    # Yield the file path because it does not exist
-    yield singlefile, readability
-
-
 def new_archive(url: str):
-    with get_new_archive_file(url) as (singlefile_path, readability_path):
-        singlefile, readability = request_archive(url)
-        with singlefile_path.open('wb') as fh:
-            fh.write(singlefile)
-        with readability_path.open('wb') as fh:
-            fh.write(readability)
+    singlefile_path, readability_path, readability_json_path, readability_txt = get_new_archive_file(url)
+
+    singlefile, readability = request_archive(url)
+
+    # Store the single-file HTML in it's own file.
+    with singlefile_path.open('wb') as fh:
+        fh.write(singlefile)
+
+    # Store the Readability into separate files.  This allows the user to view text-only or html articles.
+    with readability_path.open('wb') as fh:
+        fh.write(readability.pop('content').encode())
+    with readability_txt.open('wb') as fh:
+        fh.write(readability.pop('textContent').encode())
+    with readability_json_path.open('wt') as fh:
+        fh.write(json.dumps(readability))

@@ -49,11 +49,11 @@ async def call_single_file(url) -> bytes:
     return output
 
 
-async def extract_readability(path: str, url: str) -> str:
+async def extract_readability(path: str, url: str) -> dict:
     logger.info(f'readability for {url}')
     cmd = ['readability-extractor', path, url]
     output = subprocess.check_output(cmd)
-    output = json.loads(output)['content']
+    output = json.loads(output)
     logger.debug(f'done readability for {url}')
     return output
 
@@ -74,6 +74,7 @@ async def post_archive(request: Request):
         readability = await extract_readability(fh.name, url)
 
     ret = dict(
+        url=url,
         singlefile=singlefile.decode(),
         readability=readability,
     )

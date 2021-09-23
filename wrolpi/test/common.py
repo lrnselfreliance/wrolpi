@@ -109,7 +109,7 @@ class PytestCase:
 
     @staticmethod
     def assertEqual(a, b, msg: str = None):
-        assert a == b, msg
+        assert a == b, msg or f'{a} != {b}'
 
     @staticmethod
     def assertRaises(exception, func, *args, **kwargs):
@@ -118,8 +118,8 @@ class PytestCase:
         except exception:
             pass
 
-    @staticmethod
-    def assertDictContains(d1: dict, d2: dict):
+    @classmethod
+    def assertDictContains(cls, d1: dict, d2: dict):
         if hasattr(d1, '__dict__'):
             d1 = d1.__dict__
         if hasattr(d2, '__dict__'):
@@ -129,7 +129,10 @@ class PytestCase:
             assert d1, f'dict 1 is empty: {d1}'
             assert d2, f'dict 1 is empty: {d2}'
             assert k2 in d1, f'dict 1 does not contain {k2}'
-            assert d1[k2] == d2[k2], f'{k2} of value "{d1[k2]}" does not equal {d2[k2]} in dict 1'
+            if isinstance(d1[k2], dict):
+                cls.assertDictContains(d1[k2], d2[k2])
+            else:
+                assert d1[k2] == d2[k2], f'{k2} of value "{d1[k2]}" does not equal {d2[k2]} in dict 1'
 
     def assertError(self, response, http_status: int, code=None):
         self.assertEqual(response.status_code, http_status)

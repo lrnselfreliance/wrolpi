@@ -108,6 +108,10 @@ class InvalidTimezone(APIError):
     pass
 
 
+class InvalidDomain(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -234,6 +238,11 @@ API_ERRORS = {
     InvalidTimezone: {
         'code': next(error_codes),
         'message': 'Invalid timezone',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    InvalidDomain: {
+        'code': next(error_codes),
+        'message': 'Invalid archive domain',
         'status': HTTPStatus.BAD_REQUEST,
     },
 }

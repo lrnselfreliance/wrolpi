@@ -47,11 +47,19 @@ class URL(Base, ModelHelper):
     url = Column(String, unique=True)
 
     archives: InstrumentedList = relationship('Archive', primaryjoin='URL.id==Archive.url_id')
-    latest = Column(Integer, ForeignKey('archive.id'))
+    latest_id = Column(Integer, ForeignKey('archive.id'))
+    latest = relationship('Archive', primaryjoin='URL.latest_id==Archive.id')
     latest_datetime = Column(TZDateTime)
 
     domain_id = Column(Integer, ForeignKey('domains.id'))
     domain = relationship('Domain', primaryjoin='URL.domain_id==Domain.id')
+
+    def dict(self) -> dict:
+        d = super().dict()
+        d['latest'] = self.latest.dict()
+        d['domain'] = self.domain.dict()
+        d['archives'] = [i.dict() for i in self.archives]
+        return d
 
 
 class Domain(Base, ModelHelper):
@@ -61,7 +69,7 @@ class Domain(Base, ModelHelper):
     domain = Column(String)
     directory = Column(String)
 
-    urls: InstrumentedList = relationship('URL', primaryjoin='Domain.id==URL.domain_id')
+    urls: InstrumentedList = relationship('URL', primaryjoin='Domain.id==URL.domain_id', order_by='URL.latest_datetime')
 
     def __repr__(self):
         return f'<Domain id={self.id} domain={self.domain} directory={self.directory}>'

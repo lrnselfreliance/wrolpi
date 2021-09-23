@@ -9,6 +9,7 @@ import requests
 from modules.archive.models import URL, Domain, Archive
 from wrolpi.common import get_media_directory, logger, now
 from wrolpi.db import get_db_session
+from wrolpi.errors import InvalidDomain
 from wrolpi.vars import DATETIME_FORMAT_MS
 
 logger = logger.getChild(__name__)
@@ -133,7 +134,7 @@ def new_archive(url: str):
         session.flush()
 
         # Update the latest for easy viewing.
-        url_.latest = archive.id
+        url_.latest_id = archive.id
         url_.latest_datetime = archive.archive_datetime
 
         return archive
@@ -155,3 +156,20 @@ def get_or_create_domain_and_url(session, url):
         session.add(url_)
         session.flush()
     return domain, url_
+
+
+def get_urls(limit: int = 20, offset: int = 0, domain: str = ''):
+    with get_db_session() as session:
+        if domain:
+            domain_ = session.query(Domain).filter_by(domain=domain).one_or_none()
+            if not domain_:
+                raise InvalidDomain(f'Invalid domain: {domain}')
+            urls = domain_.urls[offset:offset + limit]
+        else:
+            urls = session.query(URL) \
+                .order_by(URL.latest_datetime) \
+                .limit(limit) \
+                .offset(offset) \
+                .all()
+        urls = [i.dict() for i in urls]
+        return urls

@@ -33,7 +33,7 @@ def get_domain_directory(url: str) -> pathlib.Path:
     directory = get_archive_directory() / domain
     if directory.is_dir():
         return directory
-    elif directory.is_file():
+    elif directory.exists():
         raise FileNotFoundError(f'Domain directory {directory} is already a file')
 
     directory.mkdir()
@@ -71,7 +71,7 @@ def request_archive(url: str):
     except Exception as e:
         logger.error('Error when requesting archive', exc_info=e)
         raise
-    singlefile = resp.json()['singlefile'].encode()
+    singlefile = resp.json()['singlefile']
     readability = resp.json()['readability']
     screenshot = resp.json()['screenshot']
     if screenshot:
@@ -83,13 +83,13 @@ def new_archive(url: str):
     """
     Request archiving of the provided URL.  Store the returned files in their domain's directory.
     """
+    singlefile, readability, screenshot = request_archive(url)
+
     singlefile_path, readability_path, readability_txt, screenshot_path = \
         get_new_archive_files(url)
 
-    singlefile, readability, screenshot = request_archive(url)
-
     # Store the single-file HTML in it's own file.
-    with singlefile_path.open('wb') as fh:
+    with singlefile_path.open('wt') as fh:
         fh.write(singlefile)
 
     if screenshot:

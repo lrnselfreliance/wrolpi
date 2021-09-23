@@ -1,9 +1,12 @@
+import json
 import pathlib
+import tempfile
 
 import mock
 
 from modules.archive.lib import new_archive
 from modules.archive.models import Archive
+from wrolpi.common import CustomJSONEncoder
 from wrolpi.test.common import TestAPI, wrap_test_db
 
 
@@ -22,6 +25,16 @@ def make_fake_request_archive(readability=True, screenshot=True):
 
 
 class TestArchive(TestAPI):
+
+    def setUp(self) -> None:
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        tmp_dir = pathlib.Path(self.tmp_dir.name)
+        self.domain_directory_patch = mock.patch('modules.archive.lib.get_domain_directory', lambda i: tmp_dir)
+        self.domain_directory_patch.start()
+
+    def tearDown(self) -> None:
+        self.domain_directory_patch.stop()
+        self.tmp_dir.cleanup()
 
     @wrap_test_db
     def test_new_archive(self):
@@ -57,5 +70,14 @@ class TestArchive(TestAPI):
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(readability=False)):
             archive = new_archive('https://example.com')
             self.assertIsInstance(archive.singlefile_path, pathlib.Path)
-            self.assertIsNone(archive.readability_path)
             self.assertIsInstance(archive.screenshot_path, pathlib.Path)
+            # Readability empty
+            self.assertIsNone(archive.readability_path)
+            self.assertIsNone(archive.readability_txt_path)
+
+    @wrap_test_db
+    def test_dict(self):
+        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
+            d = new_archive('https://example.com').dict()
+            self.assertIsInstance(d, dict)
+            json.dumps(d, cls=CustomJSONEncoder)

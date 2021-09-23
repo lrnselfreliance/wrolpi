@@ -73,9 +73,12 @@ async def take_screenshot(url: str) -> bytes:
             logger.error(f'Failed to screenshot {url}', exc_info=True)
             return b''
 
-        with open(f'{tmp_dir}/screenshot.png', 'rb') as fh:
-            png = fh.read()
-            return base64.b64encode(png)
+        try:
+            with open(f'{tmp_dir}/screenshot.png', 'rb') as fh:
+                png = fh.read()
+                return base64.b64encode(png)
+        except FileNotFoundError:
+            return b''
 
 
 @app.post('/json')

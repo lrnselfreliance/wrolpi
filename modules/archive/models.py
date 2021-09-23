@@ -29,6 +29,7 @@ class Archive(Base, ModelHelper):
 
     singlefile_path = Column(DomainPath)
     readability_path = Column(DomainPath)
+    readability_json_path = Column(DomainPath)
     readability_txt_path = Column(DomainPath)
     screenshot_path = Column(DomainPath)
 

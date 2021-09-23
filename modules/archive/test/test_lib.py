@@ -12,11 +12,11 @@ from wrolpi.test.common import TestAPI, wrap_test_db
 
 def make_fake_request_archive(readability=True, screenshot=True):
     def fake_request_archive(_):
-        singlefile = '<html>test single-file</html>'
+        singlefile = '<html>\ntest single-file\nジにてこちら\n</html>'
         r = dict(
             content='<html>test readability content</html>',
             textContent='<html>test readability textContent</html>',
-            title='test title',
+            title='ジにてこちら',
         ) if readability else None
         s = b'foo' if screenshot else None
         return singlefile, r, s
@@ -47,9 +47,19 @@ class TestArchive(TestAPI):
             self.assertIsInstance(archive1.readability_path, pathlib.Path)
             self.assertIsInstance(archive1.readability_txt_path, pathlib.Path)
             self.assertIsInstance(archive1.screenshot_path, pathlib.Path)
-            self.assertEqual(archive1.title, 'test title')
+            self.assertEqual(archive1.title, 'ジにてこちら')
             self.assertIsNotNone(archive1.url)
             self.assertIsNotNone(archive1.domain)
+
+            # The actual files were dumped and read correctly.
+            with open(archive1.singlefile_path) as fh:
+                self.assertEqual(fh.read(), '<html>\ntest single-file\nジにてこちら\n</html>')
+            with open(archive1.readability_path) as fh:
+                self.assertEqual(fh.read(), '<html>test readability content</html>')
+            with open(archive1.readability_txt_path) as fh:
+                self.assertEqual(fh.read(), '<html>test readability textContent</html>')
+            with open(archive1.readability_json_path) as fh:
+                self.assertEqual(json.load(fh), {'title': 'ジにてこちら'})
 
             archive2 = new_archive('https://example.com')
             # URL and Domain are reused.
@@ -74,6 +84,8 @@ class TestArchive(TestAPI):
             # Readability empty
             self.assertIsNone(archive.readability_path)
             self.assertIsNone(archive.readability_txt_path)
+
+            self.assertIsNone(archive.title)
 
     @wrap_test_db
     def test_dict(self):

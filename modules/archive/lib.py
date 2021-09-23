@@ -1,4 +1,5 @@
 import base64
+import json
 import pathlib
 from functools import lru_cache
 from urllib.parse import urlparse
@@ -47,12 +48,13 @@ def get_new_archive_files(url: str):
     directory = get_domain_directory(url)
     dt = now().strftime(DATETIME_FORMAT_MS)
 
-    singlefile = directory / f'{dt}.html'
-    readability = directory / f'{dt}-readability.html'
-    readability_txt = directory / f'{dt}-readability.txt'
-    screenshot_png = directory / f'{dt}.png'
+    singlefile_path = directory / f'{dt}.html'
+    readability_path = directory / f'{dt}-readability.html'
+    readability_txt_path = directory / f'{dt}-readability.txt'
+    readability_json_path = directory / f'{dt}-readability.json'
+    screenshot_path = directory / f'{dt}.png'
 
-    ret = (singlefile, readability, readability_txt, screenshot_png)
+    ret = (singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path)
 
     for path in ret:
         if path.exists():
@@ -74,6 +76,10 @@ def request_archive(url: str):
     singlefile = resp.json()['singlefile']
     readability = resp.json()['readability']
     screenshot = resp.json()['screenshot']
+
+    if not screenshot:
+        raise Exception('singlefile response was empty!')
+
     if screenshot:
         screenshot = base64.b64decode(screenshot)
     return singlefile, readability, screenshot
@@ -85,7 +91,7 @@ def new_archive(url: str):
     """
     singlefile, readability, screenshot = request_archive(url)
 
-    singlefile_path, readability_path, readability_txt, screenshot_path = \
+    singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path = \
         get_new_archive_files(url)
 
     # Store the single-file HTML in it's own file.
@@ -99,12 +105,15 @@ def new_archive(url: str):
     # Store the Readability into separate files.  This allows the user to view text-only or html articles.
     title = None
     if readability:
-        with readability_path.open('wb') as fh:
-            fh.write(readability.pop('content').encode())
-        with readability_txt.open('wb') as fh:
-            fh.write(readability.pop('textContent').encode())
-
         title = readability.get('title')
+
+        # Write the readability parts to their own files.  Write what is left after pops to the JSON file.
+        with readability_path.open('wt') as fh:
+            fh.write(readability.pop('content'))
+        with readability_txt_path.open('wt') as fh:
+            fh.write(readability.pop('textContent'))
+        with readability_json_path.open('wt') as fh:
+            fh.write(json.dumps(readability))
 
     with get_db_session(commit=True) as session:
         domain, url_ = get_or_create_domain_and_url(session, url)
@@ -112,7 +121,8 @@ def new_archive(url: str):
         archive = Archive(
             singlefile_path=singlefile_path,
             readability_path=readability_path if readability_path.is_file() else None,
-            readability_txt_path=readability_txt if readability_txt.is_file() else None,
+            readability_txt_path=readability_txt_path if readability_txt_path.is_file() else None,
+            readability_json_path=readability_json_path if readability_json_path.is_file() else None,
             screenshot_path=screenshot_path if screenshot_path.is_file() else None,
             title=title,
             archive_datetime=now(),
@@ -130,9 +140,9 @@ def new_archive(url: str):
 
 
 def get_or_create_domain_and_url(session, url):
-    '''
+    """
     Get/create the Domain for this archive.
-    '''
+    """
     domain_ = get_domain(url)
     domain = session.query(Domain).filter_by(domain=domain_).one_or_none()
     if not domain:

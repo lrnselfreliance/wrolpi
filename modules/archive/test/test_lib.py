@@ -12,7 +12,7 @@ from wrolpi.test.common import TestAPI, wrap_test_db
 
 def make_fake_request_archive(readability=True, screenshot=True):
     def fake_request_archive(_):
-        singlefile = b'<html>test single-file</html>'
+        singlefile = '<html>test single-file</html>'
         r = dict(
             content='<html>test readability content</html>',
             textContent='<html>test readability textContent</html>',

@@ -107,19 +107,7 @@ def new_archive(url: str):
         title = readability.get('title')
 
     with get_db_session(commit=True) as session:
-        # Get/create the Domain for this archive.
-        domain_ = get_domain(url)
-        domain = session.query(Domain).filter_by(domain=domain_).one_or_none()
-        if not domain:
-            domain = Domain(domain=domain_, directory=str(get_domain_directory(url)))
-            session.add(domain)
-            session.flush()
-
-        url_ = session.query(URL).filter_by(url=url).one_or_none()
-        if not url_:
-            url_ = URL(url=url, domain_id=domain.id)
-            session.add(url_)
-            session.flush()
+        domain, url_ = get_or_create_domain_and_url(session, url)
 
         archive = Archive(
             singlefile_path=singlefile_path,
@@ -139,3 +127,21 @@ def new_archive(url: str):
         url_.latest_datetime = archive.archive_datetime
 
         return archive
+
+
+def get_or_create_domain_and_url(session, url):
+    '''
+    Get/create the Domain for this archive.
+    '''
+    domain_ = get_domain(url)
+    domain = session.query(Domain).filter_by(domain=domain_).one_or_none()
+    if not domain:
+        domain = Domain(domain=domain_, directory=str(get_domain_directory(url)))
+        session.add(domain)
+        session.flush()
+    url_ = session.query(URL).filter_by(url=url).one_or_none()
+    if not url_:
+        url_ = URL(url=url, domain_id=domain.id)
+        session.add(url_)
+        session.flush()
+    return domain, url_

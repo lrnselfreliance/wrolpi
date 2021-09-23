@@ -24,7 +24,7 @@ class Archive(Base, ModelHelper):
 
     url_id = Column(Integer, ForeignKey('url.id'))
     url = relationship('URL', primaryjoin='Archive.url_id==URL.id')
-    domain_id = Column(Integer, ForeignKey('domain.id'))
+    domain_id = Column(Integer, ForeignKey('domains.id'))
     domain = relationship('Domain', primaryjoin='Archive.domain_id==Domain.id')
 
     singlefile_path = Column(DomainPath)
@@ -49,12 +49,12 @@ class URL(Base, ModelHelper):
     latest = Column(Integer, ForeignKey('archive.id'))
     latest_datetime = Column(TZDateTime)
 
-    domain_id = Column(Integer, ForeignKey('domain.id'))
+    domain_id = Column(Integer, ForeignKey('domains.id'))
     domain = relationship('Domain', primaryjoin='URL.domain_id==Domain.id')
 
 
 class Domain(Base, ModelHelper):
-    __tablename__ = 'domain'
+    __tablename__ = 'domains'  # plural to avoid conflict
     id = Column(Integer, primary_key=True)
 
     domain = Column(String)

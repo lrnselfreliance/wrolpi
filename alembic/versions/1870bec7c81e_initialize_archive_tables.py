@@ -30,7 +30,8 @@ def upgrade():
     CREATE TABLE url (
         id SERIAL PRIMARY KEY,
         domain_id INTEGER REFERENCES domains(id) NOT NULL,
-        url TEXT NOT NULL UNIQUE
+        url TEXT NOT NULL UNIQUE,
+        latest_datetime TIMESTAMPTZ
     )''')
 
     session.execute('''
@@ -46,8 +47,7 @@ def upgrade():
         archive_datetime TIMESTAMPTZ
     )''')
 
-    session.execute('ALTER TABLE url ADD COLUMN latest INTEGER REFERENCES archive(id)')
-    session.execute('ALTER TABLE url ADD COLUMN latest_datetime TIMESTAMPTZ')
+    session.execute('ALTER TABLE url ADD COLUMN latest_id INTEGER REFERENCES archive(id)')
 
 
 def downgrade():

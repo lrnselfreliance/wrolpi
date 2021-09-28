@@ -37,7 +37,24 @@ class Archive(Base, ModelHelper):
     archive_datetime = Column(TZDateTime)
 
     def __repr__(self):
-        return f'<Archive id={self.id} url={self.url.url} singlefile={self.singlefile_path}>'
+        return f'<Archive id={self.id} url_id={self.url_id} singlefile={self.singlefile_path}>'
+
+    def make_paths_relative(self):
+        if not self.domain:
+            raise Exception(f'No domain! {self}')
+
+        d = self.domain.directory
+
+        if str(self.singlefile_path).startswith('/'):
+            self.singlefile_path = self.singlefile_path.relative_to(d)
+        if str(self.readability_path).startswith('/'):
+            self.readability_path = self.readability_path.relative_to(d)
+        if str(self.readability_json_path).startswith('/'):
+            self.readability_json_path = self.readability_json_path.relative_to(d)
+        if str(self.readability_txt_path).startswith('/'):
+            self.readability_txt_path = self.readability_txt_path.relative_to(d)
+        if str(self.screenshot_path).startswith('/'):
+            self.screenshot_path = self.screenshot_path.relative_to(d)
 
 
 class URL(Base, ModelHelper):
@@ -50,7 +67,6 @@ class URL(Base, ModelHelper):
     latest_id = Column(Integer, ForeignKey('archive.id'))
     latest = relationship('Archive', primaryjoin='URL.latest_id==Archive.id')
     latest_datetime = Column(TZDateTime)
-
     domain_id = Column(Integer, ForeignKey('domains.id'))
     domain = relationship('Domain', primaryjoin='URL.domain_id==Domain.id')
 

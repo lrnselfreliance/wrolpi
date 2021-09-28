@@ -31,7 +31,7 @@ class TestArchive(TestAPI):
     def setUp(self) -> None:
         self.tmp_dir = tempfile.TemporaryDirectory()
         tmp_dir = pathlib.Path(self.tmp_dir.name)
-        self.domain_directory_patch = mock.patch('modules.archive.lib.get_domain_directory', lambda i: tmp_dir)
+        self.domain_directory_patch = mock.patch('modules.archive.lib.get_archive_directory', lambda: tmp_dir)
         self.domain_directory_patch.start()
 
     def tearDown(self) -> None:
@@ -52,6 +52,9 @@ class TestArchive(TestAPI):
             self.assertEqual(archive1.title, 'ジにてこちら')
             self.assertIsNotNone(archive1.url)
             self.assertIsNotNone(archive1.domain)
+
+            # Paths are relative
+            assert not str(archive1.singlefile_path).startswith('/'), f'{archive1.singlefile_path} starts with /'
 
             # The actual files were dumped and read correctly.
             with open(archive1.singlefile_path) as fh:

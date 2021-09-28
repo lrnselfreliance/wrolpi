@@ -16,10 +16,7 @@ class ChannelPath(types.TypeDecorator):
     impl = types.String
 
     def process_bind_param(self, value, dialect):
-        if isinstance(value, Path):
-            return value.relative_to(self.channel.directory)
-        elif value:
-            return str(value)
+        return str(value) if value else None
 
     def process_result_value(self, value, dialect):
         if value:

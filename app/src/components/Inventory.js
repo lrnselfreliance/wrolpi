@@ -17,7 +17,8 @@ import {Button, Checkbox, Dropdown, Form, Grid, Header, Portal, Segment, Tab, Ta
 import {Route} from "react-router-dom";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {toast} from 'react-semantic-toasts';
-import {enumerate, replaceNullValues} from './Common';
+import {arraysEqual, enumerate, replaceNullValues} from './Common';
+import _ from 'lodash';
 
 class InventorySummary extends React.Component {
 
@@ -318,25 +319,76 @@ class InventoryList extends React.Component {
         }
     }
 
+    handleSort = (columns) => {
+        this.props.handleSort(columns);
+    }
+
     render() {
         if (this.props.items.length === 0) {
             return <p>Add some items using the form above!</p>
         }
 
+        const {sortColumns, sortDirection} = this.props;
+
         return (
             <>
-                <Table celled>
+                <Table celled sortable>
                     <Table.Header>
                         <Table.Row>
-                            <Table.HeaderCell>Edit</Table.HeaderCell>
-                            <Table.HeaderCell>Brand</Table.HeaderCell>
-                            <Table.HeaderCell>Name</Table.HeaderCell>
-                            <Table.HeaderCell>Size</Table.HeaderCell>
-                            <Table.HeaderCell>Unit</Table.HeaderCell>
-                            <Table.HeaderCell>Count</Table.HeaderCell>
-                            <Table.HeaderCell>Subcategory</Table.HeaderCell>
-                            <Table.HeaderCell>Category</Table.HeaderCell>
-                            <Table.HeaderCell>Expiration Date</Table.HeaderCell>
+                            <Table.HeaderCell
+                                sorted={arraysEqual(sortColumns, ['id']) ? sortDirection : null}
+                                onClick={() => this.handleSort(['id'])}
+                            >
+                                Edit
+                            </Table.HeaderCell>
+                            <Table.HeaderCell
+                                sorted={arraysEqual(sortColumns, ['brand', 'name']) ? sortDirection : null}
+                                onClick={() => this.handleSort(['brand', 'name'])}
+                            >
+                                Brand
+                            </Table.HeaderCell>
+                            <Table.HeaderCell
+                                sorted={arraysEqual(sortColumns, ['name', 'brand']) ? sortDirection : null}
+                                onClick={() => this.handleSort(['name', 'brand'])}
+                            >
+                                Name
+                            </Table.HeaderCell>
+                            <Table.HeaderCell
+                                sorted={arraysEqual(sortColumns, ['size']) ? sortDirection : null}
+                                onClick={() => this.handleSort(['size'])}
+                            >
+                                Size
+                            </Table.HeaderCell>
+                            <Table.HeaderCell
+                                sorted={arraysEqual(sortColumns, ['unit']) ? sortDirection : null}
+                                onClick={() => this.handleSort(['unit'])}
+                            >
+                                Unit
+                            </Table.HeaderCell>
+                            <Table.HeaderCell
+                                sorted={arraysEqual(sortColumns, ['count']) ? sortDirection : null}
+                                onClick={() => this.handleSort(['count'])}
+                            >
+                                Count
+                            </Table.HeaderCell>
+                            <Table.HeaderCell
+                                sorted={arraysEqual(sortColumns, ['subcategory', 'category']) ? sortDirection : null}
+                                onClick={() => this.handleSort(['subcategory', 'category'])}
+                            >
+                                Subcategory
+                            </Table.HeaderCell>
+                            <Table.HeaderCell
+                                sorted={arraysEqual(sortColumns, ['category', 'subcategory']) ? sortDirection : null}
+                                onClick={() => this.handleSort(['category', 'subcategory'])}
+                            >
+                                Category
+                            </Table.HeaderCell>
+                            <Table.HeaderCell
+                                sorted={arraysEqual(sortColumns, ['expiration_date']) ? sortDirection : null}
+                                onClick={() => this.handleSort(['expiration_date'])}
+                            >
+                                Expiration Date
+                            </Table.HeaderCell>
                         </Table.Row>
                     </Table.Header>
                     <Table.Body>
@@ -849,6 +901,7 @@ class InventoryAddList extends React.Component {
         this.state = {
             inventory: null,
             categories: [],
+            sort: {columns: null, direction: 'ascending'},
             items: [],
             brand: '',
             name: '',
@@ -934,6 +987,18 @@ class InventoryAddList extends React.Component {
         await this.brandRef.current.fetchBrands();
     }
 
+    handleSort = (newColumns) => {
+        let sorted = _.sortBy(this.state.items, newColumns);
+        let {columns, direction} = this.state.sort;
+        if (arraysEqual(columns, newColumns)) {
+            direction = direction === 'ascending' ? 'descending' : 'ascending';
+        }
+        if (direction === 'descending') {
+            sorted = sorted.reverse();
+        }
+        this.setState({items: sorted, sort: {columns: newColumns, direction: direction}});
+    }
+
     render() {
         this.categoriesRef = React.createRef();
         this.brandRef = React.createRef();
@@ -1012,7 +1077,13 @@ class InventoryAddList extends React.Component {
                     </Form.Group>
                 </Form>
                 <h4>Items in: {this.state.inventory ? this.state.inventory.name : ''}</h4>
-                <InventoryList items={this.state.items} fetchItems={this.fetchItems}/>
+                <InventoryList
+                    items={this.state.items}
+                    fetchItems={this.fetchItems}
+                    handleSort={this.handleSort}
+                    sortColumns={this.state.sort.columns}
+                    sortDirection={this.state.sort.direction}
+                />
             </>
         )
     }

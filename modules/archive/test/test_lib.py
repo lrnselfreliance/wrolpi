@@ -53,9 +53,6 @@ class TestArchive(TestAPI):
             self.assertIsNotNone(archive1.url)
             self.assertIsNotNone(archive1.domain)
 
-            # Paths are relative
-            assert not str(archive1.singlefile_path).startswith('/'), f'{archive1.singlefile_path} starts with /'
-
             # The actual files were dumped and read correctly.
             with open(archive1.singlefile_path) as fh:
                 self.assertEqual(fh.read(), '<html>\ntest single-file\nジにてこちら\n</html>')
@@ -126,7 +123,7 @@ class TestArchive(TestAPI):
                 latest_id=1,
                 latest=dict(singlefile_path=pathlib.Path('foo')),
                 domain_id=1,
-                domain=dict(directory=self.tmp_dir.name, domain='wrolpi.org:443'),
+                domain=dict(directory=f'{self.tmp_dir.name}/wrolpi.org:443', domain='wrolpi.org:443'),
             )
         )
 
@@ -171,3 +168,13 @@ class TestArchive(TestAPI):
         # Last two of this domain, but there is only 1.
         urls = get_urls(2, 2, 'wrolpi.org')
         self.assertEqual(['https://wrolpi.org/three'], [i['url'] for i in urls])
+
+    @wrap_test_db
+    def test_validate_paths(self):
+        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
+            archive = new_archive('https://example.com')
+            try:
+                with get_db_session(commit=True):
+                    archive.singlefile_path = 'asdf'
+            except ValueError as e:
+                self.assertIn('relative', str(e), f'Relative path error was not raised')

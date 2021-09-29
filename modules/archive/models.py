@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import Column, Integer, String, ForeignKey, types
+from sqlalchemy import Column, Integer, String, ForeignKey, types, event
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
@@ -39,22 +39,33 @@ class Archive(Base, ModelHelper):
     def __repr__(self):
         return f'<Archive id={self.id} url_id={self.url_id} singlefile={self.singlefile_path}>'
 
-    def make_paths_relative(self):
+    def validate_paths(self):
+        """
+        Verify that all paths are relative to my Domain.
+        """
         if not self.domain:
-            raise Exception(f'No domain! {self}')
+            return
 
         d = self.domain.directory
+        paths = {'singlefile_path', 'readability_path', 'readability_json_path', 'readability_txt_path',
+                 'screenshot_path'}
+        for path in paths:
+            value: Path = getattr(self, path)
+            if isinstance(value, str):
+                value = Path(value)
 
-        if str(self.singlefile_path).startswith('/'):
-            self.singlefile_path = self.singlefile_path.relative_to(d)
-        if str(self.readability_path).startswith('/'):
-            self.readability_path = self.readability_path.relative_to(d)
-        if str(self.readability_json_path).startswith('/'):
-            self.readability_json_path = self.readability_json_path.relative_to(d)
-        if str(self.readability_txt_path).startswith('/'):
-            self.readability_txt_path = self.readability_txt_path.relative_to(d)
-        if str(self.screenshot_path).startswith('/'):
-            self.screenshot_path = self.screenshot_path.relative_to(d)
+            if value and not value.is_relative_to(d):
+                raise ValueError(f'Archive path {path} is not relative to domain {self.domain.directory}')
+
+
+@event.listens_for(Archive, 'before_insert')
+def archive_before_insert(mapper, connector, target: Archive):
+    target.validate_paths()
+
+
+@event.listens_for(Archive, 'before_update')
+def archive_before_update(mapper, connector, target: Archive):
+    target.validate_paths()
 
 
 class URL(Base, ModelHelper):

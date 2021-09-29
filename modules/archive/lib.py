@@ -132,8 +132,6 @@ def new_archive(url: str):
         )
         session.add(archive)
         session.flush()
-        archive.make_paths_relative()
-
         # Update the latest for easy viewing.
         url_.latest_id = archive.id
         url_.latest_datetime = archive.archive_datetime

@@ -4,7 +4,7 @@ import tempfile
 
 import mock
 
-from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls
+from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count
 from modules.archive.models import Archive
 from wrolpi.common import CustomJSONEncoder
 from wrolpi.db import get_db_session
@@ -178,3 +178,18 @@ class TestArchive(TestAPI):
                     archive.singlefile_path = 'asdf'
             except ValueError as e:
                 self.assertIn('relative', str(e), f'Relative path error was not raised')
+
+    @wrap_test_db
+    def test_get_url_count(self):
+        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
+            self.assertRaises(InvalidDomain, get_url_count, 'bad domain')
+
+            self.assertEqual(get_url_count(), 0)
+            new_archive('https://example.com')
+            self.assertEqual(get_url_count(), 1)
+            new_archive('https://example.com')
+            self.assertEqual(get_url_count(), 1)
+            new_archive('https://example.org')
+            self.assertEqual(get_url_count(), 2)
+            new_archive('https://example.org')
+            self.assertEqual(get_url_count('example.org'), 1)

@@ -47,4 +47,6 @@ async def retrieve_urls(request: Request, data: dict):
         return response.json(dict(error='bad request'), HTTPStatus.BAD_REQUEST)
 
     urls = lib.get_urls(limit, offset, domain)
-    return response.json(urls)
+    count = lib.get_url_count(domain)
+    ret = dict(urls=urls, totals=dict(urls=count))
+    return response.json(ret)

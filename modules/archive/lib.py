@@ -8,7 +8,7 @@ import requests
 
 from modules.archive.models import URL, Domain, Archive
 from wrolpi.common import get_media_directory, logger, now
-from wrolpi.db import get_db_session
+from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import InvalidDomain
 from wrolpi.vars import DATETIME_FORMAT_MS
 
@@ -22,7 +22,7 @@ def get_archive_directory() -> pathlib.Path:
     return get_media_directory() / 'archive'
 
 
-def get_domain(url):
+def extract_domain(url):
     parsed = urlparse(url)
     return parsed.netloc
 
@@ -31,7 +31,7 @@ def get_domain_directory(url: str) -> pathlib.Path:
     """
     Get the archive directory for a particular domain.
     """
-    domain = get_domain(url)
+    domain = extract_domain(url)
     directory = get_archive_directory() / domain
     if directory.is_dir():
         return directory
@@ -143,7 +143,7 @@ def get_or_create_domain_and_url(session, url):
     """
     Get/create the Domain for this archive.
     """
-    domain_ = get_domain(url)
+    domain_ = extract_domain(url)
     domain = session.query(Domain).filter_by(domain=domain_).one_or_none()
     if not domain:
         domain = Domain(domain=domain_, directory=str(get_domain_directory(url)))
@@ -157,12 +157,17 @@ def get_or_create_domain_and_url(session, url):
     return domain, url_
 
 
+def get_domain(session, domain: str) -> Domain:
+    domain_ = session.query(Domain).filter_by(domain=domain).one_or_none()
+    if not domain_:
+        raise InvalidDomain(f'Invalid domain: {domain}')
+    return domain_
+
+
 def get_urls(limit: int = 20, offset: int = 0, domain: str = ''):
     with get_db_session() as session:
         if domain:
-            domain_ = session.query(Domain).filter_by(domain=domain).one_or_none()
-            if not domain_:
-                raise InvalidDomain(f'Invalid domain: {domain}')
+            domain_ = get_domain(session, domain)
             urls = domain_.urls[offset:offset + limit]
         else:
             urls = session.query(URL) \
@@ -172,3 +177,23 @@ def get_urls(limit: int = 20, offset: int = 0, domain: str = ''):
                 .all()
         urls = [i.dict() for i in urls]
         return urls
+
+
+def get_url_count(domain: str = '') -> int:
+    """
+    Get count of all URLs.  Or, get count of all attached to a specific domain string.
+    """
+    with get_db_session() as session:
+        domain_id = None
+        if domain:
+            domain_id = get_domain(session, domain).id
+
+    with get_db_curs() as curs:
+        stmt = 'SELECT COUNT(*) FROM url'
+        params = {}
+        if domain_id:
+            stmt = f'{stmt} WHERE domain_id = %(domain_id)s'
+            params['domain_id'] = domain_id
+        curs.execute(stmt, params)
+        count = int(curs.fetchone()[0])
+        return count

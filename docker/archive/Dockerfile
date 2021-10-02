@@ -10,7 +10,7 @@ RUN python3 -m ensurepip
 RUN pip3 install --no-cache --upgrade pip setuptools
 
 # Install the Python wrapper and it's requirements.
-COPY archive /app
+COPY docker/archive /app
 RUN pip3 install -r /app/requirements.txt
 
 # Install Readability too

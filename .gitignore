@@ -116,8 +116,8 @@ config/inventories.yaml
 
 app/package-lock.json
 modules/node_modules/
-archive/node_modules/
-archive/package-lock.json
+docker/archive/node_modules/
+docker/archive/package-lock.json
 
 # open street map files
 *.pbf

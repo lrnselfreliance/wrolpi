@@ -30,7 +30,7 @@ services:
   archive:
     build:
       context: .
-      dockerfile: archive/Dockerfile
+      dockerfile: docker/archive/Dockerfile
     ports:
       - '8083:8080'
     healthcheck:

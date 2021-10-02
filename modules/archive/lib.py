@@ -104,10 +104,14 @@ def new_archive(url: str, sync: bool = False):
             url_id=url_.id,
             domain_id=domain.id,
             status='pending',
+            archive_datetime=now(),
         )
         session.add(archive)
         session.flush()
         archive_id = archive.id
+
+        url_.latest_id = archive_id
+        url_.latest_datetime = now()
 
     if sync:
         return _do_archive(url, archive_id)
@@ -207,7 +211,7 @@ def get_urls(limit: int = 20, offset: int = 0, domain: str = ''):
             urls = domain_.urls[offset:offset + limit]
         else:
             urls = session.query(URL) \
-                .order_by(URL.latest_datetime) \
+                .order_by(URL.latest_datetime.desc()) \
                 .limit(limit) \
                 .offset(offset) \
                 .all()

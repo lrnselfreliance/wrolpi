@@ -4,7 +4,7 @@ import tempfile
 
 import mock
 
-from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count, _do_archive
+from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count
 from modules.archive.models import Archive
 from wrolpi.db import get_db_session
 from wrolpi.errors import InvalidDomain
@@ -61,7 +61,7 @@ class TestArchive(TestAPI):
             with open(archive1.readability_txt_path) as fh:
                 self.assertEqual(fh.read(), '<html>test readability textContent</html>')
             with open(archive1.readability_json_path) as fh:
-                self.assertEqual(json.load(fh), {'title': 'ジにてこちら'})
+                self.assertEqual(json.load(fh), {'title': 'ジにてこちら', 'url': 'https://example.com'})
 
             archive2 = new_archive('https://example.com')
             # URL and Domain are reused.
@@ -101,7 +101,7 @@ class TestArchive(TestAPI):
         with get_db_session(commit=True) as session:
             domain, url = get_or_create_domain_and_url(session, 'https://wrolpi.org:443')
             archive = Archive(
-                singlefile_path='foo',
+                singlefile_path=f'{self.tmp_dir.name}/wrolpi.org:443/foo',
                 title='bar',
                 url_id=url.id,
                 domain_id=domain.id,
@@ -135,18 +135,19 @@ class TestArchive(TestAPI):
 
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(readability=False)):
             # One set of duplicate URLs
-            new_archive('https://wrolpi.org/one')
-            new_archive('https://wrolpi.org/one')
+            new_archive('https://wrolpi.org/one', sync=True)
+            new_archive('https://wrolpi.org/one', sync=True)
 
-            new_archive('https://wrolpi.org/two')
-            new_archive('https://wrolpi.org/three')
-            new_archive('https://example.com/one')
+            # Unique URLs
+            new_archive('https://wrolpi.org/two', sync=True)
+            new_archive('https://wrolpi.org/three', sync=True)
+            new_archive('https://example.com/one', sync=True)
 
         urls = get_urls()
         # There are only 4 because one set is duplicate.
         self.assertEqual(len(urls), 4)
         self.assertEqual(
-            ['https://wrolpi.org/one', 'https://wrolpi.org/two', 'https://wrolpi.org/three', 'https://example.com/one'],
+            ['https://example.com/one', 'https://wrolpi.org/three', 'https://wrolpi.org/two', 'https://wrolpi.org/one'],
             [i['url'] for i in urls],
         )
 
@@ -160,11 +161,11 @@ class TestArchive(TestAPI):
 
         # Limit to 3, but with an offset of 2 there are only 2.
         urls = get_urls(3, 2)
-        self.assertEqual(['https://wrolpi.org/three', 'https://example.com/one'], [i['url'] for i in urls])
+        self.assertEqual(['https://wrolpi.org/two', 'https://wrolpi.org/one'], [i['url'] for i in urls])
 
         # First two of this domain.
         urls = get_urls(2, 0, 'wrolpi.org')
-        self.assertEqual(['https://wrolpi.org/one', 'https://wrolpi.org/two'], [i['url'] for i in urls])
+        self.assertEqual(['https://wrolpi.org/two', 'https://wrolpi.org/one'], [i['url'] for i in urls])
         # Last two of this domain, but there is only 1.
         urls = get_urls(2, 2, 'wrolpi.org')
         self.assertEqual(['https://wrolpi.org/three'], [i['url'] for i in urls])

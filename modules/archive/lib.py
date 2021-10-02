@@ -150,8 +150,12 @@ def _do_archive(url: str, archive_id: int):
                 fh.write(readability.pop('content'))
             with readability_txt_path.open('wt') as fh:
                 fh.write(readability.pop('textContent'))
-            with readability_json_path.open('wt') as fh:
-                fh.write(json.dumps(readability))
+
+        # Always write a JSON file that contains at least the URL.
+        readability = readability or {}
+        readability['url'] = url
+        with readability_json_path.open('wt') as fh:
+            fh.write(json.dumps(readability))
 
         with get_db_session(commit=True) as session:
             archive = session.query(Archive).filter_by(id=archive_id).one()
@@ -160,7 +164,7 @@ def _do_archive(url: str, archive_id: int):
             archive.title = title
             archive.singlefile_path = singlefile_path
             archive.readability_path = readability_path if readability_path.is_file() else None
-            archive.readability_json_path = readability_json_path if readability_json_path.is_file() else None
+            archive.readability_json_path = readability_json_path
             archive.readability_txt_path = readability_txt_path if readability_txt_path.is_file() else None
             archive.screenshot_path = screenshot_path if screenshot_path.is_file() else None
             # Update the latest for easy viewing.
@@ -209,6 +213,7 @@ def get_urls(limit: int = 20, offset: int = 0, domain: str = ''):
         if domain:
             domain_ = get_domain(session, domain)
             urls = domain_.urls[offset:offset + limit]
+            urls = sorted(urls, key=lambda i: i.latest_datetime)[::-1]
         else:
             urls = session.query(URL) \
                 .order_by(URL.latest_datetime.desc()) \

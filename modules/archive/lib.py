@@ -103,6 +103,7 @@ def new_archive(url: str, sync: bool = False):
         archive = Archive(
             url_id=url_.id,
             domain_id=domain.id,
+            status='pending',
         )
         session.add(archive)
         session.flush()
@@ -122,45 +123,52 @@ def _do_archive(url: str, archive_id: int):
     Perform the real archive request to the archiving service.  Store the resulting data into files.  Update the Archive
     in the DB.
     """
-    singlefile, readability, screenshot = request_archive(url)
+    try:
+        singlefile, readability, screenshot = request_archive(url)
 
-    singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path = \
-        get_new_archive_files(url)
+        singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path = \
+            get_new_archive_files(url)
 
-    # Store the single-file HTML in it's own file.
-    with singlefile_path.open('wt') as fh:
-        fh.write(singlefile)
-    if screenshot:
-        with screenshot_path.open('wb') as fh:
-            fh.write(screenshot)
+        # Store the single-file HTML in it's own file.
+        with singlefile_path.open('wt') as fh:
+            fh.write(singlefile)
+        if screenshot:
+            with screenshot_path.open('wb') as fh:
+                fh.write(screenshot)
 
-    # Store the Readability into separate files.  This allows the user to view text-only or html articles.
-    title = None
-    if readability:
-        title = readability.get('title')
+        # Store the Readability into separate files.  This allows the user to view text-only or html articles.
+        title = None
+        if readability:
+            title = readability.get('title')
 
-        # Write the readability parts to their own files.  Write what is left after pops to the JSON file.
-        with readability_path.open('wt') as fh:
-            fh.write(readability.pop('content'))
-        with readability_txt_path.open('wt') as fh:
-            fh.write(readability.pop('textContent'))
-        with readability_json_path.open('wt') as fh:
-            fh.write(json.dumps(readability))
+            # Write the readability parts to their own files.  Write what is left after pops to the JSON file.
+            with readability_path.open('wt') as fh:
+                fh.write(readability.pop('content'))
+            with readability_txt_path.open('wt') as fh:
+                fh.write(readability.pop('textContent'))
+            with readability_json_path.open('wt') as fh:
+                fh.write(json.dumps(readability))
 
-    with get_db_session(commit=True) as session:
-        archive = session.query(Archive).filter_by(id=archive_id).one()
-        archive.archive_datetime = now()
-        archive.title = title
-        archive.singlefile_path = singlefile_path
-        archive.readability_path = readability_path if readability_path.is_file() else None
-        archive.readability_json_path = readability_json_path if readability_json_path.is_file() else None
-        archive.readability_txt_path = readability_txt_path if readability_txt_path.is_file() else None
-        archive.screenshot_path = screenshot_path if screenshot_path.is_file() else None
-        # Update the latest for easy viewing.
-        archive.url.latest_id = archive.id
-        archive.url.latest_datetime = archive.archive_datetime
+        with get_db_session(commit=True) as session:
+            archive = session.query(Archive).filter_by(id=archive_id).one()
+            archive.status = 'complete'
+            archive.archive_datetime = now()
+            archive.title = title
+            archive.singlefile_path = singlefile_path
+            archive.readability_path = readability_path if readability_path.is_file() else None
+            archive.readability_json_path = readability_json_path if readability_json_path.is_file() else None
+            archive.readability_txt_path = readability_txt_path if readability_txt_path.is_file() else None
+            archive.screenshot_path = screenshot_path if screenshot_path.is_file() else None
+            # Update the latest for easy viewing.
+            archive.url.latest_id = archive.id
+            archive.url.latest_datetime = archive.archive_datetime
 
-    return archive
+        return archive
+    except Exception:
+        with get_db_session(commit=True) as session:
+            archive = session.query(Archive).filter_by(id=archive_id).one()
+            archive.status = 'failed'
+        raise
 
 
 async def do_archive(url: str, archive_id: int):

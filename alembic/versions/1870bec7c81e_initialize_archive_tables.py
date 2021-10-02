@@ -45,7 +45,8 @@ def upgrade():
         readability_json_path TEXT,
         screenshot_path TEXT,
         title TEXT,
-        archive_datetime TIMESTAMPTZ
+        archive_datetime TIMESTAMPTZ,
+        status TEXT
     )''')
 
     session.execute('ALTER TABLE url ADD COLUMN latest_id INTEGER REFERENCES archive(id)')

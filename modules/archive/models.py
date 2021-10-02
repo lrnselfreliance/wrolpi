@@ -35,6 +35,7 @@ class Archive(Base, ModelHelper):
 
     title = Column(String)
     archive_datetime = Column(TZDateTime)
+    status = Column(String)
 
     def __repr__(self):
         return f'<Archive id={self.id} url_id={self.url_id} singlefile={self.singlefile_path}>'

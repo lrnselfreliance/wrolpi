@@ -11,6 +11,7 @@ import PIL
 from PIL import Image
 from sqlalchemy.orm import Session
 
+from wrolpi import before_startup
 from wrolpi.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify, chunks, get_media_directory, \
     get_absolute_media_path, minimize_dict
 from wrolpi.db import get_db_session, get_db_curs
@@ -58,6 +59,7 @@ class ConfigError(Exception):
     pass
 
 
+@before_startup
 def import_settings_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
     try:

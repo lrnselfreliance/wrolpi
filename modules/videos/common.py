@@ -99,8 +99,6 @@ def import_settings_config():
                     videos = session.query(Video).filter(Video.source_id.in_(favorites.keys()))
                     for video in videos:
                         video.favorite = favorites[video.source_id]['favorite']
-
-        return 0
     except Exception:
         logger.warning('Failed to load channels config!', exc_info=True)
 

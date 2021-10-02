@@ -1,27 +1,3 @@
-"""
-This module contains the Sanic routes, as well as functions necessary to retrieve video files.  This module also
-contains functions that will search the file structure for video files, as well as cleanup the DB video records.
-
-All paths in the DB are relative.  A Channel's directory is relative to the video_root_directory.  A Video's path (as
-well as its meta files) is relative to its Channel's directory.
-
-    Example:
-        Real Paths:
-            video_root_directory = '/media/something'
-            channel['directory'] = '/media/something/the channel'
-            video['video_path'] = '/media/something/the channel/foo.mp4'
-            video['poster_path'] = '/media/something/the channel/foo.jpg'
-            video['video_path'] = '/media/something/the channel/subdir/bar.mp4'
-
-        The same paths in the DB:
-            channel['directory'] = 'the channel'
-            video['video_path'] = 'foo.mp4'
-            video['poster_path'] = 'foo.jpg'
-            video['video_path'] = 'subdir/bar.mp4'
-
-Relative DB paths allow files to be moved without having to rebuild the entire collection.  It also ensures that when
-a file is moved, it will not be duplicated in the DB.
-"""
 import asyncio
 import random
 from functools import wraps
@@ -29,9 +5,10 @@ from http import HTTPStatus
 from multiprocessing import Event
 
 import requests
-from sanic import Blueprint, response, Sanic
+from sanic import Blueprint, response
 from sanic.request import Request
 
+from wrolpi import before_startup
 from wrolpi.common import create_websocket_feed, get_sanic_url, \
     wrol_mode_check, ProgressReporter, get_config
 from wrolpi.common import logger
@@ -216,8 +193,8 @@ async def _periodic_download(min_download_frequency: int, max_download_frequency
     asyncio.ensure_future(_periodic_download(min_download_frequency, max_download_frequency))
 
 
-@content_bp.listener('after_server_start')
-async def download(app: Sanic, loop):
+@before_startup
+def start_periodic_download():
     """
     Periodically download the videos.
     """

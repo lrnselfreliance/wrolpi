@@ -39,9 +39,10 @@ def upgrade():
         id SERIAL PRIMARY KEY,
         url_id INTEGER REFERENCES url(id) ON DELETE CASCADE NOT NULL,
         domain_id INTEGER REFERENCES domains(id) ON DELETE CASCADE NOT NULL,
-        singlefile_path TEXT NOT NULL,
+        singlefile_path TEXT,
         readability_path TEXT,
         readability_txt_path TEXT,
+        readability_json_path TEXT,
         screenshot_path TEXT,
         title TEXT,
         archive_datetime TIMESTAMPTZ

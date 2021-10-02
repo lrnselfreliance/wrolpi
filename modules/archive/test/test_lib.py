@@ -4,11 +4,11 @@ import tempfile
 
 import mock
 
-from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count
+from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count, _do_archive
 from modules.archive.models import Archive
-from wrolpi.root_api import CustomJSONEncoder
 from wrolpi.db import get_db_session
 from wrolpi.errors import InvalidDomain
+from wrolpi.root_api import CustomJSONEncoder
 from wrolpi.test.common import TestAPI, wrap_test_db
 
 
@@ -41,7 +41,7 @@ class TestArchive(TestAPI):
     @wrap_test_db
     def test_new_archive(self):
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-            archive1 = new_archive('https://example.com')
+            archive1 = new_archive('https://example.com', sync=True)
             # Everything is filled out.
             self.assertIsInstance(archive1, Archive)
             self.assertIsNotNone(archive1.archive_datetime)
@@ -71,7 +71,7 @@ class TestArchive(TestAPI):
     @wrap_test_db
     def test_no_screenshot(self):
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(screenshot=False)):
-            archive = new_archive('https://example.com')
+            archive = new_archive('https://example.com', sync=True)
             self.assertIsInstance(archive.singlefile_path, pathlib.Path)
             self.assertIsInstance(archive.readability_path, pathlib.Path)
             # Screenshot was empty
@@ -80,7 +80,7 @@ class TestArchive(TestAPI):
     @wrap_test_db
     def test_no_readability(self):
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(readability=False)):
-            archive = new_archive('https://example.com')
+            archive = new_archive('https://example.com', sync=True)
             self.assertIsInstance(archive.singlefile_path, pathlib.Path)
             self.assertIsInstance(archive.screenshot_path, pathlib.Path)
             # Readability empty
@@ -92,7 +92,7 @@ class TestArchive(TestAPI):
     @wrap_test_db
     def test_dict(self):
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-            d = new_archive('https://example.com').dict()
+            d = new_archive('https://example.com', sync=True).dict()
             self.assertIsInstance(d, dict)
             json.dumps(d, cls=CustomJSONEncoder)
 

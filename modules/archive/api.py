@@ -21,7 +21,7 @@ logger = logger.getChild(__name__)
     'Archive a website',
     PostArchiveRequest,
 )
-async def post_archive(request: Request, data: dict):
+async def post_archive(_: Request, data: dict):
     url = data['url']
     try:
         lib.new_archive(url)
@@ -37,7 +37,7 @@ async def post_archive(request: Request, data: dict):
     RetrieveUrlsRequest,
     RetrieveURLsResponse,
 )
-async def retrieve_urls(request: Request, data: dict):
+async def retrieve_urls(_: Request, data: dict):
     try:
         limit = int(data.get('limit', 20))
         offset = int(data.get('offset', 0))

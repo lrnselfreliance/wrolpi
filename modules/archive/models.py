@@ -83,7 +83,7 @@ class URL(Base, ModelHelper):
 
     def dict(self) -> dict:
         d = super().dict()
-        d['latest'] = self.latest.dict()
+        d['latest'] = self.latest.dict() if self.latest else None
         d['domain'] = self.domain.dict()
         d['archives'] = [i.dict() for i in self.archives]
         return d

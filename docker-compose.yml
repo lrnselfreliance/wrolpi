@@ -28,9 +28,7 @@ services:
     user: "${UID-1000}:${GID-1000}"
 
   archive:
-    build:
-      context: .
-      dockerfile: docker/archive/Dockerfile
+    image: lrnselfreliance/archive
     ports:
       - '8083:8080'
     healthcheck:

@@ -12,7 +12,7 @@ from PIL import Image
 from sqlalchemy.orm import Session
 
 from wrolpi.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify, chunks, get_media_directory, \
-    get_absolute_media_path
+    get_absolute_media_path, minimize_dict
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict
@@ -311,15 +311,6 @@ def get_matching_directories(path: Union[str, Path]) -> List[str]:
     return paths
 
 
-def make_media_directory(path: str):
-    """
-    Make a directory relative within the media directory.
-    """
-    media_dir = get_media_directory()
-    path = media_dir / str(path)
-    path.mkdir(parents=True)
-
-
 def replace_extension(path: pathlib.Path, new_ext) -> pathlib.Path:
     """Swap the extension of a file's path.
 
@@ -514,13 +505,6 @@ def update_view_count(channel_id: int):
             for id_, view_count in chunk:
                 stmt = 'UPDATE video SET view_count = %s WHERE source_id=%s AND channel_id=%s'
                 curs.execute(stmt, (view_count, id_, channel_id))
-
-
-def minimize_dict(d: dict, keys: Iterable) -> dict:
-    """
-    Return a new dictionary that contains only the keys provided.
-    """
-    return {k: d[k] for k in set(keys) & d.keys()}
 
 
 minimize_channel = partial(minimize_dict, keys=MINIMUM_CHANNEL_KEYS)

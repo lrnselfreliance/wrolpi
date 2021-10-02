@@ -3,9 +3,9 @@ from http import HTTPStatus
 from sanic import response
 from sanic.request import Request
 
-from wrolpi.common import json_response, run_after, remove_dict_value_whitespace
+from wrolpi.common import run_after, remove_dict_value_whitespace
 from wrolpi.errors import ValidationError
-from wrolpi.root_api import get_blueprint
+from wrolpi.root_api import get_blueprint, json_response
 from wrolpi.schema import validate_doc
 from .common import get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
     save_inventories_file

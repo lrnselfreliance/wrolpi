@@ -1,11 +1,11 @@
-from typing import List
+from typing import List, Dict
 
 from sqlalchemy.orm.exc import NoResultFound
 
-from wrolpi.common import sanitize_link, run_after, get_relative_to_media_directory
+from wrolpi.common import sanitize_link, run_after, get_relative_to_media_directory, make_media_directory
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
-from ..common import make_media_directory, check_for_channel_conflicts
+from ..common import check_for_channel_conflicts
 from ..lib import save_channels_config
 from ..models import Channel
 
@@ -19,18 +19,36 @@ async def get_minimal_channels() -> List[dict]:
     """
     with get_db_curs() as curs:
         # Get all channels, even if they don't have videos.
-        query = '''
+        stmt = '''
             SELECT
                 c.id, name, link, directory, url, download_frequency, info_date, next_download
             FROM
                 channel AS c
             ORDER BY LOWER(name)
         '''
-        curs.execute(query)
+        curs.execute(stmt)
         channels = list(map(dict, curs.fetchall()))
 
-        # Add video counts to all channels
-        query = '''
+    video_counts = await get_channels_video_count()
+
+    for channel in channels:
+        channel_id = channel['id']
+        channel['video_count'] = video_counts[channel_id]
+
+    return channels
+
+
+async def get_channels_video_count() -> Dict[int, int]:
+    """
+    Add video counts to all channels
+    """
+    with get_db_curs() as curs:
+        stmt = 'SELECT id FROM channel'
+        curs.execute(stmt)
+        # Get all channel IDs, start them with a count of 0.
+        video_counts = {int(i['id']): 0 for i in curs.fetchall()}
+
+        stmt = '''
             SELECT
                 c.id, COUNT(v.id) AS video_count
             FROM
@@ -40,18 +58,10 @@ async def get_minimal_channels() -> List[dict]:
                 v.video_path IS NOT NULL
             GROUP BY 1
         '''
-        curs.execute(query)
-        video_counts = {i['id']: i['video_count'] for i in curs.fetchall()}
-
-        for channel in channels:
-            channel_id = channel['id']
-            try:
-                channel['video_count'] = video_counts[channel_id]
-            except KeyError:
-                # No videos for this channel
-                channel['video_count'] = 0
-
-    return channels
+        curs.execute(stmt)
+        # Replace all the counts of those channels with videos.
+        video_counts.update({int(i['id']): int(i['video_count']) for i in curs.fetchall()})
+        return video_counts
 
 
 @run_after(save_channels_config)

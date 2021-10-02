@@ -6,7 +6,7 @@ import mock
 
 from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count
 from modules.archive.models import Archive
-from wrolpi.common import CustomJSONEncoder
+from wrolpi.root_api import CustomJSONEncoder
 from wrolpi.db import get_db_session
 from wrolpi.errors import InvalidDomain
 from wrolpi.test.common import TestAPI, wrap_test_db

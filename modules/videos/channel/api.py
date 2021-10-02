@@ -4,11 +4,11 @@ from http import HTTPStatus
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from wrolpi.common import logger, json_response, wrol_mode_check, get_relative_to_media_directory
+from wrolpi.common import logger, wrol_mode_check, get_relative_to_media_directory, make_media_directory
+from wrolpi.root_api import json_response
 from wrolpi.errors import UnknownDirectory
 from wrolpi.schema import validate_doc
 from .lib import get_minimal_channels, delete_channel, update_channel, get_channel, create_channel
-from ..common import make_media_directory
 from ..schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
     ChannelPostResponse, ChannelPutRequest, SuccessResponse
 

@@ -1,6 +1,5 @@
 import asyncio
 import collections
-import glob
 import inspect
 import json
 import logging
@@ -10,28 +9,25 @@ import re
 import string
 from copy import deepcopy
 from datetime import datetime, date, timezone
-from decimal import Decimal
 from functools import wraps, lru_cache
 from itertools import islice
 from multiprocessing import Event, Queue
 from pathlib import Path
-from typing import Union, Callable, Tuple, Dict, Mapping, List
+from typing import Union, Callable, Tuple, Dict, Mapping, List, Iterable
 from urllib.parse import urlunsplit
 
 import pytz
 import yaml
 from cachetools import cached, TTLCache
-from sanic import Blueprint, response
+from sanic import Blueprint
 from sanic.request import Request
-from sanic.response import HTTPResponse
-from sanic_openapi.doc import Field
 from sqlalchemy import types
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
 
 from wrolpi.errors import WROLModeEnabled, InvalidTimezone, UnknownDirectory
 from wrolpi.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT, \
-    DEFAULT_TIMEZONE_STR, PROJECT_DIR, MODULES_DIR
+    DEFAULT_TIMEZONE_STR, PROJECT_DIR
 
 logger = logging.getLogger(__name__)
 ch = logging.StreamHandler()
@@ -413,45 +409,6 @@ def save_settings_config(config=None):
         yaml.dump(new_config, fh)
 
 
-class CustomJSONEncoder(json.JSONEncoder):
-
-    def default(self, obj):
-        if isinstance(obj, datetime):
-            return obj.timestamp()
-        elif isinstance(obj, date):
-            return datetime(obj.year, obj.month, obj.day).timestamp()
-        elif isinstance(obj, Decimal):
-            return str(obj)
-        elif isinstance(obj, Base):
-            if hasattr(obj, 'dict'):
-                return obj.dict()
-        elif isinstance(obj, Path):
-            return str(obj)
-        return super(CustomJSONEncoder, self).default(obj)
-
-
-@wraps(response.json)
-def json_response(*a, **kwargs) -> HTTPResponse:
-    """
-    Handles encoding date/datetime in JSON.
-    """
-    resp = response.json(*a, **kwargs, cls=CustomJSONEncoder, dumps=json.dumps)
-    return resp
-
-
-class Trinary(Field):
-    """
-    A field for API docs.  Can be True/False/None.
-    """
-
-    def __init__(self, *a, **kw):
-        kw['choices'] = (True, False, None)
-        super().__init__(*a, **kw)
-
-    def serialize(self):
-        return {"type": "trinary", **super().serialize()}
-
-
 @cached(cache=TTLCache(maxsize=1, ttl=30))
 def wrol_mode_enabled() -> bool:
     """
@@ -619,6 +576,17 @@ def get_relative_to_media_directory(path: str) -> Path:
     return absolute.relative_to(get_media_directory())
 
 
-def get_alembic_configs():
-    alembic_configs = glob.glob(f'{MODULES_DIR}/*/alembic.ini')
-    return alembic_configs
+def minimize_dict(d: dict, keys: Iterable) -> dict:
+    """
+    Return a new dictionary that contains only the keys provided.
+    """
+    return {k: d[k] for k in set(keys) & d.keys()}
+
+
+def make_media_directory(path: str):
+    """
+    Make a directory relative within the media directory.
+    """
+    media_dir = get_media_directory()
+    path = media_dir / str(path)
+    path.mkdir(parents=True)

@@ -33,9 +33,9 @@ from sanic import Blueprint, response, Sanic
 from sanic.request import Request
 
 from wrolpi.common import create_websocket_feed, get_sanic_url, \
-    json_response, wrol_mode_check, ProgressReporter, get_config
+    wrol_mode_check, ProgressReporter, get_config
 from wrolpi.common import logger
-from wrolpi.root_api import add_blueprint
+from wrolpi.root_api import add_blueprint, json_response
 from wrolpi.schema import validate_doc
 from .channel.api import channel_bp
 from .downloader import update_channels, download_all_missing_videos

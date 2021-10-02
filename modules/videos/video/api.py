@@ -3,8 +3,9 @@ from http import HTTPStatus
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from wrolpi.common import logger, json_response, wrol_mode_check, run_after, get_media_directory, \
+from wrolpi.common import logger, wrol_mode_check, run_after, get_media_directory, \
     get_relative_to_media_directory
+from wrolpi.root_api import json_response
 from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError, InvalidOrderBy
 from wrolpi.schema import validate_doc

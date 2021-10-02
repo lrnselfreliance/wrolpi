@@ -5,8 +5,9 @@ from uuid import UUID
 import sanic
 from sanic import response
 from sanic_openapi import doc
+from sanic_openapi.doc import Field
 
-from wrolpi.common import string_to_boolean, Trinary, logger
+from wrolpi.common import string_to_boolean, logger
 from wrolpi.errors import NoBodyContents, ValidationError, MissingRequiredField, ExcessJSONFields, API_ERRORS, APIError
 from wrolpi.vars import DATE_FORMAT
 
@@ -171,3 +172,16 @@ class EventObject:
 
 class EventsResponse:
     events = doc.List(EventObject)
+
+
+class Trinary(Field):
+    """
+    A field for API docs.  Can be True/False/None.
+    """
+
+    def __init__(self, *a, **kw):
+        kw['choices'] = (True, False, None)
+        super().__init__(*a, **kw)
+
+    def serialize(self):
+        return {"type": "trinary", **super().serialize()}

@@ -1,15 +1,22 @@
+import json
 import logging
 import re
+from datetime import datetime, date
+from decimal import Decimal
+from functools import wraps
 from http import HTTPStatus
+from pathlib import Path
 
 from pytz import UnknownTimeZoneError
 from sanic import Sanic, response, Blueprint
 from sanic.request import Request
+from sanic.response import HTTPResponse
 from sanic_cors import CORS
 from sanic_openapi import swagger_blueprint
 
-from wrolpi.common import EVENTS, set_sanic_url_parts, logger, get_config, json_response, \
-    wrol_mode_enabled, set_timezone, save_settings_config
+from wrolpi.common import EVENTS, set_sanic_url_parts, logger, get_config, wrol_mode_enabled, set_timezone, \
+    save_settings_config, \
+    Base
 from wrolpi.errors import WROLModeEnabled, InvalidTimezone
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, EchoResponse, \
     EventsResponse, validate_doc
@@ -125,8 +132,6 @@ def events(_: Request):
     return response.json({'events': e})
 
 
-# TODO the following needs to be moved to their respective services.
-
 @root_api.route('/settings', methods=['GET', 'OPTIONS'])
 @validate_doc(
     summary='Get WROLPi settings',
@@ -173,3 +178,29 @@ def valid_regex(_: Request, data: dict):
         return response.json({'valid': True, 'regex': data['regex']})
     except re.error:
         return response.json({'valid': False, 'regex': data['regex']}, HTTPStatus.BAD_REQUEST)
+
+
+class CustomJSONEncoder(json.JSONEncoder):
+
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.timestamp()
+        elif isinstance(obj, date):
+            return datetime(obj.year, obj.month, obj.day).timestamp()
+        elif isinstance(obj, Decimal):
+            return str(obj)
+        elif isinstance(obj, Base):
+            if hasattr(obj, 'dict'):
+                return obj.dict()
+        elif isinstance(obj, Path):
+            return str(obj)
+        return super(CustomJSONEncoder, self).default(obj)
+
+
+@wraps(response.json)
+def json_response(*a, **kwargs) -> HTTPResponse:
+    """
+    Handles encoding date/datetime in JSON.
+    """
+    resp = response.json(*a, **kwargs, cls=CustomJSONEncoder, dumps=json.dumps)
+    return resp

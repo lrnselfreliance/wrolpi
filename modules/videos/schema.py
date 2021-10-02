@@ -1,6 +1,6 @@
 from sanic_openapi import doc
 
-from wrolpi.common import Trinary
+from wrolpi.schema import Trinary
 
 
 class ChannelPostRequest:

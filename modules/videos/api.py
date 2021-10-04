@@ -95,6 +95,8 @@ async def download(_, link: str = None):
     # Only one download can run at a time
     if download_event.is_set():
         return response.json({'error': 'download already running', 'stream_url': stream_url}, HTTPStatus.CONFLICT)
+    if refresh_event.is_set():
+        return response.json({'error': 'Refresh is running.  Cannot download.'})
 
     download_event.set()
 

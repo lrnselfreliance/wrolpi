@@ -13,12 +13,12 @@ from wrolpi.common import create_websocket_feed, get_sanic_url, \
     wrol_mode_check, ProgressReporter, get_config
 from wrolpi.common import logger
 from wrolpi.root_api import add_blueprint, json_response
-from wrolpi.schema import validate_doc
+from wrolpi.schema import validate_doc, JSONErrorResponse
 from .channel.api import channel_bp
 from .downloader import update_channels, download_all_missing_videos
 from .lib import process_video_meta_data, _refresh_videos, get_statistics, get_download_history
 from .schema import StreamResponse, \
-    JSONErrorResponse, FavoriteRequest, FavoriteResponse, VideosStatisticsResponse, DownloadHistoryResponse
+    FavoriteRequest, FavoriteResponse, VideosStatisticsResponse, DownloadHistoryResponse
 from .video.api import video_bp
 from .video.lib import set_video_favorite
 

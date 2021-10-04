@@ -49,7 +49,7 @@ def upgrade():
         status TEXT
     )''')
 
-    session.execute('ALTER TABLE url ADD COLUMN latest_id INTEGER REFERENCES archive(id)')
+    session.execute('ALTER TABLE url ADD COLUMN latest_id INTEGER REFERENCES archive(id) ON DELETE CASCADE')
 
 
 def downgrade():

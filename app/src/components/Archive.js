@@ -2,14 +2,20 @@ import React from "react";
 import {Card, Container, Form, Header, Icon, Image} from "semantic-ui-react";
 import {Route} from "react-router-dom";
 import {APIForm, uploadDate} from "./Common";
-import {postArchive, searchURLs} from "../api";
+import {deleteArchive, postArchive, searchURLs} from "../api";
 
 
-function FailedUrlCard({url, syncURL}) {
+function FailedUrlCard({url, syncURL, deleteURL}) {
 
     let syncIcon = (
         <a onClick={() => syncURL(url.url)}>
             <Icon name='sync' size='big'/>
+        </a>
+    );
+
+    let trashIcon = (
+        <a onClick={() => deleteURL(url.id)}>
+            <Icon name='trash' size='big'/>
         </a>
     );
 
@@ -28,6 +34,7 @@ function FailedUrlCard({url, syncURL}) {
                 <Card.Description>
                     <p>Failed!</p>
                     {syncIcon}
+                    {trashIcon}
                     {externalIcon}
                 </Card.Description>
             </Card.Content>
@@ -35,11 +42,11 @@ function FailedUrlCard({url, syncURL}) {
     );
 }
 
-function URLCard({url, syncURL}) {
+function URLCard({url, syncURL, deleteURL}) {
     let latest = url.latest;
 
     if (latest == null || latest.status === 'failed') {
-        return <FailedUrlCard url={url} syncURL={syncURL}/>;
+        return <FailedUrlCard url={url} syncURL={syncURL} deleteURL={deleteURL}/>;
     }
 
     let imageSrc = latest.screenshot_path ? `/media/${latest.screenshot_path}` : null;
@@ -77,7 +84,9 @@ function URLCard({url, syncURL}) {
     );
 
     let trashIcon = (
-        <Icon name='trash' size='big'/>
+        <a onClick={() => deleteURL(url.id)}>
+            <Icon name='trash' size='big'/>
+        </a>
     );
 
     let externalIcon = (
@@ -120,7 +129,8 @@ class URLCards extends React.Component {
         return (
             <Card.Group>
                 {this.props.urls.map((i) => {
-                    return <URLCard key={i['id']} url={i} syncURL={this.props.syncURL}/>
+                    return <URLCard key={i['id']} url={i}
+                                    syncURL={this.props.syncURL} deleteURL={this.props.deleteURL}/>
                 })}
             </Card.Group>
         )
@@ -140,6 +150,7 @@ class Archives extends React.Component {
         };
         this.syncURL = this.syncURL.bind(this);
         this.fetchURLs = this.fetchURLs.bind(this);
+        this.deleteURL = this.deleteURL.bind(this);
     }
 
     async componentDidMount() {
@@ -157,13 +168,18 @@ class Archives extends React.Component {
         await this.fetchURLs();
     }
 
+    async deleteURL(url_id) {
+        await deleteArchive(url_id);
+        await this.fetchURLs();
+    }
+
     render() {
         let {urls} = this.state;
         if (urls !== null) {
             return (
                 <>
                     <Header as='h1'>Latest Archives</Header>
-                    <URLCards urls={urls} syncURL={this.syncURL}/>
+                    <URLCards urls={urls} syncURL={this.syncURL} deleteURL={this.deleteURL}/>
                 </>
             )
         }

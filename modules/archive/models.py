@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from sqlalchemy import Column, Integer, String, ForeignKey, types, event
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi.common import ModelHelper, Base, TZDateTime, get_media_directory
@@ -22,7 +22,7 @@ class Archive(Base, ModelHelper):
     __tablename__ = 'archive'
     id = Column(Integer, primary_key=True)
 
-    url_id = Column(Integer, ForeignKey('url.id'))
+    url_id = Column(Integer, ForeignKey('url.id', ondelete='cascade'))
     url = relationship('URL', primaryjoin='Archive.url_id==URL.id')
     domain_id = Column(Integer, ForeignKey('domains.id'))
     domain = relationship('Domain', primaryjoin='Archive.domain_id==Domain.id')

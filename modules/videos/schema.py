@@ -61,10 +61,6 @@ class ChannelsResponse:
     channels = doc.List(doc.Object(ChannelsChannelModel))
 
 
-class JSONErrorResponse:
-    error = doc.String()
-
-
 class StreamResponse:
     success = doc.String()
     stream_url = doc.String()

@@ -112,6 +112,10 @@ class InvalidDomain(APIError):
     pass
 
 
+class UnknownURL(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -243,6 +247,11 @@ API_ERRORS = {
     InvalidDomain: {
         'code': next(error_codes),
         'message': 'Invalid archive domain',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    UnknownURL: {
+        'code': next(error_codes),
+        'message': 'Unknown URL',
         'status': HTTPStatus.BAD_REQUEST,
     },
 }

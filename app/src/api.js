@@ -293,6 +293,10 @@ export async function postArchive(url) {
     return await apiPost(`${API_URI}/archive`, i);
 }
 
+export async function deleteArchive(url_id) {
+    return await apiDelete(`${API_URI}/archive/${url_id}`);
+}
+
 export async function searchURLs(offset, limit) {
     // Build a search query to retrieve a list of videos from the API
     offset = offset || 0;

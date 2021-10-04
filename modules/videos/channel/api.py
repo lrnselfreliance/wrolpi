@@ -7,9 +7,9 @@ from sanic.request import Request
 from wrolpi.common import logger, wrol_mode_check, get_relative_to_media_directory, make_media_directory
 from wrolpi.root_api import json_response
 from wrolpi.errors import UnknownDirectory
-from wrolpi.schema import validate_doc
+from wrolpi.schema import validate_doc, JSONErrorResponse
 from .lib import get_minimal_channels, delete_channel, update_channel, get_channel, create_channel
-from ..schema import ChannelsResponse, ChannelResponse, JSONErrorResponse, ChannelPostRequest, \
+from ..schema import ChannelsResponse, ChannelResponse, ChannelPostRequest, \
     ChannelPostResponse, ChannelPutRequest, SuccessResponse
 
 channel_bp = Blueprint('Channel', url_prefix='/api/videos/channels')

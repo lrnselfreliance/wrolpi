@@ -4,10 +4,10 @@ import tempfile
 
 import mock
 
-from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count
-from modules.archive.models import Archive
+from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count, delete_url
+from modules.archive.models import Archive, URL
 from wrolpi.db import get_db_session
-from wrolpi.errors import InvalidDomain
+from wrolpi.errors import InvalidDomain, UnknownURL
 from wrolpi.root_api import CustomJSONEncoder
 from wrolpi.test.common import TestAPI, wrap_test_db
 
@@ -198,3 +198,23 @@ class TestArchive(TestAPI):
             self.assertEqual(get_url_count(), 2)
             new_archive('https://example.org')
             self.assertEqual(get_url_count('example.org'), 1)
+
+    @wrap_test_db
+    def test_delete_url(self):
+        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
+            archive = new_archive('https://example.com')
+
+            with get_db_session() as session:
+                urls = session.query(URL).all()
+                self.assertEqual(len(urls), 1)
+                archives = session.query(Archive).all()
+                self.assertEqual(len(archives), 1)
+
+        delete_url(archive.url.id)
+
+        with get_db_session() as session:
+            urls = session.query(URL).all()
+            self.assertEqual(len(urls), 0)
+
+        # Bad ID
+        self.assertRaises(UnknownURL, delete_url, 123)

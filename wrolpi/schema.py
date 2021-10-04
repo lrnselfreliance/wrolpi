@@ -185,3 +185,7 @@ class Trinary(Field):
 
     def serialize(self):
         return {"type": "trinary", **super().serialize()}
+
+
+class JSONErrorResponse:
+    error = doc.String()

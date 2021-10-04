@@ -10,7 +10,7 @@ import requests
 from modules.archive.models import URL, Domain, Archive
 from wrolpi.common import get_media_directory, logger, now
 from wrolpi.db import get_db_session, get_db_curs
-from wrolpi.errors import InvalidDomain
+from wrolpi.errors import InvalidDomain, UnknownURL
 from wrolpi.vars import DATETIME_FORMAT_MS
 
 logger = logger.getChild(__name__)
@@ -242,3 +242,13 @@ def get_url_count(domain: str = '') -> int:
         curs.execute(stmt, params)
         count = int(curs.fetchone()[0])
         return count
+
+
+def delete_url(url_id: int):
+    with get_db_session() as session:
+        url = session.query(URL).filter_by(id=url_id).one_or_none()
+        if not url:
+            raise UnknownURL(f'Unknown url with id: {url_id}')
+
+    with get_db_session(commit=True) as session:
+        session.query(URL).filter_by(id=url_id).delete()

@@ -5,7 +5,7 @@ from sanic import response
 
 from wrolpi.common import logger
 from wrolpi.root_api import get_blueprint, json_response
-from wrolpi.schema import validate_doc
+from wrolpi.schema import validate_doc, JSONErrorResponse
 from . import lib
 from .schema import RetrieveUrlsRequest, RetrieveURLsResponse, PostArchiveRequest
 
@@ -28,6 +28,18 @@ async def post_archive(_: Request, data: dict):
     except Exception:
         logger.error(f'Failed to create new archive', exc_info=True)
         return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
+    return response.empty()
+
+
+@bp.delete('/<url_id:int>')
+@validate_doc(
+    'Delete a website record',
+    responses=[
+            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
+    ]
+)
+async def delete_url(_: Request, url_id: int):
+    lib.delete_url(url_id)
     return response.empty()
 
 

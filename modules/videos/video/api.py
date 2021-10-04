@@ -8,11 +8,11 @@ from wrolpi.common import logger, wrol_mode_check, run_after, get_media_director
 from wrolpi.root_api import json_response
 from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError, InvalidOrderBy
-from wrolpi.schema import validate_doc
+from wrolpi.schema import validate_doc, JSONErrorResponse
 from .lib import get_video, VIDEO_ORDERS, DEFAULT_VIDEO_ORDER, video_search, get_video_for_app
 from ..common import get_matching_directories, get_allowed_limit, minimize_video
 from ..lib import save_channels_config
-from ..schema import VideoResponse, JSONErrorResponse, VideoSearchRequest, VideoSearchResponse, \
+from ..schema import VideoResponse, VideoSearchRequest, VideoSearchResponse, \
     DirectoriesResponse, DirectoriesRequest
 
 video_bp = Blueprint('Video', '/api/videos')

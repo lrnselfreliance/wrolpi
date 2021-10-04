@@ -5,8 +5,13 @@ import {APIForm, uploadDate} from "./Common";
 import {postArchive, searchURLs} from "../api";
 
 
-function FailedUrlCard({url}) {
+function FailedUrlCard({url, syncURL}) {
 
+    let syncIcon = (
+        <a onClick={() => syncURL(url.url)}>
+            <Icon name='sync' size='big'/>
+        </a>
+    );
 
     let externalIcon = (
         <a href={url.url} target='_blank' rel='noopener noreferrer'>
@@ -22,6 +27,7 @@ function FailedUrlCard({url}) {
                 </Card.Header>
                 <Card.Description>
                     <p>Failed!</p>
+                    {syncIcon}
                     {externalIcon}
                 </Card.Description>
             </Card.Content>
@@ -29,11 +35,11 @@ function FailedUrlCard({url}) {
     );
 }
 
-function URLCard({url}) {
+function URLCard({url, syncURL}) {
     let latest = url.latest;
 
     if (latest == null || latest.status === 'failed') {
-        return <FailedUrlCard url={url}/>;
+        return <FailedUrlCard url={url} syncURL={syncURL}/>;
     }
 
     let imageSrc = latest.screenshot_path ? `/media/${latest.screenshot_path}` : null;
@@ -64,6 +70,16 @@ function URLCard({url}) {
             </a>);
     }
 
+    let syncIcon = (
+        <a onClick={() => syncURL(url.url)}>
+            <Icon name='sync' size='big'/>
+        </a>
+    );
+
+    let trashIcon = (
+        <Icon name='trash' size='big'/>
+    );
+
     let externalIcon = (
         <a href={url.url} target='_blank' rel='noopener noreferrer'>
             <Icon name='sign-out' size='big'/>
@@ -89,6 +105,8 @@ function URLCard({url}) {
                         {singlefileIcon}
                         {readabilityIcon}
                         {screenshotIcon}
+                        {syncIcon}
+                        {trashIcon}
                         {externalIcon}
                     </Container>
                 </Card.Description>
@@ -102,7 +120,7 @@ class URLCards extends React.Component {
         return (
             <Card.Group>
                 {this.props.urls.map((i) => {
-                    return <URLCard key={i['id']} url={i}/>
+                    return <URLCard key={i['id']} url={i} syncURL={this.props.syncURL}/>
                 })}
             </Card.Group>
         )
@@ -120,6 +138,8 @@ class Archives extends React.Component {
             urls: null,
             totalPages: null,
         };
+        this.syncURL = this.syncURL.bind(this);
+        this.fetchURLs = this.fetchURLs.bind(this);
     }
 
     async componentDidMount() {
@@ -132,13 +152,18 @@ class Archives extends React.Component {
         this.setState({urls, totalPages: total / this.state.limit});
     }
 
+    async syncURL(url) {
+        await postArchive(url);
+        await this.fetchURLs();
+    }
+
     render() {
         let {urls} = this.state;
         if (urls !== null) {
             return (
                 <>
                     <Header as='h1'>Latest Archives</Header>
-                    <URLCards urls={urls}/>
+                    <URLCards urls={urls} syncURL={this.syncURL}/>
                 </>
             )
         }

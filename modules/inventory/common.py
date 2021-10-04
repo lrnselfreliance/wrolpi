@@ -6,6 +6,7 @@ from typing import List, Tuple
 import yaml
 from pint import Quantity
 
+from wrolpi import before_startup
 from wrolpi.common import logger, Base
 from wrolpi.db import get_db_session
 from wrolpi.errors import NoInventories, InventoriesVersionMismatch
@@ -144,6 +145,7 @@ def save_inventories_file(path: str = None):
             yaml.dump(contents, fh)
 
 
+@before_startup
 def import_inventories_file(path: str = None):
     path: Path = Path(path) if path else DEFAULT_SAVE_PATH
 

@@ -91,41 +91,43 @@ class TestArchive(TestAPI):
 
     @wrap_test_db
     def test_dict(self):
-        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
+        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()), \
+                mock.patch('modules.archive.models.get_media_directory', lambda: self.tmp_dir.name):
             d = new_archive('https://example.com', sync=True).dict()
             self.assertIsInstance(d, dict)
             json.dumps(d, cls=CustomJSONEncoder)
 
     @wrap_test_db
     def test_relationships(self):
-        with get_db_session(commit=True) as session:
-            domain, url = get_or_create_domain_and_url(session, 'https://wrolpi.org:443')
-            archive = Archive(
-                singlefile_path=f'{self.tmp_dir.name}/wrolpi.org:443/foo',
-                title='bar',
-                url_id=url.id,
-                domain_id=domain.id,
+        with mock.patch('modules.archive.models.get_media_directory', lambda: self.tmp_dir.name):
+            with get_db_session(commit=True) as session:
+                domain, url = get_or_create_domain_and_url(session, 'https://wrolpi.org:443')
+                archive = Archive(
+                    singlefile_path=f'{self.tmp_dir.name}/wrolpi.org:443/foo',
+                    title='bar',
+                    url_id=url.id,
+                    domain_id=domain.id,
+                )
+                session.add(archive)
+                session.flush()
+
+                url.latest_id = archive.id
+
+            self.assertEqual(archive.domain, domain)
+            self.assertEqual(archive.url, url)
+
+            # Relationships are added in the dict() method.
+            self.assertDictContains(
+                url.dict(),
+                dict(
+                    id=1,
+                    url='https://wrolpi.org:443',
+                    latest_id=1,
+                    latest=dict(singlefile_path=pathlib.Path('wrolpi.org:443/foo')),
+                    domain_id=1,
+                    domain=dict(directory=f'{self.tmp_dir.name}/wrolpi.org:443', domain='wrolpi.org:443'),
+                )
             )
-            session.add(archive)
-            session.flush()
-
-            url.latest_id = archive.id
-
-        self.assertEqual(archive.domain, domain)
-        self.assertEqual(archive.url, url)
-
-        # Relationships are added in the dict() method.
-        self.assertDictContains(
-            url.dict(),
-            dict(
-                id=1,
-                url='https://wrolpi.org:443',
-                latest_id=1,
-                latest=dict(singlefile_path=pathlib.Path('foo')),
-                domain_id=1,
-                domain=dict(directory=f'{self.tmp_dir.name}/wrolpi.org:443', domain='wrolpi.org:443'),
-            )
-        )
 
     @wrap_test_db
     def test_get_urls(self):
@@ -133,42 +135,44 @@ class TestArchive(TestAPI):
         urls = get_urls()
         self.assertEqual([], urls)
 
-        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(readability=False)):
-            # One set of duplicate URLs
-            new_archive('https://wrolpi.org/one', sync=True)
-            new_archive('https://wrolpi.org/one', sync=True)
+        with mock.patch('modules.archive.models.get_media_directory', lambda: self.tmp_dir.name):
+            with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(readability=False)):
+                # One set of duplicate URLs
+                new_archive('https://wrolpi.org/one', sync=True)
+                new_archive('https://wrolpi.org/one', sync=True)
 
-            # Unique URLs
-            new_archive('https://wrolpi.org/two', sync=True)
-            new_archive('https://wrolpi.org/three', sync=True)
-            new_archive('https://example.com/one', sync=True)
+                # Unique URLs
+                new_archive('https://wrolpi.org/two', sync=True)
+                new_archive('https://wrolpi.org/three', sync=True)
+                new_archive('https://example.com/one', sync=True)
 
-        urls = get_urls()
-        # There are only 4 because one set is duplicate.
-        self.assertEqual(len(urls), 4)
-        self.assertEqual(
-            ['https://example.com/one', 'https://wrolpi.org/three', 'https://wrolpi.org/two', 'https://wrolpi.org/one'],
-            [i['url'] for i in urls],
-        )
+            urls = get_urls()
+            # There are only 4 because one set is duplicate.
+            self.assertEqual(len(urls), 4)
+            self.assertEqual(
+                ['https://example.com/one', 'https://wrolpi.org/three',
+                 'https://wrolpi.org/two', 'https://wrolpi.org/one'],
+                [i['url'] for i in urls],
+            )
 
-        # Only one URL for this domain.
-        urls = get_urls(domain='example.com')
-        self.assertEqual(len(urls), 1)
-        self.assertEqual(urls[0]['url'], 'https://example.com/one')
+            # Only one URL for this domain.
+            urls = get_urls(domain='example.com')
+            self.assertEqual(len(urls), 1)
+            self.assertEqual(urls[0]['url'], 'https://example.com/one')
 
-        # Bad domain requested.
-        self.assertRaises(InvalidDomain, get_urls, domain='bad_domain.com')
+            # Bad domain requested.
+            self.assertRaises(InvalidDomain, get_urls, domain='bad_domain.com')
 
-        # Limit to 3, but with an offset of 2 there are only 2.
-        urls = get_urls(3, 2)
-        self.assertEqual(['https://wrolpi.org/two', 'https://wrolpi.org/one'], [i['url'] for i in urls])
+            # Limit to 3, but with an offset of 2 there are only 2.
+            urls = get_urls(3, 2)
+            self.assertEqual(['https://wrolpi.org/two', 'https://wrolpi.org/one'], [i['url'] for i in urls])
 
-        # First two of this domain.
-        urls = get_urls(2, 0, 'wrolpi.org')
-        self.assertEqual(['https://wrolpi.org/two', 'https://wrolpi.org/one'], [i['url'] for i in urls])
-        # Last two of this domain, but there is only 1.
-        urls = get_urls(2, 2, 'wrolpi.org')
-        self.assertEqual(['https://wrolpi.org/three'], [i['url'] for i in urls])
+            # First two of this domain.
+            urls = get_urls(2, 0, 'wrolpi.org')
+            self.assertEqual(['https://wrolpi.org/two', 'https://wrolpi.org/one'], [i['url'] for i in urls])
+            # Last two of this domain, but there is only 1.
+            urls = get_urls(2, 2, 'wrolpi.org')
+            self.assertEqual(['https://wrolpi.org/three'], [i['url'] for i in urls])
 
     @wrap_test_db
     def test_validate_paths(self):

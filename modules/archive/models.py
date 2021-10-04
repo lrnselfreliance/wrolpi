@@ -4,7 +4,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, types, event
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import ModelHelper, Base, TZDateTime
+from wrolpi.common import ModelHelper, Base, TZDateTime, get_media_directory
 
 
 class DomainPath(types.TypeDecorator):
@@ -60,15 +60,14 @@ class Archive(Base, ModelHelper):
 
     def dict(self) -> dict:
         d = super().dict()
-        d['singlefile_path'] = self.singlefile_path.relative_to(self.domain.directory) if self.singlefile_path else None
-        d['readability_path'] = self.singlefile_path.relative_to(
-            self.domain.directory) if self.readability_path else None
-        d['readability_json_path'] = self.singlefile_path.relative_to(
-            self.domain.directory) if self.readability_json_path else None
-        d['readability_txt_path'] = self.singlefile_path.relative_to(
-            self.domain.directory) if self.readability_txt_path else None
-        d['screenshot_path'] = self.singlefile_path.relative_to(
-            self.domain.directory) if self.screenshot_path else None
+        media_directory = get_media_directory()
+        d['singlefile_path'] = self.singlefile_path.relative_to(media_directory) if self.singlefile_path else None
+        d['readability_path'] = self.readability_path.relative_to(media_directory) if self.readability_path else None
+        d['readability_json_path'] = self.readability_json_path.relative_to(
+            media_directory) if self.readability_json_path else None
+        d['readability_txt_path'] = self.readability_txt_path.relative_to(
+            media_directory) if self.readability_txt_path else None
+        d['screenshot_path'] = self.screenshot_path.relative_to(media_directory) if self.screenshot_path else None
         return d
 
 

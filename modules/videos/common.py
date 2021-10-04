@@ -498,13 +498,19 @@ def update_view_count(channel_id: int):
         logger.info(f'No info_json for channel {channel.name}')
         return
 
-    view_counts = [(i['id'], i['view_count']) for i in info['entries']]
+    view_counts = [{'id': i['id'], 'view_count': i['view_count']} for i in info['entries']]
     logger.info(f'Updating {len(view_counts)} view counts for channel {channel.name}')
-    for chunk in chunks(view_counts, 20):
-        with get_db_curs(commit=True) as curs:
-            for id_, view_count in chunk:
-                stmt = 'UPDATE video SET view_count = %s WHERE source_id=%s AND channel_id=%s'
-                curs.execute(stmt, (view_count, id_, channel_id))
+    view_counts_str = json.dumps(view_counts)
+
+    with get_db_curs(commit=True) as curs:
+        stmt = '''
+            WITH source AS (select * from json_to_recordset(%s::json) as (id text, view_count int))
+            UPDATE video
+            SET view_count = s.view_count
+            FROM source as s
+            WHERE source_id=s.id AND channel_id=%s
+        '''
+        curs.execute(stmt, (view_counts_str, channel_id))
 
 
 minimize_channel = partial(minimize_dict, keys=MINIMUM_CHANNEL_KEYS)

@@ -11,7 +11,8 @@ from modules.videos.test.common import create_channel_structure
 from wrolpi.common import get_absolute_media_path
 from wrolpi.db import get_db_session
 from wrolpi.test.common import ExtendedTestCase, build_test_directories, wrap_test_db
-from ..common import get_matching_directories, convert_image, bulk_validate_posters, remove_duplicate_video_paths
+from ..common import get_matching_directories, convert_image, bulk_validate_posters, remove_duplicate_video_paths, \
+    update_view_count
 
 
 class TestCommon(ExtendedTestCase):
@@ -209,3 +210,44 @@ def test_bulk_replace_invalid_posters(tempdir: pathlib.Path):
         bulk_validate_posters(video_ids)
 
     mocked_convert_image.assert_not_called()
+
+
+@wrap_test_db
+@create_channel_structure(
+    {
+        'channel1': ['vid1.mp4', 'vid1.jpg'],
+        'channel2': ['vid2.mp4'],
+        'channel3': ['vid3.mp4', 'vid4.mp4'],
+    }
+)
+def test_update_view_count(tempdir: pathlib.Path):
+    def check_view_counts(view_counts):
+        with get_db_session(commit=True) as session:
+            for source_id, view_count in view_counts.items():
+                vid = session.query(Video).filter_by(source_id=source_id).one()
+                assert vid.view_count == view_count
+
+    with get_db_session(commit=True) as session:
+        channel1, channel2, channel3 = session.query(Channel).order_by(Channel.id).all()
+        channel1.info_json = {'entries': [{'id': 'vid1.mp4', 'view_count': 10}]}
+        channel2.info_json = {'entries': [{'id': 'vid2.mp4', 'view_count': 11}, {'id': 'bad_id', 'view_count': 12}]}
+        channel3.info_json = {'entries': [{'id': 'vid3.mp4', 'view_count': 13}, {'id': 'vid4.mp4', 'view_count': 14}]}
+
+        # Use the video_path as a unique source_id
+        for v in session.query(Video).all():
+            v.source_id = str(v.video_path)
+
+    # Check all videos are empty.
+    check_view_counts({'vid1.mp4': None, 'vid2.mp4': None, 'vid3.mp4': None, 'vid4.mp4': None})
+
+    # Channel 1 is updated, the other channels are left alone.
+    update_view_count(channel1.id)
+    check_view_counts({'vid1.mp4': 10, 'vid2.mp4': None, 'vid3.mp4': None, 'vid4.mp4': None})
+
+    # Channel 2 is updated, the other channels are left alone.  The 'bad_id' video is ignored.
+    update_view_count(channel2.id)
+    check_view_counts({'vid1.mp4': 10, 'vid2.mp4': 11, 'vid3.mp4': None, 'vid4.mp4': None})
+
+    # All videos are updated.
+    update_view_count(channel3.id)
+    check_view_counts({'vid1.mp4': 10, 'vid2.mp4': 11, 'vid3.mp4': 13, 'vid4.mp4': 14})

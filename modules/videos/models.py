@@ -53,7 +53,7 @@ class Video(ModelHelper, Base):
                                                 COALESCE(caption, ''::text)))'''))
 
     def __repr__(self):
-        return f'<Video(id={self.id}, title={self.title}, path={self.video_path}, channel={self.channel_id}) ' \
+        return f'<Video id={self.id}, title={self.title}, path={self.video_path}, channel={self.channel_id} ' \
                f'source_id={self.source_id}>'
 
     def dict(self) -> dict:

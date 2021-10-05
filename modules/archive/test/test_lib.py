@@ -12,15 +12,15 @@ from wrolpi.root_api import CustomJSONEncoder
 from wrolpi.test.common import TestAPI, wrap_test_db
 
 
-def make_fake_request_archive(readability=True, screenshot=True):
+def make_fake_request_archive(readability=True, screenshot=True, title=True):
     def fake_request_archive(_):
         singlefile = '<html>\ntest single-file\nジにてこちら\n</html>'
         r = dict(
-            content='<html>test readability content</html>',
+            content=f'<html>test readability content<title>some title</title></html>',
             textContent='<html>test readability textContent</html>',
-            title='ジにてこちら',
+            title='ジにてこちら' if title else None,
         ) if readability else None
-        s = b'foo' if screenshot else None
+        s = b'screenshot data' if screenshot else None
         return singlefile, r, s
 
     return fake_request_archive
@@ -57,7 +57,7 @@ class TestArchive(TestAPI):
             with open(archive1.singlefile_path) as fh:
                 self.assertEqual(fh.read(), '<html>\ntest single-file\nジにてこちら\n</html>')
             with open(archive1.readability_path) as fh:
-                self.assertEqual(fh.read(), '<html>test readability content</html>')
+                self.assertEqual(fh.read(), '<html>test readability content<title>some title</title></html>')
             with open(archive1.readability_txt_path) as fh:
                 self.assertEqual(fh.read(), '<html>test readability textContent</html>')
             with open(archive1.readability_json_path) as fh:
@@ -218,3 +218,35 @@ class TestArchive(TestAPI):
 
         # Bad ID
         self.assertRaises(UnknownURL, delete_url, 123)
+
+    @wrap_test_db
+    def test_get_title_from_html(self):
+        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
+            archive = new_archive('example.com', sync=True)
+            self.assertEqual(archive.title, 'ジにてこちら')
+
+        def fake_request_archive(_):
+            singlefile = '<html>\ntest single-file\nジにてこちら\n</html>'
+            r = dict(
+                content=f'<html>test readability content<title>some title</title></html>',
+                textContent='<html>test readability textContent</html>',
+            )
+            s = b'screenshot data'
+            return singlefile, r, s
+
+        with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
+            archive = new_archive('example.com', sync=True)
+            self.assertEqual(archive.title, 'some title')
+
+        def fake_request_archive(_):
+            singlefile = '<html></html>'
+            r = dict(
+                content=f'<html>missing a title</html>',
+                textContent='',
+            )
+            s = b'screenshot data'
+            return singlefile, r, s
+
+        with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
+            archive = new_archive('example.com', sync=True)
+            self.assertIsNone(archive.title)

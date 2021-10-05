@@ -6,6 +6,7 @@ from functools import lru_cache
 from urllib.parse import urlparse
 
 import requests
+from bs4 import BeautifulSoup
 
 from modules.archive.models import URL, Domain, Archive
 from wrolpi.common import get_media_directory, logger, now
@@ -145,6 +146,11 @@ def _do_archive(url: str, archive_id: int):
         if readability:
             title = readability.get('title')
 
+            # Use the Readability title, or try and extract one.
+            if not title and readability:
+                title = get_title_from_html(readability['content'], url=url)
+                readability['title'] = title
+
             # Write the readability parts to their own files.  Write what is left after pops to the JSON file.
             with readability_path.open('wt') as fh:
                 fh.write(readability.pop('content'))
@@ -201,6 +207,17 @@ def get_or_create_domain_and_url(session, url):
     return domain, url_
 
 
+def get_title_from_html(html: str, url: str = None) -> str:
+    """
+    Try and get the title from the
+    """
+    soup = BeautifulSoup(html, features='html.parser')
+    try:
+        return soup.title.string
+    except Exception:  # noqa
+        logger.info(f'Unable to extract title {url}')
+
+
 def get_domain(session, domain: str) -> Domain:
     domain_ = session.query(Domain).filter_by(domain=domain).one_or_none()
     if not domain_:
@@ -245,6 +262,9 @@ def get_url_count(domain: str = '') -> int:
 
 
 def delete_url(url_id: int):
+    """
+    Delete a URL record and all associated Archives.
+    """
     with get_db_session() as session:
         url = session.query(URL).filter_by(id=url_id).one_or_none()
         if not url:

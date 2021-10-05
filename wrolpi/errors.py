@@ -116,6 +116,10 @@ class UnknownURL(APIError):
     pass
 
 
+class PendingArchive(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -252,6 +256,11 @@ API_ERRORS = {
     UnknownURL: {
         'code': next(error_codes),
         'message': 'Unknown URL',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    PendingArchive: {
+        'code': next(error_codes),
+        'message': 'Archive with that URL is already pending',
         'status': HTTPStatus.BAD_REQUEST,
     },
 }

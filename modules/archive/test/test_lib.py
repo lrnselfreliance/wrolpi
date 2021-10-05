@@ -14,9 +14,9 @@ from wrolpi.test.common import TestAPI, wrap_test_db
 
 def make_fake_request_archive(readability=True, screenshot=True, title=True):
     def fake_request_archive(_):
-        singlefile = '<html>\ntest single-file\nジにてこちら\n</html>'
+        singlefile = '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>'
         r = dict(
-            content=f'<html>test readability content<title>some title</title></html>',
+            content=f'<html>test readability content</html>',
             textContent='<html>test readability textContent</html>',
             title='ジにてこちら' if title else None,
         ) if readability else None
@@ -55,9 +55,9 @@ class TestArchive(TestAPI):
 
             # The actual files were dumped and read correctly.
             with open(archive1.singlefile_path) as fh:
-                self.assertEqual(fh.read(), '<html>\ntest single-file\nジにてこちら\n</html>')
+                self.assertEqual(fh.read(), '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>')
             with open(archive1.readability_path) as fh:
-                self.assertEqual(fh.read(), '<html>test readability content<title>some title</title></html>')
+                self.assertEqual(fh.read(), '<html>test readability content</html>')
             with open(archive1.readability_txt_path) as fh:
                 self.assertEqual(fh.read(), '<html>test readability textContent</html>')
             with open(archive1.readability_json_path) as fh:
@@ -86,8 +86,6 @@ class TestArchive(TestAPI):
             # Readability empty
             self.assertIsNone(archive.readability_path)
             self.assertIsNone(archive.readability_txt_path)
-
-            self.assertIsNone(archive.title)
 
     @wrap_test_db
     def test_dict(self):
@@ -190,13 +188,13 @@ class TestArchive(TestAPI):
             self.assertRaises(InvalidDomain, get_url_count, 'bad domain')
 
             self.assertEqual(get_url_count(), 0)
-            new_archive('https://example.com')
+            new_archive('https://example.com', sync=True)
             self.assertEqual(get_url_count(), 1)
-            new_archive('https://example.com')
+            new_archive('https://example.com', sync=True)
             self.assertEqual(get_url_count(), 1)
-            new_archive('https://example.org')
+            new_archive('https://example.org', sync=True)
             self.assertEqual(get_url_count(), 2)
-            new_archive('https://example.org')
+            new_archive('https://example.org', sync=True)
             self.assertEqual(get_url_count('example.org'), 1)
 
     @wrap_test_db
@@ -226,9 +224,9 @@ class TestArchive(TestAPI):
             self.assertEqual(archive.title, 'ジにてこちら')
 
         def fake_request_archive(_):
-            singlefile = '<html>\ntest single-file\nジにてこちら\n</html>'
+            singlefile = '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>'
             r = dict(
-                content=f'<html>test readability content<title>some title</title></html>',
+                content=f'<html>test readability content</html>',
                 textContent='<html>test readability textContent</html>',
             )
             s = b'screenshot data'

@@ -11,7 +11,7 @@ from bs4 import BeautifulSoup
 from modules.archive.models import URL, Domain, Archive
 from wrolpi.common import get_media_directory, logger, now
 from wrolpi.db import get_db_session, get_db_curs
-from wrolpi.errors import InvalidDomain, UnknownURL
+from wrolpi.errors import InvalidDomain, UnknownURL, PendingArchive
 from wrolpi.vars import DATETIME_FORMAT_MS
 
 logger = logger.getChild(__name__)
@@ -88,6 +88,14 @@ def request_archive(url: str):
     return singlefile, readability, screenshot
 
 
+def is_pending_archive(url: str) -> bool:
+    with get_db_session() as session:
+        url = session.query(URL).filter_by(url=url).one_or_none()
+        if url and url.latest.status == 'pending':
+            return True
+    return False
+
+
 def new_archive(url: str, sync: bool = False):
     """
     Request archiving of the provided URL.  Store the returned files in their domain's directory.
@@ -97,6 +105,9 @@ def new_archive(url: str, sync: bool = False):
     """
     # Check that the archive files are available.
     get_new_archive_files(url)
+
+    if is_pending_archive(url):
+        raise PendingArchive()
 
     with get_db_session(commit=True) as session:
         domain, url_ = get_or_create_domain_and_url(session, url)
@@ -146,11 +157,6 @@ def _do_archive(url: str, archive_id: int):
         if readability:
             title = readability.get('title')
 
-            # Use the Readability title, or try and extract one.
-            if not title and readability:
-                title = get_title_from_html(readability['content'], url=url)
-                readability['title'] = title
-
             # Write the readability parts to their own files.  Write what is left after pops to the JSON file.
             with readability_path.open('wt') as fh:
                 fh.write(readability.pop('content'))
@@ -159,6 +165,10 @@ def _do_archive(url: str, archive_id: int):
 
         # Always write a JSON file that contains at least the URL.
         readability = readability or {}
+        # Use the Readability title, or try and extract one from singlefile.
+        if not title and singlefile:
+            title = get_title_from_html(singlefile, url=url)
+            readability['title'] = title
         readability['url'] = url
         with readability_json_path.open('wt') as fh:
             fh.write(json.dumps(readability))

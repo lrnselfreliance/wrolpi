@@ -23,11 +23,7 @@ logger = logger.getChild(__name__)
 )
 async def post_archive(_: Request, data: dict):
     url = data['url']
-    try:
-        lib.new_archive(url)
-    except Exception:
-        logger.error(f'Failed to create new archive', exc_info=True)
-        return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
+    lib.new_archive(url)
     return response.empty()
 
 

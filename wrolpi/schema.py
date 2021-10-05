@@ -1,3 +1,4 @@
+import inspect
 from datetime import datetime
 from functools import wraps
 from uuid import UUID
@@ -82,7 +83,7 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
 
     def wrapper(func):
         @wraps(func)
-        def wrapped(request, *a, **kw):
+        async def wrapped(request, *a, **kw):
             try:
                 if consumes:
                     if 'data' in kw:
@@ -92,9 +93,12 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
                     if isinstance(data, sanic.response.HTTPResponse):
                         # Error in validation
                         return data
-                    result = func(request, *a, **kw, data=data)
-                    return result
-                return func(request, *a, **kw)
+                    kw['data'] = data
+
+                result = func(request, *a, **kw)
+                if inspect.iscoroutine(result):
+                    result = await result
+                return result
             except ValidationError as e:
                 error = API_ERRORS[type(e)]
                 body = {

@@ -102,7 +102,7 @@ function URLCard({url, syncURL, deleteURL}) {
                     <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
                     <Card.Header>
                         <Container textAlign='left'>
-                            <p>{url.title || url.url}</p>
+                            <p>{url.latest.title || url.url}</p>
                         </Container>
                     </Card.Header>
                 </a>

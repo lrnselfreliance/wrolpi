@@ -7,4 +7,4 @@ Sanic-Cors==0.10.0.post3
 sanic-openapi==0.6.2
 sanic==20.12.0
 SQLAlchemy==1.3.22
-websockets==8.1
+websockets==9.1

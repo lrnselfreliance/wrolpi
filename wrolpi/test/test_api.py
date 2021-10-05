@@ -69,43 +69,6 @@ class TestRootAPI(TestAPI):
         from sanic.response import json as json_
         json_(swagger_blueprint._spec)
 
-    @staticmethod
-    def _get_event(events, name):
-        try:
-            return [i for i in events if i['name'] == name][0]
-        except IndexError:
-            raise ValueError(f'No event named {name} in events!')
-
-    def test_events(self):
-        request, response = api_app.test_client.get('/api/events')
-        self.assertOK(response)
-        self.assertGreater(len(response.json['events']), 1)
-        self.assertFalse(any(i['is_set'] for i in response.json['events']))
-
-        calls = []
-
-        async def fake_refresh_videos(*a, **kw):
-            calls.append((a, kw))
-
-        with mock.patch('modules.videos.api.refresh_videos', fake_refresh_videos), \
-                mock.patch('modules.videos.api.refresh_event') as refresh_event:
-            refresh_event: MagicMock
-
-            # Cannot start a second refresh while one is running.
-            refresh_event.is_set.return_value = True
-            request, response = api_app.test_client.post('/api/videos:refresh')
-            self.assertCONFLICT(response)
-
-            # Refresh is started, a stream is created
-            refresh_event.is_set.return_value = False
-            request, response = api_app.test_client.post('/api/videos:refresh')
-            self.assertOK(response)
-            self.assertEqual(response.json['code'], 'stream-started')
-            stream_url: str = response.json['stream_url']
-            assert stream_url.startswith('ws://')
-            assert calls == [((None,), {})]
-            refresh_event.set.assert_called()
-
     def test_get_settings(self):
         request, response = api_app.test_client.get('/api/settings')
         self.assertOK(response)

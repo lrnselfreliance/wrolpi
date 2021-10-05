@@ -115,7 +115,7 @@ class TestArchive(TestAPI):
                 latest_id=1,
                 latest=dict(singlefile_path=self.tmp_path / 'wrolpi.org:443/foo'),
                 domain_id=1,
-                domain=dict(directory=f'{self.tmp_dir.name}/archive/wrolpi.org:443', domain='wrolpi.org:443'),
+                domain=dict(directory=self.tmp_path / 'archive/wrolpi.org:443', domain='wrolpi.org:443'),
             )
         )
 

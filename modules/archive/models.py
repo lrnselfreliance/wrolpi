@@ -1,20 +1,9 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, types
+from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi.common import ModelHelper, Base, TZDateTime
-from wrolpi.media_path import MediaPath
-
-
-class DomainPath(types.TypeDecorator):
-    impl = types.String
-
-    def process_bind_param(self, value, dialect):
-        return str(value) if value else None
-
-    def process_result_value(self, value, dialect):
-        if value:
-            return MediaPath(value)
+from wrolpi.media_path import MediaPathType
 
 
 class Archive(Base, ModelHelper):
@@ -26,11 +15,11 @@ class Archive(Base, ModelHelper):
     domain_id = Column(Integer, ForeignKey('domains.id'))
     domain = relationship('Domain', primaryjoin='Archive.domain_id==Domain.id')
 
-    singlefile_path = Column(DomainPath)
-    readability_path = Column(DomainPath)
-    readability_json_path = Column(DomainPath)
-    readability_txt_path = Column(DomainPath)
-    screenshot_path = Column(DomainPath)
+    singlefile_path = Column(MediaPathType)
+    readability_path = Column(MediaPathType)
+    readability_json_path = Column(MediaPathType)
+    readability_txt_path = Column(MediaPathType)
+    screenshot_path = Column(MediaPathType)
 
     title = Column(String)
     archive_datetime = Column(TZDateTime)
@@ -66,7 +55,7 @@ class Domain(Base, ModelHelper):
     id = Column(Integer, primary_key=True)
 
     domain = Column(String)
-    directory = Column(String)
+    directory = Column(MediaPathType)
 
     urls: InstrumentedList = relationship('URL', primaryjoin='Domain.id==URL.domain_id', order_by='URL.latest_datetime')
 

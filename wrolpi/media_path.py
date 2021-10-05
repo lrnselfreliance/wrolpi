@@ -1,6 +1,8 @@
 import pathlib
 from typing import Union
 
+from sqlalchemy import types
+
 from wrolpi.common import get_media_directory
 
 PATH_TYPE = Union[str, pathlib.Path]
@@ -48,3 +50,14 @@ class MediaPath:
 
     def __eq__(self, other):
         return self._path == other
+
+
+class MediaPathType(types.TypeDecorator):  # noqa
+    impl = types.String
+
+    def process_bind_param(self, value, dialect):
+        return str(value) if value else None
+
+    def process_result_value(self, value, dialect):
+        if value:
+            return MediaPath(value)

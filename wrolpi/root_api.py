@@ -194,6 +194,8 @@ class CustomJSONEncoder(json.JSONEncoder):
                 return obj.dict()
         elif isinstance(obj, Path):
             return str(obj)
+        elif hasattr(obj, '__json__'):
+            return obj.__json__()
         return super(CustomJSONEncoder, self).default(obj)
 
 

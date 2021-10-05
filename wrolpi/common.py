@@ -4,12 +4,13 @@ import inspect
 import json
 import logging
 import os
+import pathlib
 import queue
 import re
 import string
 from copy import deepcopy
 from datetime import datetime, date, timezone
-from functools import wraps, lru_cache
+from functools import wraps
 from itertools import islice
 from multiprocessing import Event, Queue
 from pathlib import Path
@@ -527,18 +528,36 @@ def run_after(after: callable, *args, **kwargs) -> callable:
     return wrapper
 
 
-@lru_cache(maxsize=1)
+TEST_MEDIA_DIRECTORY = None
+MEDIA_DIRECTORY = None
+
+
+def set_test_media_directory(path):
+    global TEST_MEDIA_DIRECTORY
+    TEST_MEDIA_DIRECTORY = pathlib.Path(path) if path else None
+
+
 def get_media_directory() -> Path:
     """
     Get the media directory configured in local.yaml.
     """
+    global TEST_MEDIA_DIRECTORY
+    global MEDIA_DIRECTORY
+
+    if isinstance(TEST_MEDIA_DIRECTORY, pathlib.Path):
+        return TEST_MEDIA_DIRECTORY
+
+    if isinstance(MEDIA_DIRECTORY, pathlib.Path):
+        return MEDIA_DIRECTORY
+
     config = get_config()
     media_directory = config['media_directory']
     media_directory = Path(media_directory)
     if not media_directory.is_absolute():
         # Media directory is relative.  Assume that is relative to the project directory.
         media_directory = PROJECT_DIR / media_directory
-    return media_directory.absolute()
+    MEDIA_DIRECTORY = media_directory.absolute()
+    return MEDIA_DIRECTORY
 
 
 def get_absolute_media_path(path: str) -> Path:

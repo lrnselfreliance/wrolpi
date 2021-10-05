@@ -1,6 +1,5 @@
 import json
 import pathlib
-import tempfile
 
 import mock
 
@@ -8,8 +7,9 @@ from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_u
 from modules.archive.models import Archive, URL
 from wrolpi.db import get_db_session
 from wrolpi.errors import InvalidDomain, UnknownURL
+from wrolpi.media_path import MediaPath
 from wrolpi.root_api import CustomJSONEncoder
-from wrolpi.test.common import TestAPI, wrap_test_db
+from wrolpi.test.common import TestAPI, wrap_test_db, test_media_directory
 
 
 def make_fake_request_archive(readability=True, screenshot=True, title=True):
@@ -29,14 +29,8 @@ def make_fake_request_archive(readability=True, screenshot=True, title=True):
 class TestArchive(TestAPI):
 
     def setUp(self) -> None:
-        self.tmp_dir = tempfile.TemporaryDirectory()
-        tmp_dir = pathlib.Path(self.tmp_dir.name)
-        self.domain_directory_patch = mock.patch('modules.archive.lib.get_archive_directory', lambda: tmp_dir)
-        self.domain_directory_patch.start()
-
-    def tearDown(self) -> None:
-        self.domain_directory_patch.stop()
-        self.tmp_dir.cleanup()
+        super().setUp()
+        (pathlib.Path(self.tmp_dir.name) / 'archive').mkdir(exist_ok=True)
 
     @wrap_test_db
     def test_new_archive(self):
@@ -45,22 +39,22 @@ class TestArchive(TestAPI):
             # Everything is filled out.
             self.assertIsInstance(archive1, Archive)
             self.assertIsNotNone(archive1.archive_datetime)
-            self.assertIsInstance(archive1.singlefile_path, pathlib.Path)
-            self.assertIsInstance(archive1.readability_path, pathlib.Path)
-            self.assertIsInstance(archive1.readability_txt_path, pathlib.Path)
-            self.assertIsInstance(archive1.screenshot_path, pathlib.Path)
+            self.assertIsInstance(archive1.singlefile_path, MediaPath)
+            self.assertIsInstance(archive1.readability_path, MediaPath)
+            self.assertIsInstance(archive1.readability_txt_path, MediaPath)
+            self.assertIsInstance(archive1.screenshot_path, MediaPath)
             self.assertEqual(archive1.title, 'ジにてこちら')
             self.assertIsNotNone(archive1.url)
             self.assertIsNotNone(archive1.domain)
 
             # The actual files were dumped and read correctly.
-            with open(archive1.singlefile_path) as fh:
+            with open(archive1.singlefile_path.path) as fh:
                 self.assertEqual(fh.read(), '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>')
-            with open(archive1.readability_path) as fh:
+            with open(archive1.readability_path.path) as fh:
                 self.assertEqual(fh.read(), '<html>test readability content</html>')
-            with open(archive1.readability_txt_path) as fh:
+            with open(archive1.readability_txt_path.path) as fh:
                 self.assertEqual(fh.read(), '<html>test readability textContent</html>')
-            with open(archive1.readability_json_path) as fh:
+            with open(archive1.readability_json_path.path) as fh:
                 self.assertEqual(json.load(fh), {'title': 'ジにてこちら', 'url': 'https://example.com'})
 
             archive2 = new_archive('https://example.com')
@@ -72,8 +66,8 @@ class TestArchive(TestAPI):
     def test_no_screenshot(self):
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(screenshot=False)):
             archive = new_archive('https://example.com', sync=True)
-            self.assertIsInstance(archive.singlefile_path, pathlib.Path)
-            self.assertIsInstance(archive.readability_path, pathlib.Path)
+            self.assertIsInstance(archive.singlefile_path, MediaPath)
+            self.assertIsInstance(archive.readability_path, MediaPath)
             # Screenshot was empty
             self.assertIsNone(archive.screenshot_path)
 
@@ -81,51 +75,49 @@ class TestArchive(TestAPI):
     def test_no_readability(self):
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(readability=False)):
             archive = new_archive('https://example.com', sync=True)
-            self.assertIsInstance(archive.singlefile_path, pathlib.Path)
-            self.assertIsInstance(archive.screenshot_path, pathlib.Path)
+            self.assertIsInstance(archive.singlefile_path, MediaPath)
+            self.assertIsInstance(archive.screenshot_path, MediaPath)
             # Readability empty
             self.assertIsNone(archive.readability_path)
             self.assertIsNone(archive.readability_txt_path)
 
     @wrap_test_db
     def test_dict(self):
-        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()), \
-                mock.patch('modules.archive.models.get_media_directory', lambda: self.tmp_dir.name):
+        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
             d = new_archive('https://example.com', sync=True).dict()
             self.assertIsInstance(d, dict)
             json.dumps(d, cls=CustomJSONEncoder)
 
     @wrap_test_db
     def test_relationships(self):
-        with mock.patch('modules.archive.models.get_media_directory', lambda: self.tmp_dir.name):
-            with get_db_session(commit=True) as session:
-                domain, url = get_or_create_domain_and_url(session, 'https://wrolpi.org:443')
-                archive = Archive(
-                    singlefile_path=f'{self.tmp_dir.name}/wrolpi.org:443/foo',
-                    title='bar',
-                    url_id=url.id,
-                    domain_id=domain.id,
-                )
-                session.add(archive)
-                session.flush()
-
-                url.latest_id = archive.id
-
-            self.assertEqual(archive.domain, domain)
-            self.assertEqual(archive.url, url)
-
-            # Relationships are added in the dict() method.
-            self.assertDictContains(
-                url.dict(),
-                dict(
-                    id=1,
-                    url='https://wrolpi.org:443',
-                    latest_id=1,
-                    latest=dict(singlefile_path=pathlib.Path('wrolpi.org:443/foo')),
-                    domain_id=1,
-                    domain=dict(directory=f'{self.tmp_dir.name}/wrolpi.org:443', domain='wrolpi.org:443'),
-                )
+        with get_db_session(commit=True) as session:
+            domain, url = get_or_create_domain_and_url(session, 'https://wrolpi.org:443')
+            archive = Archive(
+                singlefile_path=f'{self.tmp_dir.name}/wrolpi.org:443/foo',
+                title='bar',
+                url_id=url.id,
+                domain_id=domain.id,
             )
+            session.add(archive)
+            session.flush()
+
+            url.latest_id = archive.id
+
+        self.assertEqual(archive.domain, domain)
+        self.assertEqual(archive.url, url)
+
+        # Relationships are added in the dict() method.
+        self.assertDictContains(
+            url.dict(),
+            dict(
+                id=1,
+                url='https://wrolpi.org:443',
+                latest_id=1,
+                latest=dict(singlefile_path=self.tmp_path / 'wrolpi.org:443/foo'),
+                domain_id=1,
+                domain=dict(directory=f'{self.tmp_dir.name}/archive/wrolpi.org:443', domain='wrolpi.org:443'),
+            )
+        )
 
     @wrap_test_db
     def test_get_urls(self):
@@ -133,44 +125,43 @@ class TestArchive(TestAPI):
         urls = get_urls()
         self.assertEqual([], urls)
 
-        with mock.patch('modules.archive.models.get_media_directory', lambda: self.tmp_dir.name):
-            with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(readability=False)):
-                # One set of duplicate URLs
-                new_archive('https://wrolpi.org/one', sync=True)
-                new_archive('https://wrolpi.org/one', sync=True)
+        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(readability=False)):
+            # One set of duplicate URLs
+            new_archive('https://wrolpi.org/one', sync=True)
+            new_archive('https://wrolpi.org/one', sync=True)
 
-                # Unique URLs
-                new_archive('https://wrolpi.org/two', sync=True)
-                new_archive('https://wrolpi.org/three', sync=True)
-                new_archive('https://example.com/one', sync=True)
+            # Unique URLs
+            new_archive('https://wrolpi.org/two', sync=True)
+            new_archive('https://wrolpi.org/three', sync=True)
+            new_archive('https://example.com/one', sync=True)
 
-            urls = get_urls()
-            # There are only 4 because one set is duplicate.
-            self.assertEqual(len(urls), 4)
-            self.assertEqual(
-                ['https://example.com/one', 'https://wrolpi.org/three',
-                 'https://wrolpi.org/two', 'https://wrolpi.org/one'],
-                [i['url'] for i in urls],
-            )
+        urls = get_urls()
+        # There are only 4 because one set is duplicate.
+        self.assertEqual(len(urls), 4)
+        self.assertEqual(
+            ['https://example.com/one', 'https://wrolpi.org/three',
+             'https://wrolpi.org/two', 'https://wrolpi.org/one'],
+            [i['url'] for i in urls],
+        )
 
-            # Only one URL for this domain.
-            urls = get_urls(domain='example.com')
-            self.assertEqual(len(urls), 1)
-            self.assertEqual(urls[0]['url'], 'https://example.com/one')
+        # Only one URL for this domain.
+        urls = get_urls(domain='example.com')
+        self.assertEqual(len(urls), 1)
+        self.assertEqual(urls[0]['url'], 'https://example.com/one')
 
-            # Bad domain requested.
-            self.assertRaises(InvalidDomain, get_urls, domain='bad_domain.com')
+        # Bad domain requested.
+        self.assertRaises(InvalidDomain, get_urls, domain='bad_domain.com')
 
-            # Limit to 3, but with an offset of 2 there are only 2.
-            urls = get_urls(3, 2)
-            self.assertEqual(['https://wrolpi.org/two', 'https://wrolpi.org/one'], [i['url'] for i in urls])
+        # Limit to 3, but with an offset of 2 there are only 2.
+        urls = get_urls(3, 2)
+        self.assertEqual(['https://wrolpi.org/two', 'https://wrolpi.org/one'], [i['url'] for i in urls])
 
-            # First two of this domain.
-            urls = get_urls(2, 0, 'wrolpi.org')
-            self.assertEqual(['https://wrolpi.org/two', 'https://wrolpi.org/one'], [i['url'] for i in urls])
-            # Last two of this domain, but there is only 1.
-            urls = get_urls(2, 2, 'wrolpi.org')
-            self.assertEqual(['https://wrolpi.org/three'], [i['url'] for i in urls])
+        # First two of this domain.
+        urls = get_urls(2, 0, 'wrolpi.org')
+        self.assertEqual(['https://wrolpi.org/two', 'https://wrolpi.org/one'], [i['url'] for i in urls])
+        # Last two of this domain, but there is only 1.
+        urls = get_urls(2, 2, 'wrolpi.org')
+        self.assertEqual(['https://wrolpi.org/three'], [i['url'] for i in urls])
 
     @wrap_test_db
     def test_validate_paths(self):
@@ -219,32 +210,33 @@ class TestArchive(TestAPI):
 
     @wrap_test_db
     def test_get_title_from_html(self):
-        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-            archive = new_archive('example.com', sync=True)
-            self.assertEqual(archive.title, 'ジにてこちら')
+        with test_media_directory():
+            with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
+                archive = new_archive('example.com', sync=True)
+                self.assertEqual(archive.title, 'ジにてこちら')
 
-        def fake_request_archive(_):
-            singlefile = '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>'
-            r = dict(
-                content=f'<html>test readability content</html>',
-                textContent='<html>test readability textContent</html>',
-            )
-            s = b'screenshot data'
-            return singlefile, r, s
+            def fake_request_archive(_):
+                singlefile = '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>'
+                r = dict(
+                    content=f'<html>test readability content</html>',
+                    textContent='<html>test readability textContent</html>',
+                )
+                s = b'screenshot data'
+                return singlefile, r, s
 
-        with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
-            archive = new_archive('example.com', sync=True)
-            self.assertEqual(archive.title, 'some title')
+            with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
+                archive = new_archive('example.com', sync=True)
+                self.assertEqual(archive.title, 'some title')
 
-        def fake_request_archive(_):
-            singlefile = '<html></html>'
-            r = dict(
-                content=f'<html>missing a title</html>',
-                textContent='',
-            )
-            s = b'screenshot data'
-            return singlefile, r, s
+            def fake_request_archive(_):
+                singlefile = '<html></html>'
+                r = dict(
+                    content=f'<html>missing a title</html>',
+                    textContent='',
+                )
+                s = b'screenshot data'
+                return singlefile, r, s
 
-        with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
-            archive = new_archive('example.com', sync=True)
-            self.assertIsNone(archive.title)
+            with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
+                archive = new_archive('example.com', sync=True)
+                self.assertIsNone(archive.title)

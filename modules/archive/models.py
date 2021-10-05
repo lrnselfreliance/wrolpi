@@ -1,10 +1,9 @@
-from pathlib import Path
-
-from sqlalchemy import Column, Integer, String, ForeignKey, types, event
-from sqlalchemy.orm import relationship, backref
+from sqlalchemy import Column, Integer, String, ForeignKey, types
+from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import ModelHelper, Base, TZDateTime, get_media_directory
+from wrolpi.common import ModelHelper, Base, TZDateTime
+from wrolpi.media_path import MediaPath
 
 
 class DomainPath(types.TypeDecorator):
@@ -15,7 +14,7 @@ class DomainPath(types.TypeDecorator):
 
     def process_result_value(self, value, dialect):
         if value:
-            return Path(value)
+            return MediaPath(value)
 
 
 class Archive(Base, ModelHelper):
@@ -39,46 +38,6 @@ class Archive(Base, ModelHelper):
 
     def __repr__(self):
         return f'<Archive id={self.id} url_id={self.url_id} singlefile={self.singlefile_path}>'
-
-    def validate_paths(self):
-        """
-        Verify that all paths are relative to my Domain.
-        """
-        if not self.domain:
-            return
-
-        d = self.domain.directory
-        paths = {'singlefile_path', 'readability_path', 'readability_json_path', 'readability_txt_path',
-                 'screenshot_path'}
-        for path in paths:
-            value: Path = getattr(self, path)
-            if isinstance(value, str):
-                value = Path(value)
-
-            if value and not value.is_relative_to(d):
-                raise ValueError(f'Archive path {path} is not relative to domain {self.domain.directory}')
-
-    def dict(self) -> dict:
-        d = super().dict()
-        media_directory = get_media_directory()
-        d['singlefile_path'] = self.singlefile_path.relative_to(media_directory) if self.singlefile_path else None
-        d['readability_path'] = self.readability_path.relative_to(media_directory) if self.readability_path else None
-        d['readability_json_path'] = self.readability_json_path.relative_to(
-            media_directory) if self.readability_json_path else None
-        d['readability_txt_path'] = self.readability_txt_path.relative_to(
-            media_directory) if self.readability_txt_path else None
-        d['screenshot_path'] = self.screenshot_path.relative_to(media_directory) if self.screenshot_path else None
-        return d
-
-
-@event.listens_for(Archive, 'before_insert')
-def archive_before_insert(mapper, connector, target: Archive):
-    target.validate_paths()
-
-
-@event.listens_for(Archive, 'before_update')
-def archive_before_update(mapper, connector, target: Archive):
-    target.validate_paths()
 
 
 class URL(Base, ModelHelper):

@@ -8,7 +8,7 @@ from http import HTTPStatus
 from itertools import zip_longest
 from queue import Empty
 from shutil import copyfile
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from uuid import uuid1
 
 import mock
@@ -19,7 +19,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from wrolpi.common import EXAMPLE_CONFIG_PATH, get_config, Base, QUEUES
+from wrolpi.common import EXAMPLE_CONFIG_PATH, get_config, Base, QUEUES, set_test_media_directory
 from wrolpi.db import postgres_engine, get_db_args
 from wrolpi.root_api import BLUEPRINTS, api_app
 from wrolpi.vars import PROJECT_DIR
@@ -175,8 +175,11 @@ ROUTES_ATTACHED = False
 class TestAPI(ExtendedTestCase):
 
     def setUp(self) -> None:
-        self.patch = mock.patch('wrolpi.vars.CONFIG_PATH', TEST_CONFIG_PATH.name)
-        self.patch.start()
+        self.config_path_patch = mock.patch('wrolpi.vars.CONFIG_PATH', TEST_CONFIG_PATH.name)
+        self.config_path_patch.start()
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        self.tmp_path = pathlib.Path(self.tmp_dir.name)
+        set_test_media_directory(self.tmp_dir.name)
         # Copy the example config to test against
         copyfile(str(EXAMPLE_CONFIG_PATH), TEST_CONFIG_PATH.name)
         # Setup the testing video root directory
@@ -195,7 +198,8 @@ class TestAPI(ExtendedTestCase):
             ROUTES_ATTACHED = True
 
     def tearDown(self) -> None:
-        self.patch.stop()
+        self.config_path_patch.stop()
+        set_test_media_directory(None)
         # Clear out any messages in queues
         for q in QUEUES:
             get_all_messages_in_queue(q)
@@ -206,6 +210,22 @@ class TestAPI(ExtendedTestCase):
     assertOK = partialmethod(assertHTTPStatus, status=HTTPStatus.OK)
     assertCONFLICT = partialmethod(assertHTTPStatus, status=HTTPStatus.CONFLICT)
     assertNO_CONTENT = partialmethod(assertHTTPStatus, status=HTTPStatus.NO_CONTENT)
+
+
+@contextmanager
+def test_media_directory(path: Optional[pathlib.Path] = None):
+    cleanup = False
+    if not path:
+        path = tempfile.TemporaryDirectory()
+        cleanup = True
+
+    set_test_media_directory(path.name)
+    try:
+        yield
+    finally:
+        set_test_media_directory(None)
+        if cleanup:
+            path.cleanup()
 
 
 @contextmanager

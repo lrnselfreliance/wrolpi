@@ -19,7 +19,6 @@ logger = logger.getChild(__name__)
 ARCHIVE_SERVICE = 'http://archive:8080'
 
 
-@lru_cache(maxsize=1)
 def get_archive_directory() -> pathlib.Path:
     return get_media_directory() / 'archive'
 

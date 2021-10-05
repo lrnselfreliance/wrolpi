@@ -10,6 +10,7 @@ import {SemanticToastContainer} from 'react-semantic-toasts';
 import 'react-semantic-toasts/styles/react-semantic-alert.css';
 import {AppsRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/Inventory";
+import {ArchiveRoute} from "./components/Archive";
 
 function Welcome() {
     return (
@@ -50,6 +51,7 @@ function App() {
                 <Route path="/admin" component={Admin}/>
                 <Route path="/apps" component={AppsRoute}/>
                 <Route path="/inventory" component={InventoryRoute}/>
+                <Route path='/archive' component={ArchiveRoute}/>
                 <Route component={PageNotFound}/>
             </Switch>
             <SemanticToastContainer position="top-right"/>

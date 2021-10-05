@@ -1,34 +1,17 @@
 #! /usr/bin/env python3
-"""
-WROLPi is a self-contained collection of software to help you survive the world Without Rule of Law.
-
-WROLPi is intended to be run on a Raspberry Pi with an optional external drive attached.  It serves up it's own wifi
-network so that any person with a laptop/tablet/phone can connect and use the data previously collected by the user.
-"""
 import argparse
 import asyncio
 import inspect
 import logging
 import sys
-from pprint import pprint
 
 import pytz
 
-from api import api
-from api.cmd import import_settings_configs
-from api.common import logger, get_config, set_timezone
-from api.db import uri
-from api.modules import MODULES
-from api.vars import PROJECT_DIR
-from api.videos.common import verify_config
+from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS
+from wrolpi.common import logger, get_config, set_timezone
+from wrolpi.vars import PROJECT_DIR, MODULES_DIR
 
-
-def update_choices_to_mains(sub_commands, choices_to_mains, sub_main):
-    """Associate a sub-command with the provided main, but only if that sub-command hasn't already been claimed
-    by another main.  This is a work-around so modules can define their down cmd-line arguments."""
-    for choice in sub_commands.choices:
-        if choice not in choices_to_mains:
-            choices_to_mains[choice] = sub_main
+logger = logger.getChild('wrolpi-main')
 
 
 def db_main(args):
@@ -37,6 +20,7 @@ def db_main(args):
     """
     from alembic.config import Config
     from alembic import command
+    from wrolpi.db import uri
 
     config = Config(PROJECT_DIR / 'alembic.ini')
     # Overwrite the Alembic config, the is usually necessary when running in a docker container.
@@ -58,36 +42,61 @@ def db_main(args):
 async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='count')
-    parser.add_argument('--verify-config', action='store_true', default=False,
-                        help='Verify the local.yaml, then exit.')
 
     sub_commands = parser.add_subparsers(title='sub-commands', dest='sub_commands')
 
-    # API parser is always present
+    # Add the API parser, this will allow the user to specify host/port etc.
     api_parser = sub_commands.add_parser('api')
-    # This dict keeps track of which main will be called for each sub-command
-    api.init_parser(api_parser)
+    root_api.init_parser(api_parser)
 
     # DB Parser for running Alembic migrations
     db_parser = sub_commands.add_parser('db')
     db_parser.add_argument('command', help=f'Supported commands: upgrade, downgrade')
 
-    choices_to_mains = {'api': api.main, }
-
-    # Setup the modules' sub-commands
-    for module_name, module in MODULES.items():
-        module.init_parser(sub_commands)
-        update_choices_to_mains(sub_commands, choices_to_mains, module.main.main)
-
     args = parser.parse_args()
     logger.warning(f'Starting with: {sys.argv}')
 
-    if args.verify_config:
-        verify_config()
-        print('Config verified')
-        return 0
+    await set_log_level(args)
 
-    # Set the level at the root logger so all children that have been created (or will be created) share the same level.
+    # Run DB migrations before anything else.
+    if args.sub_commands == 'db':
+        return db_main(args)
+
+    # Set the Timezone
+    config = get_config()
+    if 'timezone' in config:
+        tz = pytz.timezone(config['timezone'])
+        set_timezone(tz)
+
+    # Import the API in every module.  Each API should attach itself to `root_api`.
+    try:
+        modules = [i.name for i in MODULES_DIR.iterdir() if i.is_dir() and not i.name.startswith('_')]
+        for module in modules:
+            module = f'modules.{module}.api'
+            logger.debug(f'Importing {module}')
+            __import__(module, globals(), locals(), [], 0)
+    except ImportError as e:
+        logger.fatal('No modules could be found!', exc_info=e)
+        raise
+
+    if not modules:
+        raise Exception('No modules could be found!')
+
+    # Run the startup functions
+    for func in BEFORE_STARTUP_FUNCTIONS:
+        logger.debug(f'Calling {func} before startup.')
+        coro = func()
+        if inspect.iscoroutine(coro):
+            await coro
+
+    # Run the API
+    return root_api.main(args)
+
+
+async def set_log_level(args):
+    """
+    Set the level at the root logger so all children that have been created (or will be created) share the same level.
+    """
     root_logger = logging.getLogger()
     if args.verbose == 1:
         root_logger.setLevel(logging.INFO)
@@ -98,32 +107,6 @@ async def main():
     effective_level = logger.getEffectiveLevel()
     level_name = logging.getLevelName(effective_level)
     logger.warning(f'Logging level: {level_name}')
-
-    # Run DB migrations before anything else, if requested.
-    if args.sub_commands == 'db':
-        return db_main(args)
-
-    # Set the Timezone
-    config = get_config()
-    if 'timezone' in config:
-        tz = pytz.timezone(config['timezone'])
-        set_timezone(tz)
-
-    import_settings_configs(MODULES)
-
-    if args.sub_commands:
-        module_main = choices_to_mains[args.sub_commands]
-        return_code_or_coro = module_main(args)
-        if inspect.iscoroutine(return_code_or_coro):
-            # The main was actually async, await the coroutine.
-            return_code = await return_code_or_coro
-        else:
-            return_code = return_code_or_coro
-    else:
-        parser.print_help()
-        return_code = 1
-
-    return return_code
 
 
 if __name__ == '__main__':

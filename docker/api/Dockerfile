@@ -1,20 +1,20 @@
-FROM python:3.7
+FROM python:3.9
 ENV DOCKER=true
-
 WORKDIR /opt/wrolpi
 
-# Install dependencies
+# Update dependencies for the services install.
 RUN apt update
-RUN apt install -y ffmpeg wkhtmltopdf
+RUN apt install -y wkhtmltopdf
 
-# Copy minimal directories/files
-COPY main.py config *local.yaml alembic.ini /opt/wrolpi/
-COPY api /opt/wrolpi/api
+# Install WROLPi
+COPY main.py /opt/wrolpi/
+COPY config /opt/wrolpi/config
+COPY wrolpi /opt/wrolpi/wrolpi
+COPY modules /opt/wrolpi/modules
+# Remove archive, its not for this service.
+RUN rm -rf /opt/wrolpi/archive
+RUN pip3 install -r /opt/wrolpi/wrolpi/requirements.txt
+RUN find /opt/wrolpi/modules -name 'requirements.txt' -exec pip3 install -r {} \;
 
-# Install all requirements files.
-COPY requirements.txt /opt/wrolpi/
-RUN find -name requirements.txt -exec pip install --upgrade -r {} \;
-
-# Run the webserver
 ENTRYPOINT [ "python3", "/opt/wrolpi/main.py"]
 CMD ["api", "--host", "0.0.0.0" ]

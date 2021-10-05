@@ -1,4 +1,4 @@
-import {API_URI, DEFAULT_LIMIT, VIDEOS_API} from "./components/Common";
+import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, VIDEOS_API} from "./components/Common";
 import {toast} from 'react-semantic-toasts';
 
 function timeoutPromise(ms, promise) {
@@ -286,4 +286,29 @@ export async function updateItem(itemId, item) {
 export async function deleteItems(itemIds) {
     let i = itemIds.join(',');
     await apiDelete(`${API_URI}/inventory/item/${i}`);
+}
+
+export async function postArchive(url) {
+    let i = {url: url};
+    return await apiPost(`${API_URI}/archive`, i);
+}
+
+export async function deleteArchive(url_id) {
+    return await apiDelete(`${API_URI}/archive/${url_id}`);
+}
+
+export async function searchURLs(offset, limit) {
+    // Build a search query to retrieve a list of videos from the API
+    offset = offset || 0;
+    limit = limit || DEFAULT_LIMIT;
+    let body = {offset, limit};
+
+    let response = await apiPost(`${ARCHIVES_API}/search`, body);
+    if (response.status === 200) {
+        let data = await response.json();
+        console.log(data);
+        return [data['urls'], data['totals']['urls']];
+    } else {
+        throw Error(`Unable to search archives`);
+    }
 }

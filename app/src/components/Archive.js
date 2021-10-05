@@ -199,6 +199,7 @@ class ArchiveAddForm extends APIForm {
     handleSubmit = async (e) => {
         e.preventDefault();
         await postArchive(this.state.inputs.url);
+        this.setState({inputs: {url: ''}});
     }
 
     render() {
@@ -211,6 +212,7 @@ class ArchiveAddForm extends APIForm {
                             name='url'
                             placeholder='https://wrolpi.org'
                             onChange={this.handleInputChange}
+                            value={this.state.inputs.url}
                         />
                         <Form.Button primary>Archive</Form.Button>
                     </Form.Group>

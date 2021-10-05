@@ -42,8 +42,18 @@ function FailedUrlCard({url, syncURL, deleteURL}) {
     );
 }
 
-function URLCard({url, syncURL, deleteURL}) {
+function URLCard({url, fetchURLs}) {
     let latest = url.latest;
+
+    let syncURL = async (url) => {
+        await postArchive(url);
+        await fetchURLs();
+    }
+
+    let deleteURL = async (url_id) => {
+        await deleteArchive(url_id);
+        await fetchURLs();
+    }
 
     if (latest == null || latest.status === 'failed') {
         return <FailedUrlCard url={url} syncURL={syncURL} deleteURL={deleteURL}/>;
@@ -129,8 +139,7 @@ class URLCards extends React.Component {
         return (
             <Card.Group>
                 {this.props.urls.map((i) => {
-                    return <URLCard key={i['id']} url={i}
-                                    syncURL={this.props.syncURL} deleteURL={this.props.deleteURL}/>
+                    return <URLCard key={i['id']} url={i} fetchURLs={this.props.fetchURLs}/>
                 })}
             </Card.Group>
         )
@@ -148,9 +157,7 @@ class Archives extends React.Component {
             urls: null,
             totalPages: null,
         };
-        this.syncURL = this.syncURL.bind(this);
         this.fetchURLs = this.fetchURLs.bind(this);
-        this.deleteURL = this.deleteURL.bind(this);
     }
 
     async componentDidMount() {
@@ -163,23 +170,13 @@ class Archives extends React.Component {
         this.setState({urls, totalPages: total / this.state.limit});
     }
 
-    async syncURL(url) {
-        await postArchive(url);
-        await this.fetchURLs();
-    }
-
-    async deleteURL(url_id) {
-        await deleteArchive(url_id);
-        await this.fetchURLs();
-    }
-
     render() {
         let {urls} = this.state;
         if (urls !== null) {
             return (
                 <>
                     <Header as='h1'>Latest Archives</Header>
-                    <URLCards urls={urls} syncURL={this.syncURL} deleteURL={this.deleteURL}/>
+                    <URLCards urls={urls} fetchURLs={this.fetchURLs}/>
                 </>
             )
         }

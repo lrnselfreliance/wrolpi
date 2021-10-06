@@ -13,6 +13,10 @@ from sanic.request import Request
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+ch = logging.StreamHandler()
+formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
+ch.setFormatter(formatter)
+logger.addHandler(ch)
 
 app = Sanic('archive')
 
@@ -44,8 +48,9 @@ async def call_single_file(url) -> bytes:
     cmd = ['/usr/src/app/node_modules/single-file/cli/single-file', url,
            '--browser-executable-path', '/usr/bin/chromium-browser', '--browser-args', '["--no-sandbox"]',
            '--dump-content']
+    logger.debug(f'archive cmd: {cmd}')
     output = subprocess.check_output(cmd)
-    logger.debug(f'done archiving {url}')
+    logger.debug(f'done archiving for {url}')
     return output
 
 
@@ -57,6 +62,7 @@ async def extract_readability(path: str, url: str) -> dict:
     """
     logger.info(f'readability for {url}')
     cmd = ['readability-extractor', path, url]
+    logger.debug(f'readability cmd: {cmd}')
     output = subprocess.check_output(cmd)
     output = json.loads(output)
     logger.debug(f'done readability for {url}')
@@ -65,7 +71,9 @@ async def extract_readability(path: str, url: str) -> dict:
 
 async def take_screenshot(url: str) -> bytes:
     cmd = ['/usr/bin/chromium-browser', '--headless', '--disable-gpu', '--no-sandbox', '--screenshot',
-           '--window-size=1920,1080', url]
+           '--window-size=1280,720', url]
+    logger.info(f'Screenshot: {url}')
+    logger.debug(f'Screenshot cmd: {cmd}')
     with tempfile.TemporaryDirectory() as tmp_dir:
         try:
             subprocess.check_output(cmd, cwd=tmp_dir)

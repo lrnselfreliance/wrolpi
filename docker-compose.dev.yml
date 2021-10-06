@@ -32,7 +32,9 @@ services:
     user: '${UID-1000}:${GID-1000}'
 
   archive:
-    image: lrnselfreliance/archive
+    build:
+      context: .
+      dockerfile: docker/archive/Dockerfile
     ports:
       - '8083:8080'
     healthcheck:

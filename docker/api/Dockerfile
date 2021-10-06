@@ -4,7 +4,7 @@ WORKDIR /opt/wrolpi
 
 # Update dependencies for the services install.
 RUN apt update
-RUN apt install -y wkhtmltopdf
+RUN apt install -y ffmpeg wkhtmltopdf
 
 # Install WROLPi
 COPY main.py /opt/wrolpi/

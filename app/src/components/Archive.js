@@ -1,8 +1,9 @@
 import React from "react";
-import {Card, Container, Form, Header, Icon, Image} from "semantic-ui-react";
+import {Card, Confirm, Container, Form, Header, Icon, Image} from "semantic-ui-react";
 import {Route} from "react-router-dom";
 import {APIForm, uploadDate} from "./Common";
 import {deleteArchive, postArchive, searchURLs} from "../api";
+import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 
 
 function FailedUrlCard({url, syncURL, deleteURL}) {
@@ -42,96 +43,110 @@ function FailedUrlCard({url, syncURL, deleteURL}) {
     );
 }
 
-function URLCard({url, fetchURLs}) {
-    let latest = url.latest;
-
-    let syncURL = async (url) => {
-        await postArchive(url);
-        await fetchURLs();
+class URLCard extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            latest: props.url ? props.url.latest : null,
+            deleteOpen: false,
+            syncOpen: false,
+        }
     }
 
-    let deleteURL = async (url_id) => {
-        await deleteArchive(url_id);
-        await fetchURLs();
+    syncURL = async () => {
+        await postArchive(this.props.url.url);
+        await this.props.fetchURLs();
     }
 
-    if (latest == null || latest.status === 'failed') {
-        return <FailedUrlCard url={url} syncURL={syncURL} deleteURL={deleteURL}/>;
+    deleteURL = async () => {
+        await deleteArchive(this.props.url.id);
+        await this.props.fetchURLs();
     }
 
-    let imageSrc = latest.screenshot_path ? `/media/${latest.screenshot_path}` : null;
-    let screenshotUrl = latest.screenshot_path ? `/media/${latest.screenshot_path}` : null;
-    let screenshotIcon = <Icon name='camera' size='big' disabled/>;
-    if (screenshotUrl) {
-        screenshotIcon = (
-            <a href={screenshotUrl} target='_blank' rel='noopener noreferrer'>
-                <Icon name='camera' size='big'/>
-            </a>);
-    }
+    render() {
+        let url = this.props.url;
+        let latest = url && url.latest ? url.latest : null;
 
-    let singlefileUrl = latest.singlefile_path ? `/media/${latest.singlefile_path}` : null;
-    let singlefileIcon = <Icon name='file code' size='big' disabled/>;
-    if (singlefileUrl) {
-        singlefileIcon = (
-            <a href={singlefileUrl} target='_blank' rel='noopener noreferrer'>
-                <Icon name='file code' size='big'/>
-            </a>);
-    }
+        let imageSrc = latest.screenshot_path ? `/media/${latest.screenshot_path}` : null;
+        let singlefileUrl = latest.singlefile_path ? `/media/${latest.singlefile_path}` : null;
 
-    let readabilityUrl = latest.readability_path ? `/media/${latest.readability_path}` : null;
-    let readabilityIcon = <Icon name='book' size='big' disabled/>;
-    if (readabilityUrl) {
-        readabilityIcon = (
-            <a href={readabilityUrl} target='_blank' rel='noopener noreferrer'>
-                <Icon name='book' size='big'/>
-            </a>);
-    }
+        if (latest == null || latest.status === 'failed') {
+            return <FailedUrlCard url={url} syncURL={this.syncURL} deleteURL={this.deleteURL}/>;
+        }
 
-    let syncIcon = (
-        <a onClick={() => syncURL(url.url)}>
-            <Icon name='sync' size='big'/>
-        </a>
-    );
+        let readabilityUrl = latest.readability_path ? `/media/${latest.readability_path}` : null;
+        let readabilityIcon = <Button icon><Icon name='book' size='large' disabled/></Button>;
+        if (readabilityUrl) {
+            readabilityIcon = (
+                <Button icon href={readabilityUrl} target='_blank' rel='noopener noreferrer'>
+                    <Icon name='book' size='large'/>
+                </Button>);
+        }
 
-    let trashIcon = (
-        <a onClick={() => deleteURL(url.id)}>
-            <Icon name='trash' size='big'/>
-        </a>
-    );
+        let syncIcon = (
+            <>
+                <Button icon onClick={() => this.setState({syncOpen: true})}>
+                    <Icon name='sync' size='large'/>
+                </Button>
+                <Confirm
+                    open={this.state.syncOpen}
+                    content='Download the latest version of this URL?'
+                    confirmButton='Confirm'
+                    onCancel={() => this.setState({syncOpen: false})}
+                    onConfirm={this.syncURL}
+                />
+            </>
+        );
 
-    let externalIcon = (
-        <a href={url.url} target='_blank' rel='noopener noreferrer'>
-            <Icon name='sign-out' size='big'/>
-        </a>
-    );
+        let deleteIcon = (
+                <>
+                    <Button icon onClick={() => this.setState({deleteOpen: true})}>
+                        <Icon name='trash' size='large'/>
+                    </Button>
+                    <Confirm
+                        open={this.state.deleteOpen}
+                        content='Are you sure you want to delete this URL?  All files will be deleted.'
+                        confirmButton='Delete'
+                        onCancel={() => this.setState({deleteOpen: false})}
+                        onConfirm={this.deleteURL}
+                    />
+                </>
+            )
+        ;
 
-    return (
-        <Card>
-            <Card.Content>
-                <a href={singlefileUrl} target='_blank' rel='noopener noreferrer'>
-                    <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
-                    <Card.Header>
+        let externalIcon = (
+            <Button icon href={url.url} target='_blank' rel='noopener noreferrer'>
+                <Icon name='sign-out' size='large'/>
+            </Button>
+        );
+
+        return (
+            <Card>
+                <Card.Content>
+                    <a href={singlefileUrl} target='_blank' rel='noopener noreferrer'>
+                        <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
+                        <Card.Header>
+                            <Container textAlign='left'>
+                                <p>{url.latest.title || url.url}</p>
+                            </Container>
+                        </Card.Header>
+                    </a>
+                    <Card.Meta>
+                        {uploadDate(latest.archive_datetime)}
+                    </Card.Meta>
+                    <Card.Description>
                         <Container textAlign='left'>
-                            <p>{url.latest.title || url.url}</p>
+                            {readabilityIcon}
+                            {syncIcon}
+                            {deleteIcon}
+                            {externalIcon}
                         </Container>
-                    </Card.Header>
-                </a>
-                <Card.Meta>
-                    {uploadDate(latest.archive_datetime)}
-                </Card.Meta>
-                <Card.Description>
-                    <Container textAlign='left'>
-                        {singlefileIcon}
-                        {readabilityIcon}
-                        {screenshotIcon}
-                        {syncIcon}
-                        {trashIcon}
-                        {externalIcon}
-                    </Container>
-                </Card.Description>
-            </Card.Content>
-        </Card>
-    )
+                    </Card.Description>
+                </Card.Content>
+            </Card>
+        )
+    }
+
 }
 
 class URLCards extends React.Component {

@@ -12,7 +12,6 @@ COPY config /opt/wrolpi/config
 COPY wrolpi /opt/wrolpi/wrolpi
 COPY modules /opt/wrolpi/modules
 # Remove archive, its not for this service.
-RUN rm -rf /opt/wrolpi/archive
 RUN pip3 install -r /opt/wrolpi/wrolpi/requirements.txt
 RUN find /opt/wrolpi/modules -name 'requirements.txt' -exec pip3 install -r {} \;
 

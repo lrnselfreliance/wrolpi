@@ -60,7 +60,7 @@ class ConfigError(Exception):
 
 
 @before_startup
-def import_settings_config():
+def import_videos_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
     try:
         config = load_channels_config()

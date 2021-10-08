@@ -2,7 +2,6 @@ import asyncio
 import base64
 import json
 import pathlib
-from functools import lru_cache
 from urllib.parse import urlparse
 
 import requests
@@ -272,12 +271,16 @@ def get_url_count(domain: str = '') -> int:
 
 def delete_url(url_id: int):
     """
-    Delete a URL record and all associated Archives.
+    Delete a URL record, all it's Archives and files.
     """
     with get_db_session() as session:
-        url = session.query(URL).filter_by(id=url_id).one_or_none()
+        url: URL = session.query(URL).filter_by(id=url_id).one_or_none()
         if not url:
             raise UnknownURL(f'Unknown url with id: {url_id}')
+
+        # Delete any files associated with this URL.
+        for archive in url.archives:
+            archive.unlink()
 
     with get_db_session(commit=True) as session:
         session.query(URL).filter_by(id=url_id).delete()

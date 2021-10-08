@@ -181,7 +181,7 @@ async def _periodic_download(min_download_frequency: int, max_download_frequency
     Wait some amount of time, download, then schedule the next download.
     """
     sleep_seconds = random.randint(min_download_frequency, max_download_frequency)
-    logger.debug(f'Waiting {sleep_seconds} seconds before next download')
+    logger.debug(f'Waiting {sleep_seconds} seconds before next periodic download')
     await asyncio.sleep(sleep_seconds)
 
     url = get_sanic_url(path='/api/videos:download')

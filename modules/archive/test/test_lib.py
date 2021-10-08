@@ -191,7 +191,7 @@ class TestArchive(TestAPI):
     @wrap_test_db
     def test_delete_url(self):
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-            archive = new_archive('https://example.com')
+            archive = new_archive('https://example.com', sync=True)
 
             with get_db_session() as session:
                 urls = session.query(URL).all()
@@ -199,7 +199,19 @@ class TestArchive(TestAPI):
                 archives = session.query(Archive).all()
                 self.assertEqual(len(archives), 1)
 
-        delete_url(archive.url.id)
+            self.assertIsNotNone(archive.singlefile_path)
+            singlefile_path = archive.singlefile_path.path
+            self.assertTrue(singlefile_path.exists())
+
+            url_id = archive.url.id
+
+        # Delete the URL, all archives and all files.
+        delete_url(url_id)
+
+        self.assertFalse(singlefile_path.exists())
+
+        # Can't delete the same URL twice.
+        self.assertRaises(UnknownURL, delete_url, url_id)
 
         with get_db_session() as session:
             urls = session.query(URL).all()

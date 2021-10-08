@@ -1,3 +1,6 @@
+import pathlib
+from typing import Generator
+
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
@@ -27,6 +30,26 @@ class Archive(Base, ModelHelper):
 
     def __repr__(self):
         return f'<Archive id={self.id} url_id={self.url_id} singlefile={self.singlefile_path}>'
+
+    def my_paths(self) -> Generator:
+        if self.singlefile_path:
+            yield self.singlefile_path.path
+        if self.readability_path:
+            yield self.readability_path.path
+        if self.readability_json_path:
+            yield self.readability_json_path.path
+        if self.readability_txt_path:
+            yield self.readability_txt_path.path
+        if self.screenshot_path:
+            yield self.screenshot_path.path
+
+    def unlink(self):
+        """
+        Remove any files in this archive.
+        """
+        # Don't fail if a file is missing, it could have been deleted manually.
+        for path in self.my_paths():
+            path.unlink(missing_ok=True)
 
 
 class URL(Base, ModelHelper):

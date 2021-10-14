@@ -1,8 +1,10 @@
 import React from "react";
 import {Card, Confirm, Container, Form, Header, Icon, Image, Tab} from "semantic-ui-react";
-import {APIForm, uploadDate} from "./Common";
+import Paginator, {APIForm, changePageHistory, uploadDate} from "./Common";
 import {deleteArchive, postArchive, refreshArchives, searchURLs} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
+import {NavLink, Route} from "react-router-dom";
+import * as QueryString from "query-string";
 
 
 function FailedUrlCard({url, syncURL, deleteURL}) {
@@ -164,18 +166,40 @@ class Archives extends React.Component {
 
     constructor(props) {
         super(props);
+        const query = QueryString.parse(this.props.location.search);
+        let activePage = query.page ? parseInt(query.page) : 1;
+
         this.state = {
-            offset: 0,
-            activePage: 1,
+            activePage: activePage,
             limit: 20,
             urls: null,
             totalPages: null,
         };
         this.fetchURLs = this.fetchURLs.bind(this);
+        this.changePage = this.changePage.bind(this);
     }
 
     async componentDidMount() {
         await this.fetchURLs();
+    }
+
+    async componentDidUpdate(prevProps, prevState, snapshot) {
+        let pageChanged = (
+            prevState.activePage !== this.state.activePage
+        );
+
+        if (pageChanged) {
+            this.applyStateToHistory();
+            let {history, location} = this.props;
+            let {activePage, queryStr, searchOrder} = this.state;
+            changePageHistory(history, location, activePage, queryStr, searchOrder);
+        }
+    }
+
+    applyStateToHistory = () => {
+        let {history, location} = this.props;
+        let {activePage, queryStr, searchOrder} = this.state;
+        changePageHistory(history, location, activePage, queryStr, searchOrder);
     }
 
     async fetchURLs() {
@@ -184,13 +208,32 @@ class Archives extends React.Component {
         this.setState({urls, totalPages: total / this.state.limit});
     }
 
+    changePage(activePage) {
+        this.setState({activePage}, this.fetchURLs);
+    }
+
     render() {
-        let {urls} = this.state;
+        let {urls, activePage, totalPages} = this.state;
+
+        let pagination = null;
+        if (totalPages) {
+            pagination = (
+                <div style={{marginTop: '3em', textAlign: 'center'}}>
+                    <Paginator
+                        activePage={activePage}
+                        changePage={this.changePage}
+                        totalPages={totalPages}
+                    />
+                </div>
+            )
+        }
+
         if (urls !== null) {
             return (
                 <>
                     <Header as='h1'>Latest Archives</Header>
                     <URLCards urls={urls} fetchURLs={this.fetchURLs}/>
+                    {pagination}
                 </>
             )
         }
@@ -252,10 +295,39 @@ class ManageArchives extends React.Component {
 }
 
 export class ArchiveRoute extends React.Component {
+
     render() {
         const panes = [
-            {menuItem: 'Archives', render: () => <Tab.Pane><Archives/></Tab.Pane>},
-            {menuItem: 'Manage', render: () => <Tab.Pane><ManageArchives/></Tab.Pane>},
+            {
+                menuItem: {
+                    as: NavLink,
+                    content: 'Archives',
+                    id: 'archive',
+                    to: '/archive',
+                    exact: true,
+                    key: 'home',
+                },
+                render: () => (
+                    <Route path='/archive' exact
+                           component={(i) => <Tab.Pane>
+                               <Archives history={i.history} location={i.location}/>
+                           </Tab.Pane>}
+                    />)
+            },
+            {
+                menuItem: {
+                    as: NavLink,
+                    content: 'Manage',
+                    id: 'manage',
+                    to: '/archive/manage',
+                    exact: true,
+                    key: 'manage',
+                },
+                render: () => (
+                    <Route path='/archive/manage' exact
+                           component={(i) => <Tab.Pane><ManageArchives history={i.history}/></Tab.Pane>}/>
+                )
+            },
         ];
 
         return (

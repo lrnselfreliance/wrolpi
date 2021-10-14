@@ -1,11 +1,13 @@
 import React from 'react';
 import {Link, Route} from "react-router-dom";
 import Paginator, {
+    changePageHistory,
     DEFAULT_LIMIT,
     defaultSearchOrder,
     defaultVideoOrder,
     humanFileSize,
     Progresses,
+    scrollToTop,
     searchOrders,
     secondsToString,
     uploadDate,
@@ -19,13 +21,6 @@ import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {Channels, EditChannel, NewChannel} from "./Channels";
 import {VideoPlaceholder} from "./Placeholder";
-
-function scrollToTop() {
-    window.scrollTo({
-        top: 0,
-        behavior: "auto"
-    });
-}
 
 class ManageVideos extends React.Component {
 
@@ -136,21 +131,6 @@ export class VideoWrapper extends React.Component {
             return <VideoPlaceholder/>
         }
     }
-}
-
-function changePageHistory(history, location, activePage, searchStr, searchOrder) {
-    let search = `?page=${activePage}`;
-    if (searchStr) {
-        search = `${search}&q=${searchStr}`;
-    }
-    if (searchOrder) {
-        search = `${search}&o=${searchOrder}`;
-    }
-    history.push({
-        pathname: location.pathname,
-        search: search,
-    });
-    scrollToTop();
 }
 
 class VideosPreview extends React.Component {

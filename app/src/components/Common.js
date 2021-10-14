@@ -420,12 +420,34 @@ export function enumerate(array) {
 }
 
 export function arraysEqual(a, b) {
-  if (a === b) return true;
-  if (a == null || b == null) return false;
-  if (a.length !== b.length) return false;
+    if (a === b) return true;
+    if (a == null || b == null) return false;
+    if (a.length !== b.length) return false;
 
-  for (var i = 0; i < a.length; ++i) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
+    for (var i = 0; i < a.length; ++i) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+}
+
+export function scrollToTop() {
+    window.scrollTo({
+        top: 0,
+        behavior: "auto"
+    });
+}
+
+export function changePageHistory(history, location, activePage, searchStr, searchOrder) {
+    let search = `?page=${activePage}`;
+    if (searchStr) {
+        search = `${search}&q=${searchStr}`;
+    }
+    if (searchOrder) {
+        search = `${search}&o=${searchOrder}`;
+    }
+    history.push({
+        pathname: location.pathname,
+        search: search,
+    });
+    scrollToTop();
 }

@@ -306,7 +306,6 @@ export async function searchURLs(offset, limit) {
     let response = await apiPost(`${ARCHIVES_API}/search`, body);
     if (response.status === 200) {
         let data = await response.json();
-        console.log(data);
         return [data['urls'], data['totals']['urls']];
     } else {
         throw Error(`Unable to search archives`);

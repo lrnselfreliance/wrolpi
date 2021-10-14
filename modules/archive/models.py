@@ -1,4 +1,3 @@
-import pathlib
 from typing import Generator
 
 from sqlalchemy import Column, Integer, String, ForeignKey

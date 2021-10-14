@@ -3,13 +3,15 @@ import pathlib
 
 import mock
 
-from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count, delete_url
+from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count, delete_url, \
+    refresh_archives
 from modules.archive.models import Archive, URL
+from wrolpi.common import get_media_directory
 from wrolpi.db import get_db_session
 from wrolpi.errors import InvalidDomain, UnknownURL
 from wrolpi.media_path import MediaPath
 from wrolpi.root_api import CustomJSONEncoder
-from wrolpi.test.common import TestAPI, wrap_test_db, test_media_directory
+from wrolpi.test.common import TestAPI, wrap_test_db, wrap_media_directory
 
 
 def make_fake_request_archive(readability=True, screenshot=True, title=True):
@@ -201,13 +203,12 @@ class TestArchive(TestAPI):
 
             self.assertIsNotNone(archive.singlefile_path)
             singlefile_path = archive.singlefile_path.path
-            self.assertTrue(singlefile_path.exists())
+            self.assertTrue(singlefile_path.is_file())
 
             url_id = archive.url.id
 
         # Delete the URL, all archives and all files.
         delete_url(url_id)
-
         self.assertFalse(singlefile_path.exists())
 
         # Can't delete the same URL twice.
@@ -222,7 +223,7 @@ class TestArchive(TestAPI):
 
     @wrap_test_db
     def test_get_title_from_html(self):
-        with test_media_directory():
+        with wrap_media_directory():
             with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
                 archive = new_archive('example.com', sync=True)
                 self.assertEqual(archive.title, 'ジにてこちら')
@@ -252,3 +253,45 @@ class TestArchive(TestAPI):
             with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
                 archive = new_archive('example.com', sync=True)
                 self.assertIsNone(archive.title)
+
+    @wrap_test_db
+    def test_refresh_archives(self):
+        with wrap_media_directory():
+            with get_db_session() as session:
+                urls = session.query(URL).count()
+                self.assertEqual(urls, 0)
+
+            archive_directory = get_media_directory() / 'archive'
+            archive_directory.mkdir()
+
+            # Make some test files to refresh.
+            example = archive_directory / 'example.com'
+            example.mkdir()
+            (example / '2021-10-05 16:20:10.346823.html').touch()
+            (example / '2021-10-05 16:20:10.346823.png').touch()
+            (example / '2021-10-05 16:20:10.346823-readability.txt').touch()
+            (example / '2021-10-05 16:20:10.346823-readability.json').touch()
+            (example / '2021-10-05 16:20:10.346823-readability.html').touch()
+            with (example / '2021-10-05 16:20:10.346823-readability.json').open('wt') as fh:
+                json.dump({'url': 'foo'}, fh)
+
+            # These should log an error because they are missing the singlefile path.
+            (example / '2021-10-05 16:20:10.346824-readability.html').touch()
+            (example / '2021-10-05 16:20:10.346825-readability.json').touch()
+            # These are not archives and should be ignored.
+            (example / '2021-10-05 16:20:10.346826-something.html').touch()
+            (example / 'random file').touch()
+            (example / '2021-10-05 16:20:10.346827-something.html').mkdir()
+            (example / '2021-10-05 16:20:10 invalid date').touch()
+
+            # This single archive is found.
+            refresh_archives()
+            with get_db_session() as session:
+                self.assertEqual(session.query(URL).count(), 1)
+                self.assertEqual(session.query(Archive).count(), 1)
+
+            # Running the refresh does not result in a new archive.
+            refresh_archives()
+            with get_db_session() as session:
+                self.assertEqual(session.query(URL).count(), 1)
+                self.assertEqual(session.query(Archive).count(), 1)

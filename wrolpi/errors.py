@@ -120,6 +120,10 @@ class PendingArchive(APIError):
     pass
 
 
+class InvalidArchive(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -262,5 +266,10 @@ API_ERRORS = {
         'code': next(error_codes),
         'message': 'Archive with that URL is already pending',
         'status': HTTPStatus.BAD_REQUEST,
+    },
+    InvalidArchive: {
+        'code': next(error_codes),
+        'message': 'The archive is invalid.  See server logs.',
+        'status': HTTPStatus.INTERNAL_SERVER_ERROR,
     },
 }

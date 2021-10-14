@@ -23,7 +23,7 @@ class MediaPath:
     @classmethod
     def _validate_path(cls, path: PATH_TYPE):
         if not path:
-            raise ValueError(f'Path must not be empty!')
+            raise ValueError(f'MediaPath cannot not be empty!')
 
         path = pathlib.Path(path) if not isinstance(path, pathlib.Path) else path
         if not path.is_absolute():
@@ -56,7 +56,17 @@ class MediaPathType(types.TypeDecorator):  # noqa
     impl = types.String
 
     def process_bind_param(self, value, dialect):
-        return str(value) if value else None
+        if isinstance(value, str) and len(value) == 0:
+            raise ValueError('MediaPath cannot be empty')
+
+        if isinstance(value, pathlib.Path):
+            return str(value.absolute())
+        elif isinstance(value, tuple) and len(value) == 1 and isinstance(value[0], pathlib.Path):
+            # TODO Sometimes a value will be passed as a tuple??
+            return str(value[0].absolute())
+        elif isinstance(value, str) or value is None:
+            return value
+        raise ValueError(f'Invalid MediaPath ({type(value)}): {value}')
 
     def process_result_value(self, value, dialect):
         if value:

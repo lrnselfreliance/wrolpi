@@ -28,7 +28,7 @@ from sqlalchemy.ext.declarative import declarative_base
 
 from wrolpi.errors import WROLModeEnabled, InvalidTimezone, UnknownDirectory
 from wrolpi.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT, \
-    DEFAULT_TIMEZONE_STR, PROJECT_DIR
+    DEFAULT_TIMEZONE_STR, PROJECT_DIR, DATETIME_FORMAT, DATETIME_FORMAT_MS
 
 logger = logging.getLogger(__name__)
 ch = logging.StreamHandler()
@@ -107,6 +107,22 @@ def today() -> date:
     Return today's date.
     """
     return now().date()
+
+
+def strftime(dt: datetime) -> str:
+    return dt.strftime(DATETIME_FORMAT)
+
+
+def strptime(dt: str) -> datetime:
+    return local_timezone(datetime.strptime(dt, DATETIME_FORMAT))
+
+
+def strftime_ms(dt: datetime) -> str:
+    return dt.strftime(DATETIME_FORMAT_MS)
+
+
+def strptime_ms(dt: str) -> datetime:
+    return local_timezone(datetime.strptime(dt, DATETIME_FORMAT_MS))
 
 
 class TZDateTime(types.TypeDecorator):

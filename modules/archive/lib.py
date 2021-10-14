@@ -2,15 +2,19 @@ import asyncio
 import base64
 import json
 import pathlib
+import re
+from itertools import groupby
+from typing import Iterator
 from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
+from sqlalchemy.orm import Session
 
 from modules.archive.models import URL, Domain, Archive
-from wrolpi.common import get_media_directory, logger, now
+from wrolpi.common import get_media_directory, logger, now, strptime_ms, chunks
 from wrolpi.db import get_db_session, get_db_curs
-from wrolpi.errors import InvalidDomain, UnknownURL, PendingArchive
+from wrolpi.errors import InvalidDomain, UnknownURL, PendingArchive, InvalidArchive
 from wrolpi.vars import DATETIME_FORMAT_MS
 
 logger = logger.getChild(__name__)
@@ -149,6 +153,8 @@ def _do_archive(url: str, archive_id: int):
         if screenshot:
             with screenshot_path.open('wb') as fh:
                 fh.write(screenshot)
+        else:
+            screenshot_path = None
 
         # Store the Readability into separate files.  This allows the user to view text-only or html articles.
         title = None
@@ -160,6 +166,8 @@ def _do_archive(url: str, archive_id: int):
                 fh.write(readability.pop('content'))
             with readability_txt_path.open('wt') as fh:
                 fh.write(readability.pop('textContent'))
+        else:
+            readability_path = readability_txt_path = None
 
         # Always write a JSON file that contains at least the URL.
         readability = readability or {}
@@ -177,10 +185,10 @@ def _do_archive(url: str, archive_id: int):
             archive.archive_datetime = now()
             archive.title = title
             archive.singlefile_path = singlefile_path
-            archive.readability_path = readability_path if readability_path.is_file() else None
+            archive.readability_path = readability_path
             archive.readability_json_path = readability_json_path
-            archive.readability_txt_path = readability_txt_path if readability_txt_path.is_file() else None
-            archive.screenshot_path = screenshot_path if screenshot_path.is_file() else None
+            archive.readability_txt_path = readability_txt_path
+            archive.screenshot_path = screenshot_path
             # Update the latest for easy viewing.
             archive.url.latest_id = archive.id
             archive.url.latest_datetime = archive.archive_datetime
@@ -284,3 +292,107 @@ def delete_url(url_id: int):
 
     with get_db_session(commit=True) as session:
         session.query(URL).filter_by(id=url_id).delete()
+
+
+def group_archive_files(files: Iterator[pathlib.Path]) -> groupby:
+    """
+    Group archive files by their timestamp.
+    """
+    # groupby requires the files to be sorted.
+    files = sorted(files)
+    # Group archive files by their datetime at the beginning of the file.
+    groups = groupby(files, key=lambda i: i.name[:26])
+    for dt, files in groups:
+        try:
+            dt = strptime_ms(dt)
+        except ValueError:
+            logger.info(f'Ignoring invalid archives of {dt=}')
+            continue
+
+        # Sort the files into their respective slots.
+        singlefile_path = readability_path = readability_txt_path = readability_json_path = screenshot_path = None
+        file = None
+        for file in files:
+            if file.name.endswith('-readability.html'):
+                readability_path = file
+            elif file.name.endswith('.html'):
+                singlefile_path = file
+            elif file.name.endswith('.png') or file.name.endswith('.jpg') or file.name.endswith('.jpeg'):
+                screenshot_path = file
+            elif file.name.endswith('-readability.json'):
+                readability_json_path = file
+            elif file.name.endswith('-readability.txt'):
+                readability_txt_path = file
+
+        if not singlefile_path:
+            logger.warning(f'Archive does not have a singlefile html!  Ignoring. {file}')
+            continue
+        if not readability_json_path:
+            logger.warning(f'Archive does not have a json file!  Ignoring. {file}')
+            continue
+
+        yield dt, (singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path)
+
+
+ARCHIVE_MATCHER = re.compile(r'\d{4}-\d\d-\d\d (\d\d:){2}\d\d\.\d{6}.*$')
+ARCHIVE_SUFFIXES = {'.txt', '.html', '.json', '.png', '.jpg', '.jpeg'}
+
+
+def is_archive_file(path: pathlib.Path) -> bool:
+    """
+    Archive files are expected to start with the following: %Y-%m-%d %H:%M:%S.%f
+    they must have one of the following suffixes: .txt, .html, .json, .png, .jpg, .jpeg
+    """
+    return path.is_file() and path.suffix.lower() in ARCHIVE_SUFFIXES and bool(ARCHIVE_MATCHER.match(path.name))
+
+
+def refresh_archives():
+    """
+    Search the Archives directory for archive files, update the database if new files are found.
+    """
+    archive_directory = get_archive_directory()
+    for domain_directory in filter(lambda i: i.is_dir(), archive_directory.iterdir()):
+        archives_files = filter(is_archive_file, domain_directory.iterdir())
+        archive_groups = group_archive_files(archives_files)
+        for chunk in chunks(archive_groups, 20):
+            with get_db_session(commit=True) as session:
+                for dt, files in chunk:
+                    upsert_archive(dt, files, session)
+
+
+def upsert_archive(dt: str, files, session: Session):
+    """
+    Get or create an Archive and it's URL/Domain.  If it already exists, update it with these new files.
+    """
+    singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path = files
+    # Extract the URL from the JSON.  Fail if this is not possible.
+    try:
+        with readability_json_path.open() as fh:
+            json_contents = json.load(fh)
+            url = json_contents['url']
+    except Exception as e:
+        raise InvalidArchive() from e
+
+    domain, url_ = get_or_create_domain_and_url(session, url)
+    # Get the existing Archive, or create a new one.
+    archive = session.query(Archive).filter_by(singlefile_path=singlefile_path).one_or_none()
+    if not archive:
+        # No archive matches this singlefile_path, create a new one.
+        archive = Archive(
+            url_id=url_.id,
+            domain_id=domain.id,
+        )
+        session.add(archive)
+        session.flush()
+
+    # Update the archive with the files that we have.
+    archive.status = 'complete',
+    archive.archive_datetime = dt,
+    archive.singlefile_path = singlefile_path,
+    archive.readability_path = readability_path,
+    archive.readability_txt_path = readability_txt_path,
+    archive.readability_json_path = readability_json_path,
+    archive.screenshot_path = screenshot_path,
+    archive_id = archive.id
+    if url_.latest_datetime and url_.latest_datetime < dt:
+        url_.latest_id = archive_id

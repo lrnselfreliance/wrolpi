@@ -84,10 +84,13 @@ async def main():
 
     # Run the startup functions
     for func in BEFORE_STARTUP_FUNCTIONS:
-        logger.debug(f'Calling {func} before startup.')
-        coro = func()
-        if inspect.iscoroutine(coro):
-            await coro
+        try:
+            logger.debug(f'Calling {func} before startup.')
+            coro = func()
+            if inspect.iscoroutine(coro):
+                await coro
+        except Exception as e:
+            logger.warning(f'Startup {func} failed!', exc_info=e)
 
     # Run the API
     return root_api.main(args)

@@ -213,7 +213,7 @@ class TestAPI(ExtendedTestCase):
 
 
 @contextmanager
-def test_media_directory(path: Optional[pathlib.Path] = None):
+def wrap_media_directory(path: Optional[pathlib.Path] = None):
     cleanup = False
     if not path:
         path = tempfile.TemporaryDirectory()

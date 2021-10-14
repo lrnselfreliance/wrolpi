@@ -1,8 +1,7 @@
 import React from "react";
-import {Card, Confirm, Container, Form, Header, Icon, Image} from "semantic-ui-react";
-import {Route} from "react-router-dom";
+import {Card, Confirm, Container, Form, Header, Icon, Image, Tab} from "semantic-ui-react";
 import {APIForm, uploadDate} from "./Common";
-import {deleteArchive, postArchive, searchURLs} from "../api";
+import {deleteArchive, postArchive, refreshArchives, searchURLs} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 
 
@@ -237,23 +236,33 @@ class ArchiveAddForm extends APIForm {
     }
 }
 
-class Archive extends React.Component {
+class ManageArchives extends React.Component {
+    async refresh() {
+        await refreshArchives();
+    }
+
     render() {
-        return (
-            <Container fluid style={{marginTop: '2em'}}>
-                <ArchiveAddForm/>
-                <Archives/>
-            </Container>
-        )
+        return (<>
+            <Button secondary
+                    onClick={this.refresh}>
+                Refresh Archive Files
+            </Button>
+        </>)
     }
 }
 
 export class ArchiveRoute extends React.Component {
     render() {
+        const panes = [
+            {menuItem: 'Archives', render: () => <Tab.Pane><Archives/></Tab.Pane>},
+            {menuItem: 'Manage', render: () => <Tab.Pane><ManageArchives/></Tab.Pane>},
+        ];
+
         return (
             <>
                 <Container style={{marginTop: '2em', marginBottom: '2em'}}>
-                    <Route path='/archive' exact component={Archive}/>
+                    <ArchiveAddForm/>
+                    <Tab panes={panes}/>
                 </Container>
             </>
         )

@@ -312,3 +312,7 @@ export async function searchURLs(offset, limit) {
         throw Error(`Unable to search archives`);
     }
 }
+
+export async function refreshArchives() {
+    return await apiPost(`${ARCHIVES_API}:refresh`);
+}

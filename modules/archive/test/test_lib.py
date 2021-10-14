@@ -4,7 +4,7 @@ import pathlib
 import mock
 
 from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count, delete_url, \
-    refresh_archives
+    _refresh_archives
 from modules.archive.models import Archive, URL
 from wrolpi.common import get_media_directory
 from wrolpi.db import get_db_session
@@ -285,13 +285,13 @@ class TestArchive(TestAPI):
             (example / '2021-10-05 16:20:10 invalid date').touch()
 
             # This single archive is found.
-            refresh_archives()
+            _refresh_archives()
             with get_db_session() as session:
                 self.assertEqual(session.query(URL).count(), 1)
                 self.assertEqual(session.query(Archive).count(), 1)
 
             # Running the refresh does not result in a new archive.
-            refresh_archives()
+            _refresh_archives()
             with get_db_session() as session:
                 self.assertEqual(session.query(URL).count(), 1)
                 self.assertEqual(session.query(Archive).count(), 1)

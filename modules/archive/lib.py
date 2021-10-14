@@ -210,6 +210,7 @@ def get_or_create_domain_and_url(session, url):
     Get/create the Domain for this archive.
     """
     domain_ = extract_domain(url)
+    logger.debug(f'{domain_=}')
     domain = session.query(Domain).filter_by(domain=domain_).one_or_none()
     if not domain:
         domain = Domain(domain=domain_, directory=str(get_domain_directory(url)))
@@ -346,18 +347,23 @@ def is_archive_file(path: pathlib.Path) -> bool:
     return path.is_file() and path.suffix.lower() in ARCHIVE_SUFFIXES and bool(ARCHIVE_MATCHER.match(path.name))
 
 
-def refresh_archives():
+def _refresh_archives():
     """
     Search the Archives directory for archive files, update the database if new files are found.
     """
     archive_directory = get_archive_directory()
     for domain_directory in filter(lambda i: i.is_dir(), archive_directory.iterdir()):
+        logger.debug(f'Refreshing directory: {domain_directory}')
         archives_files = filter(is_archive_file, domain_directory.iterdir())
         archive_groups = group_archive_files(archives_files)
         for chunk in chunks(archive_groups, 20):
             with get_db_session(commit=True) as session:
                 for dt, files in chunk:
                     upsert_archive(dt, files, session)
+
+
+async def refresh_archives():
+    _refresh_archives()
 
 
 def upsert_archive(dt: str, files, session: Session):
@@ -373,6 +379,7 @@ def upsert_archive(dt: str, files, session: Session):
     except Exception as e:
         raise InvalidArchive() from e
 
+    logger.debug(f'{url=}')
     domain, url_ = get_or_create_domain_and_url(session, url)
     # Get the existing Archive, or create a new one.
     archive = session.query(Archive).filter_by(singlefile_path=singlefile_path).one_or_none()

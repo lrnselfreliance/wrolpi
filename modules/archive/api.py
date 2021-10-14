@@ -1,3 +1,4 @@
+import asyncio
 from http import HTTPStatus
 
 from requests import Request
@@ -31,7 +32,7 @@ async def post_archive(_: Request, data: dict):
 @validate_doc(
     'Delete a website record',
     responses=[
-            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
+        (HTTPStatus.NOT_FOUND, JSONErrorResponse),
     ]
 )
 async def delete_url(_: Request, url_id: int):
@@ -58,3 +59,9 @@ async def search_archives(_: Request, data: dict):
     count = lib.get_url_count(domain)
     ret = dict(urls=urls, totals=dict(urls=count))
     return json_response(ret)
+
+
+@bp.post(':refresh')
+async def refresh_archives(_: Request):
+    asyncio.ensure_future(lib.refresh_archives())
+    return response.empty()

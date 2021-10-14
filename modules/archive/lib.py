@@ -400,5 +400,5 @@ def upsert_archive(dt: str, files, session: Session):
     archive.readability_json_path = readability_json_path,
     archive.screenshot_path = screenshot_path,
     archive_id = archive.id
-    if url_.latest_datetime and url_.latest_datetime < dt:
+    if not url_.latest_datetime or url_.latest_datetime < dt:
         url_.latest_id = archive_id

@@ -1,10 +1,11 @@
 import React from "react";
-import {Card, Confirm, Container, Form, Header, Icon, Image, Tab} from "semantic-ui-react";
+import {Card, Confirm, Container, Dimmer, Form, Header, Icon, Image, Loader, Segment, Tab} from "semantic-ui-react";
 import Paginator, {APIForm, changePageHistory, uploadDate} from "./Common";
 import {deleteArchive, postArchive, refreshArchives, searchURLs} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {NavLink, Route} from "react-router-dom";
 import * as QueryString from "query-string";
+import {ArchivePlaceholder, ChannelPlaceholder, VideoPlaceholder} from "./Placeholder";
 
 
 function FailedUrlCard({url, syncURL, deleteURL}) {
@@ -171,7 +172,7 @@ class Archives extends React.Component {
 
         this.state = {
             activePage: activePage,
-            limit: 20,
+            limit: 2,
             urls: null,
             totalPages: null,
         };
@@ -189,27 +190,21 @@ class Archives extends React.Component {
         );
 
         if (pageChanged) {
-            this.applyStateToHistory();
             let {history, location} = this.props;
             let {activePage, queryStr, searchOrder} = this.state;
             changePageHistory(history, location, activePage, queryStr, searchOrder);
         }
     }
 
-    applyStateToHistory = () => {
-        let {history, location} = this.props;
-        let {activePage, queryStr, searchOrder} = this.state;
-        changePageHistory(history, location, activePage, queryStr, searchOrder);
-    }
-
     async fetchURLs() {
+        this.setState({urls: null});
         let offset = this.state.limit * this.state.activePage - this.state.limit;
         let [urls, total] = await searchURLs(offset, this.state.limit);
         this.setState({urls, totalPages: total / this.state.limit});
     }
 
     changePage(activePage) {
-        this.setState({activePage}, this.fetchURLs);
+        this.setState({activePage});
     }
 
     render() {
@@ -237,7 +232,11 @@ class Archives extends React.Component {
                 </>
             )
         }
-        return <></>;
+
+        return (<>
+            <Header as='h1'>Latest Archives</Header>
+            <ArchivePlaceholder/>
+        </>);
     }
 }
 

@@ -20,22 +20,32 @@ export function VideoPlaceholder() {
     )
 }
 
-export function FieldPlaceholder() {
-    return (
-        <Form.Field>
-            <Placeholder style={{'marginBottom': '0.5em'}}>
-                <Placeholder.Line length="short"/>
-            </Placeholder>
-            <input disabled/>
-        </Form.Field>
-    )
-}
-
 export function ChannelPlaceholder() {
     return (
         <Placeholder>
             <Placeholder.Line length='long'/>
             <Placeholder.Line length='short'/>
         </Placeholder>
+    )
+}
+
+export function ArchivePlaceholder() {
+    return (
+        <Card.Group doubling stackable>
+            <Card>
+                <Placeholder>
+                    <Placeholder.Image rectangular/>
+                </Placeholder>
+                <Card.Content>
+                    <Placeholder>
+                        <Placeholder.Line/>
+                        <Placeholder.Line/>
+                    </Placeholder>
+                    <Placeholder style={{height: 40, width: 40}} inline>
+                        <Placeholder.Image rectangular inline/>
+                    </Placeholder>
+                </Card.Content>
+            </Card>
+        </Card.Group>
     )
 }

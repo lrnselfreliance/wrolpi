@@ -4,7 +4,7 @@ from http import HTTPStatus
 from requests import Request
 from sanic import response
 
-from wrolpi.common import logger
+from wrolpi.common import logger, wrol_mode_check
 from wrolpi.root_api import get_blueprint, json_response
 from wrolpi.schema import validate_doc, JSONErrorResponse
 from . import lib
@@ -22,6 +22,7 @@ logger = logger.getChild(__name__)
     'Archive a website',
     PostArchiveRequest,
 )
+@wrol_mode_check
 async def post_archive(_: Request, data: dict):
     url = data['url']
     lib.new_archive(url)
@@ -35,6 +36,7 @@ async def post_archive(_: Request, data: dict):
         (HTTPStatus.NOT_FOUND, JSONErrorResponse),
     ]
 )
+@wrol_mode_check
 async def delete_url(_: Request, url_id: int):
     lib.delete_url(url_id)
     return response.empty()
@@ -62,6 +64,7 @@ async def search_archives(_: Request, data: dict):
 
 
 @bp.post(':refresh')
+@wrol_mode_check
 async def refresh_archives(_: Request):
     asyncio.ensure_future(lib.refresh_archives())
     return response.empty()

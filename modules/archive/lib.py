@@ -210,7 +210,6 @@ def get_or_create_domain_and_url(session, url):
     Get/create the Domain for this archive.
     """
     domain_ = extract_domain(url)
-    logger.debug(f'{domain_=}')
     domain = session.query(Domain).filter_by(domain=domain_).one_or_none()
     if not domain:
         domain = Domain(domain=domain_, directory=str(get_domain_directory(url)))
@@ -379,8 +378,8 @@ def upsert_archive(dt: str, files, session: Session):
     except Exception as e:
         raise InvalidArchive() from e
 
-    logger.debug(f'{url=}')
     domain, url_ = get_or_create_domain_and_url(session, url)
+    logger.debug(f'Upsert url={url_.url}')
     # Get the existing Archive, or create a new one.
     archive = session.query(Archive).filter_by(singlefile_path=singlefile_path).one_or_none()
     if not archive:

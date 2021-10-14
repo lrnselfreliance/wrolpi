@@ -64,6 +64,9 @@ class URL(Base, ModelHelper):
     domain_id = Column(Integer, ForeignKey('domains.id'))
     domain = relationship('Domain', primaryjoin='URL.domain_id==Domain.id')
 
+    def __repr__(self):
+        return f'<URL id={self.id} url={self.url}>'
+
     def dict(self) -> dict:
         d = super().dict()
         d['latest'] = self.latest.dict() if self.latest else None

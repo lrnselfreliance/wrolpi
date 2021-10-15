@@ -315,3 +315,13 @@ export async function searchURLs(offset, limit) {
 export async function refreshArchives() {
     return await apiPost(`${ARCHIVES_API}:refresh`);
 }
+
+export async function fetchDomains() {
+    let response = await apiGet(`${ARCHIVES_API}/domains`);
+    if (response.status === 200) {
+        let data = await response.json();
+        return [data['domains'], data['totals']['domains']];
+    } else {
+        throw Error(`Unable to fetch domains`);
+    }
+}

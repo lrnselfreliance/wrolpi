@@ -4,8 +4,8 @@ import pathlib
 import mock
 
 from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count, delete_url, \
-    _refresh_archives
-from modules.archive.models import Archive, URL
+    _refresh_archives, get_domains
+from modules.archive.models import Archive, URL, Domain
 from wrolpi.common import get_media_directory
 from wrolpi.db import get_db_session
 from wrolpi.errors import InvalidDomain, UnknownURL
@@ -295,3 +295,35 @@ class TestArchive(TestAPI):
             with get_db_session() as session:
                 self.assertEqual(session.query(URL).count(), 1)
                 self.assertEqual(session.query(Archive).count(), 1)
+
+    @wrap_test_db
+    def test_refresh_archives_delete_empty(self):
+        """
+        Domains or URLs with no archives should be deleted during refresh.
+        """
+        with wrap_media_directory():
+            (get_media_directory() / 'archive').mkdir()
+            with get_db_session(commit=True) as session:
+                # These should not be deleted.
+                domain = Domain(domain='foo')
+                session.add(domain)
+                session.flush()
+                url = URL(url='foo', domain_id=domain.id)
+                session.add(url)
+                session.flush()
+                archive = Archive(singlefile_path='foo', url_id=url.id)
+                session.add(archive)
+
+                # These should be deleted.
+                domain = Domain(domain='bar')
+                session.add(domain)
+                session.flush()
+                session.add(URL(url='bar', domain_id=domain.id))
+
+            self.assertEqual(len(get_urls()), 2)
+            self.assertEqual(len(get_domains()), 2)
+
+            _refresh_archives()
+
+            self.assertEqual(len(get_urls()), 1)
+            self.assertEqual(len(get_domains()), 1)

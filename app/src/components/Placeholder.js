@@ -41,8 +41,8 @@ export function ArchivePlaceholder() {
                         <Placeholder.Line/>
                         <Placeholder.Line/>
                     </Placeholder>
-                    <Placeholder style={{height: 40, width: 40}} inline>
-                        <Placeholder.Image rectangular inline/>
+                    <Placeholder style={{height: 40, width: 40}}>
+                        <Placeholder.Image rectangular/>
                     </Placeholder>
                 </Card.Content>
             </Card>

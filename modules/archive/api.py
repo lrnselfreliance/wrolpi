@@ -68,3 +68,9 @@ async def search_archives(_: Request, data: dict):
 async def refresh_archives(_: Request):
     asyncio.ensure_future(lib.refresh_archives())
     return response.empty()
+
+
+@bp.get('/domains')
+async def fetch_domains(_: Request):
+    domains = lib.get_domains()
+    return json_response({'domains': domains, 'totals': {'domains': len(domains)}})

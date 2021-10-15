@@ -1,11 +1,11 @@
 import React from "react";
-import {Card, Confirm, Container, Dimmer, Form, Header, Icon, Image, Loader, Segment, Tab} from "semantic-ui-react";
+import {Card, Confirm, Container, Form, Header, Icon, Image, Tab, Table} from "semantic-ui-react";
 import Paginator, {APIForm, changePageHistory, uploadDate} from "./Common";
-import {deleteArchive, postArchive, refreshArchives, searchURLs} from "../api";
+import {deleteArchive, fetchDomains, postArchive, refreshArchives, searchURLs} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {NavLink, Route} from "react-router-dom";
 import * as QueryString from "query-string";
-import {ArchivePlaceholder, ChannelPlaceholder, VideoPlaceholder} from "./Placeholder";
+import {ArchivePlaceholder} from "./Placeholder";
 
 
 function FailedUrlCard({url, syncURL, deleteURL}) {
@@ -240,6 +240,53 @@ class Archives extends React.Component {
     }
 }
 
+class Domains extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            domains: null,
+        };
+        this.fetchDomains = this.fetchDomains.bind(this);
+    }
+
+    async componentDidMount() {
+        await this.fetchDomains();
+    }
+
+    async fetchDomains() {
+        this.setState({domains: null});
+        let [domains, total] = await fetchDomains();
+        this.setState({domains});
+    }
+
+    render() {
+        if (this.state.domains) {
+            return (
+                <>
+                    <Header as='h1'>Domains</Header>
+                    <Table celled>
+                        <Table.Header>
+                            <Table.HeaderCell>Domain</Table.HeaderCell>
+                            <Table.HeaderCell>URLs</Table.HeaderCell>
+                        </Table.Header>
+
+                        <Table.Body>
+                            {this.state.domains.map((i) =>
+                                <Table.Row>
+                                    <Table.Cell>{i['domain']}</Table.Cell>
+                                    <Table.Cell>{i['url_count']}</Table.Cell>
+                                </Table.Row>
+                            )}
+                        </Table.Body>
+                    </Table>
+                </>
+            )
+        }
+        return (<>
+        </>)
+    }
+}
+
 class ArchiveAddForm extends APIForm {
     constructor(props) {
         super(props);
@@ -310,6 +357,22 @@ export class ArchiveRoute extends React.Component {
                     <Route path='/archive' exact
                            component={(i) => <Tab.Pane>
                                <Archives history={i.history} location={i.location}/>
+                           </Tab.Pane>}
+                    />)
+            },
+            {
+                menuItem: {
+                    as: NavLink,
+                    content: 'Domains',
+                    id: 'domains',
+                    to: '/archive/domains',
+                    exact: true,
+                    key: 'domains',
+                },
+                render: () => (
+                    <Route path='/archive/domains' exact
+                           component={(i) => <Tab.Pane>
+                               <Domains history={i.history} location={i.location}/>
                            </Tab.Pane>}
                     />)
             },

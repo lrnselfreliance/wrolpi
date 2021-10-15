@@ -355,10 +355,39 @@ def _refresh_archives():
         logger.debug(f'Refreshing directory: {domain_directory}')
         archives_files = filter(is_archive_file, domain_directory.iterdir())
         archive_groups = group_archive_files(archives_files)
+        archive_count = 0
         for chunk in chunks(archive_groups, 20):
+            archive_count += 1
             with get_db_session(commit=True) as session:
                 for dt, files in chunk:
                     upsert_archive(dt, files, session)
+
+        if archive_count:
+            logger.info(f'Inserted/updated {archive_count} archives')
+
+    cleanup_domains_urls()
+
+
+def cleanup_domains_urls():
+    """
+    Delete any URLs/Domains without Archives.
+    """
+    with get_db_curs(commit=True) as curs:
+        stmt = '''
+            DELETE FROM url WHERE id NOT IN (
+                select distinct url_id from archive
+            ) RETURNING url.id
+        '''
+        curs.execute(stmt)
+        urls = list(map(dict, curs.fetchall()))
+        stmt = '''
+            DELETE FROM domains WHERE id NOT IN (
+                select distinct domain_id from url
+            ) RETURNING domains.id
+        '''
+        curs.execute(stmt)
+        domains = list(map(dict, curs.fetchall()))
+        logger.info(f'Deleted {len(urls)} URLS and {len(domains)} Domains')
 
 
 async def refresh_archives():
@@ -402,3 +431,17 @@ def upsert_archive(dt: str, files, session: Session):
     archive_id = archive.id
     if not url_.latest_datetime or url_.latest_datetime < dt:
         url_.latest_id = archive_id
+
+
+def get_domains():
+    with get_db_curs() as curs:
+        stmt = '''
+            SELECT domains.domain AS domain, COUNT(u.id) AS url_count
+            FROM domains
+            LEFT JOIN url u on domains.id = u.domain_id
+            GROUP BY domains.domain
+            ORDER BY domains.domain
+        '''
+        curs.execute(stmt)
+        domains = list(map(dict, curs.fetchall()))
+        return domains

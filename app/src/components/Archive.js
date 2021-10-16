@@ -173,7 +173,7 @@ class Archives extends React.Component {
 
         this.state = {
             activePage: activePage,
-            limit: 2,
+            limit: 20,
             urls: null,
             totalPages: null,
             domain: domain,

@@ -453,7 +453,9 @@ export function changePageHistory(history, location, activePage, searchStr, sear
 }
 
 export function objectToQuery(d) {
-    return Object.keys(d).map(function (key) {
-        return key + "=" + d[key]
-    }).join("&");
+    // Return an HTTP query string based on the provided dictionary.
+    // Do not include key/values when the value is null if noNull=true
+    let arr = Object.keys(d).map((k) => d[k] === null ? '' : `${k}=${d[k]}`);
+    arr = arr.filter((i) => i !== '')
+    return arr.join('&');
 }

@@ -173,7 +173,7 @@ class Archives extends React.Component {
 
         this.state = {
             activePage: activePage,
-            limit: 2,
+            limit: 20,
             urls: null,
             totalPages: null,
             domain: domain,
@@ -211,13 +211,10 @@ class Archives extends React.Component {
         }
         let {history, location} = this.props;
 
-        let search = {};
-        if (activePage > 1) {
-            search['page'] = activePage;
-        }
-        if (this.state.domain) {
-            search['domain'] = this.state.domain;
-        }
+        let search = {
+            page: activePage > 1 ? activePage : null,
+            domain: this.state.domain,
+        };
 
         history.push({
             pathname: location.pathname,

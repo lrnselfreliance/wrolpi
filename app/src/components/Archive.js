@@ -1,6 +1,6 @@
 import React from "react";
 import {Card, Confirm, Container, Form, Header, Icon, Image, Placeholder, Tab, Table} from "semantic-ui-react";
-import Paginator, {APIForm, changePageHistory, uploadDate} from "./Common";
+import Paginator, {APIForm, objectToQuery, scrollToTop, uploadDate} from "./Common";
 import {deleteArchive, fetchDomains, postArchive, refreshArchives, searchURLs} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link, NavLink} from "react-router-dom";
@@ -11,15 +11,15 @@ import {ArchivePlaceholder} from "./Placeholder";
 function FailedUrlCard({url, syncURL, deleteURL}) {
 
     let syncIcon = (
-        <a onClick={() => syncURL(url.url)}>
+        <Button onClick={() => syncURL(url.url)}>
             <Icon name='sync' size='big'/>
-        </a>
+        </Button>
     );
 
     let trashIcon = (
-        <a onClick={() => deleteURL(url.id)}>
+        <Button onClick={() => deleteURL(url.id)}>
             <Icon name='trash' size='big'/>
-        </a>
+        </Button>
     );
 
     let externalIcon = (
@@ -173,12 +173,11 @@ class Archives extends React.Component {
 
         this.state = {
             activePage: activePage,
-            limit: 20,
+            limit: 2,
             urls: null,
             totalPages: null,
             domain: domain,
         };
-        this.applyStateToHistory = this.applyStateToHistory.bind(this);
         this.fetchURLs = this.fetchURLs.bind(this);
         this.clearSearch = this.clearSearch.bind(this);
         this.changePage = this.changePage.bind(this);
@@ -189,36 +188,42 @@ class Archives extends React.Component {
     }
 
     async componentDidUpdate(prevProps, prevState, snapshot) {
-        let pageChanged = (
-            prevState.activePage !== this.state.activePage ||
-            prevProps.location.search !== this.props.location.search
-        );
-
-        if (pageChanged) {
-            this.applyStateToHistory();
+        if (prevProps.location.search !== this.props.location.search) {
             await this.fetchURLs();
         }
-    }
-
-    applyStateToHistory = () => {
-        let {history, location} = this.props;
-        let {activePage, queryStr, searchOrder} = this.state;
-        changePageHistory(history, location, activePage, queryStr, searchOrder);
     }
 
     async fetchURLs() {
         this.setState({urls: null});
         let offset = this.state.limit * this.state.activePage - this.state.limit;
         let [urls, total] = await searchURLs(offset, this.state.limit, this.state.domain);
-        this.setState({urls, totalPages: total / this.state.limit});
+        let totalPages = Math.round(total / this.state.limit) || 1;
+        this.setState({urls, totalPages: totalPages});
     }
 
     clearSearch() {
-        this.setState({domain: null}, this.applyStateToHistory);
+        this.setState({activePage: 1, domain: null}, this.changePage);
     }
 
     changePage(activePage) {
-        this.setState({activePage}, this.applyStateToHistory);
+        if (activePage) {
+            this.setState({activePage});
+        }
+        let {history, location} = this.props;
+
+        let search = {};
+        if (activePage > 1) {
+            search['page'] = activePage;
+        }
+        if (this.state.domain) {
+            search['domain'] = this.state.domain;
+        }
+
+        history.push({
+            pathname: location.pathname,
+            search: objectToQuery(search),
+        });
+        scrollToTop();
     }
 
     render() {
@@ -270,6 +275,7 @@ class Domains extends React.Component {
         super(props);
         this.state = {
             domains: null,
+            total: null,
         };
         this.fetchDomains = this.fetchDomains.bind(this);
     }
@@ -281,7 +287,7 @@ class Domains extends React.Component {
     async fetchDomains() {
         this.setState({domains: null});
         let [domains, total] = await fetchDomains();
-        this.setState({domains});
+        this.setState({domains, total});
     }
 
     row(domain) {

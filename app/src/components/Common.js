@@ -451,3 +451,9 @@ export function changePageHistory(history, location, activePage, searchStr, sear
     });
     scrollToTop();
 }
+
+export function objectToQuery(d) {
+    return Object.keys(d).map(function (key) {
+        return key + "=" + d[key]
+    }).join("&");
+}

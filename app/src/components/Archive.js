@@ -173,15 +173,15 @@ class Archives extends React.Component {
 
         this.state = {
             activePage: activePage,
-            limit: 20,
+            limit: 2,
             urls: null,
             totalPages: null,
             domain: domain,
         };
         this.applyStateToHistory = this.applyStateToHistory.bind(this);
         this.fetchURLs = this.fetchURLs.bind(this);
-        this.changePage = this.changePage.bind(this);
         this.clearSearch = this.clearSearch.bind(this);
+        this.changePage = this.changePage.bind(this);
     }
 
     async componentDidMount() {
@@ -191,7 +191,6 @@ class Archives extends React.Component {
     async componentDidUpdate(prevProps, prevState, snapshot) {
         let pageChanged = (
             prevState.activePage !== this.state.activePage ||
-            prevProps.location.pathname !== this.props.location.pathname ||
             prevProps.location.search !== this.props.location.search
         );
 

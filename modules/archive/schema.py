@@ -1,7 +1,7 @@
 from sanic_openapi import doc
 
 
-class RetrieveUrlsRequest:
+class RetrieveURLsRequest:
     limit = doc.Integer()
     offset = doc.Integer()
     domain = doc.String()

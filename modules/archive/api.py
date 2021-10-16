@@ -8,7 +8,7 @@ from wrolpi.common import logger, wrol_mode_check
 from wrolpi.root_api import get_blueprint, json_response
 from wrolpi.schema import validate_doc, JSONErrorResponse
 from . import lib
-from .schema import RetrieveUrlsRequest, RetrieveURLsResponse, PostArchiveRequest
+from .schema import RetrieveURLsRequest, RetrieveURLsResponse, PostArchiveRequest
 
 NAME = 'archive'
 
@@ -45,7 +45,7 @@ async def delete_url(_: Request, url_id: int):
 @bp.post('/search')
 @validate_doc(
     'Get a list of URLs',
-    RetrieveUrlsRequest,
+    RetrieveURLsRequest,
     RetrieveURLsResponse,
 )
 async def search_archives(_: Request, data: dict):

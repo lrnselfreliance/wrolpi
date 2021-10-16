@@ -297,11 +297,14 @@ export async function deleteArchive(url_id) {
     return await apiDelete(`${API_URI}/archive/${url_id}`);
 }
 
-export async function searchURLs(offset, limit) {
+export async function searchURLs(offset, limit, domain = null) {
     // Build a search query to retrieve a list of videos from the API
     offset = offset || 0;
     limit = limit || DEFAULT_LIMIT;
     let body = {offset, limit};
+    if (domain) {
+        body['domain'] = domain;
+    }
 
     let response = await apiPost(`${ARCHIVES_API}/search`, body);
     if (response.status === 200) {

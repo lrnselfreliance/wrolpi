@@ -1,9 +1,9 @@
 import React from "react";
-import {Card, Confirm, Container, Form, Header, Icon, Image, Tab, Table} from "semantic-ui-react";
+import {Card, Confirm, Container, Form, Header, Icon, Image, Placeholder, Tab, Table} from "semantic-ui-react";
 import Paginator, {APIForm, changePageHistory, uploadDate} from "./Common";
 import {deleteArchive, fetchDomains, postArchive, refreshArchives, searchURLs} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
-import {NavLink, Route} from "react-router-dom";
+import {Link, NavLink} from "react-router-dom";
 import * as QueryString from "query-string";
 import {ArchivePlaceholder} from "./Placeholder";
 
@@ -169,15 +169,19 @@ class Archives extends React.Component {
         super(props);
         const query = QueryString.parse(this.props.location.search);
         let activePage = query.page ? parseInt(query.page) : 1;
+        let domain = query.domain || null;
 
         this.state = {
             activePage: activePage,
-            limit: 2,
+            limit: 20,
             urls: null,
             totalPages: null,
+            domain: domain,
         };
+        this.applyStateToHistory = this.applyStateToHistory.bind(this);
         this.fetchURLs = this.fetchURLs.bind(this);
         this.changePage = this.changePage.bind(this);
+        this.clearSearch = this.clearSearch.bind(this);
     }
 
     async componentDidMount() {
@@ -186,29 +190,47 @@ class Archives extends React.Component {
 
     async componentDidUpdate(prevProps, prevState, snapshot) {
         let pageChanged = (
-            prevState.activePage !== this.state.activePage
+            prevState.activePage !== this.state.activePage ||
+            prevProps.location.pathname !== this.props.location.pathname ||
+            prevProps.location.search !== this.props.location.search
         );
 
         if (pageChanged) {
-            let {history, location} = this.props;
-            let {activePage, queryStr, searchOrder} = this.state;
-            changePageHistory(history, location, activePage, queryStr, searchOrder);
+            this.applyStateToHistory();
+            await this.fetchURLs();
         }
+    }
+
+    applyStateToHistory = () => {
+        let {history, location} = this.props;
+        let {activePage, queryStr, searchOrder} = this.state;
+        changePageHistory(history, location, activePage, queryStr, searchOrder);
     }
 
     async fetchURLs() {
         this.setState({urls: null});
         let offset = this.state.limit * this.state.activePage - this.state.limit;
-        let [urls, total] = await searchURLs(offset, this.state.limit);
+        let [urls, total] = await searchURLs(offset, this.state.limit, this.state.domain);
         this.setState({urls, totalPages: total / this.state.limit});
     }
 
+    clearSearch() {
+        this.setState({domain: null}, this.applyStateToHistory);
+    }
+
     changePage(activePage) {
-        this.setState({activePage});
+        this.setState({activePage}, this.applyStateToHistory);
     }
 
     render() {
         let {urls, activePage, totalPages} = this.state;
+
+        if (urls === null) {
+            return (<>
+                <Header as='h1'>Latest Archives</Header>
+                <ArchivePlaceholder/>
+            </>)
+        }
 
         let pagination = null;
         if (totalPages) {
@@ -223,20 +245,24 @@ class Archives extends React.Component {
             )
         }
 
-        if (urls !== null) {
-            return (
-                <>
-                    <Header as='h1'>Latest Archives</Header>
-                    <URLCards urls={urls} fetchURLs={this.fetchURLs}/>
-                    {pagination}
-                </>
+        let domainButton = null;
+        if (this.state.domain) {
+            domainButton = (
+                <Button icon labelPosition='right' onClick={this.clearSearch} style={{marginBottom: '1em'}}>
+                    Search: {this.state.domain}
+                    <Icon name='close'/>
+                </Button>
             )
         }
 
-        return (<>
-            <Header as='h1'>Latest Archives</Header>
-            <ArchivePlaceholder/>
-        </>);
+        return (
+            <>
+                <Header as='h1'>Latest Archives</Header>
+                {domainButton}
+                <URLCards urls={urls} fetchURLs={this.fetchURLs}/>
+                {pagination}
+            </>
+        )
     }
 }
 
@@ -259,6 +285,17 @@ class Domains extends React.Component {
         this.setState({domains});
     }
 
+    row(domain) {
+        return <Table.Row key={domain['domain']}>
+            <Table.Cell>
+                <Link to={`/archive?domain=${domain['domain']}`}>
+                    {domain['domain']}
+                </Link>
+            </Table.Cell>
+            <Table.Cell>{domain['url_count']}</Table.Cell>
+        </Table.Row>
+    }
+
     render() {
         if (this.state.domains) {
             return (
@@ -266,23 +303,28 @@ class Domains extends React.Component {
                     <Header as='h1'>Domains</Header>
                     <Table celled>
                         <Table.Header>
-                            <Table.HeaderCell>Domain</Table.HeaderCell>
-                            <Table.HeaderCell>URLs</Table.HeaderCell>
+                            <Table.Row>
+                                <Table.HeaderCell>Domain</Table.HeaderCell>
+                                <Table.HeaderCell>URLs</Table.HeaderCell>
+                            </Table.Row>
                         </Table.Header>
 
                         <Table.Body>
-                            {this.state.domains.map((i) =>
-                                <Table.Row>
-                                    <Table.Cell>{i['domain']}</Table.Cell>
-                                    <Table.Cell>{i['url_count']}</Table.Cell>
-                                </Table.Row>
-                            )}
+                            {this.state.domains.map(this.row)}
                         </Table.Body>
                     </Table>
                 </>
             )
         }
+
         return (<>
+            <Header as='h1'>Domains</Header>
+            <Placeholder>
+                <Placeholder.Header>
+                    <Placeholder.Line/>
+                    <Placeholder.Line/>
+                </Placeholder.Header>
+            </Placeholder>
         </>)
     }
 }
@@ -342,6 +384,25 @@ class ManageArchives extends React.Component {
 
 export class ArchiveRoute extends React.Component {
 
+    constructor(props) {
+        super(props);
+
+        this.panesTos = ['/archive', '/archive/domains', '/archive/manage'];
+        this.state = {
+            activeIndex: this.matchPaneTo(),
+        }
+    }
+
+    componentDidUpdate(prevProps, prevState, snapshot) {
+        if (prevProps.location.pathname !== this.props.location.pathname) {
+            this.setState({activeIndex: this.matchPaneTo()});
+        }
+    }
+
+    matchPaneTo = () => {
+        return this.panesTos.indexOf(this.props.location.pathname);
+    }
+
     render() {
         const panes = [
             {
@@ -353,12 +414,7 @@ export class ArchiveRoute extends React.Component {
                     exact: true,
                     key: 'home',
                 },
-                render: () => (
-                    <Route path='/archive' exact
-                           component={(i) => <Tab.Pane>
-                               <Archives history={i.history} location={i.location}/>
-                           </Tab.Pane>}
-                    />)
+                render: () => <Tab.Pane><Archives {...this.props}/></Tab.Pane>
             },
             {
                 menuItem: {
@@ -369,12 +425,7 @@ export class ArchiveRoute extends React.Component {
                     exact: true,
                     key: 'domains',
                 },
-                render: () => (
-                    <Route path='/archive/domains' exact
-                           component={(i) => <Tab.Pane>
-                               <Domains history={i.history} location={i.location}/>
-                           </Tab.Pane>}
-                    />)
+                render: () => <Tab.Pane><Domains {...this.props}/></Tab.Pane>
             },
             {
                 menuItem: {
@@ -385,20 +436,15 @@ export class ArchiveRoute extends React.Component {
                     exact: true,
                     key: 'manage',
                 },
-                render: () => (
-                    <Route path='/archive/manage' exact
-                           component={(i) => <Tab.Pane><ManageArchives history={i.history}/></Tab.Pane>}/>
-                )
+                render: () => <Tab.Pane><ManageArchives {...this.props}/></Tab.Pane>
             },
         ];
 
         return (
-            <>
-                <Container style={{marginTop: '2em', marginBottom: '2em'}}>
-                    <ArchiveAddForm/>
-                    <Tab panes={panes}/>
-                </Container>
-            </>
+            <Container style={{marginTop: '2em', marginBottom: '2em'}}>
+                <ArchiveAddForm/>
+                <Tab panes={panes} activeIndex={this.state.activeIndex}/>
+            </Container>
         )
     }
 }

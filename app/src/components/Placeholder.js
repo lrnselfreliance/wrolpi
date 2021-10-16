@@ -1,4 +1,4 @@
-import {Card, Form, Placeholder} from "semantic-ui-react";
+import {Card, Placeholder} from "semantic-ui-react";
 import React from "react";
 
 export function VideoPlaceholder() {

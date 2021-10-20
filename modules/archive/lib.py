@@ -422,13 +422,14 @@ def upsert_archive(dt: str, files, session: Session):
 
     # Update the archive with the files that we have.
     archive.status = 'complete',
-    archive.archive_datetime = dt,
-    archive.singlefile_path = singlefile_path,
-    archive.readability_path = readability_path,
-    archive.readability_txt_path = readability_txt_path,
-    archive.readability_json_path = readability_json_path,
-    archive.screenshot_path = screenshot_path,
+    archive.archive_datetime = dt
+    archive.singlefile_path = singlefile_path
+    archive.readability_path = readability_path
+    archive.readability_txt_path = readability_txt_path
+    archive.readability_json_path = readability_json_path
+    archive.screenshot_path = screenshot_path
     archive_id = archive.id
+
     if not url_.latest_datetime or url_.latest_datetime < dt:
         url_.latest_id = archive_id
 

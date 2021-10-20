@@ -59,10 +59,6 @@ class MediaPathType(types.TypeDecorator):  # noqa
         if isinstance(value, str) and len(value) == 0:
             raise ValueError('MediaPath cannot be empty')
 
-        if isinstance(value, tuple) and len(value) == 1:
-            # TODO Sometimes a value will be passed as a tuple??
-            value = value[0]
-
         if isinstance(value, pathlib.Path):
             return str(value.absolute())
         elif isinstance(value, str) or value is None:

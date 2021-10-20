@@ -1,4 +1,4 @@
-import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, VIDEOS_API} from "./components/Common";
+import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, OTP_API, VIDEOS_API} from "./components/Common";
 import {toast} from 'react-semantic-toasts';
 
 function timeoutPromise(ms, promise) {
@@ -209,7 +209,7 @@ export async function refreshChannel(link) {
 
 export async function encryptOTP(otp, plaintext) {
     let body = {otp, plaintext};
-    let response = await apiPost(`${API_URI}:encrypt_otp`, body);
+    let response = await apiPost(`${OTP_API}:encrypt_otp`, body);
     if (response.status !== 200) {
         toast({
             type: 'error',
@@ -224,7 +224,7 @@ export async function encryptOTP(otp, plaintext) {
 
 export async function decryptOTP(otp, ciphertext) {
     let body = {otp, ciphertext};
-    let response = await apiPost(`${API_URI}:decrypt_otp`, body);
+    let response = await apiPost(`${OTP_API}:decrypt_otp`, body);
     if (response.status !== 200) {
         toast({
             type: 'error',

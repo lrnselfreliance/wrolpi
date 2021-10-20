@@ -5,6 +5,7 @@ import {Link} from "react-router-dom";
 export const API_URI = `http://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
 export const ARCHIVES_API = `${API_URI}/archive`;
+export const OTP_API = `${API_URI}/otp`;
 export const DEFAULT_LIMIT = 20;
 
 export default class Paginator extends React.Component {

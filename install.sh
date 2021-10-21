@@ -38,7 +38,7 @@ python3 -m venv /opt/wrolpi/venv
 . /opt/wrolpi/venv/bin/activate
 
 # Install python requirements files
-pip3 install /opt/wrolpi/requirements.txt
+pip3 install -r /opt/wrolpi/requirements.txt
 
 # Any further pip commands will be global
 deactivate

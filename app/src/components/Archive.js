@@ -334,6 +334,8 @@ class Domains extends React.Component {
 class ArchiveAddForm extends APIForm {
     constructor(props) {
         super(props);
+        this.archivesRef = props.archivesRef;
+
         this.state = {
             ...this.state,
             inputs: {
@@ -341,12 +343,17 @@ class ArchiveAddForm extends APIForm {
             },
             errors: {},
         };
+        this.fetchURLs = this.fetchURLs.bind(this);
     }
 
     handleSubmit = async (e) => {
         e.preventDefault();
         await postArchive(this.state.inputs.url);
-        this.setState({inputs: {url: ''}});
+        this.setState({inputs: {url: ''}}, this.fetchURLs);
+    }
+
+    fetchURLs = async (e) => {
+        await this.archivesRef.current.fetchURLs();
     }
 
     render() {
@@ -393,6 +400,7 @@ export class ArchiveRoute extends React.Component {
         this.state = {
             activeIndex: this.matchPaneTo(),
         }
+        this.archivesRef = React.createRef();
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
@@ -416,7 +424,7 @@ export class ArchiveRoute extends React.Component {
                     exact: true,
                     key: 'home',
                 },
-                render: () => <Tab.Pane><Archives {...this.props}/></Tab.Pane>
+                render: () => <Tab.Pane><Archives {...this.props} ref={this.archivesRef}/></Tab.Pane>
             },
             {
                 menuItem: {
@@ -444,7 +452,7 @@ export class ArchiveRoute extends React.Component {
 
         return (
             <Container style={{marginTop: '2em', marginBottom: '2em'}}>
-                <ArchiveAddForm/>
+                <ArchiveAddForm archivesRef={this.archivesRef}/>
                 <Tab panes={panes} activeIndex={this.state.activeIndex}/>
             </Container>
         )

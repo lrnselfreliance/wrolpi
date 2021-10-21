@@ -8,7 +8,8 @@ import sys
 import pytz
 
 from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS
-from wrolpi.common import logger, get_config, set_timezone
+from wrolpi.common import logger, get_config
+from wrolpi.dates import set_timezone
 from wrolpi.vars import PROJECT_DIR, MODULES_DIR
 
 logger = logger.getChild('wrolpi-main')

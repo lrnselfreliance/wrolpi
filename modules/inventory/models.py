@@ -2,7 +2,8 @@ from sqlalchemy import Column, Integer, String, Date, ForeignKey, DECIMAL
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import Base, ModelHelper, TZDateTime, now
+from wrolpi.common import Base, ModelHelper
+from wrolpi.dates import now, TZDateTime
 
 
 class Item(Base, ModelHelper):

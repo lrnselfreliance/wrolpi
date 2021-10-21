@@ -9,7 +9,8 @@ import pytest
 from modules.videos.downloader import update_channels, find_all_missing_videos, download_video
 from modules.videos.models import Channel, Video
 from modules.videos.test.common import create_channel_structure
-from wrolpi.common import today, ProgressReporter
+from wrolpi.common import ProgressReporter
+from wrolpi.dates import today
 from wrolpi.db import get_db_session
 from wrolpi.test.common import wrap_test_db, TestAPI
 

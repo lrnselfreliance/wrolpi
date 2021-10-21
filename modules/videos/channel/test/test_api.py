@@ -12,7 +12,7 @@ from modules.videos.api import refresh_queue
 from modules.videos.lib import upsert_video
 from modules.videos.models import Channel, Video
 from modules.videos.test.common import create_channel_structure
-from wrolpi.common import now
+from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.errors import UnknownFile
 from wrolpi.root_api import api_app

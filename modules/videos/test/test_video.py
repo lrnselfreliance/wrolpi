@@ -1,5 +1,5 @@
 from modules.videos.models import Video
-from wrolpi.common import now
+from wrolpi.dates import now
 
 
 def test_timezone(test_session):

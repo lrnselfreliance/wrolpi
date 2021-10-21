@@ -5,11 +5,11 @@ from queue import Queue
 import pytest
 from sanic_openapi import doc
 
-from wrolpi.common import combine_dicts, insert_parameter, ProgressReporter, date_range, set_timezone, \
-    now
+from wrolpi.common import combine_dicts, insert_parameter, ProgressReporter, date_range
+from wrolpi.dates import set_timezone, now
 from wrolpi.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields, InvalidTimezone
 from wrolpi.schema import validate_data
-from wrolpi.test.common import build_test_directories
+from wrolpi.test.common import build_test_directories, wrap_test_db
 
 
 class Model:

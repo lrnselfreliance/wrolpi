@@ -9,7 +9,8 @@ from sqlalchemy import or_
 from sqlalchemy.orm.exc import NoResultFound
 from youtube_dl import YoutubeDL
 
-from wrolpi.common import logger, today, ProgressReporter, now, run_after, get_absolute_media_path
+from wrolpi.common import logger, ProgressReporter, run_after, get_absolute_media_path
+from wrolpi.dates import now, today
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty
 from .common import load_downloader_config, update_view_count

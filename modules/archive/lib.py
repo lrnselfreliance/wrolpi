@@ -12,7 +12,8 @@ from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
 from modules.archive.models import URL, Domain, Archive
-from wrolpi.common import get_media_directory, logger, now, strptime_ms, chunks
+from wrolpi.common import get_media_directory, logger, chunks
+from wrolpi.dates import now, strptime_ms
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import InvalidDomain, UnknownURL, PendingArchive, InvalidArchive
 from wrolpi.vars import DATETIME_FORMAT_MS
@@ -360,6 +361,7 @@ def _refresh_archives():
             archive_count += 1
             with get_db_session(commit=True) as session:
                 for dt, files in chunk:
+                    print('_refresh_archives', dt)
                     upsert_archive(dt, files, session)
 
         if archive_count:
@@ -432,6 +434,7 @@ def upsert_archive(dt: str, files, session: Session):
 
     if not url_.latest_datetime or url_.latest_datetime < dt:
         url_.latest_id = archive_id
+        url_.latest_datetime = archive.archive_datetime
 
 
 def get_domains():

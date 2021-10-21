@@ -4,7 +4,8 @@ from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import ModelHelper, Base, TZDateTime
+from wrolpi.common import ModelHelper, Base
+from wrolpi.dates import TZDateTime
 from wrolpi.media_path import MediaPathType
 
 

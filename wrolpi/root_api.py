@@ -14,9 +14,9 @@ from sanic.response import HTTPResponse
 from sanic_cors import CORS
 from sanic_openapi import swagger_blueprint
 
-from wrolpi.common import EVENTS, set_sanic_url_parts, logger, get_config, wrol_mode_enabled, set_timezone, \
-    save_settings_config, \
+from wrolpi.common import EVENTS, set_sanic_url_parts, logger, get_config, wrol_mode_enabled, save_settings_config, \
     Base
+from wrolpi.dates import set_timezone
 from wrolpi.errors import WROLModeEnabled, InvalidTimezone
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, EchoResponse, \
     EventsResponse, validate_doc

@@ -7,7 +7,8 @@ from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, Fore
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import Base, tsvector, ModelHelper, PathColumn, today, TZDateTime, now, get_absolute_media_path
+from wrolpi.common import Base, tsvector, ModelHelper, PathColumn, get_absolute_media_path
+from wrolpi.dates import now, today, TZDateTime
 from wrolpi.db import get_db_curs
 from wrolpi.errors import UnknownVideo, NoFrequency, UnknownFile, UnknownDirectory
 

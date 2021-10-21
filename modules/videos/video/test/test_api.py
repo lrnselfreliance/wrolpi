@@ -9,7 +9,7 @@ from uuid import uuid4
 from modules.videos.models import Channel, Video
 from modules.videos.test.common import create_channel_structure
 from modules.videos.video.lib import get_video_for_app
-from wrolpi.common import now
+from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.errors import API_ERRORS, WROLModeEnabled
 from wrolpi.root_api import api_app

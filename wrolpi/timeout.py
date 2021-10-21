@@ -21,7 +21,8 @@ from datetime import timedelta
 from functools import wraps
 from multiprocessing import Process, Pipe
 
-from wrolpi.common import logger, utc_now
+from wrolpi.common import logger
+from wrolpi.dates import utc_now
 
 logger = logger.getChild(__name__)
 

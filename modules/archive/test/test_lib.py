@@ -290,6 +290,12 @@ class TestArchive(TestAPI):
                 self.assertEqual(session.query(URL).count(), 1)
                 self.assertEqual(session.query(Archive).count(), 1)
 
+                url: URL = session.query(URL).one()
+                archive: Archive = session.query(Archive).one()
+                self.assertEqual(url.latest, archive)
+                # latest_datetime is set, the timestamp in the file name is assumed to be UTC.
+                self.assertEqual(str(url.latest_datetime), '2021-10-05 22:20:10.346823-06:00')
+
             # Running the refresh does not result in a new archive.
             _refresh_archives()
             with get_db_session() as session:
@@ -305,12 +311,7 @@ class TestArchive(TestAPI):
             (get_media_directory() / 'archive').mkdir()
             with get_db_session(commit=True) as session:
                 # These should not be deleted.
-                domain = Domain(domain='foo')
-                session.add(domain)
-                session.flush()
-                url = URL(url='foo', domain_id=domain.id)
-                session.add(url)
-                session.flush()
+                domain, url = get_or_create_domain_and_url(session, 'https://example.com')
                 archive = Archive(singlefile_path='foo', url_id=url.id)
                 session.add(archive)
 

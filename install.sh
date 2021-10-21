@@ -55,7 +55,6 @@ apt-get remove docker docker-engine docker.io containerd runc || : # ignore fail
 )
 # Install docker-ce & docker-compose
 apt install -y docker-ce docker-ce-cli containerd.io
-pip3 install docker-compose
 
 # Install docker-compose configs
 cp -f /opt/wrolpi/wrolpi.service /etc/systemd/system/

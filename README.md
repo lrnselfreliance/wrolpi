@@ -84,4 +84,8 @@ WROLPi runs in a couple Docker containers. Let's get the prerequisites installed
 
 # Join!
 
+<p>
+   <img width="256px" src="https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/join_discord.png" alt='Discord QR Code'>
+</p>
+
 [Join our Discord](https://discord.gg/HrwFk7nqA2)

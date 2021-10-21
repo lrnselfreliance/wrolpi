@@ -108,4 +108,4 @@ async def post_archive(request: Request):
 
 
 if __name__ == '__main__':
-    app.run('0.0.0.0', 8080, workers=4, auto_reload=True)
+    app.run('0.0.0.0', 8080, workers=4)

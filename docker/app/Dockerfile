@@ -5,10 +5,12 @@ WORKDIR /app
 ENV PATH /app/node_modules/.bin:$PATH
 
 # install and cache app dependencies
-COPY app .env* /app/
+COPY app/public /app/public
+COPY app/src /app/src
+COPY app/package.json /app/
 RUN rm -rf /app/node_modules
 RUN npm install --silent
-RUN yarn
+RUN yarn --network-timeout 100000
 
 # Create the production build
 RUN yarn run build

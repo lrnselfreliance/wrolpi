@@ -1,5 +1,0 @@
-Pillow==8.2.0
-requests==2.26.0
-srt==3.4.1
-webvtt-py==0.4.6
-youtube-dl==2021.5.16

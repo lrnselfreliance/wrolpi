@@ -60,8 +60,8 @@ pip3 install docker-compose
 # Install docker-compose configs
 cp -f /opt/wrolpi/wrolpi.service /etc/systemd/system/
 
-# Build docker containers
-docker-compose -f /opt/wrolpi/docker-compose.yml build --parallel
+# Build docker containers.  Don't build in parallel to avoid throttling the CPU.
+docker-compose -f /opt/wrolpi/docker-compose.yml build
 
 # Enable WROLPi on startup
 systemctl enable wrolpi.service

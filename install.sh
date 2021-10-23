@@ -42,13 +42,14 @@ done
 set -x
 set -e
 
-# Install git
-apt update
-apt install -y git raspberrypi-kernel-headers apt-transport-https ca-certificates curl gnupg-agent \
-  software-properties-common
-
 # Check that WROLPi directory exists, and contains wrolpi.
 [ -d /opt/wrolpi ]  && [ ! -d /opt/wrolpi/wrolpi ] && echo "/opt/wrolpi exists but does not contain wrolpi!" && exit 2
+
+# Update if we haven't updated in the last day.
+[ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
+# Install git
+apt install -y git raspberrypi-kernel-headers apt-transport-https ca-certificates curl gnupg-agent \
+  software-properties-common
 
 # Get the latest WROLPi code
 git --version

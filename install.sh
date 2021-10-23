@@ -11,6 +11,34 @@
 #  * Build docker containers
 #  * Install and enable systemd configs
 
+Help() {
+  # Display Help
+  echo "Install WROLPi onto this Raspberry Pi."
+  echo
+  echo "Syntax: install.sh [-p|h]"
+  echo "options:"
+  echo "p     Build the docker containers in parallel."
+  echo "h     Print this help."
+  echo
+}
+
+parallel=false
+while getopts ":hp" option; do
+  case $option in
+  h) # display Help
+    Help
+    exit
+    ;;
+  p)
+    parallel=true
+    ;;
+  *) # invalid argument(s)
+    echo "Error: Invalid option"
+    exit 1
+    ;;
+  esac
+done
+
 set -x
 set -e
 
@@ -19,10 +47,13 @@ apt update
 apt install -y git raspberrypi-kernel-headers apt-transport-https ca-certificates curl gnupg-agent \
   software-properties-common
 
+# Check that WROLPi directory exists, and contains wrolpi.
+[ -d /opt/wrolpi ]  && [ ! -d /opt/wrolpi/wrolpi ] && echo "/opt/wrolpi exists but does not contain wrolpi!" && exit 2
+
 # Get the latest WROLPi code
 git --version
 git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi ||
-  (cd /opt/wrolpi && git pull origin master) || exit 1
+  (cd /opt/wrolpi && git pull origin master) || exit 3
 
 # Install Python 3.7 or 3.5
 python3 --version ||
@@ -60,7 +91,11 @@ apt install -y docker-ce docker-ce-cli containerd.io
 cp -f /opt/wrolpi/wrolpi.service /etc/systemd/system/
 
 # Build docker containers.  Don't build in parallel to avoid throttling the CPU.
-docker-compose -f /opt/wrolpi/docker-compose.yml build
+build_opts=""
+if [ $parallel == true ]; then
+  build_opts="${build_opts} --parallel"
+fi
+docker-compose -f /opt/wrolpi/docker-compose.yml build ${build_opts}
 
 # Enable WROLPi on startup
 systemctl enable wrolpi.service

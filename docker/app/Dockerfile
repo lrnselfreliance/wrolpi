@@ -10,7 +10,8 @@ COPY app/src /app/src
 COPY app/package.json /app/
 RUN rm -rf /app/node_modules
 RUN npm install --silent
-RUN yarn --network-timeout 100000
+# Increase network timeout because a Raspberry Pi is slow.
+RUN yarn --silent --network-timeout 100000
 
 # Create the production build
 RUN yarn run build

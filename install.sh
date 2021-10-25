@@ -44,12 +44,12 @@ set -e
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
 # Install dependencies
 apt install -y git apt-transport-https ca-certificates curl gnupg-agent gcc libpq-dev npm software-properties-common \
-	postgresql-12 nginx-full nginx-doc python3.8-full python3.8-dev python3.8-doc python3.8-venv
+  postgresql-12 nginx-full nginx-doc python3.8-full python3.8-dev python3.8-doc python3.8-venv
 
 # Get the latest WROLPi code
 git --version
 git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi ||
-  (cd /opt/wrolpi && git pull origin master) || exit 3
+  (cd /opt/wrolpi && git pull) || exit 3
 
 # Setup the virtual environment that main.py expects
 pip3 --version || (
@@ -72,4 +72,3 @@ npm -g install yarn serve
 yarn --silent --network-timeout 10000
 yarn run build
 yarn global add serve
-

@@ -15,22 +15,17 @@ Help() {
   # Display Help
   echo "Install WROLPi onto this Raspberry Pi."
   echo
-  echo "Syntax: install.sh [-p|h]"
+  echo "Syntax: install.sh [-h]"
   echo "options:"
-  echo "p     Build the docker containers in parallel."
   echo "h     Print this help."
   echo
 }
 
-parallel=false
-while getopts ":hp" option; do
+while getopts ":h" option; do
   case $option in
   h) # display Help
     Help
     exit
-    ;;
-  p)
-    parallel=true
     ;;
   *) # invalid argument(s)
     echo "Error: Invalid option"
@@ -43,23 +38,18 @@ set -x
 set -e
 
 # Check that WROLPi directory exists, and contains wrolpi.
-[ -d /opt/wrolpi ]  && [ ! -d /opt/wrolpi/wrolpi ] && echo "/opt/wrolpi exists but does not contain wrolpi!" && exit 2
+[ -d /opt/wrolpi ] && [ ! -d /opt/wrolpi/wrolpi ] && echo "/opt/wrolpi exists but does not contain wrolpi!" && exit 2
 
 # Update if we haven't updated in the last day.
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
-# Install git
-apt install -y git raspberrypi-kernel-headers apt-transport-https ca-certificates curl gnupg-agent \
-  software-properties-common
+# Install dependencies
+apt install -y git apt-transport-https ca-certificates curl gnupg-agent gcc libpq-dev npm software-properties-common \
+	postgresql-12 nginx-full nginx-doc python3.8-full python3.8-dev python3.8-doc python3.8-venv
 
 # Get the latest WROLPi code
 git --version
 git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi ||
   (cd /opt/wrolpi && git pull origin master) || exit 3
-
-# Install Python 3.7 or 3.5
-python3 --version ||
-  apt install -y python3.7 python3.7-dev python3.7-doc python3.7-venv ||
-  apt install -y python3.5 python3.5-dev python3.5-doc python3.5-venv
 
 # Setup the virtual environment that main.py expects
 pip3 --version || (
@@ -76,27 +66,10 @@ pip3 install -r /opt/wrolpi/requirements.txt
 # Any further pip commands will be global
 deactivate
 
-# Remove any old versions of docker
-apt-get remove docker docker-engine docker.io containerd runc || : # ignore failures
-# Installing docker repo and keys
-[ -f /etc/apt/sources.list.d/wrolpi-docker.list ] || (
-  # Docker repo not installed, install it.  Update the package list with these new repos.
-  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add - &&
-    echo "deb [arch=armhf] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list &&
-    apt update
-)
-# Install docker-ce & docker-compose
-apt install -y docker-ce docker-ce-cli containerd.io
+# Build React app
+cd /opt/wrolpi/app
+npm -g install yarn serve
+yarn --silent --network-timeout 10000
+yarn run build
+yarn global add serve
 
-# Install docker-compose configs
-cp -f /opt/wrolpi/wrolpi.service /etc/systemd/system/
-
-# Build docker containers.  Don't build in parallel to avoid throttling the CPU.
-build_opts=""
-if [ $parallel == true ]; then
-  build_opts="${build_opts} --parallel"
-fi
-docker-compose -f /opt/wrolpi/docker-compose.yml build ${build_opts}
-
-# Enable WROLPi on startup
-systemctl enable wrolpi.service

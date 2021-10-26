@@ -71,13 +71,14 @@ yarn run build
 yarn global add serve
 
 # Configure PostgreSQL
-sudo -u postgres createuser wrolpi
-sudo -u postgres psql -c "alter user postgres password 'wrolpi'"
-sudo -u postgres psql -c "alter user wrolpi password 'wrolpi'"
-sudo -u postgres createdb -O wrolpi wrolpi
+sudo -u postgres psql -c '\l' | grep wrolpi || (
+  sudo -u postgres createuser wrolpi
+  sudo -u postgres psql -c "alter user postgres password 'wrolpi'"
+  sudo -u postgres psql -c "alter user wrolpi password 'wrolpi'"
+  sudo -u postgres createdb -O wrolpi wrolpi
+)
 # Initialize the WROLPi database.
-cd /opt/wrolpi
-python3 /opt/wrolpi/main.py db upgrade
+(cd /opt/wrolpi && python3 /opt/wrolpi/main.py db upgrade)
 
 # Install the WROLPi nginx config over the default nginx config.
 cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf

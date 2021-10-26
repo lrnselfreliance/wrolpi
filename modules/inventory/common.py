@@ -149,6 +149,10 @@ def save_inventories_file(path: str = None):
 def import_inventories_file(path: str = None):
     path: Path = Path(path) if path else DEFAULT_SAVE_PATH
 
+    if not path.is_file():
+        logger.warning(f'No inventories config file at {path}')
+        return
+
     with open(path, 'rt') as fh:
         contents = yaml.load(fh, Loader=yaml.Loader)
 

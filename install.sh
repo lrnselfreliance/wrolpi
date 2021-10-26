@@ -81,9 +81,9 @@ grep wrolpi /etc/passwd || useradd -d /opt/wrolpi wrolpi -s "$(which bash)"
 chown -R wrolpi:wrolpi /opt/wrolpi
 
 # Install the systemd services
-cp /opt/wrolpi/wrolpi-api.service /etc/systemd/system/
-cp /opt/wrolpi/wrolpi-app.service /etc/systemd/system/
-cp /opt/wrolpi/wrolpi.target /etc/systemd/system/
+cp /opt/wrolpi/systemd/wrolpi-api.service /etc/systemd/system/
+cp /opt/wrolpi/systemd/wrolpi-app.service /etc/systemd/system/
+cp /opt/wrolpi/systemd/wrolpi.target /etc/systemd/system/
 /usr/bin/systemctl daemon-reload
 
 set +x

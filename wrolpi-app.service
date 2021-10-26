@@ -1,0 +1,10 @@
+[Unit]
+Description=WROLPi React APP
+Wants=wrolpi-api.service
+
+[Service]
+WorkingDirectory=/opt/wrolpi/app
+ExecStart=/usr/local/bin/serve -s build
+
+[Install]
+WantedBy=default.target

@@ -2,15 +2,6 @@
 # This script will install WROLPi to `/opt/wrolpi` on a fresh/empty Raspberry Pi.  It is expected to be run once to
 # install, and any subsequent runs will update WROLPi.  This script assumes it will be run as the `root` user.
 
-# Installation steps are roughly:
-#  * Install git and kernel headers
-#  * Clone WROLPi repo
-#  * Install Python 3.7 or 3.5
-#  * Setup virtual environment
-#  * Install docker-ce and docker-compose
-#  * Build docker containers
-#  * Install and enable systemd configs
-
 Help() {
   # Display Help
   echo "Install WROLPi onto this Raspberry Pi."
@@ -72,15 +63,19 @@ yarn global add serve
 
 # Configure PostgreSQL
 sudo -u postgres psql -c '\l' | grep wrolpi || (
-  sudo -u postgres createuser wrolpi
-  sudo -u postgres psql -c "alter user postgres password 'wrolpi'"
-  sudo -u postgres psql -c "alter user wrolpi password 'wrolpi'"
-  sudo -u postgres createdb -O wrolpi wrolpi
+  sudo -u postgres createuser wrolpi &&
+    sudo -u postgres psql -c "alter user postgres password 'wrolpi'" &&
+    sudo -u postgres psql -c "alter user wrolpi password 'wrolpi'" &&
+    sudo -u postgres createdb -O wrolpi wrolpi
 )
 # Initialize the WROLPi database.
-cd /opt/wrolpi
-python3 /opt/wrolpi/main.py db upgrade
+/opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py db upgrade
 
 # Install the WROLPi nginx config over the default nginx config.
 cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
-nginx -s reload
+/usr/sbin/nginx -s reload
+
+# Install the systemd services
+cp /opt/wrolpi/wrolpi-api.service /etc/systemd/system/
+cp /opt/wrolpi/wrolpi-app.service /etc/systemd/system/
+/usr/bin/systemctl daemon-reload

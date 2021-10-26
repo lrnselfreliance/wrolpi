@@ -36,12 +36,18 @@ set -e
 # Check that WROLPi directory exists, and contains wrolpi.
 [ -d /opt/wrolpi ] && [ ! -d /opt/wrolpi/wrolpi ] && echo "/opt/wrolpi exists but does not contain wrolpi!" && exit 2
 
+# Install npm repos, otherwise it requires x11.
+curl -fsSL https://deb.nodesource.com/setup_14.x | bash -
+# Install yarn repos
+curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarnkey.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/yarnkey.gpg] https://dl.yarnpkg.com/debian stable main" |
+  sudo tee /etc/apt/sources.list.d/yarn.list
 # Update if we haven't updated in the last day.
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
 # Install dependencies
-apt install -y git apt-transport-https ca-certificates curl gnupg-agent gcc libpq-dev npm software-properties-common \
-  postgresql-12 nginx-full nginx-doc python3.8-full python3.8-dev python3.8-doc python3.8-venv \
-  ffmpeg wkhtmltopdf hostapd
+apt install -y git apt-transport-https ca-certificates curl gnupg-agent gcc libpq-dev software-properties-common \
+  postgresql-12 nginx-full nginx-doc python3.8-minimal python3.8-dev python3.8-doc python3.8-venv \
+  ffmpeg wkhtmltopdf hostapd nodejs yarn
 
 # Get the latest WROLPi code
 git --version
@@ -61,7 +67,7 @@ python3 -m venv /opt/wrolpi/venv
 pip3 install -r /opt/wrolpi/requirements.txt
 
 # Build React app
-[ ! -f /usr/local/bin/serve ] && npm -g install yarn serve
+[ ! -f /usr/local/bin/serve ] && npm -g install serve
 cd /opt/wrolpi/app
 yarn --silent --network-timeout 10000
 yarn run build
@@ -92,7 +98,7 @@ cp /opt/wrolpi/systemd/wrolpi.target /etc/systemd/system/
 /usr/bin/systemctl daemon-reload
 
 # Configure the hotspot.
-/opt/wrolpi/scripts/hotspot.sh
+bash /opt/wrolpi/scripts/hotspot.sh
 
 set +x
 

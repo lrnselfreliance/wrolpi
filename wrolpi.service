@@ -1,3 +1,0 @@
-[Unit]
-Description=WROLPi services group
-Wants=wrolpi-api.service,wrolpi-app.service,nginx.service,postgresql.service

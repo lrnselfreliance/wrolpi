@@ -78,4 +78,5 @@ cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
 # Install the systemd services
 cp /opt/wrolpi/wrolpi-api.service /etc/systemd/system/
 cp /opt/wrolpi/wrolpi-app.service /etc/systemd/system/
+cp /opt/wrolpi/wrolpi.target /etc/systemd/system/
 /usr/bin/systemctl daemon-reload

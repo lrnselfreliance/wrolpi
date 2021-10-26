@@ -6,6 +6,8 @@ PartOf=wrolpi.target
 [Service]
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/wrolpi/venv/bin/python /opt/wrolpi/main.py api
+Group=wrolpi
+User=wrolpi
 WorkingDirectory=/opt/wrolpi/
 
 [Install]

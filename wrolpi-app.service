@@ -5,6 +5,8 @@ PartOf=wrolpi.target
 
 [Service]
 ExecStart=/usr/local/bin/serve -s build
+Group=wrolpi
+User=wrolpi
 WorkingDirectory=/opt/wrolpi/app/
 
 [Install]

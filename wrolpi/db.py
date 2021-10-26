@@ -19,7 +19,7 @@ def get_db_args(dbname: str = None):
         user='postgres',
         password='wrolpi',
         host='127.0.0.1',
-        port=54321,
+        port=5432,
     )
     if DOCKERIZED:
         # Deployed in docker, use the docker database.

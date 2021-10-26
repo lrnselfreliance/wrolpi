@@ -1,7 +1,7 @@
 [Unit]
 Description=WROLPi React APP
 Wants=wrolpi-api.service
-StopWhenUnneeded=yes
+PartOf=wrolpi.target
 
 [Service]
 ExecStart=/usr/local/bin/serve -s build

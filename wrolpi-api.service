@@ -1,7 +1,7 @@
 [Unit]
 Description=WROLPi Python API
 Wants=postgresql.service
-StopWhenUnneeded=yes
+PartOf=wrolpi.target
 
 [Service]
 Environment=PYTHONUNBUFFERED=1

@@ -90,11 +90,13 @@ set +x
 
 ip=$(hostname -i | cut -d' ' -f1)
 
-echo "WROLPi has successfully been installed!
+echo "
+
+WROLPi has successfully been installed!
 
 Start the WROLPi services using:
 
-sudo systemctl start wrolpi.target
+ # sudo systemctl start wrolpi.target
 
-then navigate to http://${ip}
+then navigate to:  http://${ip}
 "

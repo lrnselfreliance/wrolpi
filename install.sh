@@ -63,12 +63,22 @@ python3 -m venv /opt/wrolpi/venv
 # Install python requirements files
 pip3 install -r /opt/wrolpi/requirements.txt
 
-# Any further pip commands will be global
-deactivate
-
 # Build React app
 cd /opt/wrolpi/app
 npm -g install yarn serve
 yarn --silent --network-timeout 10000
 yarn run build
 yarn global add serve
+
+# Configure PostgreSQL
+sudo -u postgres createuser wrolpi
+sudo -u postgres psql -c "alter user postgres password 'wrolpi'"
+sudo -u postgres psql -c "alter user wrolpi password 'wrolpi'"
+sudo -u postgres createdb -O wrolpi wrolpi
+# Initialize the WROLPi database.
+cd /opt/wrolpi
+python3 /opt/wrolpi/main.py db upgrade
+
+# Install the WROLPi nginx config over the default nginx config.
+cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
+nginx -s reload

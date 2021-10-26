@@ -85,3 +85,16 @@ cp /opt/wrolpi/wrolpi-api.service /etc/systemd/system/
 cp /opt/wrolpi/wrolpi-app.service /etc/systemd/system/
 cp /opt/wrolpi/wrolpi.target /etc/systemd/system/
 /usr/bin/systemctl daemon-reload
+
+set +x
+
+ip=$(hostname -i | cut -d' ' -f1)
+
+echo "WROLPi has successfully been installed!
+
+Start the WROLPi services using:
+
+sudo systemctl start wrolpi.target
+
+then navigate to http://${ip}
+"

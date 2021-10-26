@@ -6,17 +6,22 @@ Help() {
   # Display Help
   echo "Install WROLPi onto this Raspberry Pi."
   echo
-  echo "Syntax: install.sh [-h]"
+  echo "Syntax: install.sh [-h] [-b BRANCH]"
   echo "options:"
   echo "h     Print this help."
+  echo "b     Install from this git BRANCH."
   echo
 }
 
-while getopts ":h" option; do
+BRANCH="master"
+while getopts ":hb:" option; do
   case $option in
   h) # display Help
     Help
     exit
+    ;;
+  b)
+    BRANCH="${OPTARG}"
     ;;
   *) # invalid argument(s)
     echo "Error: Invalid option"
@@ -40,8 +45,8 @@ apt install -y git apt-transport-https ca-certificates curl gnupg-agent gcc libp
 
 # Get the latest WROLPi code
 git --version
-git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi ||
-  (cd /opt/wrolpi && git pull) || exit 3
+git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi || :
+(cd /opt/wrolpi && git checkout "${BRANCH}" && git pull) || exit 3
 
 # Setup the virtual environment that main.py expects
 pip3 --version || (

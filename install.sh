@@ -78,7 +78,8 @@ sudo -u postgres psql -c '\l' | grep wrolpi || (
   sudo -u postgres createdb -O wrolpi wrolpi
 )
 # Initialize the WROLPi database.
-(cd /opt/wrolpi && python3 /opt/wrolpi/main.py db upgrade)
+cd /opt/wrolpi
+python3 /opt/wrolpi/main.py db upgrade
 
 # Install the WROLPi nginx config over the default nginx config.
 cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf

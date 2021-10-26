@@ -19,23 +19,6 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 - WROLPi is in early Alpha!
 - Expect things to change!
 
-# Minimal Install
-
-WROLPi runs in a couple Docker containers. Let's get the prerequisites installed...
-
-1. [Install docker-ce](https://docs.docker.com/install/linux/docker-ce/debian/) and
-   [docker-compose](https://docs.docker.com/compose/install/)
-1. Copy the latest WROLPi code
-    * `git clone git@github.com:lrnselfreliance/wrolpi.git`
-1. Change directory into the code base
-    * `cd wrolpi`
-1. Build the docker containers
-    * `docker-compose build --parallel`
-1. Start the docker containers
-    * `docker-compose up`
-1. Navigate to WROLPi
-    * http://0.0.0.0:8080
-
 # Features
 
 - [x] Video player & downloader
@@ -50,6 +33,34 @@ WROLPi runs in a couple Docker containers. Let's get the prerequisites installed
 - [ ] Synchronizer and/or duplicator
 - [ ] Food storage calculator
 - [ ] Podcast player & downloader
+
+# Try WROLPi!
+
+You can try out WROLPi by running the docker containers.
+
+1. [Install docker-ce](https://docs.docker.com/install/linux/docker-ce/debian/) and
+   [docker-compose](https://docs.docker.com/compose/install/)
+1. Copy the latest WROLPi code
+    * `git clone git@github.com:lrnselfreliance/wrolpi.git`
+1. Change directory into the code base
+    * `cd wrolpi`
+1. Start the docker containers
+    * `docker-compose up`
+1. Navigate to WROLPi
+    * http://0.0.0.0:8080
+
+# RaspberryPi Install
+
+Install WROLPi onto a fresh Raspberry Pi.
+
+**Warning: this will clobber anything else on the Raspberry Pi!  Do not run this installation script elsewhere!**
+
+1. Install [Ubuntu Server 20.04](https://ubuntu.com/download/raspberry-pi) onto a RaspberryPi.
+2. Login to the new RaspberryPi.
+3. Get the WROLPi installation script
+    * `wget https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/install.sh -O /tmp/install.sh`
+4. Run the installation script
+    * `sudo /bin/bash /tmp/install.sh`
 
 # Charter
 

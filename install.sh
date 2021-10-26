@@ -36,7 +36,7 @@ set -e
 # Install dependencies
 apt install -y git apt-transport-https ca-certificates curl gnupg-agent gcc libpq-dev npm software-properties-common \
   postgresql-12 nginx-full nginx-doc python3.8-full python3.8-dev python3.8-doc python3.8-venv \
-  ffmpeg wkhtmltopdf
+  ffmpeg wkhtmltopdf hostapd
 
 # Get the latest WROLPi code
 git --version
@@ -85,6 +85,9 @@ cp /opt/wrolpi/systemd/wrolpi-api.service /etc/systemd/system/
 cp /opt/wrolpi/systemd/wrolpi-app.service /etc/systemd/system/
 cp /opt/wrolpi/systemd/wrolpi.target /etc/systemd/system/
 /usr/bin/systemctl daemon-reload
+
+# Configure the hotspot.
+/opt/wrolpi/scripts/hotspot.sh
 
 set +x
 

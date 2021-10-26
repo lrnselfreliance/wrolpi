@@ -1,10 +1,12 @@
 [Unit]
 Description=WROLPi Python API
 Wants=postgresql.service
+StopWhenUnneeded=yes
 
 [Service]
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/wrolpi/venv/bin/python /opt/wrolpi/main.py api
+WorkingDirectory=/opt/wrolpi/
 
 [Install]
 WantedBy=default.target

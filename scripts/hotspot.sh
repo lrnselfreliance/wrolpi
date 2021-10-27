@@ -3,7 +3,7 @@
 set -x
 set -e
 
-apt install hostapd isc-dhcp-server
+apt install -y hostapd isc-dhcp-server
 
 # hostapd will broadcast the hotspot
 cat >/etc/hostapd/hostapd.conf <<'EOF'

@@ -69,7 +69,7 @@ pip3 install -r /opt/wrolpi/requirements.txt
 # Build React app
 [ ! -f /usr/local/bin/serve ] && npm -g install serve
 cd /opt/wrolpi/app
-yarn --silent --network-timeout 10000
+yarn --network-timeout 10000
 yarn run build
 yarn global add serve
 

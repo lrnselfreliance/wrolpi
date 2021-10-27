@@ -1,66 +1,71 @@
 #! /usr/bin/env bash
-# Configure the hotspot.
+# Configure the WROLPi hotspot.
 set -x
 set -e
 
-cat >>/etc/udev/rules.d/70-ap-interface.rules <<'EOF'
-SUBSYSTEM=="net", KERNEL=="wlan*", ACTION=="add", RUN+="/sbin/iw dev %k interface add ap%n type __ap"
-EOF
+apt install hostapd netplan isc-dhcp-server
 
-cat >>/etc/systemd/network/20-ap0.network <<'EOF'
-[Match]
-Name=ap0
-
-[Network]
-Address=192.168.1.1/28
-DHCPServer=yes
-EOF
-
-sudo udevadm trigger --action=add /sys/class/net/wlan0
-sudo systemctl restart systemd-networkd
-
-cat >/etc/systemd/system/hostapd@.service <<'EOF'
-[Unit]
-Description=Advanced IEEE 802.11 AP and IEEE 802.1X/WPA/WPA2/EAP Authenticator
-Requires=sys-subsystem-net-devices-%i.device
-After=sys-subsystem-net-devices-%i.device
-Before=network.target
-Wants=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/sbin/hostapd /etc/hostapd/hostapd-%I.conf
-
-[Install]
-Alias=multi-user.target.wants/hostapd@%i.service
-EOF
-
-cat >/etc/hostapd/hostapd-ap0.conf <<'EOF'
-interface=ap0
-country_code=US
+# hostapd will broadcast the hotspot
+cat >/etc/hostapd/hostapd.conf <<'EOF'
+# the interface used by the AP
+interface=wlan0
+driver=nl80211
+# "g" simply means 2.4GHz band
 hw_mode=g
-
-ssid=wrolpi
-channel=6
-ignore_broadcast_ssid=0
-
+# the channel to use
+channel=1
+# limit the frequencies used to those allowed in the country
+ieee80211d=1
+# the country code
+country_code=US
+# 802.11n support
+ieee80211n=1
+# QoS support
+wmm_enabled=1
+# the name of the AP
+ssid=WROLPi
+macaddr_acl=0
+# 1=wpa, 2=wep, 3=both
 auth_algs=1
+ignore_broadcast_ssid=0
+# WPA2 only
 wpa=2
-wpa_passphrase=wrolpi
+wpa_passphrase=wrolpihotspot
 wpa_key_mgmt=WPA-PSK
-
-wmm_enabled=0
+#wpa_pairwise=TKIP
+rsn_pairwise=CCMP
 EOF
 
-mkdir /etc/systemd/system/wpa_supplicant@wlan0.service.d
-cat >/etc/systemd/system/wpa_supplicant@wlan0.service.d/override.conf <<'EOF'
-[Unit]
-Wants=hostapd@ap0.service
-After=hostapd@ap0.service
+# Serve DHCP on the hotspot interface.
+cat >/etc/dhcp/dhcpd.conf<<'EOF'
+default-lease-time 600;
+max-lease-time 7200;
 
-[Service]
-ExecStartPre=/bin/sleep 3
+subnet 192.168.1.0 netmask 255.255.255.0 {
+ range 192.168.1.100 192.168.1.200;
+ option routers 192.168.1.1;
+ option domain-name-servers 192.168.1.1, 192.168.1.2;
+ option domain-name "wrolpi.local";
+}
+EOF
+sed -ie 's/INTERFACESv4.*/INTERFACESv4="wlan0"/' /etc/default/isc-dhcp-server
+
+# Configure eth0 as a normal dhcp interface, wlan0 as our hotspot interface.
+cat >/etc/netplan/10-wrolpi-hotspot.yaml <<'EOF'
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    eth0:
+      dhcp4: yes
+    wlan0:
+      dhcp4: no
+      dhcp6: no
+      addresses:
+        - 192.168.1.1/24
+      nameservers:
+         addresses: [192.168.1.1]
+
 EOF
 
-sudo systemctl enable hostapd@ap0
-sudo systemctl start hostapd@ap0
+netplan generate && netplan apply &&  systemctl restart hostapd.service isc-dhcp-server.service

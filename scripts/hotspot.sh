@@ -3,14 +3,13 @@
 set -x
 set -e
 
-apt install hostapd netplan isc-dhcp-server
+apt install hostapd isc-dhcp-server
 
 # hostapd will broadcast the hotspot
 cat >/etc/hostapd/hostapd.conf <<'EOF'
 # the interface used by the AP
 interface=wlan0
 driver=nl80211
-# "g" simply means 2.4GHz band
 hw_mode=g
 # the channel to use
 channel=1
@@ -32,12 +31,11 @@ ignore_broadcast_ssid=0
 wpa=2
 wpa_passphrase=wrolpihotspot
 wpa_key_mgmt=WPA-PSK
-#wpa_pairwise=TKIP
 rsn_pairwise=CCMP
 EOF
 
 # Serve DHCP on the hotspot interface.
-cat >/etc/dhcp/dhcpd.conf<<'EOF'
+cat >/etc/dhcp/dhcpd.conf <<'EOF'
 default-lease-time 600;
 max-lease-time 7200;
 
@@ -63,9 +61,7 @@ network:
       dhcp6: no
       addresses:
         - 192.168.1.1/24
-      nameservers:
-         addresses: [192.168.1.1]
-
 EOF
 
-netplan generate && netplan apply &&  systemctl restart hostapd.service isc-dhcp-server.service
+netplan generate && netplan apply && systemctl unmask hostapd.service &&
+  systemctl restart hostapd.service isc-dhcp-server.service

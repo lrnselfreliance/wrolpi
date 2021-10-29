@@ -253,7 +253,7 @@ UNRECOVERABLE_ERRORS = {
     'requires payment',
     'Content Warning',
     'Did not get any data blocks',
-    'Sign in to confirm your age',
+    'Sign in',
     'This live stream recording is not available.',
     'members-only content',
 }

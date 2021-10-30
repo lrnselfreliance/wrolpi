@@ -41,7 +41,7 @@ curl -fsSL https://deb.nodesource.com/setup_14.x | bash -
 # Install yarn repos
 curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarnkey.gpg >/dev/null
 echo "deb [signed-by=/usr/share/keyrings/yarnkey.gpg] https://dl.yarnpkg.com/debian stable main" |
-  sudo tee /etc/apt/sources.list.d/yarn.list
+  tee /etc/apt/sources.list.d/yarn.list
 # Update if we haven't updated in the last day.
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
 # Install dependencies
@@ -96,6 +96,8 @@ cp /opt/wrolpi/systemd/wrolpi-api.service /etc/systemd/system/
 cp /opt/wrolpi/systemd/wrolpi-app.service /etc/systemd/system/
 cp /opt/wrolpi/systemd/wrolpi.target /etc/systemd/system/
 /usr/bin/systemctl daemon-reload
+systemctl enable wrolpi-api.service
+systemctl enable wrolpi-app.service
 
 # Configure the hotspot.
 bash /opt/wrolpi/scripts/hotspot.sh

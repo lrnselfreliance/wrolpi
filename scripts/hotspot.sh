@@ -39,10 +39,10 @@ cat >/etc/dhcp/dhcpd.conf <<'EOF'
 default-lease-time 600;
 max-lease-time 7200;
 
-subnet 192.168.1.0 netmask 255.255.255.0 {
- range 192.168.1.100 192.168.1.200;
- option routers 192.168.1.1;
- option domain-name-servers 192.168.1.1, 192.168.1.2;
+subnet 192.168.0.0 netmask 255.255.255.0 {
+ range 192.168.0.100 192.168.0.200;
+ option routers 192.168.0.1;
+ option domain-name-servers 192.168.0.1, 192.168.0.2;
  option domain-name "wrolpi.local";
 }
 EOF
@@ -62,7 +62,7 @@ network:
       dhcp6: no
       optional: yes
       addresses:
-        - 192.168.1.1/24
+        - 192.168.0.1/24
 
 EOF
 

@@ -56,11 +56,14 @@ network:
   ethernets:
     eth0:
       dhcp4: yes
+      optional: yes
     wlan0:
       dhcp4: no
       dhcp6: no
+      optional: yes
       addresses:
         - 192.168.1.1/24
+
 EOF
 
 netplan generate && netplan apply && systemctl unmask hostapd.service &&

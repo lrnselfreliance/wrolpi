@@ -1,3 +1,4 @@
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -63,7 +64,9 @@ def run_migrations_online():
     )
 
     with connectable.connect() as connection:
-        connection.execute("SET ROLE 'wrolpi'")
+        if not os.environ.get('DOCKER', '').lower().startswith('t'):
+            # Set role when not in a docker container
+            connection.execute("SET ROLE 'wrolpi'")
         context.configure(
             connection=connection, target_metadata=target_metadata
         )

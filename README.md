@@ -40,13 +40,17 @@ You can try out WROLPi by running the docker containers.
 
 1. [Install docker-ce](https://docs.docker.com/install/linux/docker-ce/debian/) and
    [docker-compose](https://docs.docker.com/compose/install/)
-1. Copy the latest WROLPi code
+2. Copy the latest WROLPi code
     * `git clone git@github.com:lrnselfreliance/wrolpi.git`
-1. Change directory into the code base
+3. Change directory into the code base
     * `cd wrolpi`
-1. Start the docker containers
+4. Start the database.
+    * `docker-compose up -d db`
+5. Initialize the database
+    * `docker-compose run api db upgrade`
+6. Start the docker containers
     * `docker-compose up`
-1. Navigate to WROLPi
+7. Navigate to WROLPi
     * http://0.0.0.0:8080
 
 # RaspberryPi Install

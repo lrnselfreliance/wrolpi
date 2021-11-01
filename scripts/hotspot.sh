@@ -16,6 +16,11 @@ network:
     renderer: NetworkManager
 EOF
 
+netplan generate
+netplan apply
+
+# Initialize the Hotspot config, then overwrite it.
+nmcli con add type wifi ifname wlan0 con-name Hotspot autoconnect yes ssid WROLPi
 cat >/etc/NetworkManager/system-connections/Hotspot.nmconnection <<'EOF'
 [connection]
 id=Hotspot
@@ -49,6 +54,4 @@ method=auto
 [proxy]
 EOF
 
-netplan generate
-netplan apply
 systemctl restart NetworkManager.service

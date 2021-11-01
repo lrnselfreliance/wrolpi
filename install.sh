@@ -36,7 +36,7 @@ set -e
 # Check that WROLPi directory exists, and contains wrolpi.
 [ -d /opt/wrolpi ] && [ ! -d /opt/wrolpi/wrolpi ] && echo "/opt/wrolpi exists but does not contain wrolpi!" && exit 2
 
-# Install npm repos, otherwise it requires x11.
+# Install npm repos.
 curl -fsSL https://deb.nodesource.com/setup_14.x | bash -
 # Install yarn repos
 curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarnkey.gpg >/dev/null

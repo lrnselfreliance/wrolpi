@@ -16,7 +16,7 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 
 # WARNING WROLPi is under active development!
 
-- WROLPi is in early Alpha!
+- WROLPi is in Alpha!
 - Expect things to change!
 
 # Features
@@ -25,7 +25,7 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 - [x] One-Time pad generator, encrypter/decrypter
 - [x] Web archiver
 - [x] Inventory management
-- [ ] Wi-Fi Hotspot
+- [x] Wi-Fi Hotspot
 - [ ] Universal search
 - [ ] Map viewer & downloader
 - [ ] eBook viewer

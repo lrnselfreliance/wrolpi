@@ -8,23 +8,28 @@ from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import NullPool
 
 from wrolpi.common import logger
-from wrolpi.vars import DOCKERIZED
+from wrolpi.vars import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DOCKERIZED, PYTEST
 
 logger = logger.getChild(__name__)
 
 
 def get_db_args(dbname: str = None):
     db_args = dict(
-        dbname=dbname or 'wrolpi',
-        user='postgres',
-        password='wrolpi',
-        host='127.0.0.1',
-        port=5432,
+        dbname=dbname or DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        host=DB_HOST,
+        port=DB_PORT,
     )
     if DOCKERIZED:
         # Deployed in docker, use the docker database.
+        db_args['user'] = 'postgres'
         db_args['host'] = 'db'
         db_args['port'] = 5432
+    elif PYTEST:
+        # Pytest is running but we're not in docker, use the exposed docker container port.
+        db_args['user'] = 'postgres'
+        db_args['port'] = 54321
 
     return db_args
 

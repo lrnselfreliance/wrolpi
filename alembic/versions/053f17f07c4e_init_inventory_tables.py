@@ -5,6 +5,8 @@ Revises: f0d0086a73d1
 Create Date: 2021-09-20 16:21:00.322598
 
 """
+import os
+
 from alembic import op
 from sqlalchemy.orm import Session
 
@@ -12,6 +14,8 @@ revision = '053f17f07c4e'
 down_revision = 'f0d0086a73d1'
 branch_labels = None
 depends_on = None
+
+DOCKERIZED = True if os.environ.get('DOCKER', '').lower().startswith('t') else False
 
 
 def upgrade():
@@ -50,6 +54,11 @@ def upgrade():
         created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         deleted_at TIMESTAMP WITHOUT TIME ZONE
     )''')
+
+    if not DOCKERIZED:
+        session.execute('ALTER TABLE public.inventories_version OWNER TO wrolpi')
+        session.execute('ALTER TABLE public.inventory OWNER TO wrolpi')
+        session.execute('ALTER TABLE public.item OWNER TO wrolpi')
 
 
 def downgrade():

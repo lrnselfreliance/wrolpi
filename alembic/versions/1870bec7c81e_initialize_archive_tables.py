@@ -5,6 +5,8 @@ Revises: 053f17f07c4e
 Create Date: 2021-09-22 18:31:15.056697
 
 """
+import os
+
 from alembic import op
 from sqlalchemy.orm import Session
 
@@ -13,6 +15,8 @@ revision = '1870bec7c81e'
 down_revision = '053f17f07c4e'
 branch_labels = None
 depends_on = None
+
+DOCKERIZED = True if os.environ.get('DOCKER', '').lower().startswith('t') else False
 
 
 def upgrade():
@@ -50,6 +54,11 @@ def upgrade():
     )''')
 
     session.execute('ALTER TABLE url ADD COLUMN latest_id INTEGER REFERENCES archive(id) ON DELETE CASCADE')
+
+    if not DOCKERIZED:
+        session.execute('ALTER TABLE public.domains OWNER TO wrolpi')
+        session.execute('ALTER TABLE public.url OWNER TO wrolpi')
+        session.execute('ALTER TABLE public.archive OWNER TO wrolpi')
 
 
 def downgrade():

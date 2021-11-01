@@ -13,6 +13,8 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
+DOCKERIZED = True if os.environ.get('DOCKER', '').lower().startswith('t') else False
+
 
 def upgrade():
     bind = op.get_bind()
@@ -61,6 +63,10 @@ def upgrade():
     validated_poster BOOLEAN DEFAULT false,
     view_count INTEGER
 )''')
+
+    if not DOCKERIZED:
+        session.execute('ALTER TABLE public.channel OWNER TO wrolpi')
+        session.execute('ALTER TABLE public.video OWNER TO wrolpi')
 
 
 def downgrade():

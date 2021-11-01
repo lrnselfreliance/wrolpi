@@ -1,0 +1,48 @@
+.channel-edit {
+    border-radius: 3px;
+    padding: 0.75em;
+}
+
+.channel-edit:hover {
+    background-color: #7abaff;
+    cursor: pointer;
+}
+
+::-ms-clear {
+    display: none;
+}
+
+.form-control-clear {
+    z-index: 10;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+pre.wrap-text {
+    white-space: pre-wrap; /* Since CSS 2.1 */
+    white-space: -moz-pre-wrap; /* Mozilla, since 1999 */
+    word-wrap: break-word; /* Internet Explorer 5.5+ */
+}
+
+.duration-overlay {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    color: black;
+    background: #eee;
+    opacity: 0.8;
+    padding: 0px 4px;
+    border-radius: 3px;
+}
+
+.no-link-underscore {
+    text-decoration: none !important;
+}
+
+.video-card-link {
+    color: black;
+}
+
+.center-me {
+    margin: 0 auto;
+}

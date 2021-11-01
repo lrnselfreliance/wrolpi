@@ -1,0 +1,28 @@
+# This is an example config for your WROLPi.  Do NOT modify this file, rather, copy this file to local.yaml and
+# modify that file.
+media_directory: ./test  # this should be an absolute directory, for example, /media/8TB
+
+downloader:
+  # Most of these names were decided by Youtube-DL project, we pass these to any calls to that project.
+  continue_dl: true
+  dateafter: 19900101
+  file_name_format: "%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s"
+  format: 22/135/18/43
+  nooverwrites: true
+  quiet: false
+  writeautomaticsub: true
+  writeinfojson: true
+  writesubtitles: true
+  writethumbnail: true
+  youtube_include_dash_manifest: false
+
+channels:
+  # These are channels or playlists that will be downloaded.  You can configure them in the UI, or in your local.yaml.
+  wrolpi:
+    name: WROLPi # the pretty name for the channel
+    url: https://www.youtube.com/channel/UC4t8bw1besFTyjW7ZBCOIrw/videos
+    directory: videos/wrolpi  # relative to `media_directory`
+
+timezone: America/Boise
+min_download_frequency: 14400  # 4 hours
+max_download_frequency: 43200  # 12 hours

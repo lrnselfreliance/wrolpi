@@ -36,12 +36,12 @@ set -e
 # Check that WROLPi directory exists, and contains wrolpi.
 [ -d /opt/wrolpi ] && [ ! -d /opt/wrolpi/wrolpi ] && echo "/opt/wrolpi exists but does not contain wrolpi!" && exit 2
 
-# Install npm repos.
-curl -fsSL https://deb.nodesource.com/setup_14.x | bash -
 # Install yarn repos
 curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarnkey.gpg >/dev/null
 echo "deb [signed-by=/usr/share/keyrings/yarnkey.gpg] https://dl.yarnpkg.com/debian stable main" |
   tee /etc/apt/sources.list.d/yarn.list
+# Install npm repos.
+curl -fsSL https://deb.nodesource.com/setup_14.x | bash -
 # Update if we haven't updated in the last day.
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
 # Install dependencies

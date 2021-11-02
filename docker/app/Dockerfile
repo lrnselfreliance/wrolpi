@@ -10,10 +10,9 @@ COPY app/src /app/src
 COPY app/package.json /app/
 RUN rm -rf /app/node_modules
 # Increase network timeout because a Raspberry Pi is slow.
-RUN yarn --silent --network-timeout 100000
+RUN yarn --network-timeout 100000
 
 # Create the production build
-RUN yarn run build
 RUN yarn global add serve
 
 # Run the production build

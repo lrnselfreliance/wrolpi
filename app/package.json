@@ -1,5 +1,5 @@
 {
-  "name": "app",
+  "name": "wrolpi-app",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
@@ -12,7 +12,7 @@
     "react-router-dom": "^5.2.0",
     "react-scripts": "^3.4.1",
     "react-semantic-toasts": "^0.6.5",
-    "react-timezone-select": "^1.0.5",
+    "react-timezone-select": "0.8.4",
     "semantic-ui-offline": "^2.4.1-1",
     "semantic-ui-react": "^0.88.2",
     "yargs-parser": "^18.1.2"

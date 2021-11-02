@@ -29,7 +29,7 @@ class MediaPath:
         if not path.is_absolute():
             # Assume the path is relative to the media directory.
             path = get_media_directory() / path
-        elif not path.is_relative_to(get_media_directory()):
+        elif not str(path).startswith(str(get_media_directory())):
             # Absolute paths must be within the media directory.
             raise ValueError(f'Path {path} must be in {get_media_directory()}')
 

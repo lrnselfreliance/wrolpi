@@ -37,3 +37,6 @@ class TestMediaPath(unittest.TestCase):
         # Absolute paths must be in media directory.
         d = MediaPath(f'{self.test_dir.name}/foo')
         self.assertEqual(d._path, pathlib.Path(f'{self.test_dir.name}/foo'))
+
+        # Error is raised when the path is not in the media path.
+        self.assertRaises(ValueError, MediaPath, '/tmp/foo')

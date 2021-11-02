@@ -65,6 +65,9 @@ Install WROLPi onto a fresh Raspberry Pi.
     * `wget https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/install.sh -O /tmp/install.sh`
 4. Run the installation script
     * `sudo /bin/bash /tmp/install.sh`
+5. Start WROLPi
+    * `sudo systemctl start wrolpi.target`
+6. Join the Hotspot or browse to the IP address of your WROLPi!
 
 # Charter
 

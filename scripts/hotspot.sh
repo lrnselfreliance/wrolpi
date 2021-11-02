@@ -16,6 +16,10 @@ network:
     renderer: NetworkManager
 EOF
 
+cat >/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg <<'EOF'
+network: {config: disabled}
+EOF
+
 netplan generate
 netplan apply
 

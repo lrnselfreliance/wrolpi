@@ -69,13 +69,16 @@ def get_new_archive_files(url: str):
     return ret
 
 
+ARCHIVE_TIMEOUT = 5 * 60  # Wait at most 5 minutes for response.
+
+
 def request_archive(url: str):
     """
     Send a request to the archive service to archive the URL.
     """
     data = {'url': url}
     try:
-        resp = requests.post(f'{ARCHIVE_SERVICE}/json', json=data)
+        resp = requests.post(f'{ARCHIVE_SERVICE}/json', json=data, timeout=ARCHIVE_TIMEOUT)
     except Exception as e:
         logger.error('Error when requesting archive', exc_info=e)
         raise
@@ -83,11 +86,19 @@ def request_archive(url: str):
     readability = resp.json()['readability']
     screenshot = resp.json()['screenshot']
 
-    if not screenshot:
+    if not (screenshot or singlefile or readability):
         raise Exception('singlefile response was empty!')
 
-    if screenshot:
+    if not singlefile:
+        logger.info(f'Failed to get singlefile for {url=}')
+    if not readability:
+        logger.info(f'Failed to get readability for {url=}')
+    if not screenshot:
+        logger.info(f'Failed to get screenshot for {url=}')
+    else:
+        # Decode screenshot to bytes.
         screenshot = base64.b64decode(screenshot)
+
     return singlefile, readability, screenshot
 
 

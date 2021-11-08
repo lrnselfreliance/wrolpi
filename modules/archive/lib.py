@@ -13,10 +13,9 @@ from sqlalchemy.orm import Session
 
 from modules.archive.models import URL, Domain, Archive
 from wrolpi.common import get_media_directory, logger, chunks
-from wrolpi.dates import now, strptime_ms
+from wrolpi.dates import now, strptime_ms, strftime_ms
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import InvalidDomain, UnknownURL, PendingArchive, InvalidArchive
-from wrolpi.vars import DATETIME_FORMAT_MS
 
 logger = logger.getChild(__name__)
 
@@ -28,8 +27,18 @@ def get_archive_directory() -> pathlib.Path:
 
 
 def extract_domain(url):
+    """
+    Extract the domain from a URL.  Remove leading www.
+
+    >>> extract_domain('https://www.example.com/foo')
+    'example.com'
+    """
     parsed = urlparse(url)
-    return parsed.netloc
+    domain = parsed.netloc
+    if domain.startswith('www.'):
+        # Remove leading www.
+        domain = domain[4:]
+    return domain
 
 
 def get_domain_directory(url: str) -> pathlib.Path:
@@ -52,7 +61,7 @@ def get_new_archive_files(url: str):
     Create a list of archive files using a shared name schema.  Raise an error if any of them exist.
     """
     directory = get_domain_directory(url)
-    dt = now().strftime(DATETIME_FORMAT_MS)
+    dt = strftime_ms(now())
 
     singlefile_path = directory / f'{dt}.html'
     readability_path = directory / f'{dt}-readability.html'

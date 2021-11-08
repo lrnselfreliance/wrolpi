@@ -1,10 +1,11 @@
 import json
 import pathlib
+from datetime import datetime
 
 import mock
 
 from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count, delete_url, \
-    _refresh_archives, get_domains
+    _refresh_archives, get_domains, get_new_archive_files
 from modules.archive.models import Archive, URL, Domain
 from wrolpi.common import get_media_directory
 from wrolpi.db import get_db_session
@@ -33,6 +34,23 @@ class TestArchive(TestAPI):
     def setUp(self) -> None:
         super().setUp()
         (pathlib.Path(self.tmp_dir.name) / 'archive').mkdir(exist_ok=True)
+
+    @mock.patch('modules.archive.lib.now', lambda: datetime(2001, 1, 1))
+    def test_get_new_archive_files(self):
+        s, r, t, j, c = map(str, get_new_archive_files('https://example.com/two'))
+        assert str(s).endswith('archive/example.com/2001-01-01 00:00:00.000000.html')
+        assert str(r).endswith('archive/example.com/2001-01-01 00:00:00.000000-readability.html')
+        assert str(t).endswith('archive/example.com/2001-01-01 00:00:00.000000-readability.txt')
+        assert str(j).endswith('archive/example.com/2001-01-01 00:00:00.000000-readability.json')
+        assert str(c).endswith('archive/example.com/2001-01-01 00:00:00.000000.png')
+
+        s, r, t, j, c = get_new_archive_files('https://www.example.com/one')
+        # Leading www. is removed.
+        assert str(s).endswith('archive/example.com/2001-01-01 00:00:00.000000.html')
+        assert str(r).endswith('archive/example.com/2001-01-01 00:00:00.000000-readability.html')
+        assert str(t).endswith('archive/example.com/2001-01-01 00:00:00.000000-readability.txt')
+        assert str(j).endswith('archive/example.com/2001-01-01 00:00:00.000000-readability.json')
+        assert str(c).endswith('archive/example.com/2001-01-01 00:00:00.000000.png')
 
     @wrap_test_db
     def test_new_archive(self):

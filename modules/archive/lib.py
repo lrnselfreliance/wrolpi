@@ -69,7 +69,7 @@ def get_new_archive_files(url: str):
     return ret
 
 
-ARCHIVE_TIMEOUT = 5 * 60  # Wait at most 5 minutes for response.
+ARCHIVE_TIMEOUT = 10 * 60  # Wait at most 10 minutes for response.
 
 
 def request_archive(url: str):

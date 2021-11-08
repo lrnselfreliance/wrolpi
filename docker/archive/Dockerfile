@@ -16,4 +16,7 @@ RUN pip3 install -r /app/requirements.txt
 # Install Readability too
 RUN npm install -g 'git+https://github.com/pirate/readability-extractor'
 
+# Block ads using /etc/hosts
+RUN wget https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts -O /etc/hosts
+
 ENTRYPOINT [ "python3", "/app/main.py"]

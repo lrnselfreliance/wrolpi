@@ -40,7 +40,7 @@ services:
     ports:
       - '8083:8080'
     healthcheck:
-      test: [ 'CMD-SHELL', 'curl http://0.0.0.0:8080/' ]
+      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8080/' ]
 
   app:
     depends_on:

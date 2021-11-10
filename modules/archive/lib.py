@@ -101,13 +101,13 @@ def request_archive(url: str):
 
     if not singlefile:
         logger.info(f'Failed to get singlefile for {url=}')
+    else:
+        # Decode and decompress.
+        singlefile = base64.b64decode(singlefile)
+        singlefile = gzip.decompress(singlefile)
 
     if not readability:
         logger.info(f'Failed to get readability for {url=}')
-    else:
-        # Decode and decompress.
-        readability = base64.b64decode(readability)
-        readability = gzip.decompress(readability)
 
     if not screenshot:
         logger.info(f'Failed to get screenshot for {url=}')

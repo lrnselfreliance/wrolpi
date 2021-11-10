@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import gzip
 import json
 import pathlib
 import re
@@ -100,13 +101,20 @@ def request_archive(url: str):
 
     if not singlefile:
         logger.info(f'Failed to get singlefile for {url=}')
+
     if not readability:
         logger.info(f'Failed to get readability for {url=}')
+    else:
+        # Decode and decompress.
+        readability = base64.b64decode(readability)
+        readability = gzip.decompress(readability)
+
     if not screenshot:
         logger.info(f'Failed to get screenshot for {url=}')
     else:
-        # Decode screenshot to bytes.
+        # Decode and decompress.
         screenshot = base64.b64decode(screenshot)
+        screenshot = gzip.decompress(screenshot)
 
     return singlefile, readability, screenshot
 

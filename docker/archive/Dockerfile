@@ -10,8 +10,9 @@ RUN python3 -m ensurepip
 RUN pip3 install --no-cache --upgrade pip setuptools
 
 # Install the Python wrapper and it's requirements.
-COPY docker/archive /app
+COPY docker/archive/requirements.txt /app/requirements.txt
 RUN pip3 install -r /app/requirements.txt
+COPY docker/archive /app
 
 # Install Readability too
 RUN npm install -g 'git+https://github.com/pirate/readability-extractor'

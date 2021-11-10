@@ -2,9 +2,12 @@
 """
 This file is a simple Python/Sanic wrapper around the single-file CLI command.
 """
+import asyncio
 import base64
+import gzip
 import json
 import logging
+import os.path
 import subprocess
 import tempfile
 
@@ -77,32 +80,48 @@ async def take_screenshot(url: str) -> bytes:
     with tempfile.TemporaryDirectory() as tmp_dir:
         try:
             subprocess.check_output(cmd, cwd=tmp_dir)
-        except Exception as e:
+        except Exception:
             logger.error(f'Failed to screenshot {url}', exc_info=True)
             return b''
 
+        path = f'{tmp_dir}/screenshot.png'
+        size = os.path.getsize(path)
+        logger.info(f'Successful screenshot ({size} bytes) at {path}')
         try:
-            with open(f'{tmp_dir}/screenshot.png', 'rb') as fh:
+            with open(path, 'rb') as fh:
                 png = fh.read()
-                return base64.b64encode(png)
+                return png
         except FileNotFoundError:
             return b''
+
+
+def prepare_bytes(b: bytes) -> str:
+    """
+    Compress and encode bytes for smaller response.
+    """
+    b = gzip.compress(b)
+    b = base64.b64encode(b)
+    b = b.decode()
+    return b
 
 
 @app.post('/json')
 async def post_archive(request: Request):
     url = request.json['url']
-    singlefile = await call_single_file(url)
-    screenshot = await take_screenshot(url)
+    singlefile, screenshot = await asyncio.gather(call_single_file(url), take_screenshot(url))
     with tempfile.NamedTemporaryFile('wb') as fh:
         fh.write(singlefile)
         readability = await extract_readability(fh.name, url)
 
+    # Compress for smaller response.
+    singlefile = prepare_bytes(singlefile)
+    screenshot = prepare_bytes(screenshot)
+
     ret = dict(
         url=url,
-        singlefile=singlefile.decode(),
+        singlefile=singlefile,
         readability=readability,
-        screenshot=screenshot.decode(),
+        screenshot=screenshot,
     )
     return response.json(ret)
 

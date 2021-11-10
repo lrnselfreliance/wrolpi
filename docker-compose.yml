@@ -37,6 +37,8 @@ services:
     build:
       context: .
       dockerfile: docker/archive/Dockerfile
+    volumes:
+      - './docker/archive/main.py:/app/main.py'
     ports:
       - '8083:8080'
     healthcheck:

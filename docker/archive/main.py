@@ -84,10 +84,10 @@ async def take_screenshot(url: str) -> bytes:
             logger.error(f'Failed to screenshot {url}', exc_info=True)
             return b''
 
-        path = f'{tmp_dir}/screenshot.png'
-        size = os.path.getsize(path)
-        logger.info(f'Successful screenshot ({size} bytes) at {path}')
         try:
+            path = f'{tmp_dir}/screenshot.png'
+            size = os.path.getsize(path)
+            logger.info(f'Successful screenshot ({size} bytes) at {path}')
             with open(path, 'rb') as fh:
                 png = fh.read()
                 return png

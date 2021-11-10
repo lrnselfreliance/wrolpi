@@ -92,12 +92,16 @@ def request_archive(url: str):
     except Exception as e:
         logger.error('Error when requesting archive', exc_info=e)
         raise
-    singlefile = resp.json()['singlefile']
     readability = resp.json()['readability']
+    # Compressed base64
+    singlefile = resp.json()['singlefile']
     screenshot = resp.json()['screenshot']
 
     if not (screenshot or singlefile or readability):
         raise Exception('singlefile response was empty!')
+
+    if not readability:
+        logger.info(f'Failed to get readability for {url=}')
 
     if not singlefile:
         logger.info(f'Failed to get singlefile for {url=}')
@@ -105,9 +109,7 @@ def request_archive(url: str):
         # Decode and decompress.
         singlefile = base64.b64decode(singlefile)
         singlefile = gzip.decompress(singlefile)
-
-    if not readability:
-        logger.info(f'Failed to get readability for {url=}')
+        singlefile = singlefile.decode()
 
     if not screenshot:
         logger.info(f'Failed to get screenshot for {url=}')

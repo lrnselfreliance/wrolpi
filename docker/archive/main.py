@@ -8,6 +8,7 @@ import gzip
 import json
 import logging
 import os.path
+import pathlib
 import subprocess
 import tempfile
 
@@ -84,15 +85,14 @@ async def take_screenshot(url: str) -> bytes:
             logger.error(f'Failed to screenshot {url}', exc_info=True)
             return b''
 
-        try:
-            path = f'{tmp_dir}/screenshot.png'
-            size = os.path.getsize(path)
-            logger.info(f'Successful screenshot ({size} bytes) at {path}')
-            with open(path, 'rb') as fh:
-                png = fh.read()
-                return png
-        except FileNotFoundError:
+        path = pathlib.Path(f'{tmp_dir}/screenshot.png')
+        if not path.is_file():
             return b''
+
+        size = os.path.getsize(path)
+        logger.info(f'Successful screenshot ({size} bytes) at {path}')
+        png = path.read_bytes()
+        return png
 
 
 def prepare_bytes(b: bytes) -> str:

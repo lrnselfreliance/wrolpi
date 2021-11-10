@@ -108,22 +108,26 @@ def prepare_bytes(b: bytes) -> str:
 @app.post('/json')
 async def post_archive(request: Request):
     url = request.json['url']
-    singlefile, screenshot = await asyncio.gather(call_single_file(url), take_screenshot(url))
-    with tempfile.NamedTemporaryFile('wb') as fh:
-        fh.write(singlefile)
-        readability = await extract_readability(fh.name, url)
+    try:
+        singlefile, screenshot = await asyncio.gather(call_single_file(url), take_screenshot(url))
+        with tempfile.NamedTemporaryFile('wb') as fh:
+            fh.write(singlefile)
+            readability = await extract_readability(fh.name, url)
 
-    # Compress for smaller response.
-    singlefile = prepare_bytes(singlefile)
-    screenshot = prepare_bytes(screenshot)
+        # Compress for smaller response.
+        singlefile = prepare_bytes(singlefile)
+        screenshot = prepare_bytes(screenshot)
 
-    ret = dict(
-        url=url,
-        singlefile=singlefile,
-        readability=readability,
-        screenshot=screenshot,
-    )
-    return response.json(ret)
+        ret = dict(
+            url=url,
+            singlefile=singlefile,
+            readability=readability,
+            screenshot=screenshot,
+        )
+        return response.json(ret)
+    except Exception:
+        logger.fatal(f'Failed to archive {url}', exc_info=True)
+        return response.json({'error': f'Failed to archive {url}'})
 
 
 if __name__ == '__main__':

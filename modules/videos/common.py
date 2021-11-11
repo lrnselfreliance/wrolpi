@@ -509,8 +509,11 @@ def update_view_count(channel_id: int):
             SET view_count = s.view_count
             FROM source as s
             WHERE source_id=s.id AND channel_id=%s
+            RETURNING video.id AS updated_ids
         '''
         curs.execute(stmt, (view_counts_str, channel_id))
+        count = len(curs.fetchall())
+        logger.debug(f'Updated {count} view counts in DB.')
 
 
 minimize_channel = partial(minimize_dict, keys=MINIMUM_CHANNEL_KEYS)

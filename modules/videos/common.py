@@ -434,6 +434,11 @@ def get_video_duration(video_path: Path) -> int:
     """
     Get the duration of a video in seconds.  Do this using ffprobe.
     """
+    if not isinstance(video_path, Path):
+        video_path = Path(video_path)
+    if not video_path.is_file():
+        raise FileNotFoundError(f'{video_path} does not exist!')
+
     cmd = ['/usr/bin/ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of',
            'default=noprint_wrappers=1:nokey=1', str(video_path)]
 
@@ -458,12 +463,20 @@ async def get_bulk_video_info_json(video_ids: List[int]):
             for video_id in video_ids:
                 video = session.query(Video).filter_by(id=video_id).one()
                 logger.debug(f'Getting video info_json data: {video}')
-                video_path = get_absolute_video_path(video)
 
                 try:
                     info_json = video.get_info_json()
-                    video.view_count = info_json.get('view_count') if info_json else None
-                    video.duration = info_json.get('duration') if info_json else get_video_duration(video_path)
+                    if info_json:
+                        if not video.view_count and info_json.get('view_count'):
+                            video.view_count = info_json['view_count']
+                        if not video.duration:
+                            # Get duration from info_json without reading video file.
+                            video.duration = info_json.get('duration')
+                    elif not video.duration:
+                        # As a last resort, get duration from the video file.
+                        video_path = get_absolute_video_path(video)
+                        video.duration = get_video_duration(video_path)
+
                 except Exception:
                     logger.warning(f'Unable to get meta data of {video}', exc_info=True)
     logger.info('Done getting video info_json meta data.')

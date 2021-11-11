@@ -1,4 +1,5 @@
 import pathlib
+import subprocess
 import tempfile
 from unittest import mock
 from unittest.mock import Mock
@@ -11,8 +12,9 @@ from modules.videos.test.common import create_channel_structure
 from wrolpi.common import get_absolute_media_path
 from wrolpi.db import get_db_session
 from wrolpi.test.common import ExtendedTestCase, build_test_directories, wrap_test_db
+from wrolpi.vars import PROJECT_DIR
 from ..common import get_matching_directories, convert_image, bulk_validate_posters, remove_duplicate_video_paths, \
-    update_view_count
+    update_view_count, get_video_duration
 
 
 class TestCommon(ExtendedTestCase):
@@ -52,6 +54,22 @@ class TestCommon(ExtendedTestCase):
             # foo is an exact match, return subdirectories
             matches = get_matching_directories(temp_dir / 'foo')
             assert matches == [str(temp_dir / 'foo/qux')]
+
+    def test_get_video_duration(self):
+        """
+        Video duration can be retrieved from the video file.
+        """
+        video_path = PROJECT_DIR / 'test/videos/wrolpi/big_buck_bunny_720p_1mb.mp4'
+        self.assertEqual(get_video_duration(video_path), 5)
+
+        video_path = PROJECT_DIR / 'test/videos/wrolpi/does not exist.mp4'
+        self.assertRaises(FileNotFoundError, get_video_duration, video_path)
+
+        video_path = str(PROJECT_DIR / 'test/videos/wrolpi/does not exist.mp4')
+        self.assertRaises(FileNotFoundError, get_video_duration, video_path)
+
+        with tempfile.NamedTemporaryFile() as fh:
+            self.assertRaises(subprocess.CalledProcessError, get_video_duration, fh.name)
 
 
 @pytest.mark.parametrize(
@@ -250,4 +268,12 @@ def test_update_view_count(tempdir: pathlib.Path):
 
     # All videos are updated.
     update_view_count(channel3.id)
+    check_view_counts({'vid1.mp4': 10, 'vid2.mp4': 11, 'vid3.mp4': 13, 'vid4.mp4': 14})
+
+    # An outdated view count will be overwritten.
+    with get_db_session(commit=True) as session:
+        vid = session.query(Video).filter_by(id=1).one()
+        vid.view_count = 8
+    check_view_counts({'vid1.mp4': 8, 'vid2.mp4': 11, 'vid3.mp4': 13, 'vid4.mp4': 14})
+    update_view_count(channel1.id)
     check_view_counts({'vid1.mp4': 10, 'vid2.mp4': 11, 'vid3.mp4': 13, 'vid4.mp4': 14})

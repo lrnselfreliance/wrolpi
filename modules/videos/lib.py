@@ -80,8 +80,14 @@ def refresh_channel_info_json() -> bool:
     Fill in Video columns that are extracted from the info_json.
     """
     with get_db_curs() as curs:
-        query = 'SELECT id FROM video WHERE video_path IS NOT NULL AND ' \
-                '(duration IS NULL OR view_count IS NULL)'
+        query = '''
+            SELECT v.id
+            FROM video v
+            WHERE
+                v.video_path IS NOT NULL
+                AND v.info_json_path IS NOT NULL
+                AND (v.duration IS NULL OR v.view_count IS NULL)
+        '''
         curs.execute(query)
         missing_duration = [i for (i,) in curs.fetchall()]
 

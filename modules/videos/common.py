@@ -26,7 +26,8 @@ REQUIRED_OPTIONS = ['name', 'directory']
 MINIMUM_CHANNEL_KEYS = {'id', 'name', 'directory', 'url', 'video_count', 'link'}
 MINIMUM_INFO_JSON_KEYS = {'description', 'view_count'}
 MINIMUM_VIDEO_KEYS = {'id', 'title', 'upload_date', 'duration', 'channel', 'channel_id', 'favorite', 'size',
-                      'poster_path', 'caption_path', 'video_path', 'info_json', 'channel', 'viewed', 'source_id'}
+                      'poster_path', 'caption_path', 'video_path', 'info_json', 'channel', 'viewed', 'source_id',
+                      'view_count'}
 VIDEO_QUERY_LIMIT = 20
 VIDEO_QUERY_MAX_LIMIT = 100
 # These are the supported video formats.  These are in order of their preference.

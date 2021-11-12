@@ -11,8 +11,7 @@ const MEDIA_PATH = '/media';
 
 
 function VideoPage(props) {
-    let video = props.video;
-    let channel = video.channel;
+    let {video, channel} = props;
     let [deleteOpen, setDeleteOpen] = useState(false);
 
     async function handleDeleteVideo(video_id) {
@@ -37,10 +36,10 @@ function VideoPage(props) {
     }
 
     let description = 'No description available.';
-    let viewCount = null;
+    let viewCount = video.view_count;
     if (video.info_json) {
         description = video.info_json['description'];
-        viewCount = video.info_json['view_count'];
+        viewCount = viewCount || video.info_json['view_count'];
     }
 
     let [favorite, setFavorite] = React.useState(video.favorite);

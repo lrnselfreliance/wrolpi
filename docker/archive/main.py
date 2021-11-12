@@ -22,7 +22,14 @@ formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(messag
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
+# Increase response timeout, archiving can take several minutes.
+RESPONSE_TIMEOUT = 10 * 60
+config = {
+    'RESPONSE_TIMEOUT': RESPONSE_TIMEOUT,
+}
+
 app = Sanic('archive')
+app.update_config(config)
 
 index_html = '''
 <html>

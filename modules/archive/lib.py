@@ -92,6 +92,9 @@ def request_archive(url: str):
     except Exception as e:
         logger.error('Error when requesting archive', exc_info=e)
         raise
+
+    logger.debug(f'archive request status {resp.status_code=}')
+
     readability = resp.json()['readability']
     # Compressed base64
     singlefile = resp.json()['singlefile']

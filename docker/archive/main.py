@@ -15,6 +15,7 @@ import tempfile
 from sanic import Sanic, response
 from sanic.request import Request
 
+# Log using datetime and log level.  Log to stdout.
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 ch = logging.StreamHandler()

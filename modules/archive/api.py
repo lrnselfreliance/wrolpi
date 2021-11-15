@@ -24,7 +24,8 @@ logger = logger.getChild(__name__)
 )
 @wrol_mode_check
 async def post_archive(_: Request, data: dict):
-    url = data['url']
+    # Remove whitespace from URL.
+    url = data['url'].strip()
     lib.new_archive(url)
     return response.empty()
 

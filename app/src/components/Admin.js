@@ -233,7 +233,7 @@ class StoppableRow extends React.Component {
         let negative = false;
         let warning = false;
         if (status === 'pending' || status === 'new') {
-            positive = true;
+            positive = status === 'pending';
             buttonCell = (
                 <Table.Cell>
                     <Button

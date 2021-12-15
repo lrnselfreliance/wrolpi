@@ -160,8 +160,9 @@ def refresh_channel_videos(channel: Channel):
     for chunk in chunks(new_videos, 20):
         with get_db_session(commit=True) as session:
             for video_path in chunk:
-                upsert_video(session, pathlib.Path(video_path), channel, idempotency=idempotency)
-                logger.debug(f'{channel.name}: Added {video_path}')
+                video_path = pathlib.Path(video_path)
+                upsert_video(session, video_path, channel, idempotency=idempotency)
+                logger.debug(f'{channel.name}: Added {video_path.name}')
 
     with get_db_curs(commit=True) as curs:
         curs.execute('DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL RETURNING id', (channel.id,))

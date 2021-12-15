@@ -15,7 +15,7 @@ import Paginator, {
     videoOrders
 } from "./Common"
 import VideoPage from "./VideoPlayer";
-import {download, downloadHistory, getChannel, getStatistics, getVideo, refresh, searchVideos} from "../api";
+import {download, getChannel, getStatistics, getVideo, refresh, searchVideos} from "../api";
 import {Button, Dropdown, Form, Grid, Header, Icon, Input, Loader, Segment, Statistic, Tab} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
@@ -28,13 +28,8 @@ class ManageVideos extends React.Component {
         super(props);
         this.state = {
             streamUrl: null,
-            downloadHistory: null,
             mostRecentDownload: '',
         }
-    }
-
-    async componentDidMount() {
-        await this.downloadHistory();
     }
 
     download = async (e) => {
@@ -53,15 +48,6 @@ class ManageVideos extends React.Component {
         }
     }
 
-    async downloadHistory() {
-        let response = await downloadHistory();
-        if (response && response.history.length > 0) {
-            let history = response.history;
-            let mostRecentDownload = uploadDate(history[0]['info_date']);
-            this.setState({downloadHistory: history, mostRecentDownload: mostRecentDownload});
-        }
-    }
-
     render() {
         return (
             <Container>
@@ -75,7 +61,6 @@ class ManageVideos extends React.Component {
                     </Button>
                     <label>Download any missing videos</label>
                     <br/>
-                    Most recent download: {this.state.mostRecentDownload}
                 </p>
 
                 <p>

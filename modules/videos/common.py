@@ -506,7 +506,7 @@ async def get_bulk_video_size(video_ids: List[int]):
 
 def update_view_count(channel_id: int):
     """
-    Update view_count for all Videos in a channel.
+    Update view_count for all Videos in a channel using it's info_json file.
     """
     with get_db_session() as session:
         channel = session.query(Channel).filter_by(id=channel_id).one()

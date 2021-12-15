@@ -212,12 +212,6 @@ export async function downloadChannel(link) {
     await fetch(url, {method: 'POST'});
 }
 
-export async function downloadHistory() {
-    let url = `${VIDEOS_API}/download_history`;
-    let resp = await apiGet(url);
-    return await resp.json();
-}
-
 export async function refreshChannel(link) {
     let url = `${VIDEOS_API}/refresh/${link}`;
     await fetch(url, {method: 'POST'});

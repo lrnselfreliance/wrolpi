@@ -13,9 +13,9 @@ from wrolpi.root_api import add_blueprint, json_response
 from wrolpi.schema import validate_doc, JSONErrorResponse
 from .channel.api import channel_bp
 from .channel.lib import download_channel, spread_channel_downloads
-from .lib import _refresh_videos, get_statistics, get_download_history
+from .lib import _refresh_videos, get_statistics
 from .schema import StreamResponse, \
-    FavoriteRequest, FavoriteResponse, VideosStatisticsResponse, DownloadHistoryResponse
+    FavoriteRequest, FavoriteResponse, VideosStatisticsResponse
 from .video.api import video_bp
 from .video.lib import set_video_favorite
 
@@ -127,17 +127,6 @@ async def favorite(_: Request, data: dict):
 )
 async def statistics(_: Request):
     ret = await get_statistics()
-    return json_response(ret, HTTPStatus.OK)
-
-
-@content_bp.get('/download_history')
-@validate_doc(
-    summary='Retrieve video download history',
-    produces=DownloadHistoryResponse,
-)
-async def download_history(_: Request):
-    history = await get_download_history()
-    ret = dict(history=history)
     return json_response(ret, HTTPStatus.OK)
 
 

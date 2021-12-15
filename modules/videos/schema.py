@@ -170,13 +170,3 @@ class ChannelStatistics:
 class VideosStatisticsResponse:
     videos = VideoStatistics
     channels = ChannelStatistics
-
-
-class DownloadHistory:
-    link = doc.String()
-    name = doc.String()
-    info_date = doc.Date()
-
-
-class DownloadHistoryResponse:
-    history = doc.List(doc.Object(DownloadHistory))

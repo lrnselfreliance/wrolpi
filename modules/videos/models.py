@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, Computed
 from sqlalchemy.orm import relationship, Session
@@ -291,8 +291,9 @@ class Channel(ModelHelper, Base):
 
         session = Session.object_session(self)
         favorites = session.query(Video).filter(Video.favorite != None, Video.channel_id == self.id).all()  # noqa
+        favorites: List[Video]
         if favorites:
-            config['favorites'] = {i.source_id: {'favorite': i.favorite} for i in favorites if i.source_id}
+            config['favorites'] = {i.video_path.path.name: {'favorite': i.favorite} for i in favorites}
 
         return config
 

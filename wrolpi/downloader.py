@@ -44,7 +44,7 @@ class Download(ModelHelper, Base):
 
     attempts = Column(Integer, default=0)
     frequency = Column(Integer)
-    last_successful_download = Column(TZDateTime, default=now)
+    last_successful_download = Column(TZDateTime)
     next_download = Column(TZDateTime)
     status = Column(String, default='new')
 

@@ -164,6 +164,7 @@ def spread_channel_downloads():
     with get_db_session(commit=True) as session:
         channels = list(session.query(Channel).filter(
             Channel.url != None,
+            Channel.url != '',
             Channel.download_frequency != None
         ).order_by(Channel.link).all())  # noqa
 

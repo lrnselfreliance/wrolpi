@@ -19,7 +19,7 @@ from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownload
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
 from .common import load_downloader_config, update_view_count
-from .lib import upsert_video
+from .lib import upsert_video, _refresh_videos
 from .models import Video, Channel
 from .video_url_resolver import video_url_resolver
 
@@ -348,6 +348,27 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
 
         # Get all channels while in the db context.
         channels = list(channels)
+
+    # Check that each channel has some videos.  We can't be sure what is missing if we don't know what we have.
+    for channel in channels:
+        refresh = False
+        with get_db_curs() as curs:
+            curs.execute('''
+                SELECT
+                    COUNT(v.id)
+                FROM
+                    channel c
+                    LEFT OUTER JOIN video v on c.id = v.channel_id
+                WHERE
+                    c.id = %s
+            ''', (channel.id,))
+            video_count = curs.fetchall()[0]
+            if video_count == 0:
+                # No videos for this channel.  We can't be sure if any videos are missing without a refresh.
+                refresh = True
+        if refresh:
+            # Refresh this channel's videos.
+            _refresh_videos([channel.link])
 
     channels = {i.id: i for i in channels}
 

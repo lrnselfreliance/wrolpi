@@ -102,9 +102,10 @@ def update_channel(data, link):
             try:
                 data['download_frequency'] = int(data['download_frequency'])
             except ValueError:
-                raise APIError('Invalid download frequency')
-        else:
-            data['download_frequency'] = DEFAULT_DOWNLOAD_FREQUENCY
+                if data['download_frequency'] in ('null', 'None', ''):
+                    data['download_frequency'] = None
+                else:
+                    raise APIError(f'Invalid download frequency {data["download_frequency"]}')
 
         if data.get('match_regex') in ('None', 'null'):
             data['match_regex'] = None

@@ -1,4 +1,5 @@
 import json
+import os
 import pathlib
 import tempfile
 from datetime import timedelta
@@ -9,11 +10,13 @@ import mock
 import pytest
 
 from modules.videos.api import refresh_queue
+from modules.videos.channel.lib import spread_channel_downloads
 from modules.videos.lib import upsert_video
 from modules.videos.models import Channel, Video
 from modules.videos.test.common import create_channel_structure
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
+from wrolpi.downloader import download_manager
 from wrolpi.errors import UnknownFile
 from wrolpi.root_api import api_app
 from wrolpi.test.common import wrap_test_db, TestAPI
@@ -508,3 +511,56 @@ class TestVideoAPI(TestAPI):
         response = do_search('b', 2)
         assert [i['id'] for i in response.json['videos']] == [1, 2]
         assert response.json['totals']['videos'] == 4
+
+    @wrap_test_db
+    def test_channel_no_download_frequency(self):
+        """
+        A channel does not require a download frequency.
+        """
+        channel_directory = tempfile.TemporaryDirectory(dir=self.tmp_dir.name).name
+        os.mkdir(channel_directory)
+
+        new_channel = dict(
+            directory=channel_directory,
+            name='Example Channel 1',
+            url='https://example.com/channel1',
+            download_frequency=None,
+        )
+
+        # Create the Channel
+        request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.CREATED
+        location = response.headers['Location']
+
+        # No downloads are scheduled.
+        spread_channel_downloads()
+        with get_db_session() as session:
+            downloads = list(download_manager.get_new_downloads(session))
+            self.assertEqual(len(downloads), 0)
+
+        # Get the Channel
+        request, response = api_app.test_client.get(location)
+        channel = response.json['channel']
+        self.assertEqual(channel['download_frequency'], None)
+
+        # Update the Channel with a frequency.
+        new_channel = dict(
+            directory=channel['directory'],
+            name=channel['name'],
+            url=channel['url'],
+            download_frequency=10,
+        )
+        request, response = api_app.test_client.put(f'/api/videos/channels/{channel["link"]}',
+                                                    data=json.dumps(new_channel))
+        self.assertEqual(response.status_code, 204, response.json)
+
+        # Remove the frequency.
+        new_channel = dict(
+            directory=channel['directory'],
+            name=channel['name'],
+            url=channel['url'],
+            download_frequency=None,
+        )
+        request, response = api_app.test_client.put(f'/api/videos/channels/{channel["link"]}',
+                                                    data=json.dumps(new_channel))
+        self.assertEqual(response.status_code, 204, response.json)

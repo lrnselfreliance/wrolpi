@@ -61,6 +61,15 @@ def channel_post(_: Request, data: dict):
         else:
             raise
 
+    if download_frequency := data.get('download_frequency'):
+        try:
+            download_frequency = int(download_frequency)
+        except ValueError:
+            if download_frequency in ('null', 'None'):
+                download_frequency = None
+
+    data['download_frequency'] = download_frequency
+
     channel = create_channel(data)
 
     # Refresh the videos asynchronously

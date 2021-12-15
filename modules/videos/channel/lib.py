@@ -4,14 +4,16 @@ from typing import List, Dict, Union
 
 from sqlalchemy.orm.exc import NoResultFound
 
-from wrolpi.common import sanitize_link, run_after, get_relative_to_media_directory, make_media_directory
+from wrolpi.common import sanitize_link, run_after, get_relative_to_media_directory, make_media_directory, logger
 from wrolpi.dates import today
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.downloader import download_manager, Download
 from wrolpi.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from ..common import check_for_channel_conflicts
-from ..lib import save_channels_config, DEFAULT_DOWNLOAD_FREQUENCY
+from ..lib import save_channels_config
 from ..models import Channel
+
+logger = logger.getChild(__name__)
 
 
 async def get_minimal_channels() -> List[dict]:
@@ -133,6 +135,7 @@ def get_channel(source_id: str = None, link: str = None, url: str = None, return
 
     Raises UnknownChannel if no channel is found.
     """
+    logger.debug(f'Searching for channel {source_id=} {link=} {url=}')
     with get_db_session() as session:
         # Try by source_id first.
         channel = None

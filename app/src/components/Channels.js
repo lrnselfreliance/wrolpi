@@ -486,7 +486,7 @@ class MobileChannelRow extends ChannelRow {
                     </Link>
                 </p>
                 <p>
-                    Last Update: {channel.url ? secondsToDate(channel.info_date) : null}
+                    Last Update: {channel.url && channel.info_date ? secondsToDate(channel.info_date) : null}
                 </p>
                 <p>
                     Next Update: {channel.url && channel.next_download ? secondsToDate(channel.next_download) : null}

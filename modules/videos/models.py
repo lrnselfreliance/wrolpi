@@ -77,7 +77,7 @@ class Video(ModelHelper, Base):
         """
         Remove all files related to this video.  Add it to it's Channel's skip list.
 
-        Raises: UnknownFile if a the video has no files.
+        Raises: UnknownFile if the video has no files.
         """
         from modules.videos.common import get_absolute_video_files
         video_files = get_absolute_video_files(self)

@@ -405,7 +405,7 @@ def bulk_validate_posters(video_ids: List[int]):
     for video_ids in chunks(video_ids, 10):
         for video_id in video_ids:
             with get_db_session(commit=True) as session:
-                video = session.query(Video).filter_by(id=video_id).one()
+                video: Video = session.query(Video).filter_by(id=video_id).one()
 
                 poster_path: Path = video.poster_path.path
                 new_poster_path = poster_path.with_suffix('.jpg')

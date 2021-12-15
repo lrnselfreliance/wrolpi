@@ -36,7 +36,7 @@ async def get_channels(_: Request):
     ),
 )
 def channel_get(_: Request, link: str):
-    channel = get_channel(link)
+    channel = get_channel(link=link)
     channel.pop('info_json')
     return json_response({'channel': channel})
 

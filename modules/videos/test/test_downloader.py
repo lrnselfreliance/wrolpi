@@ -7,7 +7,7 @@ from youtube_dl.utils import UnsupportedError
 
 from modules.videos.channel.lib import spread_channel_downloads
 from modules.videos.downloader import find_all_missing_videos, VideoDownloader, \
-    ChannelDownloader
+    ChannelDownloader, get_or_create_channel
 from modules.videos.models import Channel, Video
 from modules.videos.test.common import create_channel_structure
 from wrolpi.dates import local_timezone
@@ -319,3 +319,44 @@ class TestVideosDownloaders(TestAPI):
             'https://example.com/4': '2020-01-12 16:00:00-07:00',
         }
         check_frequencies(expected)
+
+    @wrap_test_db
+    def test_get_or_create_channel(self):
+        """
+        A Channel may need to be created for an arbitrary download.  Attempt to use an existing Channel if we can
+        match it.
+        """
+        with get_db_session(commit=True) as session:
+            c1 = Channel(name='foo', link='foo', source_id='foo', url='foo')
+            c2 = Channel(name='bar', link='bar', source_id='bar')
+            c3 = Channel(name='baz', link='baz', source_id='baz', url='baz')
+            c4 = Channel(name='qux', link='qux')
+            session.add_all([c1, c2, c3, c4])
+
+        # All existing channels should be used.
+        tests = [
+            (dict(source_id='foo'), c1),
+            (dict(link='foo'), c1),
+            (dict(url='foo'), c1),
+            (dict(url='foo', source_id='bar'), c2),  # source_id is preferred.
+            (dict(name='foo', source_id='bar'), c2),
+            (dict(source_id='bar'), c2),
+            (dict(source_id='baz'), c3),
+            (dict(name='qux'), c4),
+            (dict(link='qux'), c4),
+        ]
+        for kwargs, expected in tests:
+            channel = get_or_create_channel(**kwargs)
+            self.assertEqual(expected.id, channel.id, f'Expected {expected} got {channel}')
+
+        # A new channel is created.  It will not be automatically downloaded.
+        channel = get_or_create_channel(source_id='quux', name='quux', url='quux')
+        self.assertEqual(channel.id, 5)
+        self.assertEqual(channel.source_id, 'quux')
+        self.assertEqual(channel.name, 'quux')
+        self.assertEqual(channel.link, 'quux')
+        self.assertEqual(channel.url, 'quux')
+        self.assertIsNone(channel.download_frequency)
+
+        # New channel can be retrieved.
+        self.assertEqual(get_or_create_channel(source_id='quux'), channel)

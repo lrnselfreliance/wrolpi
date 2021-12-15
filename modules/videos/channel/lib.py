@@ -4,7 +4,6 @@ from typing import List, Dict, Union
 
 from sqlalchemy.orm.exc import NoResultFound
 
-from wrolpi import before_startup
 from wrolpi.common import sanitize_link, run_after, get_relative_to_media_directory, make_media_directory
 from wrolpi.dates import today
 from wrolpi.db import get_db_session, get_db_curs
@@ -126,15 +125,25 @@ def update_channel(data, link):
     return channel
 
 
-def get_channel(link, return_dict: bool = True) -> Union[dict, Channel]:
+def get_channel(source_id: str = None, link: str = None, url: str = None, return_dict: bool = True
+                ) -> Union[dict, Channel]:
     """
-    Get a Channel by it's `link`.  Raise UnknownChannel if it does not exist.
+    Attempt to find a Channel using the provided params.  The params are in order of reliability.
+
+    Raises UnknownChannel if no channel is found.
     """
     with get_db_session() as session:
-        try:
-            channel: Channel = session.query(Channel).filter_by(link=link).one()
-        except NoResultFound:
-            raise UnknownChannel()
+        # Try by source_id first.
+        channel = None
+        if source_id:
+            channel = session.query(Channel).filter_by(source_id=source_id).one_or_none()
+        if not channel and link:
+            channel = session.query(Channel).filter_by(link=link).one_or_none()
+        if not channel and url:
+            channel = session.query(Channel).filter_by(url=url).one_or_none()
+
+        if not channel:
+            raise UnknownChannel(f'No channel matches {link=} {source_id=} {url=}')
 
         return channel.dict() if return_dict else channel
 
@@ -222,6 +231,6 @@ def create_channel(data: dict, return_dict: bool = True) -> Union[Channel, dict]
 
 
 def download_channel(link: str):
-    channel = get_channel(link, return_dict=False)
+    channel = get_channel(link=link, return_dict=False)
     with get_db_session(commit=True) as session:
         download_manager.create_download(channel.url, session)

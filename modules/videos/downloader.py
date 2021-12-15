@@ -115,11 +115,11 @@ class VideoDownloader(Downloader, ABC):
             raise UnrecoverableDownloadError() from e
 
         channel_name = info.get('channel')
+        channel_id = info.get('channel_id')
         channel = None
-        if channel_name:
+        if channel_name or channel_id:
             channel_url = info.get('channel_url')
-            source_id = info.get('channel_id')
-            channel = get_or_create_channel(channel_name, channel_url, source_id)
+            channel = get_or_create_channel(channel_id, None, channel_url, channel_name)
 
         # Use the default directory if this video has no channel.
         out_dir = get_no_channel_directory()
@@ -203,22 +203,34 @@ channel_downloader = ChannelDownloader()
 video_downloader = VideoDownloader(40)
 
 
-def get_or_create_channel(name, url=None, source_id=None):
-    link = sanitize_link(name)
+def get_or_create_channel(source_id: str = None, link: str = None, url: str = None, name: str = None) -> Channel:
+    """
+    Attempt to find a Channel using the provided params.  The params are in order of reliability.
+
+    Creates a new Channel if one cannot be found.
+    """
+    if not link and name:
+        link = sanitize_link(name)
+
     try:
-        channel = get_channel(link, return_dict=False)
+        channel = get_channel(link=link, source_id=source_id, url=url, return_dict=False)
+        return channel
     except UnknownChannel:
-        channel_directory = get_media_directory() / f'videos/{name}'
-        channel_directory.mkdir(exist_ok=True)
-        data = dict(
-            name=name,
-            url=url,
-            link=link,
-            domain=extract_domain(url),
-            directory=str(channel_directory),
-            source_id=source_id,
-        )
-        channel = create_channel(data, return_dict=False)
+        pass
+
+    channel_directory = get_media_directory() / f'videos/{name}'
+    data = dict(
+        name=name,
+        url=url,
+        link=link,
+        domain=extract_domain(url),
+        directory=str(channel_directory),
+        source_id=source_id,
+    )
+    channel = create_channel(data, return_dict=False)
+    # Create the directory now that the channel is approved.
+    channel_directory.mkdir(exist_ok=True)
+
     return channel
 
 
@@ -265,6 +277,7 @@ def update_channel(channel: Channel):
 
         channel.info_json = info
         channel.info_date = now()
+        channel.source_id = info.get('id')
 
         with get_db_curs() as curs:
             # Get all known videos in this channel.
@@ -284,7 +297,7 @@ def update_channel(channel: Channel):
     if channel.directory:
         info_json_path = channel.directory.path / f'{channel.name}.info.json'
         with info_json_path.open('wt') as fh:
-            json.dump(info, fh)
+            json.dump(info, fh, indent=2)
 
     # Update all view counts using the latest from the Channel's info_json.
     update_view_count(channel_id)

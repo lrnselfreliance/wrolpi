@@ -453,6 +453,7 @@ def extract_domain(url):
     """
     parsed = urlparse(url)
     domain = parsed.netloc
+    domain = domain.decode() if hasattr(domain, 'decode') else domain
     if domain.startswith('www.'):
         # Remove leading www.
         domain = domain[4:]

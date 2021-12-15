@@ -250,7 +250,7 @@ class Channel(ModelHelper, Base):
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
 
     def __repr__(self):
-        return f'<Channel(id={self.id}, name={self.name})>'
+        return f'<Channel id={self.id}, name={self.name}>'
 
     def add_video_to_skip_list(self, source_id: str):
         if not source_id:

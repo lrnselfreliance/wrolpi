@@ -169,8 +169,12 @@ class DownloadRow extends React.Component {
 
     render() {
         let {url, frequency, last_successful_download, status, next_download} = this.props;
+        let positive = false;
+        if (status === 'pending') {
+            positive = true;
+        }
         return (
-            <Table.Row>
+            <Table.Row positive={positive}>
                 <Table.Cell>{url}</Table.Cell>
                 <Table.Cell>{secondsToFrequency(frequency)}</Table.Cell>
                 <Table.Cell>{secondsToDate(last_successful_download)}</Table.Cell>

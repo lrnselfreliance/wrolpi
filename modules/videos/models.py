@@ -278,15 +278,16 @@ class Channel(ModelHelper, Base):
         Retrieve the data about this Channel that should be stored in a config file.
         """
         config = dict(
-            directory=str(self.directory.path),
-            match_regex=self.match_regex or '',
-            name=self.name,
-            url=self.url or '',
-            generate_posters=self.generate_posters,
             calculate_duration=self.calculate_duration,
-            skip_download_videos=self.skip_download_videos or [],
+            directory=str(self.directory.path),
             download_frequency=self.download_frequency,
             favorites={},
+            generate_posters=self.generate_posters,
+            match_regex=self.match_regex or '',
+            name=self.name,
+            skip_download_videos=self.skip_download_videos or [],
+            source_id=self.source_id,
+            url=self.url or '',
         )
 
         session = Session.object_session(self)

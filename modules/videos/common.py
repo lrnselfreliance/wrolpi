@@ -92,6 +92,7 @@ def import_videos_config():
                 channel.match_regex = config[section].get('match_regex')
                 channel.skip_download_videos = list(set(config[section].get('skip_download_videos', {})))
                 channel.url = config[section].get('url')
+                channel.source_id = config[section].get('source_id')
 
                 session.add(channel)
 

@@ -135,7 +135,6 @@ def get_channel(source_id: str = None, link: str = None, url: str = None, return
 
     Raises UnknownChannel if no channel is found.
     """
-    logger.debug(f'Searching for channel {source_id=} {link=} {url=}')
     with get_db_session() as session:
         # Try by source_id first.
         channel = None
@@ -149,6 +148,7 @@ def get_channel(source_id: str = None, link: str = None, url: str = None, return
         if not channel:
             raise UnknownChannel(f'No channel matches {link=} {source_id=} {url=}')
 
+        logger.debug(f'Found {channel=} using {source_id=} {link=} {url=}')
         return channel.dict() if return_dict else channel
 
 

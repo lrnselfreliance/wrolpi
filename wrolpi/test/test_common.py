@@ -1,15 +1,14 @@
 import unittest
 from datetime import date, datetime
-from queue import Queue
 
 import pytest
 from sanic_openapi import doc
 
-from wrolpi.common import combine_dicts, insert_parameter, ProgressReporter, date_range
+from wrolpi.common import combine_dicts, insert_parameter, date_range
 from wrolpi.dates import set_timezone, now
 from wrolpi.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields, InvalidTimezone
 from wrolpi.schema import validate_data
-from wrolpi.test.common import build_test_directories, wrap_test_db
+from wrolpi.test.common import build_test_directories, wrap_media_directory
 
 
 class Model:
@@ -114,42 +113,43 @@ def test_combine_dicts(data, expected):
 
 
 def test_build_video_directories():
-    structure = [
-        'channel1/vid1.mp4',
-    ]
-    with build_test_directories(structure) as tempdir:
-        assert (tempdir / 'channel1').is_dir()
-        assert (tempdir / 'channel1/vid1.mp4').is_file()
+    with wrap_media_directory():
+        structure = [
+            'channel1/vid1.mp4',
+        ]
+        with build_test_directories(structure) as tempdir:
+            assert (tempdir / 'channel1').is_dir()
+            assert (tempdir / 'channel1/vid1.mp4').is_file()
 
-    structure = [
-        'channel2/',
-        'channel2.1/channel2.2/',
-    ]
-    with build_test_directories(structure) as tempdir:
-        assert (tempdir / 'channel2').is_dir()
-        assert (tempdir / 'channel2.1/channel2.2').is_dir()
+        structure = [
+            'channel2/',
+            'channel2.1/channel2.2/',
+        ]
+        with build_test_directories(structure) as tempdir:
+            assert (tempdir / 'channel2').is_dir()
+            assert (tempdir / 'channel2.1/channel2.2').is_dir()
 
-    structure = [
-        'channel3/vid1.mp4',
-        'channel3/vid2.mp4',
-        'channel4/vid1.mp4',
-        'channel4/vid1.en.vtt',
-        'channel5/',
-    ]
-    with build_test_directories(structure) as tempdir:
-        assert (tempdir / 'channel3/vid1.mp4').is_file()
-        assert (tempdir / 'channel3').is_dir()
-        assert (tempdir / 'channel3/vid2.mp4').is_file()
-        assert (tempdir / 'channel4/vid1.mp4').is_file()
-        assert (tempdir / 'channel4/vid1.en.vtt').is_file()
-        assert (tempdir / 'channel5').is_dir()
+        structure = [
+            'channel3/vid1.mp4',
+            'channel3/vid2.mp4',
+            'channel4/vid1.mp4',
+            'channel4/vid1.en.vtt',
+            'channel5/',
+        ]
+        with build_test_directories(structure) as tempdir:
+            assert (tempdir / 'channel3/vid1.mp4').is_file()
+            assert (tempdir / 'channel3').is_dir()
+            assert (tempdir / 'channel3/vid2.mp4').is_file()
+            assert (tempdir / 'channel4/vid1.mp4').is_file()
+            assert (tempdir / 'channel4/vid1.en.vtt').is_file()
+            assert (tempdir / 'channel5').is_dir()
 
-    structure = [
-        'channel6/subdirectory/vid1.mp4',
-    ]
-    with build_test_directories(structure) as tempdir:
-        assert (tempdir / 'channel6/subdirectory').is_dir()
-        assert (tempdir / 'channel6/subdirectory/vid1.mp4').is_file()
+        structure = [
+            'channel6/subdirectory/vid1.mp4',
+        ]
+        with build_test_directories(structure) as tempdir:
+            assert (tempdir / 'channel6/subdirectory').is_dir()
+            assert (tempdir / 'channel6/subdirectory/vid1.mp4').is_file()
 
 
 def test_insert_parameter():
@@ -193,146 +193,6 @@ def test_insert_parameter():
         pass
 
     pytest.raises(TypeError, insert_parameter, func, 'bar', 'bar', (1,), {})
-
-
-@pytest.mark.parametrize(
-    'totals,progresses,messages',
-    [
-        (
-                [25],
-                [],
-                [
-                    {'progresses': [dict(message='foo', percent=0, total=25, value=0)]},
-                    {'code': 'bar', 'progresses': [dict(message='foo', percent=0, total=25, value=0)]},
-                    {'code': 'error', 'progresses': [dict(message='baz', percent=0, total=25, value=0)]},
-                ],
-        ),
-        (
-                [25],
-                [
-                    (0, 1),
-                    (0, 2),
-                    (0, 4),
-                    (0, 8),
-                    (0, 16),
-                    (0, 25),
-                ],
-                [
-                    {'progresses': [dict(message='foo', percent=0, total=25, value=0)]},
-                    {'code': 'bar', 'progresses': [dict(message='foo', percent=0, total=25, value=0)]},
-                    {'progresses': [dict(message='foo', percent=4, total=25, value=1)]},
-                    {'progresses': [dict(message='foo', percent=8, total=25, value=2)]},
-                    {'progresses': [dict(message='foo', percent=16, total=25, value=4)]},
-                    {'progresses': [dict(message='foo', percent=32, total=25, value=8)]},
-                    {'progresses': [dict(message='foo', percent=64, total=25, value=16)]},
-                    {'progresses': [dict(message='foo', percent=100, total=25, value=25)]},
-                    {'code': 'error', 'progresses': [dict(message='baz', percent=100, total=25, value=25)]},
-                ]
-        ),
-        (
-                [25, 10],
-                [
-                    (1, 3),
-                    (1, 8),
-                    (0, 18),
-                    (1, 10),
-                    (0, 30),  # This is higher than the total of 25, percent should be 100.
-                ],
-                [
-                    {'progresses': [
-                        dict(message='foo', percent=0, total=25, value=0),
-                        dict(percent=0, total=10, value=0),
-                    ]},
-                    {'code': 'bar', 'progresses': [
-                        dict(message='foo', percent=0, total=25, value=0),
-                        dict(percent=0, total=10, value=0),
-                    ]},
-                    {'progresses': [
-                        dict(message='foo', percent=0, total=25, value=0),
-                        dict(percent=30, total=10, value=3),
-                    ]},
-                    {'progresses': [
-                        dict(message='foo', percent=0, total=25, value=0),
-                        dict(percent=80, total=10, value=8),
-                    ]},
-                    {'progresses': [
-                        dict(message='foo', percent=72, total=25, value=18),
-                        dict(percent=80, total=10, value=8),
-                    ]},
-                    {'progresses': [
-                        dict(message='foo', percent=72, total=25, value=18),
-                        dict(percent=100, total=10, value=10),
-                    ]},
-                    {'progresses': [
-                        dict(message='foo', percent=100, total=25, value=30),
-                        dict(percent=100, total=10, value=10),
-                    ]},
-                    {
-                        'code': 'error',
-                        'progresses': [
-                            dict(message='baz', percent=100, total=25, value=30),
-                            dict(percent=100, total=10, value=10),
-                        ]
-                    },
-                ]
-        ),
-    ]
-)
-def test_feed_reporter(totals, progresses, messages):
-    q = Queue()
-    reporter = ProgressReporter(q, len(totals))
-
-    for idx, total in enumerate(totals):
-        reporter.set_progress_total(idx, total)
-
-    reporter.message(0, 'foo')
-    reporter.code('bar')
-
-    for progress in progresses:
-        reporter.send_progress(*progress)
-
-    reporter.error(0, 'baz')
-
-    count = 0
-    while not q.empty():
-        received = q.get_nowait()
-        try:
-            message = messages.pop(0)
-        except IndexError:
-            raise AssertionError(f'Queue ({count}) had excess message: {received}')
-
-        assert message == received, f'Message {count} did not match'
-
-        count += 1
-
-
-def test_feed_reporter_finish():
-    q = Queue()
-    reporter = ProgressReporter(q)
-
-    reporter.set_progress_total(0, 50)
-    reporter.send_progress(0, 0)
-    reporter.send_progress(0, 20)
-    reporter.finish(0, 'completed')
-
-    expected = [
-        {'progresses': [{'percent': 0, 'total': 50, 'value': 0}]},
-        {'progresses': [{'percent': 40, 'total': 50, 'value': 20}]},
-        {'progresses': [{'message': 'completed', 'percent': 100, 'value': 50, 'total': 50}]},
-    ]
-
-    count = 0
-
-    while not q.empty():
-        received = q.get_nowait()
-        try:
-            message = expected.pop(0)
-        except IndexError:
-            raise AssertionError(f'Queue ({count}) had excess message: {received}')
-
-        assert message == received, f'Message {count} did not match'
-
-        count += 1
 
 
 class TestCommon(unittest.TestCase):

@@ -102,6 +102,7 @@ export class VideoWrapper extends React.Component {
             prev: null,
             next: null,
             channel: null,
+            no_channel: null,
         }
     }
 
@@ -112,8 +113,13 @@ export class VideoWrapper extends React.Component {
     async fetchVideo() {
         // Get and display the Video specified in the Router match
         let [video, prev, next] = await getVideo(this.props.match.params.video_id);
-        let channel = await getChannel(this.props.match.params.channel_link);
-        this.setState({video, prev, next, channel}, scrollToTop);
+        let channel_link = this.props.match.params.channel_link;
+        let channel = channel_link ? await getChannel(channel_link) : null;
+        let no_channel = false;
+        if (!channel) {
+            no_channel = true;
+        }
+        this.setState({video, prev, next, channel, no_channel}, scrollToTop);
     }
 
     async componentDidUpdate(prevProps, prevState) {
@@ -125,7 +131,7 @@ export class VideoWrapper extends React.Component {
     }
 
     render() {
-        if (this.state.video && this.state.channel) {
+        if (this.state.video && (this.state.no_channel || this.state.channel)) {
             return <VideoPage {...this.state} history={this.props.history} autoplay={true}/>
         } else {
             return <VideoPlaceholder/>

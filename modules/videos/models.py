@@ -1,27 +1,20 @@
 import json
-from datetime import timedelta, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, Computed, types
+from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, Computed
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import Base, tsvector, ModelHelper, PathColumn, get_absolute_media_path
-from wrolpi.dates import now, today, TZDateTime
+from wrolpi.common import Base, tsvector, ModelHelper, logger
+from wrolpi.dates import now, TZDateTime
 from wrolpi.db import get_db_curs
-from wrolpi.errors import UnknownVideo, NoFrequency, UnknownFile, UnknownDirectory
+from wrolpi.downloader import Download
+from wrolpi.errors import UnknownVideo, UnknownFile, UnknownDirectory
+from wrolpi.media_path import MediaPathType
 
-
-class ChannelPath(types.TypeDecorator):
-    impl = types.String
-
-    def process_bind_param(self, value, dialect):
-        return str(value) if value else None
-
-    def process_result_value(self, value, dialect):
-        if value:
-            return Path(value)
+logger = logger.getChild(__name__)
 
 
 class Video(ModelHelper, Base):
@@ -32,12 +25,12 @@ class Video(ModelHelper, Base):
     idempotency = Column(String)
 
     # File paths
-    caption_path = Column(ChannelPath)
-    description_path = Column(ChannelPath)
+    caption_path = Column(MediaPathType)
+    description_path = Column(MediaPathType)
     ext = Column(String)
-    info_json_path = Column(ChannelPath)
-    poster_path = Column(ChannelPath)
-    video_path = Column(ChannelPath)
+    info_json_path = Column(MediaPathType)
+    poster_path = Column(MediaPathType)
+    video_path = Column(MediaPathType)
 
     caption = Column(String)
     duration = Column(Integer)
@@ -49,12 +42,13 @@ class Video(ModelHelper, Base):
     validated_poster = Column(Boolean, default=False)
     viewed = Column(TZDateTime)
     view_count = Column(Integer)
+    url = Column(String)
     textsearch = Column(tsvector, Computed('''to_tsvector('english'::regconfig,
                                                ((COALESCE(title, ''::text) || ' '::text) ||
                                                 COALESCE(caption, ''::text)))'''))
 
     def __repr__(self):
-        return f'<Video id={self.id}, title={self.title}, path={self.video_path}, channel={self.channel_id} ' \
+        return f'<Video id={self.id}, title={self.title}, path={self.video_path.path}, channel={self.channel_id} ' \
                f'source_id={self.source_id}>'
 
     def dict(self) -> dict:
@@ -89,7 +83,7 @@ class Video(ModelHelper, Base):
         video_files = get_absolute_video_files(self)
         for path in video_files:
             try:
-                path.unlink()
+                path.path.unlink()
             except FileNotFoundError:
                 pass
 
@@ -117,13 +111,9 @@ class Video(ModelHelper, Base):
         """
         If this Video has an info_json file, return it's contents.  Otherwise, return None.
         """
-        if not self.channel or not self.channel.directory:
-            return
-
         try:
             if self.info_json_path:
-                path = self.channel.get_relative_path(self.info_json_path)
-                with open(path, 'rb') as fh:
+                with open(self.info_json_path.path, 'rb') as fh:
                     contents = json.load(fh)
                     return contents
         except UnknownFile:
@@ -142,12 +132,10 @@ class Video(ModelHelper, Base):
             if description:
                 return description
 
-        if self.description_path and self.channel_id:
-            path = self.channel.get_relative_path(self.description_path)
-            if path.exists():
-                with open(path, 'rt') as fh:
-                    contents = fh.read()
-                    return contents
+        if self.description_path:
+            with open(self.description_path, 'rt') as fh:
+                contents = fh.read()
+                return contents
 
     def get_surrounding_videos(self):
         """
@@ -215,6 +203,28 @@ class Video(ModelHelper, Base):
 
         return previous_video, next_video
 
+    def __json__(self):
+        from modules.videos.common import minimize_video_info_json
+        d = dict(
+            caption_path=self.caption_path,
+            channel=self.channel,
+            channel_id=self.channel_id,
+            duration=self.duration,
+            favorite=self.favorite,
+            id=self.id,
+            info_json=minimize_video_info_json(self.get_info_json()) if self.info_json_path else None,
+            poster_path=self.poster_path,
+            size=self.size,
+            source_id=self.source_id,
+            title=self.title,
+            upload_date=self.upload_date,
+            url=self.url,
+            video_path=self.video_path,
+            view_count=self.view_count,
+            viewed=self.viewed,
+        )
+        return d
+
 
 class Channel(ModelHelper, Base):
     __tablename__ = 'channel'
@@ -224,12 +234,12 @@ class Channel(ModelHelper, Base):
     idempotency = Column(String)
     url = Column(String)
     match_regex = Column(String)
-    directory = Column(PathColumn)
+    directory = Column(MediaPathType)
     skip_download_videos = Column(ARRAY(String))
     generate_posters = Column(Boolean)
     calculate_duration = Column(Boolean)
     download_frequency = Column(Integer)
-    next_download = Column(Date)
+    source_id = Column(String)
 
     info_json = Column(JSON)
     info_date = Column(Date)
@@ -242,43 +252,13 @@ class Channel(ModelHelper, Base):
     def __repr__(self):
         return f'<Channel(id={self.id}, name={self.name})>'
 
-    def add_video_to_skip_list(self, source_id):
+    def add_video_to_skip_list(self, source_id: str):
         if not source_id:
             raise UnknownVideo(f'Cannot skip video with empty source id: {source_id}')
 
         skip_download_videos = {i for i in self.skip_download_videos or [] if i}
         skip_download_videos.add(source_id)
         self.skip_download_videos = skip_download_videos
-
-    def increment_next_download(self):
-        """
-        Set the next download predictably during the next download iteration.
-
-        For example, two channels that download weekly will need to be downloaded on different days.  We want a channel
-        to always be downloaded on it's day.  That may be Monday, or Tuesday, etc.
-
-        This is true for all download frequencies (30 days, 90 days, etc.).
-
-        The order that channels will be downloaded/distributed will be by `link`.
-        """
-        if not self.download_frequency:
-            raise NoFrequency(f'{self} does not have a frequency!')
-
-        session = Session.object_session(self)
-
-        # All the channels that share the my frequency.
-        channel_group = session.query(self.__class__).filter_by(download_frequency=self.download_frequency)
-        channel_group = list(channel_group.order_by(self.__class__.link).all())
-
-        # My position in the channel group.
-        index = channel_group.index(self)
-
-        # The seconds between each download.
-        chunk = self.download_frequency // len(channel_group)
-
-        # My next download will be distributed by my frequency and my position.
-        position = chunk * (index + 1)
-        self.next_download = today() + timedelta(seconds=self.download_frequency + position)
 
     def delete_with_videos(self):
         """
@@ -298,7 +278,7 @@ class Channel(ModelHelper, Base):
         Retrieve the data about this Channel that should be stored in a config file.
         """
         config = dict(
-            directory=str(self.directory),
+            directory=str(self.directory.path),
             match_regex=self.match_regex or '',
             name=self.name,
             url=self.url or '',
@@ -306,27 +286,39 @@ class Channel(ModelHelper, Base):
             calculate_duration=self.calculate_duration,
             skip_download_videos=self.skip_download_videos or [],
             download_frequency=self.download_frequency,
-            next_download=self.next_download,
             favorites={},
         )
 
         session = Session.object_session(self)
-        favorites = session.query(Video).filter(Video.favorite != None, Video.channel_id == self.id).all()
+        favorites = session.query(Video).filter(Video.favorite != None, Video.channel_id == self.id).all()  # noqa
         if favorites:
-            config['favorites'] = {i.source_id: {'favorite': i.favorite} for i in favorites}
+            config['favorites'] = {i.source_id: {'favorite': i.favorite} for i in favorites if i.source_id}
 
         return config
 
-    def get_directory(self):
-        if self._directory:
-            return self._directory
-
-        self._directory = get_absolute_media_path(self.directory)
-        return self._directory
-
     def get_relative_path(self, path: Path, exists: bool = True):
-        channel_dir = self._directory or self.get_directory()
-        path = channel_dir / path
+        path = self.directory / path
         if exists and not path.exists():
-            raise FileNotFoundError(f'Channel path {path} does not exist!')
+            raise FileNotFoundError(f'{path} does not exist!')
         return path
+
+    def get_download(self) -> Optional[Download]:
+        """
+        Get the Download row for this Channel.  If there isn't a Download, return None.
+        """
+        if not self.url:
+            raise ValueError(f'Channel {self.name} does not have a URL to download!')
+
+        session = Session.object_session(self)
+        download = session.query(Download).filter_by(url=self.url).one_or_none()
+        return download
+
+    def __json__(self):
+        d = dict(
+            id=self.id,
+            name=self.name,
+            directory=self.directory,
+            url=self.url,
+            link=self.link,
+        )
+        return d

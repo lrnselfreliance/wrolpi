@@ -458,10 +458,10 @@ class ChannelRow extends React.Component {
                     {channel.url ? secondsToDate(channel.info_date) : null}
                 </Table.Cell>
                 <Table.Cell>
-                    {channel.url ? secondsToDate(channel.next_download) : null}
+                    {channel.url && channel.next_download ? secondsToDate(channel.next_download) : null}
                 </Table.Cell>
                 <Table.Cell>
-                    {channel.url ? secondsToFrequency(channel.download_frequency) : null}
+                    {channel.url && channel.download_frequency ? secondsToFrequency(channel.download_frequency) : null}
                 </Table.Cell>
                 <Table.Cell textAlign='right'>
                     <Link className="ui button secondary" to={this.editTo}>Edit</Link>
@@ -489,13 +489,14 @@ class MobileChannelRow extends ChannelRow {
                     Last Update: {channel.url ? secondsToDate(channel.info_date) : null}
                 </p>
                 <p>
-                    Next Update: {channel.url ? secondsToDate(channel.next_download) : null}
+                    Next Update: {channel.url && channel.next_download ? secondsToDate(channel.next_download) : null}
                 </p>
                 <p>
                     Videos: {channel.video_count}
                 </p>
                 <p>
-                    Frequency: {channel.url ? secondsToFrequency(channel.download_frequency) : null}
+                    Frequency: {channel.url && channel.download_frequency ?
+                    secondsToFrequency(channel.download_frequency) : null}
                 </p>
             </Table.Cell>
             <Table.Cell width={6} colSpan={2} textAlign='right'>
@@ -621,7 +622,7 @@ export class Channels extends React.Component {
                         </Table>
                     </Responsive>
                     <Responsive maxWidth={769}>
-                        <Table striped basic unstackable size='medium'>
+                        <Table striped basic unstackable size='small'>
                             <Table.Body>
                                 {this.state.results.map((channel) =>
                                     <MobileChannelRow key={channel.link} channel={channel}/>)}

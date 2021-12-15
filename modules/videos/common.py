@@ -13,10 +13,11 @@ from sqlalchemy.orm import Session
 
 from wrolpi import before_startup
 from wrolpi.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify, chunks, get_media_directory, \
-    get_absolute_media_path, minimize_dict
+    minimize_dict
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
-    ChannelLinkConflict, ChannelDirectoryConflict
+    ChannelLinkConflict, ChannelDirectoryConflict, ChannelSourceIdConflict
+from wrolpi.media_path import MediaPath
 from wrolpi.vars import DOCKERIZED, DEFAULT_FILE_PERMISSIONS
 from .models import Channel, Video
 
@@ -24,7 +25,7 @@ logger = logger.getChild(__name__)
 
 REQUIRED_OPTIONS = ['name', 'directory']
 MINIMUM_CHANNEL_KEYS = {'id', 'name', 'directory', 'url', 'video_count', 'link'}
-MINIMUM_INFO_JSON_KEYS = {'description', 'view_count'}
+MINIMUM_INFO_JSON_KEYS = {'description', 'view_count', 'webpage_url'}
 MINIMUM_VIDEO_KEYS = {'id', 'title', 'upload_date', 'duration', 'channel', 'channel_id', 'favorite', 'size',
                       'poster_path', 'caption_path', 'video_path', 'info_json', 'channel', 'viewed', 'source_id',
                       'view_count'}
@@ -107,13 +108,12 @@ def import_videos_config():
 VALID_VIDEO_KINDS = {'video', 'caption', 'poster', 'description', 'info_json'}
 
 
-def get_absolute_video_path(video: Video, kind: str = 'video') -> Path:
+def get_absolute_video_path(video: Video, kind: str = 'video') -> MediaPath:
     if kind not in VALID_VIDEO_KINDS:
         raise Exception(f'Unknown video path kind {kind}')
-    directory = get_absolute_media_path(video.channel.directory)
     path = getattr(video, f'{kind}_path')
-    if directory and path:
-        return directory / path
+    if path:
+        return path
     raise UnknownFile()
 
 
@@ -123,7 +123,7 @@ get_absolute_video_description = partial(get_absolute_video_path, kind='descript
 get_absolute_video_info_json = partial(get_absolute_video_path, kind='info_json')
 
 
-def get_absolute_video_files(video: Video) -> List[Path]:
+def get_absolute_video_files(video: Video) -> List[MediaPath]:
     """
     Get all video files that exist.
     """
@@ -173,7 +173,7 @@ def any_extensions(filename: str, extensions: Iterable = ()):
 match_video_extensions = partial(any_extensions, extensions=VIDEO_EXTENSIONS)
 
 
-def generate_video_paths(directory: Union[str, pathlib.Path], relative_to=None) -> Tuple[str, pathlib.Path]:
+def generate_video_paths(directory: Union[str, pathlib.Path]) -> Tuple[str, pathlib.Path]:
     """
     Generate a list of video paths in the provided directory.
     """
@@ -182,10 +182,7 @@ def generate_video_paths(directory: Union[str, pathlib.Path], relative_to=None) 
     for child in directory.iterdir():
         if child.is_file() and match_video_extensions(child.name):
             child = child.absolute()
-            if relative_to:
-                yield child.relative_to(relative_to)
-            else:
-                yield child
+            yield child
         elif child.is_dir():
             yield from generate_video_paths(child)
 
@@ -232,7 +229,8 @@ def remove_duplicate_video_paths(paths: Iterable[Path]) -> Set[Path]:
                 yield sorted(paths)[0]
 
 
-def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None, link=None, directory=None):
+def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None, link=None, directory=None,
+                                source_id=None):
     """
     Search for any channels that conflict with the provided args, raise a relevant exception if any conflicts are found.
     """
@@ -263,6 +261,10 @@ def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None,
         conflicts = base_where.filter(Channel.directory == directory)
         if list(conflicts):
             raise ChannelDirectoryConflict()
+    if source_id:
+        conflicts = base_where.filter(Channel.source_id == source_id)
+        if list(conflicts):
+            raise ChannelSourceIdConflict()
 
 
 def verify_config():
@@ -295,10 +297,14 @@ def get_matching_directories(path: Union[str, Path]) -> List[str]:
     """
     path = str(path)
 
+    ignored_directories = {
+        str(get_media_directory() / 'videos/NO CHANNEL'),
+    }
+
     if os.path.isdir(path):
         # The provided path is a directory, return it's subdirectories, or itself if no subdirectories exist
         paths = [os.path.join(path, i) for i in os.listdir(path)]
-        paths = sorted(i for i in paths if os.path.isdir(i))
+        paths = sorted(i for i in paths if os.path.isdir(i) and i not in ignored_directories)
         if len(paths) == 0:
             return [path]
         return paths
@@ -307,7 +313,8 @@ def get_matching_directories(path: Union[str, Path]) -> List[str]:
     paths = os.listdir(head)
     paths = [os.path.join(head, i) for i in paths]
     pattern = path.lower()
-    paths = sorted(i for i in paths if os.path.isdir(i) and i.lower().startswith(pattern))
+    paths = sorted(
+        i for i in paths if os.path.isdir(i) and i.lower().startswith(pattern) and i not in ignored_directories)
 
     return paths
 
@@ -354,14 +361,12 @@ async def generate_bulk_posters(video_ids: List[int]):
         with get_db_session(commit=True) as session:
             videos = session.query(Video).filter(Video.id.in_(video_ids))
             for video in videos:
-                video_path = get_absolute_video_path(video)
+                video_path = video.video_path.path
 
                 poster_path = replace_extension(video_path, '.jpg')
                 if not poster_path.exists():
                     generate_video_poster(video_path)
-                channel_dir = get_absolute_media_path(video.channel.directory)
-                poster_path = poster_path.relative_to(channel_dir)
-                video.poster_path = str(poster_path)
+                video.poster_path = poster_path
     logger.info('Done generating video posters')
 
 
@@ -401,9 +406,8 @@ def bulk_validate_posters(video_ids: List[int]):
         for video_id in video_ids:
             with get_db_session(commit=True) as session:
                 video = session.query(Video).filter_by(id=video_id).one()
-                channel = video.channel
 
-                poster_path: Path = get_absolute_video_poster(video)
+                poster_path: Path = video.poster_path.path
                 new_poster_path = poster_path.with_suffix('.jpg')
 
                 if poster_path != new_poster_path and new_poster_path.exists():
@@ -423,10 +427,8 @@ def bulk_validate_posters(video_ids: List[int]):
                 else:
                     logger.debug(f'Poster was already valid: {new_poster_path}')
 
-                channel_dir = get_absolute_media_path(channel.directory)
-
                 # Update the video with the new poster path.  Mark it as validated.
-                video.poster_path = str(new_poster_path.relative_to(channel_dir))
+                video.poster_path = new_poster_path
                 video.validated_poster = True
     logger.info('Done validating video posters.')
 
@@ -465,6 +467,10 @@ async def get_bulk_video_info_json(video_ids: List[int]):
                 video = session.query(Video).filter_by(id=video_id).one()
                 logger.debug(f'Getting video info_json data: {video}')
 
+                if not video.video_path:
+                    logger.warning(f'Refusing to get info_json for video without a video file: {video}')
+                    continue
+
                 try:
                     info_json = video.get_info_json()
                     if info_json:
@@ -475,8 +481,7 @@ async def get_bulk_video_info_json(video_ids: List[int]):
                             video.duration = info_json.get('duration')
                     elif not video.duration:
                         # As a last resort, get duration from the video file.
-                        video_path = get_absolute_video_path(video)
-                        video.duration = get_video_duration(video_path)
+                        video.duration = get_video_duration(video.video_path.path)
 
                 except Exception:
                     logger.warning(f'Unable to get meta data of {video}', exc_info=True)
@@ -493,9 +498,8 @@ async def get_bulk_video_size(video_ids: List[int]):
             for video_id in video_ids:
                 video = session.query(Video).filter_by(id=video_id).one()
                 logger.debug(f'Getting video size: {video.id} {video.video_path}')
-                video_path = get_absolute_video_path(video)
 
-                size = video_path.stat().st_size
+                size = video.video_path.path.stat().st_size
                 video.size = size
     logger.info('Done getting video sizes')
 

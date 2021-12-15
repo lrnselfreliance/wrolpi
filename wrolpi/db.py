@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from typing import ContextManager
+from typing import ContextManager, Tuple
 
 import psycopg2
 import sqlalchemy.exc
@@ -51,7 +51,9 @@ LOGGED_ARGS = False
 
 
 def _get_db_session():
-    """This function allows the database to be wrapped during testing.  See: api.test.common.wrap_test_db"""
+    """
+    This function allows the database to be wrapped during testing.  See: api.test.common.wrap_test_db
+    """
     global LOGGED_ARGS
     if LOGGED_ARGS is False:
         # Print the DB args for troubleshooting.
@@ -64,10 +66,19 @@ def _get_db_session():
     return engine, session
 
 
+def get_db_context() -> Tuple[create_engine, Session]:
+    """
+    Get a DB engine and session.
+    """
+    return _get_db_session()
+
+
 @contextmanager
 def get_db_session(commit: bool = False) -> ContextManager[Session]:
-    """Context manager that creates a DB session.  This will automatically rollback changes, unless `commit` is True."""
-    local_engine, session = _get_db_session()
+    """
+    Context manager that creates a DB session.  This will automatically rollback changes, unless `commit` is True.
+    """
+    _, session = get_db_context()
     try:
         yield session
         if commit:
@@ -83,8 +94,10 @@ def get_db_session(commit: bool = False) -> ContextManager[Session]:
 
 @contextmanager
 def get_db_curs(commit: bool = False):
-    """Context manager that yields a DictCursor to execute raw SQL statements."""
-    local_engine, session = _get_db_session()
+    """
+    Context manager that yields a DictCursor to execute raw SQL statements.
+    """
+    local_engine, session = get_db_context()
     connection = local_engine.raw_connection()
     curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
     try:

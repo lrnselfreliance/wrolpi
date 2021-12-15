@@ -2,7 +2,7 @@ import pathlib
 import subprocess
 import tempfile
 from unittest import mock
-from unittest.mock import Mock
+from unittest.mock import Mock, MagicMock
 
 import pytest
 from PIL import Image
@@ -11,17 +11,17 @@ from modules.videos.models import Channel, Video
 from modules.videos.test.common import create_channel_structure
 from wrolpi.common import get_absolute_media_path
 from wrolpi.db import get_db_session
-from wrolpi.test.common import ExtendedTestCase, build_test_directories, wrap_test_db
+from wrolpi.test.common import build_test_directories, wrap_test_db, TestAPI
 from wrolpi.vars import PROJECT_DIR
 from ..common import get_matching_directories, convert_image, bulk_validate_posters, remove_duplicate_video_paths, \
     update_view_count, get_video_duration
 
 
-class TestCommon(ExtendedTestCase):
+class TestCommon(TestAPI):
 
     def test_get_absolute_media_path(self):
-        wrolpi = get_absolute_media_path('videos/wrolpi')
-        assert str(wrolpi).endswith('wrolpi')
+        path = get_absolute_media_path('videos')
+        self.assertTrue(str(path).endswith('videos'))
 
     def test_matching_directories(self):
         structure = [
@@ -59,13 +59,13 @@ class TestCommon(ExtendedTestCase):
         """
         Video duration can be retrieved from the video file.
         """
-        video_path = PROJECT_DIR / 'test/videos/wrolpi/big_buck_bunny_720p_1mb.mp4'
+        video_path = PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4'
         self.assertEqual(get_video_duration(video_path), 5)
 
-        video_path = PROJECT_DIR / 'test/videos/wrolpi/does not exist.mp4'
+        video_path = PROJECT_DIR / 'test/does not exist.mp4'
         self.assertRaises(FileNotFoundError, get_video_duration, video_path)
 
-        video_path = str(PROJECT_DIR / 'test/videos/wrolpi/does not exist.mp4')
+        video_path = str(PROJECT_DIR / 'test/does not exist.mp4')
         self.assertRaises(FileNotFoundError, get_video_duration, video_path)
 
         with tempfile.NamedTemporaryFile() as fh:
@@ -139,7 +139,7 @@ def test_convert_image():
 )
 def test_create_db_structure(_structure, paths):
     @create_channel_structure(_structure)
-    def test_func(tempdir):
+    def test_func(_, tempdir):
         assert isinstance(tempdir, pathlib.Path)
         for path in paths:
             path = (tempdir / path)
@@ -154,7 +154,12 @@ def test_create_db_structure(_structure, paths):
                 assert channel.directory == tempdir / channel_name
                 assert len(channel.videos) == len([i for i in _structure[channel_name] if i.endswith('mp4')])
 
-    test_func()
+    with tempfile.TemporaryDirectory() as tmp_dir, \
+            mock.patch('wrolpi.media_path.get_media_directory') as mock_get_directory:
+        mock_get_directory.return_value = pathlib.Path(tmp_dir)
+        test_ = MagicMock()
+        test_.tmp_dir.name = tmp_dir
+        test_func(test_)
 
 
 @wrap_test_db
@@ -184,10 +189,10 @@ def test_bulk_replace_invalid_posters(tempdir: pathlib.Path):
         assert Image.open(webp_fh).format == 'WEBP'
 
     with get_db_session() as session:
-        vid1 = session.query(Video).filter_by(poster_path='vid1.jpg').one()
+        vid1 = session.query(Video).filter_by(poster_path=f'{tempdir}/channel1/vid1.jpg').one()
         assert vid1.validated_poster is False
 
-        vid2 = session.query(Video).filter_by(poster_path='vid2.webp').one()
+        vid2 = session.query(Video).filter_by(poster_path=f'{tempdir}/channel2/vid2.webp').one()
         assert vid2.validated_poster is False
 
     # Convert the WEBP image.  convert_image() should only be called once.
@@ -201,13 +206,13 @@ def test_bulk_replace_invalid_posters(tempdir: pathlib.Path):
     with get_db_session() as session:
         # Get the video by ID because it's poster is now a JPEG.
         vid2 = session.query(Video).filter_by(id=vid2.id).one()
-        assert str(vid2.poster_path) == 'vid2.jpg'
-        assert all('webp' not in str(i.poster_path) for i in session.query(Video).all())
+        assert str(vid2.poster_path.path).split('/')[-1] == 'vid2.jpg'
+        assert all('webp' not in str(i.poster_path.path) for i in session.query(Video).all())
         assert vid2.validated_poster is True
 
         # Vid1's image was validated, but not converted.
         vid1 = session.query(Video).filter_by(id=vid1.id).one()
-        assert str(vid1.poster_path) == 'vid1.jpg'
+        assert str(vid1.poster_path.path).split('/')[-1] == 'vid1.jpg'
         assert vid1.validated_poster is True
 
     # Old webp was removed
@@ -240,9 +245,9 @@ def test_bulk_replace_invalid_posters(tempdir: pathlib.Path):
 )
 def test_update_view_count(tempdir: pathlib.Path):
     def check_view_counts(view_counts):
-        with get_db_session(commit=True) as session:
+        with get_db_session() as session_:
             for source_id, view_count in view_counts.items():
-                vid = session.query(Video).filter_by(source_id=source_id).one()
+                vid = session_.query(Video).filter_by(source_id=source_id).one()
                 assert vid.view_count == view_count
 
     with get_db_session(commit=True) as session:
@@ -251,9 +256,9 @@ def test_update_view_count(tempdir: pathlib.Path):
         channel2.info_json = {'entries': [{'id': 'vid2.mp4', 'view_count': 11}, {'id': 'bad_id', 'view_count': 12}]}
         channel3.info_json = {'entries': [{'id': 'vid3.mp4', 'view_count': 13}, {'id': 'vid4.mp4', 'view_count': 14}]}
 
-        # Use the video_path as a unique source_id
+        # Use the video file name as a unique source_id
         for v in session.query(Video).all():
-            v.source_id = str(v.video_path)
+            v.source_id = str(v.video_path.path).split('/')[-1]
 
     # Check all videos are empty.
     check_view_counts({'vid1.mp4': None, 'vid2.mp4': None, 'vid3.mp4': None, 'vid4.mp4': None})

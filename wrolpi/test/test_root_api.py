@@ -1,13 +1,11 @@
 import json
 from http import HTTPStatus
-from unittest import mock
-from unittest.mock import MagicMock
+from itertools import zip_longest
 
-import pytest
-from sanic_openapi import swagger_blueprint
-
+from wrolpi.db import get_db_session
+from wrolpi.downloader import Download
 from wrolpi.root_api import api_app
-from wrolpi.test.common import TestAPI
+from wrolpi.test.common import TestAPI, wrap_test_db
 
 
 class TestRootAPI(TestAPI):
@@ -58,17 +56,48 @@ class TestRootAPI(TestAPI):
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert json.loads(response.body) == {'valid': False, 'regex': '.*(missing parenthesis.*'}
 
-    @pytest.mark.xfail
-    def test_swagger(self):
-        """
-        Swagger can be generated.  This test is just to assure that our spec generation hasn't broken.
-        """
-        # An API request is required to set things up (apparently).
-        api_app.test_client.get('/')
-
-        from sanic.response import json as json_
-        json_(swagger_blueprint._spec)
-
     def test_get_settings(self):
         request, response = api_app.test_client.get('/api/settings')
         self.assertOK(response)
+
+    @wrap_test_db
+    def test_get_downloads(self):
+        request, response = api_app.test_client.get('/api/download')
+        self.assertDictContains(response.json, {'once_downloads': [], 'recurring_downloads': []})
+
+        with get_db_session(commit=True) as session:
+            d1 = Download(url='https://example.com/1', status='complete')
+            d2 = Download(url='https://example.com/2', status='pending')
+            d3 = Download(url='https://example.com/3', status='deferred')
+            d4 = Download(url='https://example.com/4', status='deferred')
+            d5 = Download(url='https://example.com/5', status='new')
+            d6 = Download(url='https://example.com/6', status='deferred', frequency=60)
+            d7 = Download(url='https://example.com/7', status='pending', frequency=60)
+            session.add_all([d1, d2, d3, d4, d5, d6, d7])
+
+        request, response = api_app.test_client.get('/api/download')
+        expected = [
+            {'url': 'https://example.com/2', 'status': 'pending'},
+            {'url': 'https://example.com/5', 'status': 'new'},
+            {'url': 'https://example.com/3', 'status': 'deferred'},
+            {'url': 'https://example.com/4', 'status': 'deferred'},
+            {'url': 'https://example.com/1', 'status': 'complete'},
+        ]
+        for download, expected in zip_longest(response.json['once_downloads'], expected):
+            self.assertDictContains(download, expected)
+        expected = [
+            {'url': 'https://example.com/7', 'status': 'pending'},
+            {'url': 'https://example.com/6', 'status': 'deferred'},
+        ]
+        for download, expected in zip_longest(response.json['recurring_downloads'], expected):
+            self.assertDictContains(download, expected)
+
+    @wrap_test_db
+    def test_get_downloads_paged(self):
+        with get_db_session(commit=True) as session:
+            downloads = [Download(url=f'https://example.com/{i}') for i in range(25)]
+            session.add_all(downloads)
+
+        request, response = api_app.test_client.get('/api/download')
+        self.assertEqual(len(response.json['once_downloads']), 20)
+        self.assertEqual(len(response.json['recurring_downloads']), 0)

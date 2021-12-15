@@ -17,12 +17,12 @@ def test_session() -> Session:
     """
     test_engine, session = test_db()
 
-    def fake_get_db_context():
+    def fake_get_db_session():
         """Get the testing db"""
         return test_engine, session
 
     try:
-        with mock.patch('wrolpi.db._get_db_session', fake_get_db_context):
+        with mock.patch('wrolpi.db._get_db_session', fake_get_db_session):
             yield session
     finally:
         session.rollback()

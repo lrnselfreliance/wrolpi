@@ -19,7 +19,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from wrolpi.common import EXAMPLE_CONFIG_PATH, get_config, Base, QUEUES, set_test_media_directory
+from wrolpi.common import EXAMPLE_CONFIG_PATH, get_config, Base, QUEUES, set_test_media_directory, get_media_directory
 from wrolpi.db import postgres_engine, get_db_args
 from wrolpi.root_api import BLUEPRINTS, api_app
 from wrolpi.vars import PROJECT_DIR
@@ -63,12 +63,12 @@ def wrap_test_db(func):
     def wrapped(*a, **kw):
         test_engine, session = test_db()
 
-        def fake_get_db_context():
+        def fake_get_db_session():
             """Get the testing db"""
             return test_engine, session
 
         try:
-            with mock.patch('wrolpi.db._get_db_session', fake_get_db_context):
+            with mock.patch('wrolpi.db._get_db_session', fake_get_db_session):
                 # Run the test.
                 result = func(*a, **kw)
                 return result
@@ -100,26 +100,26 @@ class PytestCase:
     """
 
     @staticmethod
-    def assertGreater(a, b, msg: str = None):
+    def assertGreater(a, b, msg: str = None):  # noqa
         assert a > b, msg
 
     @staticmethod
-    def assertLess(a, b, msg: str = None):
+    def assertLess(a, b, msg: str = None):  # noqa
         assert a < b, msg
 
     @staticmethod
-    def assertEqual(a, b, msg: str = None):
+    def assertEqual(a, b, msg: str = None):  # noqa
         assert a == b, msg or f'{a} != {b}'
 
     @staticmethod
-    def assertRaises(exception, func, *args, **kwargs):
+    def assertRaises(exception, func, *args, **kwargs):  # noqa
         try:
             func(*args, **kwargs)
         except exception:
             pass
 
     @classmethod
-    def assertDictContains(cls, d1: dict, d2: dict):
+    def assertDictContains(cls, d1: dict, d2: dict):  # noqa
         if hasattr(d1, '__dict__'):
             d1 = d1.__dict__
         if hasattr(d2, '__dict__'):
@@ -134,13 +134,13 @@ class PytestCase:
             else:
                 assert d1[k2] == d2[k2], f'{k2} of value "{d1[k2]}" does not equal {d2[k2]} in dict 1'
 
-    def assertError(self, response, http_status: int, code=None):
+    def assertError(self, response, http_status: int, code=None):  # noqa
         self.assertEqual(response.status_code, http_status)
         if code:
             self.assertEqual(response.json['code'], code)
 
     @staticmethod
-    def assertTruth(value, expected):
+    def assertTruth(value, expected):  # noqa
         """
         Check that a value is Truthy or Falsy.
         """
@@ -160,6 +160,10 @@ class PytestCase:
                 if d2 is None:
                     raise ValueError('d2 is None')
                 self.assertTruth(d1[d2_key], d2[d2_key])
+
+    @staticmethod
+    def assertLength(a, b):  # noqa
+        assert len(a) == len(b), f'{len(a)=} != {len(b)=}'
 
 
 class ExtendedTestCase(PytestCase, unittest.TestCase):
@@ -229,7 +233,7 @@ def wrap_media_directory(path: Optional[pathlib.Path] = None):
 
 
 @contextmanager
-def build_test_directories(paths: List[str]) -> pathlib.Path:
+def build_test_directories(paths: List[str], tmp_dir: pathlib.Path = None) -> pathlib.Path:
     """
     Create directories based on the provided structure.
 
@@ -247,23 +251,20 @@ def build_test_directories(paths: List[str]) -> pathlib.Path:
             channel2/vid2.mp4
             channel2/vid2.en.vtt
     """
-    dir_ = get_config().get('media_directory')
-    dir_ = pathlib.Path(dir_).absolute()
-    with tempfile.TemporaryDirectory(dir=dir_) as temp_dir:
-        root = pathlib.Path(temp_dir)
+    tmp_dir = tmp_dir or get_media_directory()
 
-        directories = filter(lambda i: i.endswith('/'), paths)
-        for directory in directories:
-            (root / directory).mkdir(parents=True)
+    directories = filter(lambda i: i.endswith('/'), paths)
+    for directory in directories:
+        (tmp_dir / directory).mkdir(parents=True)
 
-        files = filter(lambda i: not i.endswith('/'), paths)
-        for file in files:
-            file = root / file
-            parents = file.parents
-            parents[0].mkdir(parents=True, exist_ok=True)
-            (root / file).touch()
+    files = filter(lambda i: not i.endswith('/'), paths)
+    for file in files:
+        file = tmp_dir / file
+        parents = file.parents
+        parents[0].mkdir(parents=True, exist_ok=True)
+        (tmp_dir / file).touch()
 
-        yield root.absolute()
+    yield tmp_dir.absolute()
 
 
 async def get_all_ws_messages(ws) -> List[dict]:

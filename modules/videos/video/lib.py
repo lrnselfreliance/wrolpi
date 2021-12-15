@@ -31,9 +31,9 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
         video.set_viewed()
         previous_video, next_video = video.get_surrounding_videos()
 
-        video = video.get_minimize()
-        previous_video = previous_video.get_minimize() if previous_video else None
-        next_video = next_video.get_minimize() if next_video else None
+        video = video.__json__()
+        previous_video = previous_video.__json__() if previous_video else None
+        next_video = next_video.__json__() if next_video else None
 
     return video, previous_video, next_video
 
@@ -139,7 +139,7 @@ def video_search(
             results = session.query(Video).filter(Video.id.in_(ranked_ids)).all()
             results = sorted(results, key=lambda r: ranked_ids.index(r.id))
 
-        results = [i.get_minimize() for i in results]
+        results = [i.__json__() for i in results]
 
     return results, total
 

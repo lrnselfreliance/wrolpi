@@ -16,7 +16,7 @@ from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.errors import UnknownFile
 from wrolpi.root_api import api_app
-from wrolpi.test.common import wrap_test_db, get_all_messages_in_queue, TestAPI
+from wrolpi.test.common import wrap_test_db, TestAPI
 
 
 class TestVideoAPI(TestAPI):
@@ -39,83 +39,83 @@ class TestVideoAPI(TestAPI):
 
     @wrap_test_db
     def test_channel(self):
-        with tempfile.TemporaryDirectory() as media_dir, \
-                mock.patch('wrolpi.common.get_media_directory', lambda: pathlib.Path(media_dir)):
-            channel_directory = tempfile.TemporaryDirectory(dir=media_dir).name
-            pathlib.Path(channel_directory).mkdir()
-            new_channel = dict(
-                directory=channel_directory,
-                match_regex='asdf',
-                name='Example Channel 1',
-                url='https://example.com/channel1',
-            )
+        channel_directory = tempfile.TemporaryDirectory(dir=self.tmp_dir.name).name
+        channel_directory_name = channel_directory.split('/')[-1]
+        pathlib.Path(channel_directory).mkdir()
 
-            # Channel doesn't exist
-            request, response = api_app.test_client.get('/api/videos/channels/examplechannel1')
-            assert response.status_code == HTTPStatus.NOT_FOUND, f'Channel exists: {response.json}'
+        new_channel = dict(
+            directory=channel_directory,
+            match_regex='asdf',
+            name='Example Channel 1',
+            url='https://example.com/channel1',
+        )
 
-            # Create it
-            request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
-            assert response.status_code == HTTPStatus.CREATED
-            location = response.headers['Location']
-            request, response = api_app.test_client.get(location)
-            created = response.json['channel']
-            self.assertIsNotNone(created)
-            self.assertIsNotNone(created['id'])
+        # Channel doesn't exist
+        request, response = api_app.test_client.get('/api/videos/channels/examplechannel1')
+        assert response.status_code == HTTPStatus.NOT_FOUND, f'Channel exists: {response.json}'
 
-            # Channel directory should be relative to the media directory
-            assert not pathlib.Path(created['directory']).is_absolute(), \
-                f'Channel directory is absolute: {created["directory"]}'
+        # Create it
+        request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.CREATED
+        location = response.headers['Location']
+        request, response = api_app.test_client.get(location)
+        created = response.json['channel']
+        self.assertIsNotNone(created)
+        self.assertIsNotNone(created['id'])
 
-            # Get the link that was computed
-            new_channel['link'] = response.json['channel']['link']
-            assert new_channel['link']
+        # Channel directory should be relative to the media directory
+        assert not pathlib.Path(created['directory']).is_absolute(), \
+            f'Channel directory is absolute: {created["directory"]}'
 
-            # Can't create it again
-            request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
-            assert response.status_code == HTTPStatus.BAD_REQUEST
+        # Get the link that was computed
+        new_channel['link'] = response.json['channel']['link']
+        assert new_channel['link']
 
-            # Update it
-            new_channel['name'] = 'Example Channel 2'
-            new_channel['directory'] = str(new_channel['directory'])
-            request, response = api_app.test_client.put(location, data=json.dumps(new_channel))
-            assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
-            request, response = api_app.test_client.get(location)
-            assert response.status_code == HTTPStatus.OK
-            self.assertDictContains(response.json['channel'], {
-                'id': 1,
-                'name': 'Example Channel 2',
-                'directory': channel_directory,
-                'match_regex': 'asdf',
-                'url': 'https://example.com/channel1',
-            })
+        # Can't create it again
+        request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.BAD_REQUEST
 
-            # Patch it
-            patch = {'name': 'new name'}
-            request, response = api_app.test_client.patch(location, data=json.dumps(patch))
-            assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
-            request, response = api_app.test_client.get(location)
-            assert response.status_code == HTTPStatus.OK
-            self.assertDictContains(response.json['channel'], {
-                'id': 1,
-                'name': 'new name',
-                'directory': channel_directory,
-                'match_regex': 'asdf',
-                'url': 'https://example.com/channel1',
-            })
+        # Update it
+        new_channel['name'] = 'Example Channel 2'
+        new_channel['directory'] = str(new_channel['directory'])
+        request, response = api_app.test_client.put(location, data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
+        request, response = api_app.test_client.get(location)
+        assert response.status_code == HTTPStatus.OK
+        self.assertDictContains(response.json['channel'], {
+            'id': 1,
+            'name': 'Example Channel 2',
+            'directory': channel_directory_name,
+            'match_regex': 'asdf',
+            'url': 'https://example.com/channel1',
+        })
 
-            # Can't update channel that doesn't exist
-            request, response = api_app.test_client.put('/api/videos/channels/doesnt_exist',
-                                                        data=json.dumps(new_channel))
-            assert response.status_code == HTTPStatus.NOT_FOUND
+        # Patch it
+        patch = {'name': 'new name'}
+        request, response = api_app.test_client.patch(location, data=json.dumps(patch))
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
+        request, response = api_app.test_client.get(location)
+        assert response.status_code == HTTPStatus.OK
+        self.assertDictContains(response.json['channel'], {
+            'id': 1,
+            'name': 'new name',
+            'directory': channel_directory_name,
+            'match_regex': 'asdf',
+            'url': 'https://example.com/channel1',
+        })
 
-            # Delete the new channel
-            request, response = api_app.test_client.delete(location)
-            assert response.status_code == HTTPStatus.NO_CONTENT
+        # Can't update channel that doesn't exist
+        request, response = api_app.test_client.put('/api/videos/channels/doesnt_exist',
+                                                    data=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
-            # Cant delete it again
-            request, response = api_app.test_client.delete(location)
-            assert response.status_code == HTTPStatus.NOT_FOUND
+        # Delete the new channel
+        request, response = api_app.test_client.delete(location)
+        assert response.status_code == HTTPStatus.NO_CONTENT
+
+        # Cant delete it again
+        request, response = api_app.test_client.delete(location)
+        assert response.status_code == HTTPStatus.NOT_FOUND
 
     @wrap_test_db
     def test_channel_conflicts(self):
@@ -211,14 +211,60 @@ class TestVideoAPI(TestAPI):
             assert location != response.headers['Location']
 
     @wrap_test_db
+    def test_refresh_no_channel(self):
+        with get_db_session() as session:
+            videos_path = pathlib.Path(self.tmp_dir.name) / 'videos'
+            videos_path.mkdir()
+
+            # A regular user-defined channel
+            channel1_path = videos_path / 'channel1'
+            channel1_path.mkdir()
+            vid1 = channel1_path / 'MyChannelName_20000101_abcdefghijk_title1.mp4'
+            vid1.touch()
+            vid2 = channel1_path / 'MyChannelName_20000101_abcdefghijk_title2.mp4'
+            vid2.touch()
+
+            channel1 = Channel(name='channel1', link='channel1', directory=channel1_path)
+            session.add(channel1)
+            session.commit()
+
+            # The special NO CHANNEL directory.
+            from modules.videos.downloader import get_no_channel_directory
+            no_channel_path = get_no_channel_directory()
+            no_channel_path.mkdir()
+            vid3 = no_channel_path / 'some video.mp4'
+            vid3.touch()
+            no_channel_subdir = no_channel_path / 'subdir'
+            no_channel_subdir.mkdir()
+            vid4 = no_channel_subdir / 'other video.mp4'
+            vid4.touch()
+
+            api_app.test_client.post('/api/videos/refresh')
+
+            videos = session.query(Video).order_by(Video.title).all()
+            self.assertEqual(len(videos), 4)
+
+            # Add some fake videos, they should be removed.
+            session.add(Video(title='vid5'))
+            session.add(Video(title='vid6', channel_id=channel1.id))
+            session.commit()
+
+            videos = session.query(Video).order_by(Video.title).all()
+            self.assertEqual(len(videos), 6)
+
+            api_app.test_client.post('/api/videos/refresh')
+
+            videos = session.query(Video).order_by(Video.title).all()
+            self.assertEqual(len(videos), 4)
+
+    @wrap_test_db
     def test_refresh_videos(self):
         # There should be no messages until a refresh is called.
         pytest.raises(Empty, refresh_queue.get_nowait)
 
         # Setup a fake channel directory.
-        with get_db_session() as session, \
-                tempfile.TemporaryDirectory() as channel_dir:
-            channel_path = pathlib.Path(channel_dir)
+        with get_db_session() as session:
+            channel_path = pathlib.Path(self.tmp_dir.name)
 
             # Files in subdirectories should be found and handled properly.
             subdir = channel_path / 'subdir'
@@ -243,26 +289,26 @@ class TestVideoAPI(TestAPI):
             poster2.touch()
 
             # Create a channel, associate videos with it.
-            channel = Channel(directory=channel_dir, link='foo', name='foo')
+            channel = Channel(directory=channel_path, link='foo', name='foo')
             session.add(channel)
             session.flush()
             session.refresh(channel)
             video1 = upsert_video(session, vid1, channel)
             video2 = upsert_video(session, vid2, channel)
             session.commit()
-            self.assertEqual({i.video_path for i in channel.videos},
-                             {pathlib.Path('subdir/' + vid1.name), pathlib.Path(vid2.name)})
+            self.assertEqual({str(i.video_path.path) for i in channel.videos},
+                             {f'{channel_path}/subdir/{vid1.name}', f'{channel_path}/{vid2.name}'})
 
             # Poster files were found.
-            self.assertEqual(video1.poster_path, pathlib.Path('subdir/' + poster1.name))
-            self.assertEqual(video2.poster_path, pathlib.Path(poster2.name))
+            self.assertEqual(video1.poster_path.path, subdir / poster1.name)
+            self.assertEqual(video2.poster_path.path, channel_path / poster2.name)
 
             # Add a bogus file, this should be removed during the refresh
-            self.assertNotIn('foo', {i.video_path for i in channel.videos})
+            self.assertNotIn('foo', {i.video_path.path for i in channel.videos})
             session.add(Video(video_path='foo', channel_id=channel.id))
             session.flush()
             session.refresh(channel)
-            self.assertIn('foo', {str(i.video_path) for i in channel.videos})
+            self.assertIn(f'{self.tmp_dir.name}/foo', {str(i.video_path.path) for i in channel.videos})
             self.assertEqual(len(channel.videos), 3)
 
             # Add a video that isn't in the DB, it should be found and any meta files associated with it
@@ -277,10 +323,10 @@ class TestVideoAPI(TestAPI):
 
             # Finally, call the refresh.  Again, it should remove the "foo" video, then discover this 3rd video
             # file and it's description.
-            api_app.test_client.post('/api/videos:refresh')
+            api_app.test_client.post('/api/videos/refresh')
 
             # Bogus file was removed
-            self.assertNotIn('foo', {i.video_path for i in channel.videos})
+            self.assertNotIn(f'{self.tmp_dir.name}/foo', {i.video_path.path for i in channel.videos})
 
             # Final channel video list we built
             expected = {
@@ -290,7 +336,7 @@ class TestVideoAPI(TestAPI):
             }
 
             def str_or_none(i):
-                return str(i) if i else None
+                return str(i.__json__()) if i else None
 
             self.assertEqual(
                 {(str_or_none(i.video_path), str_or_none(i.poster_path), str_or_none(i.description_path))
@@ -299,10 +345,6 @@ class TestVideoAPI(TestAPI):
             )
 
             assert poster3.is_file(), 'Orphan jpg file was deleted!'
-
-        # During the refresh process, messages are pushed to a queue, make sure there are messages there
-        messages = get_all_messages_in_queue(refresh_queue)
-        assert 'refresh-started' in [i.get('code') for i in messages]
 
     @wrap_test_db
     def test_get_channel_videos(self):

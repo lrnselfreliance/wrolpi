@@ -1,16 +1,18 @@
-from typing import List, Dict
+from collections import defaultdict
+from datetime import timedelta
+from typing import List, Dict, Union
 
 from sqlalchemy.orm.exc import NoResultFound
 
+from wrolpi import before_startup
 from wrolpi.common import sanitize_link, run_after, get_relative_to_media_directory, make_media_directory
+from wrolpi.dates import today
 from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.downloader import download_manager, Download
 from wrolpi.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
 from ..common import check_for_channel_conflicts
-from ..lib import save_channels_config
+from ..lib import save_channels_config, DEFAULT_DOWNLOAD_FREQUENCY
 from ..models import Channel
-
-DEFAULT_DOWNLOAD_FREQUENCY = 60 * 60 * 24 * 7  # weekly
-DEFAULT_DOWNLOAD_TIMEOUT = 60.0 * 10.0  # Ten minutes
 
 
 async def get_minimal_channels() -> List[dict]:
@@ -21,7 +23,7 @@ async def get_minimal_channels() -> List[dict]:
         # Get all channels, even if they don't have videos.
         stmt = '''
             SELECT
-                c.id, name, link, directory, url, download_frequency, info_date, next_download
+                c.id, name, link, directory, url, download_frequency, info_date
             FROM
                 channel AS c
             ORDER BY LOWER(name)
@@ -102,6 +104,8 @@ def update_channel(data, link):
                 data['download_frequency'] = int(data['download_frequency'])
             except ValueError:
                 raise APIError('Invalid download frequency')
+        else:
+            data['download_frequency'] = DEFAULT_DOWNLOAD_FREQUENCY
 
         if data.get('match_regex') in ('None', 'null'):
             data['match_regex'] = None
@@ -122,32 +126,76 @@ def update_channel(data, link):
     return channel
 
 
-def get_channel(link) -> dict:
+def get_channel(link, return_dict: bool = True) -> Union[dict, Channel]:
     """
     Get a Channel by it's `link`.  Raise UnknownChannel if it does not exist.
     """
     with get_db_session() as session:
         try:
-            channel = session.query(Channel).filter_by(link=link).one()
+            channel: Channel = session.query(Channel).filter_by(link=link).one()
         except NoResultFound:
             raise UnknownChannel()
-        return channel.dict()
+
+        return channel.dict() if return_dict else channel
+
+
+def _spread_by_frequency(channels: List[Channel]):
+    channels_by_frequency = defaultdict(lambda: [])
+    for channel in channels:
+        channels_by_frequency[channel.download_frequency].append(channel)
+
+    for frequency, channels in channels_by_frequency.items():
+        # The seconds between each download.
+        chunk = frequency // len(channels)
+        for channel in channels:
+            # My position in the channel group.
+            index = channels.index(channel)
+            # My next download will be distributed by my frequency and my position.
+            position = chunk * index
+            next_download = today() + timedelta(seconds=frequency + position)
+            yield dict(url=channel.url, frequency=frequency, next_download=next_download)
+
+
+def spread_channel_downloads():
+    """
+    Channels should be downloaded in a manner that is spread out over their frequency.  For example, three channels
+    with a frequency of a week should be downloaded on different days that week.
+    """
+    with get_db_session(commit=True) as session:
+        channels = list(session.query(Channel).filter(
+            Channel.url != None,
+            Channel.download_frequency != None
+        ).order_by(Channel.link).all())  # noqa
+
+        url_next_download = _spread_by_frequency(channels)
+
+        for info in url_next_download:
+            download = download_manager.get_download(session, url=info['url'])
+            if not download:
+                download = Download(url=info['url'])
+                session.add(download)
+
+            download.frequency = info['frequency']
+            download.next_download = info['next_download']
 
 
 @run_after(save_channels_config)
-def create_channel(data: dict) -> dict:
+@run_after(spread_channel_downloads)
+def create_channel(data: dict, return_dict: bool = True) -> Union[Channel, dict]:
     """
     Create a new Channel.  Check for conflicts with existing Channels.
     """
     with get_db_session(commit=True) as session:
+        link = sanitize_link(data['name'])
         try:
             # Verify that the URL/Name/Link aren't taken
             check_for_channel_conflicts(
                 session,
                 url=data.get('url'),
                 name=data['name'],
-                link=sanitize_link(data['name']),
+                link=link,
                 directory=str(data['directory']),
+                source_id=data.get('source_id'),
             )
         except APIError as e:
             raise ValidationError() from e
@@ -156,13 +204,23 @@ def create_channel(data: dict) -> dict:
             name=data['name'],
             url=data.get('url'),
             match_regex=data.get('match_regex'),
-            link=sanitize_link(data['name']),
+            link=link,
             directory=str(data['directory']),
-            download_frequency=data.get('download_frequency', DEFAULT_DOWNLOAD_FREQUENCY),
+            download_frequency=data.get('download_frequency'),
+            source_id=data.get('source_id'),
         )
         session.add(channel)
         session.commit()
         session.flush()
         session.refresh(channel)
 
-        return channel.dict()
+        if return_dict:
+            return channel.dict()
+        else:
+            return channel
+
+
+def download_channel(link: str):
+    channel = get_channel(link, return_dict=False)
+    with get_db_session(commit=True) as session:
+        download_manager.create_download(channel.url, session)

@@ -1,4 +1,5 @@
 #! /usr/bin/env python3
+import pathlib
 from pathlib import Path
 from typing import Generator, List, Union
 
@@ -7,8 +8,7 @@ import webvtt
 
 from wrolpi.common import logger, chunks
 from wrolpi.db import get_db_session
-from wrolpi.errors import UnknownCaptionFile
-from .common import get_absolute_video_caption
+from wrolpi.media_path import MediaPath
 from .models import Video
 
 
@@ -43,9 +43,11 @@ def process_captions(video: Video):
     """
     Parse and insert captions for a video record.
     """
-    caption_path = get_absolute_video_caption(video)
-    if not caption_path.exists():
-        raise UnknownCaptionFile()
+    if isinstance(video.caption_path, MediaPath):
+        caption_path = video.caption_path.path
+    else:
+        caption_path = pathlib.Path(video.caption_path)
+
     try:
         lines = get_unique_caption_lines(str(caption_path))
         block = '\n'.join(lines)

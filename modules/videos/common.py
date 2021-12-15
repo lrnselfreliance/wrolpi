@@ -68,13 +68,12 @@ def import_videos_config():
         config = load_channels_config()
 
         with get_db_session(commit=True) as session:
-            for section in config:
-                for option in (i for i in REQUIRED_OPTIONS if i not in config[section]):
-                    raise ConfigError(f'Channel "{section}" is required to have "{option}"')
+            for link in config:
+                for option in (i for i in REQUIRED_OPTIONS if i not in config[link]):
+                    raise ConfigError(f'Channel "{link}" is required to have "{option}"')
 
-                name, directory = config[section]['name'], config[section]['directory']
+                name, directory = config[link]['name'], config[link]['directory']
 
-                link = sanitize_link(name)
                 matches = session.query(Channel).filter(Channel.link == link)
                 if not matches.count():
                     # Channel not yet in the DB, add it
@@ -86,18 +85,18 @@ def import_videos_config():
                 channel.name = name
                 channel.directory = str(directory)
 
-                channel.calculate_duration = config[section].get('calculate_duration')
-                channel.download_frequency = config[section].get('download_frequency')
-                channel.generate_posters = config[section].get('generate_posters')
-                channel.match_regex = config[section].get('match_regex')
-                channel.skip_download_videos = list(set(config[section].get('skip_download_videos', {})))
-                channel.url = config[section].get('url')
-                channel.source_id = config[section].get('source_id')
+                channel.calculate_duration = config[link].get('calculate_duration')
+                channel.download_frequency = config[link].get('download_frequency')
+                channel.generate_posters = config[link].get('generate_posters')
+                channel.match_regex = config[link].get('match_regex')
+                channel.skip_download_videos = list(set(config[link].get('skip_download_videos', {})))
+                channel.url = config[link].get('url')
+                channel.source_id = config[link].get('source_id')
 
                 session.add(channel)
 
                 # Set favorite Videos of this Channel.
-                favorites = config[section].get('favorites', {})
+                favorites = config[link].get('favorites', {})
                 if favorites:
                     videos = session.query(Video).filter(Video.source_id.in_(favorites.keys()))
                     for video in videos:

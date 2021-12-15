@@ -432,3 +432,8 @@ def _skip_download(error):
         if msg in error_str:
             return True
     return False
+
+
+def get_channel_source_id(url: str) -> str:
+    channel_info = YDL.extract_info(url, download=False, process=False)
+    return channel_info['id']

@@ -12,7 +12,7 @@ from PIL import Image
 from sqlalchemy.orm import Session
 
 from wrolpi import before_startup
-from wrolpi.common import sanitize_link, logger, CONFIG_PATH, get_config, iterify, chunks, get_media_directory, \
+from wrolpi.common import logger, CONFIG_PATH, get_config, iterify, chunks, get_media_directory, \
     minimize_dict
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
@@ -74,12 +74,10 @@ def import_videos_config():
 
                 name, directory = config[link]['name'], config[link]['directory']
 
-                matches = session.query(Channel).filter(Channel.link == link)
-                if not matches.count():
-                    # Channel not yet in the DB, add it
+                channel = session.query(Channel).filter(Channel.link == link).one_or_none()
+                if not channel:
+                    # Channel not yet in the DB, add it.
                     channel = Channel(link=link)
-                else:
-                    channel = matches.one()
 
                 # Only name and directory are required
                 channel.name = name
@@ -91,7 +89,12 @@ def import_videos_config():
                 channel.match_regex = config[link].get('match_regex')
                 channel.skip_download_videos = list(set(config[link].get('skip_download_videos', {})))
                 channel.url = config[link].get('url')
-                channel.source_id = config[link].get('source_id')
+                channel.source_id = config[link].get('source_id') or channel.source_id
+
+                if not channel.source_id and channel.url:
+                    # If we can download from a channel, we must have its source_id.
+                    from .downloader import get_channel_source_id
+                    channel.source_id = get_channel_source_id(channel.url)
 
                 session.add(channel)
 

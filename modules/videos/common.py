@@ -83,13 +83,13 @@ def import_videos_config():
                 channel.name = name
                 channel.directory = str(directory)
 
-                channel.calculate_duration = config[link].get('calculate_duration')
-                channel.download_frequency = config[link].get('download_frequency')
-                channel.generate_posters = config[link].get('generate_posters')
-                channel.match_regex = config[link].get('match_regex')
+                channel.calculate_duration = config[link].get('calculate_duration') or channel.calculate_duration
+                channel.download_frequency = config[link].get('download_frequency') or channel.download_frequency
+                channel.generate_posters = config[link].get('generate_posters') or channel.generate_posters
+                channel.match_regex = config[link].get('match_regex') or channel.match_regex
                 channel.skip_download_videos = list(set(config[link].get('skip_download_videos', {})))
-                channel.url = config[link].get('url')
                 channel.source_id = config[link].get('source_id') or channel.source_id
+                channel.url = config[link].get('url') or channel.url
 
                 if not channel.source_id and channel.url:
                     # If we can download from a channel, we must have its source_id.

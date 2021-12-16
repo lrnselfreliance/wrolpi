@@ -10,7 +10,7 @@ import mock
 import pytest
 
 from modules.videos.api import refresh_queue
-from modules.videos.channel.lib import spread_channel_downloads
+from modules.videos.channel.lib import spread_channel_downloads, delete_channel
 from modules.videos.lib import upsert_video
 from modules.videos.models import Channel, Video
 from modules.videos.test.common import create_channel_structure
@@ -588,3 +588,16 @@ def test_channel_frequency_update(download_channel, test_client, test_session):
     # Only one download
     downloads = test_session.query(Download).all()
     assert len(list(downloads)) == 1
+
+
+def test_delete_channel_delete_download(download_channel, test_session):
+    """
+    Deleting a Channel deletes it's Download.
+    """
+    downloads = test_session.query(Download).all()
+    assert all(i.url == download_channel.url for i in downloads)
+
+    delete_channel(download_channel.link)
+
+    downloads = test_session.query(Download).all()
+    assert not list(downloads)

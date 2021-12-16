@@ -12,7 +12,7 @@ from wrolpi.dates import now, TZDateTime
 from wrolpi.db import get_db_curs
 from wrolpi.downloader import Download
 from wrolpi.errors import UnknownVideo, UnknownFile, UnknownDirectory
-from wrolpi.media_path import MediaPathType
+from wrolpi.media_path import MediaPathType, MediaPath
 
 logger = logger.getChild(__name__)
 
@@ -234,7 +234,7 @@ class Channel(ModelHelper, Base):
     idempotency = Column(String)
     url = Column(String)
     match_regex = Column(String)
-    directory = Column(MediaPathType)
+    directory: MediaPath = Column(MediaPathType)
     skip_download_videos = Column(ARRAY(String))
     generate_posters = Column(Boolean)
     calculate_duration = Column(Boolean)
@@ -250,7 +250,7 @@ class Channel(ModelHelper, Base):
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
 
     def __repr__(self):
-        return f'<Channel id={self.id}, name={self.name}>'
+        return f'<Channel id={self.id}, name={repr(self.name)}>'
 
     def add_video_to_skip_list(self, source_id: str):
         if not source_id:

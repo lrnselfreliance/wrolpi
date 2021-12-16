@@ -24,7 +24,7 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
 
 from wrolpi.errors import WROLModeEnabled
-from wrolpi.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, PROJECT_DIR, PYTEST
+from wrolpi.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, PROJECT_DIR, PYTEST, MODULES_DIR
 
 logger = logging.getLogger()
 ch = logging.StreamHandler()
@@ -367,7 +367,12 @@ MEDIA_DIRECTORY = None
 
 def set_test_media_directory(path):
     global TEST_MEDIA_DIRECTORY
-    TEST_MEDIA_DIRECTORY = pathlib.Path(path) if path else None
+    if isinstance(path, pathlib.Path):
+        TEST_MEDIA_DIRECTORY = path
+    elif path:
+        TEST_MEDIA_DIRECTORY = pathlib.Path(path)
+    else:
+        TEST_MEDIA_DIRECTORY = None
 
 
 def get_media_directory() -> Path:
@@ -458,3 +463,19 @@ def extract_domain(url):
         # Remove leading www.
         domain = domain[4:]
     return domain
+
+
+def import_modules():
+    """
+    Import all WROLPi Modules in the modules directory.  Raise an ImportError if there are no modules.
+    """
+    try:
+        modules = [i.name for i in MODULES_DIR.iterdir() if i.is_dir() and not i.name.startswith('_')]
+        for module in modules:
+            module = f'modules.{module}.api'
+            logger.debug(f'Importing {module}')
+            __import__(module, globals(), locals(), [], 0)
+    except ImportError as e:
+        logger.fatal('No modules could be found!', exc_info=e)
+        raise
+    return modules

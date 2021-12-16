@@ -8,50 +8,19 @@ from http import HTTPStatus
 from itertools import zip_longest
 from queue import Empty
 from shutil import copyfile
-from typing import List, Tuple, Optional
-from uuid import uuid1
+from typing import List, Optional
 
 import mock
 import websockets
 import yaml
 from sanic_openapi.api import Response
-from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session, sessionmaker
 
-from wrolpi.common import EXAMPLE_CONFIG_PATH, get_config, Base, QUEUES, set_test_media_directory, get_media_directory
-from wrolpi.db import postgres_engine, get_db_args
-from wrolpi.root_api import BLUEPRINTS, api_app
+from wrolpi.common import EXAMPLE_CONFIG_PATH, get_config, QUEUES, set_test_media_directory, get_media_directory
+from wrolpi.conftest import ROUTES_ATTACHED, test_db, test_client  # noqa
+from wrolpi.db import postgres_engine
 from wrolpi.vars import PROJECT_DIR
 
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
-
-
-def get_test_db_engine():
-    suffix = str(uuid1()).replace('-', '')
-    db_name = f'wrolpi_testing_{suffix}'
-    conn = postgres_engine.connect()
-    conn.execute(f'DROP DATABASE IF EXISTS {db_name}')
-    conn.execute(f'CREATE DATABASE {db_name}')
-    conn.execute('commit')
-
-    test_args = get_db_args(db_name)
-    test_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**test_args))
-    return test_engine
-
-
-def test_db() -> Tuple[Engine, Session]:
-    """
-    Create a unique SQLAlchemy engine/session for a test.
-    """
-    test_engine = get_test_db_engine()
-    if test_engine.engine.url.database == 'wrolpi':
-        raise ValueError('Refusing the test on wrolpi database!')
-
-    # Create all tables.  No need to check if they exist because this is a test DB.
-    Base.metadata.create_all(test_engine, checkfirst=False)
-    session = sessionmaker(bind=test_engine)()
-    return test_engine, session
 
 
 def wrap_test_db(func):
@@ -173,9 +142,6 @@ class ExtendedTestCase(PytestCase, unittest.TestCase):
     pass
 
 
-ROUTES_ATTACHED = False
-
-
 class TestAPI(ExtendedTestCase):
 
     def setUp(self) -> None:
@@ -191,15 +157,6 @@ class TestAPI(ExtendedTestCase):
         config['media_directory'] = str(PROJECT_DIR / 'test')
         with open(TEST_CONFIG_PATH.name, 'wt') as fh:
             fh.write(yaml.dump(config))
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        global ROUTES_ATTACHED
-        if ROUTES_ATTACHED is False:
-            # Attach any blueprints for the test.
-            for bp in BLUEPRINTS:
-                api_app.blueprint(bp)
-            ROUTES_ATTACHED = True
 
     def tearDown(self) -> None:
         self.config_path_patch.stop()

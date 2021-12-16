@@ -1,6 +1,6 @@
 # Import conftest for test fixtures
-import os
-
+from wrolpi.common import import_modules
 from wrolpi.conftest import *  # noqa
 
-os.environ['DB_PORT'] = '54321'
+# Import modules and their conftest.py.
+import_modules()

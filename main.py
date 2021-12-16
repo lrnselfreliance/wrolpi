@@ -9,7 +9,7 @@ import pytz
 from sanic import Sanic
 
 from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, after_startup, limit_concurrent
-from wrolpi.common import logger, get_config, wrol_mode_enabled
+from wrolpi.common import logger, get_config, wrol_mode_enabled, import_modules
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
 from wrolpi.vars import PROJECT_DIR, MODULES_DIR
@@ -72,18 +72,7 @@ async def main(loop):
         set_timezone(tz)
 
     # Import the API in every module.  Each API should attach itself to `root_api`.
-    try:
-        modules = [i.name for i in MODULES_DIR.iterdir() if i.is_dir() and not i.name.startswith('_')]
-        for module in modules:
-            module = f'modules.{module}.api'
-            logger.debug(f'Importing {module}')
-            __import__(module, globals(), locals(), [], 0)
-    except ImportError as e:
-        logger.fatal('No modules could be found!', exc_info=e)
-        raise
-
-    if not modules:
-        raise Exception('No modules could be found!')
+    import_modules()
 
     # Run the startup functions
     for func in BEFORE_STARTUP_FUNCTIONS:

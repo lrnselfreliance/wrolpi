@@ -564,3 +564,23 @@ class TestVideoAPI(TestAPI):
         request, response = api_app.test_client.put(f'/api/videos/channels/{channel["link"]}',
                                                     data=json.dumps(new_channel))
         self.assertEqual(response.status_code, 204, response.json)
+
+
+def test_channel_frequency_update(download_channel, test_client):
+    """
+    A Channel's Download record is updated when the Channel's frequency is updated.
+    """
+    old_frequency = download_channel.get_download().frequency
+    assert old_frequency
+
+    data = dict(
+        directory=str(download_channel.directory.path),
+        name=download_channel.name,
+        url=download_channel.url,
+        download_frequency=100,
+    )
+    request, response = test_client.put(f'/api/videos/channels/{download_channel.link}', json=data)
+    assert response.status_code == HTTPStatus.NO_CONTENT, response.json
+
+    download = download_channel.get_download()
+    assert download.frequency == 100

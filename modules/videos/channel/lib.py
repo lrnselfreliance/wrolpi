@@ -78,56 +78,6 @@ def delete_channel(link):
         channel.delete_with_videos()
 
 
-@run_after(save_channels_config)
-def update_channel(data, link):
-    with get_db_session(commit=True) as session:
-        try:
-            channel = session.query(Channel).filter_by(link=link).one()
-        except NoResultFound:
-            raise UnknownChannel()
-
-        # Only update directory if it was empty
-        if data.get('directory') and not channel.directory:
-            try:
-                data['directory'] = get_relative_to_media_directory(data['directory'])
-            except UnknownDirectory:
-                if data['mkdir']:
-                    make_media_directory(data['directory'])
-                    data['directory'] = get_relative_to_media_directory(data['directory'])
-                else:
-                    raise
-
-        if 'directory' in data:
-            data['directory'] = str(data['directory'])
-
-        if 'download_frequency' in data:
-            try:
-                data['download_frequency'] = int(data['download_frequency'])
-            except ValueError:
-                if data['download_frequency'] in ('null', 'None', ''):
-                    data['download_frequency'] = None
-                else:
-                    raise APIError(f'Invalid download frequency {data["download_frequency"]}')
-
-        if data.get('match_regex') in ('None', 'null'):
-            data['match_regex'] = None
-
-        # Verify that the URL/Name/Link aren't taken
-        check_for_channel_conflicts(
-            session,
-            id_=channel.id,
-            url=data.get('url'),
-            name=data.get('name'),
-            link=data.get('link'),
-            directory=data.get('directory'),
-        )
-
-        # Apply the changes now that we've OK'd them
-        channel.update(data)
-
-    return channel
-
-
 def get_channel(source_id: str = None, link: str = None, url: str = None, return_dict: bool = True
                 ) -> Union[dict, Channel]:
     """
@@ -191,6 +141,58 @@ def spread_channel_downloads():
 
             download.frequency = info['frequency']
             download.next_download = info['next_download']
+
+
+@run_after(save_channels_config)
+def update_channel(data, link):
+    with get_db_session(commit=True) as session:
+        try:
+            channel = session.query(Channel).filter_by(link=link).one()
+        except NoResultFound:
+            raise UnknownChannel()
+
+        # Only update directory if it was empty
+        if data.get('directory') and not channel.directory:
+            try:
+                data['directory'] = get_relative_to_media_directory(data['directory'])
+            except UnknownDirectory:
+                if data['mkdir']:
+                    make_media_directory(data['directory'])
+                    data['directory'] = get_relative_to_media_directory(data['directory'])
+                else:
+                    raise
+
+        if 'directory' in data:
+            data['directory'] = str(data['directory'])
+
+        if 'download_frequency' in data:
+            try:
+                data['download_frequency'] = int(data['download_frequency'])
+            except ValueError:
+                if data['download_frequency'] in ('null', 'None', ''):
+                    data['download_frequency'] = None
+                else:
+                    raise APIError(f'Invalid download frequency {data["download_frequency"]}')
+
+        if data.get('match_regex') in ('None', 'null'):
+            data['match_regex'] = None
+
+        # Verify that the URL/Name/Link aren't taken
+        check_for_channel_conflicts(
+            session,
+            id_=channel.id,
+            url=data.get('url'),
+            name=data.get('name'),
+            link=data.get('link'),
+            directory=data.get('directory'),
+        )
+
+        # Apply the changes now that we've OK'd them
+        channel.update(data)
+
+    spread_channel_downloads()
+
+    return channel
 
 
 @run_after(save_channels_config)

@@ -1,16 +1,53 @@
 """
 Fixtures for Pytest tests.
 """
+import os
+import pathlib
+import tempfile
+from typing import Tuple
 from unittest import mock
+from uuid import uuid1
 
 import pytest
-from sqlalchemy.orm import Session
+from sanic_testing.testing import SanicTestClient
+from sqlalchemy.engine import Engine, create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
-from wrolpi.db import postgres_engine
-from wrolpi.test.common import test_db
+from wrolpi.common import set_test_media_directory, Base
+from wrolpi.db import postgres_engine, get_db_args
+from wrolpi.root_api import BLUEPRINTS, api_app
+
+os.environ['DB_PORT'] = '54321'
 
 
-@pytest.fixture
+def get_test_db_engine():
+    suffix = str(uuid1()).replace('-', '')
+    db_name = f'wrolpi_testing_{suffix}'
+    conn = postgres_engine.connect()
+    conn.execute(f'DROP DATABASE IF EXISTS {db_name}')
+    conn.execute(f'CREATE DATABASE {db_name}')
+    conn.execute('commit')
+
+    test_args = get_db_args(db_name)
+    test_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**test_args))
+    return test_engine
+
+
+def test_db() -> Tuple[Engine, Session]:
+    """
+    Create a unique SQLAlchemy engine/session for a test.
+    """
+    test_engine = get_test_db_engine()
+    if test_engine.engine.url.database == 'wrolpi':
+        raise ValueError('Refusing the test on wrolpi database!')
+
+    # Create all tables.  No need to check if they exist because this is a test DB.
+    Base.metadata.create_all(test_engine, checkfirst=False)
+    session = sessionmaker(bind=test_engine)()
+    return test_engine, session
+
+
+@pytest.fixture()
 def test_session() -> Session:
     """
     Pytest Fixture to get a test database session.
@@ -30,3 +67,32 @@ def test_session() -> Session:
         test_engine.dispose()
         conn = postgres_engine.connect()
         conn.execute(f'DROP DATABASE IF EXISTS {test_engine.engine.url.database}')
+
+
+@pytest.fixture(autouse=True)
+def test_directory():
+    """
+    Overwrite the media directory with a temporary directory.
+    """
+    tmp_dir = tempfile.TemporaryDirectory()
+    tmp_path = pathlib.Path(tmp_dir.name)
+    set_test_media_directory(tmp_path)
+    return tmp_path
+
+
+ROUTES_ATTACHED = False
+
+
+@pytest.fixture(autouse=True)
+def test_client() -> SanicTestClient:
+    """
+    Get a Sanic Test Client with all default routes attached.
+    """
+    global ROUTES_ATTACHED
+    if ROUTES_ATTACHED is False:
+        # Attach any blueprints for the test.
+        for bp in BLUEPRINTS:
+            api_app.blueprint(bp)
+        ROUTES_ATTACHED = True
+
+    return api_app.test_client

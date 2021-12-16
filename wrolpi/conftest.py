@@ -9,11 +9,12 @@ from unittest import mock
 from uuid import uuid1
 
 import pytest
+import yaml
 from sanic_testing.testing import SanicTestClient
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from wrolpi.common import set_test_media_directory, Base
+from wrolpi.common import set_test_media_directory, Base, get_example_config
 from wrolpi.db import postgres_engine, get_db_args
 from wrolpi.root_api import BLUEPRINTS, api_app
 
@@ -78,6 +79,19 @@ def test_directory():
     tmp_path = pathlib.Path(tmp_dir.name)
     set_test_media_directory(tmp_path)
     return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def test_config():
+    """
+    Create a test config based off the example config.
+    """
+    test_config_path = tempfile.NamedTemporaryFile(mode='rt')
+    with mock.patch('wrolpi.vars.CONFIG_PATH', test_config_path.name):
+        config = get_example_config()
+        with open(test_config_path.name, 'wt') as fh:
+            fh.write(yaml.dump(config))
+        yield
 
 
 ROUTES_ATTACHED = False

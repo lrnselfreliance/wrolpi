@@ -16,7 +16,7 @@ from modules.videos.models import Channel, Video
 from modules.videos.test.common import create_channel_structure
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
-from wrolpi.downloader import download_manager
+from wrolpi.downloader import download_manager, Download
 from wrolpi.errors import UnknownFile
 from wrolpi.root_api import api_app
 from wrolpi.test.common import wrap_test_db, TestAPI
@@ -566,7 +566,7 @@ class TestVideoAPI(TestAPI):
         self.assertEqual(response.status_code, 204, response.json)
 
 
-def test_channel_frequency_update(download_channel, test_client):
+def test_channel_frequency_update(download_channel, test_client, test_session):
     """
     A Channel's Download record is updated when the Channel's frequency is updated.
     """
@@ -584,3 +584,7 @@ def test_channel_frequency_update(download_channel, test_client):
 
     download = download_channel.get_download()
     assert download.frequency == 100
+
+    # Only one download
+    downloads = test_session.query(Download).all()
+    assert len(list(downloads)) == 1

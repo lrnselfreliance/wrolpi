@@ -6,7 +6,6 @@ from contextlib import contextmanager
 from functools import partialmethod
 from http import HTTPStatus
 from itertools import zip_longest
-from queue import Empty
 from shutil import copyfile
 from typing import List, Optional
 
@@ -15,7 +14,7 @@ import websockets
 import yaml
 from sanic_openapi.api import Response
 
-from wrolpi.common import EXAMPLE_CONFIG_PATH, get_config, QUEUES, set_test_media_directory, get_media_directory
+from wrolpi.common import EXAMPLE_CONFIG_PATH, get_config, set_test_media_directory, get_media_directory
 from wrolpi.conftest import ROUTES_ATTACHED, test_db, test_client  # noqa
 from wrolpi.db import postgres_engine
 from wrolpi.vars import PROJECT_DIR
@@ -49,18 +48,6 @@ def wrap_test_db(func):
             conn.execute(f'DROP DATABASE IF EXISTS {test_engine.engine.url.database}')
 
     return wrapped
-
-
-def get_all_messages_in_queue(q):
-    """Get all messages in a Queue without waiting."""
-    messages = []
-    while True:
-        try:
-            msg = q.get_nowait()
-            messages.append(msg)
-        except Empty:
-            break
-    return messages
 
 
 class PytestCase:
@@ -161,9 +148,6 @@ class TestAPI(ExtendedTestCase):
     def tearDown(self) -> None:
         self.config_path_patch.stop()
         set_test_media_directory(None)
-        # Clear out any messages in queues
-        for q in QUEUES:
-            get_all_messages_in_queue(q)
 
     def assertHTTPStatus(self, response: Response, status: int):
         self.assertEqual(response.status_code, status)

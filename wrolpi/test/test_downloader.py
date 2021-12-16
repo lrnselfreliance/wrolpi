@@ -1,5 +1,5 @@
-import unittest
 from datetime import datetime, timedelta
+from itertools import zip_longest
 from unittest import mock
 from unittest.mock import MagicMock
 
@@ -8,7 +8,7 @@ from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, get_downloads, get_download, Download
 from wrolpi.errors import UnrecoverableDownloadError
-from wrolpi.test.common import wrap_test_db
+from wrolpi.test.common import wrap_test_db, TestAPI
 
 
 class PermissiveDownloader(Downloader):
@@ -29,8 +29,9 @@ class HTTPDownloader(Downloader):
         return url.startswith('https://') or url.startswith('http://')
 
 
-class TestDownloader(unittest.TestCase):
+class TestDownloader(TestAPI):
     def setUp(self) -> None:
+        super().setUp()
         self.mgr = downloader.DownloadManager()
         PermissiveDownloader.do_download = MagicMock()
         HTTPDownloader.do_download = MagicMock()
@@ -235,3 +236,47 @@ class TestDownloader(unittest.TestCase):
             self.assertEqual(download.status, 'complete')
             self.assertEqual(download.last_successful_download, now)
             self.assertEqual(download.next_download, local_timezone(datetime(2020, 1, 1, 4, 0, 0)))
+
+    @wrap_test_db
+    @mock.patch('wrolpi.downloader.now', lambda: local_timezone(datetime(2020, 6, 5, 0, 0)))
+    def test_delete_old_once_downloads(self):
+        """
+        Once-downloads over a month old should be deleted.
+        """
+        permissive_downloader = PermissiveDownloader(priority=0)
+        self.mgr.register_downloader(permissive_downloader)
+
+        _, session = get_db_context()
+        # Recurring downloads should not be deleted.
+        d1 = self.mgr.create_download('https://example.com/1', session, skip_download=True)
+        d2 = self.mgr.create_download('https://example.com/2', session, skip_download=True)
+        d1.frequency = 1
+        d2.frequency = 1
+        d2.started()
+        # Should be deleted.
+        d3 = self.mgr.create_download('https://example.com/3', session, skip_download=True)
+        d4 = self.mgr.create_download('https://example.com/4', session, skip_download=True)
+        d3.complete()
+        d4.complete()
+        d3.last_successful_download = local_timezone(datetime(2020, 1, 1, 0, 0, 0))
+        d4.last_successful_download = local_timezone(datetime(2020, 5, 1, 0, 0, 0))
+        # Not a month old.
+        d5 = self.mgr.create_download('https://example.com/5', session, skip_download=True)
+        d5.last_successful_download = local_timezone(datetime(2020, 6, 1, 0, 0, 0))
+        # An old, but pending download should not be deleted.
+        d6 = self.mgr.create_download('https://example.com/6', session, skip_download=True)
+        d6.last_successful_download = local_timezone(datetime(2020, 4, 1, 0, 0, 0))
+        d6.started()
+
+        self.mgr.delete_old_once_downloads()
+
+        # Two old downloads are deleted.
+        downloads = self.mgr._downloads_sorter(session.query(Download).all())
+        expected = [
+            dict(url='https://example.com/2', frequency=1, attempts=1, status='pending'),
+            dict(url='https://example.com/6', attempts=1, status='pending'),
+            dict(url='https://example.com/1', frequency=1, attempts=0, status='new'),
+            dict(url='https://example.com/5', attempts=0, status='new'),
+        ]
+        for download, expected in zip_longest(downloads, expected):
+            self.assertDictContains(download.dict(), expected)

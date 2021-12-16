@@ -196,7 +196,7 @@ async def post_download(request: Request, data: dict):
 async def get_downloads(request: Request):
     data = dict(
         recurring_downloads=download_manager.get_recurring_downloads(),
-        once_downloads=download_manager.get_once_downloads(limit=20),
+        once_downloads=download_manager.get_once_downloads(limit=1000),
     )
     return json_response(data)
 

@@ -383,6 +383,8 @@ class DownloadManager:
             _, session = get_db_context()
         query = session.query(Download).filter(
             Download.frequency != None  # noqa
+        ).order_by(
+            Download.next_download
         )
         if limit:
             query = query.limit(limit)
@@ -398,6 +400,8 @@ class DownloadManager:
             _, session = get_db_context()
         query = session.query(Download).filter(
             Download.frequency == None  # noqa
+        ).order_by(
+            Download.last_successful_download
         )
         if limit:
             query = query.limit(limit)
@@ -443,12 +447,29 @@ class DownloadManager:
         return False
 
     def kill_download(self, download_id: int):
-        logger.warning('DownloadManager.kill_download')
+        """
+        Fail a Download, if it is pending, kill the Downloader so the download stops.
+        """
         with get_db_session(commit=True) as session:
             download = self.get_download(session, id_=download_id)
             downloader = self.get_downloader(download.url)
-            downloader.kill()
+            logger.warning(f'Killing download {download_id} in {downloader}')
+            if download.status == 'pending':
+                downloader.kill()
             download.fail()
+
+    FINISHED_STATUSES = ('complete', 'failed')
+
+    def delete_old_once_downloads(self):
+        """
+        Delete all once-downloads that have expired.  Do not delete downloads that are new, or should be tried again.
+        """
+        with get_db_session(commit=True) as session:
+            downloads = self.get_once_downloads(session)
+            one_month = now() - timedelta(days=30)
+            for download in downloads:
+                if download.status in self.FINISHED_STATUSES and download.last_successful_download < one_month:
+                    session.delete(download)
 
 
 # The global DownloadManager.  This should be used everywhere!

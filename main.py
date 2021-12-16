@@ -130,6 +130,7 @@ def periodic_downloads(app: Sanic, loop):
 
     async def _periodic_download():
         download_manager.renew_recurring_downloads()
+        download_manager.delete_old_once_downloads()
         await download_manager.do_downloads()
         seconds = 60
         logger.debug(f'Waiting {seconds} seconds to start next download')

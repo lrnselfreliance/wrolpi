@@ -2,6 +2,7 @@ import json
 from http import HTTPStatus
 from itertools import zip_longest
 
+from wrolpi.dates import strptime
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Download
 from wrolpi.root_api import api_app
@@ -101,3 +102,32 @@ class TestRootAPI(TestAPI):
         request, response = api_app.test_client.get('/api/download')
         self.assertEqual(len(response.json['once_downloads']), 20)
         self.assertEqual(len(response.json['recurring_downloads']), 0)
+
+    @wrap_test_db
+    def test_download_sorter(self):
+        with get_db_session(commit=True) as session:
+            downloads = [
+                dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:01')),
+                dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:03')),
+                dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:02')),
+                dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:01')),
+                dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:04')),
+                dict(status='failed'),
+                dict(status='failed', last_successful_download=strptime('2020-01-01 00:00:01')),
+            ]
+            for download in downloads:
+                session.add(Download(url='https://example.com', **download))
+
+        expected = [
+            dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:01').timestamp()),
+            dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:04').timestamp()),
+            dict(status='failed', last_successful_download=strptime('2020-01-01 00:00:01').timestamp()),
+            dict(status='failed'),
+            dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:01').timestamp()),
+            dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:02').timestamp()),
+            dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:03').timestamp()),
+        ]
+        request, response = api_app.test_client.get('/api/download')
+        once_downloads = response.json['once_downloads']
+        for d1, d2 in zip(expected, once_downloads):
+            self.assertDictContains(d2, d1)

@@ -67,17 +67,6 @@ async def get_channels_video_count() -> Dict[int, int]:
         return video_counts
 
 
-@run_after(save_channels_config)
-def delete_channel(link):
-    with get_db_session(commit=True) as session:
-        try:
-            channel = session.query(Channel).filter_by(link=link).one()
-        except NoResultFound:
-            raise UnknownChannel()
-
-        channel.delete_with_videos()
-
-
 def get_channel(source_id: str = None, link: str = None, url: str = None, return_dict: bool = True
                 ) -> Union[dict, Channel]:
     """
@@ -234,6 +223,17 @@ def create_channel(data: dict, return_dict: bool = True) -> Union[Channel, dict]
             return channel.dict()
         else:
             return channel
+
+
+@run_after(save_channels_config)
+def delete_channel(link):
+    with get_db_session(commit=True) as session:
+        try:
+            channel = session.query(Channel).filter_by(link=link).one()
+        except NoResultFound:
+            raise UnknownChannel()
+
+        channel.delete_with_videos()
 
 
 def download_channel(link: str):

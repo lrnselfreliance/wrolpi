@@ -267,6 +267,9 @@ class Channel(ModelHelper, Base):
         session = Session.object_session(self)
         # Delete the video records, but not the video files!
         session.query(Video).filter_by(channel_id=self.id).delete()
+        if download := self.get_download():
+            session.delete(download)
+
         session.delete(self)
 
     def update(self, data: dict):

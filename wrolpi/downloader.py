@@ -13,7 +13,7 @@ from cachetools import cached, TTLCache
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import Session
 
-from wrolpi.common import Base, ModelHelper, logger
+from wrolpi.common import Base, ModelHelper, logger, iterify
 from wrolpi.dates import TZDateTime, now
 from wrolpi.db import get_db_session, get_db_curs, get_db_context
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
@@ -363,6 +363,7 @@ class DownloadManager:
     DOWNLOAD_SORT = ('pending', 'failed', 'new', 'deferred', 'complete')
 
     @classmethod
+    @iterify(list)
     def _downloads_sorter(cls, downloads: List[Download]):
         """
         Downloads should be displayed to the user by status.
@@ -373,7 +374,7 @@ class DownloadManager:
 
         # Yield the downloads in the order defined above.
         for sort in cls.DOWNLOAD_SORT:
-            yield from grouped_by_statuses[sort]
+            yield from grouped_by_statuses[sort]  # converted to a list by iterify()
 
     def get_recurring_downloads(self, session: Session = None, limit: int = None):
         """
@@ -384,12 +385,13 @@ class DownloadManager:
         query = session.query(Download).filter(
             Download.frequency != None  # noqa
         ).order_by(
-            Download.next_download
+            Download.next_download,  # Sort recurring by which will occur first, then by frequency.
+            Download.frequency,  # Sort by frequency if the next_download is the same.
         )
         if limit:
             query = query.limit(limit)
         downloads = query.all()
-        downloads = list(self._downloads_sorter(downloads))
+        downloads = self._downloads_sorter(downloads)
         return downloads
 
     def get_once_downloads(self, session: Session = None, limit: int = None):
@@ -406,7 +408,7 @@ class DownloadManager:
         if limit:
             query = query.limit(limit)
         downloads = query.all()
-        downloads = list(self._downloads_sorter(downloads))
+        downloads = self._downloads_sorter(downloads)
         return downloads
 
     def renew_recurring_downloads(self, session: Session = None):

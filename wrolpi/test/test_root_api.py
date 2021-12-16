@@ -94,17 +94,7 @@ class TestRootAPI(TestAPI):
             self.assertDictContains(download, expected)
 
     @wrap_test_db
-    def test_get_downloads_paged(self):
-        with get_db_session(commit=True) as session:
-            downloads = [Download(url=f'https://example.com/{i}') for i in range(25)]
-            session.add_all(downloads)
-
-        request, response = api_app.test_client.get('/api/download')
-        self.assertEqual(len(response.json['once_downloads']), 20)
-        self.assertEqual(len(response.json['recurring_downloads']), 0)
-
-    @wrap_test_db
-    def test_download_sorter(self):
+    def test_downloads_sorter(self):
         with get_db_session(commit=True) as session:
             downloads = [
                 dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:01')),
@@ -129,5 +119,34 @@ class TestRootAPI(TestAPI):
         ]
         request, response = api_app.test_client.get('/api/download')
         once_downloads = response.json['once_downloads']
-        for d1, d2 in zip(expected, once_downloads):
+        for d1, d2 in zip_longest(expected, once_downloads):
+            self.assertDictContains(d2, d1)
+
+    @wrap_test_db
+    def test_downloads_sorter_recurring(self):
+        with get_db_session(commit=True) as session:
+            downloads = [
+                dict(status='complete', frequency=1),
+                dict(status='complete', frequency=2, next_download=strptime('2020-01-01 00:00:01')),
+                dict(status='complete', frequency=2, next_download=strptime('2020-01-01 00:00:02')),
+                dict(status='pending', frequency=1),
+                dict(status='pending', frequency=4),
+                dict(status='failed', frequency=1),
+                dict(status='failed', frequency=1),
+            ]
+            for download in downloads:
+                session.add(Download(url='https://example.com', **download))
+
+        expected = [
+            dict(status='pending', frequency=1),
+            dict(status='pending', frequency=4),
+            dict(status='failed', frequency=1),
+            dict(status='failed'),
+            dict(status='complete', frequency=2, next_download=strptime('2020-01-01 00:00:01').timestamp()),
+            dict(status='complete', frequency=2, next_download=strptime('2020-01-01 00:00:02').timestamp()),
+            dict(status='complete', frequency=1),
+        ]
+        request, response = api_app.test_client.get('/api/download')
+        recurring_downloads = response.json['recurring_downloads']
+        for d1, d2 in zip_longest(expected, recurring_downloads):
             self.assertDictContains(d2, d1)

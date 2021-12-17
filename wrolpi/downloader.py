@@ -403,7 +403,8 @@ class DownloadManager:
         query = session.query(Download).filter(
             Download.frequency == None  # noqa
         ).order_by(
-            Download.last_successful_download
+            Download.last_successful_download,
+            Download.id,
         )
         if limit:
             query = query.limit(limit)

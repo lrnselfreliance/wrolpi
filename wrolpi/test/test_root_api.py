@@ -100,16 +100,20 @@ class TestRootAPI(TestAPI):
                 dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:01')),
                 dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:03')),
                 dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:02')),
-                dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:01')),
+                # last_successful_download are equal, so id is used next.
+                dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:01'), url='1'),
+                dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:01'), url='2'),
+
                 dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:04')),
                 dict(status='failed'),
                 dict(status='failed', last_successful_download=strptime('2020-01-01 00:00:01')),
             ]
             for download in downloads:
-                session.add(Download(url='https://example.com', **download))
+                session.add(Download(url=download.pop('url', 'https://example.com'), **download))
 
         expected = [
-            dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:01').timestamp()),
+            dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:01').timestamp(), url='1'),
+            dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:01').timestamp(), url='2'),
             dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:04').timestamp()),
             dict(status='failed', last_successful_download=strptime('2020-01-01 00:00:01').timestamp()),
             dict(status='failed'),

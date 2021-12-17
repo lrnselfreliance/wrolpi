@@ -3,7 +3,7 @@ from copy import copy
 from datetime import datetime
 from unittest import mock
 
-from youtube_dl.utils import UnsupportedError
+from yt_dlp.utils import UnsupportedError
 
 from modules.videos.channel.lib import spread_channel_downloads
 from modules.videos.downloader import find_all_missing_videos, VideoDownloader, \

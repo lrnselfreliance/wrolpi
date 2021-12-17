@@ -6,9 +6,9 @@ from abc import ABC
 from typing import Tuple, List
 
 from sqlalchemy.orm.exc import NoResultFound
-from youtube_dl import YoutubeDL
-from youtube_dl.extractor import YoutubeTabIE
-from youtube_dl.utils import UnsupportedError, DownloadError
+from yt_dlp import YoutubeDL
+from yt_dlp.extractor import YoutubeTabIE
+from yt_dlp.utils import UnsupportedError, DownloadError
 
 from wrolpi.common import logger, sanitize_link, extract_domain, \
     get_media_directory
@@ -36,7 +36,7 @@ ChannelIEs = {
 }
 
 PREFERRED_VIDEO_EXTENSION = 'mp4'
-PREFERRED_VIDEO_FORMATS = '22/135/18/43'
+PREFERRED_VIDEO_FORMAT = 'best[height=720]'
 
 
 def get_no_channel_directory():
@@ -90,7 +90,7 @@ class VideoDownloader(Downloader, ABC):
         """
         Match against all Youtube-DL Info Extractors, except those that match a Channel.
         """
-        for ie in YDL._ies:
+        for ie in YDL._ies.values():
             if ie.suitable(url) and not ChannelDownloader.valid_url(url):
                 try:
                     YDL.extract_info(url, download=False, process=False)
@@ -132,12 +132,13 @@ class VideoDownloader(Downloader, ABC):
             # Do the real download.
             file_name_format = '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s'
             cmd = [
-                'youtube-dl',
+                'yt-dlp',
                 '-cw',  # Continue downloads, do not clobber existing files.
-                '-f', PREFERRED_VIDEO_FORMATS,
-                '--write-sub',
-                '--write-auto-sub',
+                '-f', PREFERRED_VIDEO_FORMAT,
+                '--write-subs',
+                '--write-auto-subs',
                 '--write-thumbnail',
+                '--write-info-json',
                 '--merge-output-format', PREFERRED_VIDEO_EXTENSION,
                 '-o', file_name_format,
                 url,

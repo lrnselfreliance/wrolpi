@@ -183,13 +183,15 @@ class VideoDownloader(Downloader, ABC):
 
         # YoutubeDL expects specific options, add onto the default options
         config = load_downloader_config()
-        options = dict(config)
+        options = config.copy()
         options['outtmpl'] = f'{out_dir}/{config["file_name_format"]}'
+        # We don't need format when getting the filename.
+        del options['format']
 
         logger.debug(f'Downloading {url} to {out_dir}')
 
         # Create a new YoutubeDL for the output directory.
-        ydl = YoutubeDL(options.copy())
+        ydl = YoutubeDL(options)
         ydl.params['logger'] = ydl_logger
         ydl.add_default_info_extractors()
 

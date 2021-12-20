@@ -112,14 +112,14 @@ class TestRootAPI(TestAPI):
                 session.add(Download(url=download.pop('url', 'https://example.com'), **download))
 
         expected = [
+            dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:04').timestamp()),
             dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:01').timestamp(), url='1'),
             dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:01').timestamp(), url='2'),
-            dict(status='pending', last_successful_download=strptime('2020-01-01 00:00:04').timestamp()),
-            dict(status='failed', last_successful_download=strptime('2020-01-01 00:00:01').timestamp()),
             dict(status='failed'),
-            dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:01').timestamp()),
-            dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:02').timestamp()),
+            dict(status='failed', last_successful_download=strptime('2020-01-01 00:00:01').timestamp()),
             dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:03').timestamp()),
+            dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:02').timestamp()),
+            dict(status='complete', last_successful_download=strptime('2020-01-01 00:00:01').timestamp()),
         ]
         request, response = api_app.test_client.get('/api/download')
         once_downloads = response.json['once_downloads']

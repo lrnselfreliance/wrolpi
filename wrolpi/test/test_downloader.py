@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 from wrolpi import downloader
 from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_context
-from wrolpi.downloader import Downloader, get_downloads, get_download, Download
+from wrolpi.downloader import Downloader, Download
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.test.common import wrap_test_db, TestAPI
 
@@ -77,19 +77,19 @@ class TestDownloader(TestAPI):
     def test_ensure_download(self):
         _, session = get_db_context()
 
-        self.assertEqual(len(get_downloads()), 0)
+        self.assertEqual(len(self.mgr.get_downloads(session)), 0)
 
         http_downloader = HTTPDownloader()
         http_downloader.do_download.return_value = False
         self.mgr.register_downloader(http_downloader)
 
         self.mgr.create_download('https://example.com', session)
-        download = get_download('https://example.com', session)
+        download = self.mgr.get_download(session, 'https://example.com')
         self.assertEqual(download.url, 'https://example.com')
 
-        self.assertEqual(len(get_downloads()), 1)
-        self.assertIsNotNone(get_download('https://example.com', session))
-        self.assertIsNone(get_download('https://example.com/not downloading', session))
+        self.assertEqual(len(self.mgr.get_downloads(session)), 1)
+        self.assertIsNotNone(self.mgr.get_download(session, 'https://example.com'))
+        self.assertIsNone(self.mgr.get_download(session, 'https://example.com/not downloading'))
 
     @wrap_test_db
     def test_do_downloads(self):
@@ -107,7 +107,7 @@ class TestDownloader(TestAPI):
         self.mgr.create_download('https://example.com', session)
         http_downloader.do_download.assert_called_once()
         permissive_downloader.do_download.assert_not_called()
-        self.assertIsNotNone(get_download('https://example.com', session))
+        self.assertIsNotNone(self.mgr.get_download(session, 'https://example.com'))
 
         http_downloader.do_download.reset_mock()
 
@@ -115,20 +115,20 @@ class TestDownloader(TestAPI):
         self.mgr.create_download('foo', session)
         http_downloader.do_download.assert_not_called()
         permissive_downloader.do_download.assert_called_once()
-        download = get_download('foo', session)
+        download = self.mgr.get_download(session, 'foo')
         self.assertEqual(download.attempts, 1)
 
         # try again
         self.mgr.create_download('foo', session)
         self.mgr._do_downloads(session)
-        download = get_download('foo', session)
+        download = self.mgr.get_download(session, 'foo')
         self.assertEqual(download.attempts, 2)
 
         # finally success
         permissive_downloader.do_download.return_value = True
         self.mgr.create_download('foo', session)
         self.mgr._do_downloads(session)
-        download = get_download('foo', session)
+        download = self.mgr.get_download(session, 'foo')
         self.assertEqual(download.status, 'complete')
 
         # No downloads left.

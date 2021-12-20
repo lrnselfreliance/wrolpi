@@ -7,7 +7,7 @@ from datetime import timedelta
 from enum import Enum
 from functools import partial
 from operator import attrgetter
-from typing import List, Union, Optional
+from typing import List, Optional
 
 from cachetools import cached, TTLCache
 from sqlalchemy import Column, Integer, String
@@ -235,9 +235,15 @@ class DownloadManager:
             last = download
             yield download
 
-    @staticmethod
-    def get_conflicting_download(url: str, session: Session) -> Union[Download]:
-        download = session.query(Download).filter_by(url=url).one_or_none()
+    def get_or_create_download(self, url: str, session: Session) -> Download:
+        """
+        Get a Download by its URL, if it cannot be found create one.
+        """
+        download = self.get_download(session, url=url)
+        if not download:
+            download = Download(url=url, status='new')
+            session.add(download)
+            session.flush()
         return download
 
     def create_download(self, url: str, session, skip_download: bool = False, reset_attempts: bool = False) -> Download:
@@ -247,14 +253,9 @@ class DownloadManager:
         # Make sure the URL can be downloaded.
         self.get_downloader(url)
 
-        download = self.get_conflicting_download(url, session)
-        if not download:
-            download = Download(url=url, status='new')
-            session.add(download)
-            session.flush()
-        else:
-            # Download may have failed, try again.
-            download.renew(reset_attempts=reset_attempts)
+        download = self.get_or_create_download(url, session)
+        # Download may have failed, try again.
+        download.renew(reset_attempts=reset_attempts)
 
         session.commit()
 
@@ -269,6 +270,37 @@ class DownloadManager:
             self.start_downloads()
 
         return download
+
+    def create_downloads(self, urls: List[str], session: Session, skip_download: bool = False,
+                         reset_attempts: bool = False) -> List[Download]:
+        """
+        Schedule all URLs for download.  If one cannot be downloaded, none will be added.
+        """
+        downloads = []
+
+        # Verify that all URLs can be downloaded.
+        for url in urls:
+            self.get_downloader(url)
+
+        with session.transaction:
+            for url in urls:
+                download = self.get_or_create_download(url, session)
+                # Download may have failed, try again.
+                download.renew(reset_attempts=reset_attempts)
+                downloads.append(download)
+            session.commit()
+
+        if skip_download is True:
+            return downloads
+
+        if PYTEST:
+            # Download now (for testing).
+            self._do_downloads(session)
+        else:
+            # Start downloading ASAP.
+            self.start_downloads()
+
+        return downloads
 
     def _do_downloads(self, session=None):
         # This is a long-running function, lets get a session that can be used for a long time.
@@ -349,6 +381,9 @@ class DownloadManager:
             curs.execute("UPDATE download SET status='new' WHERE status='pending' OR status='deferred'")
 
     def recurring_download(self, url: str, frequency: int, skip_download: bool = False) -> Download:
+        """
+        Schedule a recurring download.
+        """
         with get_db_session(commit=True) as session:
             download = self.create_download(url, session=session, skip_download=True)
             download.frequency = frequency
@@ -403,7 +438,7 @@ class DownloadManager:
         query = session.query(Download).filter(
             Download.frequency == None  # noqa
         ).order_by(
-            Download.last_successful_download,
+            Download.last_successful_download.desc(),
             Download.id,
         )
         if limit:
@@ -432,7 +467,15 @@ class DownloadManager:
             self.start_downloads()
 
     @staticmethod
+    def get_downloads(session: Session) -> List[Download]:
+        downloads = session.query(Download).all()
+        return list(downloads)
+
+    @staticmethod
     def get_download(session: Session, url: str = None, id_: int = None) -> Optional[Download]:
+        """
+        Attempt to find a Download by its URL or by its id.
+        """
         query = session.query(Download)
         if url:
             return query.filter_by(url=url).one_or_none()
@@ -440,6 +483,9 @@ class DownloadManager:
             return query.filter_by(id=id_).one_or_none()
 
     def delete_download(self, download_id: int, session: Session = None):
+        """
+        Delete a Download.  Returns True if a Download was deleted, otherwise return False.
+        """
         if not session:
             _, session = get_db_context()
         download = self.get_download(session, id_=download_id)
@@ -477,41 +523,3 @@ class DownloadManager:
 
 # The global DownloadManager.  This should be used everywhere!
 download_manager = DownloadManager()
-
-
-def download_urls(urls: List[str], reset_attempts=False):
-    downloads = []
-    with get_db_session(commit=True) as session:
-        for url in urls:
-            download = download_manager.create_download(url, session, skip_download=True, reset_attempts=reset_attempts)
-            downloads.append(download)
-
-    download_manager.start_downloads()
-    return downloads
-
-
-def validate_urls(urls: List[str]) -> List[str]:
-    """
-    Check that each URL has an assigned Downloader.  Return any that cannot be downloaded.
-    """
-    invalid_urls = []
-    for url in urls:
-        if not download_manager.valid_url(url):
-            invalid_urls.append(url)
-    return invalid_urls
-
-
-def get_downloads(session: Session = None):
-    if session:
-        downloads = session.query(Download).all()
-        return downloads
-    else:
-        with get_db_session() as session:
-            downloads = session.query(Download).all()
-            return downloads
-
-
-def get_download(url: str, session: Session):
-    url = url.strip()
-    download = session.query(Download).filter_by(url=url).one_or_none()
-    return download

@@ -18,7 +18,7 @@ from wrolpi import downloader
 from wrolpi.common import set_sanic_url_parts, logger, get_config, wrol_mode_enabled, save_settings_config, \
     Base, get_media_directory, wrol_mode_check
 from wrolpi.dates import set_timezone
-from wrolpi.downloader import download_urls, download_manager
+from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, InvalidTimezone
 from wrolpi.media_path import MediaPath
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, EchoResponse, \
@@ -180,12 +180,9 @@ def valid_regex(_: Request, data: dict):
 )
 @wrol_mode_check
 async def post_download(request: Request, data: dict):
+    # URLs are provided in a textarea, lets split all lines.
     urls = [i.strip() for i in str(data['urls']).strip().splitlines()]
-    invalid_urls = downloader.validate_urls(urls)
-    if invalid_urls:
-        return response.json({'error': 'Invalid URLs', 'invalid_urls': invalid_urls})
-
-    download_urls(urls, reset_attempts=True)
+    download_manager.create_downloads(urls)
     return response.empty()
 
 

@@ -87,12 +87,16 @@ export function uploadDate(d) {
 }
 
 export function VideoCard({video}) {
-    let channel = video.channel;
-    let channel_url = `/videos/channel/${channel.link}/video`;
-
+    let video_url = `/videos/video/${video.id}`;
     let upload_date = uploadDate(video.upload_date);
-    let video_url = `/videos/channel/${channel.link}/video/${video.id}`;
-    let poster_url = video.poster_path ? `/media/${channel.directory}/${encodeURIComponent(video.poster_path)}` : null;
+    // A video may not have a channel.
+    let channel = video.channel ? video.channel : null;
+    let channel_url = null;
+    if (channel) {
+        channel_url = `/videos/channel/${channel.link}/video`;
+        video_url = `/videos/channel/${channel.link}/video/${video.id}`;
+    }
+    let poster_url = video.poster_path ? `/media/${encodeURIComponent(video.poster_path)}` : null;
 
     return (
         <Card style={{'width': '18em', 'margin': '1em'}}>
@@ -110,9 +114,10 @@ export function VideoCard({video}) {
                 </Card.Header>
                 <Card.Description>
                     <Container textAlign='left'>
-                        <Link to={channel_url} className="no-link-underscore video-card-link">
-                            <b>{channel.name}</b>
-                        </Link>
+                        {channel &&
+                            <Link to={channel_url} className="no-link-underscore video-card-link">
+                                <b>{channel.name}</b>
+                            </Link>}
                         <p>{upload_date}</p>
                     </Container>
                 </Card.Description>
@@ -229,6 +234,27 @@ export function humanFileSize(bytes, si = false, dp = 1) {
     return bytes.toFixed(dp) + ' ' + units[u];
 }
 
+export function humanNumber(num, dp = 1) {
+    // Convert large numbers to a more human readable format.
+    // >> humanNumber(1000)
+    // 1.0k
+    // >> humanNumber(1500000)
+    // 1.5m
+    const divisor = 1000;
+    if (Math.abs(num) < divisor) {
+        return num;
+    }
+    const units = ['k', 'm', 'b'];
+    let i = -1;
+    const r = 10 ** dp;
+    do {
+        num /= divisor;
+        ++i;
+    } while (Math.round(Math.abs(num) * r) / r >= divisor && i < units.length - 1);
+
+    return num.toFixed(dp) + units[i];
+}
+
 export class APIForm extends React.Component {
 
     constructor(props) {
@@ -317,7 +343,7 @@ export class APIForm extends React.Component {
         this.setState({
             disabled: true,
             error: false,
-            errors: this.getEmptyErrors,
+            errors: this.getEmptyErrors(),
             loading: true,
             success: false,
         })

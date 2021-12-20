@@ -1,5 +1,6 @@
 import json
-import logging
+import json
+import multiprocessing
 import re
 from datetime import datetime, date
 from decimal import Decimal
@@ -8,18 +9,20 @@ from http import HTTPStatus
 from pathlib import Path
 
 from pytz import UnknownTimeZoneError
-from sanic import Sanic, response, Blueprint
+from sanic import Sanic, response, Blueprint, __version__ as sanic_version
 from sanic.request import Request
 from sanic.response import HTTPResponse
 from sanic_cors import CORS
-from sanic_openapi import swagger_blueprint
 
-from wrolpi.common import EVENTS, set_sanic_url_parts, logger, get_config, wrol_mode_enabled, save_settings_config, \
-    Base
+from wrolpi.common import set_sanic_url_parts, logger, get_config, wrol_mode_enabled, save_settings_config, \
+    Base, get_media_directory, wrol_mode_check
 from wrolpi.dates import set_timezone
+from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, InvalidTimezone
+from wrolpi.media_path import MediaPath
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, EchoResponse, \
-    EventsResponse, validate_doc
+    validate_doc, DownloadRequest
+from wrolpi.vars import DOCKERIZED
 
 logger = logger.getChild(__name__)
 
@@ -38,10 +41,9 @@ CORS(
     }
 )
 
-root_api = Blueprint('Root API', url_prefix='/api')
+root_api = Blueprint('RootAPI', url_prefix='/api')
 
-# Attach the Sanic OpenAPI blueprint to the API App.  This will generate our API docs.
-BLUEPRINTS = [swagger_blueprint, root_api, ]
+BLUEPRINTS = [root_api, ]
 
 
 def get_blueprint(name: str, url_prefix: str) -> Blueprint:
@@ -57,29 +59,29 @@ def add_blueprint(bp: Blueprint):
     BLUEPRINTS.append(bp)
 
 
-def run_webserver(host: str, port: int, workers: int = 8):
+def run_webserver(loop, host: str, port: int, workers: int = 8):
     set_sanic_url_parts(host, port)
 
     # Attach all blueprints after they have been defined.
     for bp in BLUEPRINTS:
         api_app.blueprint(bp)
 
-    # Sanic should match our logging level.
-    debug = logger.level == logging.DEBUG
     # TODO remove the auto reload when development is stable
-    api_app.run(host, port, workers=workers, debug=debug, auto_reload=True)
+    kwargs = dict(host=host, port=port, workers=workers, auto_reload=DOCKERIZED)
+    logger.debug(f'Running Sanic {sanic_version} with kwargs {kwargs}')
+    return api_app.run(**kwargs)
 
 
 def init_parser(parser):
     # Called by WROLPI's main() function
     parser.add_argument('-H', '--host', default=DEFAULT_HOST, help='What network interface to connect webserver')
     parser.add_argument('-p', '--port', default=DEFAULT_PORT, type=int, help='What port to connect webserver')
-    parser.add_argument('-w', '--workers', default=4, type=int, help='How many web workers to run')
+    parser.add_argument('-w', '--workers', default=multiprocessing.cpu_count(), type=int,
+                        help='How many web workers to run')
 
 
-def main(args):
-    run_webserver(args.host, args.port, args.workers)
-    return 0
+def main(loop, args):
+    return run_webserver(loop, args.host, args.port, args.workers)
 
 
 index_html = '''
@@ -120,16 +122,6 @@ async def echo(request: Request):
         args=request.args,
     )
     return response.json(ret)
-
-
-@root_api.get('/events')
-@validate_doc(
-    summary='Get a list of event feeds',
-    produces=EventsResponse,
-)
-def events(_: Request):
-    e = [{'name': name, 'is_set': event.is_set()} for (name, event) in EVENTS]
-    return response.json({'events': e})
 
 
 @root_api.route('/settings', methods=['GET', 'OPTIONS'])
@@ -180,23 +172,72 @@ def valid_regex(_: Request, data: dict):
         return response.json({'valid': False, 'regex': data['regex']}, HTTPStatus.BAD_REQUEST)
 
 
+@root_api.post('/download')
+@validate_doc(
+    summary='Download the many URLs that are provided.',
+    consumes=DownloadRequest,
+)
+@wrol_mode_check
+async def post_download(request: Request, data: dict):
+    # URLs are provided in a textarea, lets split all lines.
+    urls = [i.strip() for i in str(data['urls']).strip().splitlines()]
+    download_manager.create_downloads(urls)
+    return response.empty()
+
+
+@root_api.get('/download')
+@validate_doc(
+    summary='Get all Downloads that need to be processed.',
+)
+async def get_downloads(request: Request):
+    data = dict(
+        recurring_downloads=download_manager.get_recurring_downloads(),
+        once_downloads=download_manager.get_once_downloads(limit=1000),
+    )
+    return json_response(data)
+
+
+@root_api.post('/download/<download_id:int>/kill')
+async def kill_download(request: Request, download_id: int):
+    download_manager.kill_download(download_id)
+    return response.empty()
+
+
+@root_api.delete('/download/<download_id:integer>')
+@wrol_mode_check
+async def delete_download(request: Request, download_id: int):
+    deleted = download_manager.delete_download(download_id)
+    return response.empty(HTTPStatus.NO_CONTENT if deleted else HTTPStatus.NOT_FOUND)
+
+
 class CustomJSONEncoder(json.JSONEncoder):
 
     def default(self, obj):
-        if isinstance(obj, datetime):
-            return obj.timestamp()
-        elif isinstance(obj, date):
-            return datetime(obj.year, obj.month, obj.day).timestamp()
-        elif isinstance(obj, Decimal):
-            return str(obj)
-        elif isinstance(obj, Base):
-            if hasattr(obj, 'dict'):
-                return obj.dict()
-        elif isinstance(obj, Path):
-            return str(obj)
-        elif hasattr(obj, '__json__'):
-            return obj.__json__()
-        return super(CustomJSONEncoder, self).default(obj)
+        try:
+            if hasattr(obj, '__json__'):
+                # Get __json__ before others.
+                return obj.__json__()
+            elif isinstance(obj, datetime):
+                return obj.timestamp()
+            elif isinstance(obj, date):
+                return datetime(obj.year, obj.month, obj.day).timestamp()
+            elif isinstance(obj, Decimal):
+                return str(obj)
+            elif isinstance(obj, Base):
+                if hasattr(obj, 'dict'):
+                    return obj.dict()
+            elif isinstance(obj, Path):
+                return str(obj)
+            elif isinstance(obj, MediaPath):
+                media_directory = get_media_directory()
+                path = obj.path.relative_to(media_directory)
+                if str(path) == '.':
+                    return ''
+                return str(path)
+            return super(CustomJSONEncoder, self).default(obj)
+        except Exception as e:
+            logger.fatal(f'Failed to JSON encode {obj}', exc_info=e)
+            raise
 
 
 @wraps(response.json)

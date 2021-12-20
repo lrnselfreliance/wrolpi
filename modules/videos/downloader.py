@@ -1,21 +1,27 @@
 #! /usr/bin/env python3
+import json
 import pathlib
 import re
-from queue import Queue
-from random import shuffle
-from typing import Tuple, List, Dict
+from abc import ABC
+from typing import Tuple, List
 
-from sqlalchemy import or_
 from sqlalchemy.orm.exc import NoResultFound
-from youtube_dl import YoutubeDL
+from yt_dlp import YoutubeDL
+from yt_dlp.extractor import YoutubeTabIE
+from yt_dlp.utils import UnsupportedError, DownloadError
 
-from wrolpi.common import logger, ProgressReporter, run_after, get_absolute_media_path
-from wrolpi.dates import now, today
+from wrolpi.common import logger, sanitize_link, extract_domain, \
+    get_media_directory
+from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs
-from wrolpi.errors import UnknownChannel, ChannelURLEmpty
+from wrolpi.downloader import Downloader, Download
+from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
+from wrolpi.vars import PYTEST
+from .channel.lib import create_channel, get_channel
 from .common import load_downloader_config, update_view_count
-from .lib import save_channels_config, upsert_video
+from .lib import upsert_video, _refresh_videos
 from .models import Video, Channel
+from .video_url_resolver import video_url_resolver
 
 logger = logger.getChild(__name__)
 ydl_logger = logger.getChild('youtube-dl')
@@ -24,17 +30,219 @@ YDL = YoutubeDL()
 YDL.params['logger'] = ydl_logger
 YDL.add_default_info_extractors()
 
+# Channels are handled differently than a single video.
+ChannelIEs = {
+    YoutubeTabIE,
+}
 
-def update_channel(channel=None, link: str = None):
+PREFERRED_VIDEO_EXTENSION = 'mp4'
+PREFERRED_VIDEO_FORMAT = 'best[height=720]'
+
+
+def get_no_channel_directory():
+    return get_media_directory() / 'videos/NO CHANNEL'
+
+
+class ChannelDownloader(Downloader, ABC):
+    """
+    Handling downloading of all Videos in a Channel.
+    """
+
+    @staticmethod
+    def valid_url(url) -> bool:
+        for ie in ChannelIEs:
+            if ie.suitable(url):
+                return True
+        return False
+
+    def do_download(self, download: Download):
+        """
+        Update a Channel's catalog, then schedule downloads of every missing video.
+        """
+        with get_db_session() as session:
+            channel = session.query(Channel).filter_by(url=download.url).one()
+
+        update_channel(channel)
+
+        domain = extract_domain(download.url)
+        missing_videos = find_all_missing_videos(channel.link)
+        with get_db_session(commit=True) as session:
+            for video_id, source_id, missing_video in missing_videos:
+                url = video_url_resolver(domain, missing_video)
+                # Schedule any missing videos for download.
+                self.manager.create_download(url, session, skip_download=True)
+
+        if PYTEST:
+            self.manager.do_downloads_sync()
+        else:
+            self.manager.start_downloads()
+
+        return True
+
+
+class VideoDownloader(Downloader, ABC):
+    """
+    Download a single video.  Store the video in it's channel's directory, otherwise store it in `videos/NO CHANNEL`.
+    """
+
+    @staticmethod
+    def valid_url(url) -> bool:
+        """
+        Match against all Youtube-DL Info Extractors, except those that match a Channel.
+        """
+        for ie in YDL._ies.values():
+            if ie.suitable(url) and not ChannelDownloader.valid_url(url):
+                try:
+                    YDL.extract_info(url, download=False, process=False)
+                    return True
+                except UnsupportedError:
+                    logger.debug(f'Video downloader extract_info failed for {url}')
+                    return False
+                except DownloadError:
+                    logger.debug(f'Video downloader extract_info failed for {url}')
+                    return False
+        return False
+
+    def do_download(self, download: Download):
+        if download.attempts >= 10:
+            raise UnrecoverableDownloadError('Max download attempts reached')
+
+        url = download.url
+        try:
+            info = YDL.extract_info(url, download=False, process=False)
+        except UnsupportedError as e:
+            # Video wasn't really valid... probably the GenericIE.
+            raise UnrecoverableDownloadError() from e
+
+        channel_name = info.get('channel')
+        channel_id = info.get('channel_id')
+        channel = None
+        if channel_name or channel_id:
+            channel_url = info.get('channel_url')
+            channel = get_or_create_channel(channel_id, None, channel_url, channel_name)
+
+        # Use the default directory if this video has no channel.
+        out_dir = get_no_channel_directory()
+        if channel:
+            out_dir = channel.directory.path
+        out_dir.mkdir(exist_ok=True)
+
+        try:
+            video_path, entry = self.prepare_filename(url, out_dir)
+            # Do the real download.
+            file_name_format = '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s'
+            cmd = [
+                'yt-dlp',
+                '-cw',  # Continue downloads, do not clobber existing files.
+                '-f', PREFERRED_VIDEO_FORMAT,
+                '--write-subs',
+                '--write-auto-subs',
+                '--write-thumbnail',
+                '--write-info-json',
+                '--merge-output-format', PREFERRED_VIDEO_EXTENSION,
+                '-o', file_name_format,
+                url,
+            ]
+            return_code = self.process_runner(url, cmd, out_dir)
+
+            if return_code != 0:
+                raise ValueError(f'youtube-dl exited with {return_code}')
+
+            if not video_path.is_file():
+                raise ValueError(f'Video file could not be found!  {video_path}')
+        except UnrecoverableDownloadError:
+            raise
+        except Exception as e:
+            logger.warning(f'Failed to download "{info["title"]}"', exc_info=e)
+            if _skip_download(e):
+                # The video failed to download, and the error will never be fixed.  Skip it forever.
+                source_id = info.get('id')
+                logger.warning(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
+                               f'attempt to download it again.')
+
+                with get_db_session(commit=True) as session:
+                    channel = session.query(Channel).filter_by(id=channel.id).one()
+                    channel.add_video_to_skip_list(source_id)
+            return
+
+        with get_db_session(commit=True) as session:
+            # If the video is from a channel, it will already be in the database.
+            source_id = entry['id']
+            existing_video = session.query(Video).filter_by(source_id=source_id).one_or_none()
+            id_ = existing_video.id if existing_video else None
+
+            upsert_video(session, video_path, channel, id_=id_)
+
+        # Successful download.
+        return True
+
+    @staticmethod
+    def prepare_filename(url: str, out_dir: pathlib.Path) -> Tuple[pathlib.Path, dict]:
+        if not out_dir.is_dir():
+            raise ValueError(f'Output directory does not exist! {out_dir=}')
+
+        # YoutubeDL expects specific options, add onto the default options
+        config = load_downloader_config()
+        options = config.copy()
+        options['outtmpl'] = f'{out_dir}/{config["file_name_format"]}'
+        # We don't need format when getting the filename.
+        del options['format']
+
+        logger.debug(f'Downloading {url} to {out_dir}')
+
+        # Create a new YoutubeDL for the output directory.
+        ydl = YoutubeDL(options)
+        ydl.params['logger'] = ydl_logger
+        ydl.add_default_info_extractors()
+
+        # Perform the real download.  This saves multiple files.
+        entry = ydl.extract_info(url, download=False, process=True)
+        final_filename = pathlib.Path(ydl.prepare_filename(entry))
+        return final_filename, entry
+
+
+channel_downloader = ChannelDownloader()
+# Videos may match the ChannelDownloader, give it a higher priority.
+video_downloader = VideoDownloader(40)
+
+
+def get_or_create_channel(source_id: str = None, link: str = None, url: str = None, name: str = None) -> Channel:
+    """
+    Attempt to find a Channel using the provided params.  The params are in order of reliability.
+
+    Creates a new Channel if one cannot be found.
+    """
+    if not link and name:
+        link = sanitize_link(name)
+
+    try:
+        channel = get_channel(link=link, source_id=source_id, url=url, return_dict=False)
+        return channel
+    except UnknownChannel:
+        pass
+
+    channel_directory = get_media_directory() / f'videos/{name}'
+    data = dict(
+        name=name,
+        url=url,
+        link=link,
+        domain=extract_domain(url),
+        directory=str(channel_directory),
+        source_id=source_id,
+    )
+    channel = create_channel(data, return_dict=False)
+    # Create the directory now that the channel is approved.
+    channel_directory.mkdir(exist_ok=True)
+
+    return channel
+
+
+def update_channel(channel: Channel):
     """
     Connect to the Channel's host website and pull a catalog of all videos.  Insert any new videos into the DB.
 
     It is expected that any missing videos will be downloaded later.
     """
-    with get_db_session() as session:
-        if not channel:
-            channel = session.query(Channel).filter_by(link=link).one()
-
     logger.info(f'Downloading video list for {channel.name} at {channel.url}  This may take several minutes.')
     info = YDL.extract_info(channel.url, download=False, process=False)
     if 'url' in info:
@@ -63,16 +271,19 @@ def update_channel(channel=None, link: str = None):
         logger.warning(f'entries: {entries}')
         raise KeyError('No id key for entry!') from e
 
+    # In order to store the Video's URL, we will need a quick lookup.
+    urls = {i['id']: i.get('webpage_url') for i in entries}
+
     with get_db_session(commit=True) as session:
         # Get the channel in this new context.
         channel = session.query(Channel).filter_by(id=channel.id).one()
 
         channel.info_json = info
         channel.info_date = now()
-        channel.increment_next_download()
+        channel.source_id = info.get('id')
 
         with get_db_curs() as curs:
-            # Insert any new videos.
+            # Get all known videos in this channel.
             query = 'SELECT source_id FROM video WHERE channel_id=%s AND source_id IS NOT NULL'
             curs.execute(query, (channel.id,))
             known_source_ids = {i[0] for i in curs.fetchall()}
@@ -82,57 +293,17 @@ def update_channel(channel=None, link: str = None):
         logger.info(f'Got {len(new_source_ids)} new videos for channel {channel.name}')
         channel_id = channel.id
         for source_id in new_source_ids:
-            session.add(Video(source_id=source_id, channel_id=channel_id))
+            url = urls.get(source_id)
+            session.add(Video(source_id=source_id, channel_id=channel_id, url=url))
+
+    # Write the Channel's info to a JSON file.
+    if channel.directory:
+        info_json_path = channel.directory.path / f'{channel.name}.info.json'
+        with info_json_path.open('wt') as fh:
+            json.dump(info, fh, indent=2)
 
     # Update all view counts using the latest from the Channel's info_json.
     update_view_count(channel_id)
-
-
-def update_channels(reporter: ProgressReporter, link: str = None):
-    """Update all information for each channel.  (No downloads performed)"""
-
-    with get_db_session() as session:
-        if session.query(Channel).count() == 0:
-            raise UnknownChannel('No channels exist yet')
-
-        if link:
-            try:
-                channel = session.query(Channel).filter_by(link=link).one()
-            except NoResultFound:
-                raise UnknownChannel(f'No channel with link: {link}')
-            channels = [channel, ]
-        else:
-            channels = session.query(Channel).filter(
-                Channel.url != None,  # noqa
-                Channel.url != '',
-                or_(
-                    Channel.next_download == None,  # noqa
-                    Channel.next_download <= today(),
-                )
-            ).all()
-
-        if len(channels) == 0:
-            logger.warning(f'All channels are up to date')
-
-    reporter.set_progress_total(0, len(channels))
-    reporter.send_progress(0, 0, f'{len(channels)} channels scheduled for update')
-
-    # Randomize downloading of channels.
-    shuffle(channels)
-
-    logger.debug(f'Getting info for {len(channels)} channels')
-    for idx, channel in enumerate(channels):
-        reporter.send_progress(0, idx, f'Getting video list for {channel.name}')
-        try:
-            update_channel(channel)
-        except Exception:
-            logger.critical(f'Unable to get video list for {channel.name}', exc_info=True)
-            continue
-
-    if channels:
-        reporter.send_progress(0, len(channels), 'Done downloading video lists')
-    else:
-        reporter.finish(0, 'Done downloading video lists')
 
 
 def _find_all_missing_videos(link: str = None) -> List[Tuple]:
@@ -162,11 +333,12 @@ def _find_all_missing_videos(link: str = None) -> List[Tuple]:
             WHERE
                 channel.url IS NOT NULL
                 AND channel.url != ''
-                AND source_id IS NOT NULL
+                AND video.source_id IS NOT NULL
                 {where}
-                AND channel_id IS NOT NULL
+                AND video.channel_id IS NOT NULL
                 AND (video_path IS NULL OR video_path = '' OR poster_path IS NULL OR poster_path = '')
         '''
+        logger.debug(query)
         curs.execute(query, params)
         missing_videos = list(curs.fetchall())
         return missing_videos
@@ -192,6 +364,27 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
 
         # Get all channels while in the db context.
         channels = list(channels)
+
+    # Check that each channel has some videos.  We can't be sure what is missing if we don't know what we have.
+    for channel in channels:
+        refresh = False
+        with get_db_curs() as curs:
+            curs.execute('''
+                SELECT
+                    COUNT(v.id)
+                FROM
+                    channel c
+                    LEFT OUTER JOIN video v on c.id = v.channel_id
+                WHERE
+                    c.id = %s
+            ''', (channel.id,))
+            video_count = curs.fetchall()[0]
+            if video_count == 0:
+                # No videos for this channel.  We can't be sure if any videos are missing without a refresh.
+                refresh = True
+        if refresh:
+            # Refresh this channel's videos.
+            _refresh_videos([channel.link])
 
     channels = {i.id: i for i in channels}
 
@@ -221,31 +414,7 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
         match_regex: re.compile = match_regexen.get(channel_id)
         if not match_regex or (match_regex and missing_video['title'] and match_regex.match(missing_video['title'])):
             # No title match regex, or the title matches the regex.
-            yield channel, id_, missing_video
-
-
-def download_video(channel: Channel, video: Dict) -> Tuple[pathlib.Path, Dict]:
-    """
-    Download a video (and associated posters/etc) to it's channel's directory.
-
-    :param channel:
-    :param video: A YoutubeDL info entry dictionary
-    :return:
-    """
-    # YoutubeDL expects specific options, add onto the default options
-    config = load_downloader_config()
-    options = dict(config)
-    directory = get_absolute_media_path(channel.directory)
-    options['outtmpl'] = f'{directory}/{config["file_name_format"]}'
-
-    ydl = YoutubeDL(options)
-    ydl.add_default_info_extractors()
-    source_id = video['id']
-    url = f'https://www.youtube.com/watch?v={source_id}'
-    entry = ydl.extract_info(url, download=True, process=True)
-    final_filename = ydl.prepare_filename(entry)
-    final_filename = pathlib.Path(final_filename)
-    return final_filename, entry
+            yield id_, source_id, missing_video
 
 
 UNRECOVERABLE_ERRORS = {
@@ -268,42 +437,6 @@ def _skip_download(error):
     return False
 
 
-@run_after(save_channels_config)
-def download_all_missing_videos(reporter: ProgressReporter, link: str = None):
-    """Find any videos identified by the info packet that haven't yet been downloaded, download them."""
-    missing_videos = list(find_all_missing_videos(link))
-    reporter.set_progress_total(1, len(missing_videos))
-    reporter.message(1, f'Found {len(missing_videos)} missing videos.')
-
-    for idx, (channel, id_, missing_video) in enumerate(missing_videos):
-        reporter.send_progress(1, idx, f'Downloading {channel.name}: {missing_video["title"]}')
-        try:
-            video_path, info_json = download_video(channel, missing_video)
-        except Exception as e:
-            logger.warning(f'Failed to download "{missing_video["title"]}"', exc_info=e)
-            if _skip_download(e):
-                # The video failed to download, and the error will never be fixed.  Skip it forever.
-                source_id = missing_video.get('id')
-                logger.warning(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
-                               f'attempt to download it again.')
-
-                with get_db_session(commit=True) as session:
-                    channel = session.query(Channel).filter_by(id=channel.id).one()
-                    channel.add_video_to_skip_list(source_id)
-
-            reporter.error(1, f'Failed to download "{missing_video["title"]}", see server logs...')
-            continue
-
-        with get_db_session(commit=True) as session:
-            upsert_video(session, video_path, channel, id_=id_, info_json=info_json)
-
-    reporter.finish(1, 'All videos are downloaded')
-
-
-def main(args=None):
-    """Find and download any missing videos.  Parse any arguments passed by the cmd-line."""
-    q = Queue()
-    reporter = ProgressReporter(q, 2)
-    update_channels(reporter)
-    download_all_missing_videos(reporter)
-    return 0
+def get_channel_source_id(url: str) -> str:
+    channel_info = YDL.extract_info(url, download=False, process=False)
+    return channel_info['id']

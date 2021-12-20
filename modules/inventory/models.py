@@ -27,8 +27,8 @@ class Item(Base, ModelHelper):
     inventory = relationship('Inventory', primaryjoin="Item.inventory_id==Inventory.id", back_populates='items')
 
     def __repr__(self):
-        return f'<Item(id={self.id}, name={self.name}, brand={self.brand}, ' \
-               f'count={self.count}, item_size={self.item_size}, unit={self.unit}, inventory={self.inventory_id})>'
+        return f'<Item id={self.id}, name={self.name}, brand={self.brand}, ' \
+               f'count={self.count}, item_size={self.item_size}, unit={self.unit}, inventory={self.inventory_id} >'
 
 
 class Inventory(Base, ModelHelper):
@@ -43,7 +43,7 @@ class Inventory(Base, ModelHelper):
     items: InstrumentedList = relationship('Item', foreign_keys='Item.inventory_id')
 
     def __repr__(self):
-        return f'<Inventory(id={self.id}, name={self.name!r}, deleted={self.deleted_at})>'
+        return f'<Inventory id={self.id}, name={self.name!r}, deleted={self.deleted_at} >'
 
     def dict(self):
         d = super().dict()

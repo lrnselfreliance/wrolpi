@@ -3,7 +3,7 @@ import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {deleteVideo, favoriteVideo} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link} from "react-router-dom";
-import {humanFileSize, uploadDate, VideoCard} from "./Common";
+import {humanFileSize, humanNumber, uploadDate, VideoCard} from "./Common";
 import {Confirm, Container, Segment, Tab} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
@@ -24,15 +24,15 @@ function VideoPage(props) {
         props.history.goBack();
     }
 
-    let videoUrl = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.video_path)}`;
+    let videoUrl = `${MEDIA_PATH}/${encodeURIComponent(video.video_path)}`;
 
     let posterUrl = null;
     if (video.poster_path) {
-        posterUrl = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.poster_path)}`;
+        posterUrl = `${MEDIA_PATH}/${encodeURIComponent(video.poster_path)}`;
     }
     let captionsUrl = null;
     if (video.caption_path) {
-        captionsUrl = `${MEDIA_PATH}/${channel.directory}/${encodeURIComponent(video.caption_path)}`;
+        captionsUrl = `${MEDIA_PATH}/${encodeURIComponent(video.caption_path)}`;
     }
 
     let description = 'No description available.';
@@ -78,16 +78,19 @@ function VideoPage(props) {
     let statisticsPane = {
         menuItem: 'Statistics', render: () => <Tab.Pane>
             <h3>Size</h3>
-            <p>{humanFileSize(video.size)}</p>
+            <p>{video.size ? humanFileSize(video.size) : '???'}</p>
+
+            <h3>Source URL</h3>
+            <p>{video.url || 'N/A'}</p>
 
             <h3>Source ID</h3>
-            <p>{video.source_id}</p>
+            <p>{video.source_id || 'N/A'}</p>
 
             <h3>View Count</h3>
-            <p>{viewCount}</p>
+            <p>{viewCount ? humanNumber(viewCount) : 'N/A'}</p>
 
             <h3>File Name</h3>
-            <pre style={{backgroundColor: '#ccc', padding: '0.4em'}}>{video.channel.directory}/{video.video_path}</pre>
+            <pre style={{backgroundColor: '#ccc', padding: '0.4em'}}>{video.video_path}</pre>
         </Tab.Pane>
     }
 
@@ -117,9 +120,9 @@ function VideoPage(props) {
                 <h2>{video.title}</h2>
                 {video.upload_date && <h3>{uploadDate(video.upload_date)}</h3>}
                 <h3>
-                    <Link to={`/videos/channel/${channel.link}/video`}>
+                    {channel && <Link to={`/videos/channel/${channel.link}/video`}>
                         {channel.name}
-                    </Link>
+                    </Link>}
                 </h3>
 
                 <p>

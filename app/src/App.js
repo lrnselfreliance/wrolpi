@@ -4,21 +4,23 @@ import {NavBar} from "./components/Nav";
 import {Route, Switch} from "react-router-dom";
 import {FavoriteVideosPreview, VideosRoute, VideoWrapper, ViewedVideosPreview} from "./components/Videos";
 import Admin from "./components/Admin";
-import {Container, Header, Segment} from "semantic-ui-react";
+import {Container, Divider, Header, Segment} from "semantic-ui-react";
 import 'semantic-ui-offline/semantic.min.css';
 import {SemanticToastContainer} from 'react-semantic-toasts';
 import 'react-semantic-toasts/styles/react-semantic-alert.css';
 import {AppsRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/Inventory";
 import {ArchiveRoute} from "./components/Archive";
+import {Saver} from "./components/Upload";
 
 function Welcome() {
     return (
         <Container style={{marginTop: '2em'}}>
-            <Header as="h1">Welcome to WROLPi!</Header>
-            <h3>
-                Take your internet, off-grid.
-            </h3>
+            <Header as='h2'>Save your media</Header>
+            <Saver/>
+
+            <Divider/>
+
             <Segment>
                 <FavoriteVideosPreview/>
             </Segment>
@@ -45,6 +47,7 @@ export default function App() {
                 <NavBar/>
             </header>
             <Switch>
+                <Route path='/videos/video/:video_id' exact component={VideoWrapper}/>
                 <Route path='/videos/channel/:channel_link/video/:video_id' exact component={VideoWrapper}/>
                 <Route path="/" exact={true} component={Welcome}/>
                 <Route path="/videos" component={VideosRoute}/>

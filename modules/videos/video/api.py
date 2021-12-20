@@ -5,12 +5,12 @@ from sanic.request import Request
 
 from wrolpi.common import logger, wrol_mode_check, run_after, get_media_directory, \
     get_relative_to_media_directory
-from wrolpi.root_api import json_response
 from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError, InvalidOrderBy
+from wrolpi.root_api import json_response
 from wrolpi.schema import validate_doc, JSONErrorResponse
 from .lib import get_video, VIDEO_ORDERS, DEFAULT_VIDEO_ORDER, video_search, get_video_for_app
-from ..common import get_matching_directories, get_allowed_limit, minimize_video
+from ..common import get_matching_directories, get_allowed_limit
 from ..lib import save_channels_config
 from ..schema import VideoResponse, VideoSearchRequest, VideoSearchResponse, \
     DirectoriesResponse, DirectoriesRequest
@@ -55,7 +55,7 @@ async def search(_: Request, data: dict):
 
     videos, videos_total = video_search(search_str, offset, limit, channel_link, order_by, favorites)
 
-    ret = {'videos': list(map(minimize_video, videos)), 'totals': {'videos': videos_total}}
+    ret = {'videos': list(videos), 'totals': {'videos': videos_total}}
     return json_response(ret)
 
 

@@ -3,19 +3,17 @@ import collections
 import inspect
 import json
 import logging
-import os
 import pathlib
 import queue
 import re
 import string
-from copy import deepcopy
 from datetime import datetime, date
 from functools import wraps
 from itertools import islice
 from multiprocessing import Event, Queue
 from pathlib import Path
 from typing import Union, Callable, Tuple, Dict, Mapping, List, Iterable
-from urllib.parse import urlunsplit
+from urllib.parse import urlunsplit, urlparse
 
 import yaml
 from cachetools import cached, TTLCache
@@ -25,11 +23,10 @@ from sqlalchemy import types
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
 
-from wrolpi.errors import WROLModeEnabled, UnknownDirectory
-from wrolpi.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, LAST_MODIFIED_DATE_FORMAT, \
-    PROJECT_DIR
+from wrolpi.errors import WROLModeEnabled
+from wrolpi.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, PROJECT_DIR, PYTEST, MODULES_DIR
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger()
 ch = logging.StreamHandler()
 formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
 ch.setFormatter(formatter)
@@ -163,107 +160,6 @@ def get_sanic_url(scheme: str = 'http', path: str = None, query: list = None, fr
                                 query=query, fragment=fragment)
     unparsed = str(urlunsplit(components))
     return unparsed
-
-
-def make_progress_calculator(total):
-    """
-    Create a function that calculates the percentage of completion.
-    """
-
-    def progress_calculator(current) -> int:
-        if current >= total:
-            # Progress doesn't make sense, just return 100
-            return 100
-        percent = int((current / total) * 100)
-        return percent
-
-    return progress_calculator
-
-
-class ProgressReporter:
-    """
-    I am used to consistently send messages and progress(s) to a Websocket Feed.
-    """
-
-    def __init__(self, q: Queue, progress_count: int = 1):
-        self.queue: Queue = q
-        self.progresses = [{'percent': 0, 'total': 0, 'value': 0} for _ in range(progress_count)]
-        self.calculators = [lambda _: None for _ in range(progress_count)]
-
-    def _update(self, idx: int, **kwargs):
-        if 'message' in kwargs and kwargs['message'] is None:
-            # Message can't be cleared.
-            kwargs.pop('message')
-        self.progresses[idx].update(kwargs)
-
-    def _send(self, code: str = None):
-        msg = dict(
-            progresses=deepcopy(self.progresses)
-        )
-        if code:
-            msg['code'] = code
-        self.queue.put(msg)
-
-    def message(self, idx: int, msg: str, code: str = None):
-        self._update(idx, message=msg)
-        self._send(code)
-
-    def code(self, code: str):
-        self._send(code)
-
-    def error(self, idx: int, msg: str = None):
-        self.message(idx, msg, 'error')
-
-    def set_progress_total(self, idx: int, total: int):
-        self.progresses[idx]['total'] = total
-        self.calculators[idx] = make_progress_calculator(total)
-
-    def send_progress(self, idx: int, value: int, msg: str = None):
-        kwargs = dict(value=value, percent=self.calculators[idx](value), message=msg)
-        self._update(idx, **kwargs)
-        self._send()
-
-    def finish(self, idx: int, msg: str = None):
-        kwargs = dict(percent=100, message=msg)
-
-        if self.progresses[idx]['total'] == 0:
-            kwargs.update(dict(value=1, total=1))
-        else:
-            kwargs.update(dict(value=self.progresses[idx]['total']))
-
-        self._update(idx, **kwargs)
-        self._send()
-
-
-class FileNotModified(Exception):
-    pass
-
-
-def get_modified_time(path: Union[Path, str]) -> datetime:
-    """
-    Return a datetime object containing the os modification time of the provided path.
-    """
-    modified = datetime.utcfromtimestamp(os.path.getmtime(str(path)))
-    return modified
-
-
-def get_last_modified_headers(request_headers: dict, path: Union[Path, str]) -> dict:
-    """
-    Get a dict containing the Last-Modified header for the provided path.  If If-Modified-Since is in the provided
-    request headers, then this will raise a FileNotModified exception, which should be handled by
-    `handle_FileNotModified`.
-    """
-    last_modified = get_modified_time(path)
-
-    modified_since = request_headers.get('If-Modified-Since')
-    if modified_since:
-        modified_since = datetime.strptime(modified_since, LAST_MODIFIED_DATE_FORMAT)
-        if last_modified >= modified_since:
-            raise FileNotModified()
-
-    last_modified = last_modified.strftime(LAST_MODIFIED_DATE_FORMAT)
-    headers = {'Last-Modified': last_modified}
-    return headers
 
 
 def get_example_config() -> dict:
@@ -442,6 +338,9 @@ def run_after(after: callable, *args, **kwargs) -> callable:
             return synchronous_after(*a, **kw)
 
     def wrapper(func: callable):
+        if PYTEST:
+            return func
+
         if inspect.iscoroutinefunction(func):
             @wraps(func)
             async def wrapped(*a, **kw):
@@ -468,7 +367,12 @@ MEDIA_DIRECTORY = None
 
 def set_test_media_directory(path):
     global TEST_MEDIA_DIRECTORY
-    TEST_MEDIA_DIRECTORY = pathlib.Path(path) if path else None
+    if isinstance(path, pathlib.Path):
+        TEST_MEDIA_DIRECTORY = path
+    elif path:
+        TEST_MEDIA_DIRECTORY = pathlib.Path(path)
+    else:
+        TEST_MEDIA_DIRECTORY = None
 
 
 def get_media_directory() -> Path:
@@ -477,6 +381,9 @@ def get_media_directory() -> Path:
     """
     global TEST_MEDIA_DIRECTORY
     global MEDIA_DIRECTORY
+
+    if PYTEST and not TEST_MEDIA_DIRECTORY:
+        raise ValueError('No test media directory set during testing!!')
 
     if isinstance(TEST_MEDIA_DIRECTORY, pathlib.Path):
         return TEST_MEDIA_DIRECTORY
@@ -505,12 +412,9 @@ def get_absolute_media_path(path: str) -> Path:
 
     :raises UnknownDirectory: the directory/path doesn't exist
     """
-    media_directory = get_media_directory()
     if not path:
-        raise ValueError(f'Cannot combine empty path with {media_directory}')
-    path = media_directory / path
-    if not path.exists():
-        raise UnknownDirectory(f'path={path}')
+        raise ValueError('Path cannot be empty!')
+    path = get_media_directory() / path
     return path
 
 
@@ -543,3 +447,35 @@ def make_media_directory(path: str):
     media_dir = get_media_directory()
     path = media_dir / str(path)
     path.mkdir(parents=True)
+
+
+def extract_domain(url):
+    """
+    Extract the domain from a URL.  Remove leading www.
+
+    >>> extract_domain('https://www.example.com/foo')
+    'example.com'
+    """
+    parsed = urlparse(url)
+    domain = parsed.netloc
+    domain = domain.decode() if hasattr(domain, 'decode') else domain
+    if domain.startswith('www.'):
+        # Remove leading www.
+        domain = domain[4:]
+    return domain
+
+
+def import_modules():
+    """
+    Import all WROLPi Modules in the modules directory.  Raise an ImportError if there are no modules.
+    """
+    try:
+        modules = [i.name for i in MODULES_DIR.iterdir() if i.is_dir() and not i.name.startswith('_')]
+        for module in modules:
+            module = f'modules.{module}.api'
+            logger.debug(f'Importing {module}')
+            __import__(module, globals(), locals(), [], 0)
+    except ImportError as e:
+        logger.fatal('No modules could be found!', exc_info=e)
+        raise
+    return modules

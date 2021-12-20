@@ -6,52 +6,20 @@ from contextlib import contextmanager
 from functools import partialmethod
 from http import HTTPStatus
 from itertools import zip_longest
-from queue import Empty
 from shutil import copyfile
-from typing import List, Tuple, Optional
-from uuid import uuid1
+from typing import List, Optional
 
 import mock
 import websockets
 import yaml
 from sanic_openapi.api import Response
-from sqlalchemy import create_engine
-from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session, sessionmaker
 
-from wrolpi.common import EXAMPLE_CONFIG_PATH, get_config, Base, QUEUES, set_test_media_directory
-from wrolpi.db import postgres_engine, get_db_args
-from wrolpi.root_api import BLUEPRINTS, api_app
+from wrolpi.common import EXAMPLE_CONFIG_PATH, get_config, set_test_media_directory, get_media_directory
+from wrolpi.conftest import ROUTES_ATTACHED, test_db, test_client  # noqa
+from wrolpi.db import postgres_engine
 from wrolpi.vars import PROJECT_DIR
 
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
-
-
-def get_test_db_engine():
-    suffix = str(uuid1()).replace('-', '')
-    db_name = f'wrolpi_testing_{suffix}'
-    conn = postgres_engine.connect()
-    conn.execute(f'DROP DATABASE IF EXISTS {db_name}')
-    conn.execute(f'CREATE DATABASE {db_name}')
-    conn.execute('commit')
-
-    test_args = get_db_args(db_name)
-    test_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**test_args))
-    return test_engine
-
-
-def test_db() -> Tuple[Engine, Session]:
-    """
-    Create a unique SQLAlchemy engine/session for a test.
-    """
-    test_engine = get_test_db_engine()
-    if test_engine.engine.url.database == 'wrolpi':
-        raise ValueError('Refusing the test on wrolpi database!')
-
-    # Create all tables.  No need to check if they exist because this is a test DB.
-    Base.metadata.create_all(test_engine, checkfirst=False)
-    session = sessionmaker(bind=test_engine)()
-    return test_engine, session
 
 
 def wrap_test_db(func):
@@ -63,12 +31,12 @@ def wrap_test_db(func):
     def wrapped(*a, **kw):
         test_engine, session = test_db()
 
-        def fake_get_db_context():
+        def fake_get_db_session():
             """Get the testing db"""
             return test_engine, session
 
         try:
-            with mock.patch('wrolpi.db._get_db_session', fake_get_db_context):
+            with mock.patch('wrolpi.db._get_db_session', fake_get_db_session):
                 # Run the test.
                 result = func(*a, **kw)
                 return result
@@ -82,44 +50,32 @@ def wrap_test_db(func):
     return wrapped
 
 
-def get_all_messages_in_queue(q):
-    """Get all messages in a Queue without waiting."""
-    messages = []
-    while True:
-        try:
-            msg = q.get_nowait()
-            messages.append(msg)
-        except Empty:
-            break
-    return messages
-
-
 class PytestCase:
     """
     Replicate unittest.TestCase methods to bridge the gap between it and Pytest.
     """
 
     @staticmethod
-    def assertGreater(a, b, msg: str = None):
+    def assertGreater(a, b, msg: str = None):  # noqa
         assert a > b, msg
 
     @staticmethod
-    def assertLess(a, b, msg: str = None):
+    def assertLess(a, b, msg: str = None):  # noqa
         assert a < b, msg
 
     @staticmethod
-    def assertEqual(a, b, msg: str = None):
+    def assertEqual(a, b, msg: str = None):  # noqa
         assert a == b, msg or f'{a} != {b}'
 
     @staticmethod
-    def assertRaises(exception, func, *args, **kwargs):
+    def assertRaises(exception, func, *args, **kwargs):  # noqa
         try:
             func(*args, **kwargs)
         except exception:
             pass
 
     @classmethod
-    def assertDictContains(cls, d1: dict, d2: dict):
+    def assertDictContains(cls, d1: dict, d2: dict):  # noqa
         if hasattr(d1, '__dict__'):
             d1 = d1.__dict__
         if hasattr(d2, '__dict__'):
@@ -134,13 +90,13 @@ class PytestCase:
             else:
                 assert d1[k2] == d2[k2], f'{k2} of value "{d1[k2]}" does not equal {d2[k2]} in dict 1'
 
-    def assertError(self, response, http_status: int, code=None):
+    def assertError(self, response, http_status: int, code=None):  # noqa
         self.assertEqual(response.status_code, http_status)
         if code:
             self.assertEqual(response.json['code'], code)
 
     @staticmethod
-    def assertTruth(value, expected):
+    def assertTruth(value, expected):  # noqa
         """
         Check that a value is Truthy or Falsy.
         """
@@ -161,15 +117,16 @@ class PytestCase:
                     raise ValueError('d2 is None')
                 self.assertTruth(d1[d2_key], d2[d2_key])
 
+    @staticmethod
+    def assertLength(a, b):  # noqa
+        assert len(a) == len(b), f'{len(a)=} != {len(b)=}'
+
 
 class ExtendedTestCase(PytestCase, unittest.TestCase):
     """
     Add any specialized test methods to this class.
     """
     pass
-
-
-ROUTES_ATTACHED = False
 
 
 class TestAPI(ExtendedTestCase):
@@ -188,21 +145,9 @@ class TestAPI(ExtendedTestCase):
         with open(TEST_CONFIG_PATH.name, 'wt') as fh:
             fh.write(yaml.dump(config))
 
-    @classmethod
-    def setUpClass(cls) -> None:
-        global ROUTES_ATTACHED
-        if ROUTES_ATTACHED is False:
-            # Attach any blueprints for the test.
-            for bp in BLUEPRINTS:
-                api_app.blueprint(bp)
-            ROUTES_ATTACHED = True
-
     def tearDown(self) -> None:
         self.config_path_patch.stop()
         set_test_media_directory(None)
-        # Clear out any messages in queues
-        for q in QUEUES:
-            get_all_messages_in_queue(q)
 
     def assertHTTPStatus(self, response: Response, status: int):
         self.assertEqual(response.status_code, status)
@@ -229,7 +174,7 @@ def wrap_media_directory(path: Optional[pathlib.Path] = None):
 
 
 @contextmanager
-def build_test_directories(paths: List[str]) -> pathlib.Path:
+def build_test_directories(paths: List[str], tmp_dir: pathlib.Path = None) -> pathlib.Path:
     """
     Create directories based on the provided structure.
 
@@ -247,23 +192,20 @@ def build_test_directories(paths: List[str]) -> pathlib.Path:
             channel2/vid2.mp4
             channel2/vid2.en.vtt
     """
-    dir_ = get_config().get('media_directory')
-    dir_ = pathlib.Path(dir_).absolute()
-    with tempfile.TemporaryDirectory(dir=dir_) as temp_dir:
-        root = pathlib.Path(temp_dir)
+    tmp_dir = tmp_dir or get_media_directory()
 
-        directories = filter(lambda i: i.endswith('/'), paths)
-        for directory in directories:
-            (root / directory).mkdir(parents=True)
+    directories = filter(lambda i: i.endswith('/'), paths)
+    for directory in directories:
+        (tmp_dir / directory).mkdir(parents=True)
 
-        files = filter(lambda i: not i.endswith('/'), paths)
-        for file in files:
-            file = root / file
-            parents = file.parents
-            parents[0].mkdir(parents=True, exist_ok=True)
-            (root / file).touch()
+    files = filter(lambda i: not i.endswith('/'), paths)
+    for file in files:
+        file = tmp_dir / file
+        parents = file.parents
+        parents[0].mkdir(parents=True, exist_ok=True)
+        (tmp_dir / file).touch()
 
-        yield root.absolute()
+    yield tmp_dir.absolute()
 
 
 async def get_all_ws_messages(ws) -> List[dict]:

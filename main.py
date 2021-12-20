@@ -6,11 +6,13 @@ import logging
 import sys
 
 import pytz
+from sanic import Sanic
 
-from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS
-from wrolpi.common import logger, get_config
+from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, after_startup, limit_concurrent
+from wrolpi.common import logger, get_config, wrol_mode_enabled, import_modules
 from wrolpi.dates import set_timezone
-from wrolpi.vars import PROJECT_DIR, MODULES_DIR
+from wrolpi.downloader import download_manager
+from wrolpi.vars import PROJECT_DIR
 
 logger = logger.getChild('wrolpi-main')
 
@@ -40,7 +42,7 @@ def db_main(args):
     return 0
 
 
-async def main():
+async def main(loop):
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='count')
 
@@ -70,18 +72,7 @@ async def main():
         set_timezone(tz)
 
     # Import the API in every module.  Each API should attach itself to `root_api`.
-    try:
-        modules = [i.name for i in MODULES_DIR.iterdir() if i.is_dir() and not i.name.startswith('_')]
-        for module in modules:
-            module = f'modules.{module}.api'
-            logger.debug(f'Importing {module}')
-            __import__(module, globals(), locals(), [], 0)
-    except ImportError as e:
-        logger.fatal('No modules could be found!', exc_info=e)
-        raise
-
-    if not modules:
-        raise Exception('No modules could be found!')
+    import_modules()
 
     # Run the startup functions
     for func in BEFORE_STARTUP_FUNCTIONS:
@@ -93,8 +84,8 @@ async def main():
         except Exception as e:
             logger.warning(f'Startup {func} failed!', exc_info=e)
 
-    # Run the API
-    return root_api.main(args)
+    # Run the API.
+    return root_api.main(loop, args)
 
 
 async def set_log_level(args):
@@ -113,7 +104,32 @@ async def set_log_level(args):
     logger.warning(f'Logging level: {level_name}')
 
 
+@after_startup
+@limit_concurrent(1)
+def periodic_downloads(app: Sanic, loop):
+    """
+    A simple function that perpetually calls downloader_manager.do_downloads() after sleeping.
+    """
+    if wrol_mode_enabled():
+        logger.warning(f'Not starting download worker because WROL Mode is enabled.')
+        return
+
+    # Set all downloads to new.
+    download_manager.reset_downloads()
+
+    async def _periodic_download():
+        download_manager.renew_recurring_downloads()
+        download_manager.delete_old_once_downloads()
+        await download_manager.do_downloads()
+        seconds = 60
+        logger.debug(f'Waiting {seconds} seconds to start next download')
+        await asyncio.sleep(seconds)
+        app.add_task(_periodic_download())
+
+    app.add_task(_periodic_download())
+
+
 if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    result = loop.run_until_complete(main())
+    loop_ = asyncio.get_event_loop()
+    result = loop_.run_until_complete(main(loop_))
     sys.exit(result)

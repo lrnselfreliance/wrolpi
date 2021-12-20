@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+from wrolpi.common import set_test_media_directory
 from wrolpi.media_path import MediaPath
 from wrolpi.root_api import CustomJSONEncoder
 
@@ -12,11 +13,13 @@ class TestMediaPath(unittest.TestCase):
 
     def setUp(self):
         self.test_dir = tempfile.TemporaryDirectory()
+        set_test_media_directory(pathlib.Path(self.test_dir.name))
         path = pathlib.Path(self.test_dir.name).absolute()
         self.patch = mock.patch('wrolpi.media_path.get_media_directory', lambda: path)
         self.patch.start()
 
     def tearDown(self):
+        set_test_media_directory(None)
         self.test_dir.cleanup()
         self.patch.stop()
 

@@ -6,17 +6,17 @@ import pathlib
 import re
 from itertools import groupby
 from typing import Iterator
-from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
 from modules.archive.models import URL, Domain, Archive
-from wrolpi.common import get_media_directory, logger, chunks
+from wrolpi.common import get_media_directory, logger, chunks, extract_domain
 from wrolpi.dates import now, strptime_ms, strftime_ms
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import InvalidDomain, UnknownURL, PendingArchive, InvalidArchive
+from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
@@ -25,21 +25,6 @@ ARCHIVE_SERVICE = 'http://archive:8080'
 
 def get_archive_directory() -> pathlib.Path:
     return get_media_directory() / 'archive'
-
-
-def extract_domain(url):
-    """
-    Extract the domain from a URL.  Remove leading www.
-
-    >>> extract_domain('https://www.example.com/foo')
-    'example.com'
-    """
-    parsed = urlparse(url)
-    domain = parsed.netloc
-    if domain.startswith('www.'):
-        # Remove leading www.
-        domain = domain[4:]
-    return domain
 
 
 def get_domain_directory(url: str) -> pathlib.Path:
@@ -161,7 +146,7 @@ def new_archive(url: str, sync: bool = False):
         url_.latest_id = archive_id
         url_.latest_datetime = now()
 
-    if sync:
+    if PYTEST or sync:
         return _do_archive(url, archive_id)
     else:
         # Run the real archive process in the future.

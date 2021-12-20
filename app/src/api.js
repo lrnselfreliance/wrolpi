@@ -32,7 +32,16 @@ async function apiCall(url, method, body, ms = 10000) {
 
     try {
         // await the response or error.
-        return await timeoutPromise(ms, promise);
+        let response = await timeoutPromise(ms, promise);
+        if (response.status === 403 && (await response.json())['code'] === 17) {
+            toast({
+                type: 'error',
+                title: 'WROL Mode is enabled!',
+                description: 'This functionality is not enabled while WROL Mode is enabled!',
+                time: 5000,
+            });
+        }
+        return response;
     } catch (e) {
         // Timeout, or some other exception.
         if (e.message === 'promise timeout') {
@@ -165,6 +174,13 @@ export async function saveConfig(config) {
     return await apiPatch(`${API_URI}/settings`, config);
 }
 
+export async function getDownloads() {
+    let response = await apiGet(`${API_URI}/download`);
+    let data = await response.json();
+    return data;
+}
+
+
 export async function validateRegex(regex) {
     let response = await apiPost(`${API_URI}/valid_regex`, {regex});
     return (await response.json())['valid'];
@@ -172,7 +188,7 @@ export async function validateRegex(regex) {
 
 export async function favoriteVideo(video_id, favorite) {
     let body = {favorite: favorite, video_id};
-    let response = await apiPost(`${VIDEOS_API}:favorite`, body);
+    let response = await apiPost(`${VIDEOS_API}/favorite`, body);
     return (await response.json())['favorite'];
 }
 
@@ -182,28 +198,22 @@ export async function getStatistics() {
 }
 
 export async function refresh() {
-    let response = await apiPost(`${VIDEOS_API}:refresh`);
+    let response = await apiPost(`${VIDEOS_API}/refresh`);
     return await response.json();
 }
 
 export async function download() {
-    let response = await apiPost(`${VIDEOS_API}:download`);
+    let response = await apiPost(`${VIDEOS_API}/download`);
     return await response.json();
 }
 
 export async function downloadChannel(link) {
-    let url = `${VIDEOS_API}:download/${link}`;
+    let url = `${VIDEOS_API}/download/${link}`;
     await fetch(url, {method: 'POST'});
 }
 
-export async function downloadHistory() {
-    let url = `${VIDEOS_API}/download_history`;
-    let resp = await apiGet(url);
-    return await resp.json();
-}
-
 export async function refreshChannel(link) {
-    let url = `${VIDEOS_API}:refresh/${link}`;
+    let url = `${VIDEOS_API}/refresh/${link}`;
     await fetch(url, {method: 'POST'});
 }
 
@@ -316,7 +326,7 @@ export async function searchURLs(offset, limit, domain = null) {
 }
 
 export async function refreshArchives() {
-    return await apiPost(`${ARCHIVES_API}:refresh`);
+    return await apiPost(`${ARCHIVES_API}/refresh`);
 }
 
 export async function fetchDomains() {
@@ -327,4 +337,16 @@ export async function fetchDomains() {
     } else {
         throw Error(`Unable to fetch domains`);
     }
+}
+
+export async function postDownload(urls) {
+    let body = {'urls': urls};
+    let response = await apiPost(`${API_URI}/download`, body);
+    return response;
+}
+
+
+export async function killDownload(download_id) {
+    let response = await apiPost(`${API_URI}/download/${download_id}/kill`);
+    return response;
 }

@@ -101,13 +101,11 @@ class ChannelPage extends APIForm {
                 match_regex: '',
                 generate_posters: true,
                 calculate_duration: true,
-                download_frequency: 604800,
+                download_frequency: null,
             },
             errors: {},
         };
 
-        this.calculateDuration = React.createRef();
-        this.generatePosters = React.createRef();
         this.mkdir = React.createRef();
     }
 
@@ -304,7 +302,7 @@ class ChannelPage extends APIForm {
                     <Form.Group>
                         <Form.Field>
                             <label>Download Frequency</label>
-                            <Dropdown selection
+                            <Dropdown selection clearable
                                       name='download_frequency'
                                       disabled={this.state.disabled}
                                       placeholder='Frequency'
@@ -344,29 +342,6 @@ class ChannelPage extends APIForm {
                                         onChange={this.checkRegex}
                                     />
                                 </Form.Field>
-
-                                <Form.Field>
-                                    <Checkbox
-                                        toggle
-                                        label="Generate posters, if not found"
-                                        name="generate_posters"
-                                        disabled={this.state.disabled}
-                                        checked={this.state.inputs.generate_posters}
-                                        ref={this.generatePosters}
-                                        onClick={() => this.handleCheckbox(this.generatePosters)}
-                                    />
-                                </Form.Field>
-                                <Form.Field>
-                                    <Checkbox
-                                        toggle
-                                        label="Calculate video duration"
-                                        name="calculate_duration"
-                                        disabled={this.state.disabled}
-                                        checked={this.state.inputs.calculate_duration}
-                                        ref={this.calculateDuration}
-                                        onClick={() => this.handleCheckbox(this.calculateDuration)}
-                                    />
-                                </Form.Field>
                             </Segment>
                         </Accordion.Content>
                     </Accordion>
@@ -399,24 +374,24 @@ class ChannelPage extends APIForm {
                         </Button>
 
                         {!this.props.create &&
-                        <>
-                            <Button color='red' onClick={this.handleDeleteButton}>
-                                Delete
-                            </Button>
-                            <Confirm
-                                open={this.state.deleteOpen}
-                                content='Are you sure you want to delete this channel?  No video files will be deleted.'
-                                confirmButton='Delete'
-                                onCancel={() => this.setState({deleteOpen: false})}
-                                onConfirm={this.handleConfirm}
-                            />
-                            <Button color='blue' onClick={this.downloadChannel}>
-                                Download
-                            </Button>
-                            <Button color='inverted blue' onClick={this.refreshChannel}>
-                                Refresh
-                            </Button>
-                        </>
+                            <>
+                                <Button color='red' onClick={this.handleDeleteButton}>
+                                    Delete
+                                </Button>
+                                <Confirm
+                                    open={this.state.deleteOpen}
+                                    content='Are you sure you want to delete this channel?  No video files will be deleted.'
+                                    confirmButton='Delete'
+                                    onCancel={() => this.setState({deleteOpen: false})}
+                                    onConfirm={this.handleConfirm}
+                                />
+                                <Button color='blue' onClick={this.downloadChannel}>
+                                    Download
+                                </Button>
+                                <Button color='inverted blue' onClick={this.refreshChannel}>
+                                    Refresh
+                                </Button>
+                            </>
                         }
                     </Container>
                 </Form>
@@ -455,13 +430,13 @@ class ChannelRow extends React.Component {
                     {channel.video_count}
                 </Table.Cell>
                 <Table.Cell>
-                    {channel.url ? secondsToDate(channel.info_date) : null}
+                    {channel.url && channel.info_date ? secondsToDate(channel.info_date) : null}
                 </Table.Cell>
                 <Table.Cell>
-                    {channel.url ? secondsToDate(channel.next_download) : null}
+                    {channel.url && channel.next_download ? secondsToDate(channel.next_download) : null}
                 </Table.Cell>
                 <Table.Cell>
-                    {channel.url ? secondsToFrequency(channel.download_frequency) : null}
+                    {channel.url && channel.download_frequency ? secondsToFrequency(channel.download_frequency) : null}
                 </Table.Cell>
                 <Table.Cell textAlign='right'>
                     <Link className="ui button secondary" to={this.editTo}>Edit</Link>
@@ -486,16 +461,17 @@ class MobileChannelRow extends ChannelRow {
                     </Link>
                 </p>
                 <p>
-                    Last Update: {channel.url ? secondsToDate(channel.info_date) : null}
+                    Last Update: {channel.url && channel.info_date ? secondsToDate(channel.info_date) : null}
                 </p>
                 <p>
-                    Next Update: {channel.url ? secondsToDate(channel.next_download) : null}
+                    Next Update: {channel.url && channel.next_download ? secondsToDate(channel.next_download) : null}
                 </p>
                 <p>
                     Videos: {channel.video_count}
                 </p>
                 <p>
-                    Frequency: {channel.url ? secondsToFrequency(channel.download_frequency) : null}
+                    Frequency: {channel.url && channel.download_frequency ?
+                    secondsToFrequency(channel.download_frequency) : null}
                 </p>
             </Table.Cell>
             <Table.Cell width={6} colSpan={2} textAlign='right'>
@@ -621,7 +597,7 @@ export class Channels extends React.Component {
                         </Table>
                     </Responsive>
                     <Responsive maxWidth={769}>
-                        <Table striped basic unstackable size='medium'>
+                        <Table striped basic unstackable size='small'>
                             <Table.Body>
                                 {this.state.results.map((channel) =>
                                     <MobileChannelRow key={channel.link} channel={channel}/>)}

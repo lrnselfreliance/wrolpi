@@ -36,6 +36,10 @@ class ChannelDirectoryConflict(APIError):
     pass
 
 
+class ChannelSourceIdConflict(APIError):
+    pass
+
+
 class SearchEmpty(APIError):
     pass
 
@@ -121,6 +125,14 @@ class PendingArchive(APIError):
 
 
 class InvalidArchive(APIError):
+    pass
+
+
+class InvalidDownload(APIError):
+    pass
+
+
+class UnrecoverableDownloadError(APIError):
     pass
 
 
@@ -272,4 +284,19 @@ API_ERRORS = {
         'message': 'The archive is invalid.  See server logs.',
         'status': HTTPStatus.INTERNAL_SERVER_ERROR,
     },
+    InvalidDownload: {
+        'code': next(error_codes),
+        'message': 'The URL cannot be downloaded.',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    ChannelSourceIdConflict: {
+        'code': next(error_codes),
+        'message': 'Channel with source id already exists',
+        'status': HTTPStatus.INTERNAL_SERVER_ERROR,
+    },
+    UnrecoverableDownloadError: {
+        'code': next(error_codes),
+        'message': 'Download experienced an error which cannot be recovered.  Download will be deleted.',
+        'status': HTTPStatus.INTERNAL_SERVER_ERROR,
+    }
 }

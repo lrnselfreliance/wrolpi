@@ -1,9 +1,10 @@
+import pathlib
+import tempfile
 from functools import wraps
-from queue import Queue
 
 from modules.videos.lib import refresh_channel_videos
 from modules.videos.models import Channel
-from wrolpi.common import ProgressReporter, insert_parameter
+from wrolpi.common import insert_parameter, set_test_media_directory
 from wrolpi.db import get_db_session
 from wrolpi.test.common import wrap_test_db, build_test_directories
 
@@ -37,9 +38,11 @@ def create_channel_structure(structure):
         @wraps(func)
         @wrap_test_db
         def wrapped(*args, **kwargs):
-            # Dummy queue and reporter to receive messages.
-            q = Queue()
-            reporter = ProgressReporter(q, 2)
+            if args and (test := args[0]) and hasattr(test, 'tmp_dir'):
+                tmp_dir = pathlib.Path(test.tmp_dir.name)
+            else:
+                tmp_dir = pathlib.Path(tempfile.TemporaryDirectory().name)
+                set_test_media_directory(tmp_dir)
 
             # Convert the channel/video structure to a file structure for the test.
             file_structure = []
@@ -48,7 +51,7 @@ def create_channel_structure(structure):
                     file_structure.append(f'{channel}/{path}')
                 file_structure.append(f'{channel}/')
 
-            with build_test_directories(file_structure) as tempdir:
+            with build_test_directories(file_structure, tmp_dir) as tempdir:
                 args, kwargs = insert_parameter(func, 'tempdir', tempdir, args, kwargs)
 
                 with get_db_session(commit=True) as session:
@@ -60,9 +63,12 @@ def create_channel_structure(structure):
 
                 with get_db_session(commit=True) as session:
                     for channel_ in session.query(Channel).all():
-                        refresh_channel_videos(channel_, reporter)
+                        refresh_channel_videos(channel_)
 
-                return func(*args, **kwargs)
+                try:
+                    return func(*args, **kwargs)
+                finally:
+                    set_test_media_directory(None)
 
         return wrapped
 

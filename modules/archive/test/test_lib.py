@@ -312,7 +312,7 @@ class TestArchive(TestAPI):
                 archive: Archive = session.query(Archive).one()
                 self.assertEqual(url.latest, archive)
                 # latest_datetime is set, the timestamp in the file name is assumed to be UTC.
-                self.assertEqual(str(url.latest_datetime), '2021-10-05 22:20:10.346823-06:00')
+                self.assertEqual(str(url.latest_datetime), '2021-10-05 16:20:10.346823-06:00')
 
             # Running the refresh does not result in a new archive.
             _refresh_archives()

@@ -1,7 +1,20 @@
 import React from 'react';
-import {Button, Checkbox, Container, Divider, Form, Header, Loader, Tab} from "semantic-ui-react";
-import {getConfig, saveConfig} from "../api";
+import {
+    Button,
+    Checkbox,
+    Confirm,
+    Container,
+    Divider,
+    Form,
+    Header,
+    Loader,
+    Placeholder,
+    Tab,
+    Table
+} from "semantic-ui-react";
+import {getConfig, getDownloads, killDownload, postDownload, saveConfig} from "../api";
 import TimezoneSelect from 'react-timezone-select';
+import {secondsToDate, secondsToFrequency} from "./Common";
 
 class Settings extends React.Component {
 
@@ -152,11 +165,217 @@ class WROLMode extends React.Component {
     }
 }
 
+class DownloadRow extends React.Component {
+
+    render() {
+        let {url, frequency, last_successful_download, status, next_download} = this.props;
+        let positive = false;
+        if (status === 'pending') {
+            positive = true;
+        }
+        return (
+            <Table.Row positive={positive}>
+                <Table.Cell>{url}</Table.Cell>
+                <Table.Cell>{secondsToFrequency(frequency)}</Table.Cell>
+                <Table.Cell>{last_successful_download ? secondsToDate(last_successful_download) : null}</Table.Cell>
+                <Table.Cell>{secondsToDate(next_download)}</Table.Cell>
+                <Table.Cell>{status}</Table.Cell>
+            </Table.Row>
+        );
+    }
+}
+
+class StoppableRow extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            stopOpen: false,
+            startOpen: false,
+        };
+    }
+
+    openStop = () => {
+        this.setState({stopOpen: true});
+    }
+
+    closeStop = () => {
+        this.setState({stopOpen: false});
+    }
+
+    openStart = () => {
+        this.setState({startOpen: true});
+    }
+
+    closeStart = () => {
+        this.setState({startOpen: false});
+    }
+
+    handleStop = async (e) => {
+        e.preventDefault();
+        await killDownload(this.props.id);
+        this.closeStop();
+        await this.props.fetchDownloads();
+    };
+
+    handleStart = async (e) => {
+        e.preventDefault();
+        await postDownload(`${this.props.url}`);
+        this.closeStart();
+        await this.props.fetchDownloads();
+    };
+
+    render() {
+        let {url, last_successful_download, status} = this.props;
+        let {stopOpen, startOpen} = this.state;
+
+        let buttonCell = <Table.Cell/>;
+        let positive = false;
+        let negative = false;
+        let warning = false;
+        if (status === 'pending' || status === 'new') {
+            positive = status === 'pending';
+            buttonCell = (
+                <Table.Cell>
+                    <Button
+                        onClick={this.openStop}
+                        color='red'
+                    >Stop</Button>
+                    <Confirm
+                        open={stopOpen}
+                        content='Are you sure you want to stop this download?  It will not be retried.'
+                        confirmButton='Stop'
+                        onCancel={this.closeStop}
+                        onConfirm={this.handleStop}
+                    />
+                </Table.Cell>
+            );
+        } else if (status === 'failed' || status === 'deferred') {
+            negative = status === 'failed';
+            warning = status === 'deferred';
+            buttonCell = (
+                <Table.Cell>
+                    <Button
+                        onClick={this.openStart}
+                        color='green'
+                    >Start</Button>
+                    <Confirm
+                        open={startOpen}
+                        content='Are you sure you want to restart this download?'
+                        confirmButton='Start'
+                        onCancel={this.closeStart}
+                        onConfirm={this.handleStart}
+                    />
+                </Table.Cell>
+            );
+        }
+
+        return (
+            <Table.Row positive={positive} negative={negative} warning={warning}>
+                <Table.Cell>{url}</Table.Cell>
+                <Table.Cell>{last_successful_download ? secondsToDate(last_successful_download) : null}</Table.Cell>
+                <Table.Cell>{status}</Table.Cell>
+                {buttonCell}
+            </Table.Row>
+        );
+    }
+}
+
+class Downloads extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            once_downloads: null,
+            recurring_downloads: null,
+            pending_downloads: null,
+        };
+    }
+
+    async componentDidMount() {
+        await this.fetchDownloads();
+    }
+
+    fetchDownloads = async () => {
+        let data = await getDownloads();
+        this.setState({
+            once_downloads: data.once_downloads,
+            recurring_downloads: data.recurring_downloads,
+            pending_downloads: data.pending_downloads,
+        });
+    }
+
+    render() {
+        let tablePlaceholder = (
+            <Placeholder>
+                <Placeholder.Line/>
+                <Placeholder.Line/>
+            </Placeholder>
+        );
+
+        let stoppableHeader = (
+            <Table.Header>
+                <Table.Row>
+                    <Table.HeaderCell>URL</Table.HeaderCell>
+                    <Table.HeaderCell>Completed At</Table.HeaderCell>
+                    <Table.HeaderCell>Status</Table.HeaderCell>
+                    <Table.HeaderCell>Control</Table.HeaderCell>
+                </Table.Row>
+            </Table.Header>
+        );
+
+        let nonStoppableHeader = (
+            <Table.Header>
+                <Table.Row>
+                    <Table.HeaderCell>URL</Table.HeaderCell>
+                    <Table.HeaderCell>Download Frequency</Table.HeaderCell>
+                    <Table.HeaderCell>Last Successful Download</Table.HeaderCell>
+                    <Table.HeaderCell>Next Download</Table.HeaderCell>
+                    <Table.HeaderCell>Status</Table.HeaderCell>
+                </Table.Row>
+            </Table.Header>
+        );
+
+        let onceTable = tablePlaceholder;
+        if (this.state.once_downloads !== null && this.state.once_downloads.length === 0) {
+            onceTable = <p>No downloads are scheduled to be downloaded.</p>
+        } else if (this.state.once_downloads !== null) {
+            onceTable = (<Table>
+                {stoppableHeader}
+                <Table.Body>
+                    {this.state.once_downloads.map((i) => <StoppableRow {...i} fetchDownloads={this.fetchDownloads}/>)}
+                </Table.Body>
+            </Table>);
+        }
+
+        let recurringTable = tablePlaceholder;
+        if (this.state.recurring_downloads !== null && this.state.recurring_downloads.length === 0) {
+            recurringTable = <p>No downloads are scheduled to be downloaded.</p>
+        } else if (this.state.recurring_downloads !== null) {
+            recurringTable = (<Table>
+                {nonStoppableHeader}
+                <Table.Body>
+                    {this.state.recurring_downloads.map((i) => <DownloadRow {...i}/>)}
+                </Table.Body>
+            </Table>);
+        }
+
+        return (
+            <div>
+                <Header as='h1'>Downloads</Header>
+                {onceTable}
+
+                <Header as='h1'>Recurring Downloads</Header>
+                {recurringTable}
+            </div>
+        );
+    }
+}
+
 class Admin extends React.Component {
 
     render() {
 
         const panes = [
+            {menuItem: 'Downloads', render: () => <Tab.Pane><Downloads/></Tab.Pane>},
             {menuItem: 'Settings', render: () => <Tab.Pane><Settings/></Tab.Pane>},
             {menuItem: 'WROL Mode', render: () => <Tab.Pane><WROLMode/></Tab.Pane>},
         ];

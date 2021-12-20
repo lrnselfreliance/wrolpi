@@ -64,7 +64,7 @@ async def search_archives(_: Request, data: dict):
     return json_response(ret)
 
 
-@bp.post(':refresh')
+@bp.post('/refresh')
 @wrol_mode_check
 async def refresh_archives(_: Request):
     asyncio.ensure_future(lib.refresh_archives())

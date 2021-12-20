@@ -178,6 +178,10 @@ class EventsResponse:
     events = doc.List(EventObject)
 
 
+class DownloadRequest:
+    urls = doc.String()
+
+
 class Trinary(Field):
     """
     A field for API docs.  Can be True/False/None.

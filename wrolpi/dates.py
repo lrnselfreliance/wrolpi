@@ -85,9 +85,12 @@ class TZDateTime(types.TypeDecorator):
             value = value.astimezone(timezone.utc)
         elif isinstance(value, str) and '-' in value:
             value = datetime.fromisoformat(value)
+            value = value.astimezone(timezone.utc)
         return value
 
-    def process_result_value(self, value, dialect):
+    def process_result_value(self, value: datetime, dialect):
         if value is not None:
+            # Assume the DB timestamp is UTC if not specified.
+            value = value.replace(tzinfo=pytz.utc) if not value.tzinfo else value
             value = local_timezone(value)
         return value

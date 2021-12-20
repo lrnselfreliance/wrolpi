@@ -51,6 +51,12 @@ class MediaPath:
     def __eq__(self, other):
         return self._path == other
 
+    def __truediv__(self, other):
+        return self._path / other
+
+    def startswith(self, other):
+        return str(self._path).startswith(other)
+
 
 class MediaPathType(types.TypeDecorator):  # noqa
     impl = types.String

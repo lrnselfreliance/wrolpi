@@ -348,8 +348,17 @@ class ArchiveAddForm extends APIForm {
 
     handleSubmit = async (e) => {
         e.preventDefault();
-        await postArchive(this.state.inputs.url);
-        this.setState({inputs: {url: ''}}, this.fetchURLs);
+        this.setLoading();
+        try {
+            let response = await postArchive(this.state.inputs.url);
+            if (response.status === 204) {
+                this.setState({inputs: {url: ''}, success: true}, this.fetchURLs);
+            } else {
+                this.setState({loading: false, success: undefined, error: true});
+            }
+        } finally {
+            this.clearLoading();
+        }
     }
 
     fetchURLs = async (e) => {
@@ -365,10 +374,13 @@ class ArchiveAddForm extends APIForm {
                         <Form.Input
                             name='url'
                             placeholder='https://wrolpi.org'
-                            onChange={this.handleInputChange}
                             value={this.state.inputs.url}
+                            disabled={this.state.disabled}
+                            error={this.state.error}
+                            onChange={this.handleInputChange}
+                            success={this.state.success}
                         />
-                        <Form.Button primary>Archive</Form.Button>
+                        <Form.Button primary disabled={this.state.disabled}>Archive</Form.Button>
                     </Form.Group>
                 </Form>
             </>

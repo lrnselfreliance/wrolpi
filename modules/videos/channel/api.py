@@ -5,8 +5,8 @@ from sanic import response, Blueprint
 from sanic.request import Request
 
 from wrolpi.common import logger, wrol_mode_check, get_relative_to_media_directory, make_media_directory
-from wrolpi.root_api import json_response
 from wrolpi.errors import UnknownDirectory
+from wrolpi.root_api import json_response
 from wrolpi.schema import validate_doc, JSONErrorResponse
 from .lib import get_minimal_channels, delete_channel, update_channel, get_channel, create_channel
 from ..schema import ChannelsResponse, ChannelResponse, ChannelPostRequest, \
@@ -27,7 +27,7 @@ async def get_channels(_: Request):
     return json_response({'channels': channels})
 
 
-@channel_bp.route('/<link:string>', methods=['GET', 'OPTIONS'])
+@channel_bp.route('/<link:str>', methods=['GET', 'OPTIONS'])
 @validate_doc(
     summary='Get a Channel',
     produces=ChannelResponse,
@@ -36,7 +36,7 @@ async def get_channels(_: Request):
     ),
 )
 def channel_get(_: Request, link: str):
-    channel = get_channel(link)
+    channel = get_channel(link=link)
     channel.pop('info_json')
     return json_response({'channel': channel})
 
@@ -61,6 +61,15 @@ def channel_post(_: Request, data: dict):
         else:
             raise
 
+    if download_frequency := data.get('download_frequency'):
+        try:
+            download_frequency = int(download_frequency)
+        except ValueError:
+            if download_frequency in ('null', 'None'):
+                download_frequency = None
+
+    data['download_frequency'] = download_frequency
+
     channel = create_channel(data)
 
     # Refresh the videos asynchronously
@@ -72,12 +81,11 @@ def channel_post(_: Request, data: dict):
                          {'Location': f'/api/videos/channels/{channel["link"]}'})
 
 
-@channel_bp.put('/<link:string>')
-@channel_bp.patch('/<link:string>')
+@channel_bp.put('/<link:str>')
+@channel_bp.patch('/<link:str>')
 @validate_doc(
     summary='Update a Channel',
     consumes=ChannelPutRequest,
-    produces=SuccessResponse,
     responses=(
             (HTTPStatus.NOT_FOUND, JSONErrorResponse),
             (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
@@ -90,7 +98,7 @@ def channel_update(_: Request, link: str, data: dict):
                         headers={'Location': f'/api/videos/channels/{channel.link}'})
 
 
-@channel_bp.delete('/<link:string>')
+@channel_bp.delete('/<link:str>')
 @validate_doc(
     summary='Delete a Channel',
     produces=SuccessResponse,

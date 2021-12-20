@@ -10,12 +10,11 @@ import Paginator, {
     scrollToTop,
     searchOrders,
     secondsToString,
-    uploadDate,
     VideoCards,
     videoOrders
 } from "./Common"
 import VideoPage from "./VideoPlayer";
-import {download, downloadHistory, getChannel, getStatistics, getVideo, refresh, searchVideos} from "../api";
+import {download, getChannel, getStatistics, getVideo, refresh, searchVideos} from "../api";
 import {Button, Dropdown, Form, Grid, Header, Icon, Input, Loader, Segment, Statistic, Tab} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
@@ -28,13 +27,8 @@ class ManageVideos extends React.Component {
         super(props);
         this.state = {
             streamUrl: null,
-            downloadHistory: null,
             mostRecentDownload: '',
         }
-    }
-
-    async componentDidMount() {
-        await this.downloadHistory();
     }
 
     download = async (e) => {
@@ -53,15 +47,6 @@ class ManageVideos extends React.Component {
         }
     }
 
-    async downloadHistory() {
-        let response = await downloadHistory();
-        if (response && response.history.length > 0) {
-            let history = response.history;
-            let mostRecentDownload = uploadDate(history[0]['info_date']);
-            this.setState({downloadHistory: history, mostRecentDownload: mostRecentDownload});
-        }
-    }
-
     render() {
         return (
             <Container>
@@ -75,7 +60,6 @@ class ManageVideos extends React.Component {
                     </Button>
                     <label>Download any missing videos</label>
                     <br/>
-                    Most recent download: {this.state.mostRecentDownload}
                 </p>
 
                 <p>
@@ -102,6 +86,7 @@ export class VideoWrapper extends React.Component {
             prev: null,
             next: null,
             channel: null,
+            no_channel: null,
         }
     }
 
@@ -112,8 +97,13 @@ export class VideoWrapper extends React.Component {
     async fetchVideo() {
         // Get and display the Video specified in the Router match
         let [video, prev, next] = await getVideo(this.props.match.params.video_id);
-        let channel = await getChannel(this.props.match.params.channel_link);
-        this.setState({video, prev, next, channel}, scrollToTop);
+        let channel_link = this.props.match.params.channel_link;
+        let channel = channel_link ? await getChannel(channel_link) : null;
+        let no_channel = false;
+        if (!channel) {
+            no_channel = true;
+        }
+        this.setState({video, prev, next, channel, no_channel}, scrollToTop);
     }
 
     async componentDidUpdate(prevProps, prevState) {
@@ -125,7 +115,7 @@ export class VideoWrapper extends React.Component {
     }
 
     render() {
-        if (this.state.video && this.state.channel) {
+        if (this.state.video && (this.state.no_channel || this.state.channel)) {
             return <VideoPage {...this.state} history={this.props.history} autoplay={true}/>
         } else {
             return <VideoPlaceholder/>

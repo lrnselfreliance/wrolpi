@@ -271,11 +271,14 @@ class DownloadManager:
 
         return download
 
-    def create_downloads(self, urls: List[str], session: Session, skip_download: bool = False,
+    def create_downloads(self, urls: List[str], session: Session=None, skip_download: bool = False,
                          reset_attempts: bool = False) -> List[Download]:
         """
         Schedule all URLs for download.  If one cannot be downloaded, none will be added.
         """
+        if not session:
+            _, session = get_db_context()
+
         downloads = []
 
         # Verify that all URLs can be downloaded.

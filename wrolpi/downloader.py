@@ -271,7 +271,7 @@ class DownloadManager:
 
         return download
 
-    def create_downloads(self, urls: List[str], session: Session=None, skip_download: bool = False,
+    def create_downloads(self, urls: List[str], session: Session = None, skip_download: bool = False,
                          reset_attempts: bool = False) -> List[Download]:
         """
         Schedule all URLs for download.  If one cannot be downloaded, none will be added.
@@ -291,7 +291,6 @@ class DownloadManager:
                 # Download may have failed, try again.
                 download.renew(reset_attempts=reset_attempts)
                 downloads.append(download)
-            session.commit()
 
         if skip_download is True:
             return downloads

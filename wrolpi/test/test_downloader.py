@@ -7,7 +7,7 @@ from wrolpi import downloader
 from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download
-from wrolpi.errors import UnrecoverableDownloadError
+from wrolpi.errors import UnrecoverableDownloadError, InvalidDownload
 from wrolpi.test.common import wrap_test_db, TestAPI
 
 
@@ -280,3 +280,24 @@ class TestDownloader(TestAPI):
         ]
         for download, expected in zip_longest(downloads, expected):
             self.assertDictContains(download.dict(), expected)
+
+    @wrap_test_db
+    def test_create_downloads(self):
+        """
+        Multiple downloads can be scheduled using DownloadManager.create_downloads.
+        """
+        http_downloader = HTTPDownloader(priority=0)
+        self.mgr.register_downloader(http_downloader)
+
+        _, session = get_db_context()
+
+        # Both URLs are valid and are scheduled.
+        self.mgr.create_downloads(['https://example.com/1', 'https://example.com/2'], skip_download=True)
+        downloads = self.mgr.get_downloads(session)
+        self.assertEqual({i.url for i in downloads}, {'https://example.com/1', 'https://example.com/2'})
+
+        # One URL is bad, neither should be scheduled.
+        self.assertRaises(InvalidDownload, self.mgr.create_downloads, ['https://example.com/3', 'bad url should fail'],
+                          skip_download=True)
+        downloads = self.mgr.get_downloads(session)
+        self.assertEqual({i.url for i in downloads}, {'https://example.com/1', 'https://example.com/2'})

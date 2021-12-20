@@ -115,9 +115,9 @@ export function VideoCard({video}) {
                 <Card.Description>
                     <Container textAlign='left'>
                         {channel &&
-                        <Link to={channel_url} className="no-link-underscore video-card-link">
-                            <b>{channel.name}</b>
-                        </Link>}
+                            <Link to={channel_url} className="no-link-underscore video-card-link">
+                                <b>{channel.name}</b>
+                            </Link>}
                         <p>{upload_date}</p>
                     </Container>
                 </Card.Description>

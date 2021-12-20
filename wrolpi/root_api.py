@@ -14,7 +14,6 @@ from sanic.request import Request
 from sanic.response import HTTPResponse
 from sanic_cors import CORS
 
-from wrolpi import downloader
 from wrolpi.common import set_sanic_url_parts, logger, get_config, wrol_mode_enabled, save_settings_config, \
     Base, get_media_directory, wrol_mode_check
 from wrolpi.dates import set_timezone

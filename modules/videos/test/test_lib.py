@@ -62,7 +62,7 @@ daily, weekly, days30 = DownloadFrequency.daily, DownloadFrequency.weekly, Downl
              Channel(url='this should be ignored'),
          ],
          [('https://example.com/1', daily, '2000-01-02 00:00:00-07:00')]
-         ),
+        ),
     ]
 )
 @mock.patch('modules.videos.channel.lib.today', lambda: local_timezone(datetime(2000, 1, 1, 0, 0, 0)))

@@ -12,7 +12,7 @@ from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, after_startup, limit_conc
 from wrolpi.common import logger, get_config, wrol_mode_enabled, import_modules
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
-from wrolpi.vars import PROJECT_DIR, MODULES_DIR
+from wrolpi.vars import PROJECT_DIR
 
 logger = logger.getChild('wrolpi-main')
 

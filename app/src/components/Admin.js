@@ -177,7 +177,7 @@ class DownloadRow extends React.Component {
             <Table.Row positive={positive}>
                 <Table.Cell>{url}</Table.Cell>
                 <Table.Cell>{secondsToFrequency(frequency)}</Table.Cell>
-                <Table.Cell>{last_successful_download ? secondsToDate(last_successful_download): null}</Table.Cell>
+                <Table.Cell>{last_successful_download ? secondsToDate(last_successful_download) : null}</Table.Cell>
                 <Table.Cell>{secondsToDate(next_download)}</Table.Cell>
                 <Table.Cell>{status}</Table.Cell>
             </Table.Row>

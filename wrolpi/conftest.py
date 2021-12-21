@@ -75,10 +75,11 @@ def test_directory() -> pathlib.Path:
     """
     Overwrite the media directory with a temporary directory.
     """
-    tmp_dir = tempfile.TemporaryDirectory()
-    tmp_path = pathlib.Path(tmp_dir.name)
-    set_test_media_directory(tmp_path)
-    return tmp_path
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = pathlib.Path(tmp_dir)
+        assert tmp_path.is_dir()
+        set_test_media_directory(tmp_path)
+        yield tmp_path
 
 
 @pytest.fixture(autouse=True)

@@ -12,10 +12,10 @@ def simple_channel(test_session, test_directory) -> Channel:
     """
     channel = Channel(
         directory=test_directory,
-        name='Example Channel 1',
+        name='Simple Channel',
         url='https://example.com/channel1',
         download_frequency=None,  # noqa
-        link='examplechannel1',
+        link='simplechannel',
     )
     test_session.add(channel)
     test_session.commit()
@@ -23,19 +23,31 @@ def simple_channel(test_session, test_directory) -> Channel:
 
 
 @pytest.fixture
-def download_channel(simple_channel) -> Channel:
+def download_channel(test_session, test_directory) -> Channel:
     """
     Get a test Channel that has a download frequency.
     """
     # Add a frequency to the test channel, then give it a download.
-    simple_channel.download_frequency = DownloadFrequency.weekly
+    channel = Channel(
+        directory=test_directory,
+        name='Download Channel',
+        url='https://example.com/channel1',
+        download_frequency=DownloadFrequency.weekly,
+        link='downloadchannel',
+    )
+    test_session.add(channel)
+    test_session.commit()
     spread_channel_downloads()
-    return simple_channel
+    return channel
 
 
 @pytest.fixture
 def simple_video(test_session, test_directory, simple_channel) -> Video:
+    """
+    A Video with a video file whose channel is the Simple Channel.
+    """
     video_path = test_directory / 'simple_video.mp4'
+    video_path.touch()
     video = Video(video_path=video_path, channel_id=simple_channel.id)
     test_session.add(video)
     test_session.commit()

@@ -205,6 +205,12 @@ class Video(ModelHelper, Base):
 
     def __json__(self):
         from modules.videos.common import minimize_video_info_json
+        try:
+            info_json = minimize_video_info_json(self.get_info_json()) if self.info_json_path else None
+        except Exception as e:
+            logger.warning(f'Unable to parse info json {self.info_json_path}', exc_info=e)
+            info_json = None
+
         d = dict(
             caption_path=self.caption_path,
             channel=self.channel,
@@ -212,7 +218,7 @@ class Video(ModelHelper, Base):
             duration=self.duration,
             favorite=self.favorite,
             id=self.id,
-            info_json=minimize_video_info_json(self.get_info_json()) if self.info_json_path else None,
+            info_json=info_json,
             poster_path=self.poster_path,
             size=self.size,
             source_id=self.source_id,

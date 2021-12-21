@@ -10,14 +10,20 @@ class Downloader extends React.Component {
         this.state = {
             urls: '',
             valid: true,
+            pending: false,
         };
     }
 
     submitDownload = async () => {
         if (this.state.urls) {
-            let response = await postDownload(this.state.urls);
-            if (response.status === 204) {
-                this.setState({urls: ''});
+            this.setState({pending: true});
+            try {
+                let response = await postDownload(this.state.urls);
+                if (response.status === 204) {
+                    this.setState({urls: '', pending: false});
+                }
+            } finally {
+                this.setState({pending: false});
             }
         }
     }
@@ -42,7 +48,7 @@ class Downloader extends React.Component {
 
     render() {
         let textareaPlaceholder = 'Enter one URL per line';
-        let disabled = !this.state.urls || !this.state.valid;
+        let disabled = !this.state.urls || !this.state.valid || this.state.pending;
 
         return (
             <Form onSubmit={this.submitDownload}>

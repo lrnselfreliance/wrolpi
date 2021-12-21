@@ -433,10 +433,12 @@ def get_relative_to_media_directory(path: str) -> Path:
     return absolute.relative_to(get_media_directory())
 
 
-def minimize_dict(d: dict, keys: Iterable) -> dict:
+def minimize_dict(d: dict, keys: Iterable) -> Union[dict, None]:
     """
     Return a new dictionary that contains only the keys provided.
     """
+    if d is None:
+        return
     return {k: d[k] for k in set(keys) & d.keys()}
 
 

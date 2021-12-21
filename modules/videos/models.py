@@ -120,6 +120,9 @@ class Video(ModelHelper, Base):
             pass
         except UnknownDirectory:
             pass
+        except Exception as e:
+            logger.warning(f'Unable to parse info json {self.info_json_path}', exc_info=e)
+            return None
 
     def get_video_description(self) -> Optional[str]:
         """
@@ -205,11 +208,7 @@ class Video(ModelHelper, Base):
 
     def __json__(self):
         from modules.videos.common import minimize_video_info_json
-        try:
-            info_json = minimize_video_info_json(self.get_info_json()) if self.info_json_path else None
-        except Exception as e:
-            logger.warning(f'Unable to parse info json {self.info_json_path}', exc_info=e)
-            info_json = None
+        info_json = minimize_video_info_json(self.get_info_json()) if self.info_json_path else None
 
         d = dict(
             caption_path=self.caption_path,

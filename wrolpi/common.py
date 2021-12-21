@@ -12,7 +12,7 @@ from functools import wraps
 from itertools import islice
 from multiprocessing import Event, Queue
 from pathlib import Path
-from typing import Union, Callable, Tuple, Dict, Mapping, List, Iterable
+from typing import Union, Callable, Tuple, Dict, Mapping, List, Iterable, Optional
 from urllib.parse import urlunsplit, urlparse
 
 import yaml
@@ -433,7 +433,7 @@ def get_relative_to_media_directory(path: str) -> Path:
     return absolute.relative_to(get_media_directory())
 
 
-def minimize_dict(d: dict, keys: Iterable) -> Union[dict, None]:
+def minimize_dict(d: dict, keys: Iterable) -> Optional[dict]:
     """
     Return a new dictionary that contains only the keys provided.
     """

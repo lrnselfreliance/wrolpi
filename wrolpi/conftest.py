@@ -71,7 +71,7 @@ def test_session() -> Session:
 
 
 @pytest.fixture(autouse=True)
-def test_directory():
+def test_directory() -> pathlib.Path:
     """
     Overwrite the media directory with a temporary directory.
     """

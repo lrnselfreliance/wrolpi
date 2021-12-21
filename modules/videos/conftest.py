@@ -1,7 +1,7 @@
 import pytest
 
 from modules.videos.channel.lib import spread_channel_downloads
-from modules.videos.models import Channel
+from modules.videos.models import Channel, Video
 from wrolpi.downloader import DownloadFrequency
 
 
@@ -31,3 +31,13 @@ def download_channel(simple_channel) -> Channel:
     simple_channel.download_frequency = DownloadFrequency.weekly
     spread_channel_downloads()
     return simple_channel
+
+
+@pytest.fixture
+def simple_video(test_session, test_directory, simple_channel) -> Video:
+    video_path = test_directory / 'simple_video.mp4'
+    video = Video(video_path=video_path, channel_id=simple_channel.id)
+    test_session.add(video)
+    test_session.commit()
+    video = test_session.query(Video).filter_by(id=video.id).one()
+    return video

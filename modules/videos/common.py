@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 from functools import partial
 from pathlib import Path
-from typing import Union, Tuple, List, Set, Iterable
+from typing import Union, Tuple, List, Set, Iterable, Optional
 
 import PIL
 from PIL import Image
@@ -148,7 +148,7 @@ def get_absolute_video_files(video: Video) -> List[MediaPath]:
     return list(_get())
 
 
-def get_video_info_json(video) -> Union[dict, None]:
+def get_video_info_json(video) -> Optional[dict]:
     """Get the info_json object from a video's meta-file.  Return an empty dict if not possible."""
     if not video.channel or not video.channel.directory:
         return

@@ -14,7 +14,7 @@ from wrolpi.db import get_db_session
 from wrolpi.test.common import build_test_directories, wrap_test_db, TestAPI
 from wrolpi.vars import PROJECT_DIR
 from ..common import get_matching_directories, convert_image, bulk_validate_posters, remove_duplicate_video_paths, \
-    update_view_count, get_video_duration
+    update_view_count, get_video_duration, generate_video_poster, replace_extension
 
 
 class TestCommon(TestAPI):
@@ -282,3 +282,14 @@ def test_update_view_count(tempdir: pathlib.Path):
     check_view_counts({'vid1.mp4': 8, 'vid2.mp4': 11, 'vid3.mp4': 13, 'vid4.mp4': 14})
     update_view_count(channel1.id)
     check_view_counts({'vid1.mp4': 10, 'vid2.mp4': 11, 'vid3.mp4': 13, 'vid4.mp4': 14})
+
+
+def test_generate_video_poster(video_file):
+    """
+    A poster can be generated from a video file.
+    """
+    poster_path = replace_extension(video_file, '.jpg')
+    assert not poster_path.is_file(), f'{poster_path} already exists!'
+    generate_video_poster(video_file)
+    assert poster_path.is_file(), f'{poster_path} was not created!'
+    assert poster_path.stat().st_size > 0

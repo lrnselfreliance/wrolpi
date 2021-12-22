@@ -28,6 +28,7 @@ def get_test_db_engine():
     conn.execute(f'DROP DATABASE IF EXISTS {db_name}')
     conn.execute(f'CREATE DATABASE {db_name}')
     conn.execute('commit')
+    conn.close()
 
     test_args = get_db_args(db_name)
     test_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**test_args))
@@ -68,6 +69,7 @@ def test_session() -> Session:
         test_engine.dispose()
         conn = postgres_engine.connect()
         conn.execute(f'DROP DATABASE IF EXISTS {test_engine.engine.url.database}')
+        conn.close()
 
 
 @pytest.fixture(autouse=True)

@@ -1,8 +1,13 @@
+import pathlib
+import shutil
+from uuid import uuid4
+
 import pytest
 
 from modules.videos.channel.lib import spread_channel_downloads
 from modules.videos.models import Channel, Video
 from wrolpi.downloader import DownloadFrequency
+from wrolpi.vars import PROJECT_DIR
 
 
 @pytest.fixture
@@ -53,3 +58,13 @@ def simple_video(test_session, test_directory, simple_channel) -> Video:
     test_session.commit()
     video = test_session.query(Video).filter_by(id=video.id).one()
     return video
+
+
+@pytest.fixture
+def video_file(test_directory) -> pathlib.Path:
+    destination = test_directory / f'{uuid4()}.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', destination)
+
+    yield destination
+
+    destination.unlink()

@@ -12,13 +12,13 @@ from PIL import Image
 from sqlalchemy.orm import Session
 
 from wrolpi import before_startup
-from wrolpi.common import logger, CONFIG_PATH, get_config, iterify, chunks, get_media_directory, \
+from wrolpi.common import logger, get_config, iterify, chunks, get_media_directory, \
     minimize_dict
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict, ChannelSourceIdConflict
 from wrolpi.media_path import MediaPath
-from wrolpi.vars import DOCKERIZED, DEFAULT_FILE_PERMISSIONS
+from wrolpi.vars import DEFAULT_FILE_PERMISSIONS
 from .models import Channel, Video
 
 logger = logger.getChild(__name__)
@@ -270,29 +270,6 @@ def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None,
             raise ChannelSourceIdConflict()
 
 
-def verify_config():
-    """
-    Check that the local.yaml config file exists.  Check some basic expectations about it's structure.
-    """
-    if not pathlib.Path(CONFIG_PATH).exists():
-        raise Exception(f'local.yaml does not exist, looked here: {CONFIG_PATH}')
-
-    media_directory = get_media_directory()
-    error = None
-    if not media_directory.is_absolute():
-        error = f'Media directory is not absolute! {media_directory}  '
-    elif not media_directory.exists():
-        error = f'Media directory does not exist! {media_directory}  '
-
-    if error and DOCKERIZED:
-        error += 'Have you mounted your media directory in docker-compose.yml?'
-    elif error:
-        error += 'Have you updated your local.yaml with the media_directory?'
-
-    if error:
-        raise Exception(error)
-
-
 def get_matching_directories(path: Union[str, Path]) -> List[str]:
     """
     Return a list of directory strings that start with the provided path.  If the path is a directory, return it's
@@ -338,7 +315,7 @@ def replace_extension(path: pathlib.Path, new_ext) -> pathlib.Path:
     return path
 
 
-def generate_video_poster(video_path: Path):
+def generate_video_poster(video_path: Path) -> Path:
     """
     Create a poster (aka thumbnail) next to the provided video_path.
     """
@@ -352,6 +329,7 @@ def generate_video_poster(video_path: Path):
         logger.warning(f'FFMPEG poster generation failed with stdout: {e.stdout.decode()}')
         logger.warning(f'FFMPEG poster generation failed with stdout: {e.stderr.decode()}')
         raise
+    return poster_path
 
 
 async def generate_bulk_posters(video_ids: List[int]):

@@ -31,7 +31,7 @@ class TestRootAPI(TestAPI):
         assert response.json['args'] == {'hello': ['world']}
 
         data = {'foo': 'bar'}
-        request, response = api_app.test_client.post('/api/echo', data=json.dumps(data))
+        request, response = api_app.test_client.post('/api/echo', content=json.dumps(data))
         assert response.status_code == HTTPStatus.OK
         self.assertDictContains(response.json['form'], {})
         assert response.json['method'] == 'POST', 'Method was not POST'
@@ -43,17 +43,17 @@ class TestRootAPI(TestAPI):
         The endpoint should only return valid if the regex is valid.
         """
         data = {'regex': 'foo'}
-        request, response = api_app.test_client.post('/api/valid_regex', data=json.dumps(data))
+        request, response = api_app.test_client.post('/api/valid_regex', content=json.dumps(data))
         assert response.status_code == HTTPStatus.OK
         assert json.loads(response.body) == {'valid': True, 'regex': 'foo'}
 
         data = {'regex': '.*(title match).*'}
-        request, response = api_app.test_client.post('/api/valid_regex', data=json.dumps(data))
+        request, response = api_app.test_client.post('/api/valid_regex', content=json.dumps(data))
         assert response.status_code == HTTPStatus.OK
         assert json.loads(response.body) == {'valid': True, 'regex': '.*(title match).*'}
 
         data = {'regex': '.*(missing parenthesis.*'}
-        request, response = api_app.test_client.post('/api/valid_regex', data=json.dumps(data))
+        request, response = api_app.test_client.post('/api/valid_regex', content=json.dumps(data))
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert json.loads(response.body) == {'valid': False, 'regex': '.*(missing parenthesis.*'}
 

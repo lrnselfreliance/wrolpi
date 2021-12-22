@@ -305,7 +305,7 @@ def get_matching_directories(path: Union[str, Path]) -> List[str]:
     }
 
     if os.path.isdir(path):
-        # The provided path is a directory, return it's subdirectories, or itself if no subdirectories exist
+        # The provided path is a directory, return its subdirectories, or itself if no subdirectories exist
         paths = [os.path.join(path, i) for i in os.listdir(path)]
         paths = sorted(i for i in paths if os.path.isdir(i) and i not in ignored_directories)
         if len(paths) == 0:

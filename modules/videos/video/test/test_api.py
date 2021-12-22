@@ -87,11 +87,11 @@ class TestVideoFunctions(TestAPI):
 
         with mock.patch('wrolpi.common.wrol_mode_enabled', lambda: True):
             # Can't create, update, or delete a channel.
-            _, resp = api_app.test_client.post('/api/videos/channels', data=channel)
+            _, resp = api_app.test_client.post('/api/videos/channels', content=channel)
             self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
-            _, resp = api_app.test_client.put('/api/videos/channels/channel1', data=channel)
+            _, resp = api_app.test_client.put('/api/videos/channels/channel1', content=channel)
             self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
-            _, resp = api_app.test_client.patch('/api/videos/channels/channel1', data=channel)
+            _, resp = api_app.test_client.patch('/api/videos/channels/channel1', content=channel)
             self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
             _, resp = api_app.test_client.delete('/api/videos/channels/channel1')
             self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
@@ -107,7 +107,7 @@ class TestVideoFunctions(TestAPI):
             self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
 
             # THE REST OF THESE METHODS ARE ALLOWED
-            _, resp = api_app.test_client.post('/api/videos/favorite', data=favorite)
+            _, resp = api_app.test_client.post('/api/videos/favorite', content=favorite)
             self.assertEqual(resp.status_code, HTTPStatus.OK)
 
     @wrap_test_db

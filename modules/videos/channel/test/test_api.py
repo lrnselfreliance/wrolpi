@@ -58,7 +58,7 @@ class TestVideoAPI(TestAPI):
         assert response.status_code == HTTPStatus.NOT_FOUND, f'Channel exists: {response.json}'
 
         # Create it
-        request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
+        request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.CREATED
         location = response.headers['Location']
         request, response = api_app.test_client.get(location)
@@ -75,13 +75,13 @@ class TestVideoAPI(TestAPI):
         assert new_channel['link']
 
         # Can't create it again
-        request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
+        request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.BAD_REQUEST
 
         # Update it
         new_channel['name'] = 'Example Channel 2'
         new_channel['directory'] = str(new_channel['directory'])
-        request, response = api_app.test_client.put(location, data=json.dumps(new_channel))
+        request, response = api_app.test_client.put(location, content=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
         request, response = api_app.test_client.get(location)
         assert response.status_code == HTTPStatus.OK
@@ -95,7 +95,7 @@ class TestVideoAPI(TestAPI):
 
         # Patch it
         patch = {'name': 'new name'}
-        request, response = api_app.test_client.patch(location, data=json.dumps(patch))
+        request, response = api_app.test_client.patch(location, content=json.dumps(patch))
         assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
         request, response = api_app.test_client.get(location)
         assert response.status_code == HTTPStatus.OK
@@ -109,7 +109,7 @@ class TestVideoAPI(TestAPI):
 
         # Can't update channel that doesn't exist
         request, response = api_app.test_client.put('/api/videos/channels/doesnt_exist',
-                                                    data=json.dumps(new_channel))
+                                                    content=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.NOT_FOUND
 
         # Delete the new channel
@@ -134,7 +134,7 @@ class TestVideoAPI(TestAPI):
             )
 
             def _post_channel(channel):
-                return api_app.test_client.post('/api/videos/channels', data=json.dumps(channel))
+                return api_app.test_client.post('/api/videos/channels', content=json.dumps(channel))
 
             # Create it
             request, response = _post_channel(new_channel)
@@ -199,7 +199,7 @@ class TestVideoAPI(TestAPI):
                 'name': 'Fooz',
                 'directory': channel_directory,
             }
-            request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
+            request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
             assert response.status_code == HTTPStatus.CREATED, response.json
             location = response.headers['Location']
 
@@ -209,7 +209,7 @@ class TestVideoAPI(TestAPI):
                 'name': 'Barz',
                 'directory': channel_directory2,
             }
-            request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
+            request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
             assert response.status_code == HTTPStatus.CREATED, response.json
             assert location != response.headers['Location']
 
@@ -362,7 +362,7 @@ class TestVideoAPI(TestAPI):
 
         # Channels don't have videos yet
         d = dict(channel_link=channel1.link)
-        request, response = api_app.test_client.post(f'/api/videos/search', data=json.dumps(d))
+        request, response = api_app.test_client.post(f'/api/videos/search', content=json.dumps(d))
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 0
 
@@ -373,14 +373,14 @@ class TestVideoAPI(TestAPI):
             session.add(vid2)
 
         # Videos are gotten by their respective channels
-        request, response = api_app.test_client.post(f'/api/videos/search', data=json.dumps(d))
+        request, response = api_app.test_client.post(f'/api/videos/search', content=json.dumps(d))
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 1
         assert response.json['totals']['videos'] == 1
         self.assertDictContains(response.json['videos'][0], dict(id=2, title='vid2', channel_id=channel1.id))
 
         d = dict(channel_link=channel2.link)
-        request, response = api_app.test_client.post(f'/api/videos/search', data=json.dumps(d))
+        request, response = api_app.test_client.post(f'/api/videos/search', content=json.dumps(d))
         assert response.status_code == HTTPStatus.OK
         assert len(response.json['videos']) == 1
         self.assertDictContains(response.json['videos'][0], dict(id=1, title='vid1', channel_id=channel2.id))
@@ -446,7 +446,7 @@ class TestVideoAPI(TestAPI):
         last_ids = []
         for offset, video_count in tests:
             d = dict(channel_link=channel1.link, order_by='id', offset=offset)
-            _, response = api_app.test_client.post(f'/api/videos/search', data=json.dumps(d))
+            _, response = api_app.test_client.post(f'/api/videos/search', content=json.dumps(d))
             assert response.status_code == HTTPStatus.OK
             assert len(response.json['videos']) == video_count
             current_ids = [i['id'] for i in response.json['videos']]
@@ -472,7 +472,7 @@ class TestVideoAPI(TestAPI):
 
         def do_search(search_str, limit=20):
             d = json.dumps({'search_str': search_str, 'limit': limit})
-            _, resp = api_app.test_client.post('/api/videos/search', data=d)
+            _, resp = api_app.test_client.post('/api/videos/search', content=d)
             return resp
 
         def search_is_as_expected(resp, expected):
@@ -528,7 +528,7 @@ class TestVideoAPI(TestAPI):
         )
 
         # Create the Channel
-        request, response = api_app.test_client.post('/api/videos/channels', data=json.dumps(new_channel))
+        request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.CREATED
         location = response.headers['Location']
 
@@ -551,7 +551,7 @@ class TestVideoAPI(TestAPI):
             download_frequency=10,
         )
         request, response = api_app.test_client.put(f'/api/videos/channels/{channel["link"]}',
-                                                    data=json.dumps(new_channel))
+                                                    content=json.dumps(new_channel))
         self.assertEqual(response.status_code, 204, response.json)
 
         # Remove the frequency.
@@ -562,7 +562,7 @@ class TestVideoAPI(TestAPI):
             download_frequency=None,
         )
         request, response = api_app.test_client.put(f'/api/videos/channels/{channel["link"]}',
-                                                    data=json.dumps(new_channel))
+                                                    content=json.dumps(new_channel))
         self.assertEqual(response.status_code, 204, response.json)
 
 

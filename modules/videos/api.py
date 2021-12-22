@@ -17,7 +17,7 @@ from .lib import _refresh_videos, get_statistics
 from .schema import StreamResponse, \
     FavoriteRequest, FavoriteResponse, VideosStatisticsResponse
 from .video.api import video_bp
-from .video.lib import set_video_favorite
+from .video.lib import set_video_favorite, censored_videos
 
 content_bp = Blueprint('VideoContent', '/api/videos')
 bp = Blueprint('Videos', '/api/videos').group(
@@ -133,3 +133,14 @@ async def statistics(_: Request):
 @before_startup
 def startup_spread_channel_downloads():
     spread_channel_downloads()
+
+
+@content_bp.get('/censored')
+@content_bp.get('/censored/<link:str>')
+@validate_doc(
+    summary='Get all videos that were deleted on their source website',
+)
+async def get_censored_videos(_: Request, link: str = None):
+    videos = censored_videos(link=link)
+    ret = {'videos': videos}
+    return json_response(ret)

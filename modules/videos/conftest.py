@@ -6,6 +6,7 @@ import pytest
 
 from modules.videos.channel.lib import spread_channel_downloads
 from modules.videos.models import Channel, Video
+from wrolpi.common import sanitize_link
 from wrolpi.downloader import DownloadFrequency
 from wrolpi.vars import PROJECT_DIR
 
@@ -25,6 +26,30 @@ def simple_channel(test_session, test_directory) -> Channel:
     test_session.add(channel)
     test_session.commit()
     return channel
+
+
+@pytest.fixture
+def channel_factory(test_session, test_directory):
+    """
+    Create a random Channel with a directory, but no frequency.
+    """
+
+    def _():
+        name = str(uuid4())
+        directory = test_directory / name
+        directory.mkdir()
+        channel = Channel(
+            directory=directory,  # noqa
+            name=name,
+            url=f'https://example.com/{name}',
+            download_frequency=None,  # noqa
+            link=sanitize_link(name),
+        )
+        test_session.add(channel)
+        test_session.commit()
+        return channel
+
+    return _
 
 
 @pytest.fixture

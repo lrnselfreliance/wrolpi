@@ -7,7 +7,7 @@ from sqlalchemy.orm.exc import NoResultFound
 
 from wrolpi.common import run_after, logger
 from wrolpi.db import get_db_session, get_db_curs
-from wrolpi.errors import UnknownVideo
+from wrolpi.errors import UnknownVideo, UnknownChannel
 from ..lib import save_channels_config
 from ..models import Video
 
@@ -154,3 +154,51 @@ def set_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
         favorite = video.set_favorite(favorite)
 
     return favorite
+
+
+def censored_videos(link: str = None, limit: int = 20, offset: int = 0):
+    """
+    Get all Videos that are downloaded, but are not in it's Channel's catalog.  Videos without a channel will not be
+    returned.
+    """
+    limit, offset = int(limit), int(offset)
+
+    with get_db_curs() as curs:
+        if link:
+            curs.execute('SELECT id FROM channel WHERE link=%s', (link,))
+            try:
+                id_ = curs.fetchone()[0]
+            except TypeError:
+                raise UnknownChannel(f'No channel {link}')
+
+            curs.execute("SELECT info_json->'entries' FROM channel WHERE info_json IS NOT NULL AND link=%s", (link,))
+            try:
+                entries = curs.fetchone()[0]
+            except TypeError:
+                # Channel has no info_json entries, so we can't find censored.
+                return []
+
+            source_ids = {i['id'] for i in entries if i}
+            curs.execute('SELECT source_id FROM video WHERE channel_id =%s', (id_,))
+            our_source_ids = {i[0] for i in curs.fetchall()}
+        else:
+            curs.execute("SELECT info_json->'entries' FROM channel WHERE info_json IS NOT NULL")
+            source_ids = {j['id'] for i in curs.fetchall() if i and i[0] for j in i[0]}
+            stmt = '''
+                SELECT v.source_id
+                FROM video v
+                WHERE v.channel_id IN (select id from channel c where info_json is not null)
+            '''
+            curs.execute(stmt)
+            result = curs.fetchall()
+            our_source_ids = {i[0] for i in result}
+
+        censored_ids = our_source_ids - source_ids
+
+    with get_db_session() as session:
+        videos = session.query(Video).filter(Video.source_id.in_(censored_ids)) \
+            .order_by(Video.upload_date) \
+            .limit(limit) \
+            .offset(offset) \
+            .all()
+        return list(videos)

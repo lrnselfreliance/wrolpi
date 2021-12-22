@@ -366,7 +366,7 @@ def convert_image(existing_path: Path, destination_path: Path, ext: str = 'jpeg'
 
 
 def is_valid_poster(poster_path: Path) -> bool:
-    """Return True only if poster file exists, and is of a JPEG format."""
+    """Return True only if poster file exists, and is a JPEG format."""
     if poster_path.is_file():
         try:
             img = Image.open(poster_path)

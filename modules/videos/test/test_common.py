@@ -14,7 +14,7 @@ from wrolpi.db import get_db_session
 from wrolpi.test.common import build_test_directories, wrap_test_db, TestAPI
 from wrolpi.vars import PROJECT_DIR
 from ..common import get_matching_directories, convert_image, bulk_validate_posters, remove_duplicate_video_paths, \
-    update_view_count, get_video_duration, generate_video_poster, replace_extension
+    update_view_count, get_video_duration, generate_video_poster, replace_extension, is_valid_poster
 
 
 class TestCommon(TestAPI):
@@ -108,6 +108,23 @@ def test_convert_image():
         assert not existing_path.is_file()
         assert destination_path.is_file()
         assert Image.open(destination_path).format == 'JPEG'
+
+
+@pytest.mark.parametrize(
+    'ext,expected',
+    [
+        ('jpg', True),
+        ('jpeg', True),
+        ('png', False),
+        ('webp', False),
+        ('tif', False),
+    ]
+)
+def test_is_valid_poster(ext, expected, test_directory):
+    foo = Image.new('RGB', (25, 25), color='blue')
+    image_path = test_directory / f'image.{ext}'
+    foo.save(image_path)
+    assert is_valid_poster(image_path) == expected, f'is_valid_poster({image_path}) should be {expected}'
 
 
 @pytest.mark.parametrize(

@@ -19,10 +19,6 @@ from ..common import get_matching_directories, convert_image, bulk_validate_post
 
 class TestCommon(TestAPI):
 
-    def test_get_absolute_media_path(self):
-        path = get_absolute_media_path('videos')
-        self.assertTrue(str(path).endswith('videos'))
-
     def test_matching_directories(self):
         structure = [
             'foo/qux/',
@@ -55,21 +51,26 @@ class TestCommon(TestAPI):
             matches = get_matching_directories(temp_dir / 'foo')
             assert matches == [str(temp_dir / 'foo/qux')]
 
-    def test_get_video_duration(self):
-        """
-        Video duration can be retrieved from the video file.
-        """
-        video_path = PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4'
-        self.assertEqual(get_video_duration(video_path), 5)
 
-        video_path = PROJECT_DIR / 'test/does not exist.mp4'
-        self.assertRaises(FileNotFoundError, get_video_duration, video_path)
+def test_get_absolute_media_path():
+    path = get_absolute_media_path('videos')
+    assert str(path).endswith('videos')
 
-        video_path = str(PROJECT_DIR / 'test/does not exist.mp4')
-        self.assertRaises(FileNotFoundError, get_video_duration, video_path)
 
-        with tempfile.NamedTemporaryFile() as fh:
-            self.assertRaises(subprocess.CalledProcessError, get_video_duration, fh.name)
+def test_get_video_duration(test_directory):
+    """
+    Video duration can be retrieved from the video file.
+    """
+    video_path = PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4'
+    assert get_video_duration(video_path) == 5
+
+    with pytest.raises(FileNotFoundError):
+        get_video_duration(PROJECT_DIR / 'test/does not exist.mp4')
+
+    with pytest.raises(subprocess.CalledProcessError):
+        empty_file = test_directory / 'empty.mp4'
+        empty_file.touch()
+        get_video_duration(empty_file)
 
 
 @pytest.mark.parametrize(

@@ -211,6 +211,7 @@ class Video(ModelHelper, Base):
     def __json__(self):
         from modules.videos.common import minimize_video_info_json
         info_json = minimize_video_info_json(self.get_info_json()) if self.info_json_path else None
+        stem = self.video_path.path.stem
 
         d = dict(
             caption_path=self.caption_path,
@@ -223,6 +224,7 @@ class Video(ModelHelper, Base):
             poster_path=self.poster_path,
             size=self.size,
             source_id=self.source_id,
+            stem=stem,
             title=self.title,
             upload_date=self.upload_date,
             url=self.url,

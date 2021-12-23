@@ -601,3 +601,13 @@ def test_video_search(test_session):
     response = do_search('b', 2)
     assert [i['id'] for i in response.json['videos']] == [1, 2]
     assert response.json['totals']['videos'] == 4
+
+
+def test_video_file_name(test_session, simple_video, test_client):
+    """
+    If a Video has no title, the front-end can use the file name as the title.
+    """
+    _, resp = test_client.get(f'/api/videos/video/{simple_video.id}')
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.json['video']['video_path'] == 'simple_video.mp4'
+    assert resp.json['video'].get('stem') == 'simple_video'

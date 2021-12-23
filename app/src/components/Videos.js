@@ -195,49 +195,35 @@ export class ViewedVideosPreview extends VideosPreview {
 
 }
 
-function VideoFilterModal(props) {
-    const [favorite, setFavorite] = React.useState(false);
-    const [censored, setCensored] = React.useState(false);
-
-    let applyFilters = () => {
-        let filters = [];
-        if (favorite) {
-            filters = filters.concat(['favorite']);
-        }
-        if (censored) {
-            filters = filters.concat(['censored']);
-        }
-        props.applyFilters(filters);
-        props.close();
-    }
+function FilterModal(props) {
+    /*
+    Expecting props.filters = [
+        {label: 'Favorites', name: 'favorite', value: false},
+        {label: 'Censored', name: 'censored', value: false},
+    ];
+     */
+    let inputs = props.filters.map((i) =>
+        <Form.Input>
+            <Radio toggle
+                   checked={i.value}
+                   label={i.label}
+                   onClick={() => props.toggleFilter(i.name)}
+            />
+        </Form.Input>
+    )
 
     return (
-        <Modal open={props.open} onClose={props.close} onOpen={props.open}>
-            <Modal.Header>Filter Videos</Modal.Header>
+        <Modal closeIcon open={props.open} onClose={props.close} onOpen={props.open} size='mini'>
+            <Modal.Header>{props.header}</Modal.Header>
             <Modal.Content>
                 <Modal.Description>
                     <Form>
-                        <Form.Input>
-                            <Radio
-                                toggle
-                                checked={favorite}
-                                onChange={() => setFavorite(!favorite)}
-                                label='Favorites'
-                            />
-                        </Form.Input>
-                        <Form.Input>
-                            <Radio
-                                toggle
-                                checked={censored}
-                                onChange={() => setCensored(!censored)}
-                                label='Censored'
-                            />
-                        </Form.Input>
+                        {inputs}
                     </Form>
                 </Modal.Description>
             </Modal.Content>
             <Modal.Actions>
-                <Button color='blue' onClick={applyFilters}>Apply</Button>
+                {props.applyButton && <Button color='blue'>Apply</Button>}
                 <Button color='black' onClick={props.close}>Close</Button>
             </Modal.Actions>
         </Modal>
@@ -254,7 +240,10 @@ class Videos extends React.Component {
         let searchStr = query.q || '';
         let searchOrder = query.o || defaultVideoOrder;
 
-        let filters = this.props.filter === 'favorite' ? ['favorite'] : [];
+        let filters = [
+            {label: 'Favorites', name: 'favorite', value: this.props.filter === 'favorite'},
+            {label: 'Censored', name: 'censored', value: this.props.filter === 'censored'},
+        ];
 
         this.state = {
             channel: null,
@@ -271,6 +260,7 @@ class Videos extends React.Component {
             header: '',
             filtersOpen: false,
             filters,
+            filterEnabled: false,
         };
     }
 
@@ -298,6 +288,11 @@ class Videos extends React.Component {
         } else if (pageChanged) {
             this.applyStateToHistory();
             await this.fetchVideos();
+        }
+
+        let filterEnabled = this.enabledFilters().length > 0;
+        if (this.state.filterEnabled !== filterEnabled) {
+            this.state.filterEnabled = filterEnabled;
         }
     }
 
@@ -337,11 +332,27 @@ class Videos extends React.Component {
             this.fetchVideos);
     }
 
+    enabledFilters = () => {
+        let filters = this.state.filters;
+        let filtersArr = [];
+        for (let i = 0; i < filters.length; i++) {
+            let filter = filters[i];
+            if (filter['value'] === true) {
+                filtersArr = filtersArr.concat([filter['name']]);
+            }
+        }
+        return filtersArr;
+    }
+
     async fetchVideos() {
         let offset = this.state.limit * this.state.activePage - this.state.limit;
         let channel_link = this.state.channel ? this.state.channel.link : null;
-        let {queryStr, searchOrder, filters} = this.state;
-        let [videos, total] = await searchVideos(offset, this.state.limit, channel_link, queryStr, searchOrder, filters);
+        let {queryStr, searchOrder, limit} = this.state;
+
+        // Pass any enabled filters to the search.
+        let filtersArr = this.enabledFilters();
+
+        let [videos, total] = await searchVideos(offset, limit, channel_link, queryStr, searchOrder, filtersArr);
 
         let totalPages = Math.round(total / this.state.limit) || 1;
         this.setState({videos, totalPages});
@@ -375,7 +386,13 @@ class Videos extends React.Component {
         this.setState({searchOrder: value, activePage: 1}, this.applyStateToHistory);
     }
 
-    applyFilters = (filters) => {
+    toggleFilter = (name) => {
+        let filters = this.state.filters;
+        for (let i = 0; i < filters.length; i++) {
+            if (filters[i].name === name) {
+                filters[i].value = !filters[i].value;
+            }
+        }
         this.setState({filters}, this.fetchVideos);
     }
 
@@ -398,6 +415,7 @@ class Videos extends React.Component {
             totalPages,
             videoOrders,
             videos,
+            filterEnabled,
         } = this.state;
 
         let body = <VideoPlaceholder/>;
@@ -434,8 +452,6 @@ class Videos extends React.Component {
             </Button>
         );
 
-        let filtersApplied = this.state.filters.length > 0;
-
         return (
             <Container textAlign='center'>
                 <Grid columns={4} stackable>
@@ -455,6 +471,20 @@ class Videos extends React.Component {
                         </h1>
                         {queryStr && clearSearchButton}
                     </Grid.Column>
+                    <Grid.Column width={1}>
+                        <Button icon onClick={this.openFilters} color={filterEnabled ? 'black' : null}>
+                            <Icon name='filter'/>
+                        </Button>
+                        <FilterModal
+                            applyFilters={this.applyFilters}
+                            open={this.state.filtersOpen}
+                            close={this.closeFilters}
+                            header='Filter Videos'
+                            filters={this.state.filters}
+                            toggleFilter={this.toggleFilter}
+                            applyButton={null}
+                        />
+                    </Grid.Column>
                     <Grid.Column textAlign='right' width={5}>
                         <Form onSubmit={this.handleSearch}>
                             <Input
@@ -465,16 +495,6 @@ class Videos extends React.Component {
                                 value={searchStr}
                                 onChange={this.handleInputChange}/>
                         </Form>
-                    </Grid.Column>
-                    <Grid.Column width={1}>
-                        <Button icon onClick={this.openFilters} color={filtersApplied ? 'black' : null}>
-                            <Icon name='filter'/>
-                        </Button>
-                        <VideoFilterModal
-                            applyFilters={this.applyFilters}
-                            open={this.state.filtersOpen}
-                            close={this.closeFilters}
-                        />
                     </Grid.Column>
                     <Grid.Column width={4}>
                         <Dropdown

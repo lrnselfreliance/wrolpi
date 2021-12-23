@@ -11,13 +11,13 @@ from wrolpi.common import create_websocket_feed, get_sanic_url, \
 from wrolpi.common import logger
 from wrolpi.root_api import add_blueprint, json_response
 from wrolpi.schema import validate_doc, JSONErrorResponse
+from .channel import lib as channel_lib
 from .channel.api import channel_bp
-from .channel.lib import download_channel, spread_channel_downloads
 from .lib import _refresh_videos, get_statistics
 from .schema import StreamResponse, \
-    FavoriteRequest, FavoriteResponse, VideosStatisticsResponse
+    FavoriteRequest, FavoriteResponse, VideosStatisticsResponse, CensoredVideoResponse, CensoredVideoRequest
+from .video import lib as video_lib
 from .video.api import video_bp
-from .video.lib import set_video_favorite
 
 content_bp = Blueprint('VideoContent', '/api/videos')
 bp = Blueprint('Videos', '/api/videos').group(
@@ -94,7 +94,7 @@ def download(_, link: str = None):
     if refresh_event.is_set():
         return response.json({'error': 'Refresh is running.  Cannot download.'})
 
-    download_channel(link)
+    channel_lib.download_channel(link)
 
     download_logger.debug('do_download scheduled')
     return response.json({'code': 'stream-started', 'stream_url': stream_url})
@@ -115,7 +115,7 @@ async def refresh_videos(channel_links: list = None):
     ]
 )
 async def favorite(_: Request, data: dict):
-    _favorite = set_video_favorite(data['video_id'], data['favorite'])
+    _favorite = video_lib.set_video_favorite(data['video_id'], data['favorite'])
     ret = {'video_id': data['video_id'], 'favorite': _favorite}
     return json_response(ret, HTTPStatus.OK)
 
@@ -132,4 +132,20 @@ async def statistics(_: Request):
 
 @before_startup
 def startup_spread_channel_downloads():
-    spread_channel_downloads()
+    channel_lib.spread_channel_downloads()
+
+
+@content_bp.post('/censored')
+@content_bp.post('/censored/<link:str>')
+@validate_doc(
+    summary='Get all videos that were deleted on their source website',
+    consumes=CensoredVideoRequest,
+    produces=CensoredVideoResponse,
+)
+async def censored_videos(_: Request, data: dict, link: str = None):
+    limit = data.get('limit', 20)
+    offset = data.get('offset', 0)
+
+    videos = video_lib.censored_source_ids(link, limit, offset)
+    ret = {'videos': videos}
+    return json_response(ret)

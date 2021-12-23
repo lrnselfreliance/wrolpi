@@ -15,7 +15,21 @@ import Paginator, {
 } from "./Common"
 import VideoPage from "./VideoPlayer";
 import {download, getChannel, getStatistics, getVideo, refresh, searchVideos} from "../api";
-import {Button, Dropdown, Form, Grid, Header, Icon, Input, Loader, Segment, Statistic, Tab} from "semantic-ui-react";
+import {
+    Button,
+    Dropdown,
+    Form,
+    Grid,
+    Header,
+    Icon,
+    Input,
+    Loader,
+    Modal,
+    Radio,
+    Segment,
+    Statistic,
+    Tab
+} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {Channels, EditChannel, NewChannel} from "./Channels";
@@ -160,7 +174,7 @@ export class FavoriteVideosPreview extends VideosPreview {
 
     async fetchVideos() {
         let [videos] = await searchVideos(
-            0, 3, null, null, true, '-favorite');
+            0, 3, null, null, '-favorite', ['favorite']);
         this.setState({videos});
     }
 
@@ -175,10 +189,45 @@ export class ViewedVideosPreview extends VideosPreview {
 
     async fetchVideos() {
         let [videos] = await searchVideos(
-            0, 3, null, null, null, '-viewed');
+            0, 3, null, null, '-viewed');
         this.setState({videos});
     }
 
+}
+
+function FilterModal(props) {
+    /*
+    Expecting props.filters = [
+        {label: 'Favorites', name: 'favorite', value: false},
+        {label: 'Censored', name: 'censored', value: false},
+    ];
+     */
+    let inputs = props.filters.map((i) =>
+        <Form.Input>
+            <Radio toggle
+                   checked={i.value}
+                   label={i.label}
+                   onClick={() => props.toggleFilter(i.name)}
+            />
+        </Form.Input>
+    )
+
+    return (
+        <Modal closeIcon open={props.open} onClose={props.close} onOpen={props.open} size='mini'>
+            <Modal.Header>{props.header}</Modal.Header>
+            <Modal.Content>
+                <Modal.Description>
+                    <Form>
+                        {inputs}
+                    </Form>
+                </Modal.Description>
+            </Modal.Content>
+            <Modal.Actions>
+                {props.applyButton && <Button color='blue'>Apply</Button>}
+                <Button color='black' onClick={props.close}>Close</Button>
+            </Modal.Actions>
+        </Modal>
+    )
 }
 
 
@@ -190,6 +239,11 @@ class Videos extends React.Component {
         let activePage = query.page ? parseInt(query.page) : 1; // First page is 1 by default, of course.
         let searchStr = query.q || '';
         let searchOrder = query.o || defaultVideoOrder;
+
+        let filters = [
+            {label: 'Favorites', name: 'favorite', value: this.props.filter === 'favorite'},
+            {label: 'Censored', name: 'censored', value: this.props.filter === 'censored'},
+        ];
 
         this.state = {
             channel: null,
@@ -203,7 +257,10 @@ class Videos extends React.Component {
             next: null,
             videoOrders: searchStr === '' ? videoOrders : searchOrders,
             searchOrder: searchOrder,
-            title: '',
+            header: '',
+            filtersOpen: false,
+            filters,
+            filterEnabled: false,
         };
     }
 
@@ -213,7 +270,7 @@ class Videos extends React.Component {
         } else {
             await this.fetchVideos();
         }
-        this.setTitle();
+        this.setHeader();
     }
 
     async componentDidUpdate(prevProps, prevState, snapshot) {
@@ -232,24 +289,29 @@ class Videos extends React.Component {
             this.applyStateToHistory();
             await this.fetchVideos();
         }
+
+        let filterEnabled = this.enabledFilters().length > 0;
+        if (this.state.filterEnabled !== filterEnabled) {
+            this.state.filterEnabled = filterEnabled;
+        }
     }
 
-    setTitle() {
-        let title = '';
-        if (this.props.filter === 'favorites') {
-            title = 'Favorite Videos';
+    setHeader() {
+        let header = '';
+        if (this.props.header) {
+            header = this.props.header;
         } else if (this.state.channel) {
-            title = this.state.channel.name;
+            header = this.state.channel.name;
         } else {
-            // Find the matching title from the search orders.
+            // Find the matching header from the search orders.
             for (let i = 0; i < this.state.videoOrders.length; i++) {
                 let item = this.state.videoOrders[i];
                 if (item.value === this.state.searchOrder) {
-                    title = item.title;
+                    header = item.title;
                 }
             }
         }
-        this.setState({title: title});
+        this.setState({header: header});
     }
 
     async fetchChannel() {
@@ -270,12 +332,27 @@ class Videos extends React.Component {
             this.fetchVideos);
     }
 
+    enabledFilters = () => {
+        let filters = this.state.filters;
+        let filtersArr = [];
+        for (let i = 0; i < filters.length; i++) {
+            let filter = filters[i];
+            if (filter['value'] === true) {
+                filtersArr = filtersArr.concat([filter['name']]);
+            }
+        }
+        return filtersArr;
+    }
+
     async fetchVideos() {
         let offset = this.state.limit * this.state.activePage - this.state.limit;
         let channel_link = this.state.channel ? this.state.channel.link : null;
-        let favorites = this.props.filter !== undefined ? this.props.filter === 'favorites' : null;
-        let [videos, total] = await searchVideos(
-            offset, this.state.limit, channel_link, this.state.queryStr, favorites, this.state.searchOrder);
+        let {queryStr, searchOrder, limit} = this.state;
+
+        // Pass any enabled filters to the search.
+        let filtersArr = this.enabledFilters();
+
+        let [videos, total] = await searchVideos(offset, limit, channel_link, queryStr, searchOrder, filtersArr);
 
         let totalPages = Math.round(total / this.state.limit) || 1;
         this.setState({videos, totalPages});
@@ -309,6 +386,24 @@ class Videos extends React.Component {
         this.setState({searchOrder: value, activePage: 1}, this.applyStateToHistory);
     }
 
+    toggleFilter = (name) => {
+        let filters = this.state.filters;
+        for (let i = 0; i < filters.length; i++) {
+            if (filters[i].name === name) {
+                filters[i].value = !filters[i].value;
+            }
+        }
+        this.setState({filters}, this.fetchVideos);
+    }
+
+    closeFilters = () => {
+        this.setState({filtersOpen: false});
+    }
+
+    openFilters = () => {
+        this.setState({filtersOpen: true});
+    }
+
     render() {
         let {
             activePage,
@@ -316,10 +411,11 @@ class Videos extends React.Component {
             queryStr,
             searchOrder,
             searchStr,
-            title,
+            header,
             totalPages,
             videoOrders,
             videos,
+            filterEnabled,
         } = this.state;
 
         let body = <VideoPlaceholder/>;
@@ -358,10 +454,10 @@ class Videos extends React.Component {
 
         return (
             <Container textAlign='center'>
-                <Grid columns={3} stackable>
-                    <Grid.Column textAlign='left'>
+                <Grid columns={4} stackable>
+                    <Grid.Column textAlign='left' width={6}>
                         <h1>
-                            {title}
+                            {header}
                             {
                                 channel &&
                                 <>
@@ -375,7 +471,21 @@ class Videos extends React.Component {
                         </h1>
                         {queryStr && clearSearchButton}
                     </Grid.Column>
-                    <Grid.Column textAlign='right'>
+                    <Grid.Column width={1}>
+                        <Button icon onClick={this.openFilters} color={filterEnabled ? 'black' : null}>
+                            <Icon name='filter'/>
+                        </Button>
+                        <FilterModal
+                            applyFilters={this.applyFilters}
+                            open={this.state.filtersOpen}
+                            close={this.closeFilters}
+                            header='Filter Videos'
+                            filters={this.state.filters}
+                            toggleFilter={this.toggleFilter}
+                            applyButton={null}
+                        />
+                    </Grid.Column>
+                    <Grid.Column textAlign='right' width={5}>
                         <Form onSubmit={this.handleSearch}>
                             <Input
                                 fluid
@@ -386,7 +496,7 @@ class Videos extends React.Component {
                                 onChange={this.handleInputChange}/>
                         </Form>
                     </Grid.Column>
-                    <Grid.Column>
+                    <Grid.Column width={4}>
                         <Dropdown
                             size='large'
                             placeholder='Sort by...'
@@ -443,7 +553,8 @@ export class VideosRoute extends React.Component {
                                    match={i.match}
                                    history={i.history}
                                    location={i.location}
-                                   filter='favorites'
+                                   filter='favorite'
+                                   header='Favorite Videos'
                                />
                            }/>
                     <Route path='/videos/channel' exact component={Channels}/>

@@ -108,7 +108,7 @@ export function VideoCard({video}) {
                 <Card.Header>
                     <Container textAlign='left'>
                         <Link to={video_url} className="no-link-underscore video-card-link">
-                            <p>{video.title || video.video_path}</p>
+                            <p>{video.title || video.stem || video.video_path}</p>
                         </Link>
                     </Container>
                 </Card.Header>

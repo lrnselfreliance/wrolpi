@@ -185,6 +185,7 @@ class VideoDownloader(Downloader, ABC):
         config = load_downloader_config()
         options = config.copy()
         options['outtmpl'] = f'{out_dir}/{config["file_name_format"]}'
+        options['merge_output_format'] = PREFERRED_VIDEO_EXTENSION
         # We don't need format when getting the filename.
         del options['format']
 

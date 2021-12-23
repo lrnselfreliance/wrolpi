@@ -526,7 +526,7 @@ class EditInventory extends React.Component {
         } else {
             toast({
                 type: 'error',
-                title: 'Failed to save inventory!',
+                header: 'Failed to save inventory!',
                 description: 'Server responded with an error.',
                 time: 5000,
             })
@@ -542,7 +542,7 @@ class EditInventory extends React.Component {
         } else {
             toast({
                 type: 'error',
-                title: 'Failed to delete inventory!',
+                header: 'Failed to delete inventory!',
                 description: 'Server responded with an error.',
                 time: 5000,
             })
@@ -575,7 +575,7 @@ class NewInventory extends React.Component {
         } else {
             toast({
                 type: 'error',
-                title: 'Failed to save inventory!',
+                header: 'Failed to save inventory!',
                 description: 'Server responded with an error.',
                 time: 5000,
             })
@@ -968,7 +968,7 @@ class InventoryAddList extends React.Component {
         } else {
             toast({
                 type: 'error',
-                title: 'Failed to save item!',
+                header: 'Failed to save item!',
                 description: 'Server responded with an error.',
                 time: 5000,
             })

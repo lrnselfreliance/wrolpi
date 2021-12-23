@@ -454,65 +454,6 @@ class TestVideoAPI(TestAPI):
             last_ids = current_ids
 
     @wrap_test_db
-    def test_video_search(self):
-        """
-        Test that videos can be searched and that their order is by their textsearch rank.
-        """
-        # These captions have repeated letters so they will be higher in the ranking
-        videos = [
-            ('1', 'b b b b e d d'),
-            ('2', '2 b b b d'),
-            ('3', 'b b'),
-            ('4', 'b e e'),
-            ('5', ''),
-        ]
-        with get_db_session(commit=True) as session:
-            for title, caption in videos:
-                session.add(Video(title=title, caption=caption, video_path='foo'))
-
-        def do_search(search_str, limit=20):
-            d = json.dumps({'search_str': search_str, 'limit': limit})
-            _, resp = api_app.test_client.post('/api/videos/search', content=d)
-            return resp
-
-        def search_is_as_expected(resp, expected):
-            assert resp.status_code == HTTPStatus.OK
-            response_ids = [i['id'] for i in resp.json['videos']]
-            assert response_ids == expected
-            assert resp.json['totals']['videos'] == len(expected)
-
-        # Repeated runs should return the same result
-        for _ in range(2):
-            # Only videos with a b are returned, ordered by the amount of b's
-            response = do_search('b')
-            search_is_as_expected(response, [1, 2, 3, 4])
-
-        # Only two captions have e
-        response = do_search('e')
-        search_is_as_expected(response, [4, 1])
-
-        # Only two captions have d
-        response = do_search('d')
-        search_is_as_expected(response, [1, 2])
-
-        # 5 can be gotten by it's title
-        response = do_search('5')
-        search_is_as_expected(response, [5])
-
-        # only video 1 has e and d
-        response = do_search('e d')
-        search_is_as_expected(response, [1])
-
-        # video 1 and 4 have b and e, but 1 has more
-        response = do_search('b e')
-        search_is_as_expected(response, [1, 4])
-
-        # Check totals are correct even with a limit
-        response = do_search('b', 2)
-        assert [i['id'] for i in response.json['videos']] == [1, 2]
-        assert response.json['totals']['videos'] == 4
-
-    @wrap_test_db
     def test_channel_no_download_frequency(self):
         """
         A channel does not require a download frequency.
@@ -601,3 +542,72 @@ def test_delete_channel_delete_download(download_channel, test_session):
 
     downloads = test_session.query(Download).all()
     assert not list(downloads)
+
+
+def test_video_search(test_session):
+    """
+    Test that videos can be searched and that their order is by their textsearch rank.
+    """
+    # These captions have repeated letters, so they will be higher in the ranking.
+    videos = [
+        ('1', 'b b b b e d d'),
+        ('2', '2 b b b d'),
+        ('3', 'b b'),
+        ('4', 'b e e'),
+        ('5', ''),
+    ]
+    for title, caption in videos:
+        test_session.add(Video(title=title, caption=caption, video_path='foo'))
+    test_session.commit()
+
+    def do_search(search_str, limit=20):
+        d = json.dumps({'search_str': search_str, 'limit': limit})
+        _, resp = api_app.test_client.post('/api/videos/search', content=d)
+        return resp
+
+    def search_is_as_expected(resp, expected):
+        assert resp.status_code == HTTPStatus.OK
+        response_ids = [i['id'] for i in resp.json['videos']]
+        assert response_ids == expected
+        assert resp.json['totals']['videos'] == len(expected)
+
+    # Repeated runs should return the same result
+    for _ in range(2):
+        # Only videos with a b are returned, ordered by the amount of b's
+        response = do_search('b')
+        search_is_as_expected(response, [1, 2, 3, 4])
+
+    # Only two captions have e
+    response = do_search('e')
+    search_is_as_expected(response, [4, 1])
+
+    # Only two captions have d
+    response = do_search('d')
+    search_is_as_expected(response, [1, 2])
+
+    # 5 can be gotten by it's title
+    response = do_search('5')
+    search_is_as_expected(response, [5])
+
+    # only video 1 has e and d
+    response = do_search('e d')
+    search_is_as_expected(response, [1])
+
+    # video 1 and 4 have b and e, but 1 has more
+    response = do_search('b e')
+    search_is_as_expected(response, [1, 4])
+
+    # Check totals are correct even with a limit
+    response = do_search('b', 2)
+    assert [i['id'] for i in response.json['videos']] == [1, 2]
+    assert response.json['totals']['videos'] == 4
+
+
+def test_video_file_name(test_session, simple_video, test_client):
+    """
+    If a Video has no title, the front-end can use the file name as the title.
+    """
+    _, resp = test_client.get(f'/api/videos/video/{simple_video.id}')
+    assert resp.status_code == HTTPStatus.OK
+    assert resp.json['video']['video_path'] == 'simple_video.mp4'
+    assert resp.json['video'].get('stem') == 'simple_video'

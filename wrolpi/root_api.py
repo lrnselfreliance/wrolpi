@@ -181,7 +181,7 @@ def valid_regex(_: Request, data: dict):
 async def post_download(request: Request, data: dict):
     # URLs are provided in a textarea, lets split all lines.
     urls = [i.strip() for i in str(data['urls']).strip().splitlines()]
-    download_manager.create_downloads(urls)
+    download_manager.create_downloads(urls, reset_attempts=True)
     return response.empty()
 
 

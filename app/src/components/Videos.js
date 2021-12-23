@@ -254,7 +254,7 @@ class Videos extends React.Component {
         let searchStr = query.q || '';
         let searchOrder = query.o || defaultVideoOrder;
 
-        let filters = this.props.filter !== undefined ? ['favorites'] : [];
+        let filters = this.props.filter === 'favorite' ? ['favorite'] : [];
 
         this.state = {
             channel: null,
@@ -268,7 +268,7 @@ class Videos extends React.Component {
             next: null,
             videoOrders: searchStr === '' ? videoOrders : searchOrders,
             searchOrder: searchOrder,
-            title: '',
+            header: '',
             filtersOpen: false,
             filters,
         };
@@ -280,7 +280,7 @@ class Videos extends React.Component {
         } else {
             await this.fetchVideos();
         }
-        this.setTitle();
+        this.setHeader();
     }
 
     async componentDidUpdate(prevProps, prevState, snapshot) {
@@ -301,22 +301,22 @@ class Videos extends React.Component {
         }
     }
 
-    setTitle() {
-        let title = '';
-        if (this.props.filter === 'favorites') {
-            title = 'Favorite Videos';
+    setHeader() {
+        let header = '';
+        if (this.props.header) {
+            header = this.props.header;
         } else if (this.state.channel) {
-            title = this.state.channel.name;
+            header = this.state.channel.name;
         } else {
-            // Find the matching title from the search orders.
+            // Find the matching header from the search orders.
             for (let i = 0; i < this.state.videoOrders.length; i++) {
                 let item = this.state.videoOrders[i];
                 if (item.value === this.state.searchOrder) {
-                    title = item.title;
+                    header = item.title;
                 }
             }
         }
-        this.setState({title: title});
+        this.setState({header: header});
     }
 
     async fetchChannel() {
@@ -394,7 +394,7 @@ class Videos extends React.Component {
             queryStr,
             searchOrder,
             searchStr,
-            title,
+            header,
             totalPages,
             videoOrders,
             videos,
@@ -441,7 +441,7 @@ class Videos extends React.Component {
                 <Grid columns={4} stackable>
                     <Grid.Column textAlign='left' width={6}>
                         <h1>
-                            {title}
+                            {header}
                             {
                                 channel &&
                                 <>
@@ -533,7 +533,8 @@ export class VideosRoute extends React.Component {
                                    match={i.match}
                                    history={i.history}
                                    location={i.location}
-                                   filter='favorites'
+                                   filter='favorite'
+                                   header='Favorite Videos'
                                />
                            }/>
                     <Route path='/videos/channel' exact component={Channels}/>

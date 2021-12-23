@@ -36,7 +36,7 @@ async function apiCall(url, method, body, ms = 10000) {
         if (response.status === 403 && (await response.json())['code'] === 17) {
             toast({
                 type: 'error',
-                title: 'WROL Mode is enabled!',
+                header: 'WROL Mode is enabled!',
                 description: 'This functionality is not enabled while WROL Mode is enabled!',
                 time: 5000,
             });
@@ -47,14 +47,14 @@ async function apiCall(url, method, body, ms = 10000) {
         if (e.message === 'promise timeout') {
             toast({
                 type: 'error',
-                title: 'Server failed to respond!',
+                header: 'Server failed to respond!',
                 description: 'Timeout while waiting for server response.  See server logs.',
                 time: 5000,
             });
         } else {
             toast({
                 type: 'error',
-                title: 'Error!',
+                header: 'Error!',
                 description: 'See client logs',
                 time: 5000,
             });
@@ -138,7 +138,7 @@ export async function deleteVideo(video_id) {
     if (data.code === 17) {
         toast({
             type: 'warning',
-            title: 'WROL Mode Enabled',
+            header: 'WROL Mode Enabled',
             description: 'This cannot be done while WROL Mode is enabled.',
             time: 5000,
         });
@@ -147,7 +147,7 @@ export async function deleteVideo(video_id) {
     if (response.status !== 204) {
         toast({
             type: 'error',
-            title: 'Unexpected server response',
+            header: 'Unexpected server response',
             description: 'Failed to delete video.  See server logs.',
             time: 5000,
         });
@@ -223,7 +223,7 @@ export async function encryptOTP(otp, plaintext) {
     if (response.status !== 200) {
         toast({
             type: 'error',
-            title: 'Error!',
+            header: 'Error!',
             description: 'Failed to encrypt OTP',
             time: 5000,
         });
@@ -238,7 +238,7 @@ export async function decryptOTP(otp, ciphertext) {
     if (response.status !== 200) {
         toast({
             type: 'error',
-            title: 'Error!',
+            header: 'Error!',
             description: 'Failed to decrypt OTP',
             time: 5000,
         });

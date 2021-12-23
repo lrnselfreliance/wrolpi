@@ -14,7 +14,7 @@ from wrolpi.vars import PYTEST
 from .captions import insert_bulk_captions, process_captions
 from .common import generate_bulk_posters, get_bulk_video_info_json, get_bulk_video_size, \
     generate_video_paths, remove_duplicate_video_paths, bulk_validate_posters, \
-    update_view_count
+    apply_info_json
 from .models import Channel, Video
 
 logger = logger.getChild(__name__)
@@ -174,7 +174,7 @@ def refresh_channel_videos(channel: Channel):
 
     logger.info(f'{channel.name}: {len(new_videos)} new videos, {len(existing_paths)} already existed. ')
 
-    update_view_count(channel.id)
+    apply_info_json(channel.id)
 
 
 def refresh_no_channel_videos():

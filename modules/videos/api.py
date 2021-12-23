@@ -15,7 +15,7 @@ from .channel import lib as channel_lib
 from .channel.api import channel_bp
 from .lib import _refresh_videos, get_statistics
 from .schema import StreamResponse, \
-    FavoriteRequest, FavoriteResponse, VideosStatisticsResponse, CensoredVideoResponse, CensoredVideoRequest
+    FavoriteRequest, FavoriteResponse, VideosStatisticsResponse
 from .video import lib as video_lib
 from .video.api import video_bp
 
@@ -133,19 +133,3 @@ async def statistics(_: Request):
 @before_startup
 def startup_spread_channel_downloads():
     channel_lib.spread_channel_downloads()
-
-
-@content_bp.post('/censored')
-@content_bp.post('/censored/<link:str>')
-@validate_doc(
-    summary='Get all videos that were deleted on their source website',
-    consumes=CensoredVideoRequest,
-    produces=CensoredVideoResponse,
-)
-async def censored_videos(_: Request, data: dict, link: str = None):
-    limit = data.get('limit', 20)
-    offset = data.get('offset', 0)
-
-    videos = video_lib.censored_source_ids(link, limit, offset)
-    ret = {'videos': videos}
-    return json_response(ret)

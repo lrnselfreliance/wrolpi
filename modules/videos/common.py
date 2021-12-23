@@ -485,12 +485,14 @@ async def get_bulk_video_size(video_ids: List[int]):
     logger.info('Done getting video sizes')
 
 
-def update_view_count(channel_id: int):
+def apply_info_json(channel_id: int):
     """
-    Update view_count for all Videos in a channel using it's info_json file.
+    Update view_count for all Videos in a channel using its info_json file.  Mark any videos not in the info_json as
+    "censored".
     """
     with get_db_session() as session:
         channel = session.query(Channel).filter_by(id=channel_id).one()
+        channel_name = channel.name
         info = channel.info_json
 
     if not info:
@@ -502,6 +504,7 @@ def update_view_count(channel_id: int):
     view_counts_str = json.dumps(view_counts)
 
     with get_db_curs(commit=True) as curs:
+        # Update the view_count for each video.
         stmt = '''
             WITH source AS (select * from json_to_recordset(%s::json) as (id text, view_count int))
             UPDATE video
@@ -512,7 +515,15 @@ def update_view_count(channel_id: int):
         '''
         curs.execute(stmt, (view_counts_str, channel_id))
         count = len(curs.fetchall())
-        logger.debug(f'Updated {count} view counts in DB.')
+        logger.debug(f'Updated {count} view counts in DB for {channel_name}.')
+
+        # Mark any video not in the info_json entries as censored.
+        source_ids = [i['id'] for i in info['entries']]
+        stmt = '''
+            UPDATE video SET censored=(source_id != ALL(%s))
+            WHERE channel_id=%s
+        '''
+        curs.execute(stmt, (source_ids, channel_id))
 
 
 minimize_channel = partial(minimize_dict, keys=MINIMUM_CHANNEL_KEYS)

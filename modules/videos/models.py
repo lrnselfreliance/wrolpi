@@ -43,6 +43,8 @@ class Video(ModelHelper, Base):
     viewed = Column(TZDateTime)
     view_count = Column(Integer)
     url = Column(String)
+    censored = Column(Boolean, default=False)
+
     textsearch = Column(tsvector, Computed('''to_tsvector('english'::regconfig,
                                                ((COALESCE(title, ''::text) || ' '::text) ||
                                                 COALESCE(caption, ''::text)))'''))
@@ -211,7 +213,7 @@ class Video(ModelHelper, Base):
     def __json__(self):
         from modules.videos.common import minimize_video_info_json
         info_json = minimize_video_info_json(self.get_info_json()) if self.info_json_path else None
-        stem = self.video_path.path.stem
+        stem = self.video_path.path.stem if self.video_path else None
 
         d = dict(
             caption_path=self.caption_path,

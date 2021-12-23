@@ -14,7 +14,7 @@ from wrolpi.db import get_db_session
 from wrolpi.test.common import build_test_directories, wrap_test_db, TestAPI
 from wrolpi.vars import PROJECT_DIR
 from ..common import get_matching_directories, convert_image, bulk_validate_posters, remove_duplicate_video_paths, \
-    update_view_count, get_video_duration, generate_video_poster, replace_extension, is_valid_poster
+    apply_info_json, get_video_duration, generate_video_poster, replace_extension, is_valid_poster
 
 
 class TestCommon(TestAPI):
@@ -282,15 +282,15 @@ def test_update_view_count(tempdir: pathlib.Path):
     check_view_counts({'vid1.mp4': None, 'vid2.mp4': None, 'vid3.mp4': None, 'vid4.mp4': None})
 
     # Channel 1 is updated, the other channels are left alone.
-    update_view_count(channel1.id)
+    apply_info_json(channel1.id)
     check_view_counts({'vid1.mp4': 10, 'vid2.mp4': None, 'vid3.mp4': None, 'vid4.mp4': None})
 
     # Channel 2 is updated, the other channels are left alone.  The 'bad_id' video is ignored.
-    update_view_count(channel2.id)
+    apply_info_json(channel2.id)
     check_view_counts({'vid1.mp4': 10, 'vid2.mp4': 11, 'vid3.mp4': None, 'vid4.mp4': None})
 
     # All videos are updated.
-    update_view_count(channel3.id)
+    apply_info_json(channel3.id)
     check_view_counts({'vid1.mp4': 10, 'vid2.mp4': 11, 'vid3.mp4': 13, 'vid4.mp4': 14})
 
     # An outdated view count will be overwritten.
@@ -298,7 +298,7 @@ def test_update_view_count(tempdir: pathlib.Path):
         vid = session.query(Video).filter_by(id=1).one()
         vid.view_count = 8
     check_view_counts({'vid1.mp4': 8, 'vid2.mp4': 11, 'vid3.mp4': 13, 'vid4.mp4': 14})
-    update_view_count(channel1.id)
+    apply_info_json(channel1.id)
     check_view_counts({'vid1.mp4': 10, 'vid2.mp4': 11, 'vid3.mp4': 13, 'vid4.mp4': 14})
 
 
@@ -311,3 +311,67 @@ def test_generate_video_poster(video_file):
     generate_video_poster(video_file)
     assert poster_path.is_file(), f'{poster_path} was not created!'
     assert poster_path.stat().st_size > 0
+
+
+def test_update_censored_videos(test_session, video_factory, simple_channel):
+    vid1 = video_factory(channel_id=simple_channel.id)
+    vid2 = video_factory(channel_id=simple_channel.id)
+    vid3 = video_factory(channel_id=simple_channel.id)
+    vid4 = video_factory()  # should not be censored because it has no channel.
+    test_session.commit()
+
+    def check_censored(expected):
+        for video_id, censored in expected:
+            video = test_session.query(Video).filter_by(id=video_id).one()
+            assert video.censored == censored
+
+    # Videos are not censored by default.
+    test_session.commit()
+    apply_info_json(simple_channel.id)
+    check_censored([(vid1.id, False), (vid2.id, False), (vid3.id, False), (vid4.id, False)])
+
+    # All videos are in the info_json.
+    simple_channel.info_json = {
+        'entries': [
+            dict(id=vid1.source_id, view_count=0),
+            dict(id=vid2.source_id, view_count=0),
+            dict(id=vid3.source_id, view_count=0),
+        ]
+    }
+    test_session.commit()
+
+    apply_info_json(simple_channel.id)
+    check_censored([(vid1.id, False), (vid2.id, False), (vid3.id, False), (vid4.id, False)])
+
+    simple_channel.info_json = {
+        'entries': [
+            dict(id=vid1.source_id, view_count=0),  # vid2 is missing
+            dict(id=vid3.source_id, view_count=0),
+        ]
+    }
+    test_session.commit()
+    apply_info_json(simple_channel.id)
+    check_censored([(vid1.id, False), (vid2.id, True), (vid3.id, False), (vid4.id, False)])
+
+    simple_channel.info_json = {
+        'entries': [
+            dict(id=vid1.source_id, view_count=0),  # vid2 is back, vid3 is missing.
+            dict(id=vid2.source_id, view_count=0),
+        ]
+    }
+    test_session.commit()
+    apply_info_json(simple_channel.id)
+    check_censored([(vid1.id, False), (vid2.id, False), (vid3.id, True), (vid4.id, False)])
+
+    simple_channel.info_json = {
+        'entries': []  # all videos gone
+    }
+    test_session.commit()
+    apply_info_json(simple_channel.id)
+    check_censored([(vid1.id, True), (vid2.id, True), (vid3.id, True), (vid4.id, False)])
+
+    # Channels without info json preserve their last censored.
+    simple_channel.info_json = None
+    test_session.commit()
+    apply_info_json(simple_channel.id)
+    check_censored([(vid1.id, True), (vid2.id, True), (vid3.id, True), (vid4.id, False)])

@@ -18,7 +18,7 @@ from wrolpi.downloader import Downloader, Download
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
-from .common import load_downloader_config, update_view_count
+from .common import load_downloader_config, apply_info_json
 from .lib import upsert_video, _refresh_videos
 from .models import Video, Channel
 from .video_url_resolver import video_url_resolver
@@ -304,7 +304,7 @@ def update_channel(channel: Channel):
             json.dump(info, fh, indent=2)
 
     # Update all view counts using the latest from the Channel's info_json.
-    update_view_count(channel_id)
+    apply_info_json(channel_id)
 
 
 def _find_all_missing_videos(link: str = None) -> List[Tuple]:

@@ -93,3 +93,15 @@ def video_file(test_directory) -> pathlib.Path:
     yield destination
 
     destination.unlink()
+
+
+@pytest.fixture
+def video_factory(test_session, test_directory):
+    def _(channel_id: int = None):
+        title = str(uuid4())
+        path = str(test_directory / f'{title}.mp4')
+        video = Video(video_path=path, title=title, channel_id=channel_id, source_id=title)
+        test_session.add(video)
+        return video
+
+    return _

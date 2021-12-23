@@ -519,7 +519,8 @@ class DownloadManager:
             downloads = self.get_once_downloads(session)
             one_month = now() - timedelta(days=30)
             for download in downloads:
-                if download.status in self.FINISHED_STATUSES and download.last_successful_download < one_month:
+                if download.status in self.FINISHED_STATUSES and download.last_successful_download and \
+                        download.last_successful_download < one_month:
                     session.delete(download)
 
 

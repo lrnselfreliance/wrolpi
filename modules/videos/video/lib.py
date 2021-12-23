@@ -1,6 +1,7 @@
 from datetime import datetime
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Set
 
+import cachetools
 import psycopg2
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
@@ -8,6 +9,7 @@ from sqlalchemy.orm.exc import NoResultFound
 from wrolpi.common import run_after, logger
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownVideo, UnknownChannel
+from wrolpi.vars import PYTEST
 from ..lib import save_channels_config
 from ..models import Video
 
@@ -76,31 +78,41 @@ def video_search(
         limit: int = VIDEO_QUERY_LIMIT,
         channel_link: str = None,
         order_by: str = None,
-        favorites: bool = None,
+        filters: List[str] = None,
 ) -> Tuple[List[dict], int]:
     with get_db_curs() as curs:
-        args = dict(search_str=search_str, offset=offset)
+        params = dict(search_str=search_str, offset=offset)
         channel_where = ''
         if channel_link:
             channel_where = 'AND channel_id = (select id from channel where link=%(channel_link)s)'
-            args['channel_link'] = channel_link
+            params['channel_link'] = channel_link
 
         # Filter for/against favorites, if it was provided
         favorites_where = ''
-        if favorites is not None:
-            favorites_where = f'AND favorite IS {"NOT" if favorites else ""} NULL'
+        if isinstance(filters, list) and 'favorite' in filters:
+            favorites_where = 'AND favorite IS NOT NULL'
+
+        censored_where = ''
+        if isinstance(filters, list) and 'censored' in filters:
+            if PYTEST:
+                # Bypass cache for testing only.
+                params['censored_source_ids'] = list(_censored_source_ids(channel_link))
+            else:
+                params['censored_source_ids'] = list(censored_source_ids(channel_link))
+            censored_where = 'AND source_id = ANY(%(censored_source_ids)s)'
 
         where = ''
         if search_str:
             # A search_str was provided by the user, modify the query to filter by it.
             columns = 'id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
             where = 'AND textsearch @@ websearch_to_tsquery(%(search_str)s)'
-            args['search_str'] = search_str
+            params['search_str'] = search_str
         else:
             # No search_str provided.  Get id and total only.
             columns = 'id, COUNT(*) OVER() AS total'
 
-        # Convert the user-friendly order by into a real order by, restrict what can be interpolated by using the whitelist.
+        # Convert the user-friendly order by into a real order by, restrict what can be interpolated by using the
+        # whitelist.
         order = VIDEO_ORDERS[DEFAULT_VIDEO_ORDER]
         if order_by:
             try:
@@ -119,12 +131,13 @@ def video_search(
                 {where}
                 {channel_where}
                 {favorites_where}
+                {censored_where}
             ORDER BY {order}
             OFFSET %(offset)s LIMIT {int(limit)}
         '''.strip()
         logger.debug(query)
 
-        curs.execute(query, args)
+        curs.execute(query, params)
         try:
             results = [dict(i) for i in curs.fetchall()]
         except psycopg2.ProgrammingError:
@@ -156,13 +169,7 @@ def set_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
     return favorite
 
 
-def censored_videos(link: str = None, limit: int = 20, offset: int = 0):
-    """
-    Get all Videos that are downloaded, but are not in it's Channel's catalog.  Videos without a channel will not be
-    returned.
-    """
-    limit, offset = int(limit), int(offset)
-
+def _censored_source_ids(link: str = None) -> Set[str]:
     with get_db_curs() as curs:
         if link:
             curs.execute('SELECT id FROM channel WHERE link=%s', (link,))
@@ -176,7 +183,7 @@ def censored_videos(link: str = None, limit: int = 20, offset: int = 0):
                 entries = curs.fetchone()[0]
             except TypeError:
                 # Channel has no info_json entries, so we can't find censored.
-                return []
+                return set()
 
             source_ids = {i['id'] for i in entries if i}
             curs.execute('SELECT source_id FROM video WHERE channel_id =%s', (id_,))
@@ -194,11 +201,13 @@ def censored_videos(link: str = None, limit: int = 20, offset: int = 0):
             our_source_ids = {i[0] for i in result}
 
         censored_ids = our_source_ids - source_ids
+        return censored_ids
 
-    with get_db_session() as session:
-        videos = session.query(Video).filter(Video.source_id.in_(censored_ids)) \
-            .order_by(Video.upload_date) \
-            .limit(limit) \
-            .offset(offset) \
-            .all()
-        return list(videos)
+
+@cachetools.cached(cachetools.TTLCache(maxsize=100, ttl=600))
+def censored_source_ids(link: str = None) -> Set[str]:
+    """
+    Get all Videos that are downloaded, but are not in its Channel's catalog.  Videos without a channel will not be
+    returned.
+    """
+    return _censored_source_ids(link)

@@ -103,11 +103,11 @@ export async function getChannel(link) {
     return (await response.json())['channel'];
 }
 
-export async function searchVideos(offset, limit, channel_link, searchStr, favorites, order_by) {
+export async function searchVideos(offset, limit, channel_link, searchStr, order_by, filters) {
     // Build a search query to retrieve a list of videos from the API
     offset = offset || 0;
     limit = limit || DEFAULT_LIMIT;
-    let body = {offset, limit, favorites: favorites};
+    let body = {offset, limit, filters};
 
     if (searchStr) {
         body.search_str = searchStr;

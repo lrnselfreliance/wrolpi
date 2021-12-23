@@ -1,7 +1,5 @@
 from sanic_openapi import doc
 
-from wrolpi.schema import Trinary
-
 
 class ChannelPostRequest:
     url = doc.String()
@@ -118,7 +116,7 @@ class VideoSearchRequest:
     order_by = doc.String()
     offset = doc.Integer()
     limit = doc.Integer()
-    favorites = Trinary()
+    filters = doc.List(doc.String())
 
 
 class VideoSearchResponse:
@@ -170,3 +168,12 @@ class ChannelStatistics:
 class VideosStatisticsResponse:
     videos = VideoStatistics
     channels = ChannelStatistics
+
+
+class CensoredVideoRequest:
+    limit = doc.Integer()
+    offset = doc.Integer()
+
+
+class CensoredVideoResponse:
+    videos = doc.List(VideoWithChannel)

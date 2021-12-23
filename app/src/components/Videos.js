@@ -15,7 +15,21 @@ import Paginator, {
 } from "./Common"
 import VideoPage from "./VideoPlayer";
 import {download, getChannel, getStatistics, getVideo, refresh, searchVideos} from "../api";
-import {Button, Dropdown, Form, Grid, Header, Icon, Input, Loader, Segment, Statistic, Tab} from "semantic-ui-react";
+import {
+    Button,
+    Dropdown,
+    Form,
+    Grid,
+    Header,
+    Icon,
+    Input,
+    Loader,
+    Modal,
+    Radio,
+    Segment,
+    Statistic,
+    Tab
+} from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {Channels, EditChannel, NewChannel} from "./Channels";
@@ -181,6 +195,55 @@ export class ViewedVideosPreview extends VideosPreview {
 
 }
 
+function VideoFilterModal(props) {
+    const [favorite, setFavorite] = React.useState(false);
+    const [censored, setCensored] = React.useState(false);
+
+    let applyFilters = () => {
+        let filters = [];
+        if (favorite) {
+            filters = filters.concat(['favorite']);
+        }
+        if (censored) {
+            filters = filters.concat(['censored']);
+        }
+        props.applyFilters(filters);
+        props.close();
+    }
+
+    return (
+        <Modal open={props.open} onClose={props.close} onOpen={props.open}>
+            <Modal.Header>Filter Videos</Modal.Header>
+            <Modal.Content>
+                <Modal.Description>
+                    <Form>
+                        <Form.Input>
+                            <Radio
+                                toggle
+                                checked={favorite}
+                                onChange={() => setFavorite(!favorite)}
+                                label='Favorites'
+                            />
+                        </Form.Input>
+                        <Form.Input>
+                            <Radio
+                                toggle
+                                checked={censored}
+                                onChange={() => setCensored(!censored)}
+                                label='Censored'
+                            />
+                        </Form.Input>
+                    </Form>
+                </Modal.Description>
+            </Modal.Content>
+            <Modal.Actions>
+                <Button color='blue' onClick={applyFilters}>Apply</Button>
+                <Button color='black' onClick={props.close}>Close</Button>
+            </Modal.Actions>
+        </Modal>
+    )
+}
+
 
 class Videos extends React.Component {
 
@@ -190,6 +253,8 @@ class Videos extends React.Component {
         let activePage = query.page ? parseInt(query.page) : 1; // First page is 1 by default, of course.
         let searchStr = query.q || '';
         let searchOrder = query.o || defaultVideoOrder;
+
+        let filters = this.props.filter !== undefined ? ['favorites'] : [];
 
         this.state = {
             channel: null,
@@ -204,6 +269,8 @@ class Videos extends React.Component {
             videoOrders: searchStr === '' ? videoOrders : searchOrders,
             searchOrder: searchOrder,
             title: '',
+            filtersOpen: false,
+            filters,
         };
     }
 
@@ -273,9 +340,8 @@ class Videos extends React.Component {
     async fetchVideos() {
         let offset = this.state.limit * this.state.activePage - this.state.limit;
         let channel_link = this.state.channel ? this.state.channel.link : null;
-        let favorites = this.props.filter !== undefined ? this.props.filter === 'favorites' : null;
-        let [videos, total] = await searchVideos(
-            offset, this.state.limit, channel_link, this.state.queryStr, favorites, this.state.searchOrder);
+        let {queryStr, searchOrder, filters} = this.state;
+        let [videos, total] = await searchVideos(offset, this.state.limit, channel_link, queryStr, searchOrder, filters);
 
         let totalPages = Math.round(total / this.state.limit) || 1;
         this.setState({videos, totalPages});
@@ -307,6 +373,18 @@ class Videos extends React.Component {
 
     changeSearchOrder = (event, {value}) => {
         this.setState({searchOrder: value, activePage: 1}, this.applyStateToHistory);
+    }
+
+    applyFilters = (filters) => {
+        this.setState({filters}, this.fetchVideos);
+    }
+
+    closeFilters = () => {
+        this.setState({filtersOpen: false});
+    }
+
+    openFilters = () => {
+        this.setState({filtersOpen: true});
     }
 
     render() {
@@ -356,10 +434,12 @@ class Videos extends React.Component {
             </Button>
         );
 
+        let filtersApplied = this.state.filters.length > 0;
+
         return (
             <Container textAlign='center'>
-                <Grid columns={3} stackable>
-                    <Grid.Column textAlign='left'>
+                <Grid columns={4} stackable>
+                    <Grid.Column textAlign='left' width={6}>
                         <h1>
                             {title}
                             {
@@ -375,7 +455,7 @@ class Videos extends React.Component {
                         </h1>
                         {queryStr && clearSearchButton}
                     </Grid.Column>
-                    <Grid.Column textAlign='right'>
+                    <Grid.Column textAlign='right' width={5}>
                         <Form onSubmit={this.handleSearch}>
                             <Input
                                 fluid
@@ -386,7 +466,17 @@ class Videos extends React.Component {
                                 onChange={this.handleInputChange}/>
                         </Form>
                     </Grid.Column>
-                    <Grid.Column>
+                    <Grid.Column width={1}>
+                        <Button icon onClick={this.openFilters} color={filtersApplied ? 'black' : null}>
+                            <Icon name='filter'/>
+                        </Button>
+                        <VideoFilterModal
+                            applyFilters={this.applyFilters}
+                            open={this.state.filtersOpen}
+                            close={this.closeFilters}
+                        />
+                    </Grid.Column>
+                    <Grid.Column width={4}>
                         <Dropdown
                             size='large'
                             placeholder='Sort by...'

@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 from unittest import mock
 
 import pytest
@@ -6,7 +6,7 @@ import sqlalchemy
 
 from modules.videos.channel import lib
 from modules.videos.models import Channel, Video
-from modules.videos.video.lib import censored_videos
+from modules.videos.video.lib import _censored_source_ids, video_search
 from wrolpi.dates import local_timezone
 from wrolpi.downloader import DownloadFrequency
 from wrolpi.errors import UnknownChannel
@@ -111,53 +111,63 @@ def test_censored_videos(test_session, channel_factory):
 
     # All source_id's are in "entries".
     set_entries(['foo', 'bar'], ['qux', 'quux', 'quuz'])
-    assert censored_videos(channel1.link) == []
+    assert _censored_source_ids(channel1.link) == set()
 
-    # One video was removed from the catalog.
+    # "foo" is censored.
     set_entries(['bar'], ['qux', 'quux', 'quuz'])
-    assert censored_videos(channel1.link) == [vid1, ]
-    assert censored_videos() == [vid1, ]
-    assert censored_videos(channel2.link) == []
+    assert _censored_source_ids(channel1.link) == {'foo'}
+    assert _censored_source_ids() == {'foo'}
 
     # channel1 has no info_json.
     set_entries(None, ['qux', 'quux', 'quuz'])
-    assert censored_videos(channel1.link) == []
+    assert _censored_source_ids(channel1.link) == set()
 
     # Censor channel2 and channel1.
     set_entries(['bar'], ['quuz'])
-    assert censored_videos() == [vid1, vid4, vid5]
-    assert censored_videos(channel1.link) == [vid1, ]
-    assert censored_videos(channel2.link) == [vid4, vid5]
+    assert _censored_source_ids() == {'foo', 'qux', 'quux'}
+    assert _censored_source_ids(channel1.link) == {'foo', }
+    assert _censored_source_ids(channel2.link) == {'qux', 'quux'}
 
     # channel 1 has no info_json
     set_entries(None, ['quuz'])
-    assert censored_videos() == [vid4, vid5]
-    assert censored_videos(channel1.link) == []
-    assert censored_videos(channel2.link) == [vid4, vid5]
+    assert _censored_source_ids() == {'qux', 'quux'}
+    assert _censored_source_ids(channel1.link) == set()
+    assert _censored_source_ids(channel2.link) == {'qux', 'quux'}
 
     # channel 2 has no entries
     set_entries(None, [])
-    assert censored_videos() == []
-    assert censored_videos(channel2.link) == []
+    assert _censored_source_ids() == set()
+    assert _censored_source_ids(channel2.link) == set()
 
 
-def test_censored_videos_limit(test_session, channel_factory):
-    channel1 = channel_factory()
-    source_ids = []
-    for i in range(50):
-        source_ids.append(str(i))
-        upload_date = local_timezone(datetime(2000, 1, 1, 0, 0, 0) + timedelta(days=i))
-        test_session.add(Video(source_id=str(i), channel=channel1, upload_date=upload_date))
-    # All videos are censored.
-    channel1.info_json = {'entries': []}
+def test_search_censored_videos(test_session, simple_channel):
+    for i in map(str, range(50)):
+        test_session.add(Video(source_id=i, channel=simple_channel, video_path='foo'))
     test_session.commit()
 
-    assert len(censored_videos()) == 20
-    assert [i.source_id for i in censored_videos()] == list(map(str, range(20)))
+    def set_entries(entries):
+        simple_channel.info_json = {'entries': [{'id': j} for j in entries]} if entries else sqlalchemy.null()
+        test_session.commit()
 
-    assert [i.source_id for i in censored_videos(offset=20)] == list(map(str, range(20, 40)))
+    # All source_ids are in the entries.
+    set_entries(map(str, range(50)))
+    videos, total = video_search(filters=['censored'])
+    assert [i['source_id'] for i in videos] == []
+    assert total == 0
+
+    # First 5 are censored.
+    set_entries(map(str, range(5, 50)))
+    videos, total = video_search(filters=['censored'])
+    assert [i['source_id'] for i in videos] == [str(i) for i in range(5)]
+    assert total == 5
+
+    # First 25 are censored.
+    set_entries(map(str, range(25, 50)))
+    videos, total = video_search(filters=['censored'])
+    assert [i['source_id'] for i in videos] == [str(i) for i in range(20)]
+    assert total == 25
 
 
 def test_censored_videos_no_channel(test_session):
     with pytest.raises(UnknownChannel):
-        censored_videos('foo')
+        _censored_source_ids('foo')

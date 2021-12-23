@@ -500,7 +500,6 @@ def apply_info_json(channel_id: int):
         return
 
     view_counts = [{'id': i['id'], 'view_count': i['view_count']} for i in info['entries']]
-    logger.info(f'Updating {len(view_counts)} view counts for channel {channel.name}')
     view_counts_str = json.dumps(view_counts)
 
     with get_db_curs(commit=True) as curs:

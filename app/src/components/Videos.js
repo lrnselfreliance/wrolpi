@@ -174,7 +174,7 @@ export class FavoriteVideosPreview extends VideosPreview {
 
     async fetchVideos() {
         let [videos] = await searchVideos(
-            0, 3, null, null, true, '-favorite');
+            0, 3, null, null, '-favorite', ['favorite']);
         this.setState({videos});
     }
 
@@ -189,7 +189,7 @@ export class ViewedVideosPreview extends VideosPreview {
 
     async fetchVideos() {
         let [videos] = await searchVideos(
-            0, 3, null, null, null, '-viewed');
+            0, 3, null, null, '-viewed');
         this.setState({videos});
     }
 

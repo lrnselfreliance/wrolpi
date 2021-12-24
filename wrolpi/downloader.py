@@ -119,8 +119,8 @@ class Downloader:
 
         download_manager.register_downloader(self)
 
-    @staticmethod
-    def valid_url(url) -> bool:
+    @classmethod
+    def valid_url(cls, url) -> bool:
         raise NotImplementedError()
 
     def do_download(self, download: Download):

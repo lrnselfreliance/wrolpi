@@ -12,8 +12,8 @@ logger = logger.getChild(__name__)
 
 
 class ArchiveDownloader(Downloader, ABC):
-    @staticmethod
-    def valid_url(url: str) -> bool:
+    @classmethod
+    def valid_url(cls, url: str) -> bool:
         """
         Archiver will attempt to archive anything, so it should be last!
         """

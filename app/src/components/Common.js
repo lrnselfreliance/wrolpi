@@ -464,13 +464,17 @@ export function scrollToTop() {
     });
 }
 
-export function changePageHistory(history, location, activePage, searchStr, searchOrder) {
+export function changePageHistory(history, location, activePage, searchStr, searchOrder, filters) {
     let search = `?page=${activePage}`;
     if (searchStr) {
         search = `${search}&q=${searchStr}`;
     }
     if (searchOrder) {
         search = `${search}&o=${searchOrder}`;
+    }
+    if (filters.length > 0) {
+        filters = filters.join(',');
+        search = `${search}&f=${filters}`;
     }
     history.push({
         pathname: location.pathname,

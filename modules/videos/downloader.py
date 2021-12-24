@@ -48,11 +48,12 @@ class ChannelDownloader(Downloader, ABC):
     Handling downloading of all Videos in a Channel.
     """
 
-    @staticmethod
-    def valid_url(url) -> bool:
+    @classmethod
+    def valid_url(cls, url) -> bool:
         for ie in ChannelIEs:
             if ie.suitable(url):
                 return True
+        logger.debug(f'{cls.__name__} not suitable for {url}')
         return False
 
     def do_download(self, download: Download):
@@ -60,7 +61,12 @@ class ChannelDownloader(Downloader, ABC):
         Update a Channel's catalog, then schedule downloads of every missing video.
         """
         with get_db_session() as session:
-            channel = session.query(Channel).filter_by(url=download.url).one()
+            channel = session.query(Channel).filter_by(url=download.url).one_or_none()
+
+            if not channel:
+                # Couldn't get channel by URL, this is probably a playlist.  Find the channel for the playlist.
+                channel_source_id = get_channel_source_id(download.url)
+                channel = get_channel(channel_source_id, return_dict=False)
 
         update_channel(channel)
 
@@ -70,7 +76,7 @@ class ChannelDownloader(Downloader, ABC):
             for video_id, source_id, missing_video in missing_videos:
                 url = video_url_resolver(domain, missing_video)
                 # Schedule any missing videos for download.
-                self.manager.create_download(url, session, skip_download=True)
+                self.manager.get_or_create_download(url, session)
 
         if PYTEST:
             self.manager.do_downloads_sync()
@@ -85,8 +91,8 @@ class VideoDownloader(Downloader, ABC):
     Download a single video.  Store the video in it's channel's directory, otherwise store it in `videos/NO CHANNEL`.
     """
 
-    @staticmethod
-    def valid_url(url) -> bool:
+    @classmethod
+    def valid_url(cls, url) -> bool:
         """
         Match against all Youtube-DL Info Extractors, except those that match a Channel.
         """
@@ -101,6 +107,7 @@ class VideoDownloader(Downloader, ABC):
                 except DownloadError:
                     logger.debug(f'Video downloader extract_info failed for {url}')
                     return False
+        logger.debug(f'{cls.__name__} not suitable for {url}')
         return False
 
     def do_download(self, download: Download):
@@ -440,4 +447,4 @@ def _skip_download(error):
 
 def get_channel_source_id(url: str) -> str:
     channel_info = YDL.extract_info(url, download=False, process=False)
-    return channel_info['id']
+    return channel_info.get('uploader_id') or channel_info['id']

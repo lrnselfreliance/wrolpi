@@ -207,13 +207,14 @@ function FilterModal(props) {
             <Radio toggle
                    checked={i.value}
                    label={i.label}
-                   onClick={() => props.toggleFilter(i.name)}
+                   onClick={!i.disabled ? () => props.toggleFilter(i.name) : null}
+                   disabled={i.disabled}
             />
         </Form.Input>
     )
 
     return (
-        <Modal closeIcon open={props.open} onClose={props.close} onOpen={props.open} size='mini'>
+        <Modal closeIcon open={props.open} onClose={props.onClose} onOpen={props.onOpen} size='mini'>
             <Modal.Header>{props.header}</Modal.Header>
             <Modal.Content>
                 <Modal.Description>
@@ -224,7 +225,7 @@ function FilterModal(props) {
             </Modal.Content>
             <Modal.Actions>
                 {props.applyButton && <Button color='blue'>Apply</Button>}
-                <Button color='black' onClick={props.close}>Close</Button>
+                <Button color='black' onClick={props.onClose}>Close</Button>
             </Modal.Actions>
         </Modal>
     )
@@ -239,28 +240,38 @@ class Videos extends React.Component {
         let activePage = query.page ? parseInt(query.page) : 1; // First page is 1 by default, of course.
         let searchStr = query.q || '';
         let searchOrder = query.o || defaultVideoOrder;
+        let filtersEnabled = query.f && query.f.length > 0 ? query.f.split(',') : [];
 
         let filters = [
-            {label: 'Favorites', name: 'favorite', value: this.props.filter === 'favorite'},
-            {label: 'Censored', name: 'censored', value: this.props.filter === 'censored'},
+            {
+                label: 'Favorites',
+                name: 'favorite',
+                value: filtersEnabled.indexOf('favorite') >= 0 || props.filter === 'favorite',
+                disabled: props.filter === 'favorite',
+            },
+            {
+                label: 'Censored',
+                name: 'censored',
+                value: filtersEnabled.indexOf('censored') >= 0
+            },
         ];
 
         this.state = {
+            activePage,
             channel: null,
-            videos: null,
-            queryStr: searchStr,
-            searchStr: '',
-            limit: DEFAULT_LIMIT,
-            activePage: activePage,
-            totalPages: null,
-            prev: null,
-            next: null,
-            videoOrders: searchStr === '' ? videoOrders : searchOrders,
-            searchOrder: searchOrder,
-            header: '',
-            filtersOpen: false,
             filters,
-            filterEnabled: false,
+            filtersEnabled,
+            filtersOpen: false,
+            header: '',
+            limit: DEFAULT_LIMIT,
+            next: null,
+            prev: null,
+            queryStr: searchStr,
+            searchOrder,
+            searchStr: '',
+            totalPages: null,
+            videoOrders: searchStr === '' ? videoOrders : searchOrders,
+            videos: null,
         };
     }
 
@@ -288,11 +299,6 @@ class Videos extends React.Component {
         } else if (pageChanged) {
             this.applyStateToHistory();
             await this.fetchVideos();
-        }
-
-        let filterEnabled = this.enabledFilters().length > 0;
-        if (this.state.filterEnabled !== filterEnabled) {
-            this.state.filterEnabled = filterEnabled;
         }
     }
 
@@ -369,7 +375,8 @@ class Videos extends React.Component {
     applyStateToHistory = () => {
         let {history, location} = this.props;
         let {activePage, queryStr, searchOrder} = this.state;
-        changePageHistory(history, location, activePage, queryStr, searchOrder);
+        let filters = this.enabledFilters();
+        changePageHistory(history, location, activePage, queryStr, searchOrder, filters);
     }
 
     handleSearch = async (e) => {
@@ -388,16 +395,26 @@ class Videos extends React.Component {
 
     toggleFilter = (name) => {
         let filters = this.state.filters;
+        let filtersEnabled = [];
         for (let i = 0; i < filters.length; i++) {
-            if (filters[i].name === name) {
-                filters[i].value = !filters[i].value;
+            let filter = filters[i];
+            if (filter.name === name) {
+                filter.value = !filter.value;
+            }
+            if (filter.value) {
+                filtersEnabled = filtersEnabled.concat([filter.name]);
             }
         }
-        this.setState({filters}, this.fetchVideos);
+        this.setState({filters, filtersEnabled});
+    }
+
+    applyFilters = async () => {
+        this.applyStateToHistory();
+        await this.fetchVideos();
     }
 
     closeFilters = () => {
-        this.setState({filtersOpen: false});
+        this.setState({filtersOpen: false}, this.applyFilters);
     }
 
     openFilters = () => {
@@ -415,7 +432,7 @@ class Videos extends React.Component {
             totalPages,
             videoOrders,
             videos,
-            filterEnabled,
+            filtersEnabled,
         } = this.state;
 
         let body = <VideoPlaceholder/>;
@@ -472,13 +489,13 @@ class Videos extends React.Component {
                         {queryStr && clearSearchButton}
                     </Grid.Column>
                     <Grid.Column width={1}>
-                        <Button icon onClick={this.openFilters} color={filterEnabled ? 'black' : null}>
+                        <Button icon onClick={this.openFilters} color={filtersEnabled.length > 0 ? 'black' : null}>
                             <Icon name='filter'/>
                         </Button>
                         <FilterModal
                             applyFilters={this.applyFilters}
                             open={this.state.filtersOpen}
-                            close={this.closeFilters}
+                            onClose={this.closeFilters}
                             header='Filter Videos'
                             filters={this.state.filters}
                             toggleFilter={this.toggleFilter}

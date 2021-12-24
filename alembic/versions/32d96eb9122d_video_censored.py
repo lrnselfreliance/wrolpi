@@ -1,4 +1,4 @@
-"""video censored
+"""Video censored
 
 Revision ID: 32d96eb9122d
 Revises: 184329ed5137
@@ -22,12 +22,12 @@ DOCKERIZED = True if os.environ.get('DOCKER', '').lower().startswith('t') else F
 def upgrade():
     bind = op.get_bind()
     session = Session(bind=bind)
-
     session.execute('ALTER TABLE video ADD COLUMN censored BOOL DEFAULT false')
+    session.execute('CREATE INDEX video_censored ON video (censored)')
 
 
 def downgrade():
     bind = op.get_bind()
     session = Session(bind=bind)
-
     session.execute('ALTER TABLE video DROP COLUMN IF EXISTS censored')
+    session.execute('DROP INDEX IF EXISTS video_censored')

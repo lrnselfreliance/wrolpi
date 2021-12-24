@@ -1,5 +1,17 @@
 import React from "react";
-import {Accordion, Button, Checkbox, Form, Grid, Header, Input, Loader, Responsive, Segment} from "semantic-ui-react";
+import {
+    Accordion,
+    Button,
+    Checkbox,
+    Form,
+    Grid,
+    Header,
+    Input,
+    Loader,
+    Responsive,
+    Segment,
+    Statistic
+} from "semantic-ui-react";
 import {
     createChannel,
     deleteChannel,
@@ -14,7 +26,7 @@ import {
 } from "../api";
 import _ from "lodash";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
-import {APIForm, frequencyOptions, RequiredAsterisk, secondsToDate, secondsToFrequency} from "./Common";
+import {APIForm, frequencyOptions, humanFileSize, RequiredAsterisk, secondsToDate, secondsToFrequency} from "./Common";
 import {Link} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
@@ -81,6 +93,31 @@ class DirectoryInput extends React.Component {
     }
 }
 
+function ChannelStatistics(props) {
+    if (!props.statistics) {
+        return <></>
+    }
+    let stats = props.statistics;
+
+    return (
+        <>
+            <Header as='h1'>Statistics</Header>
+            <Statistic>
+                <Statistic.Value>{stats.video_count}</Statistic.Value>
+                <Statistic.Label>Videos</Statistic.Label>
+            </Statistic>
+            <Statistic>
+                <Statistic.Value>{humanFileSize(stats.size, true)}</Statistic.Value>
+                <Statistic.Label>Total Size</Statistic.Label>
+            </Statistic>
+            <Statistic>
+                <Statistic.Value>{humanFileSize(stats.largest_video, true)}</Statistic.Value>
+                <Statistic.Label>Largest Video</Statistic.Label>
+            </Statistic>
+        </>
+    )
+}
+
 
 class ChannelPage extends APIForm {
 
@@ -103,6 +140,7 @@ class ChannelPage extends APIForm {
                 calculate_duration: true,
                 download_frequency: null,
             },
+            statistics: null,
             errors: {},
         };
 
@@ -113,6 +151,10 @@ class ChannelPage extends APIForm {
         if (!this.props.create) {
             let channel_link = this.props.match.params.channel_link;
             let channel = await getChannel(channel_link);
+            let statistics = channel.statistics;
+            if (statistics) {
+                this.setState({statistics: statistics || null});
+            }
             this.initFormValues(channel);
         }
     }
@@ -395,6 +437,7 @@ class ChannelPage extends APIForm {
                         }
                     </Container>
                 </Form>
+                {<ChannelStatistics statistics={this.state.statistics}/>}
             </Container>
         )
     }

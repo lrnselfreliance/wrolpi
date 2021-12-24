@@ -88,7 +88,11 @@ def get_channel(source_id: str = None, link: str = None, url: str = None, return
             raise UnknownChannel(f'No channel matches {link=} {source_id=} {url=}')
 
         logger.debug(f'Found {channel=} using {source_id=} {link=} {url=}')
-        return channel.dict() if return_dict else channel
+        if return_dict:
+            statistics = channel.get_statistics()
+            channel = channel.dict()
+            channel['statistics'] = statistics
+        return channel
 
 
 def _spread_by_frequency(channels: List[Channel]):

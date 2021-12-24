@@ -81,16 +81,19 @@ function VideoPage(props) {
             <p>{video.size ? humanFileSize(video.size) : '???'}</p>
 
             <h3>Source URL</h3>
-            <p>{video.url || 'N/A'}</p>
-
-            <h3>Source ID</h3>
-            <p>{video.source_id || 'N/A'}</p>
+            <p>{video.url ? <a href={video.url}>{video.url}</a> : 'N/A'}</p>
 
             <h3>View Count</h3>
             <p>{viewCount ? humanNumber(viewCount) : 'N/A'}</p>
 
+            <h3>Censored</h3>
+            <p>{video.censored ? 'Yes' : 'No'}</p>
+
             <h3>File Name</h3>
             <pre style={{backgroundColor: '#ccc', padding: '0.4em'}}>{video.video_path}</pre>
+
+            <h3>Source ID</h3>
+            <p>{video.source_id || 'N/A'}</p>
         </Tab.Pane>
     }
 

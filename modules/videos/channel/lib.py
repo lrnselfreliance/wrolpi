@@ -67,16 +67,18 @@ async def get_channels_video_count() -> Dict[int, int]:
         return video_counts
 
 
-def get_channel(source_id: str = None, link: str = None, url: str = None, return_dict: bool = True
-                ) -> Union[dict, Channel]:
+COD = Union[dict, Channel]
+
+
+def get_channel(source_id: str = None, link: str = None, url: str = None, return_dict: bool = True) -> COD:
     """
     Attempt to find a Channel using the provided params.  The params are in order of reliability.
 
     Raises UnknownChannel if no channel is found.
     """
     with get_db_session() as session:
+        channel: COD = None  # noqa
         # Try by source_id first.
-        channel = None
         if source_id:
             channel = session.query(Channel).filter_by(source_id=source_id).one_or_none()
         if not channel and link:

@@ -113,6 +113,7 @@ def periodic_downloads(app: Sanic, loop):
     if wrol_mode_enabled():
         logger.warning(f'Not starting download worker because WROL Mode is enabled.')
         return
+    logger.info('Starting download manager.')
 
     # Set all downloads to new.
     download_manager.reset_downloads()
@@ -122,7 +123,6 @@ def periodic_downloads(app: Sanic, loop):
         download_manager.delete_old_once_downloads()
         await download_manager.do_downloads()
         seconds = 60
-        logger.debug(f'Waiting {seconds} seconds to start next download')
         await asyncio.sleep(seconds)
         app.add_task(_periodic_download())
 

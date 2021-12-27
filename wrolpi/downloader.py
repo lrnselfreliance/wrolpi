@@ -312,11 +312,6 @@ class DownloadManager:
         try:
             downloads = self.get_new_downloads(session)
 
-            if not downloads:
-                logger.info('No new downloads')
-                return
-
-            logger.info(f'Doing downloads.')
             download_count = 0
             for download in downloads:
                 download_count += 1
@@ -350,7 +345,8 @@ class DownloadManager:
                         download.defer()
                     session_.commit()
 
-            logger.info(f'Done doing {download_count} downloads.')
+            if download_count:
+                logger.info(f'Done doing {download_count} downloads.')
         finally:
             session.close()
 

@@ -49,6 +49,9 @@ class ChannelDownloader(Downloader, ABC):
     """
     name = 'video_channel'
 
+    def __repr__(self):
+        return f'<ChannelDownloader name={self.name}>'
+
     @classmethod
     def valid_url(cls, url) -> Tuple[bool, None]:
         for ie in ChannelIEs:
@@ -92,6 +95,9 @@ class VideoDownloader(Downloader, ABC):
     Download a single video.  Store the video in it's channel's directory, otherwise store it in `videos/NO CHANNEL`.
     """
     name = 'video'
+
+    def __repr__(self):
+        return f'<VideoDownloader name={self.name}>'
 
     @classmethod
     def valid_url(cls, url) -> Tuple[bool, Optional[dict]]:

@@ -294,15 +294,14 @@ class DownloadManager:
 
         downloads = []
 
-        # Verify that all URLs can be downloaded.
-        for url in urls:
-            self.get_downloader(url)
-
         with session.transaction:
             for url in urls:
+                downloader, info_json = self.get_downloader(url)
                 download = self.get_or_create_download(url, session)
                 # Download may have failed, try again.
                 download.renew(reset_attempts=reset_attempts)
+                download.downloader = downloader.name
+                download.info_json = info_json
                 downloads.append(download)
 
         if skip_download is True:
@@ -332,9 +331,10 @@ class DownloadManager:
                 url = download.url
 
                 downloader = self.get_downloader_by_name(download.downloader)
-                if not downloader:
-                    downloader, _ = self.get_downloader(download.url)
+                if not downloader or not download.info_json:
+                    downloader, info_json = self.get_downloader(download.url)
                     download.downloader = downloader.name
+                    download.info_json = info_json
                 downloader.clear()
 
                 download.started()

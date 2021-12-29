@@ -15,6 +15,9 @@ logger = logger.getChild(__name__)
 class ArchiveDownloader(Downloader, ABC):
     name = 'archive'
 
+    def __repr__(self):
+        return f'<ArchiveDownloader name={self.name}>'
+
     @classmethod
     def valid_url(cls, url: str) -> Tuple[bool, None]:
         """

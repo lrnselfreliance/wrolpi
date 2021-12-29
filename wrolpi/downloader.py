@@ -7,10 +7,10 @@ from datetime import timedelta
 from enum import Enum
 from functools import partial
 from operator import attrgetter
-from typing import List, Optional
+from typing import List, Optional, Tuple, Dict
 
-from cachetools import cached, TTLCache
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
 from wrolpi.common import Base, ModelHelper, logger, iterify
@@ -47,6 +47,8 @@ class Download(ModelHelper, Base):
     last_successful_download = Column(TZDateTime)
     next_download = Column(TZDateTime)
     status = Column(String, default='new')
+    info = Column(JSONB)
+    downloader = Column(Text)
 
     def __repr__(self):
         if self.next_download or self.frequency:
@@ -103,15 +105,18 @@ class Download(ModelHelper, Base):
 
 class Downloader:
 
-    def __init__(self, priority: int = 50):
+    def __init__(self, name: str, priority: int = 50):
         """
         Lower `priority` means the downloader will be checked first.  Valid priority: 0-100
 
         Downloaders of equal priority will be used at random.
         """
+        if not name:
+            raise ValueError('Downloader must have a name!')
         if not 0 <= priority <= 100:
             raise ValueError(f'Priority of {priority} of {self} is invalid!')
 
+        self.name = name
         self.priority = priority
         self._kill = multiprocessing.Event()
 
@@ -120,7 +125,7 @@ class Downloader:
         download_manager.register_downloader(self)
 
     @classmethod
-    def valid_url(cls, url) -> bool:
+    def valid_url(cls, url) -> tuple[bool, Optional[dict]]:
         raise NotImplementedError()
 
     def do_download(self, download: Download):
@@ -148,7 +153,7 @@ class Downloader:
         Clear any "kill" request for this Downloader.
         """
         if self._kill.is_set():
-            self.clear()
+            self._kill.clear()
 
     def process_runner(self, url: str, cmd: List[str], cwd: pathlib.Path, **kwargs) -> int:
         """
@@ -192,6 +197,7 @@ class DownloadManager:
 
     def __init__(self):
         self.instances = tuple()
+        self._instances = dict()
 
     def register_downloader(self, instance: Downloader):
         if not isinstance(instance, Downloader):
@@ -201,22 +207,22 @@ class DownloadManager:
 
         instance.manager = self
 
-        instances = (*self.instances, instance)
-        self.instances = tuple(self.priority_sorter(instances))
+        i = (*self.instances, instance)
+        self.instances = tuple(self.priority_sorter(i))
+        self._instances[instance.name] = instance
 
-    @cached(cache=TTLCache(maxsize=100, ttl=600))
-    def get_downloader(self, url: str):
+    def get_downloader(self, url: str) -> Tuple[Downloader, Dict]:
         for i in self.instances:
-            if i.valid_url(url):
-                return i
+            valid, info = i.valid_url(url)
+            if valid:
+                return i, info
         raise InvalidDownload(f'Invalid URL {url=}')
 
-    def valid_url(self, url: str) -> bool:
-        try:
-            self.get_downloader(url)
-            return True
-        except InvalidDownload:
-            return False
+    def get_downloader_by_name(self, name: str) -> Downloader:
+        """
+        Attempts to find a registered Downloader by its name.  Returns None if it cannot be found.
+        """
+        return self._instances.get(name)
 
     @staticmethod
     def get_new_downloads(session: Session) -> List[Download]:
@@ -251,11 +257,17 @@ class DownloadManager:
         Schedule a URL for download.  If the URL failed previously, it will be retried.
         """
         # Make sure the URL can be downloaded.
-        self.get_downloader(url)
+        downloader, info = self.get_downloader(url)
+        if not isinstance(info, dict) and info is not None:
+            logger.warning(f'info from {downloader}.is_valid is the wrong type! {type(info)=}')
 
         download = self.get_or_create_download(url, session)
         # Download may have failed, try again.
         download.renew(reset_attempts=reset_attempts)
+
+        download.downloader = downloader.name
+        if isinstance(info, dict):
+            download.info = info
 
         session.commit()
 
@@ -316,8 +328,12 @@ class DownloadManager:
             for download in downloads:
                 download_count += 1
                 download_id = download.id
+                url = download.url
 
-                downloader = self.get_downloader(download.url)
+                downloader = self.get_downloader_by_name(download.downloader)
+                if not downloader:
+                    downloader, _ = self.get_downloader(download.url)
+                    download.downloader = downloader.name
                 downloader.clear()
 
                 download.started()
@@ -332,7 +348,7 @@ class DownloadManager:
                     logger.warning(f'UnrecoverableDownloadError for {download.url}', exc_info=e)
                     failure = True
                 except Exception as e:
-                    logger.warning(f'Failed to download {download.url}.  Will be tried again later.', exc_info=e)
+                    logger.warning(f'Failed to download {url}.  Will be tried again later.', exc_info=e)
 
                 # Long-running, get the download again.
                 with get_db_session(commit=True) as session_:

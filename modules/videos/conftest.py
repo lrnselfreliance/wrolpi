@@ -2,12 +2,14 @@ import pathlib
 import shutil
 from uuid import uuid4
 
+import mock
 import pytest
 
 from modules.videos.channel.lib import spread_channel_downloads
+from modules.videos.downloader import VideoDownloader, ChannelDownloader
 from modules.videos.models import Channel, Video
 from wrolpi.common import sanitize_link
-from wrolpi.downloader import DownloadFrequency
+from wrolpi.downloader import DownloadFrequency, DownloadManager
 from wrolpi.vars import PROJECT_DIR
 
 
@@ -105,3 +107,19 @@ def video_factory(test_session, test_directory):
         return video
 
     return _
+
+
+@pytest.fixture
+def video_download_manager(test_download_manager) -> DownloadManager:
+    """
+    Get a DownloadManager ready to download Videos and Channels.
+    """
+    channel_downloader = ChannelDownloader('video_channel')
+    video_downloader = VideoDownloader('video', priority=40)
+
+    test_download_manager.register_downloader(channel_downloader)
+    test_download_manager.register_downloader(video_downloader)
+
+    with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:  # prevent real downloads
+        mock_extract_info.side_effect = Exception('You must patch modules.videos.downloader.YDL.extract_info!')
+        yield test_download_manager

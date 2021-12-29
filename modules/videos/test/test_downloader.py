@@ -94,7 +94,7 @@ example_channel_json = {
          'ie_key': 'Youtube',
          'title': 'video 1 title',
          'uploader': None,
-         'url': 'video 1 url',
+         'url': 'video_1_url',
          'view_count': 58504},
         {'_type': 'url',
          'description': None,
@@ -103,7 +103,7 @@ example_channel_json = {
          'ie_key': 'Youtube',
          'title': 'video 2 title',
          'uploader': None,
-         'url': 'video 2 url',
+         'url': 'video_2_url',
          'view_count': 1413},
     ],
     'extractor': 'youtube:tab',
@@ -119,8 +119,8 @@ class TestVideosDownloaders(TestAPI):
 
     def setUp(self) -> None:
         super().setUp()
-        self.vd = VideoDownloader()
-        self.cd = ChannelDownloader()
+        self.vd = VideoDownloader('video')
+        self.cd = ChannelDownloader('channel')
         self.mgr = DownloadManager()
         self.mgr.register_downloader(self.vd)
         self.mgr.register_downloader(self.cd)
@@ -130,32 +130,33 @@ class TestVideosDownloaders(TestAPI):
 
     def test_video_valid_url(self):
         # A specific video can be downloaded.
-        self.assertTrue(self.vd.valid_url('https://www.youtube.com/watch?v=31jPEBiAC3c'))
+        self.assertTrue(self.vd.valid_url('https://www.youtube.com/watch?v=31jPEBiAC3c')[0])
 
         # A channel cannot be downloaded.
-        self.assertFalse(self.vd.valid_url('https://www.youtube.com/c/LearningSelfReliance/videos'))
-        self.assertFalse(self.vd.valid_url('https://www.youtube.com/c/LearningSelfReliance'))
+        self.assertFalse(self.vd.valid_url('https://www.youtube.com/c/LearningSelfReliance/videos')[0])
+        self.assertFalse(self.vd.valid_url('https://www.youtube.com/c/LearningSelfReliance')[0])
 
     def test_channel_valid_url(self):
         # An entire domain cannot be downloaded.
-        self.assertFalse(self.cd.valid_url('https://example.com'))
-        self.assertFalse(self.cd.valid_url('https://youtube.com'))
+        self.assertFalse(self.cd.valid_url('https://example.com')[0])
+        self.assertFalse(self.cd.valid_url('https://youtube.com')[0])
 
         # Cannot download a single video.
-        self.assertFalse(self.cd.valid_url('https://www.youtube.com/watch?v=31jPEBiAC3c'))
+        self.assertFalse(self.cd.valid_url('https://www.youtube.com/watch?v=31jPEBiAC3c')[0])
 
         # Can download entire channels.
-        self.assertTrue(self.cd.valid_url('https://www.youtube.com/c/LearningSelfReliance/videos'))
-        self.assertTrue(self.cd.valid_url('https://www.youtube.com/c/LearningSelfReliance'))
+        self.assertTrue(self.cd.valid_url('https://www.youtube.com/c/LearningSelfReliance/videos')[0])
+        self.assertTrue(self.cd.valid_url('https://www.youtube.com/c/LearningSelfReliance')[0])
 
         # Can download entire playlists.
-        self.assertTrue(self.cd.valid_url('https://www.youtube.com/playlist?list=PLCdlMQeP-TbG12nkBCt0E96yr3EfwcH4E'))
+        self.assertTrue(
+            self.cd.valid_url('https://www.youtube.com/playlist?list=PLCdlMQeP-TbG12nkBCt0E96yr3EfwcH4E')[0])
 
     def test_get_downloader(self):
         # The correct Downloader is gotten.
-        self.assertEqual(self.mgr.get_downloader('https://www.youtube.com/c/LearningSelfReliance/videos'), self.cd)
-        self.assertEqual(self.mgr.get_downloader('https://www.youtube.com/c/LearningSelfReliance'), self.cd)
-        self.assertEqual(self.mgr.get_downloader('https://www.youtube.com/watch?v=31jPEBiAC3c'), self.vd)
+        self.assertEqual(self.mgr.get_downloader('https://www.youtube.com/c/LearningSelfReliance/videos')[0], self.cd)
+        self.assertEqual(self.mgr.get_downloader('https://www.youtube.com/c/LearningSelfReliance')[0], self.cd)
+        self.assertEqual(self.mgr.get_downloader('https://www.youtube.com/watch?v=31jPEBiAC3c')[0], self.vd)
 
     @staticmethod
     def _make_video_files(channel_dir):
@@ -269,7 +270,7 @@ class TestVideosDownloaders(TestAPI):
         _, session = get_db_context()
         with mock.patch('modules.videos.downloader.VideoDownloader.valid_url') as mock_valid_url, \
                 mock.patch('modules.videos.downloader.YDL') as mock_ydl:
-            mock_valid_url.return_value = True
+            mock_valid_url.return_value = (True, None)
             mock_ydl.extract_info.side_effect = UnsupportedError('oops')
             self.mgr.create_download('url', session)
 
@@ -360,3 +361,13 @@ class TestVideosDownloaders(TestAPI):
 
         # New channel can be retrieved.
         self.assertEqual(get_or_create_channel(source_id='quux'), channel)
+
+
+def test_download_info_save(test_session, video_download_manager):
+    """
+    An info dict from Downloader.valid_url is saved to the Downloader and can be used by the Downloader later.
+    """
+    with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
+        mock_extract_info.return_value = {'some': 'info'}
+        video_download_manager.create_download('https://www.youtube.com/watch?v=HQ_62YwcA80', test_session)
+        mock_extract_info.assert_called_once()

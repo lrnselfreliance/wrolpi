@@ -3,7 +3,7 @@ import json
 import pathlib
 import re
 from abc import ABC
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
 from sqlalchemy.orm.exc import NoResultFound
 from yt_dlp import YoutubeDL
@@ -49,12 +49,12 @@ class ChannelDownloader(Downloader, ABC):
     """
 
     @classmethod
-    def valid_url(cls, url) -> bool:
+    def valid_url(cls, url) -> tuple[bool, None]:
         for ie in ChannelIEs:
             if ie.suitable(url):
-                return True
+                return True, None
         logger.debug(f'{cls.__name__} not suitable for {url}')
-        return False
+        return False, None
 
     def do_download(self, download: Download):
         """
@@ -92,34 +92,30 @@ class VideoDownloader(Downloader, ABC):
     """
 
     @classmethod
-    def valid_url(cls, url) -> bool:
+    def valid_url(cls, url) -> tuple[bool, Optional[dict]]:
         """
         Match against all Youtube-DL Info Extractors, except those that match a Channel.
         """
         for ie in YDL._ies.values():
-            if ie.suitable(url) and not ChannelDownloader.valid_url(url):
+            if ie.suitable(url) and not ChannelDownloader.valid_url(url)[0]:
                 try:
-                    YDL.extract_info(url, download=False, process=False)
-                    return True
+                    info = YDL.extract_info(url, download=False, process=False)
+                    return True, info
                 except UnsupportedError:
                     logger.debug(f'Video downloader extract_info failed for {url}')
-                    return False
+                    return False, None
                 except DownloadError:
                     logger.debug(f'Video downloader extract_info failed for {url}')
-                    return False
+                    return False, None
         logger.debug(f'{cls.__name__} not suitable for {url}')
-        return False
+        return False, None
 
     def do_download(self, download: Download):
         if download.attempts >= 10:
             raise UnrecoverableDownloadError('Max download attempts reached')
 
         url = download.url
-        try:
-            info = YDL.extract_info(url, download=False, process=False)
-        except UnsupportedError as e:
-            # Video wasn't really valid... probably the GenericIE.
-            raise UnrecoverableDownloadError() from e
+        info = download.info
 
         channel_name = info.get('channel')
         channel_id = info.get('channel_id')
@@ -209,9 +205,9 @@ class VideoDownloader(Downloader, ABC):
         return final_filename, entry
 
 
-channel_downloader = ChannelDownloader()
+channel_downloader = ChannelDownloader('video_channel')
 # Videos may match the ChannelDownloader, give it a higher priority.
-video_downloader = VideoDownloader(40)
+video_downloader = VideoDownloader('video', 40)
 
 
 def get_or_create_channel(source_id: str = None, link: str = None, url: str = None, name: str = None) -> Channel:

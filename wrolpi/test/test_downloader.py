@@ -17,7 +17,7 @@ class PermissiveDownloader(Downloader):
     """
 
     def valid_url(self, url: str):
-        return True
+        return True, None
 
 
 class HTTPDownloader(Downloader):
@@ -26,7 +26,7 @@ class HTTPDownloader(Downloader):
     """
 
     def valid_url(self, url: str):
-        return url.startswith('https://') or url.startswith('http://')
+        return url.startswith('https://') or url.startswith('http://'), None
 
 
 class TestDownloader(TestAPI):
@@ -42,36 +42,17 @@ class TestDownloader(TestAPI):
         """
         self.assertEqual(self.mgr.instances, tuple())
 
-        http_downloader = HTTPDownloader()
+        http_downloader = HTTPDownloader('http')
         self.mgr.register_downloader(http_downloader)
         self.assertEqual(self.mgr.instances, (http_downloader,))
 
         # PermissiveDownloader is first priority.
-        permissive_downloader = PermissiveDownloader(priority=0)
+        permissive_downloader = PermissiveDownloader('permissive', priority=0)
         self.mgr.register_downloader(permissive_downloader)
         self.assertEqual(self.mgr.instances, (permissive_downloader, http_downloader))
 
         self.assertRaises(ValueError, self.mgr.register_downloader, http_downloader)
         self.assertRaises(ValueError, self.mgr.register_downloader, permissive_downloader)
-
-    def test_valid_url(self):
-        # No downloaders available.
-        self.assertFalse(self.mgr.valid_url('foo'))
-        self.assertFalse(self.mgr.valid_url('https://example.com'))
-
-        http_downloader = HTTPDownloader()
-        self.mgr.register_downloader(http_downloader)
-        self.assertFalse(self.mgr.valid_url('foo'))
-        self.assertTrue(self.mgr.valid_url('https://example.com'))
-        self.assertEqual(self.mgr.get_downloader('https://example.com'), http_downloader)
-
-        # Last priority.
-        permissive_downloader = PermissiveDownloader(priority=100)
-        self.mgr.register_downloader(permissive_downloader)
-        self.assertTrue(self.mgr.valid_url('foo'))
-        self.assertEqual(self.mgr.get_downloader('foo'), permissive_downloader)
-        self.assertTrue(self.mgr.valid_url('https://example.com'))
-        self.assertEqual(self.mgr.get_downloader('https://example.com'), http_downloader)
 
     @wrap_test_db
     def test_ensure_download(self):
@@ -79,7 +60,7 @@ class TestDownloader(TestAPI):
 
         self.assertEqual(len(self.mgr.get_downloads(session)), 0)
 
-        http_downloader = HTTPDownloader()
+        http_downloader = HTTPDownloader('http')
         http_downloader.do_download.return_value = False
         self.mgr.register_downloader(http_downloader)
 
@@ -95,11 +76,11 @@ class TestDownloader(TestAPI):
     def test_do_downloads(self):
         _, session = get_db_context()
 
-        http_downloader = HTTPDownloader()
+        http_downloader = HTTPDownloader('http')
         http_downloader.do_download.return_value = True
         self.mgr.register_downloader(http_downloader)
 
-        permissive_downloader = PermissiveDownloader(priority=100)
+        permissive_downloader = PermissiveDownloader('permissive', priority=100)
         permissive_downloader.do_download.return_value = False  # returns a failure
         self.mgr.register_downloader(permissive_downloader)
 
@@ -141,7 +122,7 @@ class TestDownloader(TestAPI):
         """
         _, session = get_db_context()
 
-        http_downloader = HTTPDownloader()
+        http_downloader = HTTPDownloader('http')
         http_downloader.do_download.return_value = False
         self.mgr.register_downloader(http_downloader)
 
@@ -167,7 +148,7 @@ class TestDownloader(TestAPI):
         """
         _, session = get_db_context()
 
-        http_downloader = HTTPDownloader()
+        http_downloader = HTTPDownloader('http')
         http_downloader.do_download.return_value = True
         http_downloader.do_download: MagicMock  # noqa
         self.mgr.register_downloader(http_downloader)
@@ -243,7 +224,7 @@ class TestDownloader(TestAPI):
         """
         Once-downloads over a month old should be deleted.
         """
-        permissive_downloader = PermissiveDownloader(priority=0)
+        permissive_downloader = PermissiveDownloader('permissive', priority=0)
         self.mgr.register_downloader(permissive_downloader)
 
         _, session = get_db_context()
@@ -286,7 +267,7 @@ class TestDownloader(TestAPI):
         """
         Multiple downloads can be scheduled using DownloadManager.create_downloads.
         """
-        http_downloader = HTTPDownloader(priority=0)
+        http_downloader = HTTPDownloader('http', priority=0)
         self.mgr.register_downloader(http_downloader)
 
         _, session = get_db_context()

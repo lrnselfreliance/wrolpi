@@ -50,7 +50,7 @@ class ChannelDownloader(Downloader, ABC):
     name = 'video_channel'
 
     @classmethod
-    def valid_url(cls, url) -> tuple[bool, None]:
+    def valid_url(cls, url) -> Tuple[bool, None]:
         for ie in ChannelIEs:
             if ie.suitable(url):
                 return True, None
@@ -94,7 +94,7 @@ class VideoDownloader(Downloader, ABC):
     name = 'video'
 
     @classmethod
-    def valid_url(cls, url) -> tuple[bool, Optional[dict]]:
+    def valid_url(cls, url) -> Tuple[bool, Optional[dict]]:
         """
         Match against all Youtube-DL Info Extractors, except those that match a Channel.
         """
@@ -117,7 +117,7 @@ class VideoDownloader(Downloader, ABC):
             raise UnrecoverableDownloadError('Max download attempts reached')
 
         url = download.url
-        info = download.info
+        info = download.info_json
 
         channel_name = info.get('channel')
         channel_id = info.get('channel_id')

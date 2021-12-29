@@ -47,7 +47,7 @@ class Download(ModelHelper, Base):
     last_successful_download = Column(TZDateTime)
     next_download = Column(TZDateTime)
     status = Column(String, default='new')
-    info = Column(JSONB)
+    info_json = Column(JSONB)
     downloader = Column(Text)
 
     def __repr__(self):
@@ -126,7 +126,7 @@ class Downloader:
         download_manager.register_downloader(self)
 
     @classmethod
-    def valid_url(cls, url) -> tuple[bool, Optional[dict]]:
+    def valid_url(cls, url) -> Tuple[bool, Optional[dict]]:
         raise NotImplementedError()
 
     def do_download(self, download: Download):
@@ -268,7 +268,7 @@ class DownloadManager:
 
         download.downloader = downloader.name
         if isinstance(info, dict):
-            download.info = info
+            download.info_json = info
 
         session.commit()
 

@@ -119,8 +119,8 @@ class TestVideosDownloaders(TestAPI):
 
     def setUp(self) -> None:
         super().setUp()
-        self.vd = VideoDownloader('video')
-        self.cd = ChannelDownloader('channel')
+        self.vd = VideoDownloader()
+        self.cd = ChannelDownloader()
         self.mgr = DownloadManager()
         self.mgr.register_downloader(self.vd)
         self.mgr.register_downloader(self.cd)

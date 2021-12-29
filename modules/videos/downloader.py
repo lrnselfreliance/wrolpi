@@ -47,6 +47,7 @@ class ChannelDownloader(Downloader, ABC):
     """
     Handling downloading of all Videos in a Channel.
     """
+    name = 'video_channel'
 
     @classmethod
     def valid_url(cls, url) -> tuple[bool, None]:
@@ -90,6 +91,7 @@ class VideoDownloader(Downloader, ABC):
     """
     Download a single video.  Store the video in it's channel's directory, otherwise store it in `videos/NO CHANNEL`.
     """
+    name = 'video'
 
     @classmethod
     def valid_url(cls, url) -> tuple[bool, Optional[dict]]:
@@ -205,9 +207,9 @@ class VideoDownloader(Downloader, ABC):
         return final_filename, entry
 
 
-channel_downloader = ChannelDownloader('video_channel')
+channel_downloader = ChannelDownloader()
 # Videos may match the ChannelDownloader, give it a higher priority.
-video_downloader = VideoDownloader('video', 40)
+video_downloader = VideoDownloader(40)
 
 
 def get_or_create_channel(source_id: str = None, link: str = None, url: str = None, name: str = None) -> Channel:

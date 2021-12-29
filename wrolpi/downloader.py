@@ -104,19 +104,20 @@ class Download(ModelHelper, Base):
 
 
 class Downloader:
+    name = None
 
-    def __init__(self, name: str, priority: int = 50):
+    def __init__(self, priority: int = 50, name: str = None):
         """
         Lower `priority` means the downloader will be checked first.  Valid priority: 0-100
 
         Downloaders of equal priority will be used at random.
         """
-        if not name:
-            raise ValueError('Downloader must have a name!')
+        if not name and not self.name:
+            raise NotImplementedError('Downloader must have a name!')
         if not 0 <= priority <= 100:
             raise ValueError(f'Priority of {priority} of {self} is invalid!')
 
-        self.name = name
+        self.name = self.name or name
         self.priority = priority
         self._kill = multiprocessing.Event()
 

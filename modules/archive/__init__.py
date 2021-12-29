@@ -13,6 +13,8 @@ logger = logger.getChild(__name__)
 
 
 class ArchiveDownloader(Downloader, ABC):
+    name = 'archive'
+
     @classmethod
     def valid_url(cls, url: str) -> Tuple[bool, None]:
         """
@@ -29,4 +31,4 @@ class ArchiveDownloader(Downloader, ABC):
 
 
 # Archive downloader is the last downloader which should be used.
-archive_downloader = ArchiveDownloader('archive', priority=100)
+archive_downloader = ArchiveDownloader(priority=100)

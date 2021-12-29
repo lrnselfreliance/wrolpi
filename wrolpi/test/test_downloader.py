@@ -1,7 +1,10 @@
+from abc import ABC
 from datetime import datetime, timedelta
 from itertools import zip_longest
 from unittest import mock
 from unittest.mock import MagicMock
+
+import pytest
 
 from wrolpi import downloader
 from wrolpi.dates import local_timezone
@@ -15,6 +18,7 @@ class PermissiveDownloader(Downloader):
     """
     A testing Downloader which always says it's valid.
     """
+    name = 'permissive'
 
     def valid_url(self, url: str):
         return True, None
@@ -24,6 +28,7 @@ class HTTPDownloader(Downloader):
     """
     A testing Downloader which says its valid when a URL starts with http/https
     """
+    name = 'http'
 
     def valid_url(self, url: str):
         return url.startswith('https://') or url.startswith('http://'), None
@@ -42,12 +47,12 @@ class TestDownloader(TestAPI):
         """
         self.assertEqual(self.mgr.instances, tuple())
 
-        http_downloader = HTTPDownloader('http')
+        http_downloader = HTTPDownloader()
         self.mgr.register_downloader(http_downloader)
         self.assertEqual(self.mgr.instances, (http_downloader,))
 
         # PermissiveDownloader is first priority.
-        permissive_downloader = PermissiveDownloader('permissive', priority=0)
+        permissive_downloader = PermissiveDownloader(priority=0)
         self.mgr.register_downloader(permissive_downloader)
         self.assertEqual(self.mgr.instances, (permissive_downloader, http_downloader))
 
@@ -60,7 +65,7 @@ class TestDownloader(TestAPI):
 
         self.assertEqual(len(self.mgr.get_downloads(session)), 0)
 
-        http_downloader = HTTPDownloader('http')
+        http_downloader = HTTPDownloader()
         http_downloader.do_download.return_value = False
         self.mgr.register_downloader(http_downloader)
 
@@ -76,11 +81,11 @@ class TestDownloader(TestAPI):
     def test_do_downloads(self):
         _, session = get_db_context()
 
-        http_downloader = HTTPDownloader('http')
+        http_downloader = HTTPDownloader()
         http_downloader.do_download.return_value = True
         self.mgr.register_downloader(http_downloader)
 
-        permissive_downloader = PermissiveDownloader('permissive', priority=100)
+        permissive_downloader = PermissiveDownloader(priority=100)
         permissive_downloader.do_download.return_value = False  # returns a failure
         self.mgr.register_downloader(permissive_downloader)
 
@@ -122,7 +127,7 @@ class TestDownloader(TestAPI):
         """
         _, session = get_db_context()
 
-        http_downloader = HTTPDownloader('http')
+        http_downloader = HTTPDownloader()
         http_downloader.do_download.return_value = False
         self.mgr.register_downloader(http_downloader)
 
@@ -148,7 +153,7 @@ class TestDownloader(TestAPI):
         """
         _, session = get_db_context()
 
-        http_downloader = HTTPDownloader('http')
+        http_downloader = HTTPDownloader()
         http_downloader.do_download.return_value = True
         http_downloader.do_download: MagicMock  # noqa
         self.mgr.register_downloader(http_downloader)
@@ -224,7 +229,7 @@ class TestDownloader(TestAPI):
         """
         Once-downloads over a month old should be deleted.
         """
-        permissive_downloader = PermissiveDownloader('permissive', priority=0)
+        permissive_downloader = PermissiveDownloader(priority=0)
         self.mgr.register_downloader(permissive_downloader)
 
         _, session = get_db_context()
@@ -267,7 +272,7 @@ class TestDownloader(TestAPI):
         """
         Multiple downloads can be scheduled using DownloadManager.create_downloads.
         """
-        http_downloader = HTTPDownloader('http', priority=0)
+        http_downloader = HTTPDownloader(priority=0)
         self.mgr.register_downloader(http_downloader)
 
         _, session = get_db_context()
@@ -282,3 +287,17 @@ class TestDownloader(TestAPI):
                           skip_download=True)
         downloads = self.mgr.get_downloads(session)
         self.assertEqual({i.url for i in downloads}, {'https://example.com/1', 'https://example.com/2'})
+
+
+def test_downloader_must_have_name():
+    """
+    A Downloader class must have a name.
+    """
+    with pytest.raises(NotImplementedError):
+        Downloader()
+
+    class D(Downloader, ABC):
+        pass
+
+    with pytest.raises(NotImplementedError):
+        D()

@@ -114,8 +114,8 @@ def video_download_manager(test_download_manager) -> DownloadManager:
     """
     Get a DownloadManager ready to download Videos and Channels.
     """
-    channel_downloader = ChannelDownloader('video_channel')
-    video_downloader = VideoDownloader('video', priority=40)
+    channel_downloader = ChannelDownloader()
+    video_downloader = VideoDownloader(priority=40)
 
     test_download_manager.register_downloader(channel_downloader)
     test_download_manager.register_downloader(video_downloader)

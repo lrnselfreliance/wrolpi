@@ -255,9 +255,6 @@ class Channel(ModelHelper, Base):
     info_json = Column(JSON)
     info_date = Column(Date)
 
-    # Will be filled later by directory path relative to the media directory.
-    _directory = None
-
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
 
     def __repr__(self):

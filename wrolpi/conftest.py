@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from wrolpi.common import set_test_media_directory, Base, get_example_config
 from wrolpi.db import postgres_engine, get_db_args
+from wrolpi.downloader import DownloadManager
 from wrolpi.root_api import BLUEPRINTS, api_app
 
 os.environ['DB_PORT'] = '54321'
@@ -113,3 +114,9 @@ def test_client() -> SanicTestClient:
         ROUTES_ATTACHED = True
 
     return api_app.test_client
+
+
+@pytest.fixture
+def test_download_manager():
+    manager = DownloadManager()
+    return manager

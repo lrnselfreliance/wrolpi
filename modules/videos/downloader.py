@@ -3,8 +3,9 @@ import json
 import pathlib
 import re
 from abc import ABC
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 
+from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 from yt_dlp import YoutubeDL
 from yt_dlp.extractor import YoutubeTabIE
@@ -47,14 +48,20 @@ class ChannelDownloader(Downloader, ABC):
     """
     Handling downloading of all Videos in a Channel.
     """
+    name = 'video_channel'
+    pretty_name = 'Video Channel'
+    listable = False
+
+    def __repr__(self):
+        return f'<ChannelDownloader name={self.name}>'
 
     @classmethod
-    def valid_url(cls, url) -> bool:
+    def valid_url(cls, url) -> Tuple[bool, None]:
         for ie in ChannelIEs:
             if ie.suitable(url):
-                return True
+                return True, None
         logger.debug(f'{cls.__name__} not suitable for {url}')
-        return False
+        return False, None
 
     def do_download(self, download: Download):
         """
@@ -76,7 +83,8 @@ class ChannelDownloader(Downloader, ABC):
             for video_id, source_id, missing_video in missing_videos:
                 url = video_url_resolver(domain, missing_video)
                 # Schedule any missing videos for download.
-                self.manager.get_or_create_download(url, session)
+                download = self.manager.get_or_create_download(url, session)
+                download.downloader = 'video'
 
         if PYTEST:
             self.manager.do_downloads_sync()
@@ -90,36 +98,46 @@ class VideoDownloader(Downloader, ABC):
     """
     Download a single video.  Store the video in it's channel's directory, otherwise store it in `videos/NO CHANNEL`.
     """
+    name = 'video'
+    pretty_name = 'Videos'
+
+    def __repr__(self):
+        return f'<VideoDownloader name={self.name}>'
 
     @classmethod
-    def valid_url(cls, url) -> bool:
+    def valid_url(cls, url) -> Tuple[bool, Optional[dict]]:
         """
         Match against all Youtube-DL Info Extractors, except those that match a Channel.
         """
         for ie in YDL._ies.values():
-            if ie.suitable(url) and not ChannelDownloader.valid_url(url):
+            if ie.suitable(url) and not ChannelDownloader.valid_url(url)[0]:
                 try:
-                    YDL.extract_info(url, download=False, process=False)
-                    return True
+                    info = YDL.extract_info(url, download=False, process=False)
+                    return True, info
                 except UnsupportedError:
                     logger.debug(f'Video downloader extract_info failed for {url}')
-                    return False
+                    return False, None
                 except DownloadError:
                     logger.debug(f'Video downloader extract_info failed for {url}')
-                    return False
+                    return False, None
         logger.debug(f'{cls.__name__} not suitable for {url}')
-        return False
+        return False, None
 
     def do_download(self, download: Download):
         if download.attempts >= 10:
             raise UnrecoverableDownloadError('Max download attempts reached')
 
         url = download.url
-        try:
-            info = YDL.extract_info(url, download=False, process=False)
-        except UnsupportedError as e:
-            # Video wasn't really valid... probably the GenericIE.
-            raise UnrecoverableDownloadError() from e
+        info = download.info_json
+
+        if not info:
+            # Info was not fetched by the DownloadManager, lets get it.
+            valid, info = self.valid_url(url)
+            if not valid:
+                raise UnrecoverableDownloadError(f'{self} cannot download {url}')
+            session = Session.object_session(download)
+            download.info_json = info
+            session.commit()
 
         channel_name = info.get('channel')
         channel_id = info.get('channel_id')

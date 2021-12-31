@@ -181,7 +181,10 @@ def valid_regex(_: Request, data: dict):
 async def post_download(request: Request, data: dict):
     # URLs are provided in a textarea, lets split all lines.
     urls = [i.strip() for i in str(data['urls']).strip().splitlines()]
-    download_manager.create_downloads(urls, reset_attempts=True)
+    downloader = data.get('downloader')
+    if not downloader or downloader in ('auto', 'None', 'null'):
+        downloader = None
+    download_manager.create_downloads(urls, downloader=downloader, reset_attempts=True)
     return response.empty()
 
 
@@ -208,6 +211,14 @@ async def kill_download(request: Request, download_id: int):
 async def delete_download(request: Request, download_id: int):
     deleted = download_manager.delete_download(download_id)
     return response.empty(HTTPStatus.NO_CONTENT if deleted else HTTPStatus.NOT_FOUND)
+
+
+@root_api.get('/downloaders')
+async def get_downloaders(request: Request):
+    downloaders = download_manager.list_downloaders()
+    downloaders.insert(0, dict(name='auto', pretty_name='Automatic'))
+    ret = dict(downloaders=downloaders)
+    return json_response(ret)
 
 
 class CustomJSONEncoder(json.JSONEncoder):

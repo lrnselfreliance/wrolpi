@@ -1,4 +1,5 @@
 from abc import ABC
+from typing import Tuple
 
 from wrolpi.common import logger
 from wrolpi.downloader import Downloader, Download
@@ -12,12 +13,18 @@ logger = logger.getChild(__name__)
 
 
 class ArchiveDownloader(Downloader, ABC):
+    name = 'archive'
+    pretty_name = 'Archive'
+
+    def __repr__(self):
+        return f'<ArchiveDownloader name={self.name}>'
+
     @classmethod
-    def valid_url(cls, url: str) -> bool:
+    def valid_url(cls, url: str) -> Tuple[bool, None]:
         """
         Archiver will attempt to archive anything, so it should be last!
         """
-        return True
+        return True, None
 
     def do_download(self, download: Download):
         if download.attempts > 3:

@@ -269,6 +269,11 @@ class ChannelPage extends APIForm {
         this.setState({deleteOpen: true});
     }
 
+    handleCancel = (e) => {
+        e.preventDefault();
+        this.props.history.goBack();
+    }
+
     render() {
         return (
             <Container>
@@ -410,7 +415,7 @@ class ChannelPage extends APIForm {
                         <Button
                             secondary
                             floated='right'
-                            onClick={() => this.props.history.goBack()}
+                            onClick={this.handleCancel}
                         >
                             Cancel
                         </Button>

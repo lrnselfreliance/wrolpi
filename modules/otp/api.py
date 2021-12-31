@@ -13,7 +13,7 @@ from .schema import EncryptOTPRequest, DecryptOTPRequest
 bp = get_blueprint('OTP', '/api/otp')
 
 
-@bp.post(':encrypt_otp')
+@bp.post('/encrypt_otp')
 @validate_doc(
     summary='Encrypt a message with OTP',
     consumes=EncryptOTPRequest,
@@ -23,7 +23,7 @@ async def post_encrypt_otp(_: Request, data: dict):
     return response.json(data)
 
 
-@bp.post(':decrypt_otp')
+@bp.post('/decrypt_otp')
 @validate_doc(
     summary='Decrypt a message with OTP',
     consumes=DecryptOTPRequest,

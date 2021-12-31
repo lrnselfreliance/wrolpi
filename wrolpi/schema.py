@@ -179,7 +179,8 @@ class EventsResponse:
 
 
 class DownloadRequest:
-    urls = doc.String()
+    urls = doc.String(required=True)
+    downloader = doc.String()
 
 
 class Trinary(Field):

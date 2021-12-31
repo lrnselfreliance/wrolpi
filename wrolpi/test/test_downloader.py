@@ -1,7 +1,10 @@
+from abc import ABC
 from datetime import datetime, timedelta
 from itertools import zip_longest
 from unittest import mock
 from unittest.mock import MagicMock
+
+import pytest
 
 from wrolpi import downloader
 from wrolpi.dates import local_timezone
@@ -15,18 +18,26 @@ class PermissiveDownloader(Downloader):
     """
     A testing Downloader which always says it's valid.
     """
+    name = 'permissive'
+
+    def __repr__(self):
+        return '<TESTING Permissive Downloader>'
 
     def valid_url(self, url: str):
-        return True
+        return True, None
 
 
 class HTTPDownloader(Downloader):
     """
     A testing Downloader which says its valid when a URL starts with http/https
     """
+    name = 'http'
+
+    def __repr__(self):
+        return '<TESTING HTTP Downloader>'
 
     def valid_url(self, url: str):
-        return url.startswith('https://') or url.startswith('http://')
+        return url.startswith('https://') or url.startswith('http://'), None
 
 
 class TestDownloader(TestAPI):
@@ -53,25 +64,6 @@ class TestDownloader(TestAPI):
 
         self.assertRaises(ValueError, self.mgr.register_downloader, http_downloader)
         self.assertRaises(ValueError, self.mgr.register_downloader, permissive_downloader)
-
-    def test_valid_url(self):
-        # No downloaders available.
-        self.assertFalse(self.mgr.valid_url('foo'))
-        self.assertFalse(self.mgr.valid_url('https://example.com'))
-
-        http_downloader = HTTPDownloader()
-        self.mgr.register_downloader(http_downloader)
-        self.assertFalse(self.mgr.valid_url('foo'))
-        self.assertTrue(self.mgr.valid_url('https://example.com'))
-        self.assertEqual(self.mgr.get_downloader('https://example.com'), http_downloader)
-
-        # Last priority.
-        permissive_downloader = PermissiveDownloader(priority=100)
-        self.mgr.register_downloader(permissive_downloader)
-        self.assertTrue(self.mgr.valid_url('foo'))
-        self.assertEqual(self.mgr.get_downloader('foo'), permissive_downloader)
-        self.assertTrue(self.mgr.valid_url('https://example.com'))
-        self.assertEqual(self.mgr.get_downloader('https://example.com'), http_downloader)
 
     @wrap_test_db
     def test_ensure_download(self):
@@ -301,3 +293,17 @@ class TestDownloader(TestAPI):
                           skip_download=True)
         downloads = self.mgr.get_downloads(session)
         self.assertEqual({i.url for i in downloads}, {'https://example.com/1', 'https://example.com/2'})
+
+
+def test_downloader_must_have_name():
+    """
+    A Downloader class must have a name.
+    """
+    with pytest.raises(NotImplementedError):
+        Downloader()
+
+    class D(Downloader, ABC):
+        pass
+
+    with pytest.raises(NotImplementedError):
+        D()

@@ -14,6 +14,7 @@ logger = logger.getChild(__name__)
 
 class ArchiveDownloader(Downloader, ABC):
     name = 'archive'
+    pretty_name = 'Archiver'
 
     def __repr__(self):
         return f'<ArchiveDownloader name={self.name}>'

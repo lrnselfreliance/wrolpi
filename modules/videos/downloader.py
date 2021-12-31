@@ -5,6 +5,7 @@ import re
 from abc import ABC
 from typing import Tuple, List, Optional
 
+from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 from yt_dlp import YoutubeDL
 from yt_dlp.extractor import YoutubeTabIE
@@ -48,6 +49,7 @@ class ChannelDownloader(Downloader, ABC):
     Handling downloading of all Videos in a Channel.
     """
     name = 'video_channel'
+    pretty_name = 'Video Channel'
 
     def __repr__(self):
         return f'<ChannelDownloader name={self.name}>'
@@ -95,6 +97,7 @@ class VideoDownloader(Downloader, ABC):
     Download a single video.  Store the video in it's channel's directory, otherwise store it in `videos/NO CHANNEL`.
     """
     name = 'video'
+    pretty_name = 'Videos'
 
     def __repr__(self):
         return f'<VideoDownloader name={self.name}>'
@@ -124,6 +127,15 @@ class VideoDownloader(Downloader, ABC):
 
         url = download.url
         info = download.info_json
+
+        if not info:
+            # Info was not fetched by the DownloadManager, lets get it.
+            valid, info = self.valid_url(url)
+            if not valid:
+                raise UnrecoverableDownloadError(f'{self} cannot download {url}')
+            session = Session.object_session(download)
+            download.info_json = info
+            session.commit()
 
         channel_name = info.get('channel')
         channel_id = info.get('channel_id')

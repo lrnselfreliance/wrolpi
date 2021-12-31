@@ -14,6 +14,7 @@ from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_session, get_db_context
 from wrolpi.downloader import DownloadManager, Download, DownloadFrequency
 from wrolpi.test.common import wrap_test_db, TestAPI
+from wrolpi.test.test_downloader import HTTPDownloader
 
 
 class FakeYDL:
@@ -371,3 +372,57 @@ def test_download_info_save(test_session, video_download_manager):
         mock_extract_info.return_value = {'some': 'info'}
         video_download_manager.create_download('https://www.youtube.com/watch?v=HQ_62YwcA80', test_session)
         mock_extract_info.assert_called_once()
+
+
+def test_selected_downloader(test_session, video_download_manager):
+    """
+    A user can specify which Downloader to use, no other should ever be used (even if the Download fails).
+    """
+    # The test HTTP Downloader will claim to be able to handle any HTTP URL; will pretend to have downloaded anything.
+    http_downloader = HTTPDownloader()
+    mock_do_download = http_downloader.do_download = mock.MagicMock()
+    mock_http_valid_url = http_downloader.valid_url = mock.MagicMock()
+    mock_http_valid_url.return_value = (True, None)
+    video_download_manager.register_downloader(http_downloader)
+
+    def check_attempts(attempts):
+        assert test_session.query(Download).one().attempts == attempts
+
+    # DownloadManager will attempt to choose the Downloader.
+    with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
+        mock_extract_info.side_effect = UnsupportedError('not this one')
+        video_download_manager.create_downloads(['https://example.com'], test_session)
+        mock_http_valid_url.assert_called_once()
+        mock_extract_info.assert_called_once()
+        mock_do_download.assert_called_once()
+
+    check_attempts(1)
+
+    mock_http_valid_url.reset_mock()
+    mock_do_download.reset_mock()
+
+    # DownloadManager will only use the HTTPDownloader.
+    with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
+        video_download_manager.create_downloads(['https://example.com'], test_session, downloader='http')
+        # DownloadManager does not try to find the Download, it trusts the "downloader" param.
+        mock_extract_info.assert_not_called()
+        mock_http_valid_url.assert_not_called()
+        # DownloadManager called do_download.
+        mock_do_download.assert_called_once()
+
+    check_attempts(2)
+
+    mock_http_valid_url.reset_mock()
+    mock_do_download.reset_mock()
+
+    # DownloadManager will only use the HTTPDownloader, even if the download fails.
+    with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
+        mock_do_download.side_effect = Exception('oh no!')
+        video_download_manager.create_downloads(['https://example.com'], test_session, downloader='http')
+        # DownloadManager does not try to find the Download, it trusts the "downloader" param.
+        mock_extract_info.assert_not_called()
+        mock_http_valid_url.assert_not_called()
+        # DownloadManager called do_download.
+        mock_do_download.assert_called_once()
+
+    check_attempts(3)

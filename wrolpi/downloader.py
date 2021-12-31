@@ -105,6 +105,7 @@ class Download(ModelHelper, Base):
 
 class Downloader:
     name = None
+    pretty_name = None
 
     def __init__(self, priority: int = 50, name: str = None):
         """
@@ -214,7 +215,8 @@ class DownloadManager:
 
     def get_downloader(self, url: str) -> Tuple[Downloader, Dict]:
         for i in self.instances:
-            valid, info = i.valid_url(url)
+            result = i.valid_url(url)
+            valid, info = result
             if valid:
                 return i, info
         raise InvalidDownload(f'Invalid URL {url=}')
@@ -253,39 +255,17 @@ class DownloadManager:
             session.flush()
         return download
 
-    def create_download(self, url: str, session, skip_download: bool = False, reset_attempts: bool = False) -> Download:
+    def create_download(self, url: str, session, downloader: str = None, skip_download: bool = False,
+                        reset_attempts: bool = False) -> Download:
         """
-        Schedule a URL for download.  If the URL failed previously, it will be retried.
+        Schedule a URL for download.  If the URL failed previously, it may be retried.
         """
-        # Make sure the URL can be downloaded.
-        downloader, info = self.get_downloader(url)
-        if not isinstance(info, dict) and info is not None:
-            logger.warning(f'info from {downloader}.is_valid is the wrong type! {type(info)=}')
+        downloads = self.create_downloads([url], session, downloader, skip_download=skip_download,
+                                          reset_attempts=reset_attempts)
+        return downloads[0]
 
-        download = self.get_or_create_download(url, session)
-        # Download may have failed, try again.
-        download.renew(reset_attempts=reset_attempts)
-
-        download.downloader = downloader.name
-        if isinstance(info, dict):
-            download.info_json = info
-
-        session.commit()
-
-        if skip_download is True:
-            return download
-
-        if PYTEST:
-            # Download now (for testing).
-            self._do_downloads(session)
-        else:
-            # Start downloading ASAP.
-            self.start_downloads()
-
-        return download
-
-    def create_downloads(self, urls: List[str], session: Session = None, skip_download: bool = False,
-                         reset_attempts: bool = False) -> List[Download]:
+    def create_downloads(self, urls: List[str], session: Session = None, downloader: str = None,
+                         skip_download: bool = False, reset_attempts: bool = False) -> List[Download]:
         """
         Schedule all URLs for download.  If one cannot be downloaded, none will be added.
         """
@@ -293,10 +273,16 @@ class DownloadManager:
             _, session = get_db_context()
 
         downloads = []
+        forced_downloader = self.get_downloader_by_name(downloader) if downloader else None
 
         with session.transaction:
             for url in urls:
-                downloader, info_json = self.get_downloader(url)
+                info_json = None
+                downloader = forced_downloader
+                if not forced_downloader:
+                    # User has requested automatic downloader selection, try and find it.
+                    downloader, info_json = self.get_downloader(url)
+
                 download = self.get_or_create_download(url, session)
                 # Download may have failed, try again.
                 download.renew(reset_attempts=reset_attempts)
@@ -317,6 +303,9 @@ class DownloadManager:
         return downloads
 
     def _do_downloads(self, session=None):
+        """
+        This method calls the Downloader's do_download method.
+        """
         # This is a long-running function, lets get a session that can be used for a long time.
         if not session:
             _, session = get_db_context()
@@ -331,7 +320,8 @@ class DownloadManager:
                 url = download.url
 
                 downloader = self.get_downloader_by_name(download.downloader)
-                if not downloader or not download.info_json:
+                info = len(download.info_json) if download.info_json else None
+                if not downloader:
                     downloader, info_json = self.get_downloader(download.url)
                     download.downloader = downloader.name
                     download.info_json = info_json
@@ -535,6 +525,18 @@ class DownloadManager:
                 if download.status in self.FINISHED_STATUSES and download.last_successful_download and \
                         download.last_successful_download < one_month:
                     session.delete(download)
+
+    def list_downloaders(self) -> List[Dict]:
+        """
+        Return a list of the Downloaders available on this Download Manager.
+        """
+        downloaders = []
+        for i in self.instances:
+            downloaders.append(dict(
+                name=i.name,
+                pretty_name=i.pretty_name,
+            ))
+        return downloaders
 
 
 # The global DownloadManager.  This should be used everywhere!

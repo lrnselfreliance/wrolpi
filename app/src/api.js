@@ -339,8 +339,8 @@ export async function fetchDomains() {
     }
 }
 
-export async function postDownload(urls) {
-    let body = {'urls': urls};
+export async function postDownload(urls, downloader) {
+    let body = {urls: urls, downloader: downloader};
     let response = await apiPost(`${API_URI}/download`, body);
     return response;
 }
@@ -349,4 +349,9 @@ export async function postDownload(urls) {
 export async function killDownload(download_id) {
     let response = await apiPost(`${API_URI}/download/${download_id}/kill`);
     return response;
+}
+
+export async function getDownloaders() {
+    let response = await apiGet(`${API_URI}/downloaders`);
+    return await response.json();
 }

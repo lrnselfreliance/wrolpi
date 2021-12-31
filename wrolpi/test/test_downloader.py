@@ -20,6 +20,9 @@ class PermissiveDownloader(Downloader):
     """
     name = 'permissive'
 
+    def __repr__(self):
+        return '<TESTING Permissive Downloader>'
+
     def valid_url(self, url: str):
         return True, None
 
@@ -29,6 +32,9 @@ class HTTPDownloader(Downloader):
     A testing Downloader which says its valid when a URL starts with http/https
     """
     name = 'http'
+
+    def __repr__(self):
+        return '<TESTING HTTP Downloader>'
 
     def valid_url(self, url: str):
         return url.startswith('https://') or url.startswith('http://'), None

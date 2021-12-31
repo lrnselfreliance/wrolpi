@@ -131,6 +131,7 @@ def spread_channel_downloads():
         for info in url_next_download:
             url, frequency, next_download = info['url'], info['frequency'], info['next_download']
             download = download_manager.get_or_create_download(url, session)
+            download.downloader = 'video_channel'
             download.frequency = frequency
             download.next_download = next_download
 

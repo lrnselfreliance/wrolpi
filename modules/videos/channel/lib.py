@@ -1,6 +1,6 @@
 from collections import defaultdict
 from datetime import timedelta
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Generator
 
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -97,7 +97,7 @@ def get_channel(source_id: str = None, link: str = None, url: str = None, return
         return channel
 
 
-def _spread_by_frequency(channels: List[Channel]):
+def _spread_by_frequency(channels: List[Channel]) -> Generator[Dict, None, None]:
     channels_by_frequency = defaultdict(lambda: [])
     for channel in channels:
         channels_by_frequency[channel.download_frequency].append(channel)
@@ -129,13 +129,10 @@ def spread_channel_downloads():
         url_next_download = _spread_by_frequency(channels)
 
         for info in url_next_download:
-            download = download_manager.get_download(session, url=info['url'])
-            if not download:
-                download = Download(url=info['url'])
-                session.add(download)
-
-            download.frequency = info['frequency']
-            download.next_download = info['next_download']
+            url, frequency, next_download = info['url'], info['frequency'], info['next_download']
+            download = download_manager.get_or_create_download(url, session)
+            download.frequency = frequency
+            download.next_download = next_download
 
 
 @run_after(save_channels_config)

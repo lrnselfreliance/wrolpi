@@ -512,7 +512,10 @@ class DownloadManager:
         """
         with get_db_session(commit=True) as session:
             download = self.get_download(session, id_=download_id)
-            downloader = self.get_downloader(download.url)
+            if not download.downloader:
+                downloader, _ = self.get_downloader(download.url)
+            else:
+                downloader = self.get_downloader_by_name(download.downloader)
             logger.warning(f'Killing download {download_id} in {downloader}')
             if download.status == 'pending':
                 downloader.kill()

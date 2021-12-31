@@ -3,6 +3,7 @@ from copy import copy
 from datetime import datetime
 from unittest import mock
 
+import pytest
 from yt_dlp.utils import UnsupportedError
 
 from modules.videos.channel.lib import spread_channel_downloads
@@ -13,6 +14,7 @@ from modules.videos.test.common import create_channel_structure
 from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_session, get_db_context
 from wrolpi.downloader import DownloadManager, Download, DownloadFrequency
+from wrolpi.errors import InvalidDownload
 from wrolpi.test.common import wrap_test_db, TestAPI
 from wrolpi.test.test_downloader import HTTPDownloader
 
@@ -434,3 +436,11 @@ def test_channel_downloader_hidden(video_download_manager):
     """
     downloaders = video_download_manager.list_downloaders()
     assert downloaders == [(dict(name='video', pretty_name='Videos')), ]
+
+
+def test_bad_downloader(test_session, video_download_manager):
+    """
+    Attempting to use an unknown downloader should raise an error.
+    """
+    with pytest.raises(InvalidDownload):
+        video_download_manager.create_download('https://example.com', test_session, 'bad downloader')

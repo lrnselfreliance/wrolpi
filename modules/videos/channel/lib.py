@@ -246,4 +246,4 @@ def download_channel(link: str):
     channel = get_channel(link=link, return_dict=False)
     # TODO do not download the channel if it does not already have Download record.
     with get_db_session(commit=True) as session:
-        download_manager.create_download(channel.url, session)
+        download_manager.create_download(channel.url, session, downloader='video_channel')

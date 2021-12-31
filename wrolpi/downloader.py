@@ -278,6 +278,9 @@ class DownloadManager:
 
         downloads = []
         forced_downloader = self.get_downloader_by_name(downloader) if downloader else None
+        if downloader and not forced_downloader:
+            # Could not find the downloader
+            raise InvalidDownload(f'Unknown downloader {downloader}')
 
         with session.transaction:
             for url in urls:
@@ -324,7 +327,6 @@ class DownloadManager:
                 url = download.url
 
                 downloader = self.get_downloader_by_name(download.downloader)
-                info = len(download.info_json) if download.info_json else None
                 if not downloader:
                     downloader, info_json = self.get_downloader(download.url)
                     download.downloader = downloader.name

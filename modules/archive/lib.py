@@ -367,9 +367,12 @@ def is_archive_file(path: pathlib.Path) -> bool:
 
 def _refresh_archives():
     """
-    Search the Archives directory for archive files, update the database if new files are found.
+    Search the Archives directory for archive files, update the database if new files are found.  Remove any orphan
+    URLs or Domains.
     """
     archive_directory = get_archive_directory()
+
+    singlefile_paths = set()
     for domain_directory in filter(lambda i: i.is_dir(), archive_directory.iterdir()):
         logger.debug(f'Refreshing directory: {domain_directory}')
         archives_files = filter(is_archive_file, domain_directory.iterdir())
@@ -379,19 +382,24 @@ def _refresh_archives():
             archive_count += 1
             with get_db_session(commit=True) as session:
                 for dt, files in chunk:
-                    print('_refresh_archives', dt)
+                    singlefile_paths.add(str(files[0]))
                     upsert_archive(dt, files, session)
 
         if archive_count:
             logger.info(f'Inserted/updated {archive_count} archives')
 
-    cleanup_domains_urls()
+    with get_db_session(commit=True) as session:
+        # Check that each URLs most recent Archive exists, if it does not use the next most recent.
+        urls = session.query(URL).all()
+        for url in urls:
+            if not url.latest or not url.latest.singlefile_path or not url.latest.singlefile_path.path.exists():
+                url.update_latest()
+                session.commit()
 
+    singlefile_paths = list(singlefile_paths)
+    with get_db_curs(commit=True) as curs:
+        curs.execute('DELETE FROM archive WHERE singlefile_path != ALL(%s)', (singlefile_paths,))
 
-def cleanup_domains_urls():
-    """
-    Delete any URLs/Domains without Archives.
-    """
     with get_db_curs(commit=True) as curs:
         stmt = '''
             DELETE FROM url WHERE id NOT IN (

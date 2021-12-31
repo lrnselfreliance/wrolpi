@@ -5,7 +5,7 @@ from datetime import datetime
 import mock
 
 from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count, delete_url, \
-    _refresh_archives, get_domains, get_new_archive_files
+    _refresh_archives, get_new_archive_files
 from modules.archive.models import Archive, URL, Domain
 from wrolpi.common import get_media_directory
 from wrolpi.db import get_db_session
@@ -320,29 +320,50 @@ class TestArchive(TestAPI):
                 self.assertEqual(session.query(URL).count(), 1)
                 self.assertEqual(session.query(Archive).count(), 1)
 
-    @wrap_test_db
-    def test_refresh_archives_delete_empty(self):
-        """
-        Domains or URLs with no archives should be deleted during refresh.
-        """
-        with wrap_media_directory():
-            (get_media_directory() / 'archive').mkdir()
-            with get_db_session(commit=True) as session:
-                # These should not be deleted.
-                domain, url = get_or_create_domain_and_url(session, 'https://example.com')
-                archive = Archive(singlefile_path='foo', url_id=url.id)
-                session.add(archive)
 
-                # These should be deleted.
-                domain = Domain(domain='bar')
-                session.add(domain)
-                session.flush()
-                session.add(URL(url='bar', domain_id=domain.id))
+def test_archive_refresh_deleted_archive(test_session, archive_directory, archive_factory):
+    archive1 = archive_factory('example.com', 'https://example.com/1')
+    archive2 = archive_factory('example.com', 'https://example.com/1')
+    archive3 = archive_factory('example.com')
+    archive4 = archive_factory('example.org')
+    archive5 = archive_factory()
 
-            self.assertEqual(len(get_urls()), 2)
-            self.assertEqual(len(get_domains()), 2)
+    # Empty directories should be ignored.
+    empty = archive_directory / 'empty'
+    empty.mkdir()
 
-            _refresh_archives()
+    def check_counts(archive_count, url_count, domain_count):
+        assert test_session.query(Archive).count() == archive_count
+        assert test_session.query(URL).count() == url_count
+        assert test_session.query(Domain).count() == domain_count
 
-            self.assertEqual(len(get_urls()), 1)
-            self.assertEqual(len(get_domains()), 1)
+    # All 3 archives are already in the DB.
+    check_counts(archive_count=5, url_count=4, domain_count=5)
+    _refresh_archives()
+    check_counts(archive_count=5, url_count=4, domain_count=4)
+
+    # Delete archive2's files, it's the latest for 'https://example.com/1'
+    for path in archive2.my_paths():
+        path.unlink()
+    _refresh_archives()
+    check_counts(archive_count=4, url_count=4, domain_count=4)
+
+    # Delete archive1's files, now the URL is empty.
+    for path in archive1.my_paths():
+        path.unlink()
+    _refresh_archives()
+    check_counts(archive_count=3, url_count=3, domain_count=3)
+
+    # Delete archive3, now there is now example.com domain
+    for path in archive3.my_paths():
+        path.unlink()
+    _refresh_archives()
+    check_counts(archive_count=2, url_count=2, domain_count=2)
+
+    # Delete all the rest of the archives
+    for path in archive4.my_paths():
+        path.unlink()
+    for path in archive5.my_paths():
+        path.unlink()
+    _refresh_archives()
+    check_counts(archive_count=0, url_count=0, domain_count=0)

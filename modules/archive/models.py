@@ -1,5 +1,7 @@
+from datetime import datetime
 from typing import Generator
 
+import pytz
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
@@ -74,6 +76,17 @@ class URL(Base, ModelHelper):
         d['domain'] = self.domain.dict()
         d['archives'] = [i.dict() for i in self.archives]
         return d
+
+    def update_latest(self):
+        """
+        Set `latest` to the most recent Archive of this URL whose `singlefile` exists.
+        """
+        self.latest_id = None
+        latest_datetime = datetime(2, 1, 1, 0, 0, 0).astimezone(tz=pytz.UTC)
+        for archive in self.archives:
+            if archive.singlefile_path and archive.singlefile_path.path.exists() and \
+                    archive.archive_datetime >= latest_datetime:
+                self.latest_id = archive.id
 
 
 class Domain(Base, ModelHelper):

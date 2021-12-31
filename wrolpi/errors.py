@@ -298,5 +298,5 @@ API_ERRORS = {
         'code': next(error_codes),
         'message': 'Download experienced an error which cannot be recovered.  Download will be deleted.',
         'status': HTTPStatus.INTERNAL_SERVER_ERROR,
-    }
+    },
 }

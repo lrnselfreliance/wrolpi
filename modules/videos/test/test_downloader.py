@@ -435,7 +435,7 @@ def test_channel_downloader_hidden(video_download_manager):
     ChannelDownloader should not be presented to the User.
     """
     downloaders = video_download_manager.list_downloaders()
-    assert downloaders == [(dict(name='video', pretty_name='Videos')), ]
+    assert [i.__json__() for i in downloaders] == [(dict(name='video', pretty_name='Videos')), ]
 
 
 def test_bad_downloader(test_session, video_download_manager):

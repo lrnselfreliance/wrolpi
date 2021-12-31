@@ -532,7 +532,7 @@ class DownloadManager:
                         download.last_successful_download < one_month:
                     session.delete(download)
 
-    def list_downloaders(self) -> List[Dict]:
+    def list_downloaders(self) -> List[Downloader]:
         """
         Return a list of the Downloaders available on this Download Manager.
         """

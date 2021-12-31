@@ -106,6 +106,7 @@ class Download(ModelHelper, Base):
 class Downloader:
     name = None
     pretty_name = None
+    listable = True
 
     def __init__(self, priority: int = 50, name: str = None):
         """
@@ -125,6 +126,9 @@ class Downloader:
         self._manager: DownloadManager = None  # noqa
 
         download_manager.register_downloader(self)
+
+    def __json__(self):
+        return dict(name=self.name, pretty_name=self.pretty_name)
 
     @classmethod
     def valid_url(cls, url) -> Tuple[bool, Optional[dict]]:
@@ -530,13 +534,7 @@ class DownloadManager:
         """
         Return a list of the Downloaders available on this Download Manager.
         """
-        downloaders = []
-        for i in self.instances:
-            downloaders.append(dict(
-                name=i.name,
-                pretty_name=i.pretty_name,
-            ))
-        return downloaders
+        return list(filter(lambda i: i.listable, self.instances))
 
 
 # The global DownloadManager.  This should be used everywhere!

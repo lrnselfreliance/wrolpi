@@ -50,6 +50,7 @@ class ChannelDownloader(Downloader, ABC):
     """
     name = 'video_channel'
     pretty_name = 'Video Channel'
+    listable = False
 
     def __repr__(self):
         return f'<ChannelDownloader name={self.name}>'

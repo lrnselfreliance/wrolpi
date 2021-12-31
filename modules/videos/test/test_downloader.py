@@ -426,3 +426,11 @@ def test_selected_downloader(test_session, video_download_manager):
         mock_do_download.assert_called_once()
 
     check_attempts(3)
+
+
+def test_channel_downloader_hidden(video_download_manager):
+    """
+    ChannelDownloader should not be presented to the User.
+    """
+    downloaders = video_download_manager.list_downloaders()
+    assert downloaders == [(dict(name='video', pretty_name='Videos')), ]

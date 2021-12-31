@@ -1,7 +1,5 @@
-from datetime import datetime
 from typing import Generator
 
-import pytz
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
@@ -53,6 +51,15 @@ class Archive(Base, ModelHelper):
         for path in self.my_paths():
             path.unlink(missing_ok=True)
 
+    def __gt__(self, other) -> bool:
+        """
+        Compare Archives according to their archive datetime.
+        """
+        if not isinstance(other, Archive):
+            raise ValueError(f'Cannot compare {type(other)} to Archive!')
+
+        return self.archive_datetime > other.archive_datetime
+
 
 class URL(Base, ModelHelper):
     __tablename__ = 'url'
@@ -82,11 +89,14 @@ class URL(Base, ModelHelper):
         Set `latest` to the most recent Archive of this URL whose `singlefile` exists.
         """
         self.latest_id = None
-        latest_datetime = datetime(2, 1, 1, 0, 0, 0).astimezone(tz=pytz.UTC)
-        for archive in self.archives:
-            if archive.singlefile_path and archive.singlefile_path.path.exists() and \
-                    archive.archive_datetime >= latest_datetime:
-                self.latest_id = archive.id
+        archives = filter(lambda i: i.singlefile_path and i.singlefile_path.path.exists(), self.archives)
+        try:
+            latest: Archive = max(archives)
+            if latest:
+                self.latest_id = latest.id
+        except ValueError:
+            # No archives exist!
+            pass
 
 
 class Domain(Base, ModelHelper):

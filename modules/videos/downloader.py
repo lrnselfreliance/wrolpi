@@ -83,7 +83,8 @@ class ChannelDownloader(Downloader, ABC):
             for video_id, source_id, missing_video in missing_videos:
                 url = video_url_resolver(domain, missing_video)
                 # Schedule any missing videos for download.
-                self.manager.get_or_create_download(url, session)
+                download = self.manager.get_or_create_download(url, session)
+                download.downloader = 'video'
 
         if PYTEST:
             self.manager.do_downloads_sync()

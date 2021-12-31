@@ -8,7 +8,7 @@ from wrolpi.common import sanitize_link, run_after, get_relative_to_media_direct
 from wrolpi.dates import today
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.downloader import download_manager, Download
-from wrolpi.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError
+from wrolpi.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError, InvalidDownload
 from ..common import check_for_channel_conflicts
 from ..lib import save_channels_config
 from ..models import Channel
@@ -243,7 +243,12 @@ def delete_channel(link):
 
 
 def download_channel(link: str):
+    """
+    Create a Download record for a Channel's entire catalog.
+    """
     channel = get_channel(link=link, return_dict=False)
-    # TODO do not download the channel if it does not already have Download record.
     with get_db_session(commit=True) as session:
+        if not download_manager.get_download(session, channel.url):
+            raise InvalidDownload(f'Channel {channel.name} does not have a download!')
+
         download_manager.create_download(channel.url, session, downloader='video_channel')

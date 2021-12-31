@@ -6,7 +6,7 @@ from unittest import mock
 import pytest
 from yt_dlp.utils import UnsupportedError
 
-from modules.videos.channel.lib import spread_channel_downloads
+from modules.videos.channel.lib import spread_channel_downloads, download_channel
 from modules.videos.downloader import find_all_missing_videos, VideoDownloader, \
     ChannelDownloader, get_or_create_channel
 from modules.videos.models import Channel, Video
@@ -444,3 +444,15 @@ def test_bad_downloader(test_session, video_download_manager):
     """
     with pytest.raises(InvalidDownload):
         video_download_manager.create_download('https://example.com', test_session, 'bad downloader')
+
+
+def test_channel_download_no_download(test_session, video_download_manager, simple_channel):
+    """
+    A Channel without an existing Download cannot be downloaded.  This is to avoid the situation where a single
+    video has been downloaded in a Channel, but the User has not requested downloading of all videos in the channel.
+    """
+    # simple_channel has no download record.
+    assert video_download_manager.get_downloads(test_session) == []
+
+    with pytest.raises(InvalidDownload):
+        download_channel(simple_channel.link)

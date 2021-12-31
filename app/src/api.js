@@ -36,7 +36,7 @@ async function apiCall(url, method, body, ms = 10000) {
         if (response.status === 403 && (await response.json())['code'] === 17) {
             toast({
                 type: 'error',
-                header: 'WROL Mode is enabled!',
+                title: 'WROL Mode is enabled!',
                 description: 'This functionality is not enabled while WROL Mode is enabled!',
                 time: 5000,
             });
@@ -47,14 +47,14 @@ async function apiCall(url, method, body, ms = 10000) {
         if (e.message === 'promise timeout') {
             toast({
                 type: 'error',
-                header: 'Server failed to respond!',
+                title: 'Server failed to respond!',
                 description: 'Timeout while waiting for server response.  See server logs.',
                 time: 5000,
             });
         } else {
             toast({
                 type: 'error',
-                header: 'Error!',
+                title: 'Error!',
                 description: 'See client logs',
                 time: 5000,
             });
@@ -138,7 +138,7 @@ export async function deleteVideo(video_id) {
     if (data.code === 17) {
         toast({
             type: 'warning',
-            header: 'WROL Mode Enabled',
+            title: 'WROL Mode Enabled',
             description: 'This cannot be done while WROL Mode is enabled.',
             time: 5000,
         });
@@ -147,7 +147,7 @@ export async function deleteVideo(video_id) {
     if (response.status !== 204) {
         toast({
             type: 'error',
-            header: 'Unexpected server response',
+            title: 'Unexpected server response',
             description: 'Failed to delete video.  See server logs.',
             time: 5000,
         });
@@ -209,7 +209,16 @@ export async function download() {
 
 export async function downloadChannel(link) {
     let url = `${VIDEOS_API}/download/${link}`;
-    await fetch(url, {method: 'POST'});
+    let response = await apiPost(url);
+    let json = await response.json();
+    if (response.status === 400 && json['code'] === 30) {
+        toast({
+            type: 'error',
+            title: 'Cannot Download!',
+            description: 'This channel does not have a download record.  Create one!',
+            time: 5000,
+        });
+    }
 }
 
 export async function refreshChannel(link) {
@@ -223,7 +232,7 @@ export async function encryptOTP(otp, plaintext) {
     if (response.status !== 200) {
         toast({
             type: 'error',
-            header: 'Error!',
+            title: 'Error!',
             description: 'Failed to encrypt OTP',
             time: 5000,
         });
@@ -238,7 +247,7 @@ export async function decryptOTP(otp, ciphertext) {
     if (response.status !== 200) {
         toast({
             type: 'error',
-            header: 'Error!',
+            title: 'Error!',
             description: 'Failed to decrypt OTP',
             time: 5000,
         });

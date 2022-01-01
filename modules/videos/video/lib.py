@@ -139,8 +139,9 @@ def video_search(
         total = results[0]['total'] if results else 0
         ranked_ids = [i['id'] for i in results]
 
-    results = get_ranked_models(ranked_ids, Video)
-    results = [i.__json__() for i in results]
+    with get_db_session() as session:
+        results = get_ranked_models(ranked_ids, Video, session=session)
+        results = [i.__json__() for i in results]
 
     return results, total
 

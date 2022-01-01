@@ -113,10 +113,15 @@ def get_db_curs(commit: bool = False):
             connection.rollback()
 
 
-def get_ranked_models(ranked_ids: List[int], model: Base) -> List[Base]:
+def get_ranked_models(ranked_ids: List[int], model: Base, session: Session = None) -> List[Base]:
     """
     Get all objects whose ids are in the `ranked_ids`, order them by their position in `ranked_ids`.
     """
+    if session:
+        results = session.query(model).filter(model.id.in_(ranked_ids)).all()
+        results = sorted(results, key=lambda i: ranked_ids.index(i.id))
+        return results
+
     with get_db_session() as session:
         results = session.query(model).filter(model.id.in_(ranked_ids)).all()
         results = sorted(results, key=lambda i: ranked_ids.index(i.id))

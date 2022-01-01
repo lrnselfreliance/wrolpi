@@ -29,7 +29,7 @@ def upgrade():
         ADD COLUMN textsearch tsvector
         GENERATED ALWAYS AS (
             setweight(to_tsvector('english'::regconfig, title), 'A') ||
-            setweight(to_tsvector('english'::regconfig, caption), 'B')
+            setweight(to_tsvector('english'::regconfig, caption), 'D')
         ) STORED
     ''')
     session.execute('CREATE INDEX IF NOT EXISTS video_textsearch_idx ON video USING GIN(textsearch)')

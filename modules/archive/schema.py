@@ -42,3 +42,15 @@ class RetrieveURLsResponse:
 
 class PostArchiveRequest:
     url = doc.String(required=True)
+
+
+class ArchiveSearchRequest:
+    search_str = doc.String()
+    domain = doc.String()
+    offset = doc.Integer()
+    limit = doc.Integer()
+
+
+class ArchiveSearchResponse:
+    videos = doc.List(ArchiveDict)
+    totals = doc.Dictionary()

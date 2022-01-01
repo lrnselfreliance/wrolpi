@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from modules.archive.models import URL, Domain, Archive
 from wrolpi.common import get_media_directory, logger, chunks, extract_domain
 from wrolpi.dates import now, strptime_ms, strftime_ms
-from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidDomain, UnknownURL, PendingArchive, InvalidArchive
 from wrolpi.vars import PYTEST
 
@@ -409,13 +409,24 @@ def _refresh_archives():
         curs.execute(stmt)
         urls = list(map(dict, curs.fetchall()))
         stmt = '''
-            DELETE FROM domains WHERE id NOT IN (
-                select distinct domain_id from url
-            ) RETURNING domains.id
+            DELETE FROM domains WHERE
+                id NOT IN (select distinct domain_id from url)
+                AND id NOT IN (select distinct domain_id from archive)
+            RETURNING domains.id
         '''
         curs.execute(stmt)
         domains = list(map(dict, curs.fetchall()))
         logger.info(f'Deleted {len(urls)} URLS and {len(domains)} Domains')
+
+    with get_db_session(commit=True) as session:
+        # Get all archives that have no text contents, but have txt files.
+        archives = session.query(Archive).filter(
+            Archive.contents == None,  # noqa
+            Archive.readability_txt_path != None,
+        ).all()
+        for archive in archives:
+            with archive.readability_txt_path.path.open('rt') as fh:
+                archive.contents = fh.read()
 
 
 async def refresh_archives():
@@ -475,3 +486,35 @@ def get_domains():
         curs.execute(stmt)
         domains = list(map(dict, curs.fetchall()))
         return domains
+
+
+def search(search_str: str, domain: str, limit: int, offset: int):
+    with get_db_curs() as curs:
+        wheres = ''
+        params = dict(search_str=search_str, offset=offset, limit=limit)
+
+        if domain:
+            curs.execute('SELECT id FROM domains WHERE domain=%s', (domain,))
+            domain_id = curs.fetchone()[0]
+            params['domain_id'] = domain_id
+            wheres += 'AND domain_id = %(domain_id)s'
+
+        # TODO handle different Archive search orders.
+        stmt = f'''
+            SELECT id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total
+            FROM archive
+            WHERE
+                textsearch @@ websearch_to_tsquery(%(search_str)s)
+                {wheres}
+            ORDER BY 2 DESC, 1 ASC
+            OFFSET %(offset)s
+            LIMIT %(limit)s
+        '''
+        curs.execute(stmt, params)
+        results = [dict(i) for i in curs.fetchall()]
+        total = results[0]['total'] if results else 0
+        ranked_ids = [i['id'] for i in results]
+
+    results = get_ranked_models(ranked_ids, Archive)
+
+    return results, total

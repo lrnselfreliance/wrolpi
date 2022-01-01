@@ -49,7 +49,7 @@ def archive_factory(test_session, archive_directory):
 
         if not domain:
             domain = Domain(
-                domain=domain,
+                domain=domain_dir.name,
                 directory=domain_dir,
             )
             test_session.add(domain)
@@ -73,6 +73,7 @@ def archive_factory(test_session, archive_directory):
             status='complete',
             title=title,
             url_id=url_.id,
+            domain_id=domain.id,
         )
         test_session.add(archive)
         test_session.commit()

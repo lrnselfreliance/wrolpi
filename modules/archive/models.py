@@ -1,10 +1,10 @@
 from typing import Generator
 
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, Computed
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import ModelHelper, Base
+from wrolpi.common import ModelHelper, Base, tsvector
 from wrolpi.dates import TZDateTime
 from wrolpi.media_path import MediaPathType
 
@@ -27,6 +27,10 @@ class Archive(Base, ModelHelper):
     title = Column(String)
     archive_datetime = Column(TZDateTime)
     status = Column(String)
+    contents = Column(String)
+
+    textsearch = Column(tsvector, Computed('''setweight(to_tsvector('english'::regconfig, title), 'A') ||
+            setweight(to_tsvector('english'::regconfig, contents), 'D')'''))
 
     def __repr__(self):
         return f'<Archive id={self.id} url_id={self.url_id} singlefile={self.singlefile_path}>'
@@ -59,6 +63,30 @@ class Archive(Base, ModelHelper):
             raise ValueError(f'Cannot compare {type(other)} to Archive!')
 
         return self.archive_datetime > other.archive_datetime
+
+    def __json__(self):
+        url = None
+        if self.url:
+            url = dict(
+                url=self.url.url,
+                id=self.url.id,
+            )
+        d = dict(
+            archive_datetime=self.archive_datetime,
+            domain=self.domain.dict() if self.domain else None,
+            domain_id=self.domain_id,
+            id=self.id,
+            readability_json_path=self.readability_json_path.path if self.readability_json_path else None,
+            readability_path=self.readability_path.path if self.readability_path else None,
+            readability_txt_path=self.readability_txt_path.path if self.readability_txt_path else None,
+            screenshot_path=self.screenshot_path.path if self.screenshot_path else None,
+            singlefile_path=self.singlefile_path.path if self.singlefile_path else None,
+            status=self.status,
+            title=self.title,
+            url=url,
+            url_id=self.url_id,
+        )
+        return d
 
 
 class URL(Base, ModelHelper):

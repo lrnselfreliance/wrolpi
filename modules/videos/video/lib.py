@@ -6,9 +6,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
 from wrolpi.common import run_after, logger
-from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import UnknownVideo
-from wrolpi.vars import PYTEST
 from ..lib import save_channels_config
 from ..models import Video
 
@@ -140,13 +139,8 @@ def video_search(
         total = results[0]['total'] if results else 0
         ranked_ids = [i['id'] for i in results]
 
-    with get_db_session() as session:
-        results = []
-        if ranked_ids:
-            results = session.query(Video).filter(Video.id.in_(ranked_ids)).all()
-            results = sorted(results, key=lambda r: ranked_ids.index(r.id))
-
-        results = [i.__json__() for i in results]
+    results = get_ranked_models(ranked_ids, Video)
+    results = [i.__json__() for i in results]
 
     return results, total
 

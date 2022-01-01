@@ -5,10 +5,12 @@ from requests import Request
 from sanic import response
 
 from wrolpi.common import logger, wrol_mode_check
+from wrolpi.errors import ValidationError
 from wrolpi.root_api import get_blueprint, json_response
 from wrolpi.schema import validate_doc, JSONErrorResponse
 from . import lib
-from .schema import RetrieveURLsRequest, RetrieveURLsResponse, PostArchiveRequest
+from .schema import RetrieveURLsRequest, RetrieveURLsResponse, PostArchiveRequest, ArchiveSearchRequest, \
+    ArchiveSearchResponse
 
 NAME = 'archive'
 
@@ -43,13 +45,13 @@ async def delete_url(_: Request, url_id: int):
     return response.empty()
 
 
-@bp.post('/search')
+@bp.post('/urls')
 @validate_doc(
     'Get a list of URLs',
     RetrieveURLsRequest,
     RetrieveURLsResponse,
 )
-async def search_archives(_: Request, data: dict):
+async def get_urls(_: Request, data: dict):
     try:
         limit = abs(int(data.get('limit', 20)))
         offset = abs(int(data.get('offset', 0)))
@@ -75,3 +77,23 @@ async def refresh_archives(_: Request):
 async def fetch_domains(_: Request):
     domains = lib.get_domains()
     return json_response({'domains': domains, 'totals': {'domains': len(domains)}})
+
+
+@bp.post('/search')
+@validate_doc(
+    'Search archive contents and titles',
+    consumes=ArchiveSearchRequest,
+    produces=ArchiveSearchResponse,
+)
+async def search_archives(_: Request, data: dict):
+    try:
+        search_str = data.get('search_str')
+        domain = data.get('domain')
+        limit = int(data.get('limit', 20))
+        offset = int(data.get('offset', 0))
+    except Exception as e:
+        raise ValidationError('Unable to validate search queries') from e
+
+    archives, total = lib.search(search_str, domain, limit, offset)
+    ret = dict(archives=archives, totals=dict(archives=total))
+    return json_response(ret)

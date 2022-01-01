@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from typing import ContextManager, Tuple
+from typing import ContextManager, Tuple, List
 
 import psycopg2
 import sqlalchemy.exc
@@ -7,7 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import NullPool
 
-from wrolpi.common import logger
+from wrolpi.common import logger, Base
 from wrolpi.vars import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DOCKERIZED, PYTEST
 
 logger = logger.getChild(__name__)
@@ -111,3 +111,13 @@ def get_db_curs(commit: bool = False):
         # Rollback only if a transaction hasn't been committed.
         if session.transaction.is_active:
             connection.rollback()
+
+
+def get_ranked_models(ranked_ids: List[int], model: Base) -> List[Base]:
+    """
+    Get all objects whose ids are in the `ranked_ids`, order them by their position in `ranked_ids`.
+    """
+    with get_db_session() as session:
+        results = session.query(model).filter(model.id.in_(ranked_ids)).all()
+        results = sorted(results, key=lambda i: ranked_ids.index(i.id))
+        return results

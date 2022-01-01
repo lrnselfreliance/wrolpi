@@ -117,12 +117,14 @@ def get_ranked_models(ranked_ids: List[int], model: Base, session: Session = Non
     """
     Get all objects whose ids are in the `ranked_ids`, order them by their position in `ranked_ids`.
     """
+
+    def _(s):
+        r = s.query(model).filter(model.id.in_(ranked_ids)).all()
+        r = sorted(r, key=lambda i: ranked_ids.index(i.id))
+        return r
+
     if session:
-        results = session.query(model).filter(model.id.in_(ranked_ids)).all()
-        results = sorted(results, key=lambda i: ranked_ids.index(i.id))
-        return results
+        return _(session)
 
     with get_db_session() as session:
-        results = session.query(model).filter(model.id.in_(ranked_ids)).all()
-        results = sorted(results, key=lambda i: ranked_ids.index(i.id))
-        return results
+        return _(session)

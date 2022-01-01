@@ -298,7 +298,6 @@ class Videos extends React.Component {
             await this.fetchChannel();
         } else if (pageChanged) {
             this.applyStateToHistory();
-            await this.fetchVideos();
         }
     }
 

@@ -26,8 +26,8 @@ def archive_factory(test_session, archive_directory):
 
     now = time_generator()
 
-    def _(domain: str = None, url: str = None) -> Archive:
-        title = str(uuid4())
+    def _(domain: str = None, url: str = None, title: str = None, contents: str = None) -> Archive:
+        title = title or str(uuid4())
         url = url or f'https://example.com/{title}'
         domain_dir = domain or title
         domain_dir = archive_directory / domain_dir
@@ -74,6 +74,7 @@ def archive_factory(test_session, archive_directory):
             title=title,
             url_id=url_.id,
             domain_id=domain.id,
+            contents=contents,
         )
         test_session.add(archive)
         test_session.commit()

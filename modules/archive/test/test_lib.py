@@ -373,14 +373,14 @@ def test_archive_refresh_deleted_archive(test_session, archive_directory, archiv
     check_counts(archive_count=0, url_count=0, domain_count=0)
 
 
-def test_refresh_archives_search(test_session, archive_directory, archive_factory, test_client):
+def test_refresh_archives_fills_contents(test_session, archive_directory, archive_factory, test_client):
     """
-    Archives can be searched.  An Archive missing `contents` will be filled using the readability txt file.
+    Refreshing archives fills in any missing contents.
     """
     archive1 = archive_factory('example.com', 'https://example.com/one')
     archive2 = archive_factory('example.com', 'https://example.com/one')
     archive3 = archive_factory('example.org')
-    archive_factory('example.org')  # has no contents
+    archive4 = archive_factory('example.org')  # has no contents
 
     contents_title_archive = [
         ('foo bar qux', 'my archive', archive1),
@@ -393,41 +393,15 @@ def test_refresh_archives_search(test_session, archive_directory, archive_factor
             fh.write(contents)
     test_session.commit()
 
+    # Contents are empty.
+    assert not archive1.contents
+    assert not archive2.contents
+    assert not archive3.contents
+    assert not archive4.contents
+
+    # Fill the contents.
     _refresh_archives()
-
-    def check_results(data, ids):
-        request, response = test_client.post('/api/archive/search', content=json.dumps(data))
-        assert response.status_code == HTTPStatus.OK, response.json
-        assert [i['id'] for i in response.json['archives']] == ids
-
-    # 1 and 2 contain "foo".
-    data = {'search_str': 'foo'}
-    check_results(data, [1, 2])
-
-    # 2 and 3 contain "baz".
-    data = {'search_str': 'baz'}
-    check_results(data, [2, 3])
-
-    # 1 contains "bar".
-    data = {'search_str': 'bar'}
-    check_results(data, [1, ])
-
-    # No archives contain "huzzah"
-    data = {'search_str': 'huzzah'}
-    check_results(data, [])
-
-    # Only 3 contains "baz" and is in domain "example.org"
-    data = {'search_str': 'baz', 'domain': 'example.org'}
-    check_results(data, [3, ])
-
-    # 1's title contains "my", this is ignored by Postgres.
-    data = {'search_str': 'my'}
-    check_results(data, [])
-
-    # 3's title contains "third".
-    data = {'search_str': 'third'}
-    check_results(data, [3, ])
-
-    # All titles contain "qux", but they contain different amounts.  They are ordered by the amount.
-    data = {'search_str': 'qux'}
-    check_results(data, [3, 2, 1])
+    assert archive1.contents
+    assert archive2.contents
+    assert archive3.contents
+    assert not archive4.contents

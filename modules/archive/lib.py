@@ -296,21 +296,25 @@ def get_url_count(domain: str = '') -> int:
         return count
 
 
-def delete_url(url_id: int):
+def delete_archive(archive_id: int):
     """
-    Delete a URL record, all it's Archives and files.
+    Delete an Archive and all of it's files.
     """
-    with get_db_session() as session:
-        url: URL = session.query(URL).filter_by(id=url_id).one_or_none()
-        if not url:
-            raise UnknownURL(f'Unknown url with id: {url_id}')
+    with get_db_session(commit=True) as session:
+        archive: Archive = session.query(Archive).filter_by(id=archive_id).one_or_none()
+        if not archive:
+            raise UnknownURL(f'Unknown Archive with id: {archive_id}')
 
         # Delete any files associated with this URL.
-        for archive in url.archives:
-            archive.unlink()
-
-    with get_db_session(commit=True) as session:
-        session.query(URL).filter_by(id=url_id).delete()
+        archive.delete()
+        # URL must have the latest
+        url = archive.url
+        url.update_latest()
+        # Delete this archive.
+        session.query(Archive).filter_by(id=archive_id).delete()
+        # Remove the URL if necessary.
+        if not url.archives:
+            session.query(URL).filter_by(id=url.id).delete()
 
 
 def group_archive_files(files: Iterator[pathlib.Path]) -> groupby:
@@ -490,23 +494,33 @@ def get_domains():
 
 def search(search_str: str, domain: str, limit: int, offset: int):
     with get_db_curs() as curs:
+        columns = 'id, COUNT(*) OVER() AS total'
+        params = dict(offset=offset, limit=limit)
         wheres = ''
-        params = dict(search_str=search_str, offset=offset, limit=limit)
+
+        if search_str:
+            columns = 'id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
+            params['search_str'] = search_str
+            wheres += '\nAND textsearch @@ websearch_to_tsquery(%(search_str)s)'
 
         if domain:
             curs.execute('SELECT id FROM domains WHERE domain=%s', (domain,))
-            domain_id = curs.fetchone()[0]
+            try:
+                domain_id = curs.fetchone()[0]
+            except TypeError:
+                # No domains match the provided domain.
+                return [], 0
             params['domain_id'] = domain_id
-            wheres += 'AND domain_id = %(domain_id)s'
+            wheres += '\nAND domain_id = %(domain_id)s'
 
         # TODO handle different Archive search orders.
         stmt = f'''
-            SELECT id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total
+            SELECT {columns}
             FROM archive
             WHERE
-                textsearch @@ websearch_to_tsquery(%(search_str)s)
+                singlefile_path IS NOT NULL AND singlefile_path != ''
                 {wheres}
-            ORDER BY 2 DESC, 1 ASC
+            ORDER BY 2 DESC, archive_datetime DESC  -- highest rank, then most recent
             OFFSET %(offset)s
             LIMIT %(limit)s
         '''

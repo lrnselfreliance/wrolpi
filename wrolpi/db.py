@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from functools import wraps
 from typing import ContextManager, Tuple, List
 
 import psycopg2
@@ -113,18 +114,31 @@ def get_db_curs(commit: bool = False):
             connection.rollback()
 
 
+def optional_session(commit: bool = False):
+    """
+    Wraps a function, if a Session is passed as keyword `session`, it will be used.  Otherwise, a new session will be
+    created and passed to the function.
+    """
+
+    def wrapper(func: callable):
+        @wraps(func)
+        def wrapped(*a, session: Session = None, **kw):
+            if session:
+                return func(*a, **kw, session=session)
+            else:
+                with get_db_session(commit=commit) as session:
+                    return func(*a, **kw, session=session)
+
+        return wrapped
+
+    return wrapper
+
+
+@optional_session()
 def get_ranked_models(ranked_ids: List[int], model: Base, session: Session = None) -> List[Base]:
     """
     Get all objects whose ids are in the `ranked_ids`, order them by their position in `ranked_ids`.
     """
-
-    def _(s):
-        r = s.query(model).filter(model.id.in_(ranked_ids)).all()
-        r = sorted(r, key=lambda i: ranked_ids.index(i.id))
-        return r
-
-    if session:
-        return _(session)
-
-    with get_db_session() as session:
-        return _(session)
+    results = session.query(model).filter(model.id.in_(ranked_ids)).all()
+    results = sorted(results, key=lambda i: ranked_ids.index(i.id))
+    return results

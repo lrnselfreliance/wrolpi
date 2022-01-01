@@ -13,12 +13,18 @@ from wrolpi.errors import NoBodyContents, ValidationError, MissingRequiredField,
 from wrolpi.vars import DATE_FORMAT
 
 
-def validate_data(model: type, data: dict):
+def validate_data(model: type, data: dict, optional_body: bool = False):
     """
     Convert a JSON object to the model's specification.  If the JSON object matches the model's specification, this
     function will return a python dict of that data.  If it doesn't match, this will return a Sanic response object
     containing an error.
+
+    If `optional_body` is True, then the request body may be empty.  Otherwise, raise NoBodyContents.
     """
+    if optional_body and not data:
+        # Body was empty in the request, but body is not required.
+        return {}
+
     if not data:
         raise NoBodyContents()
 
@@ -76,7 +82,8 @@ def validate_data(model: type, data: dict):
     return new_data
 
 
-def validate_doc(summary: str = None, consumes=None, produces=None, responses=(), tag: str = None):
+def validate_doc(summary: str = None, consumes=None, produces=None, responses=(), tag: str = None,
+                 optional_body: bool = False):
     """
     Apply Sanic OpenAPI docs to the wrapped route.  Perform simple validation on requests.
     """
@@ -89,7 +96,7 @@ def validate_doc(summary: str = None, consumes=None, produces=None, responses=()
                     if 'data' in kw:
                         raise OverflowError(f'data kwarg already being passed to {func}')
 
-                    data = validate_data(consumes, request.json)
+                    data = validate_data(consumes, request.json, optional_body)
                     if isinstance(data, sanic.response.HTTPResponse):
                         # Error in validation
                         return data

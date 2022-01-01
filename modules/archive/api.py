@@ -32,7 +32,7 @@ async def post_archive(_: Request, data: dict):
     return response.empty()
 
 
-@bp.delete('/<url_id:int>')
+@bp.delete('/<archive_id:int>')
 @validate_doc(
     'Delete a website record',
     responses=[
@@ -40,8 +40,8 @@ async def post_archive(_: Request, data: dict):
     ]
 )
 @wrol_mode_check
-async def delete_url(_: Request, url_id: int):
-    lib.delete_url(url_id)
+async def delete_archive(_: Request, archive_id: int):
+    lib.delete_archive(archive_id)
     return response.empty()
 
 
@@ -84,6 +84,7 @@ async def fetch_domains(_: Request):
     'Search archive contents and titles',
     consumes=ArchiveSearchRequest,
     produces=ArchiveSearchResponse,
+    optional_body=True,
 )
 async def search_archives(_: Request, data: dict):
     try:

@@ -1,14 +1,14 @@
 import React from "react";
 import {Card, Confirm, Container, Form, Header, Icon, Image, Placeholder, Tab, Table} from "semantic-ui-react";
 import Paginator, {APIForm, objectToQuery, scrollToTop, uploadDate} from "./Common";
-import {deleteArchive, fetchDomains, postArchive, refreshArchives, searchURLs} from "../api";
+import {deleteArchive, fetchDomains, postArchive, refreshArchives, searchArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link, NavLink} from "react-router-dom";
 import * as QueryString from "query-string";
 import {ArchivePlaceholder} from "./Placeholder";
 
 
-function FailedUrlCard({url, syncURL, deleteURL}) {
+function FailedArchiveCard({url, syncURL, deleteURL}) {
 
     let syncIcon = (
         <Button onClick={() => syncURL(url.url)}>
@@ -45,39 +45,37 @@ function FailedUrlCard({url, syncURL, deleteURL}) {
     );
 }
 
-class URLCard extends React.Component {
+class ArchiveCard extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            latest: props.url ? props.url.latest : null,
             deleteOpen: false,
             syncOpen: false,
         }
     }
 
     syncURL = async () => {
-        await postArchive(this.props.url.url);
+        await postArchive(this.props.archive.url.url);
         await this.props.fetchURLs();
     }
 
     deleteURL = async () => {
-        await deleteArchive(this.props.url.id);
+        await deleteArchive(this.props.archive.id);
         await this.props.fetchURLs();
     }
 
     render() {
-        let url = this.props.url;
-        let latest = url && url.latest ? url.latest : null;
+        let archive = this.props.archive;
 
-        let imageSrc = latest.screenshot_path ? `/media/${latest.screenshot_path}` : null;
-        let singlefileUrl = latest.singlefile_path ? `/media/${latest.singlefile_path}` : null;
+        let imageSrc = archive.screenshot_path ? `/media/${archive.screenshot_path}` : null;
+        let singlefileUrl = archive.singlefile_path ? `/media/${archive.singlefile_path}` : null;
 
-        if (latest == null || latest.status === 'failed') {
-            return <FailedUrlCard url={url} syncURL={this.syncURL} deleteURL={this.deleteURL}/>;
+        if (archive.status === 'failed') {
+            return <FailedArchiveCard url={archive} syncURL={this.syncURL} deleteURL={this.deleteURL}/>;
         }
 
-        let readabilityUrl = latest.readability_path ? `/media/${latest.readability_path}` : null;
-        let readabilityIcon = <Button icon><Icon name='book' size='large' disabled/></Button>;
+        let readabilityUrl = archive.readability_path ? `/media/${archive.readability_path}` : null;
+        let readabilityIcon = <Button icon disabled><Icon name='book' size='large'/></Button>;
         if (readabilityUrl) {
             readabilityIcon = (
                 <Button icon href={readabilityUrl} target='_blank' rel='noopener noreferrer'>
@@ -117,7 +115,7 @@ class URLCard extends React.Component {
         ;
 
         let externalIcon = (
-            <Button icon href={url.url} target='_blank' rel='noopener noreferrer'>
+            <Button icon href={archive.url} target='_blank' rel='noopener noreferrer'>
                 <Icon name='sign-out' size='large'/>
             </Button>
         );
@@ -129,12 +127,12 @@ class URLCard extends React.Component {
                         <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
                         <Card.Header>
                             <Container textAlign='left'>
-                                <p>{url.latest.title || url.url}</p>
+                                <p>{archive.title || archive.url}</p>
                             </Container>
                         </Card.Header>
                     </a>
                     <Card.Meta>
-                        {uploadDate(latest.archive_datetime)}
+                        {uploadDate(archive.archive_datetime)}
                     </Card.Meta>
                     <Card.Description>
                         <Container textAlign='left'>
@@ -151,12 +149,12 @@ class URLCard extends React.Component {
 
 }
 
-class URLCards extends React.Component {
+class ArchiveCards extends React.Component {
     render() {
         return (
             <Card.Group>
-                {this.props.urls.map((i) => {
-                    return <URLCard key={i['id']} url={i} fetchURLs={this.props.fetchURLs}/>
+                {this.props.archives.map((i) => {
+                    return <ArchiveCard key={i['id']} archive={i} fetchURLs={this.props.fetchURLs}/>
                 })}
             </Card.Group>
         )
@@ -174,7 +172,7 @@ class Archives extends React.Component {
         this.state = {
             activePage: activePage,
             limit: 20,
-            urls: null,
+            archives: null,
             totalPages: null,
             domain: domain,
         };
@@ -194,11 +192,11 @@ class Archives extends React.Component {
     }
 
     async fetchURLs() {
-        this.setState({urls: null});
+        this.setState({archives: null});
         let offset = this.state.limit * this.state.activePage - this.state.limit;
-        let [urls, total] = await searchURLs(offset, this.state.limit, this.state.domain);
+        let [archives, total] = await searchArchives(offset, this.state.limit, this.state.domain);
         let totalPages = Math.round(total / this.state.limit) || 1;
-        this.setState({urls, totalPages: totalPages});
+        this.setState({archives: archives, totalPages: totalPages});
     }
 
     clearSearch() {
@@ -224,9 +222,9 @@ class Archives extends React.Component {
     }
 
     render() {
-        let {urls, activePage, totalPages} = this.state;
+        let {archives, activePage, totalPages} = this.state;
 
-        if (urls === null) {
+        if (archives === null) {
             return (<>
                 <Header as='h1'>Latest Archives</Header>
                 <ArchivePlaceholder/>
@@ -260,7 +258,7 @@ class Archives extends React.Component {
             <>
                 <Header as='h1'>Latest Archives</Header>
                 {domainButton}
-                <URLCards urls={urls} fetchURLs={this.fetchURLs}/>
+                <ArchiveCards archives={archives} fetchURLs={this.fetchURLs}/>
                 {pagination}
             </>
         )

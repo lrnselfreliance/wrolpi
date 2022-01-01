@@ -27,6 +27,9 @@ def archive_factory(test_session, archive_directory):
     now = time_generator()
 
     def _(domain: str = None, url: str = None, title: str = None, contents: str = None) -> Archive:
+        if domain:
+            assert '/' not in domain
+
         title = title or str(uuid4())
         url = url or f'https://example.com/{title}'
         domain_dir = domain or title
@@ -53,7 +56,7 @@ def archive_factory(test_session, archive_directory):
                 directory=domain_dir,
             )
             test_session.add(domain)
-            test_session.commit()
+            test_session.flush([domain])
 
         url_ = test_session.query(URL).filter_by(url=url).one_or_none()
         if not url_:
@@ -62,7 +65,7 @@ def archive_factory(test_session, archive_directory):
                 domain_id=domain.id,
             )
             test_session.add(url_)
-            test_session.commit()
+            test_session.flush([url_])
 
         archive = Archive(
             readability_json_path=readability_json_path,
@@ -75,8 +78,12 @@ def archive_factory(test_session, archive_directory):
             url_id=url_.id,
             domain_id=domain.id,
             contents=contents,
+            archive_datetime=timestamp,
         )
         test_session.add(archive)
+        test_session.flush([archive])
+
+        url_.latest_id = archive.id
         test_session.commit()
 
         for path in archive.my_paths():

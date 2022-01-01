@@ -312,11 +312,11 @@ export async function postArchive(url) {
     return await apiPost(`${API_URI}/archive`, i);
 }
 
-export async function deleteArchive(url_id) {
-    return await apiDelete(`${API_URI}/archive/${url_id}`);
+export async function deleteArchive(archive_id) {
+    return await apiDelete(`${API_URI}/archive/${archive_id}`);
 }
 
-export async function searchURLs(offset, limit, domain = null) {
+export async function searchArchives(offset, limit, domain = null) {
     // Build a search query to retrieve a list of videos from the API
     offset = offset || 0;
     limit = limit || DEFAULT_LIMIT;
@@ -328,7 +328,7 @@ export async function searchURLs(offset, limit, domain = null) {
     let response = await apiPost(`${ARCHIVES_API}/search`, body);
     if (response.status === 200) {
         let data = await response.json();
-        return [data['urls'], data['totals']['urls']];
+        return [data['archives'], data['totals']['archives']];
     } else {
         throw Error(`Unable to search archives`);
     }

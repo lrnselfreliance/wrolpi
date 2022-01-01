@@ -1,7 +1,7 @@
 from typing import Generator
 
 from sqlalchemy import Column, Integer, String, ForeignKey, Computed
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi.common import ModelHelper, Base, tsvector
@@ -76,17 +76,29 @@ class Archive(Base, ModelHelper):
             domain=self.domain.dict() if self.domain else None,
             domain_id=self.domain_id,
             id=self.id,
-            readability_json_path=self.readability_json_path.path if self.readability_json_path else None,
-            readability_path=self.readability_path.path if self.readability_path else None,
-            readability_txt_path=self.readability_txt_path.path if self.readability_txt_path else None,
-            screenshot_path=self.screenshot_path.path if self.screenshot_path else None,
-            singlefile_path=self.singlefile_path.path if self.singlefile_path else None,
+            readability_json_path=self.readability_json_path,
+            readability_path=self.readability_path,
+            readability_txt_path=self.readability_txt_path,
+            screenshot_path=self.screenshot_path,
+            singlefile_path=self.singlefile_path,
             status=self.status,
             title=self.title,
             url=url,
             url_id=self.url_id,
         )
         return d
+
+    def delete(self):
+        self.unlink()
+
+        session = Session.object_session(self)
+
+        if self.url:
+            self.url.update_latest()
+            if not self.url.latest_id:
+                self.url.delete()
+
+        session.query(Archive).filter_by(id=self.id).delete()
 
 
 class URL(Base, ModelHelper):
@@ -126,6 +138,19 @@ class URL(Base, ModelHelper):
             # No archives exist!
             pass
 
+    def delete(self):
+        session = Session.object_session(self)
+        archive_ids = [int(i.id) for i in self.archives]
+        if archive_ids:
+            for id_ in archive_ids:
+                session.query(Archive).filter_by(id=id_).delete()
+
+        domain = self.domain
+        session.query(URL).filter_by(id=self.id).delete()
+
+        if len(domain.urls) == 0:
+            domain.delete()
+
 
 class Domain(Base, ModelHelper):
     __tablename__ = 'domains'  # plural to avoid conflict
@@ -138,3 +163,9 @@ class Domain(Base, ModelHelper):
 
     def __repr__(self):
         return f'<Domain id={self.id} domain={self.domain} directory={self.directory}>'
+
+    def delete(self):
+        session = Session.object_session(self)
+        session.execute('DELETE FROM archive WHERE domain_id=:id', dict(id=self.id))
+        session.execute('DELETE FROM url WHERE domain_id=:id', dict(id=self.id))
+        session.query(Domain).filter_by(id=self.id).delete()

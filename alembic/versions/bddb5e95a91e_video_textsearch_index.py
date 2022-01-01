@@ -22,6 +22,16 @@ DOCKERIZED = True if os.environ.get('DOCKER', '').lower().startswith('t') else F
 def upgrade():
     bind = op.get_bind()
     session = Session(bind=bind)
+    session.execute('DROP INDEX IF EXISTS video_textsearch_idx')
+    session.execute('ALTER TABLE video DROP COLUMN IF EXISTS textsearch')
+    session.execute('''
+        ALTER TABLE video
+        ADD COLUMN textsearch tsvector
+        GENERATED ALWAYS AS (
+            setweight(to_tsvector('english'::regconfig, title), 'A') ||
+            setweight(to_tsvector('english'::regconfig, caption), 'B')
+        ) STORED
+    ''')
     session.execute('CREATE INDEX IF NOT EXISTS video_textsearch_idx ON video USING GIN(textsearch)')
 
 
@@ -29,3 +39,10 @@ def downgrade():
     bind = op.get_bind()
     session = Session(bind=bind)
     session.execute('DROP INDEX IF EXISTS video_textsearch_idx')
+    session.execute("""
+        ALTER TABLE video
+        ADD COLUMN IF NOT EXISTS textsearch tsvector
+        GENERATED ALWAYS AS (to_tsvector('english'::regconfig,
+                           ((COALESCE(title, ''::text) || ' '::text) ||
+                            COALESCE(caption, ''::text)))) STORED
+    """)

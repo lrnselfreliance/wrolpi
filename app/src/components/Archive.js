@@ -1,5 +1,5 @@
 import React from "react";
-import {Card, Confirm, Container, Form, Header, Icon, Image, Placeholder, Tab, Table} from "semantic-ui-react";
+import {Card, Confirm, Container, Form, Header, Icon, Image, Input, Placeholder, Tab, Table} from "semantic-ui-react";
 import Paginator, {APIForm, objectToQuery, scrollToTop, uploadDate} from "./Common";
 import {deleteArchive, fetchDomains, postArchive, refreshArchives, searchArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
@@ -161,6 +161,20 @@ class ArchiveCards extends React.Component {
     }
 }
 
+function ArchiveSearchForm({handleSearch, searchStr, handleInputChange}) {
+    return (
+        <Form onSubmit={handleSearch} style={{marginBottom: '1em'}}>
+            <Input
+                icon='search'
+                placeholder='Search...'
+                name='searchStr'
+                value={searchStr}
+                onChange={handleInputChange}
+            />
+        </Form>
+    )
+}
+
 class Archives extends React.Component {
 
     constructor(props) {
@@ -168,13 +182,17 @@ class Archives extends React.Component {
         const query = QueryString.parse(this.props.location.search);
         let activePage = query.page ? parseInt(query.page) : 1;
         let domain = query.domain || null;
+        let searchQuery = query.q || null;
+        console.log(searchQuery);
 
         this.state = {
             activePage: activePage,
-            limit: 20,
             archives: null,
-            totalPages: null,
             domain: domain,
+            limit: 20,
+            searchQuery: searchQuery,
+            searchStr: searchQuery || '',
+            totalPages: null,
         };
         this.fetchURLs = this.fetchURLs.bind(this);
         this.clearSearch = this.clearSearch.bind(this);
@@ -194,13 +212,14 @@ class Archives extends React.Component {
     async fetchURLs() {
         this.setState({archives: null});
         let offset = this.state.limit * this.state.activePage - this.state.limit;
-        let [archives, total] = await searchArchives(offset, this.state.limit, this.state.domain);
+        let {limit, domain, searchStr} = this.state;
+        let [archives, total] = await searchArchives(offset, limit, domain, searchStr);
         let totalPages = Math.round(total / this.state.limit) || 1;
         this.setState({archives: archives, totalPages: totalPages});
     }
 
     clearSearch() {
-        this.setState({activePage: 1, domain: null}, this.changePage);
+        this.setState({activePage: 1, domain: null, searchStr: null, searchQuery: null}, this.changePage);
     }
 
     changePage(activePage) {
@@ -212,6 +231,7 @@ class Archives extends React.Component {
         let search = {
             page: activePage > 1 ? activePage : null,
             domain: this.state.domain,
+            q: this.state.searchStr,
         };
 
         history.push({
@@ -219,6 +239,10 @@ class Archives extends React.Component {
             search: objectToQuery(search),
         });
         scrollToTop();
+    }
+
+    handleInputChange = (event, {name, value}) => {
+        this.setState({[name]: value});
     }
 
     render() {
@@ -248,7 +272,18 @@ class Archives extends React.Component {
         if (this.state.domain) {
             domainButton = (
                 <Button icon labelPosition='right' onClick={this.clearSearch} style={{marginBottom: '1em'}}>
-                    Search: {this.state.domain}
+                    Domain: {this.state.domain}
+                    <Icon name='close'/>
+                </Button>
+            )
+        }
+
+        let searchButton = null;
+        console.log(this.state.searchQuery);
+        if (this.state.searchQuery) {
+            searchButton = (
+                <Button icon labelPosition='right' onClick={this.clearSearch} style={{marginBottom: '1em'}}>
+                    Search: {this.state.searchQuery}
                     <Icon name='close'/>
                 </Button>
             )
@@ -257,7 +292,13 @@ class Archives extends React.Component {
         return (
             <>
                 <Header as='h1'>Latest Archives</Header>
+                <ArchiveSearchForm
+                    handleSearch={this.changePage}
+                    handleInputChange={this.handleInputChange}
+                    searchStr={this.state.searchStr}
+                />
                 {domainButton}
+                {searchButton}
                 <ArchiveCards archives={archives} fetchURLs={this.fetchURLs}/>
                 {pagination}
             </>

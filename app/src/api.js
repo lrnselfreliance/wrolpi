@@ -316,13 +316,16 @@ export async function deleteArchive(archive_id) {
     return await apiDelete(`${API_URI}/archive/${archive_id}`);
 }
 
-export async function searchArchives(offset, limit, domain = null) {
+export async function searchArchives(offset, limit, domain = null, searchStr = null) {
     // Build a search query to retrieve a list of videos from the API
     offset = offset || 0;
     limit = limit || DEFAULT_LIMIT;
     let body = {offset, limit};
     if (domain) {
         body['domain'] = domain;
+    }
+    if (searchStr) {
+        body['search_str'] = searchStr;
     }
 
     let response = await apiPost(`${ARCHIVES_API}/search`, body);

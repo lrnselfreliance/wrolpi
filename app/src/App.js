@@ -58,7 +58,7 @@ function Welcome() {
             history.push(`/archive?q=${searchStr}`);
         };
         let videosMore = () => {
-            history.push(`/videos?q=${searchStr}`);
+            history.push(`/videos?q=${searchStr}&o=rank`);
         };
 
         body = (<>

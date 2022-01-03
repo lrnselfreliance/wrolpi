@@ -1,7 +1,7 @@
 import React, {useState} from "react";
 import {Card, Confirm, Container, Icon, Image, Placeholder, Tab} from "semantic-ui-react";
 import Paginator, {ClearButton, SearchInput, uploadDate} from "./Common";
-import {deleteArchive, postArchive, postDownload, refreshArchives} from "../api";
+import {deleteArchive, postDownload, refreshArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link, NavLink} from "react-router-dom";
 import {ArchivePlaceholder} from "./Placeholder";
@@ -11,8 +11,6 @@ import {useDomains} from "../hooks/useDomains";
 
 
 function FailedArchiveCard({archive, syncArchive, deleteArchive}) {
-
-    let url = archive.url;
 
     let syncIcon = (
         <Button onClick={syncArchive}>
@@ -27,7 +25,7 @@ function FailedArchiveCard({archive, syncArchive, deleteArchive}) {
     );
 
     let externalIcon = (
-        <a href={url.url} target='_blank' rel='noopener noreferrer'>
+        <a href={archive.url} target='_blank' rel='noopener noreferrer'>
             <Icon name='sign-out' size='big'/>
         </a>
     );
@@ -36,7 +34,7 @@ function FailedArchiveCard({archive, syncArchive, deleteArchive}) {
         <Card>
             <Card.Content>
                 <Card.Header>
-                    {url.url}
+                    {archive.url}
                 </Card.Header>
                 <Card.Description>
                     <p>Failed!</p>
@@ -50,14 +48,12 @@ function FailedArchiveCard({archive, syncArchive, deleteArchive}) {
 }
 
 function ArchiveCard({archive, syncArchive, deleteArchive}) {
-    let url = archive.url;
-
     const [syncOpen, setSyncOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
 
     const localSyncArchive = async () => {
         setSyncOpen(false);
-        await syncArchive(url.url);
+        await syncArchive(archive.url);
     }
     const localDeleteArchive = async () => {
         setDeleteOpen(false);
@@ -112,7 +108,7 @@ function ArchiveCard({archive, syncArchive, deleteArchive}) {
     ;
 
     let externalIcon = (
-        <Button icon href={url.url} target='_blank' rel='noopener noreferrer'>
+        <Button icon href={archive.url} target='_blank' rel='noopener noreferrer'>
             <Icon name='sign-out' size='large'/>
         </Button>
     );
@@ -124,7 +120,7 @@ function ArchiveCard({archive, syncArchive, deleteArchive}) {
                     <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
                     <Card.Header>
                         <Container textAlign='left'>
-                            <p>{archive.title || url.url}</p>
+                            <p>{archive.title || archive.url}</p>
                         </Container>
                     </Card.Header>
                 </a>

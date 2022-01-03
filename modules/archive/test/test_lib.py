@@ -5,7 +5,7 @@ from datetime import datetime
 import mock
 
 from modules.archive.lib import get_or_create_domain, _refresh_archives, \
-    get_new_archive_files, delete_archive, do_archive
+    get_new_archive_files, delete_archive, do_archive, get_domains
 from modules.archive.models import Archive, Domain
 from wrolpi.common import get_media_directory
 from wrolpi.db import get_db_session
@@ -301,3 +301,26 @@ def test_delete_archive(test_session, archive_factory):
     delete_archive(archive2.id)
     domain = test_session.query(Domain).one_or_none()
     assert domain is None
+
+
+def test_get_domains(test_session, archive_factory):
+    """
+    `get_domains` gets only Domains with Archives.
+    """
+    archive1 = archive_factory('example.com')
+    archive2 = archive_factory('example.com')
+    archive3 = archive_factory('example.org')
+
+    assert [i['domain'] for i in get_domains()] == ['example.com', 'example.org']
+
+    archive2.delete()
+    test_session.commit()
+    assert [i['domain'] for i in get_domains()] == ['example.com', 'example.org']
+
+    archive1.delete()
+    test_session.commit()
+    assert [i['domain'] for i in get_domains()] == ['example.org']
+
+    archive3.delete()
+    test_session.commit()
+    assert [i['domain'] for i in get_domains()] == []

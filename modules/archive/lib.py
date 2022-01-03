@@ -351,15 +351,14 @@ def upsert_archive(dt: str, files, session: Session):
     archive.readability_txt_path = readability_txt_path
     archive.readability_json_path = readability_json_path
     archive.screenshot_path = screenshot_path
-    archive_id = archive.id
 
 
 def get_domains():
     with get_db_curs() as curs:
         stmt = '''
-            SELECT domains.domain AS domain, COUNT(u.id) AS url_count
+            SELECT domains.domain AS domain, COUNT(a.id) AS url_count
             FROM domains
-            LEFT JOIN url u on domains.id = u.domain_id
+            LEFT JOIN archive a on domains.id = a.domain_id
             GROUP BY domains.domain
             ORDER BY domains.domain
         '''

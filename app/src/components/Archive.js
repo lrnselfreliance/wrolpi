@@ -1,11 +1,11 @@
 import React from "react";
-import {Card, Confirm, Container, Form, Header, Icon, Image, Input, Placeholder, Tab, Table} from "semantic-ui-react";
-import Paginator, {APIForm, objectToQuery, scrollToTop, uploadDate} from "./Common";
-import {deleteArchive, fetchDomains, postArchive, refreshArchives, searchArchives} from "../api";
+import {Card, Confirm, Container, Form, Header, Icon, Image, Input, Tab} from "semantic-ui-react";
+import Paginator, {APIForm, uploadDate} from "./Common";
+import {deleteArchive, postArchive, refreshArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
-import {Link, NavLink} from "react-router-dom";
-import * as QueryString from "query-string";
+import {NavLink} from "react-router-dom";
 import {ArchivePlaceholder} from "./Placeholder";
+import useArchives from "../hooks/useArchives";
 
 
 function FailedArchiveCard({url, syncURL, deleteURL}) {
@@ -175,199 +175,34 @@ function ArchiveSearchForm({handleSearch, searchStr, handleInputChange}) {
     )
 }
 
-class Archives extends React.Component {
+function Archives(props) {
+    const {archivesData, setPage, totalPages, activePage} = useArchives();
+    const {archives} = archivesData;
 
-    constructor(props) {
-        super(props);
-        const query = QueryString.parse(this.props.location.search);
-        let activePage = query.page ? parseInt(query.page) : 1;
-        let domain = query.domain || null;
-        let searchQuery = query.q || null;
-        console.log(searchQuery);
-
-        this.state = {
-            activePage: activePage,
-            archives: null,
-            domain: domain,
-            limit: 20,
-            searchQuery: searchQuery,
-            searchStr: searchQuery || '',
-            totalPages: null,
-        };
-        this.fetchURLs = this.fetchURLs.bind(this);
-        this.clearSearch = this.clearSearch.bind(this);
-        this.changePage = this.changePage.bind(this);
-    }
-
-    async componentDidMount() {
-        await this.fetchURLs();
-    }
-
-    async componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevProps.location.search !== this.props.location.search) {
-            await this.fetchURLs();
-        }
-    }
-
-    async fetchURLs() {
-        this.setState({archives: null});
-        let offset = this.state.limit * this.state.activePage - this.state.limit;
-        let {limit, domain, searchStr} = this.state;
-        let [archives, total] = await searchArchives(offset, limit, domain, searchStr);
-        let totalPages = Math.round(total / this.state.limit) || 1;
-        this.setState({archives: archives, totalPages: totalPages});
-    }
-
-    clearSearch() {
-        this.setState({activePage: 1, domain: null, searchStr: null, searchQuery: null}, this.changePage);
-    }
-
-    changePage(activePage) {
-        if (activePage) {
-            this.setState({activePage});
-        }
-        let {history, location} = this.props;
-
-        let search = {
-            page: activePage > 1 ? activePage : null,
-            domain: this.state.domain,
-            q: this.state.searchStr,
-        };
-
-        history.push({
-            pathname: location.pathname,
-            search: objectToQuery(search),
-        });
-        scrollToTop();
-    }
-
-    handleInputChange = (event, {name, value}) => {
-        this.setState({[name]: value});
-    }
-
-    render() {
-        let {archives, activePage, totalPages} = this.state;
-
-        if (archives === null) {
-            return (<>
-                <Header as='h1'>Latest Archives</Header>
-                <ArchivePlaceholder/>
-            </>)
-        }
-
-        let pagination = null;
-        if (totalPages) {
-            pagination = (
-                <div style={{marginTop: '3em', textAlign: 'center'}}>
-                    <Paginator
-                        activePage={activePage}
-                        changePage={this.changePage}
-                        totalPages={totalPages}
-                    />
-                </div>
-            )
-        }
-
-        let domainButton = null;
-        if (this.state.domain) {
-            domainButton = (
-                <Button icon labelPosition='right' onClick={this.clearSearch} style={{marginBottom: '1em'}}>
-                    Domain: {this.state.domain}
-                    <Icon name='close'/>
-                </Button>
-            )
-        }
-
-        let searchButton = null;
-        console.log(this.state.searchQuery);
-        if (this.state.searchQuery) {
-            searchButton = (
-                <Button icon labelPosition='right' onClick={this.clearSearch} style={{marginBottom: '1em'}}>
-                    Search: {this.state.searchQuery}
-                    <Icon name='close'/>
-                </Button>
-            )
-        }
-
-        return (
-            <>
-                <Header as='h1'>Latest Archives</Header>
-                <ArchiveSearchForm
-                    handleSearch={this.changePage}
-                    handleInputChange={this.handleInputChange}
-                    searchStr={this.state.searchStr}
-                />
-                {domainButton}
-                {searchButton}
-                <ArchiveCards archives={archives} fetchURLs={this.fetchURLs}/>
-                {pagination}
-            </>
-        )
-    }
-}
-
-class Domains extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            domains: null,
-            total: null,
-        };
-        this.fetchDomains = this.fetchDomains.bind(this);
-    }
-
-    async componentDidMount() {
-        await this.fetchDomains();
-    }
-
-    async fetchDomains() {
-        this.setState({domains: null});
-        let [domains, total] = await fetchDomains();
-        this.setState({domains, total});
-    }
-
-    row(domain) {
-        return <Table.Row key={domain['domain']}>
-            <Table.Cell>
-                <Link to={`/archive?domain=${domain['domain']}`}>
-                    {domain['domain']}
-                </Link>
-            </Table.Cell>
-            <Table.Cell>{domain['url_count']}</Table.Cell>
-        </Table.Row>
-    }
-
-    render() {
-        if (this.state.domains) {
-            return (
-                <>
-                    <Header as='h1'>Domains</Header>
-                    <Table celled>
-                        <Table.Header>
-                            <Table.Row>
-                                <Table.HeaderCell>Domain</Table.HeaderCell>
-                                <Table.HeaderCell>URLs</Table.HeaderCell>
-                            </Table.Row>
-                        </Table.Header>
-
-                        <Table.Body>
-                            {this.state.domains.map(this.row)}
-                        </Table.Body>
-                    </Table>
-                </>
-            )
-        }
-
+    if (archives === null) {
         return (<>
-            <Header as='h1'>Domains</Header>
-            <Placeholder>
-                <Placeholder.Header>
-                    <Placeholder.Line/>
-                    <Placeholder.Line/>
-                </Placeholder.Header>
-            </Placeholder>
+            <Header as='h1'>Latest Archives</Header>
+            <ArchivePlaceholder/>
         </>)
     }
+
+    let pagination = null;
+    if (totalPages) {
+        pagination = (
+            <div style={{marginTop: '3em', textAlign: 'center'}}>
+                <Paginator
+                    activePage={activePage}
+                    changePage={setPage}
+                    totalPages={totalPages}
+                />
+            </div>
+        )
+    }
+
+    return (
+        <>
+        </>
+    )
 }
 
 class ArchiveAddForm extends APIForm {
@@ -476,17 +311,6 @@ export class ArchiveRoute extends React.Component {
                     key: 'home',
                 },
                 render: () => <Tab.Pane><Archives {...this.props} ref={this.archivesRef}/></Tab.Pane>
-            },
-            {
-                menuItem: {
-                    as: NavLink,
-                    content: 'Domains',
-                    id: 'domains',
-                    to: '/archive/domains',
-                    exact: true,
-                    key: 'domains',
-                },
-                render: () => <Tab.Pane><Domains {...this.props}/></Tab.Pane>
             },
             {
                 menuItem: {

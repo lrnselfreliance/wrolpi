@@ -1,7 +1,7 @@
 import React, {useState} from "react";
 import {Card, Confirm, Container, Icon, Image, Placeholder, Tab} from "semantic-ui-react";
 import Paginator, {ClearButton, SearchInput, uploadDate} from "./Common";
-import {deleteArchive, postArchive, refreshArchives} from "../api";
+import {deleteArchive, postArchive, postDownload, refreshArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link, NavLink} from "react-router-dom";
 import {ArchivePlaceholder} from "./Placeholder";
@@ -160,7 +160,7 @@ function Archives() {
     const {archives} = archivesData;
 
     const syncArchive = async (url) => {
-        await postArchive(url);
+        await postDownload(url, 'archive');
         await search();
     }
 

@@ -307,11 +307,6 @@ export async function deleteItems(itemIds) {
     await apiDelete(`${API_URI}/inventory/item/${i}`);
 }
 
-export async function postArchive(url) {
-    let i = {url: url};
-    return await apiPost(`${API_URI}/archive`, i);
-}
-
 export async function deleteArchive(archive_id) {
     return await apiDelete(`${API_URI}/archive/${archive_id}`);
 }

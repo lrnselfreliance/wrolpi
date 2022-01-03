@@ -4,12 +4,11 @@ from datetime import datetime
 
 import mock
 
-from modules.archive.lib import new_archive, get_or_create_domain_and_url, get_urls, get_url_count, _refresh_archives, \
-    get_new_archive_files, delete_archive
-from modules.archive.models import Archive, URL, Domain
+from modules.archive.lib import get_or_create_domain, _refresh_archives, \
+    get_new_archive_files, delete_archive, do_archive
+from modules.archive.models import Archive, Domain
 from wrolpi.common import get_media_directory
 from wrolpi.db import get_db_session
-from wrolpi.errors import InvalidDomain
 from wrolpi.media_path import MediaPath
 from wrolpi.root_api import CustomJSONEncoder
 from wrolpi.test.common import TestAPI, wrap_test_db, wrap_media_directory
@@ -55,7 +54,7 @@ class TestArchive(TestAPI):
     @wrap_test_db
     def test_new_archive(self):
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-            archive1 = new_archive('https://example.com', sync=True)
+            archive1 = do_archive('https://example.com')
             # Everything is filled out.
             self.assertIsInstance(archive1, Archive)
             self.assertIsNotNone(archive1.archive_datetime)
@@ -77,15 +76,14 @@ class TestArchive(TestAPI):
             with open(archive1.readability_json_path.path) as fh:
                 self.assertEqual(json.load(fh), {'title': 'ジにてこちら', 'url': 'https://example.com'})
 
-            archive2 = new_archive('https://example.com')
-            # URL and Domain are reused.
-            self.assertEqual(archive1.url, archive2.url)
+            archive2 = do_archive('https://example.com')
+            # Domain is reused.
             self.assertEqual(archive1.domain, archive2.domain)
 
     @wrap_test_db
     def test_no_screenshot(self):
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(screenshot=False)):
-            archive = new_archive('https://example.com', sync=True)
+            archive = do_archive('https://example.com')
             self.assertIsInstance(archive.singlefile_path, MediaPath)
             self.assertIsInstance(archive.readability_path, MediaPath)
             # Screenshot was empty
@@ -94,7 +92,7 @@ class TestArchive(TestAPI):
     @wrap_test_db
     def test_no_readability(self):
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(readability=False)):
-            archive = new_archive('https://example.com', sync=True)
+            archive = do_archive('https://example.com')
             self.assertIsInstance(archive.singlefile_path, MediaPath)
             self.assertIsInstance(archive.screenshot_path, MediaPath)
             # Readability empty
@@ -104,89 +102,30 @@ class TestArchive(TestAPI):
     @wrap_test_db
     def test_dict(self):
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-            d = new_archive('https://example.com', sync=True).dict()
+            d = do_archive('https://example.com').dict()
             self.assertIsInstance(d, dict)
             json.dumps(d, cls=CustomJSONEncoder)
 
     @wrap_test_db
     def test_relationships(self):
         with get_db_session(commit=True) as session:
-            domain, url = get_or_create_domain_and_url(session, 'https://wrolpi.org:443')
+            url = 'https://wrolpi.org:443'
+            domain = get_or_create_domain(session, url)
             archive = Archive(
                 singlefile_path=f'{self.tmp_dir.name}/wrolpi.org:443/foo',
                 title='bar',
-                url_id=url.id,
+                url=url,
                 domain_id=domain.id,
             )
             session.add(archive)
             session.flush()
 
-            url.latest_id = archive.id
-
         self.assertEqual(archive.domain, domain)
-        self.assertEqual(archive.url, url)
-
-        # Relationships are added in the dict() method.
-        self.assertDictContains(
-            url.dict(),
-            dict(
-                id=1,
-                url='https://wrolpi.org:443',
-                latest_id=1,
-                latest=dict(singlefile_path=self.tmp_path / 'wrolpi.org:443/foo'),
-                domain_id=1,
-                domain=dict(directory=self.tmp_path / 'archive/wrolpi.org:443', domain='wrolpi.org:443'),
-            )
-        )
-
-    @wrap_test_db
-    def test_get_urls(self):
-        # No URLs yet.
-        urls = get_urls()
-        self.assertEqual([], urls)
-
-        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(readability=False)):
-            # One set of duplicate URLs
-            new_archive('https://wrolpi.org/one', sync=True)
-            new_archive('https://wrolpi.org/one', sync=True)
-
-            # Unique URLs
-            new_archive('https://wrolpi.org/two', sync=True)
-            new_archive('https://wrolpi.org/three', sync=True)
-            new_archive('https://example.com/one', sync=True)
-
-        urls = get_urls()
-        # There are only 4 because one set is duplicate.
-        self.assertEqual(len(urls), 4)
-        self.assertEqual(
-            ['https://example.com/one', 'https://wrolpi.org/three',
-             'https://wrolpi.org/two', 'https://wrolpi.org/one'],
-            [i['url'] for i in urls],
-        )
-
-        # Only one URL for this domain.
-        urls = get_urls(domain='example.com')
-        self.assertEqual(len(urls), 1)
-        self.assertEqual(urls[0]['url'], 'https://example.com/one')
-
-        # Bad domain requested.
-        self.assertRaises(InvalidDomain, get_urls, domain='bad_domain.com')
-
-        # Limit to 3, but with an offset of 2 there are only 2.
-        urls = get_urls(3, 2)
-        self.assertEqual(['https://wrolpi.org/two', 'https://wrolpi.org/one'], [i['url'] for i in urls])
-
-        # First two of this domain.
-        urls = get_urls(2, 0, 'wrolpi.org')
-        self.assertEqual(['https://wrolpi.org/two', 'https://wrolpi.org/one'], [i['url'] for i in urls])
-        # Last two of this domain, but there is only 1.
-        urls = get_urls(2, 2, 'wrolpi.org')
-        self.assertEqual(['https://wrolpi.org/three'], [i['url'] for i in urls])
 
     @wrap_test_db
     def test_validate_paths(self):
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-            archive = new_archive('https://example.com')
+            archive = do_archive('https://example.com')
             try:
                 with get_db_session(commit=True):
                     archive.singlefile_path = 'asdf'
@@ -194,25 +133,10 @@ class TestArchive(TestAPI):
                 self.assertIn('relative', str(e), f'Relative path error was not raised')
 
     @wrap_test_db
-    def test_get_url_count(self):
-        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-            self.assertRaises(InvalidDomain, get_url_count, 'bad domain')
-
-            self.assertEqual(get_url_count(), 0)
-            new_archive('https://example.com', sync=True)
-            self.assertEqual(get_url_count(), 1)
-            new_archive('https://example.com', sync=True)
-            self.assertEqual(get_url_count(), 1)
-            new_archive('https://example.org', sync=True)
-            self.assertEqual(get_url_count(), 2)
-            new_archive('https://example.org', sync=True)
-            self.assertEqual(get_url_count('example.org'), 1)
-
-    @wrap_test_db
     def test_get_title_from_html(self):
         with wrap_media_directory():
             with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-                archive = new_archive('example.com', sync=True)
+                archive = do_archive('example.com')
                 self.assertEqual(archive.title, 'ジにてこちら')
 
             def fake_request_archive(_):
@@ -225,7 +149,7 @@ class TestArchive(TestAPI):
                 return singlefile, r, s
 
             with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
-                archive = new_archive('example.com', sync=True)
+                archive = do_archive('example.com')
                 self.assertEqual(archive.title, 'some title')
 
             def fake_request_archive(_):
@@ -238,16 +162,12 @@ class TestArchive(TestAPI):
                 return singlefile, r, s
 
             with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
-                archive = new_archive('example.com', sync=True)
+                archive = do_archive('example.com')
                 self.assertIsNone(archive.title)
 
     @wrap_test_db
     def test_refresh_archives(self):
         with wrap_media_directory():
-            with get_db_session() as session:
-                urls = session.query(URL).count()
-                self.assertEqual(urls, 0)
-
             archive_directory = get_media_directory() / 'archive'
             archive_directory.mkdir()
 
@@ -274,25 +194,17 @@ class TestArchive(TestAPI):
             # This single archive is found.
             _refresh_archives()
             with get_db_session() as session:
-                self.assertEqual(session.query(URL).count(), 1)
                 self.assertEqual(session.query(Archive).count(), 1)
-
-                url: URL = session.query(URL).one()
-                archive: Archive = session.query(Archive).one()
-                self.assertEqual(url.latest, archive)
-                # latest_datetime is set, the timestamp in the file name is assumed to be UTC.
-                self.assertEqual(str(url.latest_datetime), '2021-10-05 16:20:10.346823-06:00')
 
             # Running the refresh does not result in a new archive.
             _refresh_archives()
             with get_db_session() as session:
-                self.assertEqual(session.query(URL).count(), 1)
                 self.assertEqual(session.query(Archive).count(), 1)
 
 
 def test_archive_refresh_deleted_archive(test_session, archive_directory, archive_factory):
     """
-    Archives/URLs/Domains should be deleted when archive files are deleted.
+    Archives/Domains should be deleted when archive files are deleted.
     """
     archive1 = archive_factory('example.com', 'https://example.com/1')
     archive2 = archive_factory('example.com', 'https://example.com/1')
@@ -304,33 +216,32 @@ def test_archive_refresh_deleted_archive(test_session, archive_directory, archiv
     empty = archive_directory / 'empty'
     empty.mkdir()
 
-    def check_counts(archive_count, url_count, domain_count):
+    def check_counts(archive_count, domain_count):
         assert test_session.query(Archive).count() == archive_count
-        assert test_session.query(URL).count() == url_count
         assert test_session.query(Domain).count() == domain_count
 
     # All 3 archives are already in the DB.
-    check_counts(archive_count=5, url_count=4, domain_count=3)
+    check_counts(archive_count=5, domain_count=3)
     _refresh_archives()
-    check_counts(archive_count=5, url_count=4, domain_count=3)
+    check_counts(archive_count=5, domain_count=3)
 
     # Delete archive2's files, it's the latest for 'https://example.com/1'
     for path in archive2.my_paths():
         path.unlink()
     _refresh_archives()
-    check_counts(archive_count=4, url_count=4, domain_count=3)
+    check_counts(archive_count=4, domain_count=3)
 
     # Delete archive1's files, now the URL is empty.
     for path in archive1.my_paths():
         path.unlink()
     _refresh_archives()
-    check_counts(archive_count=3, url_count=3, domain_count=3)
+    check_counts(archive_count=3, domain_count=3)
 
     # Delete archive3, now there is now example.com domain
     for path in archive3.my_paths():
         path.unlink()
     _refresh_archives()
-    check_counts(archive_count=2, url_count=2, domain_count=2)
+    check_counts(archive_count=2, domain_count=2)
 
     # Delete all the rest of the archives
     for path in archive4.my_paths():
@@ -338,7 +249,7 @@ def test_archive_refresh_deleted_archive(test_session, archive_directory, archiv
     for path in archive5.my_paths():
         path.unlink()
     _refresh_archives()
-    check_counts(archive_count=0, url_count=0, domain_count=0)
+    check_counts(archive_count=0, domain_count=0)
 
 
 def test_refresh_archives_fills_contents(test_session, archive_factory, test_client):
@@ -380,18 +291,13 @@ def test_delete_archive(test_session, archive_factory):
     archive2 = archive_factory('example.com', 'https://example.com/1')
     archive3 = archive_factory('example.com', 'https://example.com/1')
 
-    url = test_session.query(URL).one()
-    assert url.latest == archive3
-
     # Delete the oldest.
     delete_archive(archive1.id)
 
     # Delete the latest.
     delete_archive(archive3.id)
 
-    # Delete the last archive.  The URL and Domain should also be deleted.
+    # Delete the last archive.  The Domain should also be deleted.
     delete_archive(archive2.id)
-    url = test_session.query(URL).one_or_none()
-    assert url is None
     domain = test_session.query(Domain).one_or_none()
     assert domain is None

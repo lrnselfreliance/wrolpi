@@ -102,7 +102,7 @@ function ArchiveCard({archive, syncArchive, deleteArchive}) {
                 </Button>
                 <Confirm
                     open={deleteOpen}
-                    content='Are you sure you want to delete this URL?  All files will be deleted.'
+                    content='Are you sure you want to delete this Archive?  All files will be deleted.'
                     confirmButton='Delete'
                     onCancel={() => setDeleteOpen(false)}
                     onConfirm={localDeleteArchive}

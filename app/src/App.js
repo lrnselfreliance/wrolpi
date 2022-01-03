@@ -64,13 +64,13 @@ function Welcome() {
         body = (<>
             <Header as='h2'>Archives</Header>
             <ArchivesList archives={archives} searchStr={searchStr}/>
-            <MoreButton onClick={archiveMore}>More</MoreButton>
+            <MoreButton onClick={archiveMore} disabled={!archives || archives.length === 0}/>
 
             <Divider/>
 
             <Header as='h2'>Videos</Header>
             <VideosPreview videos={videos}/>
-            <MoreButton onClick={videosMore}>More</MoreButton>
+            <MoreButton onClick={videosMore} disabled={!videos || videos.length === 0}/>
         </>);
     }
 

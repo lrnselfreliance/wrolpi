@@ -560,8 +560,14 @@ export function MoreButton(props) {
         <Grid columns={1} textAlign='center'>
             <Grid.Row>
                 <Grid.Column>
-                    <Button onClick={props.onClick} size='big' style={{marginTop: '1em'}}>
+                    <Button
+                        onClick={props.onClick}
+                        size='big'
+                        style={{marginTop: '1em'}}
+                        disabled={props.disabled}
+                    >
                         {props.children}
+                        More
                     </Button>
                 </Grid.Column>
             </Grid.Row>

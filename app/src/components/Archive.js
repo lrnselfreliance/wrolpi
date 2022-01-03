@@ -164,7 +164,7 @@ function ArchiveCards({archives, fetchURLs}) {
     )
 }
 
-function Archives(props) {
+function Archives() {
     const {archivesData, setPage, totalPages, searchStr, activePage, setSearchStr, domain, setDomain} = useArchives();
     const {archives} = archivesData;
 
@@ -174,10 +174,21 @@ function Archives(props) {
             onSubmit={setSearchStr}
         />);
 
+    // Empty states.
     if (archives === null) {
         return (<>
             {searchInput}
             <ArchivePlaceholder/>
+        </>)
+    } else if (archives.length === 0 && searchInput) {
+        return (<>
+            {searchInput}
+            <p>No archives found! Is your search too restrictive?</p>
+        </>)
+    } else if (archives.length === 0) {
+        return (<>
+            {searchInput}
+            <p>No archives found! Have you archived any webpages?</p>
         </>)
     }
 

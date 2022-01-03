@@ -1,6 +1,6 @@
 import React, {useState} from "react";
 import {Card, Confirm, Container, Icon, Image, Placeholder, Tab} from "semantic-ui-react";
-import Paginator, {ClearButton, SearchInput, uploadDate} from "./Common";
+import Paginator, {ClearButton, ExternalLink, SearchInput, uploadDate} from "./Common";
 import {deleteArchive, postDownload, refreshArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link, NavLink} from "react-router-dom";
@@ -117,15 +117,15 @@ function ArchiveCard({archive, syncArchive, deleteArchive}) {
 
     return (
         <Card>
-            <a href={singlefileUrl} target='_blank' rel='noopener noreferrer'>
+            <ExternalLink to={singlefileUrl} className='no-link-underscore card-link'>
                 <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
-            </a>
+            </ExternalLink>
             <Card.Content>
                 <Card.Header>
                     <Container textAlign='left'>
-                        <Link to={singlefileUrl} className='no-link-underscore card-link'>
+                        <ExternalLink to={singlefileUrl} className='no-link-underscore card-link'>
                             <p>{archive.title || archive.url}</p>
-                        </Link>
+                        </ExternalLink>
                     </Container>
                 </Card.Header>
                 <Card.Meta>

@@ -545,3 +545,11 @@ export function SearchInput({initValue, onSubmit, size}) {
         </Form>
     )
 }
+
+export function ExternalLink(props) {
+    return (
+        <Link to={props.to} target='_blank' className={props.className} rel='noopener noreferrer'>
+            {props.children}
+        </Link>
+    )
+}

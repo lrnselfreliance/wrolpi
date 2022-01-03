@@ -76,7 +76,7 @@ function Welcome() {
 
     return (
         <Container style={{marginTop: '2em'}}>
-            <SearchInput initValue={searchStr} onSubmit={setSearchStr} size='big'/>
+            <SearchInput initValue={searchStr} onSubmit={setSearchStr} size='big' placeholder='Search Everywhere...'/>
             {body}
         </Container>
     )

@@ -501,7 +501,7 @@ export function ClearButton({onClick, style, label, icon = 'close'}) {
     </Button>
 }
 
-export function SearchInput({initValue, onSubmit, size}) {
+export function SearchInput({initValue, onSubmit, size, placeholder='Search...'}) {
     let [value, setValue] = useState(initValue || '');
     size = size || 'small';
 
@@ -536,7 +536,7 @@ export function SearchInput({initValue, onSubmit, size}) {
             <Form.Group inline style={{marginBottom: '1em'}}>
                 <Input
                     type='text'
-                    placeholder='Search...'
+                    placeholder={placeholder}
                     onChange={(e) => setValue(e.target.value)}
                     value={value}
                     size={size}

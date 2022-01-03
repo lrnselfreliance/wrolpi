@@ -177,6 +177,7 @@ def _do_archive(url: str, archive_id: int):
 
         # Store the Readability into separate files.  This allows the user to view text-only or html articles.
         title = None
+        readability_txt = None
         if readability:
             title = readability.get('title')
 
@@ -184,7 +185,8 @@ def _do_archive(url: str, archive_id: int):
             with readability_path.open('wt') as fh:
                 fh.write(readability.pop('content'))
             with readability_txt_path.open('wt') as fh:
-                fh.write(readability.pop('textContent'))
+                readability_txt = readability.pop('textContent')
+                fh.write(readability_txt)
         else:
             readability_path = readability_txt_path = None
 
@@ -208,6 +210,7 @@ def _do_archive(url: str, archive_id: int):
             archive.readability_json_path = readability_json_path
             archive.readability_txt_path = readability_txt_path
             archive.screenshot_path = screenshot_path
+            archive.contents = readability_txt
             # Update the latest for easy viewing.
             archive.url.latest_id = archive.id
             archive.url.latest_datetime = archive.archive_datetime

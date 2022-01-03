@@ -120,7 +120,7 @@ class ArchiveCard extends React.Component {
         ;
 
         let externalIcon = (
-            <Button icon href={archive.url} target='_blank' rel='noopener noreferrer'>
+            <Button icon href={url.url} target='_blank' rel='noopener noreferrer'>
                 <Icon name='sign-out' size='large'/>
             </Button>
         );

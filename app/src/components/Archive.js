@@ -168,32 +168,20 @@ function Archives() {
     const {archivesData, setPage, totalPages, searchStr, activePage, setSearchStr, domain, setDomain} = useArchives();
     const {archives} = archivesData;
 
-    const searchInput = (
-        <SearchInput
-            initValue={searchStr}
-            onSubmit={setSearchStr}
-        />);
-
-    let body = <ArchiveCards archives={archives}/>;
-
-    // Empty states.
+    let body;
     if (archives === null) {
+        // Fetching archives.
         body = <ArchivePlaceholder/>;
-    } else if (archives.length === 0 && searchInput) {
+    } else if (archives.length === 0 && searchStr) {
+        // Search with no results.
         body = <p>No archives found! Is your search too restrictive?</p>;
     } else if (archives.length === 0) {
+        // No archives fetched.
         body = <p>No archives found! Have you archived any webpages?</p>;
+    } else {
+        // Archives fetched successfully!
+        body = <ArchiveCards archives={archives}/>;
     }
-
-    let pagination = (
-        <div style={{marginTop: '3em', textAlign: 'center'}}>
-            <Paginator
-                activePage={activePage}
-                changePage={setPage}
-                totalPages={totalPages}
-            />
-        </div>
-    )
 
     let domainClearButton = null;
     if (domain) {
@@ -206,10 +194,16 @@ function Archives() {
 
     return (
         <>
-            {searchInput}
+            <SearchInput initValue={searchStr} onSubmit={setSearchStr}/>
             {domainClearButton}
             {body}
-            {pagination}
+            <div style={{marginTop: '3em', textAlign: 'center'}}>
+                <Paginator
+                    activePage={activePage}
+                    changePage={setPage}
+                    totalPages={totalPages}
+                />
+            </div>
         </>
     )
 }

@@ -21,6 +21,8 @@ export const useArchives = (defaultLimit = 20) => {
     }
 
     const search = async (term) => {
+        setArchives({archives: null, total: 0});
+        setTotalPages(0);
         const [archives, total] = await searchArchives(offset, limit, domain, term);
         setTotalPages(Math.floor(total / limit) + 1);
         setArchives({archives, total});

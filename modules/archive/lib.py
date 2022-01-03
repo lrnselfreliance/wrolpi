@@ -297,8 +297,7 @@ def _refresh_archives():
     with get_db_curs(commit=True) as curs:
         stmt = '''
             DELETE FROM domains WHERE
-                id NOT IN (select distinct domain_id from url)
-                AND id NOT IN (select distinct domain_id from archive)
+                id NOT IN (select distinct domain_id from archive)
             RETURNING domains.id
         '''
         curs.execute(stmt)

@@ -85,6 +85,11 @@ class Archive(Base, ModelHelper):
 
         session.query(Archive).filter_by(id=self.id).delete()
 
+        if self.domain:
+            domain_archives = [i.id for i in self.domain.archives]
+            if not domain_archives:
+                self.domain.delete()
+
 
 class Domain(Base, ModelHelper):
     __tablename__ = 'domains'  # plural to avoid conflict
@@ -92,6 +97,8 @@ class Domain(Base, ModelHelper):
 
     domain = Column(String)
     directory = Column(MediaPathType)
+
+    archives: InstrumentedList = relationship('Archive', primaryjoin='Archive.domain_id==Domain.id')
 
     def __repr__(self):
         return f'<Domain id={self.id} domain={self.domain} directory={self.directory}>'

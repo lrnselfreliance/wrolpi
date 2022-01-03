@@ -100,10 +100,19 @@ export function VideoCard({video}) {
     }
     let poster_url = video.poster_path ? `/media/${encodeURIComponent(video.poster_path)}` : null;
 
+    let imageLabel = null;
+    if (video.favorite) {
+        imageLabel = {as: 'a', corner: 'left', icon: 'heart', color: 'green'};
+    }
+
     return (
         <Card>
             <Link to={video_url}>
-                <Image src={poster_url} wrapped style={{position: 'relative', width: '100%'}}/>
+                <Image wrapped
+                       src={poster_url}
+                       label={imageLabel}
+                       style={{position: 'relative', width: '100%'}}
+                />
             </Link>
             <Duration video={video}/>
             <Card.Content>
@@ -501,7 +510,7 @@ export function ClearButton({onClick, style, label, icon = 'close'}) {
     </Button>
 }
 
-export function SearchInput({initValue, onSubmit, size, placeholder='Search...'}) {
+export function SearchInput({initValue, onSubmit, size, placeholder = 'Search...'}) {
     let [value, setValue] = useState(initValue || '');
     size = size || 'small';
 

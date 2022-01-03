@@ -33,15 +33,17 @@ export const useArchives = (defaultLimit = 20) => {
     return {
         archivesData,
         totalPages,
-        activePage,
         setTotalPages,
         offset,
         setOffset,
         setPage,
         limit,
         setLimit,
+        domain,
         setDomain,
+        searchStr,
         setSearchStr,
+        activePage,
         setActivePage,
     };
 }

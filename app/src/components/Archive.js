@@ -1,6 +1,6 @@
-import React from "react";
+import React, {useState} from "react";
 import {Card, Confirm, Container, Form, Header, Icon, Image, Input, Placeholder, Tab} from "semantic-ui-react";
-import Paginator, {APIForm, uploadDate} from "./Common";
+import Paginator, {APIForm, ClearButton, uploadDate} from "./Common";
 import {deleteArchive, postArchive, refreshArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link, NavLink} from "react-router-dom";
@@ -164,22 +164,33 @@ function ArchiveCards({archives, fetchURLs}) {
     )
 }
 
-function ArchiveSearchForm({searchStr, handleInputChange}) {
+function ArchiveSearchForm({searchStr, onSubmit}) {
+    const [value, setValue] = useState(searchStr);
+
+    const onChange = (e) => {
+        setValue(e.target.value);
+    }
+
+    const localSubmit = (e) => {
+        e.preventDefault();
+        onSubmit(value);
+    }
+
     return (
-        <Form style={{marginBottom: '1em'}}>
+        <Form style={{marginBottom: '1em'}} onSubmit={localSubmit}>
             <Input
                 icon='search'
                 placeholder='Search...'
                 name='searchStr'
-                value={searchStr}
-                onChange={handleInputChange}
+                value={value}
+                onChange={onChange}
             />
         </Form>
     )
 }
 
 function Archives(props) {
-    const {archivesData, setPage, totalPages, searchStr, activePage, setSearchStr} = useArchives();
+    const {archivesData, setPage, totalPages, searchStr, activePage, setSearchStr, domain, setDomain} = useArchives();
     const {archives} = archivesData;
 
     if (archives === null) {
@@ -202,14 +213,33 @@ function Archives(props) {
         )
     }
 
-    const handleInputChange = (e) => {
-        e.preventDefault();
-        setSearchStr(e.target.value);
+    let domainClearButton = null;
+    if (domain) {
+        domainClearButton = <ClearButton
+            onClick={() => setDomain(null)}
+            style={{marginBottom: '1em'}}
+            label={`Domain: ${domain}`}
+        />;
+    }
+
+    let searchClearButton = null;
+    if (searchStr) {
+        searchClearButton = <ClearButton
+            onClick={() => setSearchStr(null)}
+            style={{marginBottom: '1em'}}
+            label={`Search: ${searchStr}`}
+        />;
+    }
+
+    const handleSearchSubmit = (value) => {
+        setSearchStr(value);
     }
 
     return (
         <>
-            <ArchiveSearchForm handleInputChange={handleInputChange} searchStr={searchStr}/>
+            <ArchiveSearchForm searchStr={searchStr} onSubmit={handleSearchSubmit}/>
+            {domainClearButton}
+            {searchClearButton}
             <ArchiveCards archives={archives}/>
             {pagination}
         </>

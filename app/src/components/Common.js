@@ -1,6 +1,7 @@
 import React from "react";
-import {Card, Container, Image, Pagination, Progress} from 'semantic-ui-react';
+import {Card, Container, Icon, Image, Pagination, Progress} from 'semantic-ui-react';
 import {Link} from "react-router-dom";
+import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 
 export const API_URI = `http://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -489,4 +490,15 @@ export function objectToQuery(d) {
     let arr = Object.keys(d).map((k) => d[k] === null ? '' : `${k}=${d[k]}`);
     arr = arr.filter((i) => i !== '')
     return arr.join('&');
+}
+
+export function ClearButton({onClick, style, label, icon='close'}) {
+    return <Button icon
+                   labelPosition='right'
+                   onClick={onClick}
+                   style={style}
+    >
+        {label}
+        <Icon name={icon}/>
+    </Button>
 }

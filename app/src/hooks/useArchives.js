@@ -1,27 +1,9 @@
 import {useEffect, useState} from "react";
 import {searchArchives} from "../api";
-import {useHistory} from "react-router-dom";
+import {useSearchParam} from "./useSearchParam";
 
-const useSearchParam = (name, defaultValue = null) => {
-    const startingValue = new URLSearchParams().get(name);
 
-    const [value, setValue] = useState(startingValue || defaultValue);
-    const history = useHistory();
-
-    useEffect(() => {
-        const params = new URLSearchParams();
-        if (value) {
-            params.append(name, value);
-        } else {
-            params.delete(name);
-        }
-        history.push({search: params.toString()});
-    }, [value, history])
-
-    return [value, setValue];
-}
-
-const useArchives = (defaultLimit = 20) => {
+export const useArchives = (defaultLimit = 20) => {
     const [archivesData, setArchives] = useState({archives: null, total: 0});
     const [totalPages, setTotalPages] = useState(0);
     const [activePage, setActivePage] = useState(1);
@@ -40,18 +22,9 @@ const useArchives = (defaultLimit = 20) => {
 
     const search = async (term) => {
         const [a, t] = await searchArchives(offset, limit, domain, term);
-        setTotalPages(Math.floor(t / limit));
+        setTotalPages(Math.floor(t / limit) + 1);
         setArchives({archives: a, total: t});
     }
-
-    useEffect(() => {
-        setPage(1);
-    }, []);
-
-    useEffect(() => {
-        // Load the first page of results on load.
-        search();
-    }, []);
 
     useEffect(() => {
         search(searchStr);
@@ -65,11 +38,10 @@ const useArchives = (defaultLimit = 20) => {
         offset,
         setOffset,
         setPage,
+        limit,
         setLimit,
         setDomain,
         setSearchStr,
         setActivePage,
     };
 }
-
-export default useArchives;

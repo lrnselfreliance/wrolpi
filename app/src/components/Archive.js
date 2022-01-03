@@ -1,14 +1,18 @@
 import React from "react";
-import {Card, Confirm, Container, Form, Header, Icon, Image, Input, Tab} from "semantic-ui-react";
+import {Card, Confirm, Container, Form, Header, Icon, Image, Input, Placeholder, Tab} from "semantic-ui-react";
 import Paginator, {APIForm, uploadDate} from "./Common";
 import {deleteArchive, postArchive, refreshArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
-import {NavLink} from "react-router-dom";
+import {Link, NavLink} from "react-router-dom";
 import {ArchivePlaceholder} from "./Placeholder";
-import useArchives from "../hooks/useArchives";
+import Table from "semantic-ui-react/dist/commonjs/collections/Table";
+import {useArchives} from "../hooks/useArchives";
+import {useDomains} from "../hooks/useDomains";
 
 
-function FailedArchiveCard({url, syncURL, deleteURL}) {
+function FailedArchiveCard({archive, syncURL, deleteURL}) {
+
+    let url = archive.url;
 
     let syncIcon = (
         <Button onClick={() => syncURL(url.url)}>
@@ -17,7 +21,7 @@ function FailedArchiveCard({url, syncURL, deleteURL}) {
     );
 
     let trashIcon = (
-        <Button onClick={() => deleteURL(url.id)}>
+        <Button onClick={() => deleteURL(archive.id)}>
             <Icon name='trash' size='big'/>
         </Button>
     );
@@ -66,12 +70,13 @@ class ArchiveCard extends React.Component {
 
     render() {
         let archive = this.props.archive;
+        let url = archive.url;
 
         let imageSrc = archive.screenshot_path ? `/media/${archive.screenshot_path}` : null;
         let singlefileUrl = archive.singlefile_path ? `/media/${archive.singlefile_path}` : null;
 
         if (archive.status === 'failed') {
-            return <FailedArchiveCard url={archive} syncURL={this.syncURL} deleteURL={this.deleteURL}/>;
+            return <FailedArchiveCard archive={archive} syncURL={this.syncURL} deleteURL={this.deleteURL}/>;
         }
 
         let readabilityUrl = archive.readability_path ? `/media/${archive.readability_path}` : null;
@@ -127,7 +132,7 @@ class ArchiveCard extends React.Component {
                         <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
                         <Card.Header>
                             <Container textAlign='left'>
-                                <p>{archive.title || archive.url}</p>
+                                <p>{archive.title || url.url}</p>
                             </Container>
                         </Card.Header>
                     </a>
@@ -149,21 +154,19 @@ class ArchiveCard extends React.Component {
 
 }
 
-class ArchiveCards extends React.Component {
-    render() {
-        return (
-            <Card.Group>
-                {this.props.archives.map((i) => {
-                    return <ArchiveCard key={i['id']} archive={i} fetchURLs={this.props.fetchURLs}/>
-                })}
-            </Card.Group>
-        )
-    }
+function ArchiveCards({archives, fetchURLs}) {
+    return (
+        <Card.Group>
+            {archives.map((i) => {
+                return <ArchiveCard key={i['id']} archive={i}/>
+            })}
+        </Card.Group>
+    )
 }
 
-function ArchiveSearchForm({handleSearch, searchStr, handleInputChange}) {
+function ArchiveSearchForm({searchStr, handleInputChange}) {
     return (
-        <Form onSubmit={handleSearch} style={{marginBottom: '1em'}}>
+        <Form style={{marginBottom: '1em'}}>
             <Input
                 icon='search'
                 placeholder='Search...'
@@ -176,7 +179,7 @@ function ArchiveSearchForm({handleSearch, searchStr, handleInputChange}) {
 }
 
 function Archives(props) {
-    const {archivesData, setPage, totalPages, activePage} = useArchives();
+    const {archivesData, setPage, totalPages, searchStr, activePage, setSearchStr} = useArchives();
     const {archives} = archivesData;
 
     if (archives === null) {
@@ -199,8 +202,16 @@ function Archives(props) {
         )
     }
 
+    const handleInputChange = (e) => {
+        e.preventDefault();
+        setSearchStr(e.target.value);
+    }
+
     return (
         <>
+            <ArchiveSearchForm handleInputChange={handleInputChange} searchStr={searchStr}/>
+            <ArchiveCards archives={archives}/>
+            {pagination}
         </>
     )
 }
@@ -277,6 +288,51 @@ class ManageArchives extends React.Component {
     }
 }
 
+function Domains() {
+
+    const [domains] = useDomains();
+
+    const row = (domain) => {
+        return <Table.Row key={domain['domain']}>
+            <Table.Cell>
+                <Link to={`/archive?domain=${domain['domain']}`}>
+                    {domain['domain']}
+                </Link>
+            </Table.Cell>
+            <Table.Cell>{domain['url_count']}</Table.Cell>
+        </Table.Row>
+    }
+
+    if (domains) {
+        return (
+            <>
+                <Table celled>
+                    <Table.Header>
+                        <Table.Row>
+                            <Table.HeaderCell>Domain</Table.HeaderCell>
+                            <Table.HeaderCell>URLs</Table.HeaderCell>
+                        </Table.Row>
+                    </Table.Header>
+
+                    <Table.Body>
+                        {domains.map(row)}
+                    </Table.Body>
+                </Table>
+            </>
+        )
+    }
+
+    return (<>
+        <Placeholder>
+            <Placeholder.Header>
+                <Placeholder.Line/>
+                <Placeholder.Line/>
+            </Placeholder.Header>
+        </Placeholder>
+    </>)
+}
+
+
 export class ArchiveRoute extends React.Component {
 
     constructor(props) {
@@ -287,6 +343,43 @@ export class ArchiveRoute extends React.Component {
             activeIndex: this.matchPaneTo(),
         }
         this.archivesRef = React.createRef();
+
+        this.archivePanes = [
+            {
+                menuItem: {
+                    as: NavLink,
+                    content: 'Archives',
+                    id: 'archive',
+                    to: '/archive',
+                    exact: true,
+                    key: 'home',
+                },
+                render: () => <Tab.Pane><Archives/></Tab.Pane>
+            },
+            {
+                menuItem: {
+                    as: NavLink,
+                    content: 'Domains',
+                    id: 'domains',
+                    to: '/archive/domains',
+                    exact: true,
+                    key: 'domains',
+                },
+                render: () => <Tab.Pane><Domains/></Tab.Pane>
+            },
+            {
+                menuItem: {
+                    as: NavLink,
+                    content: 'Manage',
+                    id: 'manage',
+                    to: '/archive/manage',
+                    exact: true,
+                    key: 'manage',
+                },
+                render: () => <Tab.Pane><ManageArchives/></Tab.Pane>
+            },
+        ];
+
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
@@ -300,35 +393,10 @@ export class ArchiveRoute extends React.Component {
     }
 
     render() {
-        const panes = [
-            {
-                menuItem: {
-                    as: NavLink,
-                    content: 'Archives',
-                    id: 'archive',
-                    to: '/archive',
-                    exact: true,
-                    key: 'home',
-                },
-                render: () => <Tab.Pane><Archives {...this.props} ref={this.archivesRef}/></Tab.Pane>
-            },
-            {
-                menuItem: {
-                    as: NavLink,
-                    content: 'Manage',
-                    id: 'manage',
-                    to: '/archive/manage',
-                    exact: true,
-                    key: 'manage',
-                },
-                render: () => <Tab.Pane><ManageArchives {...this.props}/></Tab.Pane>
-            },
-        ];
-
         return (
             <Container style={{marginTop: '2em', marginBottom: '2em'}}>
                 <ArchiveAddForm archivesRef={this.archivesRef}/>
-                <Tab panes={panes} activeIndex={this.state.activeIndex}/>
+                <Tab panes={this.archivePanes} activeIndex={this.state.activeIndex} renderActiveOnly={true}/>
             </Container>
         )
     }

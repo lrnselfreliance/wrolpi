@@ -508,7 +508,7 @@ export function SearchInput({initValue, onSubmit, size}) {
     const buttonClick = () => {
         // Clear the input when the "clear" button is clicked, search again.
         setValue('');
-        onSubmit(value);
+        onSubmit('');
     }
 
     // Button is "search" when input is dirty, otherwise it is "clear".

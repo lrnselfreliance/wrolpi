@@ -2,6 +2,7 @@ import React, {useState} from "react";
 import {Card, Container, Form, Icon, Image, Input, Pagination, Progress} from 'semantic-ui-react';
 import {Link} from "react-router-dom";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
+import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
 export const API_URI = `http://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -551,5 +552,19 @@ export function ExternalLink(props) {
         <Link to={props.to} target='_blank' className={props.className} rel='noopener noreferrer'>
             {props.children}
         </Link>
+    )
+}
+
+export function MoreButton(props) {
+    return (
+        <Grid columns={1} textAlign='center'>
+            <Grid.Row>
+                <Grid.Column>
+                    <Button onClick={props.onClick} size='big' style={{marginTop: '1em'}}>
+                        {props.children}
+                    </Button>
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
     )
 }

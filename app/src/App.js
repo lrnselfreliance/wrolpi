@@ -1,10 +1,10 @@
 import React, {useEffect, useState} from 'react';
 import './App.css';
 import {NavBar} from "./components/Nav";
-import {Route, Switch} from "react-router-dom";
+import {Route, Switch, useHistory} from "react-router-dom";
 import {VideosPreview, VideosRoute, VideoWrapper} from "./components/Videos";
 import Admin from "./components/Admin";
-import {Container, Divider, Header, Segment} from "semantic-ui-react";
+import {Container, Divider, Header} from "semantic-ui-react";
 import 'semantic-ui-offline/semantic.min.css';
 import {SemanticToastContainer} from 'react-semantic-toasts';
 import 'react-semantic-toasts/styles/react-semantic-alert.css';
@@ -14,7 +14,7 @@ import {ArchiveRoute, ArchivesList} from "./components/Archive";
 import {Saver} from "./components/Upload";
 import {useSearchParam} from "./hooks/useSearchParam";
 import {searchArchives, searchVideos} from "./api";
-import {SearchInput} from "./components/Common";
+import {MoreButton, SearchInput} from "./components/Common";
 
 const useSearch = () => {
     let [searchStr, setSearchStr] = useSearchParam('q');
@@ -44,6 +44,7 @@ const useSearch = () => {
 
 function Welcome() {
     const {searchStr, setSearchStr, archives, videos} = useSearch();
+    const history = useHistory();
 
     let body = (
         <>
@@ -53,14 +54,23 @@ function Welcome() {
     );
 
     if (searchStr) {
+        let archiveMore = () => {
+            history.push(`/archive?q=${searchStr}`);
+        };
+        let videosMore = () => {
+            history.push(`/videos?q=${searchStr}`);
+        };
+
         body = (<>
             <Header as='h2'>Archives</Header>
             <ArchivesList archives={archives} searchStr={searchStr}/>
+            <MoreButton onClick={archiveMore}>More</MoreButton>
 
             <Divider/>
 
             <Header as='h2'>Videos</Header>
             <VideosPreview videos={videos}/>
+            <MoreButton onClick={videosMore}>More</MoreButton>
         </>);
     }
 

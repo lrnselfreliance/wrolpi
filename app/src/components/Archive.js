@@ -1,6 +1,6 @@
-import React, {useState} from "react";
-import {Card, Confirm, Container, Form, Header, Icon, Image, Input, Placeholder, Tab} from "semantic-ui-react";
-import Paginator, {APIForm, ClearButton, uploadDate} from "./Common";
+import React from "react";
+import {Card, Confirm, Container, Form, Icon, Image, Placeholder, Tab} from "semantic-ui-react";
+import Paginator, {APIForm, ClearButton, SearchInput, uploadDate} from "./Common";
 import {deleteArchive, postArchive, refreshArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link, NavLink} from "react-router-dom";
@@ -164,38 +164,19 @@ function ArchiveCards({archives, fetchURLs}) {
     )
 }
 
-function ArchiveSearchForm({searchStr, onSubmit}) {
-    const [value, setValue] = useState(searchStr);
-
-    const onChange = (e) => {
-        setValue(e.target.value);
-    }
-
-    const localSubmit = (e) => {
-        e.preventDefault();
-        onSubmit(value);
-    }
-
-    return (
-        <Form style={{marginBottom: '1em'}} onSubmit={localSubmit}>
-            <Input
-                icon='search'
-                placeholder='Search...'
-                name='searchStr'
-                value={value}
-                onChange={onChange}
-            />
-        </Form>
-    )
-}
-
 function Archives(props) {
     const {archivesData, setPage, totalPages, searchStr, activePage, setSearchStr, domain, setDomain} = useArchives();
     const {archives} = archivesData;
 
+    const searchInput = (
+        <SearchInput
+            initValue={searchStr}
+            onSubmit={setSearchStr}
+        />);
+
     if (archives === null) {
         return (<>
-            <Header as='h1'>Latest Archives</Header>
+            {searchInput}
             <ArchivePlaceholder/>
         </>)
     }
@@ -222,24 +203,10 @@ function Archives(props) {
         />;
     }
 
-    let searchClearButton = null;
-    if (searchStr) {
-        searchClearButton = <ClearButton
-            onClick={() => setSearchStr(null)}
-            style={{marginBottom: '1em'}}
-            label={`Search: ${searchStr}`}
-        />;
-    }
-
-    const handleSearchSubmit = (value) => {
-        setSearchStr(value);
-    }
-
     return (
         <>
-            <ArchiveSearchForm searchStr={searchStr} onSubmit={handleSearchSubmit}/>
+            {searchInput}
             {domainClearButton}
-            {searchClearButton}
             <ArchiveCards archives={archives}/>
             {pagination}
         </>

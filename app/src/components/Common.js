@@ -1,5 +1,5 @@
-import React from "react";
-import {Card, Container, Icon, Image, Pagination, Progress} from 'semantic-ui-react';
+import React, {useState} from "react";
+import {Card, Container, Form, Icon, Image, Input, Pagination, Progress} from 'semantic-ui-react';
 import {Link} from "react-router-dom";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 
@@ -492,7 +492,7 @@ export function objectToQuery(d) {
     return arr.join('&');
 }
 
-export function ClearButton({onClick, style, label, icon='close'}) {
+export function ClearButton({onClick, style, label, icon = 'close'}) {
     return <Button icon
                    labelPosition='right'
                    onClick={onClick}
@@ -501,4 +501,48 @@ export function ClearButton({onClick, style, label, icon='close'}) {
         {label}
         <Icon name={icon}/>
     </Button>
+}
+
+export function SearchInput({initValue, onSubmit}) {
+    let [value, setValue] = useState(initValue || '');
+
+    const buttonClick = () => {
+        // Clear the input when the "clear" button is clicked, search again.
+        setValue('');
+        onSubmit(value);
+    }
+
+    // Button is "search" when input is dirty, otherwise it is "clear".
+    let button = (
+        <Button icon onClick={buttonClick} style={{marginLeft: '0.5em'}} type='reset'>
+            <Icon name='close'/>
+        </Button>
+    );
+    if (!initValue || initValue !== value) {
+        button = (
+            <Button icon style={{marginLeft: '0.5em'}} type='submit' disabled={value === ''}>
+                <Icon name='search'/>
+            </Button>
+        );
+    }
+
+    const localOnSubmit = (e) => {
+        // Send the value up when submitting.
+        e.preventDefault();
+        onSubmit(value);
+    }
+
+    return (
+        <Form onSubmit={localOnSubmit}>
+            <Form.Group inline style={{marginBottom: '1em'}}>
+                <Input
+                    type='text'
+                    placeholder='Search...'
+                    onChange={(e) => setValue(e.target.value)}
+                    value={value}
+                />
+                {button}
+            </Form.Group>
+        </Form>
+    )
 }

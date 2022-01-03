@@ -1,6 +1,6 @@
-import React from "react";
-import {Card, Confirm, Container, Form, Icon, Image, Placeholder, Tab} from "semantic-ui-react";
-import Paginator, {APIForm, ClearButton, SearchInput, uploadDate} from "./Common";
+import React, {useState} from "react";
+import {Card, Confirm, Container, Icon, Image, Placeholder, Tab} from "semantic-ui-react";
+import Paginator, {ClearButton, SearchInput, uploadDate} from "./Common";
 import {deleteArchive, postArchive, refreshArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link, NavLink} from "react-router-dom";
@@ -10,18 +10,18 @@ import {useArchives} from "../hooks/useArchives";
 import {useDomains} from "../hooks/useDomains";
 
 
-function FailedArchiveCard({archive, syncURL, deleteURL}) {
+function FailedArchiveCard({archive, syncArchive, deleteArchive}) {
 
     let url = archive.url;
 
     let syncIcon = (
-        <Button onClick={() => syncURL(url.url)}>
+        <Button onClick={syncArchive}>
             <Icon name='sync' size='big'/>
         </Button>
     );
 
     let trashIcon = (
-        <Button onClick={() => deleteURL(archive.id)}>
+        <Button onClick={deleteArchive}>
             <Icon name='trash' size='big'/>
         </Button>
     );
@@ -49,124 +49,125 @@ function FailedArchiveCard({archive, syncURL, deleteURL}) {
     );
 }
 
-class ArchiveCard extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            deleteOpen: false,
-            syncOpen: false,
-        }
+function ArchiveCard({archive, syncArchive, deleteArchive}) {
+    let url = archive.url;
+
+    const [syncOpen, setSyncOpen] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+
+    const localSyncArchive = async () => {
+        setSyncOpen(false);
+        await syncArchive(url.url);
+    }
+    const localDeleteArchive = async () => {
+        setDeleteOpen(false);
+        await deleteArchive(archive.id);
     }
 
-    syncURL = async () => {
-        await postArchive(this.props.archive.url.url);
-        await this.props.fetchURLs();
+    let imageSrc = archive.screenshot_path ? `/media/${archive.screenshot_path}` : null;
+    let singlefileUrl = archive.singlefile_path ? `/media/${archive.singlefile_path}` : null;
+
+    if (archive.status === 'failed') {
+        return <FailedArchiveCard archive={archive} syncArchive={localSyncArchive} deleteArchive={localDeleteArchive}/>;
     }
 
-    deleteURL = async () => {
-        await deleteArchive(this.props.archive.id);
-        await this.props.fetchURLs();
+    let readabilityUrl = archive.readability_path ? `/media/${archive.readability_path}` : null;
+    let readabilityIcon = <Button icon disabled><Icon name='book' size='large'/></Button>;
+    if (readabilityUrl) {
+        readabilityIcon = (
+            <Button icon href={readabilityUrl} target='_blank' rel='noopener noreferrer'>
+                <Icon name='book' size='large'/>
+            </Button>);
     }
 
-    render() {
-        let archive = this.props.archive;
-        let url = archive.url;
+    let syncIcon = (
+        <>
+            <Button icon onClick={() => setSyncOpen(true)}>
+                <Icon name='sync' size='large'/>
+            </Button>
+            <Confirm
+                open={syncOpen}
+                content='Download the latest version of this URL?'
+                confirmButton='Confirm'
+                onCancel={() => setSyncOpen(true)}
+                onConfirm={localSyncArchive}
+            />
+        </>
+    );
 
-        let imageSrc = archive.screenshot_path ? `/media/${archive.screenshot_path}` : null;
-        let singlefileUrl = archive.singlefile_path ? `/media/${archive.singlefile_path}` : null;
-
-        if (archive.status === 'failed') {
-            return <FailedArchiveCard archive={archive} syncURL={this.syncURL} deleteURL={this.deleteURL}/>;
-        }
-
-        let readabilityUrl = archive.readability_path ? `/media/${archive.readability_path}` : null;
-        let readabilityIcon = <Button icon disabled><Icon name='book' size='large'/></Button>;
-        if (readabilityUrl) {
-            readabilityIcon = (
-                <Button icon href={readabilityUrl} target='_blank' rel='noopener noreferrer'>
-                    <Icon name='book' size='large'/>
-                </Button>);
-        }
-
-        let syncIcon = (
+    let deleteIcon = (
             <>
-                <Button icon onClick={() => this.setState({syncOpen: true})}>
-                    <Icon name='sync' size='large'/>
+                <Button icon onClick={() => setDeleteOpen(true)}>
+                    <Icon name='trash' size='large'/>
                 </Button>
                 <Confirm
-                    open={this.state.syncOpen}
-                    content='Download the latest version of this URL?'
-                    confirmButton='Confirm'
-                    onCancel={() => this.setState({syncOpen: false})}
-                    onConfirm={this.syncURL}
+                    open={deleteOpen}
+                    content='Are you sure you want to delete this URL?  All files will be deleted.'
+                    confirmButton='Delete'
+                    onCancel={() => setDeleteOpen(false)}
+                    onConfirm={localDeleteArchive}
                 />
             </>
-        );
-
-        let deleteIcon = (
-                <>
-                    <Button icon onClick={() => this.setState({deleteOpen: true})}>
-                        <Icon name='trash' size='large'/>
-                    </Button>
-                    <Confirm
-                        open={this.state.deleteOpen}
-                        content='Are you sure you want to delete this URL?  All files will be deleted.'
-                        confirmButton='Delete'
-                        onCancel={() => this.setState({deleteOpen: false})}
-                        onConfirm={this.deleteURL}
-                    />
-                </>
-            )
-        ;
-
-        let externalIcon = (
-            <Button icon href={url.url} target='_blank' rel='noopener noreferrer'>
-                <Icon name='sign-out' size='large'/>
-            </Button>
-        );
-
-        return (
-            <Card>
-                <Card.Content>
-                    <a href={singlefileUrl} target='_blank' rel='noopener noreferrer'>
-                        <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
-                        <Card.Header>
-                            <Container textAlign='left'>
-                                <p>{archive.title || url.url}</p>
-                            </Container>
-                        </Card.Header>
-                    </a>
-                    <Card.Meta>
-                        {uploadDate(archive.archive_datetime)}
-                    </Card.Meta>
-                    <Card.Description>
-                        <Container textAlign='left'>
-                            {readabilityIcon}
-                            {syncIcon}
-                            {deleteIcon}
-                            {externalIcon}
-                        </Container>
-                    </Card.Description>
-                </Card.Content>
-            </Card>
         )
-    }
+    ;
 
+    let externalIcon = (
+        <Button icon href={url.url} target='_blank' rel='noopener noreferrer'>
+            <Icon name='sign-out' size='large'/>
+        </Button>
+    );
+
+    return (
+        <Card>
+            <Card.Content>
+                <a href={singlefileUrl} target='_blank' rel='noopener noreferrer'>
+                    <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
+                    <Card.Header>
+                        <Container textAlign='left'>
+                            <p>{archive.title || url.url}</p>
+                        </Container>
+                    </Card.Header>
+                </a>
+                <Card.Meta>
+                    {uploadDate(archive.archive_datetime)}
+                </Card.Meta>
+                <Card.Description>
+                    <Container textAlign='left'>
+                        {readabilityIcon}
+                        {syncIcon}
+                        {deleteIcon}
+                        {externalIcon}
+                    </Container>
+                </Card.Description>
+            </Card.Content>
+        </Card>
+    )
 }
 
-function ArchiveCards({archives, fetchURLs}) {
+function ArchiveCards({archives, syncArchive, deleteArchive}) {
     return (
         <Card.Group>
             {archives.map((i) => {
-                return <ArchiveCard key={i['id']} archive={i}/>
+                return <ArchiveCard key={i['id']} archive={i} syncArchive={syncArchive} deleteArchive={deleteArchive}/>
             })}
         </Card.Group>
     )
 }
 
 function Archives() {
-    const {archivesData, setPage, totalPages, searchStr, activePage, setSearchStr, domain, setDomain} = useArchives();
+    const {archivesData, setPage, totalPages, searchStr, activePage, setSearchStr, domain, setDomain, search} =
+        useArchives();
     const {archives} = archivesData;
+
+    const syncArchive = async (url) => {
+        await postArchive(url);
+        await search();
+    }
+
+    const localDeleteArchive = async (archive_id) => {
+        await deleteArchive(archive_id);
+        await search();
+    }
 
     let body;
     if (archives === null) {
@@ -180,7 +181,7 @@ function Archives() {
         body = <p>No archives found! Have you archived any webpages?</p>;
     } else {
         // Archives fetched successfully!
-        body = <ArchiveCards archives={archives}/>;
+        body = <ArchiveCards archives={archives} syncArchive={syncArchive} deleteArchive={localDeleteArchive}/>;
     }
 
     let domainClearButton = null;
@@ -206,63 +207,6 @@ function Archives() {
             </div>
         </>
     )
-}
-
-class ArchiveAddForm extends APIForm {
-    constructor(props) {
-        super(props);
-        this.archivesRef = props.archivesRef;
-
-        this.state = {
-            ...this.state,
-            inputs: {
-                url: '',
-            },
-            errors: {},
-        };
-        this.fetchURLs = this.fetchURLs.bind(this);
-    }
-
-    handleSubmit = async (e) => {
-        e.preventDefault();
-        this.setLoading();
-        try {
-            let response = await postArchive(this.state.inputs.url);
-            if (response.status === 204) {
-                this.setState({inputs: {url: ''}, success: true}, this.fetchURLs);
-            } else {
-                this.setState({loading: false, success: undefined, error: true});
-            }
-        } finally {
-            this.clearLoading();
-        }
-    }
-
-    fetchURLs = async (e) => {
-        await this.archivesRef.current.fetchURLs();
-    }
-
-    render() {
-        return (
-            <>
-                <Form onSubmit={this.handleSubmit}>
-                    <label htmlFor='url'>Archive URL</label>
-                    <Form.Group>
-                        <Form.Input
-                            name='url'
-                            placeholder='https://wrolpi.org'
-                            value={this.state.inputs.url}
-                            disabled={this.state.disabled}
-                            error={this.state.error}
-                            onChange={this.handleInputChange}
-                            success={this.state.success}
-                        />
-                        <Form.Button primary disabled={this.state.disabled}>Archive</Form.Button>
-                    </Form.Group>
-                </Form>
-            </>
-        )
-    }
 }
 
 class ManageArchives extends React.Component {
@@ -387,7 +331,6 @@ export class ArchiveRoute extends React.Component {
     render() {
         return (
             <Container style={{marginTop: '2em', marginBottom: '2em'}}>
-                <ArchiveAddForm archivesRef={this.archivesRef}/>
                 <Tab panes={this.archivePanes} activeIndex={this.state.activeIndex} renderActiveOnly={true}/>
             </Container>
         )

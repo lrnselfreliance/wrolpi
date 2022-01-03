@@ -47,5 +47,6 @@ export const useArchives = (defaultLimit = 20) => {
         setSearchStr,
         activePage,
         setActivePage,
+        search,
     };
 }

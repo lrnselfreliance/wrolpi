@@ -76,8 +76,9 @@ function ArchiveCard({archive, syncArchive, deleteArchive}) {
             </Button>);
     }
 
-    let syncIcon = (
-        <>
+    let syncIcon = null;
+    if (syncArchive) {
+        syncIcon = (<>
             <Button icon onClick={() => setSyncOpen(true)}>
                 <Icon name='sync' size='large'/>
             </Button>
@@ -85,14 +86,15 @@ function ArchiveCard({archive, syncArchive, deleteArchive}) {
                 open={syncOpen}
                 content='Download the latest version of this URL?'
                 confirmButton='Confirm'
-                onCancel={() => setSyncOpen(true)}
+                onCancel={() => setSyncOpen(false)}
                 onConfirm={localSyncArchive}
             />
-        </>
-    );
+        </>);
+    }
 
-    let deleteIcon = (
-            <>
+    let deleteIcon = null;
+    if (deleteArchive) {
+        deleteIcon = (<>
                 <Button icon onClick={() => setDeleteOpen(true)}>
                     <Icon name='trash' size='large'/>
                 </Button>
@@ -104,8 +106,8 @@ function ArchiveCard({archive, syncArchive, deleteArchive}) {
                     onConfirm={localDeleteArchive}
                 />
             </>
-        )
-    ;
+        );
+    }
 
     let externalIcon = (
         <Button icon href={archive.url} target='_blank' rel='noopener noreferrer'>
@@ -115,15 +117,17 @@ function ArchiveCard({archive, syncArchive, deleteArchive}) {
 
     return (
         <Card>
+            <a href={singlefileUrl} target='_blank' rel='noopener noreferrer'>
+                <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
+            </a>
             <Card.Content>
-                <a href={singlefileUrl} target='_blank' rel='noopener noreferrer'>
-                    <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
-                    <Card.Header>
-                        <Container textAlign='left'>
+                <Card.Header>
+                    <Container textAlign='left'>
+                        <Link to={singlefileUrl} className='no-link-underscore card-link'>
                             <p>{archive.title || archive.url}</p>
-                        </Container>
-                    </Card.Header>
-                </a>
+                        </Link>
+                    </Container>
+                </Card.Header>
                 <Card.Meta>
                     {uploadDate(archive.archive_datetime)}
                 </Card.Meta>
@@ -150,7 +154,23 @@ function ArchiveCards({archives, syncArchive, deleteArchive}) {
     )
 }
 
-function Archives() {
+export function ArchivesList({archives, searchStr, syncArchive, localDeleteArchive}) {
+    if (archives === null || archives === undefined) {
+        // Fetching archives.
+        return <ArchivePlaceholder/>;
+    } else if (archives.length === 0 && searchStr) {
+        // Search with no results.
+        return <p>No archives found! Is your search too restrictive?</p>;
+    } else if (archives.length === 0) {
+        // No archives fetched.
+        return <p>No archives found! Have you archived any webpages?</p>;
+    } else {
+        // Archives fetched successfully!
+        return <ArchiveCards archives={archives} syncArchive={syncArchive} deleteArchive={localDeleteArchive}/>;
+    }
+}
+
+export function Archives() {
     const {archivesData, setPage, totalPages, searchStr, activePage, setSearchStr, domain, setDomain, search} =
         useArchives();
     const {archives} = archivesData;
@@ -163,21 +183,6 @@ function Archives() {
     const localDeleteArchive = async (archive_id) => {
         await deleteArchive(archive_id);
         await search();
-    }
-
-    let body;
-    if (archives === null) {
-        // Fetching archives.
-        body = <ArchivePlaceholder/>;
-    } else if (archives.length === 0 && searchStr) {
-        // Search with no results.
-        body = <p>No archives found! Is your search too restrictive?</p>;
-    } else if (archives.length === 0) {
-        // No archives fetched.
-        body = <p>No archives found! Have you archived any webpages?</p>;
-    } else {
-        // Archives fetched successfully!
-        body = <ArchiveCards archives={archives} syncArchive={syncArchive} deleteArchive={localDeleteArchive}/>;
     }
 
     let domainClearButton = null;
@@ -193,7 +198,12 @@ function Archives() {
         <>
             <SearchInput initValue={searchStr} onSubmit={setSearchStr}/>
             {domainClearButton}
-            {body}
+            <ArchivesList
+                archives={archives}
+                searchStr={searchStr}
+                syncArchive={syncArchive}
+                localDeleteArchive={localDeleteArchive}
+            />
             <div style={{marginTop: '3em', textAlign: 'center'}}>
                 <Paginator
                     activePage={activePage}
@@ -274,7 +284,6 @@ export class ArchiveRoute extends React.Component {
         this.state = {
             activeIndex: this.matchPaneTo(),
         }
-        this.archivesRef = React.createRef();
 
         this.archivePanes = [
             {

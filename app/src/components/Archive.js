@@ -174,36 +174,26 @@ function Archives() {
             onSubmit={setSearchStr}
         />);
 
+    let body = <ArchiveCards archives={archives}/>;
+
     // Empty states.
     if (archives === null) {
-        return (<>
-            {searchInput}
-            <ArchivePlaceholder/>
-        </>)
+        body = <ArchivePlaceholder/>;
     } else if (archives.length === 0 && searchInput) {
-        return (<>
-            {searchInput}
-            <p>No archives found! Is your search too restrictive?</p>
-        </>)
+        body = <p>No archives found! Is your search too restrictive?</p>;
     } else if (archives.length === 0) {
-        return (<>
-            {searchInput}
-            <p>No archives found! Have you archived any webpages?</p>
-        </>)
+        body = <p>No archives found! Have you archived any webpages?</p>;
     }
 
-    let pagination = null;
-    if (totalPages) {
-        pagination = (
-            <div style={{marginTop: '3em', textAlign: 'center'}}>
-                <Paginator
-                    activePage={activePage}
-                    changePage={setPage}
-                    totalPages={totalPages}
-                />
-            </div>
-        )
-    }
+    let pagination = (
+        <div style={{marginTop: '3em', textAlign: 'center'}}>
+            <Paginator
+                activePage={activePage}
+                changePage={setPage}
+                totalPages={totalPages}
+            />
+        </div>
+    )
 
     let domainClearButton = null;
     if (domain) {
@@ -218,7 +208,7 @@ function Archives() {
         <>
             {searchInput}
             {domainClearButton}
-            <ArchiveCards archives={archives}/>
+            {body}
             {pagination}
         </>
     )

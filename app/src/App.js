@@ -4,7 +4,7 @@ import {NavBar} from "./components/Nav";
 import {Route, Switch} from "react-router-dom";
 import {VideosPreview, VideosRoute, VideoWrapper} from "./components/Videos";
 import Admin from "./components/Admin";
-import {Container, Header} from "semantic-ui-react";
+import {Container, Divider, Header, Segment} from "semantic-ui-react";
 import 'semantic-ui-offline/semantic.min.css';
 import {SemanticToastContainer} from 'react-semantic-toasts';
 import 'react-semantic-toasts/styles/react-semantic-alert.css';
@@ -56,6 +56,8 @@ function Welcome() {
         body = (<>
             <Header as='h2'>Archives</Header>
             <ArchivesList archives={archives} searchStr={searchStr}/>
+
+            <Divider/>
 
             <Header as='h2'>Videos</Header>
             <VideosPreview videos={videos}/>

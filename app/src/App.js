@@ -1,32 +1,83 @@
-import React from 'react';
+import React, {useEffect, useState} from 'react';
 import './App.css';
 import {NavBar} from "./components/Nav";
-import {Route, Switch} from "react-router-dom";
-import {FavoriteVideosPreview, VideosRoute, VideoWrapper, ViewedVideosPreview} from "./components/Videos";
+import {Route, Switch, useHistory} from "react-router-dom";
+import {VideosPreview, VideosRoute, VideoWrapper} from "./components/Videos";
 import Admin from "./components/Admin";
-import {Container, Divider, Header, Segment} from "semantic-ui-react";
+import {Container, Divider, Header} from "semantic-ui-react";
 import 'semantic-ui-offline/semantic.min.css';
 import {SemanticToastContainer} from 'react-semantic-toasts';
 import 'react-semantic-toasts/styles/react-semantic-alert.css';
 import {AppsRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/Inventory";
-import {ArchiveRoute} from "./components/Archive";
+import {ArchiveRoute, ArchivesList} from "./components/Archive";
 import {Saver} from "./components/Upload";
+import {useSearchParam} from "./hooks/useSearchParam";
+import {searchArchives, searchVideos} from "./api";
+import {MoreButton, SearchInput} from "./components/Common";
+
+const useSearch = () => {
+    let [searchStr, setSearchStr] = useSearchParam('q');
+
+    const [archives, setArchives] = useState();
+    const [videos, setVideos] = useState();
+
+    const localSearchArchives = async (term) => {
+        setArchives(null);
+        const [archives, total] = await searchArchives(0, 6, null, term);
+        setArchives(archives);
+    }
+
+    const localSearchVideos = async (term) => {
+        setVideos(null);
+        const [videos, total] = await searchVideos(0, 6, null, term);
+        setVideos(videos);
+    }
+
+    useEffect(() => {
+        localSearchArchives(searchStr);
+        localSearchVideos(searchStr)
+    }, [searchStr]);
+
+    return {searchStr, setSearchStr, archives, videos}
+}
 
 function Welcome() {
-    return (
-        <Container style={{marginTop: '2em'}}>
+    const {searchStr, setSearchStr, archives, videos} = useSearch();
+    const history = useHistory();
+
+    let body = (
+        <>
             <Header as='h2'>Save your media</Header>
             <Saver/>
+        </>
+    );
+
+    if (searchStr) {
+        let archiveMore = () => {
+            history.push(`/archive?q=${searchStr}`);
+        };
+        let videosMore = () => {
+            history.push(`/videos?q=${searchStr}&o=rank`);
+        };
+
+        body = (<>
+            <Header as='h2'>Archives</Header>
+            <ArchivesList archives={archives} searchStr={searchStr}/>
+            <MoreButton onClick={archiveMore} disabled={!archives || archives.length === 0}/>
 
             <Divider/>
 
-            <Segment>
-                <FavoriteVideosPreview/>
-            </Segment>
-            <Segment>
-                <ViewedVideosPreview/>
-            </Segment>
+            <Header as='h2'>Videos</Header>
+            <VideosPreview videos={videos}/>
+            <MoreButton onClick={videosMore} disabled={!videos || videos.length === 0}/>
+        </>);
+    }
+
+    return (
+        <Container style={{marginTop: '2em'}}>
+            <SearchInput initValue={searchStr} onSubmit={setSearchStr} size='big'/>
+            {body}
         </Container>
     )
 }

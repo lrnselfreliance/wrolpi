@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import gzip
 import json
@@ -11,12 +10,11 @@ import requests
 from bs4 import BeautifulSoup
 from sqlalchemy.orm import Session
 
-from modules.archive.models import URL, Domain, Archive
+from modules.archive.models import Domain, Archive
 from wrolpi.common import get_media_directory, logger, chunks, extract_domain
 from wrolpi.dates import now, strptime_ms, strftime_ms
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
-from wrolpi.errors import InvalidDomain, UnknownURL, PendingArchive, InvalidArchive
-from wrolpi.vars import PYTEST
+from wrolpi.errors import InvalidDomain, UnknownURL, InvalidArchive
 
 logger = logger.getChild(__name__)
 
@@ -109,122 +107,71 @@ def request_archive(url: str):
     return singlefile, readability, screenshot
 
 
-def is_pending_archive(url: str) -> bool:
-    with get_db_session() as session:
-        url = session.query(URL).filter_by(url=url).one_or_none()
-        if url and url.latest.status == 'pending':
-            return True
-    return False
-
-
-def new_archive(url: str, sync: bool = False):
+def do_archive(url: str) -> Archive:
     """
-    Request archiving of the provided URL.  Store the returned files in their domain's directory.
-
-    :param url: The URL to archive.
-    :param sync: Perform the archiving process synchronously for testing.
+    Perform the real archive request to the archiving service.  Store the resulting data into files.  Create an Archive
+    record in the DB.  Create Domain/URL if missing.
     """
-    # Check that the archive files are available.
-    get_new_archive_files(url)
+    singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path = \
+        get_new_archive_files(url)
 
-    if is_pending_archive(url):
-        raise PendingArchive()
+    singlefile, readability, screenshot = request_archive(url)
+
+    # Store the single-file HTML in its own file.
+    with singlefile_path.open('wt') as fh:
+        fh.write(singlefile)
+    if screenshot:
+        with screenshot_path.open('wb') as fh:
+            fh.write(screenshot)
+    else:
+        screenshot_path = None
+
+    # Store the Readability into separate files.  This allows the user to view text-only or html articles.
+    title = None
+    readability_txt = None
+    if readability:
+        title = readability.get('title')
+
+        # Write the readability parts to their own files.  Write what is left after pops to the JSON file.
+        with readability_path.open('wt') as fh:
+            fh.write(readability.pop('content'))
+        with readability_txt_path.open('wt') as fh:
+            readability_txt = readability.pop('textContent')
+            fh.write(readability_txt)
+    else:
+        readability_path = readability_txt_path = None
+
+    # Always write a JSON file that contains at least the URL.
+    readability = readability or {}
+    # Use the Readability title, or try and extract one from singlefile.
+    if not title and singlefile:
+        title = get_title_from_html(singlefile, url=url)
+        readability['title'] = title
+    readability['url'] = url
+    with readability_json_path.open('wt') as fh:
+        fh.write(json.dumps(readability))
 
     with get_db_session(commit=True) as session:
-        domain, url_ = get_or_create_domain_and_url(session, url)
-
+        domain = get_or_create_domain(session, url)
         archive = Archive(
-            url_id=url_.id,
-            domain_id=domain.id,
-            status='pending',
+            title=title,
             archive_datetime=now(),
+            singlefile_path=singlefile_path,
+            readability_path=readability_path,
+            readability_json_path=readability_json_path,
+            readability_txt_path=readability_txt_path,
+            screenshot_path=screenshot_path,
+            contents=readability_txt,
+            url=url,
+            domain_id=domain.id,
         )
         session.add(archive)
         session.flush()
-        archive_id = archive.id
-
-        url_.latest_id = archive_id
-        url_.latest_datetime = now()
-
-    if PYTEST or sync:
-        return _do_archive(url, archive_id)
-    else:
-        # Run the real archive process in the future.
-        asyncio.ensure_future(do_archive(url, archive_id))
 
     return archive
 
 
-def _do_archive(url: str, archive_id: int):
-    """
-    Perform the real archive request to the archiving service.  Store the resulting data into files.  Update the Archive
-    in the DB.
-    """
-    try:
-        singlefile, readability, screenshot = request_archive(url)
-
-        singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path = \
-            get_new_archive_files(url)
-
-        # Store the single-file HTML in it's own file.
-        with singlefile_path.open('wt') as fh:
-            fh.write(singlefile)
-        if screenshot:
-            with screenshot_path.open('wb') as fh:
-                fh.write(screenshot)
-        else:
-            screenshot_path = None
-
-        # Store the Readability into separate files.  This allows the user to view text-only or html articles.
-        title = None
-        if readability:
-            title = readability.get('title')
-
-            # Write the readability parts to their own files.  Write what is left after pops to the JSON file.
-            with readability_path.open('wt') as fh:
-                fh.write(readability.pop('content'))
-            with readability_txt_path.open('wt') as fh:
-                fh.write(readability.pop('textContent'))
-        else:
-            readability_path = readability_txt_path = None
-
-        # Always write a JSON file that contains at least the URL.
-        readability = readability or {}
-        # Use the Readability title, or try and extract one from singlefile.
-        if not title and singlefile:
-            title = get_title_from_html(singlefile, url=url)
-            readability['title'] = title
-        readability['url'] = url
-        with readability_json_path.open('wt') as fh:
-            fh.write(json.dumps(readability))
-
-        with get_db_session(commit=True) as session:
-            archive = session.query(Archive).filter_by(id=archive_id).one()
-            archive.status = 'complete'
-            archive.archive_datetime = now()
-            archive.title = title
-            archive.singlefile_path = singlefile_path
-            archive.readability_path = readability_path
-            archive.readability_json_path = readability_json_path
-            archive.readability_txt_path = readability_txt_path
-            archive.screenshot_path = screenshot_path
-            # Update the latest for easy viewing.
-            archive.url.latest_id = archive.id
-            archive.url.latest_datetime = archive.archive_datetime
-
-        return archive
-    except Exception:
-        with get_db_session(commit=True) as session:
-            archive = session.query(Archive).filter_by(id=archive_id).one()
-            archive.status = 'failed'
-        raise
-
-
-async def do_archive(url: str, archive_id: int):
-    _do_archive(url, archive_id)
-
-
-def get_or_create_domain_and_url(session, url):
+def get_or_create_domain(session, url) -> Domain:
     """
     Get/create the Domain for this archive.
     """
@@ -234,12 +181,7 @@ def get_or_create_domain_and_url(session, url):
         domain = Domain(domain=domain_, directory=str(get_domain_directory(url)))
         session.add(domain)
         session.flush()
-    url_ = session.query(URL).filter_by(url=url).one_or_none()
-    if not url_:
-        url_ = URL(url=url, domain_id=domain.id)
-        session.add(url_)
-        session.flush()
-    return domain, url_
+    return domain
 
 
 def get_title_from_html(html: str, url: str = None) -> str:
@@ -260,42 +202,6 @@ def get_domain(session, domain: str) -> Domain:
     return domain_
 
 
-def get_urls(limit: int = 20, offset: int = 0, domain: str = ''):
-    with get_db_session() as session:
-        if domain:
-            domain_ = get_domain(session, domain)
-            urls = domain_.urls[offset:offset + limit]
-            urls = sorted(urls, key=lambda i: i.latest_datetime)[::-1]
-        else:
-            urls = session.query(URL) \
-                .order_by(URL.latest_datetime.desc()) \
-                .limit(limit) \
-                .offset(offset) \
-                .all()
-        urls = [i.dict() for i in urls]
-        return urls
-
-
-def get_url_count(domain: str = '') -> int:
-    """
-    Get count of all URLs.  Or, get count of all attached to a specific domain string.
-    """
-    with get_db_session() as session:
-        domain_id = None
-        if domain:
-            domain_id = get_domain(session, domain).id
-
-    with get_db_curs() as curs:
-        stmt = 'SELECT COUNT(*) FROM url'
-        params = {}
-        if domain_id:
-            stmt = f'{stmt} WHERE domain_id = %(domain_id)s'
-            params['domain_id'] = domain_id
-        curs.execute(stmt, params)
-        count = int(curs.fetchone()[0])
-        return count
-
-
 def delete_archive(archive_id: int):
     """
     Delete an Archive and all of it's files.
@@ -307,14 +213,6 @@ def delete_archive(archive_id: int):
 
         # Delete any files associated with this URL.
         archive.delete()
-        # URL must have the latest
-        url = archive.url
-        url.update_latest()
-        # Delete this archive.
-        session.query(Archive).filter_by(id=archive_id).delete()
-        # Remove the URL if necessary.
-        if not url.archives:
-            session.query(URL).filter_by(id=url.id).delete()
 
 
 def group_archive_files(files: Iterator[pathlib.Path]) -> groupby:
@@ -392,35 +290,19 @@ def _refresh_archives():
         if archive_count:
             logger.info(f'Inserted/updated {archive_count} archives')
 
-    with get_db_session(commit=True) as session:
-        # Check that each URLs most recent Archive exists, if it does not use the next most recent.
-        urls = session.query(URL).all()
-        for url in urls:
-            if not url.latest or not url.latest.singlefile_path or not url.latest.singlefile_path.path.exists():
-                url.update_latest()
-                session.commit()
-
     singlefile_paths = list(singlefile_paths)
     with get_db_curs(commit=True) as curs:
         curs.execute('DELETE FROM archive WHERE singlefile_path != ALL(%s)', (singlefile_paths,))
 
     with get_db_curs(commit=True) as curs:
         stmt = '''
-            DELETE FROM url WHERE id NOT IN (
-                select distinct url_id from archive
-            ) RETURNING url.id
-        '''
-        curs.execute(stmt)
-        urls = list(map(dict, curs.fetchall()))
-        stmt = '''
             DELETE FROM domains WHERE
-                id NOT IN (select distinct domain_id from url)
-                AND id NOT IN (select distinct domain_id from archive)
+                id NOT IN (select distinct domain_id from archive)
             RETURNING domains.id
         '''
         curs.execute(stmt)
         domains = list(map(dict, curs.fetchall()))
-        logger.info(f'Deleted {len(urls)} URLS and {len(domains)} Domains')
+        logger.info(f'Deleted {len(domains)} Domains')
 
     with get_db_session(commit=True) as session:
         # Get all archives that have no text contents, but have txt files.
@@ -450,40 +332,33 @@ def upsert_archive(dt: str, files, session: Session):
     except Exception as e:
         raise InvalidArchive() from e
 
-    domain, url_ = get_or_create_domain_and_url(session, url)
-    logger.debug(f'Upsert url={url_.url}')
+    domain = get_or_create_domain(session, url)
     # Get the existing Archive, or create a new one.
     archive = session.query(Archive).filter_by(singlefile_path=singlefile_path).one_or_none()
     if not archive:
         # No archive matches this singlefile_path, create a new one.
         archive = Archive(
-            url_id=url_.id,
+            url=url,
             domain_id=domain.id,
         )
         session.add(archive)
         session.flush()
 
     # Update the archive with the files that we have.
-    archive.status = 'complete',
     archive.archive_datetime = dt
     archive.singlefile_path = singlefile_path
     archive.readability_path = readability_path
     archive.readability_txt_path = readability_txt_path
     archive.readability_json_path = readability_json_path
     archive.screenshot_path = screenshot_path
-    archive_id = archive.id
-
-    if not url_.latest_datetime or url_.latest_datetime < dt:
-        url_.latest_id = archive_id
-        url_.latest_datetime = archive.archive_datetime
 
 
 def get_domains():
     with get_db_curs() as curs:
         stmt = '''
-            SELECT domains.domain AS domain, COUNT(u.id) AS url_count
+            SELECT domains.domain AS domain, COUNT(a.id) AS url_count
             FROM domains
-            LEFT JOIN url u on domains.id = u.domain_id
+            LEFT JOIN archive a on domains.id = a.domain_id
             GROUP BY domains.domain
             ORDER BY domains.domain
         '''

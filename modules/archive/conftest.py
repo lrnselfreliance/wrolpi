@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from modules.archive.models import Archive, URL, Domain
+from modules.archive.models import Archive, Domain
 from wrolpi.dates import strftime_ms
 
 
@@ -58,32 +58,20 @@ def archive_factory(test_session, archive_directory):
             test_session.add(domain)
             test_session.flush([domain])
 
-        url_ = test_session.query(URL).filter_by(url=url).one_or_none()
-        if not url_:
-            url_ = URL(
-                url=url,
-                domain_id=domain.id,
-            )
-            test_session.add(url_)
-            test_session.flush([url_])
-
         archive = Archive(
             readability_json_path=readability_json_path,
             readability_path=readability_path,
             readability_txt_path=readability_txt_path,
             screenshot_path=screenshot_path,
             singlefile_path=singlefile_path,
-            status='complete',
             title=title,
-            url_id=url_.id,
+            url=url,
             domain_id=domain.id,
             contents=contents,
             archive_datetime=timestamp,
         )
         test_session.add(archive)
-        test_session.flush([archive])
 
-        url_.latest_id = archive.id
         test_session.commit()
 
         for path in archive.my_paths():

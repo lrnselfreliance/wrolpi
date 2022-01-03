@@ -1,29 +1,31 @@
-import React from "react";
-import {Card, Confirm, Container, Form, Header, Icon, Image, Placeholder, Tab, Table} from "semantic-ui-react";
-import Paginator, {APIForm, objectToQuery, scrollToTop, uploadDate} from "./Common";
-import {deleteArchive, fetchDomains, postArchive, refreshArchives, searchArchives} from "../api";
+import React, {useState} from "react";
+import {Card, Confirm, Container, Icon, Image, Placeholder, Tab} from "semantic-ui-react";
+import Paginator, {ClearButton, ExternalLink, SearchInput, uploadDate} from "./Common";
+import {deleteArchive, postDownload, refreshArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link, NavLink} from "react-router-dom";
-import * as QueryString from "query-string";
 import {ArchivePlaceholder} from "./Placeholder";
+import Table from "semantic-ui-react/dist/commonjs/collections/Table";
+import {useArchives} from "../hooks/useArchives";
+import {useDomains} from "../hooks/useDomains";
 
 
-function FailedArchiveCard({url, syncURL, deleteURL}) {
+function FailedArchiveCard({archive, syncArchive, deleteArchive}) {
 
     let syncIcon = (
-        <Button onClick={() => syncURL(url.url)}>
+        <Button onClick={syncArchive}>
             <Icon name='sync' size='big'/>
         </Button>
     );
 
     let trashIcon = (
-        <Button onClick={() => deleteURL(url.id)}>
+        <Button onClick={deleteArchive}>
             <Icon name='trash' size='big'/>
         </Button>
     );
 
     let externalIcon = (
-        <a href={url.url} target='_blank' rel='noopener noreferrer'>
+        <a href={archive.url} target='_blank' rel='noopener noreferrer'>
             <Icon name='sign-out' size='big'/>
         </a>
     );
@@ -32,7 +34,7 @@ function FailedArchiveCard({url, syncURL, deleteURL}) {
         <Card>
             <Card.Content>
                 <Card.Header>
-                    {url.url}
+                    {archive.url}
                 </Card.Header>
                 <Card.Description>
                     <p>Failed!</p>
@@ -45,345 +47,172 @@ function FailedArchiveCard({url, syncURL, deleteURL}) {
     );
 }
 
-class ArchiveCard extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            deleteOpen: false,
-            syncOpen: false,
-        }
+function ArchiveCard({archive, syncArchive, deleteArchive}) {
+    const [syncOpen, setSyncOpen] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+
+    const localSyncArchive = async () => {
+        setSyncOpen(false);
+        await syncArchive(archive.url);
+    }
+    const localDeleteArchive = async () => {
+        setDeleteOpen(false);
+        await deleteArchive(archive.id);
     }
 
-    syncURL = async () => {
-        await postArchive(this.props.archive.url.url);
-        await this.props.fetchURLs();
+    let imageSrc = archive.screenshot_path ? `/media/${archive.screenshot_path}` : null;
+    let singlefileUrl = archive.singlefile_path ? `/media/${archive.singlefile_path}` : null;
+
+    if (archive.status === 'failed') {
+        return <FailedArchiveCard archive={archive} syncArchive={localSyncArchive} deleteArchive={localDeleteArchive}/>;
     }
 
-    deleteURL = async () => {
-        await deleteArchive(this.props.archive.id);
-        await this.props.fetchURLs();
+    let readabilityUrl = archive.readability_path ? `/media/${archive.readability_path}` : null;
+    let readabilityIcon = <Button icon disabled><Icon name='book' size='large'/></Button>;
+    if (readabilityUrl) {
+        readabilityIcon = (
+            <Button icon href={readabilityUrl} target='_blank' rel='noopener noreferrer'>
+                <Icon name='book' size='large'/>
+            </Button>);
     }
 
-    render() {
-        let archive = this.props.archive;
+    let syncIcon = null;
+    if (syncArchive) {
+        syncIcon = (<>
+            <Button icon onClick={() => setSyncOpen(true)}>
+                <Icon name='sync' size='large'/>
+            </Button>
+            <Confirm
+                open={syncOpen}
+                content='Download the latest version of this URL?'
+                confirmButton='Confirm'
+                onCancel={() => setSyncOpen(false)}
+                onConfirm={localSyncArchive}
+            />
+        </>);
+    }
 
-        let imageSrc = archive.screenshot_path ? `/media/${archive.screenshot_path}` : null;
-        let singlefileUrl = archive.singlefile_path ? `/media/${archive.singlefile_path}` : null;
-
-        if (archive.status === 'failed') {
-            return <FailedArchiveCard url={archive} syncURL={this.syncURL} deleteURL={this.deleteURL}/>;
-        }
-
-        let readabilityUrl = archive.readability_path ? `/media/${archive.readability_path}` : null;
-        let readabilityIcon = <Button icon disabled><Icon name='book' size='large'/></Button>;
-        if (readabilityUrl) {
-            readabilityIcon = (
-                <Button icon href={readabilityUrl} target='_blank' rel='noopener noreferrer'>
-                    <Icon name='book' size='large'/>
-                </Button>);
-        }
-
-        let syncIcon = (
-            <>
-                <Button icon onClick={() => this.setState({syncOpen: true})}>
-                    <Icon name='sync' size='large'/>
+    let deleteIcon = null;
+    if (deleteArchive) {
+        deleteIcon = (<>
+                <Button icon onClick={() => setDeleteOpen(true)}>
+                    <Icon name='trash' size='large'/>
                 </Button>
                 <Confirm
-                    open={this.state.syncOpen}
-                    content='Download the latest version of this URL?'
-                    confirmButton='Confirm'
-                    onCancel={() => this.setState({syncOpen: false})}
-                    onConfirm={this.syncURL}
+                    open={deleteOpen}
+                    content='Are you sure you want to delete this Archive?  All files will be deleted.'
+                    confirmButton='Delete'
+                    onCancel={() => setDeleteOpen(false)}
+                    onConfirm={localDeleteArchive}
                 />
             </>
         );
-
-        let deleteIcon = (
-                <>
-                    <Button icon onClick={() => this.setState({deleteOpen: true})}>
-                        <Icon name='trash' size='large'/>
-                    </Button>
-                    <Confirm
-                        open={this.state.deleteOpen}
-                        content='Are you sure you want to delete this URL?  All files will be deleted.'
-                        confirmButton='Delete'
-                        onCancel={() => this.setState({deleteOpen: false})}
-                        onConfirm={this.deleteURL}
-                    />
-                </>
-            )
-        ;
-
-        let externalIcon = (
-            <Button icon href={archive.url} target='_blank' rel='noopener noreferrer'>
-                <Icon name='sign-out' size='large'/>
-            </Button>
-        );
-
-        return (
-            <Card>
-                <Card.Content>
-                    <a href={singlefileUrl} target='_blank' rel='noopener noreferrer'>
-                        <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
-                        <Card.Header>
-                            <Container textAlign='left'>
-                                <p>{archive.title || archive.url}</p>
-                            </Container>
-                        </Card.Header>
-                    </a>
-                    <Card.Meta>
-                        {uploadDate(archive.archive_datetime)}
-                    </Card.Meta>
-                    <Card.Description>
-                        <Container textAlign='left'>
-                            {readabilityIcon}
-                            {syncIcon}
-                            {deleteIcon}
-                            {externalIcon}
-                        </Container>
-                    </Card.Description>
-                </Card.Content>
-            </Card>
-        )
     }
 
+    let externalIcon = (
+        <Button icon href={archive.url} target='_blank' rel='noopener noreferrer'>
+            <Icon name='sign-out' size='large'/>
+        </Button>
+    );
+
+    return (
+        <Card>
+            <ExternalLink to={singlefileUrl} className='no-link-underscore card-link'>
+                <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
+            </ExternalLink>
+            <Card.Content>
+                <Card.Header>
+                    <Container textAlign='left'>
+                        <ExternalLink to={singlefileUrl} className='no-link-underscore card-link'>
+                            <p>{archive.title || archive.url}</p>
+                        </ExternalLink>
+                    </Container>
+                </Card.Header>
+                <Card.Meta>
+                    {uploadDate(archive.archive_datetime)}
+                </Card.Meta>
+                <Card.Description>
+                    <Container textAlign='left'>
+                        {readabilityIcon}
+                        {syncIcon}
+                        {deleteIcon}
+                        {externalIcon}
+                    </Container>
+                </Card.Description>
+            </Card.Content>
+        </Card>
+    )
 }
 
-class ArchiveCards extends React.Component {
-    render() {
-        return (
-            <Card.Group>
-                {this.props.archives.map((i) => {
-                    return <ArchiveCard key={i['id']} archive={i} fetchURLs={this.props.fetchURLs}/>
-                })}
-            </Card.Group>
-        )
-    }
+function ArchiveCards({archives, syncArchive, deleteArchive}) {
+    return (
+        <Card.Group>
+            {archives.map((i) => {
+                return <ArchiveCard key={i['id']} archive={i} syncArchive={syncArchive} deleteArchive={deleteArchive}/>
+            })}
+        </Card.Group>
+    )
 }
 
-class Archives extends React.Component {
-
-    constructor(props) {
-        super(props);
-        const query = QueryString.parse(this.props.location.search);
-        let activePage = query.page ? parseInt(query.page) : 1;
-        let domain = query.domain || null;
-
-        this.state = {
-            activePage: activePage,
-            limit: 20,
-            archives: null,
-            totalPages: null,
-            domain: domain,
-        };
-        this.fetchURLs = this.fetchURLs.bind(this);
-        this.clearSearch = this.clearSearch.bind(this);
-        this.changePage = this.changePage.bind(this);
-    }
-
-    async componentDidMount() {
-        await this.fetchURLs();
-    }
-
-    async componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevProps.location.search !== this.props.location.search) {
-            await this.fetchURLs();
-        }
-    }
-
-    async fetchURLs() {
-        this.setState({archives: null});
-        let offset = this.state.limit * this.state.activePage - this.state.limit;
-        let [archives, total] = await searchArchives(offset, this.state.limit, this.state.domain);
-        let totalPages = Math.round(total / this.state.limit) || 1;
-        this.setState({archives: archives, totalPages: totalPages});
-    }
-
-    clearSearch() {
-        this.setState({activePage: 1, domain: null}, this.changePage);
-    }
-
-    changePage(activePage) {
-        if (activePage) {
-            this.setState({activePage});
-        }
-        let {history, location} = this.props;
-
-        let search = {
-            page: activePage > 1 ? activePage : null,
-            domain: this.state.domain,
-        };
-
-        history.push({
-            pathname: location.pathname,
-            search: objectToQuery(search),
-        });
-        scrollToTop();
-    }
-
-    render() {
-        let {archives, activePage, totalPages} = this.state;
-
-        if (archives === null) {
-            return (<>
-                <Header as='h1'>Latest Archives</Header>
-                <ArchivePlaceholder/>
-            </>)
-        }
-
-        let pagination = null;
-        if (totalPages) {
-            pagination = (
-                <div style={{marginTop: '3em', textAlign: 'center'}}>
-                    <Paginator
-                        activePage={activePage}
-                        changePage={this.changePage}
-                        totalPages={totalPages}
-                    />
-                </div>
-            )
-        }
-
-        let domainButton = null;
-        if (this.state.domain) {
-            domainButton = (
-                <Button icon labelPosition='right' onClick={this.clearSearch} style={{marginBottom: '1em'}}>
-                    Search: {this.state.domain}
-                    <Icon name='close'/>
-                </Button>
-            )
-        }
-
-        return (
-            <>
-                <Header as='h1'>Latest Archives</Header>
-                {domainButton}
-                <ArchiveCards archives={archives} fetchURLs={this.fetchURLs}/>
-                {pagination}
-            </>
-        )
+export function ArchivesList({archives, searchStr, syncArchive, localDeleteArchive}) {
+    if (archives === null || archives === undefined) {
+        // Fetching archives.
+        return <ArchivePlaceholder/>;
+    } else if (archives.length === 0 && searchStr) {
+        // Search with no results.
+        return <p>No archives found! Is your search too restrictive?</p>;
+    } else if (archives.length === 0) {
+        // No archives fetched.
+        return <p>No archives found! Have you archived any webpages?</p>;
+    } else {
+        // Archives fetched successfully!
+        return <ArchiveCards archives={archives} syncArchive={syncArchive} deleteArchive={localDeleteArchive}/>;
     }
 }
 
-class Domains extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            domains: null,
-            total: null,
-        };
-        this.fetchDomains = this.fetchDomains.bind(this);
+export function Archives() {
+    const {archivesData, setPage, totalPages, searchStr, activePage, setSearchStr, domain, setDomain, search} =
+        useArchives();
+    const {archives} = archivesData;
+
+    const syncArchive = async (url) => {
+        await postDownload(url, 'archive');
+        await search();
     }
 
-    async componentDidMount() {
-        await this.fetchDomains();
+    const localDeleteArchive = async (archive_id) => {
+        await deleteArchive(archive_id);
+        await search();
     }
 
-    async fetchDomains() {
-        this.setState({domains: null});
-        let [domains, total] = await fetchDomains();
-        this.setState({domains, total});
+    let domainClearButton = null;
+    if (domain) {
+        domainClearButton = <ClearButton
+            onClick={() => setDomain(null)}
+            style={{marginBottom: '1em'}}
+            label={`Domain: ${domain}`}
+        />;
     }
 
-    row(domain) {
-        return <Table.Row key={domain['domain']}>
-            <Table.Cell>
-                <Link to={`/archive?domain=${domain['domain']}`}>
-                    {domain['domain']}
-                </Link>
-            </Table.Cell>
-            <Table.Cell>{domain['url_count']}</Table.Cell>
-        </Table.Row>
-    }
-
-    render() {
-        if (this.state.domains) {
-            return (
-                <>
-                    <Header as='h1'>Domains</Header>
-                    <Table celled>
-                        <Table.Header>
-                            <Table.Row>
-                                <Table.HeaderCell>Domain</Table.HeaderCell>
-                                <Table.HeaderCell>URLs</Table.HeaderCell>
-                            </Table.Row>
-                        </Table.Header>
-
-                        <Table.Body>
-                            {this.state.domains.map(this.row)}
-                        </Table.Body>
-                    </Table>
-                </>
-            )
-        }
-
-        return (<>
-            <Header as='h1'>Domains</Header>
-            <Placeholder>
-                <Placeholder.Header>
-                    <Placeholder.Line/>
-                    <Placeholder.Line/>
-                </Placeholder.Header>
-            </Placeholder>
-        </>)
-    }
-}
-
-class ArchiveAddForm extends APIForm {
-    constructor(props) {
-        super(props);
-        this.archivesRef = props.archivesRef;
-
-        this.state = {
-            ...this.state,
-            inputs: {
-                url: '',
-            },
-            errors: {},
-        };
-        this.fetchURLs = this.fetchURLs.bind(this);
-    }
-
-    handleSubmit = async (e) => {
-        e.preventDefault();
-        this.setLoading();
-        try {
-            let response = await postArchive(this.state.inputs.url);
-            if (response.status === 204) {
-                this.setState({inputs: {url: ''}, success: true}, this.fetchURLs);
-            } else {
-                this.setState({loading: false, success: undefined, error: true});
-            }
-        } finally {
-            this.clearLoading();
-        }
-    }
-
-    fetchURLs = async (e) => {
-        await this.archivesRef.current.fetchURLs();
-    }
-
-    render() {
-        return (
-            <>
-                <Form onSubmit={this.handleSubmit}>
-                    <label htmlFor='url'>Archive URL</label>
-                    <Form.Group>
-                        <Form.Input
-                            name='url'
-                            placeholder='https://wrolpi.org'
-                            value={this.state.inputs.url}
-                            disabled={this.state.disabled}
-                            error={this.state.error}
-                            onChange={this.handleInputChange}
-                            success={this.state.success}
-                        />
-                        <Form.Button primary disabled={this.state.disabled}>Archive</Form.Button>
-                    </Form.Group>
-                </Form>
-            </>
-        )
-    }
+    return (
+        <>
+            <SearchInput initValue={searchStr} onSubmit={setSearchStr}/>
+            {domainClearButton}
+            <ArchivesList
+                archives={archives}
+                searchStr={searchStr}
+                syncArchive={syncArchive}
+                localDeleteArchive={localDeleteArchive}
+            />
+            <div style={{marginTop: '3em', textAlign: 'center'}}>
+                <Paginator
+                    activePage={activePage}
+                    changePage={setPage}
+                    totalPages={totalPages}
+                />
+            </div>
+        </>
+    )
 }
 
 class ManageArchives extends React.Component {
@@ -401,6 +230,51 @@ class ManageArchives extends React.Component {
     }
 }
 
+function Domains() {
+
+    const [domains] = useDomains();
+
+    const row = (domain) => {
+        return <Table.Row key={domain['domain']}>
+            <Table.Cell>
+                <Link to={`/archive?domain=${domain['domain']}`}>
+                    {domain['domain']}
+                </Link>
+            </Table.Cell>
+            <Table.Cell>{domain['url_count']}</Table.Cell>
+        </Table.Row>
+    }
+
+    if (domains) {
+        return (
+            <>
+                <Table celled>
+                    <Table.Header>
+                        <Table.Row>
+                            <Table.HeaderCell>Domain</Table.HeaderCell>
+                            <Table.HeaderCell>URLs</Table.HeaderCell>
+                        </Table.Row>
+                    </Table.Header>
+
+                    <Table.Body>
+                        {domains.map(row)}
+                    </Table.Body>
+                </Table>
+            </>
+        )
+    }
+
+    return (<>
+        <Placeholder>
+            <Placeholder.Header>
+                <Placeholder.Line/>
+                <Placeholder.Line/>
+            </Placeholder.Header>
+        </Placeholder>
+    </>)
+}
+
+
 export class ArchiveRoute extends React.Component {
 
     constructor(props) {
@@ -410,7 +284,43 @@ export class ArchiveRoute extends React.Component {
         this.state = {
             activeIndex: this.matchPaneTo(),
         }
-        this.archivesRef = React.createRef();
+
+        this.archivePanes = [
+            {
+                menuItem: {
+                    as: NavLink,
+                    content: 'Archives',
+                    id: 'archive',
+                    to: '/archive',
+                    exact: true,
+                    key: 'home',
+                },
+                render: () => <Tab.Pane><Archives/></Tab.Pane>
+            },
+            {
+                menuItem: {
+                    as: NavLink,
+                    content: 'Domains',
+                    id: 'domains',
+                    to: '/archive/domains',
+                    exact: true,
+                    key: 'domains',
+                },
+                render: () => <Tab.Pane><Domains/></Tab.Pane>
+            },
+            {
+                menuItem: {
+                    as: NavLink,
+                    content: 'Manage',
+                    id: 'manage',
+                    to: '/archive/manage',
+                    exact: true,
+                    key: 'manage',
+                },
+                render: () => <Tab.Pane><ManageArchives/></Tab.Pane>
+            },
+        ];
+
     }
 
     componentDidUpdate(prevProps, prevState, snapshot) {
@@ -424,46 +334,9 @@ export class ArchiveRoute extends React.Component {
     }
 
     render() {
-        const panes = [
-            {
-                menuItem: {
-                    as: NavLink,
-                    content: 'Archives',
-                    id: 'archive',
-                    to: '/archive',
-                    exact: true,
-                    key: 'home',
-                },
-                render: () => <Tab.Pane><Archives {...this.props} ref={this.archivesRef}/></Tab.Pane>
-            },
-            {
-                menuItem: {
-                    as: NavLink,
-                    content: 'Domains',
-                    id: 'domains',
-                    to: '/archive/domains',
-                    exact: true,
-                    key: 'domains',
-                },
-                render: () => <Tab.Pane><Domains {...this.props}/></Tab.Pane>
-            },
-            {
-                menuItem: {
-                    as: NavLink,
-                    content: 'Manage',
-                    id: 'manage',
-                    to: '/archive/manage',
-                    exact: true,
-                    key: 'manage',
-                },
-                render: () => <Tab.Pane><ManageArchives {...this.props}/></Tab.Pane>
-            },
-        ];
-
         return (
             <Container style={{marginTop: '2em', marginBottom: '2em'}}>
-                <ArchiveAddForm archivesRef={this.archivesRef}/>
-                <Tab panes={panes} activeIndex={this.state.activeIndex}/>
+                <Tab panes={this.archivePanes} activeIndex={this.state.activeIndex} renderActiveOnly={true}/>
             </Container>
         )
     }

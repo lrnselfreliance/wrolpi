@@ -30,7 +30,7 @@ class ArchiveDownloader(Downloader, ABC):
         if download.attempts > 3:
             raise UnrecoverableDownloadError(f'Max download attempts reached for {download.url}')
 
-        lib.new_archive(download.url, sync=True)
+        lib.do_archive(download.url)
         return True
 
 

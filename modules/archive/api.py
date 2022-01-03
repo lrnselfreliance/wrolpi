@@ -9,8 +9,7 @@ from wrolpi.errors import ValidationError
 from wrolpi.root_api import get_blueprint, json_response
 from wrolpi.schema import validate_doc, JSONErrorResponse
 from . import lib
-from .schema import RetrieveURLsRequest, RetrieveURLsResponse, PostArchiveRequest, ArchiveSearchRequest, \
-    ArchiveSearchResponse
+from .schema import ArchiveSearchRequest, ArchiveSearchResponse
 
 NAME = 'archive'
 
@@ -19,22 +18,9 @@ bp = get_blueprint('Archive', '/api/archive')
 logger = logger.getChild(__name__)
 
 
-@bp.post('/')
-@validate_doc(
-    'Archive a website',
-    PostArchiveRequest,
-)
-@wrol_mode_check
-async def post_archive(_: Request, data: dict):
-    # Remove whitespace from URL.
-    url = data['url'].strip()
-    lib.new_archive(url)
-    return response.empty()
-
-
 @bp.delete('/<archive_id:int>')
 @validate_doc(
-    'Delete a website record',
+    'Delete an individual archive',
     responses=[
         (HTTPStatus.NOT_FOUND, JSONErrorResponse),
     ]
@@ -43,27 +29,6 @@ async def post_archive(_: Request, data: dict):
 async def delete_archive(_: Request, archive_id: int):
     lib.delete_archive(archive_id)
     return response.empty()
-
-
-@bp.post('/urls')
-@validate_doc(
-    'Get a list of URLs',
-    RetrieveURLsRequest,
-    RetrieveURLsResponse,
-)
-async def get_urls(_: Request, data: dict):
-    try:
-        limit = abs(int(data.get('limit', 20)))
-        offset = abs(int(data.get('offset', 0)))
-        domain = data.get('domain')
-    except Exception as e:
-        logger.error(f'Bad request', exc_info=e)
-        return response.json(dict(error='bad request'), HTTPStatus.BAD_REQUEST)
-
-    urls = lib.get_urls(limit, offset, domain)
-    count = lib.get_url_count(domain)
-    ret = dict(urls=urls, totals=dict(urls=count))
-    return json_response(ret)
 
 
 @bp.post('/refresh')

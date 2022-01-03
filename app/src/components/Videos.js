@@ -137,62 +137,16 @@ export class VideoWrapper extends React.Component {
     }
 }
 
-class VideosPreview extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            videos: null,
-        };
+export function VideosPreview({videos}) {
+    let body = <VideoPlaceholder/>
+    if (videos && videos.length === 0) {
+        body = <p>No videos available.</p>
+    } else if (videos && videos.length > 0) {
+        body = <VideoCards videos={videos}/>
     }
-
-    async componentDidMount() {
-        await this.fetchVideos();
-    }
-
-    render() {
-        let header = <h2>{this.title}</h2>;
-        let body = <VideoPlaceholder/>
-        if (this.state.videos && this.state.videos.length === 0) {
-            body = <p>No videos available.</p>
-        } else if (this.state.videos && this.state.videos.length > 0) {
-            body = <VideoCards videos={this.state.videos}/>
-        }
-        return <>
-            {header}
-            {body}
-        </>
-    }
-
-}
-
-export class FavoriteVideosPreview extends VideosPreview {
-
-    constructor(props) {
-        super(props);
-        this.title = 'Favorite Videos'
-    }
-
-    async fetchVideos() {
-        let [videos] = await searchVideos(
-            0, 3, null, null, '-favorite', ['favorite']);
-        this.setState({videos});
-    }
-
-}
-
-export class ViewedVideosPreview extends VideosPreview {
-
-    constructor(props) {
-        super(props);
-        this.title = 'Recently Viewed Videos'
-    }
-
-    async fetchVideos() {
-        let [videos] = await searchVideos(
-            0, 3, null, null, '-viewed');
-        this.setState({videos});
-    }
-
+    return <>
+        {body}
+    </>
 }
 
 function FilterModal(props) {

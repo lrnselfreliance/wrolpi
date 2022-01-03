@@ -1,6 +1,8 @@
-import React from "react";
-import {Card, Container, Image, Pagination, Progress} from 'semantic-ui-react';
+import React, {useState} from "react";
+import {Card, Container, Form, Icon, Image, Input, Pagination, Progress} from 'semantic-ui-react';
 import {Link} from "react-router-dom";
+import Button from "semantic-ui-react/dist/commonjs/elements/Button";
+import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
 export const API_URI = `http://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -99,7 +101,7 @@ export function VideoCard({video}) {
     let poster_url = video.poster_path ? `/media/${encodeURIComponent(video.poster_path)}` : null;
 
     return (
-        <Card style={{'width': '18em', 'margin': '1em'}}>
+        <Card>
             <Link to={video_url}>
                 <Image src={poster_url} wrapped style={{position: 'relative', width: '100%'}}/>
             </Link>
@@ -107,7 +109,7 @@ export function VideoCard({video}) {
             <Card.Content>
                 <Card.Header>
                     <Container textAlign='left'>
-                        <Link to={video_url} className="no-link-underscore video-card-link">
+                        <Link to={video_url} className="no-link-underscore card-link">
                             <p>{video.title || video.stem || video.video_path}</p>
                         </Link>
                     </Container>
@@ -115,7 +117,7 @@ export function VideoCard({video}) {
                 <Card.Description>
                     <Container textAlign='left'>
                         {channel &&
-                            <Link to={channel_url} className="no-link-underscore video-card-link">
+                            <Link to={channel_url} className="no-link-underscore card-link">
                                 <b>{channel.name}</b>
                             </Link>}
                         <p>{upload_date}</p>
@@ -126,17 +128,14 @@ export function VideoCard({video}) {
     )
 }
 
-export class VideoCards extends React.Component {
-
-    render() {
-        return (
-            <Card.Group>
-                {this.props.videos.map((v) => {
-                    return <VideoCard key={v['id']} video={v}/>
-                })}
-            </Card.Group>
-        )
-    }
+export function VideoCards({videos}) {
+    return (
+        <Card.Group>
+            {videos.map((v) => {
+                return <VideoCard key={v['id']} video={v}/>
+            })}
+        </Card.Group>
+    )
 }
 
 export function RequiredAsterisk() {
@@ -489,4 +488,89 @@ export function objectToQuery(d) {
     let arr = Object.keys(d).map((k) => d[k] === null ? '' : `${k}=${d[k]}`);
     arr = arr.filter((i) => i !== '')
     return arr.join('&');
+}
+
+export function ClearButton({onClick, style, label, icon = 'close'}) {
+    return <Button icon
+                   labelPosition='right'
+                   onClick={onClick}
+                   style={style}
+    >
+        {label}
+        <Icon name={icon}/>
+    </Button>
+}
+
+export function SearchInput({initValue, onSubmit, size}) {
+    let [value, setValue] = useState(initValue || '');
+    size = size || 'small';
+
+    const buttonClick = () => {
+        // Clear the input when the "clear" button is clicked, search again.
+        setValue('');
+        onSubmit(value);
+    }
+
+    // Button is "search" when input is dirty, otherwise it is "clear".
+    let button = (
+        <Button icon onClick={buttonClick} style={{marginLeft: '0.5em'}} type='reset' size={size}>
+            <Icon name='close'/>
+        </Button>
+    );
+    if (!initValue || initValue !== value) {
+        button = (
+            <Button icon style={{marginLeft: '0.5em'}} type='submit' disabled={value === ''} size={size}>
+                <Icon name='search'/>
+            </Button>
+        );
+    }
+
+    const localOnSubmit = (e) => {
+        // Send the value up when submitting.
+        e.preventDefault();
+        onSubmit(value);
+    }
+
+    return (
+        <Form onSubmit={localOnSubmit}>
+            <Form.Group inline style={{marginBottom: '1em'}}>
+                <Input
+                    type='text'
+                    placeholder='Search...'
+                    onChange={(e) => setValue(e.target.value)}
+                    value={value}
+                    size={size}
+                />
+                {button}
+            </Form.Group>
+        </Form>
+    )
+}
+
+export function ExternalLink(props) {
+    return (
+        <Link to={props.to} target='_blank' className={props.className} rel='noopener noreferrer'>
+            {props.children}
+        </Link>
+    )
+}
+
+export function MoreButton(props) {
+    return (
+        <Grid columns={1} textAlign='center'>
+            <Grid.Row>
+                <Grid.Column>
+                    <Button
+                        onClick={props.onClick}
+                        size='big'
+                        style={{marginTop: '1em'}}
+                        disabled={props.disabled}
+                    >
+                        {props.children}
+                        More
+                    </Button>
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
+    )
 }

@@ -54,10 +54,10 @@ function Welcome() {
 
     if (searchStr) {
         body = (<>
-            <Header as='h3'>Archives</Header>
+            <Header as='h2'>Archives</Header>
             <ArchivesList archives={archives} searchStr={searchStr}/>
 
-            <Header as='h3'>Videos</Header>
+            <Header as='h2'>Videos</Header>
             <VideosPreview videos={videos}/>
         </>);
     }

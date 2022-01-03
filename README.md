@@ -24,9 +24,9 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 - [x] Video player & downloader
 - [x] One-Time pad generator, encrypter/decrypter
 - [x] Web archiver
-- [x] Inventory management
+- [x] Food Inventory management
 - [x] Wi-Fi Hotspot
-- [ ] Universal search
+- [x] Universal search
 - [ ] Map viewer & downloader
 - [ ] eBook viewer
 - [ ] Wiki viewer & downloader

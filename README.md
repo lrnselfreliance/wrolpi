@@ -47,7 +47,7 @@ You can try out WROLPi by running the docker containers.
 4. Start the database.
     * `docker-compose up -d db`
 5. Initialize the database
-    * `docker-compose run api db upgrade`
+    * `docker-compose run --rm api db upgrade`
 6. Start the docker containers
     * `docker-compose up`
 7. Navigate to WROLPi

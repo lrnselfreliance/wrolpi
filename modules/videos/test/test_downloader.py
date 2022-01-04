@@ -270,12 +270,21 @@ class TestVideosDownloaders(TestAPI):
 
     @wrap_test_db
     def test_invalid_download_url(self):
+        """
+        An invalid url should not be attempted again.
+        """
         _, session = get_db_context()
         with mock.patch('modules.videos.downloader.VideoDownloader.valid_url') as mock_valid_url, \
+                mock.patch('wrolpi.downloader.DownloadManager.get_downloader') as mock_get_downloader, \
                 mock.patch('modules.videos.downloader.YDL') as mock_ydl:
+            mock_get_downloader.return_value = (VideoDownloader, {'channel': 'foo', 'id': 'some id'})
             mock_valid_url.return_value = (True, None)
             mock_ydl.extract_info.side_effect = UnsupportedError('oops')
             self.mgr.create_download('url', session)
+
+        with get_db_session() as session:
+            download = self.mgr.get_downloads(session)[0]
+            assert download.status == 'failed'
 
     @wrap_test_db
     @mock.patch('modules.videos.channel.lib.today', lambda: local_timezone(datetime(2020, 1, 1, 0, 0, 0)))

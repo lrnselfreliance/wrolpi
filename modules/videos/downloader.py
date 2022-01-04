@@ -188,6 +188,9 @@ class VideoDownloader(Downloader, ABC):
                 with get_db_session(commit=True) as session:
                     channel = session.query(Channel).filter_by(id=channel.id).one()
                     channel.add_video_to_skip_list(source_id)
+
+                # Skipped downloads should not be tried again.
+                raise UnrecoverableDownloadError() from e
             return
 
         with get_db_session(commit=True) as session:
@@ -451,6 +454,7 @@ UNRECOVERABLE_ERRORS = {
     'Sign in',
     'This live stream recording is not available.',
     'members-only content',
+    "You've asked yt-dlp to download the URL",
 }
 
 

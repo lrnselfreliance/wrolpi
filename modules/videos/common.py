@@ -455,7 +455,7 @@ async def get_bulk_video_info_json(video_ids: List[int]):
                             # Get duration from info_json without reading video file.
                             video.duration = info_json.get('duration')
                         # Trust the info_json title before the video path title.
-                        video.title = info_json.get('title', video.title)
+                        video.title = info_json.get('title')
                     if not video.duration:
                         # As a last resort, get duration from the video file.
                         video.duration = get_video_duration(video.video_path.path)

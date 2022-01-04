@@ -241,7 +241,7 @@ def _refresh_videos(channel_links: list = None):
     elif not channels:
         raise Exception(f'No channels in DB.  Have you created any?')
 
-    for idx, channel in enumerate(channels):
+    for channel in channels:
         try:
             refresh_channel_videos(channel)
         except Exception as e:

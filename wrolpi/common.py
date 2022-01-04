@@ -481,3 +481,26 @@ def import_modules():
         logger.fatal('No modules could be found!', exc_info=e)
         raise
     return modules
+
+
+def api_param_limiter(maximum: int, default: int = 20) -> callable:
+    """
+    Create a function which restricts the maximum number that can be returned.
+    Useful for restricting API limit params.
+
+    >>> limiter = api_param_limiter(100)
+    >>> limiter(0)
+    0
+    >>> limiter(100)
+    100
+    >>> limiter(150)
+    150
+    """
+
+    def limiter_(i: int) -> int:
+        if not i:
+            # Limit is not valid, use the default.
+            return default
+        return min(int(i), maximum)
+
+    return limiter_

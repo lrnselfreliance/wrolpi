@@ -4,7 +4,7 @@ from datetime import date, datetime
 import pytest
 from sanic_openapi import doc
 
-from wrolpi.common import combine_dicts, insert_parameter, date_range
+from wrolpi.common import combine_dicts, insert_parameter, date_range, api_param_limiter
 from wrolpi.dates import set_timezone, now
 from wrolpi.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields, InvalidTimezone
 from wrolpi.schema import validate_data
@@ -293,3 +293,25 @@ class TestCommon(unittest.TestCase):
         finally:
             # Restore the timezone before the test.
             set_timezone(original_timezone)
+
+
+@pytest.mark.parametrize(
+    'i,expected', [
+        (1, 1),
+        (100, 100),
+        (150, 100),
+        (-1, -1),
+        (-1.0, -1.0),
+        (1.0, 1.0),
+        (100.0, 100.0),
+        (150.0, 100.0),
+        ('1', 1),
+        (None, 20),
+        (0, 20),
+        (0.0, 20),
+        ('', 20),
+    ]
+)
+def test_api_param_limiter(i, expected):
+    limiter = api_param_limiter(100)  # should never return an integer greater than 100.
+    assert limiter(i) == expected

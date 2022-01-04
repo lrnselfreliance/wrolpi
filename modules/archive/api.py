@@ -4,7 +4,7 @@ from http import HTTPStatus
 from requests import Request
 from sanic import response
 
-from wrolpi.common import logger, wrol_mode_check
+from wrolpi.common import logger, wrol_mode_check, api_param_limiter
 from wrolpi.errors import ValidationError
 from wrolpi.root_api import get_blueprint, json_response
 from wrolpi.schema import validate_doc, JSONErrorResponse
@@ -44,6 +44,10 @@ async def fetch_domains(_: Request):
     return json_response({'domains': domains, 'totals': {'domains': len(domains)}})
 
 
+archive_limit_limiter = api_param_limiter(100)
+archive_offset_limiter = api_param_limiter(100, 0)
+
+
 @bp.post('/search')
 @validate_doc(
     'Search archive contents and titles',
@@ -55,8 +59,8 @@ async def search_archives(_: Request, data: dict):
     try:
         search_str = data.get('search_str')
         domain = data.get('domain')
-        limit = int(data.get('limit', 20))
-        offset = int(data.get('offset', 0))
+        limit = archive_limit_limiter(data.get('limit'))
+        offset = archive_offset_limiter(data.get('offset'))
     except Exception as e:
         raise ValidationError('Unable to validate search queries') from e
 

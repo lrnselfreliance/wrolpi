@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi import before_startup
 from wrolpi.common import logger, get_config, iterify, chunks, get_media_directory, \
-    minimize_dict
+    minimize_dict, api_param_limiter
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict, ChannelSourceIdConflict
@@ -47,14 +47,7 @@ def load_channels_config() -> dict:
     return channels
 
 
-def get_allowed_limit(limit: int) -> int:
-    """
-    Return the video limit int if it was passed, unless it is over the maximum limit.  If no limit is provided, return
-    the default limit.
-    """
-    if limit:
-        return min(int(limit), VIDEO_QUERY_MAX_LIMIT)
-    return VIDEO_QUERY_LIMIT
+video_limiter = api_param_limiter(100)
 
 
 class ConfigError(Exception):

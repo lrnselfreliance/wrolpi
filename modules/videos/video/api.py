@@ -10,7 +10,7 @@ from wrolpi.errors import ValidationError, InvalidOrderBy
 from wrolpi.root_api import json_response
 from wrolpi.schema import validate_doc, JSONErrorResponse
 from .lib import get_video, VIDEO_ORDERS, DEFAULT_VIDEO_ORDER, video_search, get_video_for_app
-from ..common import get_matching_directories, get_allowed_limit
+from ..common import get_matching_directories, video_limiter
 from ..lib import save_channels_config
 from ..schema import VideoResponse, VideoSearchRequest, VideoSearchResponse, \
     DirectoriesResponse, DirectoriesRequest
@@ -45,7 +45,7 @@ async def search(_: Request, data: dict):
         channel_link = data.get('channel_link')
         order_by = data.get('order_by', DEFAULT_VIDEO_ORDER)
         offset = int(data.get('offset', 0))
-        limit = get_allowed_limit(data.get('limit'))
+        limit = video_limiter(data.get('limit'))
         filters = data.get('filters', None)
     except Exception as e:
         raise ValidationError('Unable to validate search queries') from e

@@ -37,7 +37,7 @@ ChannelIEs = {
 }
 
 PREFERRED_VIDEO_EXTENSION = 'mp4'
-PREFERRED_VIDEO_FORMAT = 'best[height=720]'
+PREFERRED_VIDEO_FORMAT = 'best[height=720],mp4-480p,mp4-360p,mp4-240p'
 
 
 def get_no_channel_directory():
@@ -178,7 +178,7 @@ class VideoDownloader(Downloader, ABC):
         except UnrecoverableDownloadError:
             raise
         except Exception as e:
-            logger.warning(f'Failed to download "{info["title"]}"', exc_info=e)
+            logger.warning(f'VideoDownloader failed to download: {download.url}', exc_info=e)
             if _skip_download(e):
                 # The video failed to download, and the error will never be fixed.  Skip it forever.
                 source_id = info.get('id')

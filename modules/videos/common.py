@@ -1,3 +1,4 @@
+import html
 import json
 import os
 import pathlib
@@ -453,9 +454,18 @@ async def get_bulk_video_info_json(video_ids: List[int]):
                         if not video.duration:
                             # Get duration from info_json without reading video file.
                             video.duration = info_json.get('duration')
-                    elif not video.duration:
+                        # Trust the info_json title before the video path title.
+                        video.title = info_json.get('title', video.title)
+                    if not video.duration:
                         # As a last resort, get duration from the video file.
                         video.duration = get_video_duration(video.video_path.path)
+                    if not video.title:
+                        # Use the video path name without the extension.
+                        video_path = video.video_path.path.with_suffix('')
+                        video.title = video_path.name
+
+                    # Unescape any HTML entities.
+                    video.title = html.unescape(video.title)
 
                 except Exception:
                     logger.warning(f'Unable to get meta data of {video}', exc_info=True)

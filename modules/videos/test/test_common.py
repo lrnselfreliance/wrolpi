@@ -1,3 +1,4 @@
+import json
 import pathlib
 import subprocess
 import tempfile
@@ -14,7 +15,8 @@ from wrolpi.db import get_db_session
 from wrolpi.test.common import build_test_directories, wrap_test_db, TestAPI
 from wrolpi.vars import PROJECT_DIR
 from ..common import get_matching_directories, convert_image, bulk_validate_posters, remove_duplicate_video_paths, \
-    apply_info_json, get_video_duration, generate_video_poster, replace_extension, is_valid_poster
+    apply_info_json, get_video_duration, generate_video_poster, replace_extension, is_valid_poster, \
+    get_bulk_video_info_json
 
 
 class TestCommon(TestAPI):
@@ -375,3 +377,31 @@ def test_update_censored_videos(test_session, video_factory, simple_channel):
     test_session.commit()
     apply_info_json(simple_channel.id)
     check_censored([(vid1.id, True), (vid2.id, True), (vid3.id, True), (vid4.id, False)])
+
+
+@pytest.mark.asyncio
+async def test_missing_title(test_session, simple_video):
+    """
+    A Video title will be filled out by `get_bulk_video_info_json`.
+    """
+    video_path: pathlib.Path = simple_video.video_path.path
+    simple_video.duration = 10  # don't update the duration during get_bulk_video_info_json()
+
+    info_json_path = video_path.with_suffix('.info.json')
+    info_json_path.write_text(json.dumps({'title': 'info json title &amp;'}))
+    simple_video.info_json_path = info_json_path
+    test_session.commit()
+
+    # simple_video does not come with a title.
+    assert not simple_video.title
+
+    # Title is fetched from the info_json.
+    await get_bulk_video_info_json([simple_video.id])
+    assert simple_video.title == 'info json title &'
+
+    # No info_json means the filename is used.
+    simple_video.title = None
+    simple_video.info_json_path = None
+    test_session.commit()
+    await get_bulk_video_info_json([simple_video.id])
+    assert simple_video.title == 'simple_video'

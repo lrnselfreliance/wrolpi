@@ -96,7 +96,7 @@ class ChannelDownloader(Downloader, ABC):
 
 class VideoDownloader(Downloader, ABC):
     """
-    Download a single video.  Store the video in it's channel's directory, otherwise store it in `videos/NO CHANNEL`.
+    Download a single video.  Store the video in its channel's directory, otherwise store it in `videos/NO CHANNEL`.
     """
     name = 'video'
     pretty_name = 'Videos'

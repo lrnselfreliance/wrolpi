@@ -1,4 +1,5 @@
 import asyncio
+import html
 import json
 import pathlib
 import re
@@ -89,7 +90,7 @@ def refresh_channel_info_json() -> bool:
                 v.video_path IS NOT NULL
                 AND v.info_json_path IS NOT NULL
                 AND v.info_json_path != ''
-                AND (v.duration IS NULL OR v.view_count IS NULL)
+                AND (v.duration IS NULL OR v.view_count IS NULL OR v.title IS NULL)
         '''
         curs.execute(query)
         missing_duration = [i for (i,) in curs.fetchall()]
@@ -377,10 +378,13 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
                 json_contents = json.load(fh)
                 duration = json_contents.get('duration')
                 url = json_contents.get('webpage_url')
+                # Trust the info_json title before the video filename.
+                title = json_contents.get('title', title)
         except json.decoder.JSONDecodeError:
             logger.warning(f'Failed to load JSON file to get duration: {info_json_path}')
 
     size = video_path.stat().st_size
+    title = html.unescape(title) if title else None
 
     video_dict = dict(
         caption_path=str(caption_path) if caption_path else None,

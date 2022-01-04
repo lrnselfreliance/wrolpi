@@ -38,4 +38,5 @@ def upgrade():
 
 
 def downgrade():
+    # The upgrade is backwards compatible.
     pass

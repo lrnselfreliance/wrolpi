@@ -70,7 +70,7 @@ function VideoPage(props) {
     let descriptionPane = {
         menuItem: 'Description', render: () => <Tab.Pane>
             <pre className="wrap-text">
-                {description}
+                {description || 'No description'}
             </pre>
         </Tab.Pane>
     };
@@ -120,7 +120,7 @@ function VideoPage(props) {
                     <track kind="captions" label="English captions" src={captionsUrl} srcLang="en" default/>
                 </video>
 
-                <h2>{video.title}</h2>
+                <h2>{video.title || video.video_path}</h2>
                 {video.upload_date && <h3>{uploadDate(video.upload_date)}</h3>}
                 <h3>
                     {channel && <Link to={`/videos/channel/${channel.link}/video`}>

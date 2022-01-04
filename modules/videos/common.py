@@ -461,8 +461,7 @@ async def get_bulk_video_info_json(video_ids: List[int]):
                         video.duration = get_video_duration(video.video_path.path)
                     if not video.title:
                         # Use the video path name without the extension.
-                        video_path = video.video_path.path.with_suffix('')
-                        video.title = video_path.name
+                        video.title = video.video_path.path.with_suffix('').name
 
                     # Unescape any HTML entities.
                     video.title = html.unescape(video.title)

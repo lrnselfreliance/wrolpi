@@ -34,4 +34,8 @@ def upgrade():
             setweight(to_tsvector('english'::regconfig, COALESCE(caption, '')), 'D')
         ) STORED
     ''')
-    session.execute('CREATE INDEX IF NOT EXISTS video_textsearch_idx ON video USING GIN(textsearch)')
+    session.execute('CREATE INDEX video_textsearch_idx ON video USING GIN(textsearch)')
+
+
+def downgrade():
+    pass

@@ -252,6 +252,8 @@ class Videos extends React.Component {
             await this.fetchChannel();
         } else if (pageChanged) {
             this.applyStateToHistory();
+            // TODO this causes a double search request.  This will be fixed with a custom hook.
+            await this.fetchVideos();
         }
     }
 
@@ -304,6 +306,7 @@ class Videos extends React.Component {
     }
 
     async fetchVideos() {
+        this.setState({videos: null});
         let offset = this.state.limit * this.state.activePage - this.state.limit;
         let channel_link = this.state.channel ? this.state.channel.link : null;
         let {queryStr, searchOrder, limit} = this.state;

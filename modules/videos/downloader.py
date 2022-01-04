@@ -181,13 +181,17 @@ class VideoDownloader(Downloader, ABC):
             logger.warning(f'VideoDownloader failed to download: {download.url}', exc_info=e)
             if _skip_download(e):
                 # The video failed to download, and the error will never be fixed.  Skip it forever.
-                source_id = info.get('id')
-                logger.warning(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
-                               f'attempt to download it again.')
+                try:
+                    source_id = info.get('id')
+                    logger.warning(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
+                                   f'attempt to download it again.')
 
-                with get_db_session(commit=True) as session:
-                    channel = session.query(Channel).filter_by(id=channel.id).one()
-                    channel.add_video_to_skip_list(source_id)
+                    with get_db_session(commit=True) as session:
+                        channel = session.query(Channel).filter_by(id=channel.id).one()
+                        channel.add_video_to_skip_list(source_id)
+                except Exception:
+                    # Could not skip this video, it may not have a channel.
+                    logger.warning(f'Could not skip video {url}')
 
                 # Skipped downloads should not be tried again.
                 raise UnrecoverableDownloadError() from e

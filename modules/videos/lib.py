@@ -98,10 +98,10 @@ def refresh_channel_info_json() -> bool:
     if missing_duration:
         coro = get_bulk_video_info_json(missing_duration)
         asyncio.ensure_future(coro)
-        logger.info('Scheduled get_bulk_video_duration()')
+        logger.info('Scheduled get_bulk_video_info_json()')
         return True
     else:
-        logger.info('No videos missing duration.')
+        logger.info('No videos need updating from info_json.')
         return False
 
 
@@ -242,7 +242,11 @@ def _refresh_videos(channel_links: list = None):
         raise Exception(f'No channels in DB.  Have you created any?')
 
     for idx, channel in enumerate(channels):
-        refresh_channel_videos(channel)
+        try:
+            refresh_channel_videos(channel)
+        except Exception as e:
+            logger.fatal(f'Failed to refresh videos for channel {channel.name}!', exc_info=e)
+            pass
 
     if not channel_links:
         # Refresh NO CHANNEL videos when not refreshing a specific channel.

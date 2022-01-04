@@ -100,7 +100,7 @@ function VideoPage(props) {
     let tabPanes = [descriptionPane, statisticsPane];
 
     return (
-        <Container textAlign='left' style={{marginTop: '2em'}}>
+        <Container textAlign='left'>
             <Button
                 style={{marginTop: '1em', marginBottom: '1em'}}
                 onClick={() => props.history.goBack()}

@@ -147,7 +147,7 @@ export class AppsRoute extends React.Component {
     render() {
         return (
             <>
-                <Container style={{marginTop: '2em', marginBottom: '2em'}}>
+                <Container fluid>
                     <Route path='/apps/otp' exact component={OTP}/>
                 </Container>
             </>

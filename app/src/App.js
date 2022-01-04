@@ -75,7 +75,7 @@ function Welcome() {
     }
 
     return (
-        <Container style={{marginTop: '2em'}}>
+        <Container fluid>
             <SearchInput initValue={searchStr} onSubmit={setSearchStr} size='big' placeholder='Search Everywhere...'/>
             {body}
         </Container>
@@ -84,7 +84,7 @@ function Welcome() {
 
 function PageNotFound() {
     return (
-        <Container>
+        <Container fluid>
             <h1 className="display-4">Page Not Found!</h1>
             <p>The page you requested cannot be found</p>
         </Container>
@@ -97,17 +97,19 @@ export default function App() {
             <header>
                 <NavBar/>
             </header>
-            <Switch>
-                <Route path='/videos/video/:video_id' exact component={VideoWrapper}/>
-                <Route path='/videos/channel/:channel_link/video/:video_id' exact component={VideoWrapper}/>
-                <Route path="/" exact={true} component={Welcome}/>
-                <Route path="/videos" component={VideosRoute}/>
-                <Route path="/admin" component={Admin}/>
-                <Route path="/apps" component={AppsRoute}/>
-                <Route path="/inventory" component={InventoryRoute}/>
-                <Route path='/archive' component={ArchiveRoute}/>
-                <Route component={PageNotFound}/>
-            </Switch>
+            <Container fluid style={{marginTop: '1em', padding: '1em'}}>
+                <Switch>
+                    <Route path='/videos/video/:video_id' exact component={VideoWrapper}/>
+                    <Route path='/videos/channel/:channel_link/video/:video_id' exact component={VideoWrapper}/>
+                    <Route path="/" exact={true} component={Welcome}/>
+                    <Route path="/videos" component={VideosRoute}/>
+                    <Route path="/admin" component={Admin}/>
+                    <Route path="/apps" component={AppsRoute}/>
+                    <Route path="/inventory" component={InventoryRoute}/>
+                    <Route path='/archive' component={ArchiveRoute}/>
+                    <Route component={PageNotFound}/>
+                </Switch>
+            </Container>
             <SemanticToastContainer position="top-right"/>
         </>
     );

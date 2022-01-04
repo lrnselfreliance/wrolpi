@@ -335,8 +335,12 @@ export class ArchiveRoute extends React.Component {
 
     render() {
         return (
-            <Container style={{marginTop: '2em', marginBottom: '2em'}}>
-                <Tab panes={this.archivePanes} activeIndex={this.state.activeIndex} renderActiveOnly={true}/>
+            <Container fluid>
+                <Tab
+                    panes={this.archivePanes}
+                    activeIndex={this.state.activeIndex}
+                    renderActiveOnly={true}
+                />
             </Container>
         )
     }

@@ -1106,7 +1106,7 @@ export class InventoryRoute extends React.Component {
     render() {
         return (
             <>
-                <Container fluid style={{marginTop: '2em', marginBottom: '2em'}}>
+                <Container fluid>
                     <Route path='/inventory' exact component={InventoryTab}/>
                 </Container>
             </>

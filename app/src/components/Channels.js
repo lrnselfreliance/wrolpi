@@ -276,7 +276,7 @@ class ChannelPage extends APIForm {
 
     render() {
         return (
-            <Container>
+            <Container fluid>
                 <Header as="h1">{this.props.header}</Header>
                 <Form
                     id="editChannel"
@@ -393,7 +393,7 @@ class ChannelPage extends APIForm {
                         </Accordion.Content>
                     </Accordion>
 
-                    <Container style={{marginTop: '2em'}}>
+                    <Container>
                         <Message error
                                  header={this.state.message_header}
                                  content={this.state.message_content}

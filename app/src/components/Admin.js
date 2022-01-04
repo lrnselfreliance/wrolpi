@@ -67,7 +67,7 @@ class Settings extends React.Component {
         }
 
         return (
-            <Container>
+            <Container fluid>
                 <p>
                     The global settings for your server.
                 </p>
@@ -144,7 +144,7 @@ class WROLMode extends React.Component {
         }
 
         return (
-            <Container>
+            <Container fluid>
 
                 <Header as="h1">WROL Mode</Header>
                 <h4>
@@ -382,7 +382,7 @@ class Admin extends React.Component {
         ];
 
         return (
-            <Container style={{marginTop: '2em'}}>
+            <Container fluid>
                 <Tab panes={panes}/>
             </Container>
         )

@@ -63,7 +63,7 @@ class ManageVideos extends React.Component {
 
     render() {
         return (
-            <Container>
+            <Container fluid>
                 <Header as="h1">Manage Videos</Header>
 
                 <p>
@@ -423,7 +423,7 @@ class Videos extends React.Component {
         );
 
         return (
-            <Container textAlign='center'>
+            <Container textAlign='center' fluid>
                 <Grid columns={4} stackable>
                     <Grid.Column textAlign='left' width={6}>
                         <h1>
@@ -480,7 +480,7 @@ class Videos extends React.Component {
                         />
                     </Grid.Column>
                 </Grid>
-                <Container textAlign='center'>
+                <Container textAlign='center' fluid>
                     {body}
                 </Container>
                 {pagination}
@@ -496,7 +496,7 @@ class ManageTabs extends React.Component {
             {menuItem: 'Statistics', render: () => <Tab.Pane><Statistics/></Tab.Pane>},
         ]
         return (
-            <Container>
+            <Container fluid>
                 <Tab panes={panes}/>
             </Container>
         )
@@ -508,7 +508,7 @@ export class VideosRoute extends React.Component {
     render() {
         return (
             <>
-                <Container fluid={true} style={{margin: '2em', padding: '0.5em'}}>
+                <Container fluid>
                     <Route path='/videos' exact
                            component={(i) =>
                                <Videos

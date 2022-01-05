@@ -419,17 +419,17 @@ def test_import_favorites(test_session, simple_channel, video_factory):
     A Video's favorited status can only be cleared by calling `Video.delete`.
     """
     video_factory(channel_id=simple_channel.id)  # never favorited
-    vid2 = video_factory(channel_id=simple_channel.id)
+    vid2 = video_factory(channel_id=None)  # has no channel
     vid3 = video_factory(channel_id=simple_channel.id)
     favorite = vid2.favorite = local_timezone(datetime(2000, 1, 1, 0, 0, 0))
     vid3.favorite = favorite
     test_session.commit()
     vid2_video_path = vid2.video_path.path
 
-    favorites = {simple_channel.link: {
-        vid2.video_path.path.name: {'favorite': favorite},
-        vid3.video_path.path.name: {'favorite': favorite},
-    }}
+    favorites = {
+        simple_channel.link: {vid3.video_path.path.name: {'favorite': favorite}},
+        'NO CHANNEL': {vid2.video_path.path.name: {'favorite': favorite}},
+    }
 
     # Save config, verify that favorite is set.
     save_channels_config()

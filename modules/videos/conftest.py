@@ -101,7 +101,10 @@ def video_file(test_directory) -> pathlib.Path:
 def video_factory(test_session, test_directory):
     def _(channel_id: int = None):
         title = str(uuid4())
-        path = str(test_directory / f'{title}.mp4')
+        if channel_id:
+            path = str(test_directory / f'{title}.mp4')
+        else:
+            path = str(test_directory / 'videos' / 'NO CHANNEL' / f'{title}.mp4')
         video = Video(video_path=path, title=title, channel_id=channel_id, source_id=title)
         test_session.add(video)
         return video

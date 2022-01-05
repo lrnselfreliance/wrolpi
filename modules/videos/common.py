@@ -96,16 +96,21 @@ def import_videos_config():
 
         with get_db_session(commit=True) as session:
             for channel, favorites in favorites.items():
-                channel: Channel = session.query(Channel).filter_by(link=channel).one_or_none()
-                if not channel:
-                    logger.warning(f'Cannot find channel {link=} for favorites!')
-                    continue
+                if channel and channel != 'NO CHANNEL':
+                    channel: Channel = session.query(Channel).filter_by(link=channel).one_or_none()
+                    if not channel:
+                        logger.warning(f'Cannot find channel {link=} for favorites!')
+                        continue
+                    channel_dir = channel.directory.path
+                else:
+                    from .downloader import get_no_channel_directory
+                    channel_dir = get_no_channel_directory()
 
                 # Set favorite Videos of this Channel.
                 for video_path, data in favorites.items():
                     # Favorite in the config is the name of the video_path.  Add the channel directory onto this
                     # video_path, so we can match the complete path for the Video.
-                    video_path = channel.directory.path / video_path
+                    video_path = channel_dir / video_path
                     video = session.query(Video).filter_by(video_path=video_path).one_or_none()
                     # If no Video is found, it may be that we need to refresh.
                     if video:

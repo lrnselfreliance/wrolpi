@@ -271,7 +271,10 @@ def get_channels_config(session: Session) -> dict:
     favorite_videos = session.query(Video).filter(Video.favorite != None, Video.video_path != None).all()  # noqa
     favorites = defaultdict(lambda: {})
     for video in favorite_videos:
-        favorites[video.channel.link][video.video_path.path.name] = dict(favorite=video.favorite)
+        if video.channel:
+            favorites[video.channel.link][video.video_path.path.name] = dict(favorite=video.favorite)
+        else:
+            favorites['NO CHANNEL'][video.video_path.path.name] = dict(favorite=video.favorite)
     favorites = dict(favorites)
 
     return dict(channels=channels, favorites=favorites)

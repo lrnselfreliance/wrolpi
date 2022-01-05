@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 
 from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, Computed
 from sqlalchemy.orm import relationship, Session
@@ -95,7 +95,17 @@ class Video(ModelHelper, Base):
         if not video_files:
             raise UnknownFile('No video files were deleted')
 
+        needs_save = bool(self.favorite)
+
         self.add_to_skip_list()
+        self.favorite = None
+        session = Session.object_session(self)
+        session.commit()
+
+        if needs_save:
+            # Save the Channels config.  This video was a favorite and that needs to be removed.
+            from modules.videos.lib import save_channels_config
+            save_channels_config(preserve_favorites=False)
 
     def add_to_skip_list(self):
         """
@@ -300,13 +310,6 @@ class Channel(ModelHelper, Base):
             source_id=self.source_id,
             url=self.url or '',
         )
-
-        session = Session.object_session(self)
-        favorites = session.query(Video).filter(Video.favorite != None, Video.channel_id == self.id).all()  # noqa
-        favorites: List[Video]
-        if favorites:
-            config['favorites'] = {i.video_path.path.name: {'favorite': i.favorite} for i in favorites}
-
         return config
 
     def get_relative_path(self, path: Path, exists: bool = True):

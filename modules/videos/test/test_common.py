@@ -2,6 +2,8 @@ import json
 import pathlib
 import subprocess
 import tempfile
+from datetime import datetime
+from typing import List
 from unittest import mock
 from unittest.mock import Mock, MagicMock
 
@@ -10,13 +12,15 @@ from PIL import Image
 
 from modules.videos.models import Channel, Video
 from modules.videos.test.common import create_channel_structure
-from wrolpi.common import get_absolute_media_path
+from wrolpi.common import get_absolute_media_path, get_config
+from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_session
 from wrolpi.test.common import build_test_directories, wrap_test_db, TestAPI
 from wrolpi.vars import PROJECT_DIR
 from ..common import get_matching_directories, convert_image, bulk_validate_posters, remove_duplicate_video_paths, \
     apply_info_json, get_video_duration, generate_video_poster, replace_extension, is_valid_poster, \
-    get_bulk_video_info_json
+    get_bulk_video_info_json, import_videos_config
+from ..lib import save_channels_config
 
 
 class TestCommon(TestAPI):
@@ -405,3 +409,64 @@ async def test_missing_title(test_session, simple_video):
     test_session.commit()
     await get_bulk_video_info_json([simple_video.id])
     assert simple_video.title == 'simple_video'
+
+
+def test_import_favorites(test_session, simple_channel, video_factory):
+    """
+    A favorited Video will be preserved through everything (channel deletion, DB wipe) and can be imported and will be
+    favorited again.
+
+    A Video's favorited status can only be cleared by calling `Video.delete`.
+    """
+    video_factory(channel_id=simple_channel.id)  # never favorited
+    vid2 = video_factory(channel_id=simple_channel.id)
+    vid3 = video_factory(channel_id=simple_channel.id)
+    favorite = vid2.favorite = local_timezone(datetime(2000, 1, 1, 0, 0, 0))
+    vid3.favorite = favorite
+    test_session.commit()
+    vid2_video_path = vid2.video_path.path
+
+    favorites = {simple_channel.link: {
+        vid2.video_path.path.name: {'favorite': favorite},
+        vid3.video_path.path.name: {'favorite': favorite},
+    }}
+
+    # Save config, verify that favorite is set.
+    save_channels_config()
+    config = get_config()
+    assert config['favorites'] == favorites
+
+    def import_and_verify(favorited_ids: List[int]):
+        with mock.patch('modules.videos.common.get_channel_source_id', lambda i: 'foo'):
+            import_videos_config()
+            for video in test_session.query(Video).all():
+                if video.id in favorited_ids:
+                    assert video.favorite
+                else:
+                    assert not video.favorite
+
+    # Clear the favorite (as if the DB was wiped), verify that the favorite is imported and set.
+    vid2.favorite = None
+    import_and_verify([vid2.id, vid3.id])
+
+    # Removing the video does not delete the favorite.  If the DB is wiped, we do not want to lose our favorites!
+    test_session.query(Video).filter_by(id=vid2.id).delete()
+    test_session.commit()
+    save_channels_config()
+    config = get_config()
+    assert config['favorites'] == favorites
+    import_and_verify([vid3.id])
+
+    # Add vid2 again, it should be favorited on import.
+    vid2 = Video(video_path=vid2_video_path, channel_id=simple_channel.id)
+    test_session.add(vid2)
+    test_session.commit()
+    import_and_verify([vid3.id, vid2.id])
+
+    # Deleting the Video in the model really removes the favorite status.
+    vid3.delete()
+    config = get_config()
+    assert config['favorites'] == {simple_channel.link: {
+        vid2.video_path.path.name: {'favorite': favorite}
+    }}
+    import_and_verify([vid2.id])

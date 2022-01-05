@@ -95,9 +95,9 @@ def import_videos_config():
                 session.add(channel)
 
         with get_db_session(commit=True) as session:
-            for channel, favorites in favorites.items():
-                if channel and channel != 'NO CHANNEL':
-                    channel: Channel = session.query(Channel).filter_by(link=channel).one_or_none()
+            for link, favorites in favorites.items():
+                if link != 'NO CHANNEL':
+                    channel: Channel = session.query(Channel).filter_by(link=link).one_or_none()
                     if not channel:
                         logger.warning(f'Cannot find channel {link=} for favorites!')
                         continue

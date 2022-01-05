@@ -91,11 +91,12 @@ def test_config():
     Create a test config based off the example config.
     """
     test_config_path = tempfile.NamedTemporaryFile(mode='rt')
-    with mock.patch('wrolpi.vars.CONFIG_PATH', test_config_path.name):
+    with mock.patch('wrolpi.vars.CONFIG_PATH', test_config_path.name), \
+            mock.patch('wrolpi.common.CONFIG_PATH', test_config_path.name):
         config = get_example_config()
         with open(test_config_path.name, 'wt') as fh:
             fh.write(yaml.dump(config))
-        yield
+        yield pathlib.Path(test_config_path.name)
 
 
 ROUTES_ATTACHED = False

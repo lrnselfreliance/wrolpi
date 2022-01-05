@@ -19,7 +19,7 @@ from wrolpi.downloader import Downloader, Download
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
-from .common import load_downloader_config, apply_info_json
+from .common import load_downloader_config, apply_info_json, get_channel_source_id
 from .lib import upsert_video, _refresh_videos
 from .models import Video, Channel
 from .video_url_resolver import video_url_resolver
@@ -469,8 +469,3 @@ def _skip_download(error):
         if msg in error_str:
             return True
     return False
-
-
-def get_channel_source_id(url: str) -> str:
-    channel_info = YDL.extract_info(url, download=False, process=False)
-    return channel_info.get('uploader_id') or channel_info['id']

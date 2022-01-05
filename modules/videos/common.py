@@ -11,6 +11,7 @@ from typing import Union, Tuple, List, Set, Iterable, Optional
 import PIL
 from PIL import Image
 from sqlalchemy.orm import Session
+from yt_dlp import YoutubeDL
 
 from wrolpi import before_startup
 from wrolpi.common import logger, get_config, iterify, chunks, get_media_directory, \
@@ -58,8 +59,10 @@ class ConfigError(Exception):
 @before_startup
 def import_videos_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
+    logger.info('Importing videos config')
     try:
-        config = load_channels_config()
+        config = get_config()
+        config, favorites = config['channels'], config.get('favorites', {})
 
         with get_db_session(commit=True) as session:
             for link in config:
@@ -87,19 +90,35 @@ def import_videos_config():
 
                 if not channel.source_id and channel.url:
                     # If we can download from a channel, we must have its source_id.
-                    from .downloader import get_channel_source_id
                     channel.source_id = get_channel_source_id(channel.url)
 
                 session.add(channel)
 
+        with get_db_session(commit=True) as session:
+            for link, favorites in favorites.items():
+                if link != 'NO CHANNEL':
+                    channel: Channel = session.query(Channel).filter_by(link=link).one_or_none()
+                    if not channel:
+                        logger.warning(f'Cannot find channel {link=} for favorites!')
+                        continue
+                    channel_dir = channel.directory.path
+                else:
+                    from .downloader import get_no_channel_directory
+                    channel_dir = get_no_channel_directory()
+
                 # Set favorite Videos of this Channel.
-                favorites = config[link].get('favorites', {})
-                if favorites:
-                    videos = session.query(Video).filter(Video.source_id.in_(favorites.keys()))
-                    for video in videos:
-                        video.favorite = favorites[video.source_id]['favorite']
-    except Exception:
-        logger.warning('Failed to load channels config!', exc_info=True)
+                for video_path, data in favorites.items():
+                    # Favorite in the config is the name of the video_path.  Add the channel directory onto this
+                    # video_path, so we can match the complete path for the Video.
+                    video_path = channel_dir / video_path
+                    video = session.query(Video).filter_by(video_path=video_path).one_or_none()
+                    # If no Video is found, it may be that we need to refresh.
+                    if video:
+                        video.favorite = data['favorite']
+                    else:
+                        logger.warning(f'Cannot find video to favorite: {video_path}')
+    except Exception as e:
+        logger.warning('Failed to load channels config!', exc_info=e)
 
 
 VALID_VIDEO_KINDS = {'video', 'caption', 'poster', 'description', 'info_json'}
@@ -545,3 +564,13 @@ def minimize_video(video: dict) -> dict:
         video['info_json'] = minimize_video_info_json(video['info_json'])
 
     return video
+
+
+YDL = YoutubeDL()
+YDL.params['logger'] = logger.getChild('youtube-dl')
+YDL.add_default_info_extractors()
+
+
+def get_channel_source_id(url: str) -> str:
+    channel_info = YDL.extract_info(url, download=False, process=False)
+    return channel_info.get('uploader_id') or channel_info['id']

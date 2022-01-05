@@ -3,12 +3,13 @@ import html
 import json
 import pathlib
 import re
+from collections import defaultdict
 from typing import Tuple
 from uuid import uuid1
 
 from sqlalchemy.orm import Session
 
-from wrolpi.common import logger, chunks
+from wrolpi.common import logger, chunks, get_config
 from wrolpi.common import save_settings_config
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.vars import PYTEST
@@ -264,10 +265,22 @@ def get_channels_config(session: Session) -> dict:
     """
     channels = session.query(Channel).order_by(Channel.link).all()
     channels = {i.link: i.config_view() for i in channels}
-    return dict(channels=channels)
+
+    # Get all Videos that are favorites.  Store them in their own config section, so they can be preserved if a channel
+    # is deleted or the DB is wiped.
+    favorite_videos = session.query(Video).filter(Video.favorite != None, Video.video_path != None).all()  # noqa
+    favorites = defaultdict(lambda: {})
+    for video in favorite_videos:
+        if video.channel:
+            favorites[video.channel.link][video.video_path.path.name] = dict(favorite=video.favorite)
+        else:
+            favorites['NO CHANNEL'][video.video_path.path.name] = dict(favorite=video.favorite)
+    favorites = dict(favorites)
+
+    return dict(channels=channels, favorites=favorites)
 
 
-def save_channels_config(session=None):
+def save_channels_config(session=None, preserve_favorites: bool = True):
     """
     Pull the Channel information from the DB, save it to the config.
     """
@@ -276,6 +289,8 @@ def save_channels_config(session=None):
     else:
         with get_db_session() as session:
             config = get_channels_config(session)
+    if preserve_favorites:
+        config['favorites'].update(get_config().get('favorites', {}))
     save_settings_config(config)
 
 

@@ -233,7 +233,9 @@ def save_settings_config(config=None):
     if ('channels' in config or 'channels' in local_config) and 'channels' in example_config:
         del example_config['channels']
 
-    new_config = combine_dicts(config, local_config, example_config)
+    # Create a new config using the values in order of: config -> local_config -> example_config
+    all_keys = list(config.keys()) + list(local_config.keys()) + list(example_config.keys())
+    new_config = {i: config.get(i, local_config.get(i, example_config.get(i))) for i in all_keys}
 
     logger.info(f'Writing config to file: {CONFIG_PATH}')
     with open(str(CONFIG_PATH), 'wt') as fh:

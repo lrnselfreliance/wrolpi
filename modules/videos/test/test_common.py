@@ -458,7 +458,7 @@ def test_import_favorites(test_session, simple_channel, video_factory):
     import_and_verify([vid3.id])
 
     # Add vid2 again, it should be favorited on import.
-    vid2 = Video(video_path=vid2_video_path, channel_id=simple_channel.id)
+    vid2 = Video(video_path=vid2_video_path)
     test_session.add(vid2)
     test_session.commit()
     import_and_verify([vid3.id, vid2.id])
@@ -466,7 +466,5 @@ def test_import_favorites(test_session, simple_channel, video_factory):
     # Deleting the Video in the model really removes the favorite status.
     vid3.delete()
     config = get_config()
-    assert config['favorites'] == {simple_channel.link: {
-        vid2.video_path.path.name: {'favorite': favorite}
-    }}
+    assert config['favorites'] == {'NO CHANNEL': {vid2.video_path.path.name: {'favorite': favorite}}}
     import_and_verify([vid2.id])

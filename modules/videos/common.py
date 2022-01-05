@@ -59,6 +59,7 @@ class ConfigError(Exception):
 @before_startup
 def import_videos_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
+    logger.info('Importing videos config')
     try:
         config = get_config()
         config, favorites = config['channels'], config.get('favorites', {})

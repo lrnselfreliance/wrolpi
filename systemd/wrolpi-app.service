@@ -4,7 +4,7 @@ Wants=wrolpi-api.service
 PartOf=wrolpi.target
 
 [Service]
-ExecStart=/usr/local/bin/serve -s build
+ExecStart=/usr/local/bin/serve -s build -l 5000
 Group=wrolpi
 User=wrolpi
 WorkingDirectory=/opt/wrolpi/app/

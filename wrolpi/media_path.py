@@ -18,7 +18,7 @@ class MediaPath:
         self._path = path.absolute()
 
     def __repr__(self):
-        return f'<MediaPath path={self.path}>'
+        return f'<MediaPath path={self.path.relative_to(get_media_directory())}>'
 
     @classmethod
     def _validate_path(cls, path: PATH_TYPE):

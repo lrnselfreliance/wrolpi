@@ -43,3 +43,8 @@ class TestMediaPath(unittest.TestCase):
 
         # Error is raised when the path is not in the media path.
         self.assertRaises(ValueError, MediaPath, '/tmp/foo')
+
+    def test_repr(self):
+        d = MediaPath('foo')
+        assert self.test_dir.name not in repr(d)
+        assert self.test_dir.name not in str(d)

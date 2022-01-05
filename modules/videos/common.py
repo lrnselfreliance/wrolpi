@@ -415,9 +415,9 @@ def bulk_validate_posters(video_ids: List[int]):
                     try:
                         convert_image(poster_path, new_poster_path)
                         logger.info(f'Converted invalid poster {poster_path} to {new_poster_path}')
-                    except Exception:
-                        logger.error(f'Failed to convert invalid poster {poster_path} to {new_poster_path}',
-                                     exc_info=True)
+                    except Exception as e:
+                        logger.error(f'Failed to convert invalid poster {poster_path} to {new_poster_path}', exc_info=e)
+                        continue
                 else:
                     logger.debug(f'Poster was already valid: {new_poster_path}')
 

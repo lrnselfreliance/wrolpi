@@ -15,7 +15,7 @@ from wrolpi.vars import PYTEST
 from .captions import insert_bulk_captions, process_captions
 from .common import generate_bulk_posters, get_bulk_video_info_json, get_bulk_video_size, \
     generate_video_paths, remove_duplicate_video_paths, bulk_validate_posters, \
-    apply_info_json
+    apply_info_json, import_videos_config
 from .models import Channel, Video
 
 logger = logger.getChild(__name__)
@@ -254,6 +254,7 @@ def _refresh_videos(channel_links: list = None):
 
     # Fill in any missing data for all videos.
     if not PYTEST:
+        import_videos_config()
         process_video_meta_data()
 
 

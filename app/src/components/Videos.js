@@ -391,7 +391,7 @@ class Videos extends React.Component {
             filtersEnabled,
         } = this.state;
 
-        let body = <VideoPlaceholder/>;
+        let body = <Container fluid style={{marginTop: '1em'}}><VideoPlaceholder/></Container>;
 
         if (videos && videos.length === 0) {
             // API didn't send back any videos, tell the user what to do.
@@ -426,7 +426,7 @@ class Videos extends React.Component {
         );
 
         return (
-            <Container textAlign='center' fluid>
+            <Container fluid>
                 <Grid columns={4} stackable>
                     <Grid.Column textAlign='left' width={6}>
                         <h1>
@@ -483,7 +483,7 @@ class Videos extends React.Component {
                         />
                     </Grid.Column>
                 </Grid>
-                <Container textAlign='center' fluid>
+                <Container fluid>
                     {body}
                 </Container>
                 {pagination}
@@ -542,7 +542,6 @@ export class VideosRoute extends React.Component {
                            }
                     />
                     <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
-                    <Route path='/videos/statistics' exact component={Statistics}/>
                 </Container>
             </>
         )

@@ -110,6 +110,8 @@ def import_videos_config():
                     # If no Video is found, it may be that we need to refresh.
                     if video:
                         video.favorite = data['favorite']
+                    else:
+                        logger.warning(f'Cannot find video to favorite: {video_path}')
     except Exception as e:
         logger.warning('Failed to load channels config!', exc_info=e)
 

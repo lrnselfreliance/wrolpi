@@ -3,11 +3,14 @@ import gzip
 import json
 import pathlib
 import re
+import subprocess
+import tempfile
 from itertools import groupby
 from typing import Iterator
 
 import requests
 from bs4 import BeautifulSoup
+from selenium import webdriver
 from sqlalchemy.orm import Session
 
 from modules.archive.models import Domain, Archive
@@ -15,6 +18,7 @@ from wrolpi.common import get_media_directory, logger, chunks, extract_domain
 from wrolpi.dates import now, strptime_ms, strftime_ms
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidDomain, UnknownURL, InvalidArchive
+from wrolpi.vars import DOCKERIZED
 
 logger = logger.getChild(__name__)
 
@@ -69,6 +73,8 @@ def request_archive(url: str):
     """
     Send a request to the archive service to archive the URL.
     """
+    logger.info(f'Sending archive request to archive service: {url}')
+
     data = {'url': url}
     try:
         resp = requests.post(f'{ARCHIVE_SERVICE}/json', json=data, timeout=ARCHIVE_TIMEOUT)
@@ -107,15 +113,82 @@ def request_archive(url: str):
     return singlefile, readability, screenshot
 
 
+def local_singlefile(url: str):
+    single_file_path = pathlib.Path('/usr/bin/single-file')
+    if not single_file_path.is_file():
+        raise FileNotFoundError(f'single-file not found at {single_file_path}')
+
+    cmd = (str(single_file_path),
+           url,
+           '--browser-executable-path', '/usr/bin/chromium-browser',
+           '--browser-args', '["--no-sandbox"]',
+           '--dump-content')
+    logger.debug(f'archive cmd: {cmd}')
+    output = subprocess.check_output(cmd, timeout=60 * 3)
+    logger.debug(f'done archiving for {url}')
+    return output
+
+
+def local_screenshot(url: str) -> bytes:
+    logger.info(f'Screenshot: {url}')
+
+    # Set Chromium to headless.  Use a wide window size so that screenshot will be the "desktop" version of the page.
+    options = webdriver.ChromeOptions()
+    options.add_argument('headless')
+    options.add_argument('window-size=1280x720')
+
+    driver = webdriver.Chrome(chrome_options=options)
+    try:
+        driver.get(url)
+        png = driver.get_screenshot_as_png()
+    except Exception as e:
+        logger.warning(f'Failed to screenshot {url}', exc_info=e)
+        return b''
+    return png
+
+
+def local_extract_readability(path: str, url: str) -> dict:
+    logger.info(f'readability for {url}')
+    readability_path = pathlib.Path('/usr/bin/readability-extractor')
+    if not readability_path.is_file():
+        raise FileNotFoundError(f'Readability extractor not found at {readability_path}')
+
+    cmd = (readability_path, path, url)
+    logger.debug(f'readability cmd: {cmd}')
+    output = subprocess.check_output(cmd, timeout=60 * 3)
+    output = json.loads(output)
+    logger.debug(f'done readability for {url}')
+    return output
+
+
+def local_archive(url: str):
+    """
+    Perform an archive of the provided URL using local resources (without the Archive docker container).
+    """
+    singlefile = local_singlefile(url)
+    with tempfile.NamedTemporaryFile('wb') as fh:
+        fh.write(singlefile)
+        readability = local_extract_readability(fh.name, url)
+    screenshot = local_screenshot(url)
+    singlefile = singlefile.decode()
+    return singlefile, readability, screenshot
+
+
 def do_archive(url: str) -> Archive:
     """
     Perform the real archive request to the archiving service.  Store the resulting data into files.  Create an Archive
     record in the DB.  Create Domain/URL if missing.
     """
+    logger.info(f'Archiving {url}')
     singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path = \
         get_new_archive_files(url)
 
-    singlefile, readability, screenshot = request_archive(url)
+    if DOCKERIZED:
+        # Perform the archive in the Archive docker container.  (Typically in the development environment).
+        singlefile, readability, screenshot = request_archive(url)
+    else:
+        # Perform the archive using locally installed executables.
+        singlefile, readability, screenshot = local_archive(url)
 
     # Store the single-file HTML in its own file.
     with singlefile_path.open('wt') as fh:

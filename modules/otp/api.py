@@ -7,7 +7,7 @@ from sanic.request import Request
 
 from wrolpi.root_api import get_blueprint
 from wrolpi.schema import validate_doc
-from .common import generate_html, generate_pdf, encrypt_otp, decrypt_otp
+from .common import generate_pdf, encrypt_otp, decrypt_otp
 from .schema import EncryptOTPRequest, DecryptOTPRequest
 
 bp = get_blueprint('OTP', '/api/otp')
@@ -31,11 +31,6 @@ async def post_encrypt_otp(_: Request, data: dict):
 async def post_decrypt_otp(_: Request, data: dict):
     data = decrypt_otp(data['otp'], data['ciphertext'])
     return response.json(data)
-
-
-@bp.get('/html')
-async def get_new_otp(_: Request):
-    return response.html(generate_html())
 
 
 @bp.get('/pdf')

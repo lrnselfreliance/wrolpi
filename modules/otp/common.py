@@ -1,13 +1,15 @@
 import secrets
+import subprocess
 from functools import partial
 from typing import Dict
 
-import pdfkit
-
-from wrolpi.common import chunks, remove_whitespace
+from wrolpi.common import chunks, remove_whitespace, logger, temporary_directory_path
 from wrolpi.errors import InvalidOTP, InvalidPlaintext, InvalidCiphertext
 
 # These are the only characters we support.
+
+logger = logger.getChild(__name__)
+
 OTP_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 # The number of characters in each group, separated by spaces.
 GROUP_SIZE = 5
@@ -36,48 +38,57 @@ def generate_message():
     Create a OTP message.  Format it for ease of use.
     """
     # Use 20 messages per line because this page will be printed.
-    return format_message(''.join(generate_char() for _ in range(400)), 20)
+    return format_message(''.join(generate_char() for _ in range(400)), 16)
 
 
-PAGE_HTML = '''
-<html>
-<title>One Time Pad - Unique, just for you</title>
-<style>
-/* Remove decoration from links so they are readable when printed */
-a {{ text-decoration: none; }}  // escaped for python
-</style>
-<body>
-{messages}
+ONE_TIME_PAD_TEX = r'''
+\documentclass{article}
+\usepackage{hyperref}
+\usepackage[margin=0.3in]{geometry}
+\usepackage{mathptmx}
 
+\title{One Time Pad}
 
-Print this page and distribute the copies (along with the <a href="https://lrnsr.co/aY6m">One Time Pad Cheat Sheet
-https://lrnsr.co/aY6m</a>) to all members of your group that you trust to receive your encrypted messages.  Every
-person must have their OWN copy of this "One Time Pad" to encrypt and decrypt messages.
-<br>
-<b>Use each message ONLY ONCE.</b>  Cut off and burn each message from this paper as it is used.
-<br>
-If you want more One Time Pads, simply <a href=".">go here to refresh the page:
-https://learningselfreliance.com/one_time_pad</a>.  The server will generate a unique page just for you. This page
-is not stored on the server, and cannot be retrieved once you close this window!
-<br>
-To learn how to use this page, please visit: <a href="https://lrnsr.co/H7Za">https://lrnsr.co/H7Za</a>
-</body>
-</html>
+\begin{document}
+
+\begin{verbatim}
+%s
+\end{verbatim}
+
+Print this page and distribute the copies (along with the \href{https://lrnsr.co/aY6m}{One Time Pad Cheat Sheet
+https://lrnsr.co/aY6m}) to all members of your group that you trust to receive your encrypted messages.  Every person
+must have their OWN copy of this “One Time Pad” to encrypt and decrypt messages.
+\\
+
+\textbf{Use each message ONLY ONCE}.  Cut off and burn each message from this paper as it is used.
+\\
+
+To learn how to use this page, please visit: \href{https://lrnsr.co/H7Za}{https://lrnsr.co/H7Za}
+
+\end{document}
 '''
 
 
-def generate_html() -> str:
+def generate_pdf() -> bytes:
     """
-    Create an HTML One-Time Pad page.   This page will have instructions on how to use the OTP.
+    Create a PDF One Time Pad.
     """
-    messages = [generate_message() for _ in range(9)]
-    messages = '\n\n'.join(f'<pre>MESSAGE {i}</pre><pre>{j}</pre>' for i, j in enumerate(messages, 1))
-    return PAGE_HTML.format(messages=messages)
-
-
-def generate_pdf():
-    # Use False to return bytes, rather than saving to file.
-    return pdfkit.from_string(generate_html(), False)
+    messages = '\n\n'.join(f'MESSAGE {i}\n{generate_message()}' for i in range(1, 8))
+    with temporary_directory_path() as d:
+        tex_path = d / 'otp.tex'
+        tex_path.write_text(ONE_TIME_PAD_TEX % messages)
+        cmd = ('pdflatex', tex_path)
+        try:
+            subprocess.check_output(cmd, cwd=d)
+            # Output path is chosen by `pdflatex`.
+            pdf_path = tex_path.with_suffix('.pdf')
+            contents = pdf_path.read_bytes()
+        except Exception as e:
+            logger.fatal(f'Failed to generate One Time Pad PDF!', exc_info=e)
+            raise
+    # Files are cleaned up.
+    assert not d.is_dir()
+    return contents
 
 
 def validate_message(otp, error_class):

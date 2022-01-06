@@ -121,6 +121,7 @@ def periodic_downloads(app: Sanic, loop):
     if wrol_mode_enabled():
         logger.warning(f'Not starting download worker because WROL Mode is enabled.')
         return
+    return
     logger.info('Starting download manager.')
 
     # Set all downloads to new.

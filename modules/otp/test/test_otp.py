@@ -1,6 +1,6 @@
 import pytest
 
-from modules.otp.common import format_message, encrypt_otp, decrypt_otp
+from modules.otp.common import format_message, encrypt_otp, decrypt_otp, generate_pdf
 
 
 @pytest.mark.parametrize(
@@ -82,8 +82,22 @@ def test_decrypt_otp(otp, ciphertext, plaintext):
                 'ABCDEFGHIJKLMNOPQRSTUVWXYZ01234567890',
                 'ABCDE FGHIJ KLMNO PQRST UVWXY\nZ0123 45678 90',
         ),
+        (
+                ''.join('A' for _ in range(94)),
+                'AAAAA AAAAA AAAAA AAAAA AAAAA\n'
+                'AAAAA AAAAA AAAAA AAAAA AAAAA\n'
+                'AAAAA AAAAA AAAAA AAAAA AAAAA\n'
+                'AAAAA AAAAA AAAAA AAAA'
+        ),
     ]
 )
 def test_format_message(message, expected):
     result = format_message(message)
     assert result == expected
+
+
+def test_latex_pdf():
+    """
+    Generate a OTP PDF.
+    """
+    assert generate_pdf()

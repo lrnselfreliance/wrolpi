@@ -49,7 +49,6 @@ ONE_TIME_PAD_TEX = r'''
 \usepackage[margin=0.5in]{geometry}
 
 \title{otp}
-\author{roland}
 \date{January 2022}
 
 \begin{document}

@@ -1,5 +1,6 @@
 import asyncio
 import collections
+import contextlib
 import inspect
 import json
 import logging
@@ -7,6 +8,7 @@ import pathlib
 import queue
 import re
 import string
+import tempfile
 from datetime import datetime, date
 from functools import wraps
 from itertools import islice
@@ -506,3 +508,9 @@ def api_param_limiter(maximum: int, default: int = 20) -> callable:
         return min(int(i), maximum)
 
     return limiter_
+
+
+@contextlib.contextmanager
+def temporary_directory_path(*a, **kw):
+    with tempfile.TemporaryDirectory(*a, **kw) as d:
+        yield pathlib.Path(d)

@@ -5,7 +5,7 @@ import tempfile
 from functools import partial
 from typing import Dict
 
-from wrolpi.common import chunks, remove_whitespace, logger
+from wrolpi.common import chunks, remove_whitespace, logger, temporary_directory_path
 from wrolpi.errors import InvalidOTP, InvalidPlaintext, InvalidCiphertext
 
 # These are the only characters we support.
@@ -77,13 +77,13 @@ def generate_pdf() -> bytes:
     Create a PDF One Time Pad.
     """
     messages = '\n\n'.join(f'MESSAGE {i}\n{generate_message()}' for i in range(1, 8))
-    with tempfile.TemporaryDirectory() as d:
-        d = pathlib.Path(d)
+    with temporary_directory_path() as d:
         tex_path = d / 'otp.tex'
         tex_path.write_text(ONE_TIME_PAD_TEX % messages)
         cmd = ('pdflatex', tex_path)
         try:
             subprocess.check_output(cmd, cwd=d)
+            # Output path is chosen by `pdflatex`.
             pdf_path = tex_path.with_suffix('.pdf')
             contents = pdf_path.read_bytes()
         except Exception as e:

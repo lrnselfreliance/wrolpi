@@ -5,7 +5,7 @@ WORKDIR /opt/wrolpi
 # Update dependencies for the services install.
 RUN apt update
 # ffmpeg for Videos and Latex for OTP PDF.
-RUN apt-get install -y ffmpeg texlive-latex-base
+RUN apt-get install -y ffmpeg texlive-latex-base texlive-latex-extra
 RUN pdflatex --version
 
 # Install WROLPi

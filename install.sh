@@ -47,7 +47,7 @@ curl -fsSL https://deb.nodesource.com/setup_14.x | bash -
 # Install dependencies
 apt install -y git apt-transport-https ca-certificates curl gnupg-agent gcc libpq-dev software-properties-common \
   postgresql-12 nginx-full nginx-doc python3.8-minimal python3.8-dev python3.8-doc python3.8-venv \
-  ffmpeg hostapd nodejs yarn texlive-latex-base
+  ffmpeg hostapd nodejs yarn texlive-latex-base texlive-latex-extra
 
 # Get the latest WROLPi code
 git --version

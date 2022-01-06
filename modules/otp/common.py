@@ -44,10 +44,10 @@ def generate_message():
 ONE_TIME_PAD_TEX = r'''
 \documentclass{article}
 \usepackage{hyperref}
-\usepackage[margin=0.5in]{geometry}
+\usepackage[margin=0.3in]{geometry}
+\usepackage{mathptmx}
 
-\title{otp}
-\date{January 2022}
+\title{One Time Pad}
 
 \begin{document}
 

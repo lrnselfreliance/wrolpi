@@ -13,6 +13,7 @@ from wrolpi.common import logger, get_config, wrol_mode_enabled, import_modules
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
 from wrolpi.vars import PROJECT_DIR
+from wrolpi.version import __version__, git_commit
 
 logger = logger.getChild('wrolpi-main')
 
@@ -45,6 +46,7 @@ def db_main(args):
 async def main(loop):
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='count')
+    parser.add_argument('--version', action='store_true', default=False)
 
     sub_commands = parser.add_subparsers(title='sub-commands', dest='sub_commands')
 
@@ -57,9 +59,15 @@ async def main(loop):
     db_parser.add_argument('command', help=f'Supported commands: upgrade, downgrade')
 
     args = parser.parse_args()
-    logger.warning(f'Starting with: {sys.argv}')
 
+    if args.version:
+        # Print out the relevant version information, then exit.
+        print(f'{__version__} (git revision: {git_commit()})')
+        return 0
+
+    logger.warning(f'Starting with: {sys.argv}')
     await set_log_level(args)
+    logger.debug(f'git revision: {git_commit()}')
 
     # Run DB migrations before anything else.
     if args.sub_commands == 'db':

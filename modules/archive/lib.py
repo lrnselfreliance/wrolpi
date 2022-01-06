@@ -18,7 +18,7 @@ from wrolpi.common import get_media_directory, logger, chunks, extract_domain
 from wrolpi.dates import now, strptime_ms, strftime_ms
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidDomain, UnknownURL, InvalidArchive
-from wrolpi.vars import DOCKERIZED
+from wrolpi.vars import DOCKERIZED, PYTEST
 
 logger = logger.getChild(__name__)
 
@@ -114,6 +114,9 @@ def request_archive(url: str):
 
 
 def local_singlefile(url: str):
+    """
+    Run the single-file executable to create an HTML file archive.
+    """
     single_file_path = pathlib.Path('/usr/bin/single-file')
     if not single_file_path.is_file():
         raise FileNotFoundError(f'single-file not found at {single_file_path}')
@@ -130,6 +133,9 @@ def local_singlefile(url: str):
 
 
 def local_screenshot(url: str) -> bytes:
+    """
+    Take a screenshot of the URL using selenium.
+    """
     logger.info(f'Screenshot: {url}')
 
     # Set Chromium to headless.  Use a wide window size so that screenshot will be the "desktop" version of the page.
@@ -148,6 +154,9 @@ def local_screenshot(url: str) -> bytes:
 
 
 def local_extract_readability(path: str, url: str) -> dict:
+    """
+    Extract the readability from an HTML file, typically from single-file.
+    """
     logger.info(f'readability for {url}')
     readability_path = pathlib.Path('/usr/bin/readability-extractor')
     if not readability_path.is_file():
@@ -183,7 +192,7 @@ def do_archive(url: str) -> Archive:
     singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path = \
         get_new_archive_files(url)
 
-    if DOCKERIZED:
+    if DOCKERIZED or PYTEST:
         # Perform the archive in the Archive docker container.  (Typically in the development environment).
         singlefile, readability, screenshot = request_archive(url)
     else:

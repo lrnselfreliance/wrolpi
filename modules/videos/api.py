@@ -130,6 +130,6 @@ async def statistics(_: Request):
     return json_response(ret, HTTPStatus.OK)
 
 
-# @before_startup
-# def startup_spread_channel_downloads():
-#     channel_lib.spread_channel_downloads()
+@before_startup
+def startup_spread_channel_downloads():
+    channel_lib.spread_channel_downloads()

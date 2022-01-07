@@ -193,10 +193,7 @@ async def post_download(request: Request, data: dict):
     summary='Get all Downloads that need to be processed.',
 )
 async def get_downloads(request: Request):
-    data = dict(
-        recurring_downloads=download_manager.get_recurring_downloads(),
-        once_downloads=download_manager.get_once_downloads(limit=100),
-    )
+    data = download_manager.get_fe_downloads()
     return json_response(data)
 
 

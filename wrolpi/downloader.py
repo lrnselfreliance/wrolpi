@@ -535,6 +535,14 @@ class DownloadManager:
         """
         return list(filter(lambda i: i.listable, self.instances))
 
+    @optional_session
+    def get_fe_downloads(self, session: Session = None):
+        data = dict(
+            recurring_downloads=self.get_recurring_downloads(session=session),
+            once_downloads=self.get_once_downloads(session=session, limit=100),
+        )
+        return data
+
 
 # The global DownloadManager.  This should be used everywhere!
 download_manager = DownloadManager()

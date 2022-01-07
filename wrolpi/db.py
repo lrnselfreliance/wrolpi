@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 from functools import wraps
-from typing import ContextManager, Tuple, List
+from typing import ContextManager, Tuple, List, Union
 
 import psycopg2
 import sqlalchemy.exc
@@ -8,7 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import NullPool
 
-from wrolpi.common import logger, Base
+from wrolpi.common import logger, Base, partition
 from wrolpi.vars import DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DOCKERIZED, PYTEST
 
 logger = logger.getChild(__name__)
@@ -114,27 +114,47 @@ def get_db_curs(commit: bool = False):
             connection.rollback()
 
 
-def optional_session(commit: bool = False):
+def optional_session(commit: Union[callable, bool] = False):
     """
-    Wraps a function, if a Session is passed as keyword `session`, it will be used.  Otherwise, a new session will be
+    Wraps a function, if a Session is passed it will be used.  Otherwise, a new session will be
     created and passed to the function.
     """
 
-    def wrapper(func: callable):
-        @wraps(func)
-        def wrapped(*a, session: Session = None, **kw):
+    def find_session(*f_args, session: Session = None, **f_kwargs):
+        session = f_kwargs.get('session', session)
+        if not session:
+            # Find the session in the args.
+            session, new_args = partition(lambda i: isinstance(i, Session), f_args)
             if session:
-                return func(*a, **kw, session=session)
-            else:
-                with get_db_session(commit=commit) as session:
-                    return func(*a, **kw, session=session)
+                session = session[0]
+                f_args = tuple(new_args)
+        return session, f_args, f_kwargs
 
-        return wrapped
+    def call_func(func, session, args, kwargs):
+        if session:
+            return func(*args, session=session, **kwargs)
+        else:
+            with get_db_session() as session:
+                return func(*args, session=session, **kwargs)
+
+    def wrapper(*w_args, **w_kwargs):
+        if len(w_args) == 1 and len(w_kwargs) == 0 and callable(w_args[0]):
+            func = w_args[0]
+
+            @wraps(func)
+            def wrapped(*args, session: Session = None, **kwargs):
+                session, args, kwargs = find_session(*args, session=session, **kwargs)
+                return call_func(func, session, args, kwargs)
+
+            return wrapped
+        else:
+            session_, w_args, w_kwargs = find_session(*w_args, **w_kwargs)
+            return call_func(commit, session_, w_args, w_kwargs)
 
     return wrapper
 
 
-@optional_session()
+@optional_session
 def get_ranked_models(ranked_ids: List[int], model: Base, session: Session = None) -> List[Base]:
     """
     Get all objects whose ids are in the `ranked_ids`, order them by their position in `ranked_ids`.

@@ -11,7 +11,7 @@ import string
 import tempfile
 from datetime import datetime, date
 from functools import wraps
-from itertools import islice
+from itertools import islice, filterfalse, tee
 from multiprocessing import Event, Queue
 from pathlib import Path
 from typing import Union, Callable, Tuple, Dict, Mapping, List, Iterable, Optional
@@ -514,3 +514,15 @@ def api_param_limiter(maximum: int, default: int = 20) -> callable:
 def temporary_directory_path(*a, **kw):
     with tempfile.TemporaryDirectory(*a, **kw) as d:
         yield pathlib.Path(d)
+
+
+def partition(pred, iterable):
+    """
+    Use a predicate to partition entries into false entries
+    and true entries
+    >>> is_even = lambda i: not i % 2
+    >>> partition(is_even, range(10))
+    ([0, 2, 4, 6, 8], [1, 3, 5, 7, 9])
+    """
+    t1, t2 = tee(iterable)
+    return list(filter(pred, t2)), list(filterfalse(pred, t1))

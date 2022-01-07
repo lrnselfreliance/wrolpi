@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi.common import Base, ModelHelper, logger, iterify
 from wrolpi.dates import TZDateTime, now
-from wrolpi.db import get_db_session, get_db_curs, get_db_context
+from wrolpi.db import get_db_session, get_db_curs, get_db_context, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
 
@@ -309,14 +309,12 @@ class DownloadManager:
 
         return downloads
 
+    @optional_session
     def _do_downloads(self, session=None):
         """
         This method calls the Downloader's do_download method.
         """
         # This is a long-running function, lets get a session that can be used for a long time.
-        if not session:
-            _, session = get_db_context()
-
         try:
             downloads = self.get_new_downloads(session)
 
@@ -422,12 +420,11 @@ class DownloadManager:
         for sort in cls.DOWNLOAD_SORT:
             yield from grouped_by_statuses[sort]  # converted to a list by iterify()
 
+    @optional_session
     def get_recurring_downloads(self, session: Session = None, limit: int = None):
         """
         Get all Downloads that will be downloaded in the future.
         """
-        if not session:
-            _, session = get_db_context()
         query = session.query(Download).filter(
             Download.frequency != None  # noqa
         ).order_by(
@@ -440,12 +437,11 @@ class DownloadManager:
         downloads = self._downloads_sorter(downloads)
         return downloads
 
+    @optional_session
     def get_once_downloads(self, session: Session = None, limit: int = None):
         """
         Get all Downloads that will not reoccur.
         """
-        if not session:
-            _, session = get_db_context()
         query = session.query(Download).filter(
             Download.frequency == None  # noqa
         ).order_by(
@@ -458,13 +454,12 @@ class DownloadManager:
         downloads = self._downloads_sorter(downloads)
         return downloads
 
+    @optional_session
     def renew_recurring_downloads(self, session: Session = None):
         """
         Mark any recurring downloads that are due for download as "new".  Start a download.
         """
         now_ = now()
-        if not session:
-            _, session = get_db_context()
 
         recurring = self.get_recurring_downloads(session)
         renewed = False
@@ -493,12 +488,11 @@ class DownloadManager:
         elif id:
             return query.filter_by(id=id_).one_or_none()
 
+    @optional_session
     def delete_download(self, download_id: int, session: Session = None):
         """
         Delete a Download.  Returns True if a Download was deleted, otherwise return False.
         """
-        if not session:
-            _, session = get_db_context()
         download = self.get_download(session, id_=download_id)
         if download:
             session.delete(download)

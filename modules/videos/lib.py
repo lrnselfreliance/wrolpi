@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi.common import logger, chunks, get_config
 from wrolpi.common import save_settings_config
-from wrolpi.db import get_db_curs, get_db_session
+from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.vars import PYTEST
 from .captions import insert_bulk_captions, process_captions
 from .common import generate_bulk_posters, get_bulk_video_info_json, get_bulk_video_size, \
@@ -280,15 +280,12 @@ def get_channels_config(session: Session) -> dict:
     return dict(channels=channels, favorites=favorites)
 
 
+@optional_session()
 def save_channels_config(session=None, preserve_favorites: bool = True):
     """
     Pull the Channel information from the DB, save it to the config.
     """
-    if session:
-        config = get_channels_config(session)
-    else:
-        with get_db_session() as session:
-            config = get_channels_config(session)
+    config = get_channels_config(session)
     if preserve_favorites:
         config['favorites'].update(get_config().get('favorites', {}))
     save_settings_config(config)

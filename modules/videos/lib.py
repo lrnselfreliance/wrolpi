@@ -176,6 +176,11 @@ def refresh_channel_videos(channel: Channel):
 
     logger.info(f'{channel.name}: {len(new_videos)} new videos, {len(existing_paths)} already existed. ')
 
+    with get_db_session(commit=True) as session:
+        # All videos have been discovered, mark the channel as refreshed.
+        channel.refreshed = True
+        session.add(channel)
+
     apply_info_json(channel.id)
 
 

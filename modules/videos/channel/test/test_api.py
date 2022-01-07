@@ -607,3 +607,21 @@ def test_channel_empty_url_doesnt_conflict(test_session, test_directory):
     request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
     assert response.status_code == HTTPStatus.CREATED, response.json
     assert location != response.headers['Location']
+
+
+def test_download_channel_no_refresh(test_session, download_channel, video_download_manager):
+    """
+    A Channel cannot be downloaded until it has been refreshed.
+    """
+    def check_refreshed(expected: bool):
+        channel = test_session.query(Channel).one()
+        assert channel.refreshed == expected
+
+    check_refreshed(False)
+    test_session.commit()
+
+    with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
+        mock_extract_info.return_value = {'entries': [], 'url': 'foo'}
+        video_download_manager.do_downloads_sync()
+
+    check_refreshed(True)

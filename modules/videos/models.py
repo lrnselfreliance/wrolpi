@@ -261,6 +261,7 @@ class Channel(ModelHelper, Base):
     calculate_duration = Column(Boolean)
     download_frequency = Column(Integer)
     source_id = Column(String)
+    refreshed = Column(Boolean, default=False)
 
     info_json = Column(JSON)
     info_date = Column(Date)

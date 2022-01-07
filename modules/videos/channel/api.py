@@ -53,7 +53,9 @@ def channel_get(_: Request, link: str):
 @wrol_mode_check
 def channel_post(_: Request, data: dict):
     try:
-        data['directory'] = get_relative_to_media_directory(data['directory'])
+        directory = data['directory'] = get_relative_to_media_directory(data['directory'])
+        if not directory.is_dir():
+            raise UnknownDirectory(str(directory))
     except UnknownDirectory:
         if data['mkdir']:
             make_media_directory(data['directory'])

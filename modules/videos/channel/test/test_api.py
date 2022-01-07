@@ -121,99 +121,6 @@ class TestVideoAPI(TestAPI):
         assert response.status_code == HTTPStatus.NOT_FOUND
 
     @wrap_test_db
-    def test_channel_conflicts(self):
-        with tempfile.TemporaryDirectory() as media_dir, \
-                mock.patch('wrolpi.common.get_media_directory', lambda: pathlib.Path(media_dir)):
-            channel_directory = tempfile.TemporaryDirectory(dir=media_dir).name
-            pathlib.Path(channel_directory).mkdir()
-            new_channel = dict(
-                directory=channel_directory,
-                match_regex='asdf',
-                name='Example Channel 1',
-                url='https://example.com/channel1',
-            )
-
-            def _post_channel(channel):
-                return api_app.test_client.post('/api/videos/channels', content=json.dumps(channel))
-
-            # Create it
-            request, response = _post_channel(new_channel)
-            assert response.status_code == HTTPStatus.CREATED
-
-            # Name is an exact match
-            channel_directory2 = tempfile.TemporaryDirectory(dir=media_dir).name
-            pathlib.Path(channel_directory2).mkdir()
-            new_channel = dict(
-                directory=channel_directory2,
-                name='Example Channel 1',
-            )
-            request, response = _post_channel(new_channel)
-            assert response.status_code == HTTPStatus.BAD_REQUEST
-            assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
-                                     'cause': {'error': 'The channel name is already taken.', 'code': 5}}
-
-            # Name matches when converted to link
-            channel_directory2 = tempfile.TemporaryDirectory(dir=media_dir).name
-            pathlib.Path(channel_directory2).mkdir()
-            new_channel = dict(
-                directory=channel_directory2,
-                name='Example channel 1',
-            )
-            request, response = _post_channel(new_channel)
-            assert response.status_code == HTTPStatus.BAD_REQUEST
-            assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
-                                     'cause': {'code': 11, 'error': 'Channel link already used by another channel'}}
-
-            # Directory was already used
-            new_channel = dict(
-                directory=channel_directory,
-                name='name is fine',
-            )
-            request, response = _post_channel(new_channel)
-            assert response.status_code == HTTPStatus.BAD_REQUEST
-            assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
-                                     'cause': {'code': 7, 'error': 'The directory is already used by another channel.'}}
-
-            # URL is already used
-            channel_directory3 = tempfile.TemporaryDirectory(dir=media_dir).name
-            pathlib.Path(channel_directory3).mkdir()
-            new_channel = dict(
-                directory=channel_directory3,
-                name='name is fine',
-                url='https://example.com/channel1',
-            )
-            request, response = _post_channel(new_channel)
-            assert response.status_code == HTTPStatus.BAD_REQUEST
-            assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
-                                     'cause': {'code': 6, 'error': 'The URL is already used by another channel.'}}
-
-    @wrap_test_db
-    def test_channel_empty_url_doesnt_conflict(self):
-        """Two channels with empty URLs shouldn't conflict"""
-        with tempfile.TemporaryDirectory() as media_dir, \
-                mock.patch('wrolpi.common.get_media_directory', lambda: pathlib.Path(media_dir)):
-            channel_directory = tempfile.TemporaryDirectory(dir=media_dir).name
-            pathlib.Path(channel_directory).mkdir()
-
-            new_channel = {
-                'name': 'Fooz',
-                'directory': channel_directory,
-            }
-            request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
-            assert response.status_code == HTTPStatus.CREATED, response.json
-            location = response.headers['Location']
-
-            channel_directory2 = tempfile.TemporaryDirectory(dir=media_dir).name
-            pathlib.Path(channel_directory2).mkdir()
-            new_channel = {
-                'name': 'Barz',
-                'directory': channel_directory2,
-            }
-            request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
-            assert response.status_code == HTTPStatus.CREATED, response.json
-            assert location != response.headers['Location']
-
-    @wrap_test_db
     def test_refresh_no_channel(self):
         with get_db_session() as session:
             videos_path = pathlib.Path(self.tmp_dir.name) / 'videos'
@@ -611,3 +518,92 @@ def test_video_file_name(test_session, simple_video, test_client):
     assert resp.status_code == HTTPStatus.OK
     assert resp.json['video']['video_path'] == 'simple_video.mp4'
     assert resp.json['video'].get('stem') == 'simple_video'
+
+
+def test_channel_conflicts(test_session, test_directory):
+    channel_directory = tempfile.TemporaryDirectory(dir=test_directory).name
+    pathlib.Path(channel_directory).mkdir()
+    new_channel = dict(
+        directory=channel_directory,
+        match_regex='asdf',
+        name='Example Channel 1',
+        url='https://example.com/channel1',
+    )
+
+    def _post_channel(channel):
+        return api_app.test_client.post('/api/videos/channels', content=json.dumps(channel))
+
+    # Create it
+    request, response = _post_channel(new_channel)
+    assert response.status_code == HTTPStatus.CREATED
+
+    # Name is an exact match
+    channel_directory2 = tempfile.TemporaryDirectory(dir=test_directory).name
+    pathlib.Path(channel_directory2).mkdir()
+    new_channel = dict(
+        directory=channel_directory2,
+        name='Example Channel 1',
+    )
+    request, response = _post_channel(new_channel)
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
+                             'cause': {'error': 'The channel name is already taken.', 'code': 5}}
+
+    # Name matches when converted to link
+    channel_directory2 = tempfile.TemporaryDirectory(dir=test_directory).name
+    pathlib.Path(channel_directory2).mkdir()
+    new_channel = dict(
+        directory=channel_directory2,
+        name='Example channel 1',
+    )
+    request, response = _post_channel(new_channel)
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
+                             'cause': {'code': 11, 'error': 'Channel link already used by another channel'}}
+
+    # Directory was already used
+    new_channel = dict(
+        directory=channel_directory,
+        name='name is fine',
+    )
+    request, response = _post_channel(new_channel)
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
+                             'cause': {'code': 7, 'error': 'The directory is already used by another channel.'}}
+
+    # URL is already used
+    channel_directory3 = tempfile.TemporaryDirectory(dir=test_directory).name
+    pathlib.Path(channel_directory3).mkdir()
+    new_channel = dict(
+        directory=channel_directory3,
+        name='name is fine',
+        url='https://example.com/channel1',
+    )
+    request, response = _post_channel(new_channel)
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
+                             'cause': {'code': 6, 'error': 'The URL is already used by another channel.'}}
+
+
+def test_channel_empty_url_doesnt_conflict(test_session, test_directory):
+    """Two channels with empty URLs shouldn't conflict"""
+    channel_directory = tempfile.TemporaryDirectory(dir=test_directory).name
+    pathlib.Path(channel_directory).mkdir()
+
+    new_channel = {
+        'name': 'Fooz',
+        'directory': channel_directory,
+    }
+    request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
+    assert response.status_code == HTTPStatus.CREATED, response.json
+    location = response.headers['Location']
+
+    channel_directory2 = tempfile.TemporaryDirectory(dir=test_directory).name
+    pathlib.Path(channel_directory2).mkdir()
+    new_channel = {
+        'name': 'Barz',
+        'directory': channel_directory2,
+    }
+    request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
+    assert response.status_code == HTTPStatus.CREATED, response.json
+    assert location != response.headers['Location']

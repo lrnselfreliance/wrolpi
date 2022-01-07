@@ -11,6 +11,7 @@ PUBLIC_HOST = os.environ.get('PUBLIC_HOST')
 PUBLIC_PORT = os.environ.get('PUBLIC_PORT')
 
 DOCKERIZED = True if os.environ.get('DOCKER', '').lower().startswith('t') else False
+# tests are running
 PYTEST = 'pytest' in sys.modules
 
 DEFAULT_TIMEZONE_STR = 'America/Boise'

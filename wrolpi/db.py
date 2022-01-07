@@ -71,7 +71,10 @@ def get_db_context() -> Tuple[create_engine, Session]:
     """
     Get a DB engine and session.
     """
-    return _get_db_session()
+    local_engine, session = _get_db_session()
+    if PYTEST and 'wrolpi_testing' not in str(local_engine.url):
+        raise ValueError(f'Running tests, but a test database is not being used!! {local_engine.url=}')
+    return local_engine, session
 
 
 @contextmanager

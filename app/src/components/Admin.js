@@ -399,7 +399,7 @@ class Downloads extends React.Component {
                 <Button
                     onClick={this.openStop}
                     color='red'
-                >Stop All</Button>
+                >Disable Downloads</Button>
                 <Confirm
                     open={stopOpen}
                     content='Are you sure you want to stop all downloads?'
@@ -414,7 +414,7 @@ class Downloads extends React.Component {
                 <Button
                     onClick={this.openStop}
                     color='green'
-                >Start All</Button>
+                >Enable Downloads</Button>
                 <Confirm
                     open={stopOpen}
                     content='Are you sure you want to start all downloads?'

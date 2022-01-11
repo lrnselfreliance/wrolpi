@@ -152,6 +152,9 @@ def update_settings(_: Request, data: dict):
 
     save_settings_config(data)
 
+    if data.get('wrolpi_mode'):
+        download_manager.kill()
+
     return response.raw('', HTTPStatus.NO_CONTENT)
 
 
@@ -203,6 +206,18 @@ async def kill_download(request: Request, download_id: int):
     return response.empty()
 
 
+@root_api.post('/download/kill')
+async def kill_downloads(request: Request):
+    download_manager.kill()
+    return response.empty()
+
+
+@root_api.post('/download/enable')
+async def enable_downloads(request: Request):
+    download_manager.enable()
+    return response.empty()
+
+
 @root_api.delete('/download/<download_id:integer>')
 @wrol_mode_check
 async def delete_download(request: Request, download_id: int):
@@ -214,7 +229,8 @@ async def delete_download(request: Request, download_id: int):
 async def get_downloaders(request: Request):
     downloaders = download_manager.list_downloaders()
     downloaders.insert(0, dict(name='auto', pretty_name='Automatic'))
-    ret = dict(downloaders=downloaders)
+    disabled = download_manager.disabled.is_set()
+    ret = dict(downloaders=downloaders, manager_disabled=disabled)
     return json_response(ret)
 
 

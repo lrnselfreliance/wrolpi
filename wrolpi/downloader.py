@@ -204,6 +204,7 @@ class DownloadManager:
     def __init__(self):
         self.instances = tuple()
         self._instances = dict()
+        self.disabled = multiprocessing.Event()
 
     def register_downloader(self, instance: Downloader):
         if not isinstance(instance, Downloader):
@@ -316,6 +317,9 @@ class DownloadManager:
         This method calls the Downloader's do_download method.
         """
         # This is a long-running function, lets get a session that can be used for a long time.
+        if self.disabled.is_set():
+            raise InvalidDownload('DownloadManager is disabled')
+
         try:
             downloads = self.get_new_downloads(session)
 
@@ -516,6 +520,31 @@ class DownloadManager:
                 downloader.kill()
             download.fail()
 
+    def kill(self):
+        """
+        Kill all downloads.
+        """
+        self.disabled.set()
+        try:
+            with get_db_session(commit=True) as session:
+                downloads = self.get_pending_downloads(session)
+                for download in downloads:
+                    if not download.downloader:
+                        downloader, _ = self.get_downloader(download.url)
+                    else:
+                        downloader = self.get_downloader_by_name(download.downloader)
+                    downloader.kill()
+                    download.defer()
+        except Exception as e:
+            logger.critical(f'Failed to kill downloads!', exc_info=e)
+
+    def enable(self):
+        """
+        Enable downloading.  Start downloading.
+        """
+        self.disabled.clear()
+        self.start_downloads()
+
     FINISHED_STATUSES = ('complete', 'failed')
 
     def delete_old_once_downloads(self):
@@ -543,6 +572,10 @@ class DownloadManager:
             once_downloads=self.get_once_downloads(session=session, limit=100),
         )
         return data
+
+    @optional_session
+    def get_pending_downloads(self, session: Session):
+        return session.query(Download).filter_by(status='pending').all()
 
 
 # The global DownloadManager.  This should be used everywhere!

@@ -12,7 +12,16 @@ import {
     Tab,
     Table
 } from "semantic-ui-react";
-import {getConfig, getDownloads, killDownload, postDownload, saveConfig} from "../api";
+import {
+    getConfig,
+    getDownloaders,
+    getDownloads,
+    killDownload,
+    killDownloads,
+    postDownload,
+    saveConfig,
+    startDownloads
+} from "../api";
 import TimezoneSelect from 'react-timezone-select';
 import {secondsToDate, secondsToFrequency} from "./Common";
 
@@ -288,11 +297,32 @@ class Downloads extends React.Component {
             once_downloads: null,
             recurring_downloads: null,
             pending_downloads: null,
+            stopOpen: false,
+            disabled: true,
         };
     }
 
     async componentDidMount() {
         await this.fetchDownloads();
+        await this.fetchStatus();
+    }
+
+    killDownloads = async () => {
+        await killDownloads();
+        this.setState({stopOpen: false}, this.fetchStatus);
+    }
+
+    startDownloads = async () => {
+        await startDownloads();
+        this.setState({stopOpen: false}, this.fetchStatus);
+    }
+
+    closeStop = () => {
+        this.setState({stopOpen: false});
+    }
+
+    openStop = () => {
+        this.setState({stopOpen: true});
     }
 
     fetchDownloads = async () => {
@@ -302,6 +332,11 @@ class Downloads extends React.Component {
             recurring_downloads: data.recurring_downloads,
             pending_downloads: data.pending_downloads,
         });
+    }
+
+    fetchStatus = async () => {
+        let data = await getDownloaders();
+        this.setState({disabled: data['manager_disabled']});
     }
 
     render() {
@@ -359,8 +394,40 @@ class Downloads extends React.Component {
             </Table>);
         }
 
+        let {stopOpen} = this.state;
+        let allButton = (<>
+                <Button
+                    onClick={this.openStop}
+                    color='red'
+                >Stop All</Button>
+                <Confirm
+                    open={stopOpen}
+                    content='Are you sure you want to stop all downloads?'
+                    confirmButton='Stop'
+                    onCancel={this.closeStop}
+                    onConfirm={this.killDownloads}
+                />
+            </>
+        );
+        if (this.state.disabled) {
+            allButton = (<>
+                <Button
+                    onClick={this.openStop}
+                    color='green'
+                >Start All</Button>
+                <Confirm
+                    open={stopOpen}
+                    content='Are you sure you want to start all downloads?'
+                    confirmButton='Start'
+                    onCancel={this.closeStop}
+                    onConfirm={this.startDownloads}
+                />
+            </>);
+        }
+
         return (
             <div>
+                {allButton}
                 <Header as='h1'>Downloads</Header>
                 {onceTable}
 

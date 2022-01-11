@@ -358,6 +358,18 @@ export async function killDownload(download_id) {
     return response;
 }
 
+
+export async function killDownloads() {
+    let response = await apiPost(`${API_URI}/download/kill`);
+    return response;
+}
+
+
+export async function startDownloads() {
+    let response = await apiPost(`${API_URI}/download/enable`);
+    return response;
+}
+
 export async function getDownloaders() {
     let response = await apiGet(`${API_URI}/downloaders`);
     return await response.json();

@@ -50,6 +50,11 @@ class Download(ModelHelper, Base):
     info_json = Column(JSONB)
     downloader = Column(Text)
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        self.manager: DownloadManager = None
+
     def __repr__(self):
         if self.next_download or self.frequency:
             return f'<Download id={self.id} status={self.status} url={repr(self.url)} ' \
@@ -101,6 +106,12 @@ class Download(ModelHelper, Base):
         self.last_successful_download = now()
         if self.frequency:
             self.increment_next_download()
+
+    def get_downloader(self):
+        if self.downloader:
+            return self.manager.get_downloader_by_name(self.downloader)
+
+        return self.manager.get_downloader(self.url)
 
 
 class Downloader:
@@ -258,6 +269,7 @@ class DownloadManager:
             download = Download(url=url, status='new')
             session.add(download)
             session.flush()
+        download.manager = self
         return download
 
     def create_download(self, url: str, session, downloader: str = None, skip_download: bool = False,
@@ -511,10 +523,7 @@ class DownloadManager:
         """
         with get_db_session(commit=True) as session:
             download = self.get_download(session, id_=download_id)
-            if not download.downloader:
-                downloader, _ = self.get_downloader(download.url)
-            else:
-                downloader = self.get_downloader_by_name(download.downloader)
+            downloader = download.get_downloader()
             logger.warning(f'Killing download {download_id} in {downloader}')
             if download.status == 'pending':
                 downloader.kill()
@@ -529,10 +538,7 @@ class DownloadManager:
             with get_db_session(commit=True) as session:
                 downloads = self.get_pending_downloads(session)
                 for download in downloads:
-                    if not download.downloader:
-                        downloader, _ = self.get_downloader(download.url)
-                    else:
-                        downloader = self.get_downloader_by_name(download.downloader)
+                    downloader = download.get_downloader()
                     downloader.kill()
                     download.defer()
         except Exception as e:

@@ -316,3 +316,20 @@ async def test_download_wrol_mode(test_session, test_download_manager):
         test_download_manager.do_downloads_sync()
     with pytest.raises(WROLModeEnabled):
         await test_download_manager.do_downloads_sync()
+
+
+def test_download_get_downloader(test_session, test_download_manager):
+    """
+    A Download can find it's Downloader.
+    """
+    permissive_downloader = PermissiveDownloader()
+    http_downloader = HTTPDownloader()
+    test_download_manager.register_downloader(permissive_downloader)
+    test_download_manager.register_downloader(http_downloader)
+
+    download1 = test_download_manager.create_download('https://example.com', test_session, skip_download=True)
+    assert download1.get_downloader() == permissive_downloader
+
+    download2 = test_download_manager.create_download('https://example.com', test_session, skip_download=True)
+    download2.downloader = 'bad downloader'
+    assert download2.get_downloader() is None

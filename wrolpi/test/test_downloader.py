@@ -10,7 +10,7 @@ from wrolpi import downloader
 from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download
-from wrolpi.errors import UnrecoverableDownloadError, InvalidDownload
+from wrolpi.errors import UnrecoverableDownloadError, InvalidDownload, WROLModeEnabled
 from wrolpi.test.common import wrap_test_db, TestAPI
 
 
@@ -307,3 +307,12 @@ def test_downloader_must_have_name():
 
     with pytest.raises(NotImplementedError):
         D()
+
+
+@mock.patch('wrolpi.common.wrol_mode_enabled', lambda: True)
+@pytest.mark.asyncio
+async def test_download_wrol_mode(test_session, test_download_manager):
+    with pytest.raises(WROLModeEnabled):
+        test_download_manager.do_downloads_sync()
+    with pytest.raises(WROLModeEnabled):
+        await test_download_manager.do_downloads_sync()

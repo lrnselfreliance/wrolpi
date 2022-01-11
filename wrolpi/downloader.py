@@ -13,7 +13,7 @@ from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
-from wrolpi.common import Base, ModelHelper, logger, iterify
+from wrolpi.common import Base, ModelHelper, logger, iterify, wrol_mode_check
 from wrolpi.dates import TZDateTime, now
 from wrolpi.db import get_db_session, get_db_curs, get_db_context, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
@@ -309,6 +309,7 @@ class DownloadManager:
 
         return downloads
 
+    @wrol_mode_check
     @optional_session
     def _do_downloads(self, session=None):
         """

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, Computed
-from sqlalchemy.orm import relationship, Session
+from sqlalchemy.orm import relationship, Session, deferred
 from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi.common import Base, tsvector, ModelHelper, logger
@@ -32,7 +32,7 @@ class Video(ModelHelper, Base):
     poster_path = Column(MediaPathType)
     video_path = Column(MediaPathType)
 
-    caption = Column(String)
+    caption = deferred(Column(String))  # slow to fetch
     duration = Column(Integer)
     favorite = Column(TZDateTime)
     size = Column(Integer)
@@ -45,9 +45,10 @@ class Video(ModelHelper, Base):
     url = Column(String)
     censored = Column(Boolean, default=False)
 
-    textsearch = Column(tsvector, Computed('''to_tsvector('english'::regconfig,
+    textsearch = deferred(
+        Column(tsvector, Computed('''to_tsvector('english'::regconfig,
                                                ((COALESCE(title, ''::text) || ' '::text) ||
-                                                COALESCE(caption, ''::text)))'''))
+                                                COALESCE(caption, ''::text)))''')))
 
     def __repr__(self):
         video_path = self.video_path.path if self.video_path else None

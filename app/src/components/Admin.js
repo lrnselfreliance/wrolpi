@@ -410,7 +410,7 @@ class Downloads extends React.Component {
                 />
             </>
         );
-        if (this.state.disabled) {
+        if (this.state.disabled === true) {
             allButton = (<>
                 <Button
                     onClick={this.openStop}

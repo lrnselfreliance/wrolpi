@@ -23,7 +23,7 @@ import {
     startDownloads
 } from "../api";
 import TimezoneSelect from 'react-timezone-select';
-import {secondsToDate, secondsToFrequency} from "./Common";
+import {secondsToDate, secondsToFrequency, WROLModeMessage} from "./Common";
 
 class Settings extends React.Component {
 
@@ -77,6 +77,7 @@ class Settings extends React.Component {
 
         return (
             <Container fluid>
+                <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
                 <p>
                     The global settings for your server.
                 </p>
@@ -298,7 +299,7 @@ class Downloads extends React.Component {
             recurring_downloads: null,
             pending_downloads: null,
             stopOpen: false,
-            disabled: true,
+            disabled: false,
         };
     }
 
@@ -427,6 +428,7 @@ class Downloads extends React.Component {
 
         return (
             <div>
+                <WROLModeMessage content='Downloads are disabled because WROL Mode is enabled.'/>
                 {allButton}
                 <Header as='h1'>Downloads</Header>
                 {onceTable}

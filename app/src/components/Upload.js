@@ -1,6 +1,7 @@
 import React from "react";
 import {Button, Dropdown, Form, Header, Segment, TextArea} from "semantic-ui-react";
 import {getDownloaders, postDownload} from "../api";
+import {WROLModeMessage} from "./Common";
 
 const validUrl = /^(http|https):\/\/[^ "]+$/;
 
@@ -67,6 +68,7 @@ class Downloader extends React.Component {
 
         return (
             <Form onSubmit={this.submitDownload}>
+                <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
                 <Header as='h4'>Enter the URLs you wish to save offline.</Header>
                 <Form.Field>
                     <TextArea

@@ -1,8 +1,10 @@
-import React, {useState} from "react";
+import React, {useEffect, useState} from "react";
 import {Card, Container, Form, Icon, Image, Input, Pagination, Progress} from 'semantic-ui-react';
 import {Link} from "react-router-dom";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import Message from "semantic-ui-react/dist/commonjs/collections/Message";
+import {getConfig} from "../api";
 
 export const API_URI = `http://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -582,4 +584,27 @@ export function MoreButton(props) {
             </Grid.Row>
         </Grid>
     )
+}
+
+export const useWROLMode = () => {
+    const [enabled, setEnabled] = useState(false);
+
+    const fetchStatus = async () => {
+        let config = await getConfig();
+        setEnabled(config['wrol_mode']);
+    }
+
+    useEffect(() => {
+        fetchStatus();
+    }, []);
+
+    return enabled;
+}
+
+export function WROLModeMessage({content}) {
+    let enabled = useWROLMode();
+    if (enabled) {
+        return <Message icon='lock' header='WROL Mode Enabled' content={content}/>
+    }
+    return null;
 }

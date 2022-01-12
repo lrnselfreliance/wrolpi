@@ -26,7 +26,15 @@ import {
 } from "../api";
 import _ from "lodash";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
-import {APIForm, frequencyOptions, humanFileSize, RequiredAsterisk, secondsToDate, secondsToFrequency} from "./Common";
+import {
+    APIForm,
+    frequencyOptions,
+    humanFileSize,
+    RequiredAsterisk,
+    secondsToDate,
+    secondsToFrequency,
+    WROLModeMessage
+} from "./Common";
 import {Link} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
@@ -278,6 +286,7 @@ class ChannelPage extends APIForm {
         return (
             <Container fluid>
                 <Header as="h1">{this.props.header}</Header>
+                <WROLModeMessage content='Channel page is disabled while WROL Mode is enabled.'/>
                 <Form
                     id="editChannel"
                     onSubmit={this.handleSubmit}

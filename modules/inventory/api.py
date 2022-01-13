@@ -2,11 +2,12 @@ from http import HTTPStatus
 
 from sanic import response
 from sanic.request import Request
+from sanic_ext import validate
+from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import run_after, remove_dict_value_whitespace
 from wrolpi.errors import ValidationError
 from wrolpi.root_api import get_blueprint, json_response
-from wrolpi.schema import validate_doc
 from .common import get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
     save_inventories_file
 from .inventory import get_items, save_item, delete_items, \
@@ -45,10 +46,8 @@ def inventory_get(_: Request, inventory_id: int):
 
 
 @bp.post('/')
-@validate_doc(
-    'Save a new inventory',
-    consumes=InventoryPostRequest,
-)
+@openapi.description('Save a new inventory')
+@validate(InventoryPostRequest)
 @run_after(save_inventories_file)
 def post_inventory(_: Request, data: dict):
     # Cleanup the whitespace.
@@ -59,10 +58,8 @@ def post_inventory(_: Request, data: dict):
 
 
 @bp.put('/<inventory_id:int>')
-@validate_doc(
-    'Update an inventory',
-    consumes=InventoryPutRequest,
-)
+@openapi.description('Update an inventory')
+@validate(InventoryPutRequest)
 @run_after(save_inventories_file)
 def put_inventory(_: Request, inventory_id: int, data: dict):
     # Cleanup the whitespace.
@@ -73,6 +70,7 @@ def put_inventory(_: Request, inventory_id: int, data: dict):
 
 
 @bp.delete('/<inventory_id:int>')
+@openapi.description('Delete an inventory.')
 @run_after(save_inventories_file)
 def inventory_delete(_: Request, inventory_id: int):
     delete_inventory(inventory_id)
@@ -80,19 +78,15 @@ def inventory_delete(_: Request, inventory_id: int):
 
 
 @bp.get('/<inventory_id:int>/item')
-@validate_doc(
-    "Get all items from an inventory.",
-)
+@openapi.description('Get all items from an inventory.')
 def items_get(_: Request, inventory_id: int):
     items = get_items(inventory_id)
     return json_response({'items': items})
 
 
 @bp.post('/<inventory_id:int>/item')
-@validate_doc(
-    "Save an item into it's inventory.",
-    consumes=ItemPostRequest,
-)
+@openapi.description("Save an item into it's inventory.")
+@validate(ItemPostRequest)
 @run_after(save_inventories_file)
 def post_item(_: Request, inventory_id: int, data: dict):
     # Cleanup the whitespace.
@@ -103,10 +97,8 @@ def post_item(_: Request, inventory_id: int, data: dict):
 
 
 @bp.put('/item/<item_id:int>')
-@validate_doc(
-    "Update an item",
-    consumes=ItemPutRequest,
-)
+@openapi.description("Update an item.")
+@validate(ItemPutRequest)
 @run_after(save_inventories_file)
 def put_item(_: Request, item_id: int, data: dict):
     # Cleanup the whitespace.
@@ -118,9 +110,7 @@ def put_item(_: Request, item_id: int, data: dict):
 
 @bp.delete('/item/<item_ids:[0-9,]+>')
 @bp.delete('/item/<item_ids:int>')
-@validate_doc(
-    'Delete items from an inventory.',
-)
+@openapi.description('Delete items from an inventory.')
 @run_after(save_inventories_file)
 def item_delete(_: Request, item_ids: str):
     try:

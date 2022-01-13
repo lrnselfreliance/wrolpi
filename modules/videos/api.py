@@ -4,12 +4,14 @@ from http import HTTPStatus
 
 from sanic import Blueprint, response
 from sanic.request import Request
+from sanic_ext import validate
+from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import create_websocket_feed, get_sanic_url, \
     wrol_mode_check
 from wrolpi.common import logger
 from wrolpi.root_api import add_blueprint, json_response
-from wrolpi.schema import validate_doc, JSONErrorResponse
+from wrolpi.schema import JSONErrorResponse
 from .channel import lib as channel_lib
 from .channel.api import channel_bp
 from .lib import _refresh_videos, get_statistics
@@ -33,13 +35,9 @@ refresh_queue, refresh_event = create_websocket_feed('refresh', '/feeds/refresh'
 
 @content_bp.post('/refresh')
 @content_bp.post('/refresh/<link:str>')
-@validate_doc(
-    summary='Search for videos that have previously been downloaded and stored.',
-    produces=StreamResponse,
-    responses=[
-        (HTTPStatus.BAD_REQUEST, JSONErrorResponse),
-    ],
-)
+@openapi.description('Search for videos that have previously been downloaded and stored.')
+@openapi.response(HTTPStatus.OK, StreamResponse)
+@openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @wrol_mode_check
 async def refresh(_, link: str = None):
     refresh_logger = logger.getChild('refresh')
@@ -75,13 +73,9 @@ download_queue, download_event = create_websocket_feed('download', '/feeds/downl
 
 @content_bp.post('/download')
 @content_bp.post('/download/<link:str>')
-@validate_doc(
-    summary='Update channel catalogs, download any missing videos',
-    produces=StreamResponse,
-    responses=[
-        (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
-    ],
-)
+@openapi.description('Update channel catalogs, download any missing videos')
+@openapi.response(HTTPStatus.OK, StreamResponse)
+@openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @wrol_mode_check
 def download(_, link: str = None):
     download_logger = logger.getChild('download')
@@ -105,14 +99,10 @@ async def refresh_videos(channel_links: list = None):
 
 
 @content_bp.post('/favorite')
-@validate_doc(
-    summary='Toggle the favorite flag on a video',
-    consumes=FavoriteRequest,
-    produces=FavoriteResponse,
-    responses=[
-        (HTTPStatus.BAD_REQUEST, JSONErrorResponse)
-    ]
-)
+@openapi.description('Toggle the favorite flag on a video')
+@validate(FavoriteRequest)
+@openapi.response(HTTPStatus.OK, FavoriteResponse)
+@openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 async def favorite(_: Request, data: dict):
     _favorite = video_lib.set_video_favorite(data['video_id'], data['favorite'])
     ret = {'video_id': data['video_id'], 'favorite': _favorite}
@@ -120,10 +110,7 @@ async def favorite(_: Request, data: dict):
 
 
 @content_bp.get('/statistics')
-@validate_doc(
-    summary='Retrieve video statistics',
-    produces=VideosStatisticsResponse,
-)
+@openapi.response(HTTPStatus.OK, VideosStatisticsResponse)
 async def statistics(_: Request):
     ret = await get_statistics()
     return json_response(ret, HTTPStatus.OK)

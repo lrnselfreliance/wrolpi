@@ -4,9 +4,10 @@ from string import ascii_letters
 
 from sanic import response
 from sanic.request import Request
+from sanic_ext import validate
+from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.root_api import get_blueprint
-from wrolpi.schema import validate_doc
 from .common import generate_pdf, encrypt_otp, decrypt_otp
 from .schema import EncryptOTPRequest, DecryptOTPRequest
 
@@ -14,20 +15,16 @@ bp = get_blueprint('OTP', '/api/otp')
 
 
 @bp.post('/encrypt_otp')
-@validate_doc(
-    summary='Encrypt a message with OTP',
-    consumes=EncryptOTPRequest,
-)
+@openapi.description('Encrypt a message with OTP.')
+@validate(EncryptOTPRequest)
 async def post_encrypt_otp(_: Request, data: dict):
     data = encrypt_otp(data['otp'], data['plaintext'])
     return response.json(data)
 
 
 @bp.post('/decrypt_otp')
-@validate_doc(
-    summary='Decrypt a message with OTP',
-    consumes=DecryptOTPRequest,
-)
+@openapi.description('Decrypt a message with OTP.')
+@validate(DecryptOTPRequest)
 async def post_decrypt_otp(_: Request, data: dict):
     data = decrypt_otp(data['otp'], data['ciphertext'])
     return response.json(data)

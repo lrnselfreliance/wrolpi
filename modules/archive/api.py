@@ -3,11 +3,12 @@ from http import HTTPStatus
 
 from requests import Request
 from sanic import response
+from sanic_ext import validate
+from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import logger, wrol_mode_check, api_param_limiter
-from wrolpi.errors import ValidationError
 from wrolpi.root_api import get_blueprint, json_response
-from wrolpi.schema import validate_doc, JSONErrorResponse
+from wrolpi.schema import JSONErrorResponse
 from . import lib
 from .schema import ArchiveSearchRequest, ArchiveSearchResponse
 
@@ -19,12 +20,8 @@ logger = logger.getChild(__name__)
 
 
 @bp.delete('/<archive_id:int>')
-@validate_doc(
-    'Delete an individual archive',
-    responses=[
-        (HTTPStatus.NOT_FOUND, JSONErrorResponse),
-    ]
-)
+@openapi.description('Delete an individual archive')
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
 async def delete_archive(_: Request, archive_id: int):
     lib.delete_archive(archive_id)
@@ -49,20 +46,15 @@ archive_offset_limiter = api_param_limiter(100, 0)
 
 
 @bp.post('/search')
-@validate_doc(
-    'Search archive contents and titles',
-    consumes=ArchiveSearchRequest,
-    produces=ArchiveSearchResponse,
-    optional_body=True,
-)
-async def search_archives(_: Request, data: dict):
-    try:
-        search_str = data.get('search_str')
-        domain = data.get('domain')
-        limit = archive_limit_limiter(data.get('limit'))
-        offset = archive_offset_limiter(data.get('offset'))
-    except Exception as e:
-        raise ValidationError('Unable to validate search queries') from e
+@openapi.description('Search archive contents and titles')
+@openapi.response(HTTPStatus.OK, ArchiveSearchResponse)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+@validate(ArchiveSearchRequest)
+async def search_archives(_: Request, body: ArchiveSearchRequest):
+    search_str = body.search_str
+    domain = body.domain
+    limit = archive_limit_limiter(body.limit)
+    offset = archive_offset_limiter(body.offset)
 
     archives, total = lib.search(search_str, domain, limit, offset)
     ret = dict(archives=archives, totals=dict(archives=total))

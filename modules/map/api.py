@@ -4,10 +4,11 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from sanic import Blueprint, response
+from sanic_ext import validate
+from sanic_ext.extensions.openapi import openapi
 
 from modules.map.schema import PBFPostRequest, PBFPostResponse
 from wrolpi.common import create_websocket_feed
-from wrolpi.schema import validate_doc
 
 NAME = 'map'
 
@@ -17,11 +18,9 @@ download_queue, download_event = create_websocket_feed('pbf_progress', '/feeds/p
 
 
 @api_bp.route('/pbf', methods=['POST'])
-@validate_doc(
-    summary='Queue a PBF file for download and processing',
-    consumes=PBFPostRequest,
-    produces=PBFPostResponse,
-)
+@openapi.description('Queue a PBF file for download and processing')
+@openapi.response(HTTPStatus.OK, PBFPostResponse)
+@validate(PBFPostRequest)
 def pbf_post(request, data: dict):
     pbf_url = data.get('pbf_url')
     parsed = urlparse(pbf_url)

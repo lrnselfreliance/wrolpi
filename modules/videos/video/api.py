@@ -2,13 +2,15 @@ from http import HTTPStatus
 
 from sanic import response, Blueprint
 from sanic.request import Request
+from sanic_ext import validate
+from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import logger, wrol_mode_check, run_after, get_media_directory, \
     get_relative_to_media_directory
 from wrolpi.db import get_db_session
 from wrolpi.errors import ValidationError, InvalidOrderBy
 from wrolpi.root_api import json_response
-from wrolpi.schema import validate_doc, JSONErrorResponse
+from wrolpi.schema import JSONErrorResponse
 from .lib import get_video, VIDEO_ORDERS, DEFAULT_VIDEO_ORDER, video_search, get_video_for_app
 from ..common import get_matching_directories, video_limiter
 from ..lib import save_channels_config
@@ -21,24 +23,19 @@ logger = logger.getChild(__name__)
 
 
 @video_bp.get('/video/<video_id:int>')
-@validate_doc(
-    summary='Get Video information',
-    produces=VideoResponse,
-    responses=(
-            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
-    ),
-)
+@openapi.description('Get Video information')
+@openapi.response(HTTPStatus.OK, VideoResponse)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 def video_get(_: Request, video_id: int):
     video, previous_video, next_video = get_video_for_app(video_id)
     return json_response({'video': video, 'prev': previous_video, 'next': next_video})
 
 
 @video_bp.post('/search')
-@validate_doc(
-    summary='Search Video titles and captions',
-    consumes=VideoSearchRequest,
-    produces=VideoSearchResponse,
-)
+@openapi.description('Search Video titles and captions')
+@openapi.response(HTTPStatus.OK, VideoSearchResponse)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+@validate(VideoSearchRequest)
 async def search(_: Request, data: dict):
     try:
         search_str = data.get('search_str')
@@ -60,14 +57,10 @@ async def search(_: Request, data: dict):
 
 
 @video_bp.post('/directories')
-@validate_doc(
-    summary='Get all directories that match the search_str, prefixed by the media directory.',
-    consumes=DirectoriesRequest,
-    responses=(
-            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
-            (HTTPStatus.OK, DirectoriesResponse),
-    ),
-)
+@openapi.description('Get all directories that match the search_str, prefixed by the media directory.')
+@openapi.response(HTTPStatus.OK, DirectoriesResponse)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+@validate(DirectoriesRequest)
 def directories(_, data):
     search_str = str(get_media_directory() / data['search_str'])
     dirs = get_matching_directories(search_str)
@@ -76,12 +69,9 @@ def directories(_, data):
 
 
 @video_bp.delete('/video/<video_id:int>')
-@validate_doc(
-    summary='Delete a video',
-    responses=(
-            (HTTPStatus.NOT_FOUND, JSONErrorResponse),
-    ),
-)
+@openapi.description('Delete a video.')
+@openapi.response(HTTPStatus.NO_CONTENT)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
 @run_after(save_channels_config)
 def video_delete(_: Request, video_id: int):

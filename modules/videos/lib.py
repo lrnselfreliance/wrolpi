@@ -1,4 +1,3 @@
-import asyncio
 import html
 import json
 import pathlib
@@ -12,125 +11,16 @@ from sqlalchemy.orm import Session
 from wrolpi.common import logger, chunks, get_config
 from wrolpi.common import save_settings_config
 from wrolpi.db import get_db_curs, get_db_session, optional_session
+from wrolpi.media_path import MediaPath
 from wrolpi.vars import PYTEST
-from .captions import insert_bulk_captions, process_captions
-from .common import generate_bulk_posters, get_bulk_video_info_json, get_bulk_video_size, \
-    generate_video_paths, remove_duplicate_video_paths, bulk_validate_posters, \
-    apply_info_json, import_videos_config
+from .captions import get_video_captions
+from .common import generate_video_paths, remove_duplicate_video_paths, apply_info_json, import_videos_config, \
+    get_video_duration, is_valid_poster, convert_image
 from .models import Channel, Video
 
 logger = logger.getChild(__name__)
 
 DEFAULT_DOWNLOAD_FREQUENCY = 60 * 60 * 24 * 7  # weekly
-
-
-def refresh_channel_video_captions() -> bool:
-    with get_db_curs() as curs:
-        query = 'SELECT id FROM video WHERE caption IS NULL AND caption_path IS NOT NULL'
-        curs.execute(query)
-        missing_captions = [i for (i,) in curs.fetchall()]
-
-    if missing_captions:
-        coro = insert_bulk_captions(missing_captions)
-        asyncio.ensure_future(coro)
-        logger.info('Scheduled insert_bulk_captions()')
-        return True
-    else:
-        logger.info('No missing captions to process.')
-        return False
-
-
-def refresh_channel_generate_posters() -> bool:
-    with get_db_curs() as curs:
-        query = 'SELECT id FROM video WHERE video_path IS NOT NULL AND poster_path IS NULL'
-        curs.execute(query)
-        missing_posters = [i for (i,) in curs.fetchall()]
-
-    if missing_posters:
-        coro = generate_bulk_posters(missing_posters)
-        asyncio.ensure_future(coro)
-        logger.info('Scheduled generate_bulk_posters()')
-        return True
-    else:
-        logger.info('No missing posters to generate.')
-        return False
-
-
-def convert_invalid_posters() -> bool:
-    """
-    Searches the DB for all videos with an invalid poster type (i.e. webp) and converts them to JPEGs.  A video with a
-    valid poster will be marked as such in it's column "validated_poster".
-    """
-    with get_db_curs() as curs:
-        query = "SELECT id FROM video WHERE poster_path IS NOT NULL AND validated_poster = FALSE"
-        curs.execute(query)
-        invalid_posters = [i for (i,) in curs.fetchall()]
-
-    if invalid_posters:
-        async def _():
-            return bulk_validate_posters(invalid_posters)
-
-        coro = _()
-        asyncio.ensure_future(coro)
-        logger.info('Scheduled bulk_replace_invalid_posters()')
-        return True
-    else:
-        logger.info('No invalid posters to replace.')
-        return False
-
-
-def refresh_channel_info_json() -> bool:
-    """
-    Fill in Video columns that are extracted from the info_json.
-    """
-    with get_db_curs() as curs:
-        query = '''
-            SELECT v.id
-            FROM video v
-            WHERE
-                v.video_path IS NOT NULL
-                AND v.info_json_path IS NOT NULL
-                AND v.info_json_path != ''
-                AND (v.duration IS NULL OR v.view_count IS NULL OR v.title IS NULL)
-        '''
-        curs.execute(query)
-        missing_duration = [i for (i,) in curs.fetchall()]
-
-    if missing_duration:
-        coro = get_bulk_video_info_json(missing_duration)
-        asyncio.ensure_future(coro)
-        logger.info('Scheduled get_bulk_video_info_json()')
-        return True
-    else:
-        logger.info('No videos need updating from info_json.')
-        return False
-
-
-def refresh_channel_calculate_size() -> bool:
-    with get_db_curs() as curs:
-        query = 'SELECT id FROM video WHERE video_path IS NOT NULL AND size IS NULL'
-        curs.execute(query)
-        missing_size = [i for (i,) in curs.fetchall()]
-
-    if missing_size:
-        coro = get_bulk_video_size(missing_size)
-        asyncio.ensure_future(coro)
-        logger.info('Scheduled get_bulk_video_size()')
-        return True
-    else:
-        logger.info('No videos missing size.')
-        return False
-
-
-def process_video_meta_data():
-    """
-    Search for any videos missing meta data, fill in that data.
-    """
-    refresh_channel_video_captions()
-    refresh_channel_generate_posters()
-    convert_invalid_posters()
-    refresh_channel_info_json()
-    refresh_channel_calculate_size()
 
 
 def refresh_channel_videos(channel: Channel):
@@ -222,6 +112,97 @@ def refresh_no_channel_videos():
         logger.info(deleted_status)
 
 
+def process_video_info_json(video: Video):
+    """
+    Parse the Video's info json file, return the relevant data.
+    """
+    title = duration = view_count = url = None
+    if info_json := video.get_info_json():
+        title = info_json.get('fulltitle') or info_json.get('title')
+        title = html.unescape(title) if title else None
+
+        duration = info_json.get('duration')
+        view_count = info_json.get('view_count')
+        url = info_json.get('webpage_url') or info_json.get('url')
+
+    return title, duration, view_count, url
+
+
+def validate_videos():
+    """
+    Validate all Videos not yet validated.  A Video is validated when we have attempted to find its: title, duration,
+    view_count, url, caption, size.  A Video is also valid when it has a JPEG poster, if any.
+    This function marks the Video as validated, even if no data can be found so a Video will not be validated multiple
+    times.
+    """
+    with get_db_curs() as curs:
+        curs.execute('SELECT id FROM video WHERE validated IS FALSE')
+        video_ids = [i['id'] for i in curs.fetchall()]
+
+    for chunk in chunks(video_ids, 20):
+        with get_db_session(commit=True) as session:
+            videos = session.query(Video).filter(Video.id.in_(chunk)).all()
+            for video in videos:
+                try:
+                    if not video.title or not video.duration or not video.view_count or not video.url:
+                        # These properties can be found in the info json.
+                        title, duration, view_count, url = process_video_info_json(video)
+                        video.title = title
+                        video.duration = duration
+                        video.url = url
+                        # View count will probably be overwritten by more recent data when this Video's Channel is
+                        # updated.
+                        video.view_count = view_count
+
+                    if not video.title:
+                        # Video title was not in the info json, use the filename.
+                        title = video.video_path.path.with_suffix('').name
+                        video.title = html.unescape(title)
+                    if not video.duration:
+                        # Video duration was not in the info json, use ffprobe.
+                        video.duration = get_video_duration(video.video_path.path)
+
+                    if not video.caption and video.caption_path:
+                        video.caption = get_video_captions(video)
+                    if not video.size:
+                        video.size = video.video_path.path.stat().st_size
+
+                    if not video.poster_path:
+                        # Video poster is not found, lets check near the video file.
+                        video_path = video.video_path.path
+                        for ext in ('.jpg', '.jpeg', '.webp', '.png'):
+                            if (poster_path := video_path.with_suffix(ext)).is_file():
+                                video.poster_path = poster_path
+                    if video.poster_path:
+                        # Check that the poster is a more universally supported JPEG.
+                        old: pathlib.Path = video.poster_path.path if \
+                            isinstance(video.poster_path, MediaPath) else video.poster_path
+                        new = old.with_suffix('.jpg')
+
+                        if old != new and new.exists():
+                            # Destination JPEG already exists (it may have the wrong format).
+                            old.unlink()
+                            old = video.poster_path = new
+
+                        if not is_valid_poster(old):
+                            # Poster is not valid, convert it and place it in the new location.
+                            try:
+                                convert_image(old, new)
+                                old.unlink(missing_ok=True)
+                                video.poster_path = new
+                                logger.info(f'Converted invalid poster {old} to {new}')
+                            except Exception as e:
+                                logger.error(f'Failed to convert invalid poster {old} to {new}', exc_info=e)
+                        else:
+                            logger.debug(f'Poster was already valid: {new}')
+
+                    # All data about the Video has been found, we should not attempt to validate it again.
+                    video.validated = True
+                except Exception as e:
+                    # This video failed to validate, continue validation for the rest of the videos.
+                    logger.warning(f'Failed to validate {video=}', exc_info=e)
+
+
 def _refresh_videos(channel_links: list = None):
     """
     Find any videos in the channel directories and add them to the DB.  Delete DB records of any videos not in the
@@ -259,7 +240,7 @@ def _refresh_videos(channel_links: list = None):
     # Fill in any missing data for all videos.
     if not PYTEST:
         import_videos_config()
-        process_video_meta_data()
+        validate_videos()
 
 
 def get_channels_config(session: Session) -> dict:
@@ -435,7 +416,7 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
 
     if skip_captions is False and caption_path:
         # Process captions only when requested
-        process_captions(video)
+        get_video_captions(video)
 
     return video
 

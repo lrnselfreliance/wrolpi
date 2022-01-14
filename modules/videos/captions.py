@@ -1,13 +1,12 @@
 #! /usr/bin/env python3
 import pathlib
 from pathlib import Path
-from typing import Generator, List, Union
+from typing import Generator, Union
 
 import srt
 import webvtt
 
-from wrolpi.common import logger, chunks
-from wrolpi.db import get_db_session
+from wrolpi.common import logger
 from wrolpi.media_path import MediaPath
 from .models import Video
 
@@ -39,9 +38,9 @@ def get_unique_caption_lines(caption_path: Union[str, Path]) -> Generator:
                 yield line
 
 
-def process_captions(video: Video):
+def get_video_captions(video: Video):
     """
-    Parse and insert captions for a video record.
+    Parse video captions from the video's captions file.
     """
     if isinstance(video.caption_path, MediaPath):
         caption_path = video.caption_path.path
@@ -51,8 +50,7 @@ def process_captions(video: Video):
     try:
         lines = get_unique_caption_lines(str(caption_path))
         block = '\n'.join(lines)
-        video.caption = block
-        return
+        return block
     except UnicodeDecodeError:
         # Failed to decode the caption file
         # TODO handle this error
@@ -65,12 +63,3 @@ def process_captions(video: Video):
         pass
 
     logger.debug(f'Failed to parse caption file {caption_path}')
-
-
-async def insert_bulk_captions(video_ids: List[int]):
-    for video_ids in chunks(video_ids, 10):
-        with get_db_session(commit=True) as session:
-            for idx, video_id in enumerate(video_ids):
-                video = session.query(Video).filter_by(id=video_id).one()
-                process_captions(video)
-    logger.debug(f'Inserted {len(video_ids)} captions')

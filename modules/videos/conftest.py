@@ -1,9 +1,11 @@
+import json
 import pathlib
 import shutil
 from uuid import uuid4
 
 import mock
 import pytest
+from PIL import Image
 
 from modules.videos.channel.lib import spread_channel_downloads
 from modules.videos.downloader import VideoDownloader, ChannelDownloader
@@ -99,13 +101,33 @@ def video_file(test_directory) -> pathlib.Path:
 
 @pytest.fixture
 def video_factory(test_session, test_directory):
-    def _(channel_id: int = None):
+    """
+    Creates Videos for testing.
+    """
+
+    def _(channel_id: int = None, with_video_file: bool = False, with_info_json_file: bool = False,
+          with_poster_ext: str = None):
         title = str(uuid4())
         if channel_id:
-            path = str(test_directory / f'{title}.mp4')
+            path = test_directory / f'{title}.mp4'
         else:
-            path = str(test_directory / 'videos' / 'NO CHANNEL' / f'{title}.mp4')
-        video = Video(video_path=path, title=title, channel_id=channel_id, source_id=title)
+            path = test_directory / 'videos' / 'NO CHANNEL' / f'{title}.mp4'
+
+        if with_video_file:
+            shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', path)
+
+        info_json_path = None
+        if with_info_json_file:
+            info_json_path = path.with_suffix('.info.json')
+            info_json_path.write_text(json.dumps({}))
+
+        poster_path = None
+        if with_poster_ext:
+            poster_path = path.with_suffix(f'.{with_poster_ext}')
+            Image.new('RGB', (25, 25)).save(poster_path)
+
+        video = Video(video_path=str(path), title=title, channel_id=channel_id, source_id=title,
+                      info_json_path=info_json_path, poster_path=poster_path)
         test_session.add(video)
         return video
 

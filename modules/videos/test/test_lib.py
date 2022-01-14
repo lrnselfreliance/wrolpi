@@ -118,12 +118,17 @@ def test_validate_videos(test_session, simple_channel, video_factory):
     """
     Videos that aren't validated should have their data filled in while being validated.
     """
-    vid1 = video_factory(simple_channel.id, with_video_file=True, with_info_json_file=True)
-    vid2 = video_factory(simple_channel.id, with_video_file=True, with_info_json_file=True)
-    vid3 = video_factory(simple_channel.id, with_video_file=True, with_info_json_file=True)
-    vid4 = video_factory(simple_channel.id, with_video_file=True, with_info_json_file=True)
-    vid5 = video_factory(simple_channel.id, with_video_file=True, with_info_json_file=True)
-    vid6 = video_factory(simple_channel.id, with_video_file=True, with_info_json_file=True)
+    vid1_json = {'title': 'info title'}
+    vid3_json = {'duration': 100}
+    vid5_json = {'view_count': 42}
+    vid6_json = {'webpage_url': 'https://example.com/webpage', 'url': 'https://example.com/url'}
+
+    vid1 = video_factory(simple_channel.id, with_video_file=True, with_info_json=vid1_json)
+    vid2 = video_factory(simple_channel.id, with_video_file=True, with_info_json=True)
+    vid3 = video_factory(simple_channel.id, with_video_file=True, with_info_json=vid3_json)
+    vid4 = video_factory(simple_channel.id, with_video_file=True, with_info_json=True)
+    vid5 = video_factory(simple_channel.id, with_video_file=True, with_info_json=vid5_json)
+    vid6 = video_factory(simple_channel.id, with_video_file=True, with_info_json=vid6_json)
     vid7 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg')
     vid8 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='webp')
 
@@ -138,20 +143,8 @@ def test_validate_videos(test_session, simple_channel, video_factory):
     test_session.commit()
 
     # Write the associated files.  This data should be processed.
-    vid1.info_json_path.path.write_text(json.dumps({
-        'title': 'info title'
-    }))
     vid2.caption_path = vid2.video_path.path.with_suffix('.en.vtt')
     shutil.copy(PROJECT_DIR / 'test/example1.en.vtt', vid2.caption_path)
-
-    vid3.info_json_path.path.write_text(json.dumps({
-        'duration': 100,
-    }))
-    vid5.info_json_path.path.write_text(json.dumps({'view_count': 42}))
-    vid6.info_json_path.path.write_text(json.dumps({
-        'webpage_url': 'https://example.com/webpage',
-        'url': 'https://example.com/url'
-    }))
     test_session.commit()
 
     # All Videos are validated, all data is filled out.  The info json data is trusted first.

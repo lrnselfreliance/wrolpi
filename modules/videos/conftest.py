@@ -105,7 +105,7 @@ def video_factory(test_session, test_directory):
     Creates Videos for testing.
     """
 
-    def _(channel_id: int = None, with_video_file: bool = False, with_info_json_file: bool = False,
+    def _(channel_id: int = None, with_video_file: bool = False, with_info_json: dict = None,
           with_poster_ext: str = None):
         title = str(uuid4())
         if channel_id:
@@ -117,9 +117,14 @@ def video_factory(test_session, test_directory):
             shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', path)
 
         info_json_path = None
-        if with_info_json_file:
+        if with_info_json is True:
+            # User requests a info json file, but does not provide one.
             info_json_path = path.with_suffix('.info.json')
             info_json_path.write_text(json.dumps({}))
+        elif with_info_json:
+            # Use the provided object as the json.
+            info_json_path = path.with_suffix('.info.json')
+            info_json_path.write_text(json.dumps(with_info_json))
 
         poster_path = None
         if with_poster_ext:

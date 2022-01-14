@@ -243,8 +243,7 @@ class DownloadManager:
         """
         return self._instances.get(name)
 
-    @staticmethod
-    def get_new_downloads(session: Session) -> List[Download]:
+    def get_new_downloads(self, session: Session) -> List[Download]:
         """
         Get all "new" downloads.  This method fetches the first download each iteration, so it will fetch downloads
         that were created after calling it.
@@ -258,6 +257,7 @@ class DownloadManager:
                 # Got the last download again.  Is something wrong?
                 return
             last = download
+            download.manager = self
             yield download
 
     def get_or_create_download(self, url: str, session: Session) -> Download:

@@ -61,6 +61,18 @@ class Download(ModelHelper, Base):
                    f'next_download={self.next_download} frequency={self.frequency} attempts={self.attempts}>'
         return f'<Download id={self.id} status={self.status} url={repr(self.url)} attempts={self.attempts}>'
 
+    def __json__(self):
+        d = dict(
+            downloader=self.downloader,
+            frequency=self.frequency,
+            id=self.id,
+            last_successful_download=self.last_successful_download,
+            next_download=self.next_download,
+            status=self.status,
+            url=self.url,
+        )
+        return d
+
     def increment_next_download(self):
         if self.frequency:
             delta = timedelta(seconds=self.frequency)

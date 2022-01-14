@@ -492,21 +492,27 @@ class DownloadManager:
             session.commit()
             self.start_downloads()
 
-    @staticmethod
-    def get_downloads(session: Session) -> List[Download]:
+    def get_downloads(self, session: Session) -> List[Download]:
         downloads = session.query(Download).all()
-        return list(downloads)
+        downloads = list(downloads)
+        for download in downloads:
+            download.manager = self
+        return downloads
 
-    @staticmethod
-    def get_download(session: Session, url: str = None, id_: int = None) -> Optional[Download]:
+    def get_download(self, session: Session, url: str = None, id_: int = None) -> Optional[Download]:
         """
         Attempt to find a Download by its URL or by its id.
         """
         query = session.query(Download)
         if url:
-            return query.filter_by(url=url).one_or_none()
+            download = query.filter_by(url=url).one_or_none()
         elif id:
-            return query.filter_by(id=id_).one_or_none()
+            download = query.filter_by(id=id_).one_or_none()
+        else:
+            raise ValueError('Cannot find download without some params.')
+        if download:
+            download.manager = self
+        return download
 
     @optional_session
     def delete_download(self, download_id: int, session: Session = None):

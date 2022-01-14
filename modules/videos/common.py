@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 
 from wrolpi import before_startup
-from wrolpi.common import logger, get_config, iterify, chunks, get_media_directory, \
+from wrolpi.common import logger, get_config, iterify, get_media_directory, \
     minimize_dict, api_param_limiter
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
@@ -343,25 +343,6 @@ def generate_video_poster(video_path: Path) -> Path:
         logger.warning(f'FFMPEG poster generation failed with stdout: {e.stderr.decode()}')
         raise
     return poster_path
-
-
-async def generate_bulk_posters(video_ids: List[int]):
-    """
-    Generate all posters for the provided videos.  Update the video object with the new jpg file location.  Do not
-    clobber existing jpg files.
-    """
-    logger.info(f'Generating {len(video_ids)} video posters')
-    for video_ids in chunks(video_ids, 10):
-        with get_db_session(commit=True) as session:
-            videos = session.query(Video).filter(Video.id.in_(video_ids))
-            for video in videos:
-                video_path = video.video_path.path
-
-                poster_path = replace_extension(video_path, '.jpg')
-                if not poster_path.exists():
-                    generate_video_poster(video_path)
-                video.poster_path = poster_path
-    logger.info('Done generating video posters')
 
 
 def convert_image(existing_path: Path, destination_path: Path, ext: str = 'jpeg'):

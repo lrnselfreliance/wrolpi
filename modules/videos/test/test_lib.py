@@ -131,6 +131,7 @@ def test_validate_videos(test_session, simple_channel, video_factory):
     vid6 = video_factory(simple_channel.id, with_video_file=True, with_info_json=vid6_json)
     vid7 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg')
     vid8 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='webp')
+    vid9 = video_factory(simple_channel.id, with_video_file=True)
 
     # These videos are missing this data, and a refresh should fill them in.
     vid1.title = None
@@ -158,11 +159,13 @@ def test_validate_videos(test_session, simple_channel, video_factory):
     assert vid6.url == 'https://example.com/webpage'
     assert str(vid7.poster_path).endswith('.jpg')
     assert str(vid8.poster_path).endswith('.jpg')
+    assert str(vid9.poster_path).endswith('.jpg')  # this was generated from the video file.
 
     vid1.title = None
     vid3.duration = None
     vid5.view_count = None
     vid6.url = None
+    vid9.poster_path = None
     test_session.commit()
 
     # Validation does not happen because all are still validated.
@@ -188,6 +191,7 @@ def test_validate_videos(test_session, simple_channel, video_factory):
     assert vid7.poster_path.path.is_file()
     assert vid8.poster_path.path.is_file()
     assert not vid8.poster_path.path.with_suffix('.webp').is_file()
+    assert str(vid9.poster_path).endswith('.jpg')  # the generated file was rediscovered.
 
 
 def test_validate_video_exception(test_session, simple_channel, video_factory):

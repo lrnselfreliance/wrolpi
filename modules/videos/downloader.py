@@ -171,7 +171,7 @@ class VideoDownloader(Downloader, ABC):
             return_code = self.process_runner(url, cmd, out_dir)
 
             if return_code != 0:
-                raise ValueError(f'youtube-dl exited with {return_code}')
+                raise ValueError(f'video downloader process exited with {return_code}')
 
             if not video_path.is_file():
                 raise ValueError(f'Video file could not be found!  {video_path}')

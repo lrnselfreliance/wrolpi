@@ -15,7 +15,7 @@ from wrolpi.media_path import MediaPath
 from wrolpi.vars import PYTEST
 from .captions import get_video_captions
 from .common import generate_video_paths, remove_duplicate_video_paths, apply_info_json, import_videos_config, \
-    get_video_duration, is_valid_poster, convert_image
+    get_video_duration, is_valid_poster, convert_image, generate_video_poster
 from .models import Channel, Video
 
 logger = logger.getChild(__name__)
@@ -171,9 +171,20 @@ def validate_videos():
                     if not video.poster_path:
                         # Video poster is not found, lets check near the video file.
                         video_path = video.video_path.path
+                        found = False
                         for ext in ('.jpg', '.jpeg', '.webp', '.png'):
                             if (poster_path := video_path.with_suffix(ext)).is_file():
                                 video.poster_path = poster_path
+                                found = True
+                                break
+                        if not found:
+                            # No poster was discovered, generate one.
+                            try:
+                                generate_video_poster(video_path)
+                                video.poster_path = video_path.with_suffix('.jpg')
+                                logger.debug(f'Generated poster for {video}')
+                            except Exception as e:
+                                logger.error(f'Failed to generate poster for {video}', exc_info=e)
                     if video.poster_path:
                         # Check that the poster is a more universally supported JPEG.
                         old: pathlib.Path = video.poster_path.path if \

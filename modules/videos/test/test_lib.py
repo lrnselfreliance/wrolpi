@@ -198,14 +198,25 @@ def test_validate_video_exception(test_session, simple_channel, video_factory):
     """
     Test that even if a Video cannot be validated, the other Videos will still be validated.
     """
-    vid1 = video_factory(simple_channel.id)  # has no video file, this will cause an error.
+    vid1 = video_factory(simple_channel.id, with_video_file=True)
     vid2 = video_factory(simple_channel.id, with_video_file=True)
-    assert not vid1.validated
-    assert not vid2.validated
+    # The validator should not even check this Video because it does not have a video file.
+    vid3 = video_factory(simple_channel.id)
+    vid3.video_path = None
+    assert not all([i.validated for i in test_session.query(Video)])
     test_session.commit()
 
-    validate_videos()
+    with mock.patch('modules.videos.lib.process_video_info_json') as mock_process_video_info_json:
+        mock_process_video_info_json.side_effect = [
+            Exception('skip this video'),
+            (None, None, None, None),
+            ('should not be set to video 3', None, None, None),  # This should not be called!
+        ]
+        validate_videos()
+        # Only first two videos are validated.
+        assert mock_process_video_info_json.call_count == 2, mock_process_video_info_json.call_count
     test_session.commit()
 
     assert not vid1.validated
     assert vid2.validated
+    assert not vid3.validated

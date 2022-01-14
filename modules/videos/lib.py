@@ -138,7 +138,7 @@ def validate_videos():
     times.
     """
     with get_db_curs() as curs:
-        curs.execute('SELECT id FROM video WHERE validated IS FALSE')
+        curs.execute('SELECT id FROM video WHERE video_path IS NOT NULL AND validated IS FALSE')
         video_ids = [i['id'] for i in curs.fetchall()]
 
     logger.info(f'Validating {len(video_ids)} videos.')

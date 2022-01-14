@@ -149,45 +149,53 @@ def validate_videos():
             videos = session.query(Video).filter(Video.id.in_(chunk)).all()
             for video in videos:
                 try:
-                    if not video.title or not video.duration or not video.view_count or not video.url:
-                        # These properties can be found in the info json.
-                        title, duration, view_count, url = process_video_info_json(video)
-                        video.title = title
-                        video.duration = duration
-                        video.url = url
-                        # View count will probably be overwritten by more recent data when this Video's Channel is
-                        # updated.
-                        video.view_count = video.view_count or view_count
-
-                    video_path = video.video_path.path
-                    if not video.title:
-                        # Video title was not in the info json, use the filename.
-                        title = get_video_title_from_file_name(video_path)
-                        video.title = html.unescape(title)
-                    if not video.duration:
-                        # Video duration was not in the info json, use ffprobe.
-                        video.duration = get_video_duration(video_path)
-
-                    if not video.caption and video.caption_path:
-                        video.caption = get_video_captions(video)
-                    if not video.size:
-                        video.size = video_path.stat().st_size
-
-                    if not video.poster_path:
-                        # Video poster is not found, lets check near the video file.
-                        for ext in ('.jpg', '.jpeg', '.webp', '.png'):
-                            if (poster_path := video_path.with_suffix(ext)).is_file():
-                                video.poster_path = poster_path
-                                break
-                    if video.channel_id and channel_generate_posters.get(video.channel_id):
-                        # Try to convert/generate, but keep the old poster if those fail.
-                        video.poster_path = convert_or_generate_poster(video) or video.poster_path
-
-                    # All data about the Video has been found, we should not attempt to validate it again.
-                    video.validated = True
+                    channel_generate_poster = channel_generate_posters.get(video.channel_id)
+                    validate_video(video, channel_generate_poster)
                 except Exception as e:
                     # This video failed to validate, continue validation for the rest of the videos.
                     logger.warning(f'Failed to validate {video=}', exc_info=e)
+
+
+def validate_video(video: Video, channel_generate_poster: bool):
+    """
+    Validate a single video.  A Video is validated when we have attempted to find its: title, duration,
+    view_count, url, caption, size.  A Video is also valid when it has a JPEG poster, if any.  If no poster can be
+    found, it will be generated from the video file.
+    """
+    if not video.title or not video.duration or not video.view_count or not video.url:
+        # These properties can be found in the info json.
+        title, duration, view_count, url = process_video_info_json(video)
+        video.title = title
+        video.duration = duration
+        video.url = url
+        # View count will probably be overwritten by more recent data when this Video's Channel is
+        # updated.
+        video.view_count = video.view_count or view_count
+
+    video_path = video.video_path.path if isinstance(video.video_path, MediaPath) else video.video_path
+
+    if not video.title:
+        # Video title was not in the info json, use the filename.
+        title = get_video_title_from_file_name(video_path)
+        video.title = html.unescape(title)
+    if not video.duration:
+        # Video duration was not in the info json, use ffprobe.
+        video.duration = get_video_duration(video_path)
+    if not video.caption and video.caption_path:
+        video.caption = get_video_captions(video)
+    if not video.size:
+        video.size = video_path.stat().st_size
+    if not video.poster_path:
+        # Video poster is not found, lets check near the video file.
+        for ext in ('.jpg', '.jpeg', '.webp', '.png'):
+            if (poster_path := video_path.with_suffix(ext)).is_file():
+                video.poster_path = poster_path
+                break
+    if channel_generate_poster:
+        # Try to convert/generate, but keep the old poster if those fail.
+        video.poster_path = convert_or_generate_poster(video) or video.poster_path
+    # All data about the Video has been found, we should not attempt to validate it again.
+    video.validated = True
 
 
 def convert_or_generate_poster(video: Video) -> Optional[pathlib.Path]:
@@ -394,7 +402,7 @@ def get_video_title_from_file_name(video_path: pathlib.Path) -> str:
         path = pathlib.Path(after)
         return path.stem.strip()
     # Return the stem as a last resort
-    return video_path.stem.strip()
+    return pathlib.Path(video_path).stem.strip()
 
 
 def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = None, idempotency: str = None,
@@ -458,6 +466,14 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
             setattr(video, key, value)
     else:
         video = Video(**video_dict)
+
+    # Fill in any missing data.  Generate poster if enabled and necessary.
+    try:
+        validate_video(video, channel.generate_posters if channel else False)
+    except Exception:
+        # Could not validate, this could be an issue with a file.  This should not prevent the video from being
+        # inserted.
+        pass
 
     session.add(video)
     session.flush()

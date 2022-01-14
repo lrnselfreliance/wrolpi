@@ -1,11 +1,10 @@
-import json
 import pathlib
 import subprocess
 import tempfile
 from datetime import datetime
 from typing import List
 from unittest import mock
-from unittest.mock import Mock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 from PIL import Image
@@ -17,9 +16,9 @@ from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_session
 from wrolpi.test.common import build_test_directories, wrap_test_db, TestAPI
 from wrolpi.vars import PROJECT_DIR
-from ..common import get_matching_directories, convert_image, bulk_validate_posters, remove_duplicate_video_paths, \
+from ..common import get_matching_directories, convert_image, remove_duplicate_video_paths, \
     apply_info_json, get_video_duration, generate_video_poster, replace_extension, is_valid_poster, \
-    get_bulk_video_info_json, import_videos_config
+    import_videos_config
 from ..lib import save_channels_config
 
 
@@ -190,79 +189,6 @@ def test_create_db_structure(_structure, paths):
 @create_channel_structure(
     {
         'channel1': ['vid1.mp4', 'vid1.jpg'],
-        'channel2': ['vid2.flv', 'vid2.webp'],
-    }
-)
-def test_bulk_replace_invalid_posters(tempdir: pathlib.Path):
-    """
-    Test that when a video has an invalid poster format, we convert it to JPEG.
-    """
-    channel1, channel2 = sorted(tempdir.iterdir())
-    jpg, mp4 = sorted(channel1.iterdir())
-    flv, webp = sorted(channel2.iterdir())
-
-    Image.new('RGB', (25, 25)).save(jpg)
-    Image.new('RGB', (25, 25)).save(webp)
-
-    with open(jpg, 'rb') as jpg_fh, open(webp, 'rb') as webp_fh:
-        # Files are different formats.
-        jpg_fh_contents = jpg_fh.read()
-        webp_fh_contents = webp_fh.read()
-        assert jpg_fh_contents != webp_fh_contents
-        assert Image.open(jpg_fh).format == 'JPEG'
-        assert Image.open(webp_fh).format == 'WEBP'
-
-    with get_db_session() as session:
-        vid1 = session.query(Video).filter_by(poster_path=f'{tempdir}/channel1/vid1.jpg').one()
-        assert vid1.validated_poster is False
-
-        vid2 = session.query(Video).filter_by(poster_path=f'{tempdir}/channel2/vid2.webp').one()
-        assert vid2.validated_poster is False
-
-    # Convert the WEBP image.  convert_image() should only be called once.
-    mocked_convert_image = Mock(wraps=convert_image)
-    with mock.patch('modules.videos.common.convert_image', mocked_convert_image):
-        video_ids = [vid1.id, vid2.id]
-        bulk_validate_posters(video_ids)
-
-    mocked_convert_image.assert_called_once_with(webp, tempdir / 'channel2/vid2.jpg')
-
-    with get_db_session() as session:
-        # Get the video by ID because it's poster is now a JPEG.
-        vid2 = session.query(Video).filter_by(id=vid2.id).one()
-        assert str(vid2.poster_path.path).split('/')[-1] == 'vid2.jpg'
-        assert all('webp' not in str(i.poster_path.path) for i in session.query(Video).all())
-        assert vid2.validated_poster is True
-
-        # Vid1's image was validated, but not converted.
-        vid1 = session.query(Video).filter_by(id=vid1.id).one()
-        assert str(vid1.poster_path.path).split('/')[-1] == 'vid1.jpg'
-        assert vid1.validated_poster is True
-
-    # Old webp was removed
-    assert not webp.is_file()
-    new_jpg = tempdir / 'channel2/vid2.jpg'
-    assert new_jpg.is_file()
-    # chmod 644
-    assert new_jpg.stat().st_mode == 0o100644
-    with open(new_jpg, 'rb') as new_jpg_fh:
-        # The converted image is the same as the other JPEG because both are black 25x25 pixel images.
-        assert jpg_fh_contents == new_jpg_fh.read()
-        assert Image.open(new_jpg_fh).format == 'JPEG'
-
-    # Calling convert again has no effect.
-    mocked_convert_image.reset_mock()
-    with mock.patch('modules.videos.common.convert_image', mocked_convert_image):
-        video_ids = [vid1.id, vid2.id]
-        bulk_validate_posters(video_ids)
-
-    mocked_convert_image.assert_not_called()
-
-
-@wrap_test_db
-@create_channel_structure(
-    {
-        'channel1': ['vid1.mp4', 'vid1.jpg'],
         'channel2': ['vid2.mp4'],
         'channel3': ['vid3.mp4', 'vid4.mp4'],
     }
@@ -381,34 +307,6 @@ def test_update_censored_videos(test_session, video_factory, simple_channel):
     test_session.commit()
     apply_info_json(simple_channel.id)
     check_censored([(vid1.id, True), (vid2.id, True), (vid3.id, True), (vid4.id, False)])
-
-
-@pytest.mark.asyncio
-async def test_missing_title(test_session, simple_video):
-    """
-    A Video title will be filled out by `get_bulk_video_info_json`.
-    """
-    video_path: pathlib.Path = simple_video.video_path.path
-    simple_video.duration = 10  # don't update the duration during get_bulk_video_info_json()
-
-    info_json_path = video_path.with_suffix('.info.json')
-    info_json_path.write_text(json.dumps({'title': 'info json title &amp;'}))
-    simple_video.info_json_path = info_json_path
-    test_session.commit()
-
-    # simple_video does not come with a title.
-    assert not simple_video.title
-
-    # Title is fetched from the info_json.
-    await get_bulk_video_info_json([simple_video.id])
-    assert simple_video.title == 'info json title &'
-
-    # No info_json means the filename is used.
-    simple_video.title = None
-    simple_video.info_json_path = None
-    test_session.commit()
-    await get_bulk_video_info_json([simple_video.id])
-    assert simple_video.title == 'simple_video'
 
 
 def test_import_favorites(test_session, simple_channel, video_factory):

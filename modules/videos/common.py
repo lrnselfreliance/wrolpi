@@ -1,4 +1,4 @@
-import html
+import json
 import json
 import os
 import pathlib
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 
 from wrolpi import before_startup
-from wrolpi.common import logger, get_config, iterify, chunks, get_media_directory, \
+from wrolpi.common import logger, get_config, iterify, get_media_directory, \
     minimize_dict, api_param_limiter
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
@@ -342,26 +342,10 @@ def generate_video_poster(video_path: Path) -> Path:
         logger.warning(f'FFMPEG poster generation failed with stdout: {e.stdout.decode()}')
         logger.warning(f'FFMPEG poster generation failed with stdout: {e.stderr.decode()}')
         raise
+    if not poster_path.exists():
+        raise Exception(f'Failed to find generated poster! {poster_path}')
+
     return poster_path
-
-
-async def generate_bulk_posters(video_ids: List[int]):
-    """
-    Generate all posters for the provided videos.  Update the video object with the new jpg file location.  Do not
-    clobber existing jpg files.
-    """
-    logger.info(f'Generating {len(video_ids)} video posters')
-    for video_ids in chunks(video_ids, 10):
-        with get_db_session(commit=True) as session:
-            videos = session.query(Video).filter(Video.id.in_(video_ids))
-            for video in videos:
-                video_path = video.video_path.path
-
-                poster_path = replace_extension(video_path, '.jpg')
-                if not poster_path.exists():
-                    generate_video_poster(video_path)
-                video.poster_path = poster_path
-    logger.info('Done generating video posters')
 
 
 def convert_image(existing_path: Path, destination_path: Path, ext: str = 'jpeg'):
@@ -391,42 +375,6 @@ def is_valid_poster(poster_path: Path) -> bool:
     return False
 
 
-def bulk_validate_posters(video_ids: List[int]):
-    """
-    Replace all posters for the provided videos if a video's poster is not a JPEG format.
-    """
-    logger.info(f'Validating {len(video_ids)} video posters')
-    for video_ids in chunks(video_ids, 10):
-        for video_id in video_ids:
-            with get_db_session(commit=True) as session:
-                video: Video = session.query(Video).filter_by(id=video_id).one()
-
-                poster_path: Path = video.poster_path.path
-                new_poster_path = poster_path.with_suffix('.jpg')
-
-                if poster_path != new_poster_path and new_poster_path.exists():
-                    # Destination JPEG already exists (it may have the wrong format), lets overwrite it with a valid
-                    # JPEG.
-                    poster_path.unlink()
-                    poster_path = new_poster_path
-
-                if not is_valid_poster(poster_path):
-                    # Poster is not valid, convert it and place it in the new location.
-                    try:
-                        convert_image(poster_path, new_poster_path)
-                        logger.info(f'Converted invalid poster {poster_path} to {new_poster_path}')
-                    except Exception as e:
-                        logger.error(f'Failed to convert invalid poster {poster_path} to {new_poster_path}', exc_info=e)
-                        continue
-                else:
-                    logger.debug(f'Poster was already valid: {new_poster_path}')
-
-                # Update the video with the new poster path.  Mark it as validated.
-                video.poster_path = new_poster_path
-                video.validated_poster = True
-    logger.info('Done validating video posters.')
-
-
 def get_video_duration(video_path: Path) -> int:
     """
     Get the duration of a video in seconds.  Do this using ffprobe.
@@ -448,62 +396,6 @@ def get_video_duration(video_path: Path) -> int:
     stdout = proc.stdout.decode()
     duration = int(float(stdout.strip()))
     return duration
-
-
-async def get_bulk_video_info_json(video_ids: List[int]):
-    """
-    Get and save the info_json data for each video provided.
-    """
-    logger.info(f'Getting {len(video_ids)} video info_json meta data.')
-    for video_ids in chunks(video_ids, 10):
-        with get_db_session(commit=True) as session:
-            for video_id in video_ids:
-                video = session.query(Video).filter_by(id=video_id).one()
-                logger.debug(f'Getting video info_json data: {video}')
-
-                if not video.video_path:
-                    logger.warning(f'Refusing to get info_json for video without a video file: {video}')
-                    continue
-
-                try:
-                    info_json = video.get_info_json()
-                    if info_json:
-                        if not video.view_count and info_json.get('view_count'):
-                            video.view_count = info_json['view_count']
-                        if not video.duration:
-                            # Get duration from info_json without reading video file.
-                            video.duration = info_json.get('duration')
-                        # Trust the info_json title before the video path title.
-                        video.title = info_json.get('title')
-                    if not video.duration:
-                        # As a last resort, get duration from the video file.
-                        video.duration = get_video_duration(video.video_path.path)
-                    if not video.title:
-                        # Use the video path name without the extension.
-                        video.title = video.video_path.path.with_suffix('').name
-
-                    # Unescape any HTML entities.
-                    video.title = html.unescape(video.title)
-
-                except Exception:
-                    logger.warning(f'Unable to get meta data of {video}', exc_info=True)
-    logger.info('Done getting video info_json meta data.')
-
-
-async def get_bulk_video_size(video_ids: List[int]):
-    """
-    Get and save the size for each video provided.
-    """
-    logger.info(f'Getting {len(video_ids)} video sizes.')
-    for video_ids in chunks(video_ids, 10):
-        with get_db_session(commit=True) as session:
-            for video_id in video_ids:
-                video = session.query(Video).filter_by(id=video_id).one()
-                logger.debug(f'Getting video size: {video.id} {video.video_path}')
-
-                size = video.video_path.path.stat().st_size
-                video.size = size
-    logger.info('Done getting video sizes')
 
 
 def apply_info_json(channel_id: int):

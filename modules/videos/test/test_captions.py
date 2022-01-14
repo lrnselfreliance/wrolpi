@@ -46,11 +46,11 @@ class TestCaption(TestAPI):
         video1 = Video(title='scream', caption_path=str(self.vtt_path1))
         session.add(video1)
         session.commit()
-        captions.process_captions(video1)
+        video1.caption = captions.get_video_captions(video1)
         video2 = Video(title='bar', caption_path=str(self.vtt_path2))
         session.add(video2)
         session.commit()
-        captions.process_captions(video2)
+        video2.caption = captions.get_video_captions(video2)
 
         session.commit()
         session.flush()

@@ -243,8 +243,7 @@ class DownloadManager:
         """
         return self._instances.get(name)
 
-    @staticmethod
-    def get_new_downloads(session: Session) -> List[Download]:
+    def get_new_downloads(self, session: Session) -> List[Download]:
         """
         Get all "new" downloads.  This method fetches the first download each iteration, so it will fetch downloads
         that were created after calling it.
@@ -258,6 +257,7 @@ class DownloadManager:
                 # Got the last download again.  Is something wrong?
                 return
             last = download
+            download.manager = self
             yield download
 
     def get_or_create_download(self, url: str, session: Session) -> Download:
@@ -337,6 +337,9 @@ class DownloadManager:
 
             download_count = 0
             for download in downloads:
+                if self.disabled.is_set():
+                    raise InvalidDownload('DownloadManager is disabled')
+
                 download_count += 1
                 download_id = download.id
                 url = download.url
@@ -481,7 +484,7 @@ class DownloadManager:
         recurring = self.get_recurring_downloads(session)
         renewed = False
         for download in recurring:
-            if download.next_download <= now_:
+            if download.next_download < now_:
                 download.renew()
                 renewed = True
 
@@ -489,21 +492,27 @@ class DownloadManager:
             session.commit()
             self.start_downloads()
 
-    @staticmethod
-    def get_downloads(session: Session) -> List[Download]:
+    def get_downloads(self, session: Session) -> List[Download]:
         downloads = session.query(Download).all()
-        return list(downloads)
+        downloads = list(downloads)
+        for download in downloads:
+            download.manager = self
+        return downloads
 
-    @staticmethod
-    def get_download(session: Session, url: str = None, id_: int = None) -> Optional[Download]:
+    def get_download(self, session: Session, url: str = None, id_: int = None) -> Optional[Download]:
         """
         Attempt to find a Download by its URL or by its id.
         """
         query = session.query(Download)
         if url:
-            return query.filter_by(url=url).one_or_none()
+            download = query.filter_by(url=url).one_or_none()
         elif id:
-            return query.filter_by(id=id_).one_or_none()
+            download = query.filter_by(id=id_).one_or_none()
+        else:
+            raise ValueError('Cannot find download without some params.')
+        if download:
+            download.manager = self
+        return download
 
     @optional_session
     def delete_download(self, download_id: int, session: Session = None):

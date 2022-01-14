@@ -7,7 +7,7 @@ from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, Fore
 from sqlalchemy.orm import relationship, Session, deferred
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import Base, tsvector, ModelHelper, logger
+from wrolpi.common import Base, tsvector, ModelHelper, logger, get_media_directory
 from wrolpi.dates import now, TZDateTime
 from wrolpi.db import get_db_curs
 from wrolpi.downloader import Download
@@ -23,6 +23,7 @@ class Video(ModelHelper, Base):
     channel_id = Column(Integer, ForeignKey('channel.id'))
     channel = relationship('Channel', primaryjoin='Video.channel_id==Channel.id', back_populates='videos')
     idempotency = Column(String)
+    validated = Column(Boolean, default=False)
 
     # File paths
     caption_path = Column(MediaPathType)
@@ -33,17 +34,16 @@ class Video(ModelHelper, Base):
     video_path = Column(MediaPathType)
 
     caption = deferred(Column(String))  # slow to fetch
+    censored = Column(Boolean, default=False)
     duration = Column(Integer)
     favorite = Column(TZDateTime)
     size = Column(Integer)
     source_id = Column(String)
     title = Column(String)
     upload_date = Column(TZDateTime)
-    validated_poster = Column(Boolean, default=False)
-    viewed = Column(TZDateTime)
-    view_count = Column(Integer)
     url = Column(String)
-    censored = Column(Boolean, default=False)
+    view_count = Column(Integer)
+    viewed = Column(TZDateTime)
 
     textsearch = deferred(
         Column(tsvector, Computed('''to_tsvector('english'::regconfig,
@@ -51,7 +51,9 @@ class Video(ModelHelper, Base):
                                                 COALESCE(caption, ''::text)))''')))
 
     def __repr__(self):
-        video_path = self.video_path.path if self.video_path else None
+        video_path = self.video_path
+        if self.video_path and isinstance(self.video_path, MediaPath):
+            video_path = self.video_path.path.relative_to(get_media_directory())
         return f'<Video id={self.id} title={self.title} path={video_path} channel={self.channel_id} ' \
                f'source_id={self.source_id}>'
 
@@ -258,8 +260,8 @@ class Channel(ModelHelper, Base):
     match_regex = Column(String)
     directory: MediaPath = Column(MediaPathType)
     skip_download_videos = Column(ARRAY(String))
-    generate_posters = Column(Boolean)
-    calculate_duration = Column(Boolean)
+    generate_posters = Column(Boolean, default=False)  # generating posters may delete files, and can be slow.
+    calculate_duration = Column(Boolean, default=True)
     download_frequency = Column(Integer)
     source_id = Column(String)
     refreshed = Column(Boolean, default=False)

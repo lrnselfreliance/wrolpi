@@ -195,7 +195,7 @@ class TestDownloader(TestAPI):
             self.assertEqual(download.last_successful_download, now)
 
             # Download is due an hour later.
-            mock_now.return_value = local_timezone(datetime(2020, 1, 1, 1, 0, 0))
+            mock_now.return_value = local_timezone(datetime(2020, 1, 1, 1, 0, 1))
             self.mgr.renew_recurring_downloads(session)
             downloads = list(self.mgr.get_new_downloads(session))
             self.assertEqual(len(downloads), 1)
@@ -214,7 +214,7 @@ class TestDownloader(TestAPI):
             self.assertEqual(download.status, 'deferred')
             self.assertEqual(download.last_successful_download, now)
             # Download should be retried after the DEFAULT_RETRY_FREQUENCY.
-            self.assertEqual(download.next_download, expected + timedelta(hours=1))
+            self.assertEqual(download.next_download, expected + timedelta(hours=1, seconds=1))
 
             # Try the download again, it finally succeeds.
             http_downloader.do_download.reset_mock()

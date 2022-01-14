@@ -37,7 +37,7 @@ ChannelIEs = {
 }
 
 PREFERRED_VIDEO_EXTENSION = 'mp4'
-PREFERRED_VIDEO_FORMAT = 'best[height=720],mp4-480p,mp4-360p,mp4-240p'
+PREFERRED_VIDEO_FORMAT = 'best[height=720],22,720p,mp4-480p,mp4-360p,mp4-240p'
 
 
 def get_no_channel_directory():
@@ -171,7 +171,7 @@ class VideoDownloader(Downloader, ABC):
             return_code = self.process_runner(url, cmd, out_dir)
 
             if return_code != 0:
-                raise ValueError(f'youtube-dl exited with {return_code}')
+                raise ValueError(f'video downloader process exited with {return_code}')
 
             if not video_path.is_file():
                 raise ValueError(f'Video file could not be found!  {video_path}')

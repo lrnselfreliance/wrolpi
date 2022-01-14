@@ -337,6 +337,9 @@ class DownloadManager:
 
             download_count = 0
             for download in downloads:
+                if self.disabled.is_set():
+                    raise InvalidDownload('DownloadManager is disabled')
+
                 download_count += 1
                 download_id = download.id
                 url = download.url

@@ -159,7 +159,7 @@ def validate_videos():
 
                     if not video.title:
                         # Video title was not in the info json, use the filename.
-                        title = video.video_path.path.with_suffix('').name
+                        title = get_video_title_from_file_name(video.video_path.path)
                         video.title = html.unescape(title)
                     if not video.duration:
                         # Video duration was not in the info json, use ffprobe.
@@ -359,6 +359,24 @@ async def get_statistics():
 
 NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
                          r'(jpg|webp|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
+DATE_SPLITTER = re.compile(r'\d{8}')
+
+
+def get_video_title_from_file_name(video_path: pathlib.Path) -> str:
+    """
+    Attempt to get the video title from a file name.
+    """
+    video_str = str(video_path)
+    if match := NAME_PARSER.match(video_str):
+        channel, date, source_id, title, ext = match.groups()
+        return title.strip()
+    # Try to find a date, return the string on the right.
+    if (match := DATE_SPLITTER.split(video_str)) and len(match) == 2:
+        before, after = match
+        path = pathlib.Path(after)
+        return path.stem.strip()
+    # Return the stem as a last resort
+    return video_path.stem.strip()
 
 
 def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = None, idempotency: str = None,

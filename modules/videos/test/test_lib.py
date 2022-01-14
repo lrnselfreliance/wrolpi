@@ -1,4 +1,5 @@
 import json
+import pathlib
 import shutil
 from datetime import datetime
 from unittest import mock
@@ -8,7 +9,7 @@ import sqlalchemy
 
 from modules.videos.channel import lib
 from modules.videos.common import apply_info_json
-from modules.videos.lib import validate_videos
+from modules.videos.lib import validate_videos, get_video_title_from_file_name
 from modules.videos.models import Channel, Video
 from modules.videos.video.lib import video_search
 from wrolpi.dates import local_timezone
@@ -118,7 +119,7 @@ def test_validate_videos(test_session, simple_channel, video_factory):
     """
     Videos that aren't validated should have their data filled in while being validated.
     """
-    vid1_json = {'title': 'info title'}
+    vid1_json = {'title': 'info&apos;s title'}
     vid3_json = {'duration': 100}
     vid5_json = {'view_count': 42}
     vid6_json = {'webpage_url': 'https://example.com/webpage', 'url': 'https://example.com/url'}
@@ -136,6 +137,7 @@ def test_validate_videos(test_session, simple_channel, video_factory):
     # These videos are missing this data, and a refresh should fill them in.
     vid1.title = None
     vid2.caption = None
+    vid2.title = None
     vid3.duration = None
     vid4.size = None
     vid5.view_count = None
@@ -151,8 +153,9 @@ def test_validate_videos(test_session, simple_channel, video_factory):
     # All Videos are validated, all data is filled out.  The info json data is trusted first.
     validate_videos()
     assert all([i.validated for i in test_session.query(Video)])
-    assert vid1.title == 'info title'
+    assert vid1.title == "info's title"
     assert vid2.caption.startswith('okay welcome')
+    assert 'mp4' not in vid2.title
     assert vid3.duration == 100
     assert vid4.size == 1055736
     assert vid5.view_count == 42
@@ -183,7 +186,7 @@ def test_validate_videos(test_session, simple_channel, video_factory):
 
     validate_videos()
     assert all([i.validated for i in test_session.query(Video)])
-    assert vid1.title != 'info title'  # file name is used.
+    assert vid1.title != "info's title"  # file name is used.
     assert vid3.duration == 5  # video file duration is used.
     assert vid5.view_count is None
     assert vid6.url == 'https://example.com/url'  # url is used as backup url.
@@ -220,3 +223,18 @@ def test_validate_video_exception(test_session, simple_channel, video_factory):
     assert not vid1.validated
     assert vid2.validated
     assert not vid3.validated
+
+
+@pytest.mark.parametrize('file_name,expected', [
+    ('channel_20000101_12345678910_ some title.mp4', 'some title'),
+    ('20000101 foo.mp4', 'foo'),
+    ('something_20000101 foo.mp4', 'foo'),
+    ('something 20000101 foo.mp4', 'foo'),
+    ('foo .mp4', 'foo'),
+])
+def test_get_video_title_from_file_name(file_name, expected):
+    """
+    A Video's title can be parsed from the video file.
+    """
+    video_path = pathlib.Path(file_name)
+    assert get_video_title_from_file_name(video_path) == expected

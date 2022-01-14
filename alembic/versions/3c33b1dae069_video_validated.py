@@ -24,6 +24,8 @@ def upgrade():
     session = Session(bind=bind)
     session.execute('ALTER TABLE video ADD COLUMN validated BOOLEAN DEFAULT FALSE')
     session.execute('ALTER TABLE video DROP COLUMN IF EXISTS validated_poster')
+    # Generating posters is slow, and may delete files.
+    session.execute('ALTER TABLE channel ALTER COLUMN generate_posters SET DEFAULT false')
 
 
 def downgrade():

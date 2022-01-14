@@ -260,8 +260,8 @@ class Channel(ModelHelper, Base):
     match_regex = Column(String)
     directory: MediaPath = Column(MediaPathType)
     skip_download_videos = Column(ARRAY(String))
-    generate_posters = Column(Boolean)
-    calculate_duration = Column(Boolean)
+    generate_posters = Column(Boolean, default=False)  # generating posters may delete files, and can be slow.
+    calculate_duration = Column(Boolean, default=True)
     download_frequency = Column(Integer)
     source_id = Column(String)
     refreshed = Column(Boolean, default=False)

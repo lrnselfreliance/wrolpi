@@ -140,6 +140,8 @@ def validate_videos():
     with get_db_curs() as curs:
         curs.execute('SELECT id FROM video WHERE video_path IS NOT NULL AND validated IS FALSE')
         video_ids = [i['id'] for i in curs.fetchall()]
+        curs.execute('SELECT id, generate_posters FROM channel')
+        channel_generate_posters = {i['id']: i['generate_posters'] for i in curs.fetchall()}
 
     logger.info(f'Validating {len(video_ids)} videos.')
     for chunk in chunks(video_ids, 20):
@@ -199,7 +201,7 @@ def validate_videos():
                                 logger.error(f'Failed to convert invalid poster {old} to {new}', exc_info=e)
                         else:
                             logger.debug(f'Poster was already valid: {new}')
-                    if not video.poster_path:
+                    if not video.poster_path and video.channel_id and channel_generate_posters.get(video.channel_id):
                         # Video poster was not discovered, or converted.  Let's generate it.
                         try:
                             generate_video_poster(video_path)

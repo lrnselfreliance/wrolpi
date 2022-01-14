@@ -37,7 +37,7 @@ ChannelIEs = {
 }
 
 PREFERRED_VIDEO_EXTENSION = 'mp4'
-PREFERRED_VIDEO_FORMAT = 'best[height=720],mp4-480p,mp4-360p,mp4-240p'
+PREFERRED_VIDEO_FORMAT = 'best[height=720],22,720p,mp4-480p,mp4-360p,mp4-240p'
 
 
 def get_no_channel_directory():

@@ -131,7 +131,9 @@ def process_video_info_json(video: Video):
 def validate_videos():
     """
     Validate all Videos not yet validated.  A Video is validated when we have attempted to find its: title, duration,
-    view_count, url, caption, size.  A Video is also valid when it has a JPEG poster, if any.
+    view_count, url, caption, size.  A Video is also valid when it has a JPEG poster, if any.  If no poster can be
+    found, it will be generated from the video file.
+
     This function marks the Video as validated, even if no data can be found so a Video will not be validated multiple
     times.
     """
@@ -171,20 +173,10 @@ def validate_videos():
                     if not video.poster_path:
                         # Video poster is not found, lets check near the video file.
                         video_path = video.video_path.path
-                        found = False
                         for ext in ('.jpg', '.jpeg', '.webp', '.png'):
                             if (poster_path := video_path.with_suffix(ext)).is_file():
                                 video.poster_path = poster_path
-                                found = True
                                 break
-                        if not found:
-                            # No poster was discovered, generate one.
-                            try:
-                                generate_video_poster(video_path)
-                                video.poster_path = video_path.with_suffix('.jpg')
-                                logger.debug(f'Generated poster for {video}')
-                            except Exception as e:
-                                logger.error(f'Failed to generate poster for {video}', exc_info=e)
                     if video.poster_path:
                         # Check that the poster is a more universally supported JPEG.
                         old: pathlib.Path = video.poster_path.path if \
@@ -207,6 +199,14 @@ def validate_videos():
                                 logger.error(f'Failed to convert invalid poster {old} to {new}', exc_info=e)
                         else:
                             logger.debug(f'Poster was already valid: {new}')
+                    if not video.poster_path:
+                        # Video poster was not discovered, or converted.  Let's generate it.
+                        try:
+                            generate_video_poster(video_path)
+                            video.poster_path = video_path.with_suffix('.jpg')
+                            logger.debug(f'Generated poster for {video}')
+                        except Exception as e:
+                            logger.error(f'Failed to generate poster for {video}', exc_info=e)
 
                     # All data about the Video has been found, we should not attempt to validate it again.
                     video.validated = True

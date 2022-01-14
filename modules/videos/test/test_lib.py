@@ -123,12 +123,12 @@ def test_validate_videos(test_session, simple_channel, video_factory):
     vid5_json = {'view_count': 42}
     vid6_json = {'webpage_url': 'https://example.com/webpage', 'url': 'https://example.com/url'}
 
-    vid1 = video_factory(simple_channel.id, with_video_file=True, with_info_json=vid1_json)
-    vid2 = video_factory(simple_channel.id, with_video_file=True, with_info_json=True)
-    vid3 = video_factory(simple_channel.id, with_video_file=True, with_info_json=vid3_json)
-    vid4 = video_factory(simple_channel.id, with_video_file=True, with_info_json=True)
-    vid5 = video_factory(simple_channel.id, with_video_file=True, with_info_json=vid5_json)
-    vid6 = video_factory(simple_channel.id, with_video_file=True, with_info_json=vid6_json)
+    vid1 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg', with_info_json=vid1_json)
+    vid2 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg', with_info_json=True)
+    vid3 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg', with_info_json=vid3_json)
+    vid4 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg', with_info_json=True)
+    vid5 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg', with_info_json=vid5_json)
+    vid6 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg', with_info_json=vid6_json)
     vid7 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg')
     vid8 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='webp')
     vid9 = video_factory(simple_channel.id, with_video_file=True)
@@ -198,17 +198,14 @@ def test_validate_video_exception(test_session, simple_channel, video_factory):
     """
     Test that even if a Video cannot be validated, the other Videos will still be validated.
     """
-    vid1 = video_factory(simple_channel.id, with_video_file=True)
+    vid1 = video_factory(simple_channel.id)  # has no video file, this will cause an error.
     vid2 = video_factory(simple_channel.id, with_video_file=True)
     assert not vid1.validated
     assert not vid2.validated
     test_session.commit()
 
-    with mock.patch('modules.videos.lib.process_video_info_json') as mock_process_video_info_json:
-        # First video fails, second video succeeds.
-        mock_process_video_info_json.side_effect = [Exception('oh no!'), (None, None, None, None)]
-        validate_videos()
-        test_session.commit()
+    validate_videos()
+    test_session.commit()
 
     assert not vid1.validated
     assert vid2.validated

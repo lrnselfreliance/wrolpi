@@ -155,7 +155,7 @@ def validate_videos():
                         video.url = url
                         # View count will probably be overwritten by more recent data when this Video's Channel is
                         # updated.
-                        video.view_count = view_count
+                        video.view_count = video.view_count or view_count
 
                     if not video.title:
                         # Video title was not in the info json, use the filename.

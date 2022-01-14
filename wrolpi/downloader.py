@@ -481,7 +481,7 @@ class DownloadManager:
         recurring = self.get_recurring_downloads(session)
         renewed = False
         for download in recurring:
-            if download.next_download <= now_:
+            if download.next_download < now_:
                 download.renew()
                 renewed = True
 

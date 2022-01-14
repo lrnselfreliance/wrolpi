@@ -139,6 +139,7 @@ def validate_videos():
         curs.execute('SELECT id FROM video WHERE validated IS FALSE')
         video_ids = [i['id'] for i in curs.fetchall()]
 
+    logger.info(f'Validating {len(video_ids)} videos.')
     for chunk in chunks(video_ids, 20):
         with get_db_session(commit=True) as session:
             videos = session.query(Video).filter(Video.id.in_(chunk)).all()

@@ -220,9 +220,6 @@ def convert_or_generate_poster(video: Video) -> Optional[pathlib.Path]:
             except Exception as e:
                 logger.error(f'Failed to convert invalid poster {old} to {new}', exc_info=e)
                 return
-        else:
-            logger.debug(f'Poster was already valid: {new}')
-            return
 
     if not video.poster_path:
         # Video poster was not discovered, or converted.  Let's generate it.

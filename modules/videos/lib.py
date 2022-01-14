@@ -435,8 +435,8 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
     video.poster_path = poster_path
     video.video_path = video_path
 
-    if channel and not video_path.is_relative_to(channel.directory.path):
-        raise ValueError(f'Video path is not within its channel {video_path=} {channel.directory=}')
+    if channel and not str(video_path).startswith(str(channel.directory.path)):
+        raise ValueError(f'Video path is not within its channel {video_path=} not in {channel.directory=}')
 
     video.channel = channel
     video.idempotency = idempotency

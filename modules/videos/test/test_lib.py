@@ -9,7 +9,7 @@ import sqlalchemy
 
 from modules.videos.channel import lib
 from modules.videos.common import apply_info_json
-from modules.videos.lib import validate_videos, get_video_title_from_file_name
+from modules.videos.lib import validate_videos, parse_video_file_name
 from modules.videos.models import Channel, Video
 from modules.videos.video.lib import video_search
 from wrolpi.dates import local_timezone
@@ -232,14 +232,18 @@ def test_validate_video_exception(test_session, simple_channel, video_factory):
     ('20000101 foo.mp4', 'foo'),
     ('something_20000101 foo.mp4', 'foo'),
     ('something 20000101 foo.mp4', 'foo'),
+    ('something_20000101_foo.mp4', 'foo'),
+    ('something 2000010 foo.mp4', 'something 2000010 foo'),  # bad date format
     ('foo .mp4', 'foo'),
+    ('NA_20000303_vp91w5_Bob&apos;s Pancakes.mp4', 'Bob&apos;s Pancakes'),
+    ('NA_NA_vp91w5_Bob&apos;s Pancakes.mp4', 'Bob&apos;s Pancakes'),
 ])
 def test_get_video_title_from_file_name(file_name, expected):
     """
     A Video's title can be parsed from the video file.
     """
     video_path = pathlib.Path(file_name)
-    assert get_video_title_from_file_name(video_path) == expected
+    assert parse_video_file_name(video_path)[3] == expected
 
 
 def test_validate_does_not_generate_when_disabled(test_session, channel_factory, video_factory):

@@ -176,7 +176,7 @@ def validate_video(video: Video, channel_generate_poster: bool):
 
     if not video.title:
         # Video title was not in the info json, use the filename.
-        title = get_video_title_from_file_name(video_path)
+        title = parse_video_file_name(video_path)[3]
         video.title = html.unescape(title)
     if not video.duration:
         # Video duration was not in the info json, use ffprobe.
@@ -383,26 +383,31 @@ async def get_statistics():
     return ret
 
 
-NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{11})_)?(.*)\.'
+NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.+?)_)?(.*)\.'
                          r'(jpg|webp|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
 DATE_SPLITTER = re.compile(r'\d{8}')
 
 
-def get_video_title_from_file_name(video_path: pathlib.Path) -> str:
+def parse_video_file_name(video_path: pathlib.Path) -> \
+        Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
     """
     Attempt to get the video title from a file name.
     """
     video_str = str(video_path)
     if match := NAME_PARSER.match(video_str):
         channel, date, source_id, title, ext = match.groups()
-        return title.strip()
+        title = title.strip()
+        return channel, date, source_id, title, ext
     # Try to find a date, return the string on the right.
     if (match := DATE_SPLITTER.split(video_str)) and len(match) == 2:
         before, after = match
         path = pathlib.Path(after)
-        return path.stem.strip()
+        title = path.stem.strip()
+        return None, None, None, title, None
+
     # Return the stem as a last resort
-    return pathlib.Path(video_path).stem.strip()
+    title = pathlib.Path(video_path).stem.strip()
+    return None, None, None, title, None
 
 
 def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = None, idempotency: str = None,
@@ -416,10 +421,7 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
         raise ValueError(f'Video path is not absolute: {video_path}')
     poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path)
 
-    name_match = NAME_PARSER.match(video_path.name)
-    _ = upload_date = source_id = title = ext = None
-    if name_match:
-        _, upload_date, source_id, title, ext = name_match.groups()
+    _, upload_date, source_id, title, ext = parse_video_file_name(video_path)
 
     # Make sure the date is a valid date format, if not, leave it blank.  Youtube-DL sometimes puts an NA in the date.
     # We may even get videos that weren't downloaded by WROLPi.

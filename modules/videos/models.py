@@ -1,4 +1,5 @@
 import json
+import pathlib
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -129,7 +130,11 @@ class Video(ModelHelper, Base):
         If this Video has an info_json file, return it's contents.  Otherwise, return None.
         """
         try:
-            if self.info_json_path:
+            if isinstance(self.info_json_path, pathlib.Path):
+                with open(self.info_json_path, 'rb') as fh:
+                    contents = json.load(fh)
+                    return contents
+            elif self.info_json_path:
                 with open(self.info_json_path.path, 'rb') as fh:
                     contents = json.load(fh)
                     return contents

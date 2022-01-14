@@ -23,7 +23,7 @@ import {
     startDownloads
 } from "../api";
 import TimezoneSelect from 'react-timezone-select';
-import {secondsToDate, secondsToFrequency, WROLModeMessage} from "./Common";
+import {secondsToDate, secondsToFrequency, textEllipsis, truncateLong, WROLModeMessage} from "./Common";
 
 class Settings extends React.Component {
 
@@ -185,7 +185,7 @@ class DownloadRow extends React.Component {
         }
         return (
             <Table.Row positive={positive}>
-                <Table.Cell>{url}</Table.Cell>
+                <Table.Cell>{textEllipsis(url, 50)}</Table.Cell>
                 <Table.Cell>{secondsToFrequency(frequency)}</Table.Cell>
                 <Table.Cell>{last_successful_download ? secondsToDate(last_successful_download) : null}</Table.Cell>
                 <Table.Cell>{secondsToDate(next_download)}</Table.Cell>
@@ -282,7 +282,7 @@ class StoppableRow extends React.Component {
 
         return (
             <Table.Row positive={positive} negative={negative} warning={warning}>
-                <Table.Cell>{url}</Table.Cell>
+                <Table.Cell>{textEllipsis(url, 50)}</Table.Cell>
                 <Table.Cell>{last_successful_download ? secondsToDate(last_successful_download) : null}</Table.Cell>
                 <Table.Cell>{status}</Table.Cell>
                 {buttonCell}

@@ -121,7 +121,7 @@ export function VideoCard({video}) {
                 <Card.Header>
                     <Container textAlign='left'>
                         <Link to={video_url} className="no-link-underscore card-link">
-                            <p>{video.title || video.stem || video.video_path}</p>
+                            <p>{textEllipsis(video.title || video.stem || video.video_path, 100)}</p>
                         </Link>
                     </Container>
                 </Card.Header>
@@ -607,4 +607,18 @@ export function WROLModeMessage({content}) {
         return <Message icon='lock' header='WROL Mode Enabled' content={content}/>
     }
     return null;
+}
+
+// Thanks https://www.npmjs.com/package/text-ellipsis
+export function textEllipsis(str, maxLength, { side = "end", ellipsis = "..." } = {}) {
+  if (str.length > maxLength) {
+    switch (side) {
+      case "start":
+        return ellipsis + str.slice(-(maxLength - ellipsis.length));
+      case "end":
+      default:
+        return str.slice(0, maxLength - ellipsis.length) + ellipsis;
+    }
+  }
+  return str;
 }

@@ -342,6 +342,9 @@ def generate_video_poster(video_path: Path) -> Path:
         logger.warning(f'FFMPEG poster generation failed with stdout: {e.stdout.decode()}')
         logger.warning(f'FFMPEG poster generation failed with stdout: {e.stderr.decode()}')
         raise
+    if not poster_path.exists():
+        raise Exception(f'Failed to find generated poster! {poster_path}')
+
     return poster_path
 
 

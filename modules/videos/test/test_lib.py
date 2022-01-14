@@ -251,11 +251,15 @@ def test_validate_does_not_generate_when_disabled(test_session, channel_factory,
     channel2.generate_posters = True
     vid1 = video_factory(channel1.id, with_video_file=True)
     vid2 = video_factory(channel2.id, with_video_file=True)
+    # webp will not be converted unless generate_posters is enabled.
+    vid3 = video_factory(channel1.id, with_video_file=True, with_poster_ext='webp')
     test_session.commit()
     assert not vid1.poster_path
     assert not vid2.poster_path
+    assert str(vid3.poster_path).endswith('webp')
 
     validate_videos()
 
     assert not vid1.poster_path
     assert vid2.poster_path
+    assert str(vid3.poster_path).endswith('webp')

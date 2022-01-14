@@ -3,7 +3,7 @@ import json
 import pathlib
 import re
 from collections import defaultdict
-from typing import Tuple
+from typing import Tuple, Optional
 from uuid import uuid1
 
 from sqlalchemy.orm import Session
@@ -159,62 +159,79 @@ def validate_videos():
                         # updated.
                         video.view_count = video.view_count or view_count
 
+                    video_path = video.video_path.path
                     if not video.title:
                         # Video title was not in the info json, use the filename.
-                        title = get_video_title_from_file_name(video.video_path.path)
+                        title = get_video_title_from_file_name(video_path)
                         video.title = html.unescape(title)
                     if not video.duration:
                         # Video duration was not in the info json, use ffprobe.
-                        video.duration = get_video_duration(video.video_path.path)
+                        video.duration = get_video_duration(video_path)
 
                     if not video.caption and video.caption_path:
                         video.caption = get_video_captions(video)
                     if not video.size:
-                        video.size = video.video_path.path.stat().st_size
+                        video.size = video_path.stat().st_size
 
                     if not video.poster_path:
                         # Video poster is not found, lets check near the video file.
-                        video_path = video.video_path.path
                         for ext in ('.jpg', '.jpeg', '.webp', '.png'):
                             if (poster_path := video_path.with_suffix(ext)).is_file():
                                 video.poster_path = poster_path
                                 break
-                    if video.poster_path:
-                        # Check that the poster is a more universally supported JPEG.
-                        old: pathlib.Path = video.poster_path.path if \
-                            isinstance(video.poster_path, MediaPath) else video.poster_path
-                        new = old.with_suffix('.jpg')
-
-                        if old != new and new.exists():
-                            # Destination JPEG already exists (it may have the wrong format).
-                            old.unlink()
-                            old = video.poster_path = new
-
-                        if not is_valid_poster(old):
-                            # Poster is not valid, convert it and place it in the new location.
-                            try:
-                                convert_image(old, new)
-                                old.unlink(missing_ok=True)
-                                video.poster_path = new
-                                logger.info(f'Converted invalid poster {old} to {new}')
-                            except Exception as e:
-                                logger.error(f'Failed to convert invalid poster {old} to {new}', exc_info=e)
-                        else:
-                            logger.debug(f'Poster was already valid: {new}')
-                    if not video.poster_path and video.channel_id and channel_generate_posters.get(video.channel_id):
-                        # Video poster was not discovered, or converted.  Let's generate it.
-                        try:
-                            generate_video_poster(video_path)
-                            video.poster_path = video_path.with_suffix('.jpg')
-                            logger.debug(f'Generated poster for {video}')
-                        except Exception as e:
-                            logger.error(f'Failed to generate poster for {video}', exc_info=e)
+                    if video.channel_id and channel_generate_posters.get(video.channel_id):
+                        # Try to convert/generate, but keep the old poster if those fail.
+                        video.poster_path = convert_or_generate_poster(video) or video.poster_path
 
                     # All data about the Video has been found, we should not attempt to validate it again.
                     video.validated = True
                 except Exception as e:
                     # This video failed to validate, continue validation for the rest of the videos.
                     logger.warning(f'Failed to validate {video=}', exc_info=e)
+
+
+def convert_or_generate_poster(video: Video) -> Optional[pathlib.Path]:
+    """
+    If a Video has a poster, but the poster is invalid, convert it.  If a Video has no poster, generate one from the
+    video file.
+
+    Returns None if the poster was not converted, and not generated.
+    """
+    video_path = video.video_path.path
+    # Modification/generation of poster is enabled for this channel.
+    if video.poster_path:
+        # Check that the poster is a more universally supported JPEG.
+        old: pathlib.Path = video.poster_path.path if \
+            isinstance(video.poster_path, MediaPath) else video.poster_path
+        new = old.with_suffix('.jpg')
+
+        if old != new and new.exists():
+            # Destination JPEG already exists (it may have the wrong format).
+            old.unlink()
+            old = video.poster_path = new
+
+        if not is_valid_poster(old):
+            # Poster is not valid, convert it and place it in the new location.
+            try:
+                convert_image(old, new)
+                old.unlink(missing_ok=True)
+                logger.info(f'Converted invalid poster {old} to {new}')
+                return new
+            except Exception as e:
+                logger.error(f'Failed to convert invalid poster {old} to {new}', exc_info=e)
+                return
+        else:
+            logger.debug(f'Poster was already valid: {new}')
+            return
+
+    if not video.poster_path:
+        # Video poster was not discovered, or converted.  Let's generate it.
+        try:
+            poster_path = generate_video_poster(video_path)
+            logger.debug(f'Generated poster for {video}')
+            return poster_path
+        except Exception as e:
+            logger.error(f'Failed to generate poster for {video}', exc_info=e)
 
 
 def _refresh_videos(channel_links: list = None):

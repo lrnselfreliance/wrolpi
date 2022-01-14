@@ -5,6 +5,7 @@ from collections import defaultdict
 from typing import Tuple, Optional
 from uuid import uuid1
 
+from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Session
 
 from wrolpi.common import logger, chunks, get_config
@@ -451,7 +452,11 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
         # inserted.
         pass
 
-    session.add(video)
+    try:
+        session.add(video)
+    except InvalidRequestError:
+        # Video is already in a session.
+        pass
     session.flush()
 
     return video

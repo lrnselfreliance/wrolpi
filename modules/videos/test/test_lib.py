@@ -228,22 +228,22 @@ def test_validate_video_exception(test_session, simple_channel, video_factory):
 
 
 @pytest.mark.parametrize('file_name,expected', [
-    ('channel_20000101_12345678910_ some title.mp4', 'some title'),
-    ('20000101 foo.mp4', 'foo'),
-    ('something_20000101 foo.mp4', 'foo'),
-    ('something 20000101 foo.mp4', 'foo'),
-    ('something_20000101_foo.mp4', 'foo'),
-    ('something 2000010 foo.mp4', 'something 2000010 foo'),  # bad date format
-    ('foo .mp4', 'foo'),
-    ('NA_20000303_vp91w5_Bob&apos;s Pancakes.mp4', 'Bob&apos;s Pancakes'),
-    ('NA_NA_vp91w5_Bob&apos;s Pancakes.mp4', 'Bob&apos;s Pancakes'),
+    ('channel_20000101_12345678910_ some title.mp4', ('channel', '20000101', '12345678910', 'some title')),
+    ('channel name_NA_12345678910_ some title.mp4', ('channel name', None, '12345678910', 'some title')),
+    ('20000101 foo.mp4', (None, None, None, '20000101 foo')),
+    ('20000101foo.mp4', (None, None, None, '20000101foo')),
+    ('something 20000101 foo.mp4', (None, None, None, 'something 20000101 foo')),
+    ('something_20000101_foo.mp4', ('something', '20000101', None, 'foo')),
+    ('foo .mp4', (None, None, None, 'foo')),
+    ('NA_20000303_vp91w5_Bob&apos;s Pancakes.mp4', (None, '20000303', 'vp91w5', 'Bob&apos;s Pancakes')),
+    ('NA_NA_vp91w5_Bob&apos;s Pancakes.mp4', (None, None, 'vp91w5', 'Bob&apos;s Pancakes')),
 ])
-def test_get_video_title_from_file_name(file_name, expected):
+def test_parse_video_file_name(file_name, expected):
     """
     A Video's title can be parsed from the video file.
     """
     video_path = pathlib.Path(file_name)
-    assert parse_video_file_name(video_path)[3] == expected
+    assert parse_video_file_name(video_path) == expected, f'{file_name} != {expected}'
 
 
 def test_validate_does_not_generate_when_disabled(test_session, channel_factory, video_factory):

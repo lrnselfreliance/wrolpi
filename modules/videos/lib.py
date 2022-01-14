@@ -1,5 +1,4 @@
 import html
-import json
 import pathlib
 import re
 from collections import defaultdict
@@ -151,6 +150,8 @@ def validate_videos():
                 try:
                     channel_generate_poster = channel_generate_posters.get(video.channel_id)
                     validate_video(video, channel_generate_poster)
+                    # All data about the Video has been found, we should not attempt to validate it again.
+                    video.validated = True
                 except Exception as e:
                     # This video failed to validate, continue validation for the rest of the videos.
                     logger.warning(f'Failed to validate {video=}', exc_info=e)
@@ -174,10 +175,13 @@ def validate_video(video: Video, channel_generate_poster: bool):
 
     video_path = video.video_path.path if isinstance(video.video_path, MediaPath) else video.video_path
 
-    if not video.title:
-        # Video title was not in the info json, use the filename.
-        title = parse_video_file_name(video_path)[3]
-        video.title = html.unescape(title)
+    if not video.title or not video.upload_date or not video.source_id:
+        # Video is missing things that can be extracted from the video file name.
+        # These are the least trusted, so anything already on the video should be trusted.
+        _, upload_date, source_id, title = parse_video_file_name(video_path)
+        video.title = video.title or html.unescape(title)
+        video.upload_date = video.upload_date or upload_date
+        video.source_id = video.source_id or source_id
     if not video.duration:
         # Video duration was not in the info json, use ffprobe.
         video.duration = get_video_duration(video_path)
@@ -194,8 +198,6 @@ def validate_video(video: Video, channel_generate_poster: bool):
     if channel_generate_poster:
         # Try to convert/generate, but keep the old poster if those fail.
         video.poster_path = convert_or_generate_poster(video) or video.poster_path
-    # All data about the Video has been found, we should not attempt to validate it again.
-    video.validated = True
 
 
 def convert_or_generate_poster(video: Video) -> Optional[pathlib.Path]:
@@ -385,33 +387,35 @@ async def get_statistics():
 
 NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.+?)_)?(.*)\.'
                          r'(jpg|webp|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
-DATE_SPLITTER = re.compile(r'\d{8}')
 
 
 def parse_video_file_name(video_path: pathlib.Path) -> \
-        Tuple[Optional[str], Optional[str], Optional[str], Optional[str], Optional[str]]:
+        Tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
     """
-    Attempt to get the video title from a file name.
+    A Video's file name can have data in it, this attempts to extract what may be there.
+
+    Example: {channel_name}_{upload_date}_{source_id}_title{ext}
     """
     video_str = str(video_path)
     if match := NAME_PARSER.match(video_str):
-        channel, date, source_id, title, ext = match.groups()
+        channel, date, source_id, title, _ = match.groups()
+
+        channel = None if channel == 'NA' else channel
+        date = None if date == 'NA' else date
+
         title = title.strip()
-        return channel, date, source_id, title, ext
-    # Try to find a date, return the string on the right.
-    if (match := DATE_SPLITTER.split(video_str)) and len(match) == 2:
-        before, after = match
-        path = pathlib.Path(after)
-        title = path.stem.strip()
-        return None, None, None, title, None
+        if date == 'NA':
+            return channel, None, source_id, title
+        if date is None or (len(date) == 8 and date.isdigit()):
+            return channel, date, source_id, title
 
     # Return the stem as a last resort
     title = pathlib.Path(video_path).stem.strip()
-    return None, None, None, title, None
+    return None, None, None, title
 
 
 def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = None, idempotency: str = None,
-                 skip_captions=False, id_: str = None) -> Video:
+                 id_: str = None) -> Video:
     """
     Insert a video into the DB.  Also, find any meta-files near the video file and store them on the video row.
 
@@ -419,59 +423,29 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
     """
     if not video_path.is_absolute():
         raise ValueError(f'Video path is not absolute: {video_path}')
+
+    # This function can update or insert a Video.
+    video = session.query(Video).filter_by(id=id_).one() if id_ else Video()
+
+    # Set the file values, all other things can be found using these files.
     poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path)
+    video.caption_path = caption_path
+    video.description_path = description_path
+    video.info_json_path = info_json_path
+    video.poster_path = poster_path
+    video.video_path = video_path
 
-    _, upload_date, source_id, title, ext = parse_video_file_name(video_path)
+    if channel and not video_path.is_relative_to(channel.directory.path):
+        raise ValueError(f'Video path is not within its channel {video_path=} {channel.directory=}')
 
-    # Make sure the date is a valid date format, if not, leave it blank.  Youtube-DL sometimes puts an NA in the date.
-    # We may even get videos that weren't downloaded by WROLPi.
-    if not upload_date or not upload_date.isdigit() or len(upload_date) != 8:
-        logger.debug(f'Could not parse date from filename: {video_path}')
-        upload_date = None
+    video.channel = channel
+    video.idempotency = idempotency
 
-    duration = None
-    url = None
-    if info_json_path:
-        try:
-            with info_json_path.open('rt') as fh:
-                json_contents = json.load(fh)
-                duration = json_contents.get('duration')
-                url = json_contents.get('webpage_url')
-                # Trust the info_json title before the video filename.
-                title = json_contents.get('title', title)
-        except json.decoder.JSONDecodeError:
-            logger.warning(f'Failed to load JSON file to get duration: {info_json_path}')
-
-    size = video_path.stat().st_size
-    title = html.unescape(title) if title else None
-
-    video_dict = dict(
-        caption_path=str(caption_path) if caption_path else None,
-        channel_id=channel.id if channel else None,
-        description_path=str(description_path) if description_path else None,
-        duration=duration,
-        ext=ext,
-        idempotency=idempotency,
-        info_json_path=str(info_json_path) if info_json_path else None,
-        poster_path=str(poster_path) if poster_path else None,
-        size=size,
-        source_id=source_id,
-        title=title,
-        upload_date=upload_date,
-        url=url,
-        video_path=str(video_path),
-    )
-
-    if id_:
-        video = session.query(Video).filter_by(id=id_).one()
-        for key, value in video_dict.items():
-            setattr(video, key, value)
-    else:
-        video = Video(**video_dict)
-
-    # Fill in any missing data.  Generate poster if enabled and necessary.
     try:
+        # Fill in any missing data.  Generate poster if enabled and necessary.
         validate_video(video, channel.generate_posters if channel else False)
+        # All data about the Video has been found, we should not attempt to validate it again.
+        video.validated = True
     except Exception:
         # Could not validate, this could be an issue with a file.  This should not prevent the video from being
         # inserted.
@@ -479,10 +453,6 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
 
     session.add(video)
     session.flush()
-
-    if skip_captions is False and caption_path:
-        # Process captions only when requested
-        get_video_captions(video)
 
     return video
 

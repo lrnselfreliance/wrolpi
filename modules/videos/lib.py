@@ -254,6 +254,8 @@ def _refresh_videos(channel_links: list = None):
         import_videos_config()
         validate_videos()
 
+    logger.info('Refresh of video files complete')
+
 
 def get_channels_config(session: Session) -> dict:
     """

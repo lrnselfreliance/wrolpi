@@ -4,9 +4,8 @@ from http import HTTPStatus
 from sanic import response, Blueprint
 from sanic.request import Request
 
-from wrolpi.common import logger, wrol_mode_check, get_relative_to_media_directory, make_media_directory, \
+from wrolpi.common import logger, wrol_mode_check, make_media_directory, \
     get_media_directory
-from wrolpi.errors import UnknownDirectory
 from wrolpi.root_api import json_response
 from wrolpi.schema import validate_doc, JSONErrorResponse
 from .lib import get_minimal_channels, delete_channel, update_channel, get_channel, create_channel
@@ -53,16 +52,10 @@ def channel_get(_: Request, link: str):
 )
 @wrol_mode_check
 def channel_post(_: Request, data: dict):
-    try:
-        # Channel directory is relative to the media directory.  Channel directory may not be in "videos" directory!
-        data['directory'] = get_media_directory() / data['directory']
-    except UnknownDirectory:
-        if data['mkdir']:
-            make_media_directory(data['directory'])
-            data['directory'] = get_relative_to_media_directory(data['directory'])
-        else:
-            raise
-    print(data['directory'])
+    # Channel directory is relative to the media directory.  Channel directory may not be in "videos" directory!
+    data['directory'] = get_media_directory() / data['directory']
+    if data.get('mkdir') is True:
+        make_media_directory(data['directory'])
 
     if download_frequency := data.get('download_frequency'):
         try:

@@ -613,6 +613,7 @@ def test_download_channel_no_refresh(test_session, download_channel, video_downl
     """
     A Channel cannot be downloaded until it has been refreshed.
     """
+
     def check_refreshed(expected: bool):
         channel = test_session.query(Channel).one()
         assert channel.refreshed == expected
@@ -625,3 +626,26 @@ def test_download_channel_no_refresh(test_session, download_channel, video_downl
         video_download_manager.do_downloads_sync()
 
     check_refreshed(True)
+
+
+def test_channel_post_directory(test_session, test_client, test_directory):
+    """
+    A Channel can be created with or without an existing directory.
+    """
+    # Channel can be created with a missing directory.
+    data = dict(name='foo', directory='foo')
+    request, response = test_client.post('/api/videos/channels', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.CREATED
+    directory = test_session.query(Channel).filter_by(link='foo').one().directory.path
+    assert (test_directory / 'foo') == directory
+    assert not directory.is_dir()
+    assert directory.is_absolute()
+
+    # Channel can be created and have its directory be created.
+    data = dict(name='bar', directory='bar', mkdir=True)
+    request, response = test_client.post('/api/videos/channels', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.CREATED
+    directory = test_session.query(Channel).filter_by(link='bar').one().directory.path
+    assert (test_directory / 'bar') == directory
+    assert directory.is_dir()
+    assert directory.is_absolute()

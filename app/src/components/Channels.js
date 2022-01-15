@@ -144,7 +144,7 @@ class ChannelPage extends APIForm {
                 mkdir: false,
                 url: '',
                 match_regex: '',
-                generate_posters: true,
+                generate_posters: false,
                 calculate_duration: true,
                 download_frequency: null,
             },

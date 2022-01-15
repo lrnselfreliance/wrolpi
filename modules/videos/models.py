@@ -353,11 +353,18 @@ class Channel(ModelHelper, Base):
         Get statistics about this channel.
         """
         with get_db_curs() as curs:
-            stmt = 'SELECT SUM(size), MAX(size) FROM video WHERE channel_id = %s'
-            curs.execute(stmt, (self.id,))
-            size, largest_video = curs.fetchone()
+            stmt = '''
+                SELECT
+                    SUM(size),
+                    MAX(size),
+                    COUNT(id)
+                FROM video
+                WHERE channel_id = %(id)s AND video_path IS NOT NULL
+            '''
+            curs.execute(stmt, dict(id=self.id))
+            size, largest_video, video_count = curs.fetchone()
         statistics = dict(
-            video_count=len(self.videos),
+            video_count=video_count,
             size=size,
             largest_video=largest_video,
         )

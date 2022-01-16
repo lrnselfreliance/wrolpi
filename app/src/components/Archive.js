@@ -1,6 +1,6 @@
 import React, {useState} from "react";
 import {Card, Confirm, Container, Icon, Image, Placeholder, Tab} from "semantic-ui-react";
-import Paginator, {ClearButton, ExternalLink, SearchInput, textEllipsis, uploadDate} from "./Common";
+import Paginator, {ClearButton, ExternalLink, SearchInput, textEllipsis, uploadDate, WROLModeMessage} from "./Common";
 import {deleteArchive, postDownload, refreshArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link, NavLink} from "react-router-dom";
@@ -226,6 +226,7 @@ class ManageArchives extends React.Component {
 
     render() {
         return (<>
+            <WROLModeMessage content='Cannot modify Archives'/>
             <Button secondary
                     onClick={this.refresh}>
                 Refresh Archive Files

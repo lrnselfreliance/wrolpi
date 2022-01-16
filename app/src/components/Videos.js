@@ -11,7 +11,7 @@ import Paginator, {
     searchOrders,
     secondsToString,
     VideoCards,
-    videoOrders
+    videoOrders, WROLModeMessage
 } from "./Common"
 import VideoPage from "./VideoPlayer";
 import {download, getChannel, getStatistics, getVideo, refresh, searchVideos} from "../api";
@@ -64,6 +64,7 @@ class ManageVideos extends React.Component {
     render() {
         return (
             <Container fluid>
+                <WROLModeMessage content='Cannot modify Videos'/>
                 <Header as="h1">Manage Videos</Header>
 
                 <p>

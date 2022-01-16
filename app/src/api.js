@@ -33,7 +33,8 @@ async function apiCall(url, method, body, ms = 10000) {
     try {
         // await the response or error.
         let response = await timeoutPromise(ms, promise);
-        if (response.status === 403 && (await response.json())['code'] === 17) {
+        let copy = response.clone();
+        if (response.status === 403 && (await copy.json())['code'] === 17) {
             toast({
                 type: 'error',
                 title: 'WROL Mode is enabled!',
@@ -134,16 +135,6 @@ export async function getVideo(video_id) {
 
 export async function deleteVideo(video_id) {
     let response = await apiDelete(`${VIDEOS_API}/video/${video_id}`);
-    let data = await response.json();
-    if (data.code === 17) {
-        toast({
-            type: 'warning',
-            title: 'WROL Mode Enabled',
-            description: 'This cannot be done while WROL Mode is enabled.',
-            time: 5000,
-        });
-        throw Error('WROL Mode enabled');
-    }
     if (response.status !== 204) {
         toast({
             type: 'error',
@@ -151,7 +142,6 @@ export async function deleteVideo(video_id) {
             description: 'Failed to delete video.  See server logs.',
             time: 5000,
         });
-        throw Error('Failed to delete video');
     }
 }
 
@@ -328,7 +318,12 @@ export async function searchArchives(offset, limit, domain = null, searchStr = n
         let data = await response.json();
         return [data['archives'], data['totals']['archives']];
     } else {
-        throw Error(`Unable to search archives`);
+        toast({
+            type: 'error',
+            title: 'Unable to search archives',
+            description: 'Cannot search archives.  See server logs.',
+            time: 5000,
+        });
     }
 }
 
@@ -342,7 +337,12 @@ export async function fetchDomains() {
         let data = await response.json();
         return [data['domains'], data['totals']['domains']];
     } else {
-        throw Error(`Unable to fetch domains`);
+        toast({
+            type: 'error',
+            title: 'Domains Error',
+            description: 'Unable to fetch Domains.  See server logs.',
+            time: 5000,
+        });
     }
 }
 

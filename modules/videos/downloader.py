@@ -11,15 +11,15 @@ from yt_dlp import YoutubeDL
 from yt_dlp.extractor import YoutubeTabIE
 from yt_dlp.utils import UnsupportedError, DownloadError
 
-from wrolpi.common import logger, sanitize_link, extract_domain, \
-    get_media_directory
+from wrolpi.common import logger, sanitize_link, extract_domain
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.downloader import Downloader, Download
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
-from .common import load_downloader_config, apply_info_json, get_channel_source_id
+from .common import load_downloader_config, apply_info_json, get_channel_source_id, get_no_channel_directory, \
+    get_videos_directory
 from .lib import upsert_video, refresh_channel_videos
 from .models import Video, Channel
 from .video_url_resolver import video_url_resolver
@@ -38,10 +38,6 @@ ChannelIEs = {
 
 PREFERRED_VIDEO_EXTENSION = 'mp4'
 PREFERRED_VIDEO_FORMAT = 'best[height=720],22,720p,mp4-480p,mp4-360p,mp4-240p'
-
-
-def get_no_channel_directory():
-    return get_media_directory() / 'videos/NO CHANNEL'
 
 
 class ChannelDownloader(Downloader, ABC):
@@ -261,7 +257,8 @@ def get_or_create_channel(source_id: str = None, link: str = None, url: str = No
     except UnknownChannel:
         pass
 
-    channel_directory = get_media_directory() / f'videos/{name}'
+    # Channel does not exist.  Create one in the video directory.
+    channel_directory = get_videos_directory() / name
     if not channel_directory.is_dir():
         channel_directory.mkdir(parents=True)
     data = dict(

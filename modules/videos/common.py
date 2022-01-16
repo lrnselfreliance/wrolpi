@@ -56,6 +56,26 @@ class ConfigError(Exception):
     pass
 
 
+def get_videos_directory() -> pathlib.Path:
+    """
+    Get the "videos" directory in the media directory.  Make it if it does not exist.
+    """
+    directory = get_media_directory() / 'videos'
+    if not directory.is_dir():
+        directory.mkdir(parents=True)
+    return directory
+
+
+def get_no_channel_directory() -> pathlib.Path:
+    """
+    Get the "NO CHANNEL" directory in the videos directory.  Make it if it does not exist.
+    """
+    directory = get_videos_directory() / 'NO CHANNEL'
+    if not directory.is_dir():
+        directory.mkdir(parents=True)
+    return directory
+
+
 @before_startup
 def import_videos_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
@@ -291,7 +311,7 @@ def get_matching_directories(path: Union[str, Path]) -> List[str]:
     path = str(path)
 
     ignored_directories = {
-        str(get_media_directory() / 'videos/NO CHANNEL'),
+        str(get_no_channel_directory()),
     }
 
     if os.path.isdir(path):

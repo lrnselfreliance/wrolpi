@@ -1,10 +1,13 @@
+import os
+import pathlib
+import tempfile
 import unittest
 from datetime import date, datetime
 
 import pytest
 from sanic_openapi import doc
 
-from wrolpi.common import combine_dicts, insert_parameter, date_range, api_param_limiter
+from wrolpi.common import combine_dicts, insert_parameter, date_range, api_param_limiter, chdir
 from wrolpi.dates import set_timezone, now
 from wrolpi.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields, InvalidTimezone
 from wrolpi.schema import validate_data
@@ -315,3 +318,31 @@ class TestCommon(unittest.TestCase):
 def test_api_param_limiter(i, expected):
     limiter = api_param_limiter(100)  # should never return an integer greater than 100.
     assert limiter(i) == expected
+
+
+def test_chdir():
+    """
+    The current working directory can be changed temporarily using the `chdir` context manager.
+    """
+    original = os.getcwd()
+    home = os.environ.get('HOME')
+    assert home
+
+    with chdir():
+        assert os.getcwd() != original
+        assert str(os.getcwd()).startswith('/tmp')
+        assert os.environ['HOME'] != os.getcwd()
+    # Replace $HOME
+    with chdir(with_home=True):
+        assert os.getcwd() != original
+        assert str(os.getcwd()).startswith('/tmp')
+        assert os.environ['HOME'] == os.getcwd()
+
+    with tempfile.TemporaryDirectory() as d:
+        # Without replacing $HOME
+        with chdir(pathlib.Path(d), with_home=True):
+            assert os.getcwd() == d
+            assert os.environ['HOME'] == os.getcwd()
+        with chdir(pathlib.Path(d)):
+            assert os.getcwd() == d
+            assert os.environ['HOME'] != os.getcwd()

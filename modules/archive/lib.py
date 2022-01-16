@@ -14,7 +14,7 @@ from selenium import webdriver
 from sqlalchemy.orm import Session
 
 from modules.archive.models import Domain, Archive
-from wrolpi.common import get_media_directory, logger, chunks, extract_domain
+from wrolpi.common import get_media_directory, logger, chunks, extract_domain, chdir
 from wrolpi.dates import now, strptime_ms, strftime_ms
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidDomain, UnknownURL, InvalidArchive
@@ -144,6 +144,7 @@ def local_screenshot(url: str) -> bytes:
     # Set Chromium to headless.  Use a wide window size so that screenshot will be the "desktop" version of the page.
     options = webdriver.ChromeOptions()
     options.add_argument('headless')
+    options.add_argument('disable-gpu')
     options.add_argument('window-size=1280x720')
 
     driver = webdriver.Chrome(chrome_options=options)
@@ -177,13 +178,16 @@ def local_archive(url: str):
     """
     Perform an archive of the provided URL using local resources (without the Archive docker container).
     """
-    singlefile = local_singlefile(url)
-    with tempfile.NamedTemporaryFile('wb') as fh:
-        fh.write(singlefile)
-        readability = local_extract_readability(fh.name, url)
-    screenshot = local_screenshot(url)
-    singlefile = singlefile.decode()
-    return singlefile, readability, screenshot
+    # Archives must be performed in the wrolpi home directory because chrome saves the screenshot there, and will
+    # raise an error if global $HOME is not a real user directory. :(
+    with chdir('/home/wrolpi', with_home=True):
+        singlefile = local_singlefile(url)
+        with tempfile.NamedTemporaryFile('wb') as fh:
+            fh.write(singlefile)
+            readability = local_extract_readability(fh.name, url)
+        screenshot = local_screenshot(url)
+        singlefile = singlefile.decode()
+        return singlefile, readability, screenshot
 
 
 def do_archive(url: str) -> Archive:

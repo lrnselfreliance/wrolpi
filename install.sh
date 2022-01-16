@@ -56,7 +56,7 @@ npm install -g 'git+https://github.com/pirate/readability-extractor'
 # Get the latest WROLPi code
 git --version
 git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi || :
-(cd /opt/wrolpi && git fetch && git checkout "${BRANCH}" && git pull origin "${BRANCH}" --rebase) || exit 3
+(cd /opt/wrolpi && git checkout "${BRANCH}" && git reset --hard origin/"${BRANCH}") || exit 3
 
 # Setup the virtual environment that main.py expects
 pip3 --version || (

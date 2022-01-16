@@ -4,6 +4,7 @@ import contextlib
 import inspect
 import json
 import logging
+import os
 import pathlib
 import queue
 import re
@@ -526,3 +527,42 @@ def partition(pred, iterable):
     """
     t1, t2 = tee(iterable)
     return list(filter(pred, t2)), list(filterfalse(pred, t1))
+
+
+@contextlib.contextmanager
+def chdir(directory: Union[pathlib.Path, str, None] = None, with_home: bool = False):
+    """
+    Change the Python working directory in this context.  If no directory is passed, a TemporaryDirectory will be used.
+
+    This also changes the $HOME environment variable to match.
+    """
+    home_exists = 'HOME' in os.environ
+    home = os.environ.get('HOME')
+    cwd = os.getcwd()
+    if directory is None:
+        with tempfile.TemporaryDirectory() as d:
+            try:
+                os.chdir(d)
+                if with_home:
+                    os.environ['HOME'] = d
+                yield
+            finally:
+                os.chdir(cwd)
+                if home_exists:
+                    os.environ['HOME'] = home
+                else:
+                    del os.environ['HOME']
+            return
+
+    try:
+        os.chdir(directory)
+        if with_home:
+            os.environ['HOME'] = str(directory)
+        yield
+    finally:
+        os.chdir(cwd)
+        if home_exists:
+            os.environ['HOME'] = home
+        else:
+            del os.environ['HOME']
+    return

@@ -11,6 +11,7 @@ import pytest
 
 from modules.videos.api import refresh_queue
 from modules.videos.channel.lib import spread_channel_downloads, delete_channel
+from modules.videos.common import get_no_channel_directory
 from modules.videos.lib import upsert_video
 from modules.videos.models import Channel, Video
 from modules.videos.test.common import create_channel_structure
@@ -139,9 +140,7 @@ class TestVideoAPI(TestAPI):
             session.commit()
 
             # The special NO CHANNEL directory.
-            from modules.videos.downloader import get_no_channel_directory
             no_channel_path = get_no_channel_directory()
-            no_channel_path.mkdir()
             vid3 = no_channel_path / 'some video.mp4'
             vid3.touch()
             no_channel_subdir = no_channel_path / 'subdir'

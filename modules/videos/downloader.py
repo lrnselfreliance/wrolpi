@@ -11,16 +11,16 @@ from yt_dlp import YoutubeDL
 from yt_dlp.extractor import YoutubeTabIE
 from yt_dlp.utils import UnsupportedError, DownloadError
 
-from wrolpi.common import logger, sanitize_link, extract_domain, \
-    get_media_directory
+from wrolpi.common import logger, sanitize_link, extract_domain
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.downloader import Downloader, Download
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
-from .common import load_downloader_config, apply_info_json, get_channel_source_id
-from .lib import upsert_video, _refresh_videos, refresh_channel_videos
+from .common import load_downloader_config, apply_info_json, get_channel_source_id, get_no_channel_directory, \
+    get_videos_directory
+from .lib import upsert_video, refresh_channel_videos
 from .models import Video, Channel
 from .video_url_resolver import video_url_resolver
 
@@ -38,10 +38,6 @@ ChannelIEs = {
 
 PREFERRED_VIDEO_EXTENSION = 'mp4'
 PREFERRED_VIDEO_FORMAT = 'best[height=720],22,720p,mp4-480p,mp4-360p,mp4-240p'
-
-
-def get_no_channel_directory():
-    return get_media_directory() / 'videos/NO CHANNEL'
 
 
 class ChannelDownloader(Downloader, ABC):
@@ -92,6 +88,13 @@ class ChannelDownloader(Downloader, ABC):
             self.manager.start_downloads()
 
         return True
+
+
+YT_DLP_BIN = pathlib.Path('/usr/local/bin/yt-dlp')  # Location in docker container
+if not YT_DLP_BIN.is_file():
+    YT_DLP_BIN = pathlib.Path('/opt/wrolpi/venv/bin/yt-dlp')  # Use virtual environment location
+if not YT_DLP_BIN.is_file():
+    logger.error('COULD NOT FIND YT-DLP!!!')
 
 
 class VideoDownloader(Downloader, ABC):
@@ -150,14 +153,14 @@ class VideoDownloader(Downloader, ABC):
         out_dir = get_no_channel_directory()
         if channel:
             out_dir = channel.directory.path
-        out_dir.mkdir(exist_ok=True)
+        out_dir.mkdir(exist_ok=True, parents=True)
 
         try:
             video_path, entry = self.prepare_filename(url, out_dir)
             # Do the real download.
             file_name_format = '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s'
             cmd = [
-                'yt-dlp',
+                str(YT_DLP_BIN),
                 '-cw',  # Continue downloads, do not clobber existing files.
                 '-f', PREFERRED_VIDEO_FORMAT,
                 '--write-subs',
@@ -254,7 +257,10 @@ def get_or_create_channel(source_id: str = None, link: str = None, url: str = No
     except UnknownChannel:
         pass
 
-    channel_directory = get_media_directory() / f'videos/{name}'
+    # Channel does not exist.  Create one in the video directory.
+    channel_directory = get_videos_directory() / name
+    if not channel_directory.is_dir():
+        channel_directory.mkdir(parents=True)
     data = dict(
         name=name,
         url=url,

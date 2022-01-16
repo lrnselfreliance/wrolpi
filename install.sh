@@ -93,7 +93,7 @@ cp /opt/wrolpi/50x.html /var/www/50x.html
 /usr/sbin/nginx -s reload
 
 # Create the WROLPi user
-grep wrolpi /etc/passwd || useradd -d /opt/wrolpi wrolpi -s "$(command -v bash)"
+grep wrolpi /etc/passwd || useradd -d /home/wrolpi wrolpi -s "$(command -v bash)"
 chown -R wrolpi:wrolpi /opt/wrolpi
 
 # Create the media directory.  This should be mounted by the maintainer.

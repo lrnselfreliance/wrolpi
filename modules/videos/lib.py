@@ -439,7 +439,7 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
     if channel and not str(video_path).startswith(str(channel.directory.path)):
         raise ValueError(f'Video path is not within its channel {video_path=} not in {channel.directory=}')
 
-    video.channel = channel
+    video.channel_id = channel.id
     video.idempotency = idempotency
 
     try:

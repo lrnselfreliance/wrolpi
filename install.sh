@@ -13,7 +13,7 @@ Help() {
   echo
 }
 
-BRANCH="master"
+BRANCH="release"
 while getopts ":hb:" option; do
   case $option in
   h) # display Help

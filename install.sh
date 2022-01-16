@@ -56,7 +56,7 @@ npm install -g 'git+https://github.com/pirate/readability-extractor'
 # Get the latest WROLPi code
 git --version
 git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi || :
-(cd /opt/wrolpi && git checkout "${BRANCH}" && git pull) || exit 3
+(cd /opt/wrolpi && git fetch && git checkout "${BRANCH}" && git pull origin "${BRANCH}" --rebase) || exit 3
 
 # Setup the virtual environment that main.py expects
 pip3 --version || (
@@ -102,6 +102,9 @@ cp /opt/wrolpi/systemd/wrolpi.target /etc/systemd/system/
 /usr/bin/systemctl daemon-reload
 systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service
+# Stop the services so the user has to start them again.  We don't want to run outdated services when updating.
+systemctl stop wrolpi-api.service
+systemctl stop wrolpi-app.service
 
 # Configure the hotspot.
 bash /opt/wrolpi/scripts/hotspot.sh
@@ -109,6 +112,10 @@ bash /opt/wrolpi/scripts/hotspot.sh
 set +x
 
 ip=$(hostname -i | cut -d' ' -f1)
+if [[ $ip == *":"* ]]; then
+  # Don't suggest the ipv6 address.
+  ip=$(hostname -i | cut -d' ' -f2)
+fi
 
 echo "
 

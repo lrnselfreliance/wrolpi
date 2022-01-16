@@ -89,7 +89,11 @@ sudo -u postgres psql -c '\l' | grep wrolpi || (
 
 # Install the WROLPi nginx config over the default nginx config.
 cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
+cp /opt/wrolpi/50x.html /var/www/50x.html
 /usr/sbin/nginx -s reload
+
+# Create the media directory.  This should be mounted by the maintainer.
+[ -d /media/wrolpi ] || mkdir /media/wrolpi
 
 # Create the WROLPi user
 grep wrolpi /etc/passwd || useradd -d /opt/wrolpi wrolpi -s "$(command -v bash)"
@@ -120,6 +124,8 @@ fi
 echo "
 
 WROLPi has successfully been installed!
+
+Mount your external hard drive to /media/wrolpi if you have one.
 
 Start the WROLPi services using:
 

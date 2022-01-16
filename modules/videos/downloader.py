@@ -262,6 +262,8 @@ def get_or_create_channel(source_id: str = None, link: str = None, url: str = No
         pass
 
     channel_directory = get_media_directory() / f'videos/{name}'
+    if not channel_directory.is_dir():
+        channel_directory.mkdir(parents=True)
     data = dict(
         name=name,
         url=url,

@@ -12,7 +12,7 @@ from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, after_startup, limit_conc
 from wrolpi.common import logger, get_config, wrol_mode_enabled, import_modules
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
-from wrolpi.vars import PROJECT_DIR
+from wrolpi.vars import PROJECT_DIR, DOCKERIZED
 from wrolpi.version import __version__, git_commit
 
 logger = logger.getChild('wrolpi-main')
@@ -68,6 +68,9 @@ async def main(loop):
     logger.warning(f'Starting with: {sys.argv}')
     await set_log_level(args)
     logger.debug(f'git revision: {git_commit()}')
+
+    if DOCKERIZED:
+        logger.info('Running in Docker')
 
     # Run DB migrations before anything else.
     if args.sub_commands == 'db':

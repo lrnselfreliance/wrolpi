@@ -117,13 +117,17 @@ def put_item(_: Request, item_id: int, data: dict):
 
 
 @bp.delete('/item/<item_ids:[0-9,]+>')
+@bp.delete('/item/<item_ids:int>')
 @validate_doc(
     'Delete items from an inventory.',
 )
 @run_after(save_inventories_file)
 def item_delete(_: Request, item_ids: str):
     try:
-        item_ids = [int(i) for i in item_ids.split(',')]
+        if isinstance(item_ids, int):
+            item_ids = [item_ids, ]
+        else:
+            item_ids = [int(i) for i in item_ids.split(',')]
     except ValueError:
         raise ValidationError('Could not parse item_ids')
 

@@ -277,7 +277,7 @@ def quantity_to_string(quantity: Quantity) -> str:
     ]
 )
 def test_compact_unit(quantity, expected):
-    # Round the result so we don't have to specify all those zeros for the test definition.
+    # Round the result, so we don't have to specify all those zeros for the test definition.
     assert quantity_to_string(compact_unit(quantity)) == expected
 
 
@@ -296,7 +296,7 @@ length = gallon.dimensionality
                 {(('grains',), oz.dimensionality): Decimal('1') * oz},
         ),
         (
-                # The larger of the units is what is returned.
+                # The largest of the units is what is returned.
                 [
                     {'category': 'grains', 'count': Decimal('1'), 'item_size': Decimal('1'), 'unit': 'oz'},
                     {'category': 'grains', 'count': Decimal('1'), 'item_size': Decimal('1'), 'unit': 'lbs'},

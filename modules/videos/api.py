@@ -5,7 +5,6 @@ from http import HTTPStatus
 from sanic import Blueprint, response
 from sanic.request import Request
 
-from wrolpi import before_startup
 from wrolpi.common import create_websocket_feed, get_sanic_url, \
     wrol_mode_check
 from wrolpi.common import logger
@@ -128,8 +127,3 @@ async def favorite(_: Request, data: dict):
 async def statistics(_: Request):
     ret = await get_statistics()
     return json_response(ret, HTTPStatus.OK)
-
-
-@before_startup
-def startup_spread_channel_downloads():
-    channel_lib.spread_channel_downloads()

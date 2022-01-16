@@ -1,6 +1,6 @@
 import React, {useState} from "react";
 import {Card, Confirm, Container, Icon, Image, Placeholder, Tab} from "semantic-ui-react";
-import Paginator, {ClearButton, ExternalLink, SearchInput, textEllipsis, truncateLong, uploadDate} from "./Common";
+import Paginator, {ClearButton, ExternalLink, SearchInput, textEllipsis, uploadDate} from "./Common";
 import {deleteArchive, postDownload, refreshArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link, NavLink} from "react-router-dom";
@@ -8,6 +8,7 @@ import {ArchivePlaceholder} from "./Placeholder";
 import Table from "semantic-ui-react/dist/commonjs/collections/Table";
 import {useArchives} from "../hooks/useArchives";
 import {useDomains} from "../hooks/useDomains";
+import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 
 
 function FailedArchiveCard({archive, syncArchive, deleteArchive}) {
@@ -163,7 +164,10 @@ export function ArchivesList({archives, searchStr, syncArchive, localDeleteArchi
         return <p>No archives found! Is your search too restrictive?</p>;
     } else if (archives.length === 0) {
         // No archives fetched.
-        return <p>No archives found! Have you archived any webpages?</p>;
+        return <Message>
+            <Message.Header>No archives</Message.Header>
+            <Message.Content>Have you archived any webpages?</Message.Content>
+        </Message>;
     } else {
         // Archives fetched successfully!
         return <ArchiveCards archives={archives} syncArchive={syncArchive} deleteArchive={localDeleteArchive}/>;
@@ -245,14 +249,14 @@ function Domains() {
         </Table.Row>
     }
 
-    if (domains) {
+    if (domains && domains.length > 0) {
         return (
             <>
                 <Table celled>
                     <Table.Header>
                         <Table.Row>
                             <Table.HeaderCell>Domain</Table.HeaderCell>
-                            <Table.HeaderCell>URLs</Table.HeaderCell>
+                            <Table.HeaderCell>Archives</Table.HeaderCell>
                         </Table.Row>
                     </Table.Header>
 
@@ -264,13 +268,22 @@ function Domains() {
         )
     }
 
+    if (domains === null) {
+        return (<>
+            <Placeholder>
+                <Placeholder.Header>
+                    <Placeholder.Line/>
+                    <Placeholder.Line/>
+                </Placeholder.Header>
+            </Placeholder>
+        </>)
+    }
+
     return (<>
-        <Placeholder>
-            <Placeholder.Header>
-                <Placeholder.Line/>
-                <Placeholder.Line/>
-            </Placeholder.Header>
-        </Placeholder>
+        <Message>
+            <Message.Header>No domains yet.</Message.Header>
+            <Message.Content>Archive some webpages!</Message.Content>
+        </Message>
     </>)
 }
 

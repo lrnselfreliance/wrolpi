@@ -10,6 +10,7 @@ from sqlalchemy.orm.exc import NoResultFound
 
 from wrolpi.common import logger, Base
 from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.errors import APIError
 from .models import Inventory, Item, InventoriesVersion
 
 logger = logger.getChild(__name__)
@@ -174,7 +175,10 @@ def update_item(item_id: int, item: dict):
 
 def delete_items(items_ids: List[int]):
     with get_db_curs(commit=True) as curs:
-        curs.execute('UPDATE item SET deleted_at=current_timestamp WHERE id = ANY(%s)', (items_ids,))
+        curs.execute('UPDATE item SET deleted_at=current_timestamp WHERE id = ANY(%s) RETURNING id', (items_ids,))
+        deleted_ids = {i['id'] for i in curs.fetchall()}
+        if set(items_ids) != deleted_ids:
+            raise APIError('Could not delete the items')
 
 
 def get_inventories_version():

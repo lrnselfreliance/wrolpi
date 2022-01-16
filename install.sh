@@ -92,13 +92,13 @@ cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
 cp /opt/wrolpi/50x.html /var/www/50x.html
 /usr/sbin/nginx -s reload
 
-# Create the media directory.  This should be mounted by the maintainer.
-[ -d /media/wrolpi ] || mkdir /media/wrolpi
-chown -R wrolpi:wrolpi /media/wrolpi
-
 # Create the WROLPi user
 grep wrolpi /etc/passwd || useradd -d /opt/wrolpi wrolpi -s "$(command -v bash)"
 chown -R wrolpi:wrolpi /opt/wrolpi
+
+# Create the media directory.  This should be mounted by the maintainer.
+[ -d /media/wrolpi ] || mkdir /media/wrolpi
+chown -R wrolpi:wrolpi /media/wrolpi
 
 # Install the systemd services
 cp /opt/wrolpi/systemd/wrolpi-api.service /etc/systemd/system/

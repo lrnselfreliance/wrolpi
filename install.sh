@@ -94,6 +94,7 @@ cp /opt/wrolpi/50x.html /var/www/50x.html
 
 # Create the media directory.  This should be mounted by the maintainer.
 [ -d /media/wrolpi ] || mkdir /media/wrolpi
+chown -R wrolpi:wrolpi /media/wrolpi
 
 # Create the WROLPi user
 grep wrolpi /etc/passwd || useradd -d /opt/wrolpi wrolpi -s "$(command -v bash)"

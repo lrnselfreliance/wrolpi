@@ -1,9 +1,9 @@
 # This is an example config for your WROLPi.  Do NOT modify this file, rather, copy this file to local.yaml and
 # modify that file.
-media_directory: ./test  # this should be an absolute directory, for example, /media/8TB
+media_directory: /media/wrolpi  # this should be an absolute directory, for example, /media/wrolpi
 
 downloader:
-  # Most of these names were decided by Youtube-DL project, we pass these to any calls to that project.
+  # Most of these names were decided by YT-DLP project, we pass these to any calls to that project.
   continue_dl: true
   dateafter: 19900101
   file_name_format: "%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s"
@@ -24,5 +24,3 @@ channels:
     directory: videos/wrolpi  # relative to `media_directory`
 
 timezone: America/Boise
-min_download_frequency: 14400  # 4 hours
-max_download_frequency: 43200  # 12 hours

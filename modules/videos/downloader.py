@@ -150,7 +150,7 @@ class VideoDownloader(Downloader, ABC):
         out_dir = get_no_channel_directory()
         if channel:
             out_dir = channel.directory.path
-        out_dir.mkdir(exist_ok=True)
+        out_dir.mkdir(exist_ok=True, parents=True)
 
         try:
             video_path, entry = self.prepare_filename(url, out_dir)

@@ -26,7 +26,10 @@ ARCHIVE_SERVICE = 'http://archive:8080'
 
 
 def get_archive_directory() -> pathlib.Path:
-    return get_media_directory() / 'archive'
+    archive_directory = get_media_directory() / 'archive'
+    if not archive_directory.is_dir():
+        archive_directory.mkdir()
+    return archive_directory
 
 
 def get_domain_directory(url: str) -> pathlib.Path:

@@ -20,7 +20,7 @@ from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownload
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
 from .common import load_downloader_config, apply_info_json, get_channel_source_id
-from .lib import upsert_video, _refresh_videos, refresh_channel_videos
+from .lib import upsert_video, refresh_channel_videos
 from .models import Video, Channel
 from .video_url_resolver import video_url_resolver
 
@@ -94,6 +94,13 @@ class ChannelDownloader(Downloader, ABC):
         return True
 
 
+YT_DLP_BIN = pathlib.Path('/usr/local/bin/yt-dlp')  # Location in docker container
+if not YT_DLP_BIN.is_file():
+    YT_DLP_BIN = pathlib.Path('/opt/wrolpi/venv/bin/yt-dlp')  # Use virtual environment location
+if not YT_DLP_BIN.is_file():
+    logger.error('COULD NOT FIND YT-DLP!!!')
+
+
 class VideoDownloader(Downloader, ABC):
     """
     Download a single video.  Store the video in its channel's directory, otherwise store it in `videos/NO CHANNEL`.
@@ -157,7 +164,7 @@ class VideoDownloader(Downloader, ABC):
             # Do the real download.
             file_name_format = '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s'
             cmd = [
-                'yt-dlp',
+                str(YT_DLP_BIN),
                 '-cw',  # Continue downloads, do not clobber existing files.
                 '-f', PREFERRED_VIDEO_FORMAT,
                 '--write-subs',

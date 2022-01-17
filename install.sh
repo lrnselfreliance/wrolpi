@@ -127,8 +127,13 @@ WROLPi has successfully been installed!
 Mount your external hard drive to /media/wrolpi if you have one.
 
 Start the WROLPi services using:
-
  # sudo systemctl start wrolpi.target
 
 then navigate to:  http://${ip}
+
+Or, join to the Wifi hotspot:
+SSID: WROLPi
+Password: wrolpi hotspot
+
+When on the hotspot, WROLPi is accessible at http://192.168.0.1
 "

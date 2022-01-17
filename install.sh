@@ -64,8 +64,6 @@ pip3 --version || (
   curl https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py &&
     python3 /tmp/get-pip.py
 )
-python3 -m venv /opt/wrolpi/venv
-. /opt/wrolpi/venv/bin/activate
 
 # Install python requirements files
 pip3 install -r /opt/wrolpi/requirements.txt
@@ -85,7 +83,7 @@ sudo -u postgres psql -c '\l' | grep wrolpi || (
     sudo -u postgres createdb -O wrolpi wrolpi
 )
 # Initialize the WROLPi database.
-(cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py db upgrade)
+(cd /opt/wrolpi && /usr/bin/python3 /opt/wrolpi/main.py db upgrade)
 
 # Install the WROLPi nginx config over the default nginx config.
 cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf

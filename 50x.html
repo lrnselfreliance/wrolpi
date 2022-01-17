@@ -1,4 +1,4 @@
-<html>
+<html lang="en">
 <body>
 
 <h1>Error!</h1>
@@ -8,9 +8,20 @@
 <p><b>sudo systemctl status wrolpi-app</b></p>
 <p><b>sudo systemctl status wrolpi-api</b></p>
 
-<p>If either of those services are not running, start it:</p>
+<br/>
+<p>If either of those services are not running, start all WROLPi services:</p>
 
+<p><b>sudo systemctl start wrolpi.target</b></p>
+
+<br/>
+<p>Or, start them individually:</p>
 <p><b>sudo systemctl start wrolpi-app</b></p>
 <p><b>sudo systemctl start wrolpi-api</b></p>
+
+<hr/>
+
+<h2>Can't start the services?</h2>
+<p>You can view the media directory by <a href="/media">clicking here</a></p>
+
 </body>
 </html>

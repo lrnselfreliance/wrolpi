@@ -64,8 +64,6 @@ pip3 --version || (
   curl https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py &&
     python3 /tmp/get-pip.py
 )
-python3 -m venv /opt/wrolpi/venv
-. /opt/wrolpi/venv/bin/activate
 
 # Install python requirements files
 pip3 install -r /opt/wrolpi/requirements.txt
@@ -85,7 +83,7 @@ sudo -u postgres psql -c '\l' | grep wrolpi || (
     sudo -u postgres createdb -O wrolpi wrolpi
 )
 # Initialize the WROLPi database.
-(cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py db upgrade)
+(cd /opt/wrolpi && /usr/bin/python3 /opt/wrolpi/main.py db upgrade)
 
 # Install the WROLPi nginx config over the default nginx config.
 cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
@@ -93,7 +91,7 @@ cp /opt/wrolpi/50x.html /var/www/50x.html
 /usr/sbin/nginx -s reload
 
 # Create the WROLPi user
-grep wrolpi /etc/passwd || useradd -d /home/wrolpi wrolpi -s "$(command -v bash)"
+grep wrolpi /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
 chown -R wrolpi:wrolpi /opt/wrolpi
 
 # Create the media directory.  This should be mounted by the maintainer.
@@ -129,8 +127,13 @@ WROLPi has successfully been installed!
 Mount your external hard drive to /media/wrolpi if you have one.
 
 Start the WROLPi services using:
-
  # sudo systemctl start wrolpi.target
 
 then navigate to:  http://${ip}
+
+Or, join to the Wifi hotspot:
+SSID: WROLPi
+Password: wrolpi hotspot
+
+When on the hotspot, WROLPi is accessible at http://192.168.0.1
 "

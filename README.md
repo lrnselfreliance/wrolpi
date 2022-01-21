@@ -35,7 +35,7 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 - [ ] Podcast player & downloader
 
 # Demo
-<a href="https://www.youtube.com/watch?v=g0Do_mlQcBU"> ![YouTube Demo Video](https://raw.githubusercontent.com/lrnselfreliance/wrolpi/demo-link/demo_link.jpg)</a>
+<a href="https://www.youtube.com/watch?v=g0Do_mlQcBU"> ![YouTube Demo Video](https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/demo_link.jpg)</a>
 
 # Try WROLPi!
 

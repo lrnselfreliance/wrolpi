@@ -16,7 +16,7 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 
 # WARNING WROLPi is under active development!
 
-- WROLPi is in Alpha!
+- WROLPi is in Beta!
 - Expect things to change!
 
 # Features
@@ -33,6 +33,9 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 - [ ] Synchronizer and/or duplicator
 - [ ] Food storage calculator
 - [ ] Podcast player & downloader
+
+# Demo
+<a href="https://www.youtube.com/watch?v=g0Do_mlQcBU"> ![YouTube Demo Video](https://raw.githubusercontent.com/lrnselfreliance/wrolpi/demo-link/demo_link.jpg)</a>
 
 # Try WROLPi!
 

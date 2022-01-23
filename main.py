@@ -9,7 +9,7 @@ import pytz
 from sanic import Sanic
 
 from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, after_startup, limit_concurrent
-from wrolpi.common import logger, get_config, wrol_mode_enabled, import_modules
+from wrolpi.common import logger, get_config, wrol_mode_enabled, import_modules, check_media_directory
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED
@@ -81,6 +81,8 @@ async def main(loop):
     if 'timezone' in config:
         tz = pytz.timezone(config['timezone'])
         set_timezone(tz)
+
+    check_media_directory()
 
     # Import the API in every module.  Each API should attach itself to `root_api`.
     import_modules()

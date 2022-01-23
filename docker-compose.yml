@@ -23,6 +23,7 @@ services:
       - './modules:/opt/wrolpi/modules'
       - './config:/opt/wrolpi/config'
       - './test:/opt/wrolpi/test'
+      - './test:/media/wrolpi'
       - './alembic:/opt/wrolpi/alembic'
       - './alembic.ini:/opt/wrolpi/alembic.ini'
     ports:

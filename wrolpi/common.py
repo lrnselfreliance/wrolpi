@@ -406,6 +406,23 @@ def get_media_directory() -> Path:
     return MEDIA_DIRECTORY
 
 
+def check_media_directory():
+    """
+    Check that the media directory exists and is readable/writeable.  Log an error if the directory
+    is unusable.
+    """
+    media_directory = get_media_directory()
+    if not media_directory.is_dir():
+        logger.error(f'Media directory does not exist: {media_directory}')
+    try:
+        # Write a file into the media directory, log an error if this is not possible.  This file should be cleaned up
+        # by tempfile.
+        with tempfile.NamedTemporaryFile(dir=media_directory) as tf:
+            tf.write(b'test')
+    except Exception as e:
+        logger.error(f'Could not write to media directory: {media_directory}', exc_info=e)
+
+
 def get_absolute_media_path(path: str) -> Path:
     """
     Get the absolute path of file/directory within the config media directory.

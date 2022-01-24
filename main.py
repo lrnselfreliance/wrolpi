@@ -13,7 +13,7 @@ from wrolpi.common import logger, get_config, wrol_mode_enabled, import_modules,
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED
-from wrolpi.version import __version__, git_commit
+from wrolpi.version import get_version_string
 
 logger = logger.getChild('wrolpi-main')
 
@@ -62,12 +62,12 @@ async def main(loop):
 
     if args.version:
         # Print out the relevant version information, then exit.
-        print(f'{__version__} (git revision: {git_commit()})')
+        print(get_version_string())
         return 0
 
     logger.warning(f'Starting with: {sys.argv}')
     await set_log_level(args)
-    logger.debug(f'git revision: {git_commit()}')
+    logger.debug(get_version_string())
 
     if DOCKERIZED:
         logger.info('Running in Docker')

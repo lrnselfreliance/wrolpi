@@ -116,7 +116,7 @@ class Video(ModelHelper, Base):
         """
         Add this video to it's Channel's skip list.
         """
-        if self.channel:
+        if self.channel and self.source_id:
             self.channel.add_video_to_skip_list(self.source_id)
 
     def set_favorite(self, favorite: bool) -> Optional[datetime]:

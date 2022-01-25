@@ -97,7 +97,13 @@ function VideoPage(props) {
         </Tab.Pane>
     }
 
-    let tabPanes = [descriptionPane, statisticsPane];
+    let captionsPane = {
+        menuItem: 'Captions', render: () => <Tab.Pane>
+            <pre>{video.caption}</pre>
+        </Tab.Pane>
+    };
+
+    let tabPanes = [descriptionPane, statisticsPane, captionsPane];
 
     return (
         <Container textAlign='left'>

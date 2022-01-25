@@ -31,7 +31,9 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
         video.set_viewed()
         previous_video, next_video = video.get_surrounding_videos()
 
+        caption = video.caption
         video = video.__json__()
+        video['caption'] = caption
         previous_video = previous_video.__json__() if previous_video else None
         next_video = next_video.__json__() if next_video else None
 

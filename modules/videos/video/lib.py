@@ -55,6 +55,8 @@ VIDEO_ORDERS = {
     '-viewed': 'viewed DESC',
     'view_count': 'view_count ASC',
     '-view_count': 'view_count DESC',
+    'modification_datetime': 'modification_datetime ASC',
+    '-modification_datetime': 'modification_datetime DESC',
 }
 NO_NULL_ORDERS = {
     'viewed': '\nAND viewed IS NOT NULL',
@@ -65,6 +67,8 @@ NO_NULL_ORDERS = {
     '-size': '\nAND size IS NOT NULL',
     'view_count': '\nAND view_count IS NOT NULL',
     '-view_count': '\nAND view_count IS NOT NULL',
+    'modification_datetime': '\nAND modification_datetime IS NOT NULL',
+    '-modification_datetime': '\nAND modification_datetime IS NOT NULL',
 }
 DEFAULT_VIDEO_ORDER = 'rank'
 VIDEO_QUERY_LIMIT = 20

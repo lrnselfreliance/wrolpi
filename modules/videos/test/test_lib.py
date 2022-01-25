@@ -9,7 +9,7 @@ import sqlalchemy
 
 from modules.videos.channel import lib
 from modules.videos.common import apply_info_json
-from modules.videos.lib import validate_videos, parse_video_file_name
+from modules.videos.lib import validate_videos, parse_video_file_name, upsert_video
 from modules.videos.models import Channel, Video
 from modules.videos.video.lib import video_search
 from wrolpi.dates import local_timezone
@@ -267,3 +267,15 @@ def test_validate_does_not_generate_when_disabled(test_session, channel_factory,
     assert not vid1.poster_path
     assert vid2.poster_path
     assert str(vid3.poster_path).endswith('webp')
+
+
+def test_video_modification_datetime(test_session, simple_channel, video_file):
+    """
+    A Video has a modification_datetime which represents the video file's mtime.
+    """
+    expected = local_timezone(datetime(2000, 1, 1, 0, 0, 0))
+    with mock.patch('modules.videos.lib.from_timestamp') as mock_from_timestamp:
+        mock_from_timestamp.return_value = expected
+        video = upsert_video(test_session, video_file, simple_channel)
+    test_session.commit()
+    assert video.modification_datetime == expected

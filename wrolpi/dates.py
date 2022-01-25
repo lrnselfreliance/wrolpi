@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, date, timezone
 
+import pytest
 import pytz
 from sqlalchemy import types
 
@@ -10,6 +11,18 @@ from wrolpi.vars import DEFAULT_TIMEZONE_STR, DATETIME_FORMAT, DATETIME_FORMAT_M
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEZONE = pytz.timezone(DEFAULT_TIMEZONE_STR)
+TEST_DATETIME: datetime = None
+
+
+@pytest.fixture
+def fake_now():
+    def _(dt: datetime):
+        if not dt.tzinfo:
+            dt = local_timezone(dt)
+        global TEST_DATETIME
+        TEST_DATETIME = dt
+
+    return _
 
 
 def set_timezone(tz: pytz.timezone):
@@ -39,6 +52,8 @@ def now(tz: pytz.timezone = None) -> datetime:
     """
     Get the current DateTime in the provided timezone.  Timezone aware.
     """
+    if TEST_DATETIME:
+        return TEST_DATETIME
     tz = tz or DEFAULT_TIMEZONE
     return datetime.utcnow().astimezone(tz)
 
@@ -71,6 +86,10 @@ def strftime_ms(dt: datetime) -> str:
 
 def strptime_ms(dt: str) -> datetime:
     return local_timezone(datetime.strptime(dt, DATETIME_FORMAT_MS))
+
+
+def from_timestamp(timestamp: float) -> datetime:
+    return local_timezone(datetime.fromtimestamp(timestamp))
 
 
 class TZDateTime(types.TypeDecorator):

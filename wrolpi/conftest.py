@@ -16,6 +16,7 @@ from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from wrolpi.common import set_test_media_directory, Base, get_example_config
+from wrolpi.dates import fake_now  # noqa
 from wrolpi.db import postgres_engine, get_db_args
 from wrolpi.downloader import DownloadManager
 from wrolpi.root_api import BLUEPRINTS, api_app

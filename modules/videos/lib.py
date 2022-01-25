@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi.common import logger, chunks, get_config
 from wrolpi.common import save_settings_config
+from wrolpi.dates import from_timestamp
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.media_path import MediaPath
 from wrolpi.vars import PYTEST
@@ -188,8 +189,12 @@ def validate_video(video: Video, channel_generate_poster: bool):
         video.duration = get_video_duration(video_path)
     if not video.caption and video.caption_path:
         video.caption = get_video_captions(video)
-    if not video.size:
-        video.size = video_path.stat().st_size
+
+    if not video.size or not video.modification_datetime:
+        stat = video_path.stat()
+        video.size = video.size or stat.st_size
+        video.modification_datetime = video.modification_datetime or from_timestamp(stat.st_mtime)
+
     if not video.poster_path:
         # Video poster is not found, lets check near the video file.
         for ext in ('.jpg', '.jpeg', '.webp', '.png'):

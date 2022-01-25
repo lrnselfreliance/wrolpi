@@ -3,7 +3,7 @@ import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {deleteVideo, favoriteVideo} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link} from "react-router-dom";
-import {humanFileSize, humanNumber, uploadDate, VideoCard} from "./Common";
+import {humanFileSize, humanNumber, secondsToTimestamp, uploadDate, VideoCard} from "./Common";
 import {Confirm, Container, Segment, Tab} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
@@ -92,8 +92,8 @@ function VideoPage(props) {
             <h3>File Name</h3>
             <pre style={{backgroundColor: '#ccc', padding: '0.4em'}}>{video.video_path}</pre>
 
-            <h3>Source ID</h3>
-            <p>{video.source_id || 'N/A'}</p>
+            <h3>File Modification Time</h3>
+            <p>{video.modification_datetime ? secondsToTimestamp(video.modification_datetime) : null}</p>
         </Tab.Pane>
     }
 

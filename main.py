@@ -47,6 +47,9 @@ async def main(loop):
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='count')
     parser.add_argument('--version', action='store_true', default=False)
+    parser.add_argument('-c', '--check-media', action='store_true', default=False,
+                        help='Check that the media directory is mounted and has the correct permissions.'
+                        )
 
     sub_commands = parser.add_subparsers(title='sub-commands', dest='sub_commands')
 
@@ -63,6 +66,14 @@ async def main(loop):
     if args.version:
         # Print out the relevant version information, then exit.
         print(get_version_string())
+        return 0
+
+    if args.check_media:
+        # Run the media directory check.  Exit with informative return code.
+        result = check_media_directory()
+        if result is False:
+            return 1
+        print('Media directory is correct.')
         return 0
 
     logger.warning(f'Starting with: {sys.argv}')
@@ -144,5 +155,5 @@ def periodic_downloads(app: Sanic, loop):
 
 if __name__ == '__main__':
     loop_ = asyncio.get_event_loop()
-    result = loop_.run_until_complete(main(loop_))
-    sys.exit(result)
+    result_ = loop_.run_until_complete(main(loop_))
+    sys.exit(result_)

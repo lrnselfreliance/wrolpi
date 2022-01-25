@@ -406,14 +406,28 @@ def get_media_directory() -> Path:
     return MEDIA_DIRECTORY
 
 
+MEDIA_DIRECTORY_PERMISSIONS = 0o40755
+
+
 def check_media_directory():
     """
-    Check that the media directory exists and is readable/writeable.  Log an error if the directory
+    Check that the media directory exists and has the correct permissions.  Log an error if the directory
     is unusable.
     """
+    result = True
     media_directory = get_media_directory()
     if not media_directory.is_dir():
         logger.error(f'Media directory does not exist: {media_directory}')
+        result = False
+
+    permissions = media_directory.stat().st_mode
+    if permissions != MEDIA_DIRECTORY_PERMISSIONS:
+        logger.error(f'Media directory has the wrong permissions: {permissions}')
+        result = False
+
+    if not media_directory.is_mount():
+        logger.warning('Media directory is not a mount.')
+
     try:
         # Write a file into the media directory, log an error if this is not possible.  This file should be cleaned up
         # by tempfile.
@@ -421,6 +435,9 @@ def check_media_directory():
             tf.write(b'test')
     except Exception as e:
         logger.error(f'Could not write to media directory: {media_directory}', exc_info=e)
+        result = False
+
+    return result
 
 
 def get_absolute_media_path(path: str) -> Path:

@@ -422,7 +422,7 @@ def check_media_directory():
 
     permissions = media_directory.stat().st_mode
     if permissions != MEDIA_DIRECTORY_PERMISSIONS:
-        logger.error(f'Media directory has the wrong permissions: {permissions}')
+        logger.error(f'Media directory has the wrong permissions: {oct(permissions)}')
         result = False
 
     if not media_directory.is_mount():

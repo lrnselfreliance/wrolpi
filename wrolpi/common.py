@@ -11,11 +11,12 @@ import re
 import string
 import tempfile
 from datetime import datetime, date
+from decimal import Decimal
 from functools import wraps
 from itertools import islice, filterfalse, tee
 from multiprocessing import Event, Queue
 from pathlib import Path
-from typing import Union, Callable, Tuple, Dict, Mapping, List, Iterable, Optional
+from typing import Union, Callable, Tuple, Dict, Mapping, List, Iterable, Optional, Generator
 from urllib.parse import urlunsplit, urlparse
 
 import yaml
@@ -600,3 +601,43 @@ def chdir(directory: Union[pathlib.Path, str, None] = None, with_home: bool = Fa
         else:
             del os.environ['HOME']
     return
+
+
+numeric = Union[int, float, complex, Decimal]
+
+
+def zig_zag(low: numeric, high: numeric) -> Generator[numeric, None, None]:
+    """
+    Generate numbers between `low` and `high` that are spread out evenly.  Produces infinite results.
+
+    >>> list(zig_zag(0, 10))
+    [0, 5, 2, 7, 1, 3, 6, 8, 0, 1, 3, 4, 5, 6, 8, 9]
+    >>> list(zig_zag(0, 5))
+    [0, 2, 1, 3, 0, 1, 3, 4]
+    >>> list(zig_zag(50, 100))
+    [50, 75, 62, 87, 56, 68, 81, 93, 53, 59, 65]
+    """
+    low_type = type(low)
+    if not isinstance(high, low_type):
+        raise ValueError(f'high and low must be same type')
+
+    # Special thanks to my wife for helping me solve this! :*
+    results = set()
+    num = low
+    divisor = 2
+    diff = high - low
+    while True:
+        if num not in results:
+            yield low_type(num)
+            results.add(num)
+        num += diff / divisor
+        if num >= high:
+            divisor *= 2
+            num = low + (diff / divisor)
+
+
+def date_zig_zag(low: datetime, high: datetime) -> Generator[datetime, None, None]:
+    """
+    Generate datetimes between `low` and `high`.  See `zig_zag`.
+    """
+    yield from map(datetime.fromtimestamp, zig_zag(low.timestamp(), high.timestamp()))

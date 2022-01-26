@@ -9,7 +9,7 @@ import pytest
 from wrolpi import downloader
 from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_context
-from wrolpi.downloader import Downloader, Download
+from wrolpi.downloader import Downloader, Download, DownloadFrequency
 from wrolpi.errors import UnrecoverableDownloadError, InvalidDownload, WROLModeEnabled
 from wrolpi.test.common import wrap_test_db, TestAPI
 
@@ -333,3 +333,30 @@ def test_download_get_downloader(test_session, test_download_manager):
     download2 = test_download_manager.create_download('https://example.com', test_session, skip_download=True)
     download2.downloader = 'bad downloader'
     assert download2.get_downloader() is None
+
+
+def test_get_next_download(test_session, test_download_manager, fake_now):
+    fake_now(datetime(2000, 1, 1))
+    download = Download()
+    download.frequency = DownloadFrequency.weekly
+    download.status = 'deferred'
+
+    # next_download slowly increases as we accumulate attempts.  Largest gap is the download frequency.
+    attempts_expected = [
+        (0, local_timezone(datetime(2000, 1, 1, 3))),
+        (1, local_timezone(datetime(2000, 1, 1, 3))),
+        (2, local_timezone(datetime(2000, 1, 1, 9))),
+        (3, local_timezone(datetime(2000, 1, 2, 3))),
+        (4, local_timezone(datetime(2000, 1, 4, 9))),
+        (5, local_timezone(datetime(2000, 1, 8))),
+        (6, local_timezone(datetime(2000, 1, 8))),
+    ]
+    for attempts, expected in attempts_expected:
+        download.attempts = attempts
+        result = test_download_manager.get_next_download(download)
+        assert result == expected, f'{attempts} != {result}'
+
+    download = Download()
+    download.frequency = DownloadFrequency.weekly
+    assert test_download_manager.get_next_download(download) == local_timezone(datetime(2000, 1, 1))
+

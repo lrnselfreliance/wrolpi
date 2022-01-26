@@ -8,7 +8,7 @@ from decimal import Decimal
 import pytest
 from sanic_openapi import doc
 
-from wrolpi.common import combine_dicts, insert_parameter, date_range, api_param_limiter, chdir, zig_zag, date_zig_zag
+from wrolpi.common import combine_dicts, insert_parameter, date_range, api_param_limiter, chdir, zig_zag
 from wrolpi.dates import set_timezone, now
 from wrolpi.errors import NoBodyContents, MissingRequiredField, ExcessJSONFields, InvalidTimezone
 from wrolpi.schema import validate_data
@@ -353,31 +353,27 @@ def test_chdir():
     (0, 10000, [0, 5000, 2500, 7500, 1250, 3750, 6250, 8750, 625, 1875, 3125, 4375, 5625, 6875, 8125, 9375]),
     (0, 1000, [0, 500, 250, 750, 125, 375, 625, 875, 62, 187, 312, 437, 562, 687, 812, 937]),
     (0, 100, [0, 50, 25, 75, 12, 37, 62, 87, 6, 18, 31, 43, 56, 68, 81, 93]),
+    # Values repeat when there are not enough.
     (0, 10, [0, 5, 2, 7, 1, 3, 6, 8, 0, 1, 3, 4, 5, 6, 8, 9]),
     (0, 5, [0, 2, 1, 3, 0, 1, 3, 4]),
+    (0, 2, [0, 1, 0, 1, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1]),
     (50, 100, [50, 75, 62, 87, 56, 68, 81, 93, 53, 59, 65]),
+    (8, 98, [8, 53, 30, 75, 19, 41, 64]),
+    # Floats are supported.  Output is identical to above.
     (50.0, 100.0, [50.0, 75.0, 62.5, 87.5, 56.25, 68.75, 81.25, 93.75, 53.125, 59.375, 65.625]),
-    (Decimal('50.0'), Decimal('100.0'), [50.0, 75.0, 62.5, 87.5, 56.25, 68.75, 81.25, 93.75, 53.125, 59.375, 65.625]),
+    # Decimals are supported.  Output is identical to above.
+    (Decimal('50.0'), Decimal('100.0'), [
+        Decimal('50'), Decimal('75'), Decimal('62.5'), Decimal('87.5'), Decimal('56.25'), Decimal('68.75'),
+        Decimal('81.25'), Decimal('93.75'), Decimal('53.125'), Decimal('59.375'), Decimal('65.625')
+    ]),
+    # Datetimes are supported.
+    (datetime(2000, 1, 1), datetime(2000, 1, 8), [
+        datetime(2000, 1, 1), datetime(2000, 1, 4, 12), datetime(2000, 1, 2, 18), datetime(2000, 1, 6, 6),
+        datetime(2000, 1, 1, 21), datetime(2000, 1, 3, 15),
+    ])
 ])
 def test_zig_zag(low, high, expected):
     zagger = zig_zag(low, high)
-    for i in expected:
-        result = next(zagger)
-        assert result == i
-        assert low <= result < high
-
-
-def test_date_zig_zag():
-    low, high = datetime(2000, 1, 1), datetime(2000, 1, 8)
-    zagger = date_zig_zag(low, high)
-    expected = [
-        datetime(2000, 1, 1),
-        datetime(2000, 1, 4, 12),
-        datetime(2000, 1, 2, 18),
-        datetime(2000, 1, 6, 6),
-        datetime(2000, 1, 1, 21),
-        datetime(2000, 1, 3, 15),
-    ]
     for i in expected:
         result = next(zagger)
         assert result == i

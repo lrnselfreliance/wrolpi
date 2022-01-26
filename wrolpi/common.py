@@ -603,23 +603,27 @@ def chdir(directory: Union[pathlib.Path, str, None] = None, with_home: bool = Fa
     return
 
 
-numeric = Union[int, float, complex, Decimal]
+ZIG_TYPE = Union[int, float, complex, Decimal, datetime]
 
 
-def zig_zag(low: numeric, high: numeric) -> Generator[numeric, None, None]:
+def zig_zag(low: ZIG_TYPE, high: ZIG_TYPE) -> Generator[ZIG_TYPE, None, None]:
     """
-    Generate numbers between `low` and `high` that are spread out evenly.  Produces infinite results.
+    Generate numbers between `low` and `high` that are
+    spread out evenly.  Produces infinite results.
 
     >>> list(zig_zag(0, 10))
     [0, 5, 2, 7, 1, 3, 6, 8, 0, 1, 3, 4, 5, 6, 8, 9]
     >>> list(zig_zag(0, 5))
     [0, 2, 1, 3, 0, 1, 3, 4]
-    >>> list(zig_zag(50, 100))
-    [50, 75, 62, 87, 56, 68, 81, 93, 53, 59, 65]
+    >>> list(zig_zag(50.0, 100.0))
+    [50.0, 75.0, 62.5, 87.5, 56.25, 68.75, 81.25, 93.75, 53.125, 59.375, 65.625]
     """
-    low_type = type(low)
-    if not isinstance(high, low_type):
+    output_type = type(low)
+    if not isinstance(high, type(low)):
         raise ValueError(f'high and low must be same type')
+    if isinstance(low, datetime) and isinstance(high, datetime):
+        low, high = low.timestamp(), high.timestamp()
+        output_type = datetime.fromtimestamp
 
     # Special thanks to my wife for helping me solve this! :*
     results = set()
@@ -628,16 +632,9 @@ def zig_zag(low: numeric, high: numeric) -> Generator[numeric, None, None]:
     diff = high - low
     while True:
         if num not in results:
-            yield low_type(num)
+            yield output_type(num)
             results.add(num)
         num += diff / divisor
         if num >= high:
             divisor *= 2
             num = low + (diff / divisor)
-
-
-def date_zig_zag(low: datetime, high: datetime) -> Generator[datetime, None, None]:
-    """
-    Generate datetimes between `low` and `high`.  See `zig_zag`.
-    """
-    yield from map(datetime.fromtimestamp, zig_zag(low.timestamp(), high.timestamp()))

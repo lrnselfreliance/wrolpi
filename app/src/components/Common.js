@@ -166,7 +166,9 @@ export let videoOrders = [
     {key: 'size', value: 'size', text: 'Smallest', title: 'Smallest Videos'},
     {key: '-view_count', value: '-view_count', text: 'Most Views', title: 'Most Views'},
     {key: 'view_count', value: 'view_count', text: 'Least Views', title: 'Least Views'},
-];
+    {key: '-modification_datetime', value: '-modification_datetime', text: 'Newest File', title: 'Newest File'},
+    {key: 'modification_datetime', value: 'modification_datetime', text: 'Oldest File', title: 'Oldest File'},
+]
 
 export let searchOrders = [
     {key: 'rank', value: 'rank', text: 'Search Rank', title: 'Search Results'},
@@ -220,6 +222,11 @@ export function secondsToString(seconds) {
 export function secondsToDate(seconds) {
     let date = new Date(seconds * 1000);
     return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+export function secondsToTimestamp(seconds) {
+    let d = new Date(seconds * 1000);
+    return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()} ${d.getHours()}:${d.getMinutes()}:${d.getSeconds()}`;
 }
 
 export function humanFileSize(bytes, si = false, dp = 1) {
@@ -610,15 +617,15 @@ export function WROLModeMessage({content}) {
 }
 
 // Thanks https://www.npmjs.com/package/text-ellipsis
-export function textEllipsis(str, maxLength, { side = "end", ellipsis = "..." } = {}) {
-  if (str.length > maxLength) {
-    switch (side) {
-      case "start":
-        return ellipsis + str.slice(-(maxLength - ellipsis.length));
-      case "end":
-      default:
-        return str.slice(0, maxLength - ellipsis.length) + ellipsis;
+export function textEllipsis(str, maxLength, {side = "end", ellipsis = "..."} = {}) {
+    if (str.length > maxLength) {
+        switch (side) {
+            case "start":
+                return ellipsis + str.slice(-(maxLength - ellipsis.length));
+            case "end":
+            default:
+                return str.slice(0, maxLength - ellipsis.length) + ellipsis;
+        }
     }
-  }
-  return str;
+    return str;
 }

@@ -38,6 +38,7 @@ class Video(ModelHelper, Base):
     censored = Column(Boolean, default=False)
     duration = Column(Integer)
     favorite = Column(TZDateTime)
+    modification_datetime = Column(TZDateTime)
     size = Column(Integer)
     source_id = Column(String)
     title = Column(String)
@@ -115,7 +116,7 @@ class Video(ModelHelper, Base):
         """
         Add this video to it's Channel's skip list.
         """
-        if self.channel:
+        if self.channel and self.source_id:
             self.channel.add_video_to_skip_list(self.source_id)
 
     def set_favorite(self, favorite: bool) -> Optional[datetime]:
@@ -237,6 +238,7 @@ class Video(ModelHelper, Base):
             caption_path=self.caption_path,
             channel=self.channel,
             channel_id=self.channel_id,
+            modification_datetime=self.modification_datetime,
             duration=self.duration,
             favorite=self.favorite,
             id=self.id,

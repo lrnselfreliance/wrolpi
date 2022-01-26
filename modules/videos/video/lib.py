@@ -31,7 +31,9 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
         video.set_viewed()
         previous_video, next_video = video.get_surrounding_videos()
 
+        caption = video.caption
         video = video.__json__()
+        video['caption'] = caption
         previous_video = previous_video.__json__() if previous_video else None
         next_video = next_video.__json__() if next_video else None
 
@@ -55,6 +57,8 @@ VIDEO_ORDERS = {
     '-viewed': 'viewed DESC',
     'view_count': 'view_count ASC',
     '-view_count': 'view_count DESC',
+    'modification_datetime': 'modification_datetime ASC',
+    '-modification_datetime': 'modification_datetime DESC',
 }
 NO_NULL_ORDERS = {
     'viewed': '\nAND viewed IS NOT NULL',
@@ -65,6 +69,8 @@ NO_NULL_ORDERS = {
     '-size': '\nAND size IS NOT NULL',
     'view_count': '\nAND view_count IS NOT NULL',
     '-view_count': '\nAND view_count IS NOT NULL',
+    'modification_datetime': '\nAND modification_datetime IS NOT NULL',
+    '-modification_datetime': '\nAND modification_datetime IS NOT NULL',
 }
 DEFAULT_VIDEO_ORDER = 'rank'
 VIDEO_QUERY_LIMIT = 20

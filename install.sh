@@ -75,16 +75,6 @@ yarn --network-timeout 10000
 yarn run build
 yarn global add serve
 
-# Configure PostgreSQL
-sudo -u postgres psql -c '\l' | grep wrolpi || (
-  sudo -u postgres createuser wrolpi &&
-    sudo -u postgres psql -c "alter user postgres password 'wrolpi'" &&
-    sudo -u postgres psql -c "alter user wrolpi password 'wrolpi'" &&
-    sudo -u postgres createdb -O wrolpi wrolpi
-)
-# Initialize the WROLPi database.
-(cd /opt/wrolpi && /usr/bin/python3 /opt/wrolpi/main.py db upgrade)
-
 # Install the WROLPi nginx config over the default nginx config.
 cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
 cp /opt/wrolpi/50x.html /var/www/50x.html
@@ -108,6 +98,16 @@ systemctl enable wrolpi-app.service
 # Stop the services so the user has to start them again.  We don't want to run outdated services when updating.
 systemctl stop wrolpi-api.service
 systemctl stop wrolpi-app.service
+
+# Configure Postgresql.  Do this after the API is stopped.
+sudo -u postgres psql -c '\l' | grep wrolpi || (
+  sudo -u postgres createuser wrolpi &&
+    sudo -u postgres psql -c "alter user postgres password 'wrolpi'" &&
+    sudo -u postgres psql -c "alter user wrolpi password 'wrolpi'" &&
+    sudo -u postgres createdb -O wrolpi wrolpi
+)
+# Init/upgrade the WROLPi database.
+(cd /opt/wrolpi && /usr/bin/python3 /opt/wrolpi/main.py db upgrade)
 
 # Configure the hotspot.
 bash /opt/wrolpi/scripts/hotspot.sh

@@ -52,35 +52,6 @@ class TestArchive(TestAPI):
         assert str(c).endswith('archive/example.com/2001-01-01 00:00:00.000000.png')
 
     @wrap_test_db
-    def test_new_archive(self):
-        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-            archive1 = do_archive('https://example.com')
-            # Everything is filled out.
-            self.assertIsInstance(archive1, Archive)
-            self.assertIsNotNone(archive1.archive_datetime)
-            self.assertIsInstance(archive1.singlefile_path, MediaPath)
-            self.assertIsInstance(archive1.readability_path, MediaPath)
-            self.assertIsInstance(archive1.readability_txt_path, MediaPath)
-            self.assertIsInstance(archive1.screenshot_path, MediaPath)
-            self.assertEqual(archive1.title, 'ジにてこちら')
-            self.assertIsNotNone(archive1.url)
-            self.assertIsNotNone(archive1.domain)
-
-            # The actual files were dumped and read correctly.
-            with open(archive1.singlefile_path.path) as fh:
-                self.assertEqual(fh.read(), '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>')
-            with open(archive1.readability_path.path) as fh:
-                self.assertEqual(fh.read(), '<html>test readability content</html>')
-            with open(archive1.readability_txt_path.path) as fh:
-                self.assertEqual(fh.read(), '<html>test readability textContent</html>')
-            with open(archive1.readability_json_path.path) as fh:
-                self.assertEqual(json.load(fh), {'title': 'ジにてこちら', 'url': 'https://example.com'})
-
-            archive2 = do_archive('https://example.com')
-            # Domain is reused.
-            self.assertEqual(archive1.domain, archive2.domain)
-
-    @wrap_test_db
     def test_no_screenshot(self):
         with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(screenshot=False)):
             archive = do_archive('https://example.com')
@@ -131,39 +102,6 @@ class TestArchive(TestAPI):
                     archive.singlefile_path = 'asdf'
             except ValueError as e:
                 self.assertIn('relative', str(e), f'Relative path error was not raised')
-
-    @wrap_test_db
-    def test_get_title_from_html(self):
-        with wrap_media_directory():
-            with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-                archive = do_archive('example.com')
-                self.assertEqual(archive.title, 'ジにてこちら')
-
-            def fake_request_archive(_):
-                singlefile = '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>'
-                r = dict(
-                    content=f'<html>test readability content</html>',
-                    textContent='<html>test readability textContent</html>',
-                )
-                s = b'screenshot data'
-                return singlefile, r, s
-
-            with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
-                archive = do_archive('example.com')
-                self.assertEqual(archive.title, 'some title')
-
-            def fake_request_archive(_):
-                singlefile = '<html></html>'
-                r = dict(
-                    content=f'<html>missing a title</html>',
-                    textContent='',
-                )
-                s = b'screenshot data'
-                return singlefile, r, s
-
-            with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
-                archive = do_archive('example.com')
-                self.assertIsNone(archive.title)
 
     @wrap_test_db
     def test_refresh_archives(self):
@@ -324,3 +262,69 @@ def test_get_domains(test_session, archive_factory):
     archive3.delete()
     test_session.commit()
     assert [i['domain'] for i in get_domains()] == []
+
+
+def test_new_archive(test_session, fake_now):
+    with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
+        fake_now(datetime(2000, 1, 1))
+        archive1 = do_archive('https://example.com')
+        # Everything is filled out.
+        assert isinstance(archive1, Archive)
+        assert archive1.archive_datetime is not None
+        assert isinstance(archive1.singlefile_path, MediaPath)
+        assert isinstance(archive1.readability_path, MediaPath)
+        assert isinstance(archive1.readability_txt_path, MediaPath)
+        assert isinstance(archive1.screenshot_path, MediaPath)
+        assert archive1.title == 'ジにてこちら'
+        assert archive1.url is not None
+        assert archive1.domain is not None
+
+        # The actual files were dumped and read correctly.
+        with open(archive1.singlefile_path.path) as fh:
+            assert fh.read() == '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>'
+        with open(archive1.readability_path.path) as fh:
+            assert fh.read() == '<html>test readability content</html>'
+        with open(archive1.readability_txt_path.path) as fh:
+            assert fh.read() == '<html>test readability textContent</html>'
+        with open(archive1.readability_json_path.path) as fh:
+            assert json.load(fh) == {'title': 'ジにてこちら', 'url': 'https://example.com'}
+
+        fake_now(datetime(2000, 1, 2))
+        archive2 = do_archive('https://example.com')
+        # Domain is reused.
+        assert archive1.domain == archive2.domain
+
+
+def test_get_title_from_html(test_session, fake_now):
+    fake_now(datetime(2000, 1, 1))
+    with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
+        archive = do_archive('example.com')
+        assert archive.title == 'ジにてこちら'
+
+    def fake_request_archive(_):
+        singlefile = '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>'
+        r = dict(
+            content=f'<html>test readability content</html>',
+            textContent='<html>test readability textContent</html>',
+        )
+        s = b'screenshot data'
+        return singlefile, r, s
+
+    fake_now(datetime(2000, 1, 2))
+    with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
+        archive = do_archive('example.com')
+        assert archive.title == 'some title'
+
+    def fake_request_archive(_):
+        singlefile = '<html></html>'
+        r = dict(
+            content=f'<html>missing a title</html>',
+            textContent='',
+        )
+        s = b'screenshot data'
+        return singlefile, r, s
+
+    fake_now(datetime(2000, 1, 3))
+    with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
+        archive = do_archive('example.com')
+        assert archive.title is None

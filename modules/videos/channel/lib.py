@@ -115,33 +115,11 @@ def _spread_by_frequency(channels: List[Channel]) -> Generator[Dict, None, None]
             yield dict(url=channel.url, frequency=frequency, next_download=next_download)
 
 
-def spread_channel_downloads():
-    """
-    Channels should be downloaded in a manner that is spread out over their frequency.  For example, three channels
-    with a frequency of a week should be downloaded on different days that week.
-    """
-    with get_db_session(commit=True) as session:
-        channels = list(session.query(Channel).filter(
-            Channel.url != None,
-            Channel.url != '',
-            Channel.download_frequency != None
-        ).order_by(Channel.link).all())  # noqa
-
-        url_next_download = _spread_by_frequency(channels)
-
-        for info in url_next_download:
-            url, frequency, next_download = info['url'], info['frequency'], info['next_download']
-            download = download_manager.get_or_create_download(url, session)
-            download.downloader = 'video_channel'
-            download.frequency = frequency
-            download.next_download = next_download
-
-
 @run_after(save_channels_config)
 def update_channel(data, link):
     with get_db_session(commit=True) as session:
         try:
-            channel = session.query(Channel).filter_by(link=link).one()
+            channel: Channel = session.query(Channel).filter_by(link=link).one()
         except NoResultFound:
             raise UnknownChannel()
 
@@ -184,13 +162,10 @@ def update_channel(data, link):
         # Apply the changes now that we've OK'd them
         channel.update(data)
 
-    spread_channel_downloads()
-
     return channel
 
 
 @run_after(save_channels_config)
-@run_after(spread_channel_downloads)
 def create_channel(data: dict, return_dict: bool = True) -> Union[Channel, dict]:
     """
     Create a new Channel.  Check for conflicts with existing Channels.

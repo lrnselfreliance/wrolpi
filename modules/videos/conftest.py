@@ -7,11 +7,10 @@ import mock
 import pytest
 from PIL import Image
 
-from modules.videos.channel.lib import spread_channel_downloads
 from modules.videos.downloader import VideoDownloader, ChannelDownloader
 from modules.videos.models import Channel, Video
 from wrolpi.common import sanitize_link
-from wrolpi.downloader import DownloadFrequency, DownloadManager
+from wrolpi.downloader import DownloadFrequency, DownloadManager, Download
 from wrolpi.vars import PROJECT_DIR
 
 
@@ -57,7 +56,7 @@ def channel_factory(test_session, test_directory):
 
 
 @pytest.fixture
-def download_channel(test_session, test_directory) -> Channel:
+def download_channel(test_session, test_directory, video_download_manager) -> Channel:
     """
     Get a test Channel that has a download frequency.
     """
@@ -69,9 +68,9 @@ def download_channel(test_session, test_directory) -> Channel:
         download_frequency=DownloadFrequency.weekly,
         link='downloadchannel',
     )
-    test_session.add(channel)
+    download = Download(url=channel.url, downloader='video_channel', frequency=channel.download_frequency)
+    test_session.add_all([channel, download])
     test_session.commit()
-    spread_channel_downloads()
     return channel
 
 

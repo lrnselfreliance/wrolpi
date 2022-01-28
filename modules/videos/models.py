@@ -12,7 +12,7 @@ from wrolpi.common import Base, tsvector, ModelHelper, logger, get_media_directo
 from wrolpi.dates import now, TZDateTime
 from wrolpi.db import get_db_curs
 from wrolpi.downloader import Download, download_manager
-from wrolpi.errors import UnknownVideo, UnknownFile, UnknownDirectory
+from wrolpi.errors import UnknownVideo, UnknownFile, UnknownDirectory, InvalidDownload
 from wrolpi.media_path import MediaPathType, MediaPath
 
 logger = logger.getChild(__name__)
@@ -345,7 +345,7 @@ class Channel(ModelHelper, Base):
         Get the Download row for this Channel.  If there isn't a Download, return None.
         """
         if not self.url:
-            raise ValueError(f'Channel {self.name} does not have a URL to download!')
+            raise InvalidDownload(f'Channel {self.name} does not have a URL to download!')
 
         session = Session.object_session(self)
         download = session.query(Download).filter_by(url=self.url).one_or_none()

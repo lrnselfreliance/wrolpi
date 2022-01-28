@@ -2,6 +2,7 @@ from collections import defaultdict
 from datetime import timedelta
 from typing import List, Dict, Union, Generator
 
+from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
 from wrolpi.common import sanitize_link, run_after, get_relative_to_media_directory, make_media_directory, logger
@@ -116,7 +117,8 @@ def _spread_by_frequency(channels: List[Channel]) -> Generator[Dict, None, None]
 
 
 @run_after(save_channels_config)
-def update_channel(data, link):
+def update_channel(data: dict, link: str) -> Channel:
+    """Update a Channel's DB record"""
     with get_db_session(commit=True) as session:
         try:
             channel: Channel = session.query(Channel).filter_by(link=link).one()
@@ -217,12 +219,12 @@ def delete_channel(link):
 
 
 def download_channel(link: str):
-    """
-    Create a Download record for a Channel's entire catalog.
-    """
+    """Create a Download record for a Channel's entire catalog.  Start downloading."""
     channel = get_channel(link=link, return_dict=False)
-    with get_db_session(commit=True) as session:
-        if not download_manager.get_download(session, channel.url):
-            raise InvalidDownload(f'Channel {channel.name} does not have a download!')
-
-        download_manager.create_download(channel.url, session, downloader='video_channel')
+    session = Session.object_session(channel)
+    download = channel.get_download()
+    if not download:
+        raise InvalidDownload(f'Channel {channel.name} does not have a download!')
+    download.renew(reset_attempts=True)
+    session.commit()
+    download_manager.start_downloads()

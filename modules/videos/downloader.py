@@ -93,7 +93,7 @@ class ChannelDownloader(Downloader, ABC):
 YT_DLP_BIN = pathlib.Path('/usr/local/bin/yt-dlp')  # Location in docker container
 if not YT_DLP_BIN.is_file():
     YT_DLP_BIN = pathlib.Path('/opt/wrolpi/venv/bin/yt-dlp')  # Use virtual environment location
-if not YT_DLP_BIN.is_file():
+if not YT_DLP_BIN.is_file() and not PYTEST:
     logger.error('COULD NOT FIND YT-DLP!!!')
 
 

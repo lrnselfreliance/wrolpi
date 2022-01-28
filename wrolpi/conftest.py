@@ -9,7 +9,6 @@ from unittest import mock
 from uuid import uuid1
 
 import pytest
-import pytest_asyncio
 import yaml
 from sanic_testing.testing import SanicTestClient
 from sqlalchemy.engine import Engine, create_engine
@@ -52,7 +51,7 @@ def test_db() -> Tuple[Engine, Session]:
     return test_engine, session
 
 
-@pytest_asyncio.fixture()
+@pytest.fixture()
 def test_session() -> Session:
     """
     Pytest Fixture to get a test database session.
@@ -75,7 +74,7 @@ def test_session() -> Session:
         conn.close()
 
 
-@pytest_asyncio.fixture(autouse=True)
+@pytest.fixture(autouse=True)
 def test_directory() -> pathlib.Path:
     """
     Overwrite the media directory with a temporary directory.
@@ -87,7 +86,7 @@ def test_directory() -> pathlib.Path:
         yield tmp_path
 
 
-@pytest_asyncio.fixture(autouse=True)
+@pytest.fixture(autouse=True)
 def test_config():
     """
     Create a test config based off the example config.

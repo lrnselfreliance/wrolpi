@@ -391,7 +391,7 @@ async def get_statistics():
     return ret
 
 
-NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.+?)_)?(.*)\.'
+NAME_PARSER = re.compile(r'(.*?)_((?:\d+?)|(?:NA))_(?:(.{5,15})_)?(.*)\.'
                          r'(jpg|webp|flv|mp4|part|info\.json|description|webm|..\.srt|..\.vtt)')
 
 

@@ -11,8 +11,8 @@ from sqlalchemy.orm.collections import InstrumentedList
 from wrolpi.common import Base, tsvector, ModelHelper, logger, get_media_directory
 from wrolpi.dates import now, TZDateTime
 from wrolpi.db import get_db_curs
-from wrolpi.downloader import Download
-from wrolpi.errors import UnknownVideo, UnknownFile, UnknownDirectory
+from wrolpi.downloader import Download, download_manager
+from wrolpi.errors import UnknownVideo, UnknownFile, UnknownDirectory, InvalidDownload
 from wrolpi.media_path import MediaPathType, MediaPath
 
 logger = logger.getChild(__name__)
@@ -302,8 +302,19 @@ class Channel(ModelHelper, Base):
         session.delete(self)
 
     def update(self, data: dict):
+        """
+        Update the values of this Channel.  Will also update the Channel's Download, if it has one.
+        """
         for key, value in data.items():
             setattr(self, key, value)
+
+        if not self.url:
+            return
+        download = self.get_download()
+        if download:
+            session = Session.object_session(self)
+            download.frequency = self.download_frequency
+            download.next_download = download_manager.get_next_download(download, session)
 
     def config_view(self) -> dict:
         """
@@ -334,7 +345,7 @@ class Channel(ModelHelper, Base):
         Get the Download row for this Channel.  If there isn't a Download, return None.
         """
         if not self.url:
-            raise ValueError(f'Channel {self.name} does not have a URL to download!')
+            raise InvalidDownload(f'Channel {self.name} does not have a URL to download!')
 
         session = Session.object_session(self)
         download = session.query(Download).filter_by(url=self.url).one_or_none()

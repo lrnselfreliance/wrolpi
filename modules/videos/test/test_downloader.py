@@ -1,19 +1,17 @@
 import pathlib
 from copy import copy
-from datetime import datetime
 from unittest import mock
 
 import pytest
 from yt_dlp.utils import UnsupportedError
 
-from modules.videos.channel.lib import spread_channel_downloads, download_channel
+from modules.videos.channel.lib import download_channel
 from modules.videos.downloader import find_all_missing_videos, VideoDownloader, \
     ChannelDownloader, get_or_create_channel
 from modules.videos.models import Channel, Video
 from modules.videos.test.common import create_channel_structure
-from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_session, get_db_context
-from wrolpi.downloader import DownloadManager, Download, DownloadFrequency
+from wrolpi.downloader import DownloadManager, Download
 from wrolpi.errors import InvalidDownload
 from wrolpi.test.common import wrap_test_db, TestAPI
 from wrolpi.test.test_downloader import HTTPDownloader
@@ -285,53 +283,6 @@ class TestVideosDownloaders(TestAPI):
         with get_db_session() as session:
             download = self.mgr.get_downloads(session)[0]
             assert download.status == 'failed'
-
-    @wrap_test_db
-    @mock.patch('modules.videos.channel.lib.today', lambda: local_timezone(datetime(2020, 1, 1, 0, 0, 0)))
-    def test_spread_channel_downloads(self):
-        with get_db_session(commit=True) as session:
-            channel1 = Channel(name='channel1', link='channel1', url='https://example.com/1',
-                               download_frequency=DownloadFrequency.weekly)
-            channel2 = Channel(name='channel2', link='channel2', url='https://example.com/2',
-                               download_frequency=DownloadFrequency.weekly)
-            session.add_all([channel1, channel2])
-
-        def check_frequencies(expected):
-            with get_db_session(commit=True) as session:
-                downloads = list(session.query(Download).all())
-                self.assertLength(downloads, expected)
-                for download in downloads:
-                    next_download = expected[download.url]
-                    self.assertEqual(next_download, str(download.next_download),
-                                     f'{download.url} frequency {next_download} != {download.next_download}')
-
-        # Spread the downloads out.
-        spread_channel_downloads()
-
-        expected = {
-            'https://example.com/1': '2020-01-08 00:00:00-07:00',
-            'https://example.com/2': '2020-01-11 12:00:00-07:00',
-        }
-        check_frequencies(expected)
-
-        with get_db_session(commit=True) as session:
-            channel3 = Channel(name='channel3', link='channel3', url='https://example.com/3',
-                               download_frequency=DownloadFrequency.daily)
-            channel4 = Channel(name='channel4', link='channel4', url='https://example.com/4',
-                               download_frequency=DownloadFrequency.weekly)
-            # 5 and 6 should be ignored.
-            channel5 = Channel(name='channel5', link='channel5', url='https://example.com/5')
-            channel6 = Channel(name='channel6', link='channel6', download_frequency=DownloadFrequency.daily)
-            session.add_all([channel3, channel4, channel5, channel6])
-
-        spread_channel_downloads()
-        expected = {
-            'https://example.com/1': '2020-01-08 00:00:00-07:00',
-            'https://example.com/2': '2020-01-10 08:00:00-07:00',
-            'https://example.com/3': '2020-01-02 00:00:00-07:00',
-            'https://example.com/4': '2020-01-12 16:00:00-07:00',
-        }
-        check_frequencies(expected)
 
     @wrap_test_db
     def test_get_or_create_channel(self):

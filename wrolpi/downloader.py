@@ -3,7 +3,7 @@ import multiprocessing
 import pathlib
 import subprocess
 from collections import defaultdict
-from datetime import timedelta
+from datetime import timedelta, datetime
 from enum import Enum
 from functools import partial
 from operator import attrgetter
@@ -13,8 +13,8 @@ from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
-from wrolpi.common import Base, ModelHelper, logger, iterify, wrol_mode_check
-from wrolpi.dates import TZDateTime, now
+from wrolpi.common import Base, ModelHelper, logger, iterify, wrol_mode_check, zig_zag
+from wrolpi.dates import TZDateTime, now, Seconds, local_timezone
 from wrolpi.db import get_db_session, get_db_curs, get_db_context, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
@@ -73,13 +73,6 @@ class Download(ModelHelper, Base):
         )
         return d
 
-    def increment_next_download(self):
-        if self.frequency:
-            delta = timedelta(seconds=self.frequency)
-        else:
-            delta = DEFAULT_RETRY_FREQUENCY
-        self.next_download = now() + delta
-
     def renew(self, reset_attempts: bool = False):
         """
         Mark this Download as "new" so it will be retried.
@@ -93,7 +86,6 @@ class Download(ModelHelper, Base):
         Download should be tried again after a time.
         """
         self.status = 'deferred'
-        self.increment_next_download()
 
     def fail(self):
         """
@@ -116,8 +108,6 @@ class Download(ModelHelper, Base):
         """
         self.status = 'complete'
         self.last_successful_download = now()
-        if self.frequency:
-            self.increment_next_download()
 
     def get_downloader(self):
         if self.downloader:
@@ -384,8 +374,10 @@ class DownloadManager:
                         download.fail()
                     elif success:
                         download.complete()
+                        download.next_download = self.get_next_download(download, session)
                     else:
                         download.defer()
+                        download.next_download = self.get_next_download(download, session)
                     session_.commit()
 
             if download_count:
@@ -594,6 +586,9 @@ class DownloadManager:
 
     @optional_session
     def get_fe_downloads(self, session: Session = None):
+        """
+        Get downloads for the Frontend.
+        """
         data = dict(
             recurring_downloads=self.get_recurring_downloads(session=session),
             once_downloads=self.get_once_downloads(session=session, limit=100),
@@ -603,6 +598,46 @@ class DownloadManager:
     @optional_session
     def get_pending_downloads(self, session: Session):
         return session.query(Download).filter_by(status='pending').all()
+
+    @optional_session
+    def get_next_download(self, download: Download, session: Session) -> Optional[datetime]:
+        """
+        If the download is "deferred", download soon.  But, slowly increase the time between attempts.
+
+        If the download is "complete" and the download has a frequency, schedule the download in it's next iteration.
+        (Next week, month, etc.)
+        """
+        if download.status == 'deferred':
+            # Increase next_download slowly at first, then by large gaps later.  The largest gap is the download
+            # frequency.
+            hours = 3 ** (download.attempts or 1)
+            seconds = hours * Seconds.hour
+            if download.frequency:
+                seconds = min(seconds, download.frequency)
+            delta = timedelta(seconds=seconds)
+            return now() + delta
+
+        if not download.frequency:
+            return None
+        if not download.id:
+            raise ValueError('Cannot get next download when Download is not in DB.')
+
+        freq = download.frequency
+
+        # Keep this Download in it's position within the like-frequency downloads.
+        downloads = [i.id for i in session.query(Download).filter_by(frequency=freq).order_by(Download.id)]
+        index = downloads.index(download.id)
+
+        # Download was successful.  Spread the same-frequency downloads out.
+        start_date = local_timezone(datetime(2000, 1, 1))
+        # Weeks/months/etc since start_date.
+        iterations = ((now() - start_date) // freq).total_seconds()
+        start_date = start_date + timedelta(seconds=iterations * freq)
+        end_date = start_date + timedelta(seconds=freq)
+        zagger = zig_zag(start_date, end_date)
+        next_download = [i for i, j in zip(zagger, range(len(downloads)))][index]
+        next_download = local_timezone(next_download)
+        return next_download
 
 
 # The global DownloadManager.  This should be used everywhere!

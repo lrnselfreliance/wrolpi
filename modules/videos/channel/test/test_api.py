@@ -10,7 +10,7 @@ import mock
 import pytest
 
 from modules.videos.api import refresh_queue
-from modules.videos.channel.lib import spread_channel_downloads, delete_channel
+from modules.videos.channel.lib import delete_channel
 from modules.videos.common import get_no_channel_directory
 from modules.videos.lib import upsert_video
 from modules.videos.models import Channel, Video
@@ -380,7 +380,6 @@ class TestVideoAPI(TestAPI):
         location = response.headers['Location']
 
         # No downloads are scheduled.
-        spread_channel_downloads()
         with get_db_session() as session:
             downloads = list(download_manager.get_new_downloads(session))
             self.assertEqual(len(downloads), 0)

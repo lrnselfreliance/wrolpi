@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime, date, timezone
+from enum import Enum
 
 import pytest
 import pytz
@@ -12,6 +13,13 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEZONE = pytz.timezone(DEFAULT_TIMEZONE_STR)
 TEST_DATETIME: datetime = None
+
+
+class Seconds(int, Enum):
+    minute = 60
+    hour = minute * 60
+    day = hour * 24
+    week = day * 7
 
 
 @pytest.fixture

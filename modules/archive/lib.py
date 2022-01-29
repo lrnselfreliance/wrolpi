@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from modules.archive.models import Domain, Archive
 from wrolpi.common import get_media_directory, logger, chunks, extract_domain, chdir
-from wrolpi.dates import now, strptime_ms, strftime_ms
+from wrolpi.dates import now, strptime_ms, strftime_ms, Seconds
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidDomain, UnknownURL, InvalidArchive
 from wrolpi.vars import DOCKERIZED, PYTEST
@@ -69,7 +69,7 @@ def get_new_archive_files(url: str):
     return ret
 
 
-ARCHIVE_TIMEOUT = 10 * 60  # Wait at most 10 minutes for response.
+ARCHIVE_TIMEOUT = Seconds.minute * 10  # Wait at most 10 minutes for response.
 
 
 def request_archive(url: str):

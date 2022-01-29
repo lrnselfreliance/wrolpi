@@ -2,7 +2,6 @@ import logging
 from datetime import datetime, date, timezone
 from enum import Enum
 
-import pytest
 import pytz
 from sqlalchemy import types
 
@@ -20,17 +19,14 @@ class Seconds(int, Enum):
     hour = minute * 60
     day = hour * 24
     week = day * 7
+    year = day * 366
 
 
-@pytest.fixture
-def fake_now():
-    def _(dt: datetime):
-        if not dt.tzinfo:
-            dt = local_timezone(dt)
-        global TEST_DATETIME
-        TEST_DATETIME = dt
-
-    return _
+def set_test_now(dt: datetime):
+    if dt and not dt.tzinfo:
+        dt = local_timezone(dt)
+    global TEST_DATETIME
+    TEST_DATETIME = dt
 
 
 def set_timezone(tz: pytz.timezone):

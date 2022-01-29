@@ -374,3 +374,14 @@ export async function getDownloaders() {
     let response = await apiGet(`${API_URI}/downloaders`);
     return await response.json();
 }
+
+export async function getFiles(directories) {
+    let body = {directories: directories || []};
+    let response = await apiPost(`${API_URI}/files`, body);
+    return await response.json();
+}
+
+export async function deleteFile(file) {
+    let body = {file: file};
+    await apiPost(`${API_URI}/files/delete`, body);
+}

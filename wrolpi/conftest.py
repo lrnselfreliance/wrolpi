@@ -15,7 +15,7 @@ from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from wrolpi.common import set_test_media_directory, Base, get_example_config
-from wrolpi.dates import fake_now  # noqa
+from wrolpi.dates import set_test_now
 from wrolpi.db import postgres_engine, get_db_args
 from wrolpi.downloader import DownloadManager
 from wrolpi.root_api import BLUEPRINTS, api_app
@@ -122,3 +122,11 @@ def test_client() -> SanicTestClient:
 def test_download_manager():
     manager = DownloadManager()
     return manager
+
+
+@pytest.fixture
+def fake_now():
+    try:
+        yield set_test_now
+    finally:
+        set_test_now(None)  # reset now() to its original functionality.

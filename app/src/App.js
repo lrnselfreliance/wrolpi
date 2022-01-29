@@ -15,6 +15,7 @@ import {Saver} from "./components/Upload";
 import {useSearchParam} from "./hooks/useSearchParam";
 import {searchArchives, searchVideos} from "./api";
 import {MoreButton, SearchInput} from "./components/Common";
+import {FilesRoute} from "./components/Files";
 
 const useSearch = () => {
     let [searchStr, setSearchStr] = useSearchParam('q');
@@ -107,6 +108,7 @@ export default function App() {
                     <Route path="/apps" component={AppsRoute}/>
                     <Route path="/inventory" component={InventoryRoute}/>
                     <Route path='/archive' component={ArchiveRoute}/>
+                    <Route path='/files' component={FilesRoute}/>
                     <Route component={PageNotFound}/>
                 </Switch>
             </Container>

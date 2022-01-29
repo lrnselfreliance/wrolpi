@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi.common import logger, chunks, get_config
 from wrolpi.common import save_settings_config
-from wrolpi.dates import from_timestamp
+from wrolpi.dates import from_timestamp, Seconds
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.media_path import MediaPath
 from wrolpi.vars import PYTEST
@@ -21,7 +21,7 @@ from .models import Channel, Video
 
 logger = logger.getChild(__name__)
 
-DEFAULT_DOWNLOAD_FREQUENCY = 60 * 60 * 24 * 7  # weekly
+DEFAULT_DOWNLOAD_FREQUENCY = Seconds.week
 
 
 def refresh_channel_videos(channel: Channel):

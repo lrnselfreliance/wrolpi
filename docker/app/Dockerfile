@@ -8,7 +8,7 @@ ENV PATH /app/node_modules/.bin:$PATH
 COPY app/public /app/public
 COPY app/src /app/src
 COPY app/package.json /app/
-RUN rm -rf /app/node_modules
+RUN rm -rf /app/node_modules /app/package-lock.json
 # Increase network timeout because a Raspberry Pi is slow.
 RUN yarn --network-timeout 100000
 

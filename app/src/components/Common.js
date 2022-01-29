@@ -90,6 +90,12 @@ export function uploadDate(d) {
     return upload_date;
 }
 
+export function secondsToDateTime(seconds) {
+    var t = new Date(1970, 0, 1); // Epoch
+    t.setSeconds(seconds);
+    return t;
+}
+
 export function VideoCard({video}) {
     let video_url = `/videos/video/${video.id}`;
     let upload_date = uploadDate(video.upload_date);

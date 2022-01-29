@@ -136,6 +136,10 @@ class UnrecoverableDownloadError(APIError):
     pass
 
 
+class InvalidFile(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -299,4 +303,9 @@ API_ERRORS = {
         'message': 'Download experienced an error which cannot be recovered.  Download will be deleted.',
         'status': HTTPStatus.INTERNAL_SERVER_ERROR,
     },
+    InvalidFile: {
+        'code': next(error_codes),
+        'message': 'File does not exist or is a directory',
+        'status': HTTPStatus.BAD_REQUEST,
+    }
 }

@@ -56,7 +56,7 @@ function FailedArchiveCard({archive, syncArchive, deleteArchive}) {
     );
 }
 
-function ArchiveCard({archive, syncArchive, deleteArchive}) {
+function ArchiveCard({archive, syncArchive, deleteArchive, setDomain}) {
     const [syncOpen, setSyncOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -124,6 +124,8 @@ function ArchiveCard({archive, syncArchive, deleteArchive}) {
         </Button>
     );
 
+    const domain = archive.domain.domain;
+
     return (
         <Card>
             <ExternalLink to={singlefileUrl} className='no-link-underscore card-link'>
@@ -137,8 +139,13 @@ function ArchiveCard({archive, syncArchive, deleteArchive}) {
                         </ExternalLink>
                     </Container>
                 </Card.Header>
+                <a onClick={() => setDomain(domain)} className="no-link-underscore card-link">
+                    {textEllipsis(domain, 40)}
+                </a>
                 <Card.Meta>
-                    {uploadDate(archive.archive_datetime)}
+                    <p>
+                        {uploadDate(archive.archive_datetime)}
+                    </p>
                 </Card.Meta>
                 <Card.Description>
                     <Container textAlign='left'>
@@ -153,17 +160,23 @@ function ArchiveCard({archive, syncArchive, deleteArchive}) {
     )
 }
 
-function ArchiveCards({archives, syncArchive, deleteArchive}) {
+function ArchiveCards({archives, syncArchive, deleteArchive, setDomain}) {
     return (
         <Card.Group>
             {archives.map((i) => {
-                return <ArchiveCard key={i['id']} archive={i} syncArchive={syncArchive} deleteArchive={deleteArchive}/>
+                return <ArchiveCard
+                    key={i['id']}
+                    archive={i}
+                    syncArchive={syncArchive}
+                    deleteArchive={deleteArchive}
+                    setDomain={setDomain}
+                />
             })}
         </Card.Group>
     )
 }
 
-export function ArchivesList({archives, searchStr, syncArchive, localDeleteArchive}) {
+export function ArchivesList({archives, searchStr, syncArchive, localDeleteArchive, setDomain}) {
     if (archives === null || archives === undefined) {
         // Fetching archives.
         return <ArchivePlaceholder/>;
@@ -178,7 +191,12 @@ export function ArchivesList({archives, searchStr, syncArchive, localDeleteArchi
         </Message>;
     } else {
         // Archives fetched successfully!
-        return <ArchiveCards archives={archives} syncArchive={syncArchive} deleteArchive={localDeleteArchive}/>;
+        return <ArchiveCards
+            archives={archives}
+            syncArchive={syncArchive}
+            deleteArchive={localDeleteArchive}
+            setDomain={setDomain}
+        />;
     }
 }
 
@@ -215,6 +233,7 @@ export function Archives() {
                 searchStr={searchStr}
                 syncArchive={syncArchive}
                 localDeleteArchive={localDeleteArchive}
+                setDomain={setDomain}
             />
             <div style={{marginTop: '3em', textAlign: 'center'}}>
                 <Paginator

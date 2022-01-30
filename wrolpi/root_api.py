@@ -22,6 +22,7 @@ from wrolpi.media_path import MediaPath
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, EchoResponse, \
     validate_doc, DownloadRequest
 from wrolpi.vars import DOCKERIZED
+from wrolpi.version import __version__
 
 logger = logger.getChild(__name__)
 
@@ -130,7 +131,7 @@ async def echo(request: Request):
 )
 def get_settings(_: Request):
     config = dict(get_config())
-    return json_response({'config': config})
+    return json_response({'config': config, 'version': __version__})
 
 
 @root_api.patch('/settings')

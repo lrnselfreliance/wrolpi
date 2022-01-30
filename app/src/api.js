@@ -385,3 +385,9 @@ export async function deleteFile(file) {
     let body = {file: file};
     await apiPost(`${API_URI}/files/delete`, body);
 }
+
+export async function getVersion() {
+    let response = await apiGet(`${API_URI}/settings`);
+    let data = await response.json();
+    return data['version'];
+}

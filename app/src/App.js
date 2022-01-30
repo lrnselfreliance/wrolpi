@@ -16,6 +16,7 @@ import {useSearchParam} from "./hooks/useSearchParam";
 import {searchArchives, searchVideos} from "./api";
 import {MoreButton, SearchInput} from "./components/Common";
 import {FilesRoute} from "./components/Files";
+import {useVersion} from "./hooks/useVersion";
 
 const useSearch = () => {
     let [searchStr, setSearchStr] = useSearchParam('q');
@@ -92,6 +93,13 @@ function PageNotFound() {
     )
 }
 
+function Footer() {
+    const version = useVersion();
+    return <Container textAlign='center' style={{marginTop: '1.5em', marginBottom: '1em'}}>
+        WROLPi v{version} <a href='https://github.com/lrnselfreliance/wrolpi'>GitHub</a>
+    </Container>
+}
+
 export default function App() {
     return (
         <>
@@ -113,6 +121,7 @@ export default function App() {
                 </Switch>
             </Container>
             <SemanticToastContainer position="top-right"/>
+            <Footer/>
         </>
     );
 }

@@ -1,6 +1,14 @@
 import React, {useState} from "react";
 import {Card, Confirm, Container, Icon, Image, Placeholder, Tab} from "semantic-ui-react";
-import Paginator, {ClearButton, ExternalLink, SearchInput, textEllipsis, uploadDate, WROLModeMessage} from "./Common";
+import Paginator, {
+    ClearButton,
+    ExternalLink,
+    SearchInput,
+    TabRouter,
+    textEllipsis,
+    uploadDate,
+    WROLModeMessage
+} from "./Common";
 import {deleteArchive, postDownload, refreshArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link, NavLink} from "react-router-dom";
@@ -289,73 +297,41 @@ function Domains() {
 }
 
 
-export class ArchiveRoute extends React.Component {
-
-    constructor(props) {
-        super(props);
-
-        this.panesTos = ['/archive', '/archive/domains', '/archive/manage'];
-        this.state = {
-            activeIndex: this.matchPaneTo(),
-        }
-
-        this.archivePanes = [
-            {
-                menuItem: {
-                    as: NavLink,
-                    content: 'Archives',
-                    id: 'archive',
-                    to: '/archive',
-                    exact: true,
-                    key: 'home',
-                },
-                render: () => <Tab.Pane><Archives/></Tab.Pane>
+export function ArchiveRoute(props) {
+    const panes = [
+        {
+            menuItem: {
+                as: NavLink,
+                content: 'Archives',
+                id: 'archive',
+                to: '/archive',
+                exact: true,
+                key: 'home',
             },
-            {
-                menuItem: {
-                    as: NavLink,
-                    content: 'Domains',
-                    id: 'domains',
-                    to: '/archive/domains',
-                    exact: true,
-                    key: 'domains',
-                },
-                render: () => <Tab.Pane><Domains/></Tab.Pane>
+            render: () => <Tab.Pane><Archives/></Tab.Pane>
+        },
+        {
+            menuItem: {
+                as: NavLink,
+                content: 'Domains',
+                id: 'domains',
+                to: '/archive/domains',
+                exact: true,
+                key: 'domains',
             },
-            {
-                menuItem: {
-                    as: NavLink,
-                    content: 'Manage',
-                    id: 'manage',
-                    to: '/archive/manage',
-                    exact: true,
-                    key: 'manage',
-                },
-                render: () => <Tab.Pane><ManageArchives/></Tab.Pane>
+            render: () => <Tab.Pane><Domains/></Tab.Pane>
+        },
+        {
+            menuItem: {
+                as: NavLink,
+                content: 'Manage',
+                id: 'manage',
+                to: '/archive/manage',
+                exact: true,
+                key: 'manage',
             },
-        ];
-
-    }
-
-    componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevProps.location.pathname !== this.props.location.pathname) {
-            this.setState({activeIndex: this.matchPaneTo()});
-        }
-    }
-
-    matchPaneTo = () => {
-        return this.panesTos.indexOf(this.props.location.pathname);
-    }
-
-    render() {
-        return (
-            <Container fluid>
-                <Tab
-                    panes={this.archivePanes}
-                    activeIndex={this.state.activeIndex}
-                    renderActiveOnly={true}
-                />
-            </Container>
-        )
-    }
+            render: () => <Tab.Pane><ManageArchives/></Tab.Pane>
+        },
+    ];
+    return <TabRouter panes={panes} {...props} />
 }

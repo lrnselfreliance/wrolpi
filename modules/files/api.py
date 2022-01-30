@@ -14,6 +14,7 @@ bp = get_blueprint('Files', '/api/files')
 
 
 def paths_to_files(paths: List[pathlib.Path]):
+    """Convert Paths to what the React UI expects."""
     media_directory = get_media_directory()
     new_files = []
     for path in paths:

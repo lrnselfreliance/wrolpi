@@ -644,6 +644,7 @@ export function TabLinks({links}) {
                     to={link.to}
                     className={'item'}
                     exact={link.exact || false}
+                    style={{padding: '1em'}}
                 >
                     {link.text}
                 </NavLink>

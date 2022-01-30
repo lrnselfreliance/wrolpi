@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from "react";
-import {Card, Container, Form, Icon, Image, Input, Pagination, Progress, Tab} from 'semantic-ui-react';
-import {Link} from "react-router-dom";
+import {Card, Container, Form, Icon, Image, Input, Menu, Pagination, Progress} from 'semantic-ui-react';
+import {Link, NavLink} from "react-router-dom";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
@@ -636,61 +636,18 @@ export function textEllipsis(str, maxLength, {side = "end", ellipsis = "..."} = 
     return str;
 }
 
-export class TabRouter extends React.Component {
-    constructor(props) {
-        super(props);
-
-        const panes = props.panes;
-        let paneTos = [];
-        for (let i = 0; i < panes.length; i++) {
-            const pane = panes[i];
-            paneTos = paneTos.concat([pane['menuItem']['to']]);
-        }
-
-        this.state = {
-            activeIndex: this.matchPaneTo(paneTos),
-            paneTos: paneTos,
-        };
-    }
-
-    matchPaneTo = (paneTos) => {
-        const pathname = this.props.location.pathname;
-        // Attempt to find the exact match first.
-        let activeIndex = paneTos.indexOf(pathname);
-        if (activeIndex !== -1) {
-            return activeIndex;
-        }
-
-        // Use the first tab if we can't find one.
-        activeIndex = 0;
-        // Try to find the most-exact match.
-        for (let i = 0; i < paneTos.length; i++) {
-            let to = paneTos[i];
-            if (pathname.startsWith(to) && to.length > paneTos[activeIndex].length) {
-                // "to" is a better match because it is longer than the last one we found.
-                activeIndex = i;
-            }
-        }
-        return activeIndex;
-    }
-
-    componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevProps.location.pathname !== this.props.location.pathname) {
-            this.setState({activeIndex: this.matchPaneTo(this.state.paneTos)});
-        }
-    }
-
-    render() {
-        const {panes, renderActiveOnly} = this.props;
-        return (
-            <>
-                <Tab
-                    panes={panes}
-                    activeIndex={this.state.activeIndex}
-                    renderActiveOnly={renderActiveOnly || true}
-                />
-            </>
-        )
-    }
-
+export function TabLinks({links}) {
+    return (
+        <Menu tabular>
+            {links.map((link) =>
+                <NavLink
+                    to={link.to}
+                    className={'item'}
+                    exact={link.exact || false}
+                >
+                    {link.text}
+                </NavLink>
+            )}
+        </Menu>
+    )
 }

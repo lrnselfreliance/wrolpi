@@ -13,11 +13,10 @@ import {
     updateInventory,
     updateItem
 } from "../api";
-import {Button, Checkbox, Dropdown, Form, Grid, Header, Portal, Segment, Tab, Table} from "semantic-ui-react";
+import {Button, Checkbox, Dropdown, Form, Grid, Header, Portal, Segment, Table} from "semantic-ui-react";
 import {Route} from "react-router-dom";
-import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {toast} from 'react-semantic-toasts';
-import {arraysEqual, enumerate, replaceNullValues} from './Common';
+import {arraysEqual, enumerate, replaceNullValues, TabLinks} from './Common';
 import _ from 'lodash';
 
 class InventorySummary extends React.Component {
@@ -1089,27 +1088,16 @@ class InventoryAddList extends React.Component {
     }
 }
 
-class InventoryTab extends React.Component {
-
-    render() {
-        let panes = [
-            {menuItem: 'List', render: () => <Tab.Pane><InventoryAddList/></Tab.Pane>},
-            {menuItem: 'Summary', render: () => <Tab.Pane><InventorySummary/></Tab.Pane>},
-        ];
-        return (
-            <Tab panes={panes}/>
-        )
-    }
-}
-
-export class InventoryRoute extends React.Component {
-    render() {
-        return (
-            <>
-                <Container fluid>
-                    <Route path='/inventory' exact component={InventoryTab}/>
-                </Container>
-            </>
-        )
-    }
+export function InventoryRoute(props) {
+    const links = [
+        {text: 'List', to: '/inventory', exact: true},
+        {text: 'Summary', to: '/inventory/summary'},
+    ];
+    return (
+        <>
+            <TabLinks links={links}/>
+            <Route path='/inventory' exact component={InventoryAddList}/>
+            <Route path='/inventory/summary' exact component={InventorySummary}/>
+        </>
+    )
 }

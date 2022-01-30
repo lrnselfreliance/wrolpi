@@ -1,17 +1,17 @@
 import React, {useState} from "react";
-import {Card, Confirm, Container, Icon, Image, Placeholder, Tab} from "semantic-ui-react";
+import {Card, Confirm, Container, Icon, Image, Placeholder} from "semantic-ui-react";
 import Paginator, {
     ClearButton,
     ExternalLink,
     SearchInput,
-    TabRouter,
+    TabLinks,
     textEllipsis,
     uploadDate,
     WROLModeMessage
 } from "./Common";
 import {deleteArchive, postDownload, refreshArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
-import {Link, NavLink} from "react-router-dom";
+import {Link, Route} from "react-router-dom";
 import {ArchivePlaceholder} from "./Placeholder";
 import Table from "semantic-ui-react/dist/commonjs/collections/Table";
 import {useArchives} from "../hooks/useArchives";
@@ -298,40 +298,15 @@ function Domains() {
 
 
 export function ArchiveRoute(props) {
-    const panes = [
-        {
-            menuItem: {
-                as: NavLink,
-                content: 'Archives',
-                id: 'archive',
-                to: '/archive',
-                exact: true,
-                key: 'home',
-            },
-            render: () => <Tab.Pane><Archives/></Tab.Pane>
-        },
-        {
-            menuItem: {
-                as: NavLink,
-                content: 'Domains',
-                id: 'domains',
-                to: '/archive/domains',
-                exact: true,
-                key: 'domains',
-            },
-            render: () => <Tab.Pane><Domains/></Tab.Pane>
-        },
-        {
-            menuItem: {
-                as: NavLink,
-                content: 'Manage',
-                id: 'manage',
-                to: '/archive/manage',
-                exact: true,
-                key: 'manage',
-            },
-            render: () => <Tab.Pane><ManageArchives/></Tab.Pane>
-        },
+    const links = [
+        {text: 'Archives', to: '/archive', exact: true},
+        {text: 'Domains', to: '/archive/domains'},
+        {text: 'Manage', to: '/archive/manage'},
     ];
-    return <TabRouter panes={panes} {...props} />
+    return <>
+        <TabLinks links={links}/>
+        <Route path='/archive' exact component={Archives}/>
+        <Route path='/archive/domains' component={Domains}/>
+        <Route path='/archive/manage' component={ManageArchives}/>
+    </>
 }

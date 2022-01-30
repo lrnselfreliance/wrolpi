@@ -143,14 +143,12 @@ class OTP extends React.Component {
     }
 }
 
-export class AppsRoute extends React.Component {
-    render() {
-        return (
-            <>
-                <Container fluid>
-                    <Route path='/apps/otp' exact component={OTP}/>
-                </Container>
-            </>
-        )
-    }
+export function AppsRoute(props) {
+    return (
+        <>
+            <Container fluid>
+                <Route path='/apps/otp' exact component={OTP}/>
+            </Container>
+        </>
+    )
 }

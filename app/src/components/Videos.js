@@ -1,5 +1,5 @@
 import React from 'react';
-import {Link, Route} from "react-router-dom";
+import {NavLink, Route} from "react-router-dom";
 import Paginator, {
     changePageHistory,
     DEFAULT_LIMIT,
@@ -10,8 +10,10 @@ import Paginator, {
     scrollToTop,
     searchOrders,
     secondsToString,
+    TabLinks,
     VideoCards,
-    videoOrders, WROLModeMessage
+    videoOrders,
+    WROLModeMessage
 } from "./Common"
 import VideoPage from "./VideoPlayer";
 import {download, getChannel, getStatistics, getVideo, refresh, searchVideos} from "../api";
@@ -27,8 +29,7 @@ import {
     Modal,
     Radio,
     Segment,
-    Statistic,
-    Tab
+    Statistic
 } from "semantic-ui-react";
 import * as QueryString from 'query-string';
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
@@ -65,7 +66,6 @@ class ManageVideos extends React.Component {
         return (
             <Container fluid>
                 <WROLModeMessage content='Cannot modify Videos'/>
-                <Header as="h1">Manage Videos</Header>
 
                 <p>
                     <Button primary
@@ -493,60 +493,77 @@ class Videos extends React.Component {
     }
 }
 
-class ManageTabs extends React.Component {
-    render() {
-        const panes = [
-            {menuItem: 'Manage', render: () => <Tab.Pane><ManageVideos/></Tab.Pane>},
-            {menuItem: 'Statistics', render: () => <Tab.Pane><Statistics/></Tab.Pane>},
-        ]
-        return (
-            <Container fluid>
-                <Tab panes={panes}/>
-            </Container>
-        )
-    }
+function ManageTab(props) {
+    return (
+        <Container fluid>
+            <ManageVideos/>
+            <Statistics/>
+        </Container>
+    )
 }
 
-export class VideosRoute extends React.Component {
-
-    render() {
-        return (
-            <>
-                <Container fluid>
-                    <Route path='/videos' exact
-                           component={(i) =>
-                               <Videos
-                                   match={i.match}
-                                   history={i.history}
-                                   location={i.location}
-                               />}
-                    />
-                    <Route path='/videos/favorites' exact
-                           component={(i) =>
-                               <Videos
-                                   match={i.match}
-                                   history={i.history}
-                                   location={i.location}
-                                   filter='favorite'
-                                   header='Favorite Videos'
-                               />
-                           }/>
-                    <Route path='/videos/channel' exact component={Channels}/>
-                    <Route path='/videos/manage' exact component={ManageTabs}/>
-                    <Route path='/videos/channel/new' exact component={NewChannel}/>
-                    <Route path='/videos/channel/:channel_link/edit' exact
-                           component={(i) =>
-                               <EditChannel
-                                   match={i.match}
-                                   history={i.history}
-                               />
-                           }
-                    />
-                    <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
-                </Container>
-            </>
-        )
+function Link(props) {
+    let classes = 'item';
+    if (props.link.header) {
+        classes = `${classes} header`;
     }
+
+    return (
+        <NavLink
+            className={classes}
+            exact={props.link.exact || false}
+            to={props.link.to}
+        >
+            {props.link.text}
+        </NavLink>
+    )
+}
+
+export function VideosRoute(props) {
+
+    const links = [
+        {text: 'Videos', to: '/videos', exact: true},
+        {text: 'Favorites', to: '/videos/favorites'},
+        {text: 'Channels', to: '/videos/channel',},
+        {text: 'Manage', to: '/videos/manage'},
+    ];
+
+    return (
+        <>
+            <TabLinks links={links}/>
+
+            <Route path='/videos' exact
+                   component={(i) =>
+                       <Videos
+                           match={i.match}
+                           history={i.history}
+                           location={i.location}
+                       />}
+            />
+            <Route path='/videos/favorites' exact
+                   component={(i) =>
+                       <Videos
+                           match={i.match}
+                           history={i.history}
+                           location={i.location}
+                           filter='favorite'
+                           header='Favorite Videos'
+                       />
+                   }/>
+            <Route path='/videos/channel' exact component={Channels}/>
+            <Route path='/videos/manage' exact component={ManageTab}/>
+            <Route path='/videos/channel/new' exact component={NewChannel}/>
+            <Route path='/videos/channel/:channel_link/edit' exact
+                   component={(i) =>
+                       <EditChannel
+                           match={i.match}
+                           history={i.history}
+                       />
+                   }
+            />
+            <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
+        </>
+    )
 }
 
 class Statistics extends React.Component {

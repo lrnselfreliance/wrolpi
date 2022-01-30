@@ -110,10 +110,8 @@ class Files extends React.Component {
     }
 }
 
-export class FilesRoute extends React.Component {
-    render() {
-        return (
-            <Files/>
-        );
-    }
+export function FilesRoute(props) {
+    return (
+        <Files/>
+    );
 }

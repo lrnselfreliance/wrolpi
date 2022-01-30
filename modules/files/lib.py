@@ -51,9 +51,7 @@ def list_files(directories: List[str]) -> List[Path]:
 
 @wrol_mode_check
 def delete_file(file: str):
-    """
-    Delete a file in the media directory.
-    """
+    """Delete a file in the media directory."""
     file = get_media_directory() / file
     if file.is_dir() or not file.is_file():
         raise InvalidFile(f'Invalid file {file}')

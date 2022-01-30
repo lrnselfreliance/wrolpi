@@ -5,17 +5,10 @@ import {Dropdown, Menu, Responsive} from "semantic-ui-react";
 const responsiveWidth = 500;
 
 const links = [
-    {
-        text: 'Videos', links: [
-            {to: '/videos', text: 'Newest Videos', exact: true},
-            {to: '/videos/favorites', text: 'Favorites', exact: true},
-            {to: '/videos/channel', text: 'Channels', exact: true},
-            {to: '/videos/manage', text: 'Manage', exact: true},
-        ]
-    },
+    {text: 'Videos', to: '/videos'},
     {text: 'Inventory', to: '/inventory', exact: true},
-    {text: 'Archive', to: '/archive', exact: true},
-    {text: 'Files', to: '/files', exact: true},
+    {text: 'Archive', to: '/archive'},
+    {text: 'Files', to: '/files'},
     {
         text: 'Apps', links: [
             {to: '/apps/otp', text: 'One Time Pad', exact: true},
@@ -33,7 +26,7 @@ function DropdownLinks(props) {
             <Dropdown.Menu>
                 {props.link.links.map((l) => {
                     return (
-                        <Link key={l.to} link={l}/>
+                        <MenuLink key={l.to} link={l}/>
                     )
                 })}
             </Dropdown.Menu>
@@ -41,7 +34,8 @@ function DropdownLinks(props) {
     )
 }
 
-function Link(props) {
+function MenuLink(props) {
+    // Wrapper around NavLink to handle Navlink/Dropdown change.
     let classes = 'item';
     if (props.link.header) {
         classes = `${classes} header`;
@@ -68,17 +62,17 @@ export function NavBar() {
     return (
         <Menu>
             {/*Always show WROLPi home button*/}
-            <Link link={{to: '/', text: 'WROLPi', exact: true}}/>
+            <MenuLink link={{to: '/', text: 'WROLPi', exact: true}}/>
 
             {/*Show the links in a menu when on desktop*/}
             {links.map((link) => {
                 return (
-                    <Responsive minWidth={responsiveWidth} as={Link} link={link} key={link.to}/>
+                    <Responsive minWidth={responsiveWidth} as={MenuLink} link={link} key={link.to}/>
                 )
             })}
             <Responsive minWidth={responsiveWidth} as={Menu.Menu} position="right">
                 {rightLinks.map((link) => {
-                    return (<Link link={link} key={link.to}/>)
+                    return (<MenuLink link={link} key={link.to}/>)
                 })}
             </Responsive>
 
@@ -87,7 +81,7 @@ export function NavBar() {
                 <Dropdown item icon="bars">
                     <Dropdown.Menu>
                         {collapsedLinks.map((link) => {
-                            return (<Link link={link} key={link.to}/>)
+                            return (<MenuLink link={link} key={link.to}/>)
                         })}
                     </Dropdown.Menu>
                 </Dropdown>

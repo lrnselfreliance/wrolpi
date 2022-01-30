@@ -23,7 +23,8 @@ import {
     startDownloads
 } from "../api";
 import TimezoneSelect from 'react-timezone-select';
-import {secondsToDate, secondsToFrequency, textEllipsis, truncateLong, WROLModeMessage} from "./Common";
+import {secondsToDate, secondsToFrequency, TabLinks, textEllipsis, WROLModeMessage} from "./Common";
+import {Route} from "react-router-dom";
 
 class Settings extends React.Component {
 
@@ -440,23 +441,21 @@ class Downloads extends React.Component {
     }
 }
 
-class Admin extends React.Component {
+export default function Admin(props) {
 
-    render() {
+    const links = [
+        {text: 'Downloads', to: '/admin', exact: true},
+        {text: 'Settings', to: '/admin/settings'},
+        {text: 'WROL Mode', to: '/admin/wrol'},
+    ];
 
-        const panes = [
-            {menuItem: 'Downloads', render: () => <Tab.Pane><Downloads/></Tab.Pane>},
-            {menuItem: 'Settings', render: () => <Tab.Pane><Settings/></Tab.Pane>},
-            {menuItem: 'WROL Mode', render: () => <Tab.Pane><WROLMode/></Tab.Pane>},
-        ];
-
-        return (
-            <Container fluid>
-                <Tab panes={panes}/>
-            </Container>
-        )
-    }
+    return (
+        <>
+            <TabLinks links={links}/>
+            <Route path='/admin' exact component={Downloads}/>
+            <Route path='/admin/settings' exact component={Settings}/>
+            <Route path='/admin/wrol' exact component={WROLMode}/>
+        </>
+    )
 
 }
-
-export default Admin;

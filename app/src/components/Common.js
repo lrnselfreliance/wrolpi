@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from "react";
-import {Card, Container, Form, Icon, Image, Input, Pagination, Progress} from 'semantic-ui-react';
-import {Link} from "react-router-dom";
+import {Card, Container, Form, Icon, Image, Input, Menu, Pagination, Progress} from 'semantic-ui-react';
+import {Link, NavLink} from "react-router-dom";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
@@ -634,4 +634,21 @@ export function textEllipsis(str, maxLength, {side = "end", ellipsis = "..."} = 
         }
     }
     return str;
+}
+
+export function TabLinks({links}) {
+    return (
+        <Menu tabular>
+            {links.map((link) =>
+                <NavLink
+                    to={link.to}
+                    className={'item'}
+                    exact={link.exact || false}
+                    style={{padding: '1em'}}
+                >
+                    {link.text}
+                </NavLink>
+            )}
+        </Menu>
+    )
 }

@@ -6,7 +6,7 @@ const responsiveWidth = 500;
 
 const links = [
     {text: 'Videos', to: '/videos'},
-    {text: 'Inventory', to: '/inventory', exact: true},
+    {text: 'Inventory', to: '/inventory'},
     {text: 'Archive', to: '/archive'},
     {text: 'Files', to: '/files'},
     {

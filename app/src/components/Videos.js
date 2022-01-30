@@ -1,5 +1,5 @@
 import React from 'react';
-import {NavLink, Route} from "react-router-dom";
+import {Link, NavLink, Route} from "react-router-dom";
 import Paginator, {
     changePageHistory,
     DEFAULT_LIMIT,
@@ -499,23 +499,6 @@ function ManageTab(props) {
             <ManageVideos/>
             <Statistics/>
         </Container>
-    )
-}
-
-function Link(props) {
-    let classes = 'item';
-    if (props.link.header) {
-        classes = `${classes} header`;
-    }
-
-    return (
-        <NavLink
-            className={classes}
-            exact={props.link.exact || false}
-            to={props.link.to}
-        >
-            {props.link.text}
-        </NavLink>
     )
 }
 

@@ -14,9 +14,8 @@ import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link, Route} from "react-router-dom";
 import {ArchivePlaceholder} from "./Placeholder";
 import Table from "semantic-ui-react/dist/commonjs/collections/Table";
-import {useArchives} from "../hooks/useArchives";
-import {useDomains} from "../hooks/useDomains";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
+import {useArchives, useDomains} from "../hooks/customHooks";
 
 
 function FailedArchiveCard({archive, syncArchive, deleteArchive}) {

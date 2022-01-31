@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React from 'react';
 import './App.css';
 import {NavBar} from "./components/Nav";
 import {Route, Switch, useHistory} from "react-router-dom";
@@ -12,39 +12,9 @@ import {AppsRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/Inventory";
 import {ArchiveRoute, ArchivesList} from "./components/Archive";
 import {Saver} from "./components/Upload";
-import {useSearchParam} from "./hooks/useSearchParam";
-import {searchArchives, searchVideos} from "./api";
 import {MoreButton, SearchInput} from "./components/Common";
 import {FilesRoute} from "./components/Files";
-import {useVersion} from "./hooks/useVersion";
-
-const useSearch = () => {
-    let [searchStr, setSearchStr] = useSearchParam('q');
-
-    const [archives, setArchives] = useState();
-    const [videos, setVideos] = useState();
-
-    const localSearchArchives = async (term) => {
-        setArchives(null);
-        const [archives, total] = await searchArchives(0, 6, null, term);
-        setArchives(archives);
-    }
-
-    const localSearchVideos = async (term) => {
-        setVideos(null);
-        const [videos, total] = await searchVideos(0, 6, null, term);
-        setVideos(videos);
-    }
-
-    useEffect(() => {
-        if (searchStr) {
-            localSearchArchives(searchStr);
-            localSearchVideos(searchStr)
-        }
-    }, [searchStr]);
-
-    return {searchStr, setSearchStr, archives, videos}
-}
+import {useSearch, useVersion} from "./hooks/customHooks";
 
 function Welcome() {
     const {searchStr, setSearchStr, archives, videos} = useSearch();

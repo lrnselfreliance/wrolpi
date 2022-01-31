@@ -12,7 +12,7 @@ import {AppsRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/Inventory";
 import {ArchiveRoute, ArchivesList} from "./components/Archive";
 import {Saver} from "./components/Upload";
-import {MoreButton, SearchInput} from "./components/Common";
+import {MoreButton, PageContainer, SearchInput} from "./components/Common";
 import {FilesRoute} from "./components/Files";
 import {useSearch, useVersion} from "./hooks/customHooks";
 
@@ -49,10 +49,10 @@ function Welcome() {
     }
 
     return (
-        <Container fluid>
+        <PageContainer>
             <SearchInput initValue={searchStr} onSubmit={setSearchStr} size='big' placeholder='Search Everywhere...'/>
             {body}
-        </Container>
+        </PageContainer>
     )
 }
 
@@ -78,7 +78,7 @@ export default function App() {
             <header>
                 <NavBar/>
             </header>
-            <Container fluid style={{marginTop: '1em', padding: '1em'}}>
+            <>
                 <Switch>
                     <Route path='/videos/video/:video_id' exact component={VideoWrapper}/>
                     <Route path='/videos/channel/:channel_link/video/:video_id' exact component={VideoWrapper}/>
@@ -91,7 +91,7 @@ export default function App() {
                     <Route path='/files' component={FilesRoute}/>
                     <Route component={PageNotFound}/>
                 </Switch>
-            </Container>
+            </>
             <SemanticToastContainer position="top-right"/>
             <Footer/>
         </>

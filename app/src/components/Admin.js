@@ -23,7 +23,7 @@ import {
     startDownloads
 } from "../api";
 import TimezoneSelect from 'react-timezone-select';
-import {secondsToDate, secondsToFrequency, TabLinks, textEllipsis, WROLModeMessage} from "./Common";
+import {PageContainer, secondsToDate, secondsToFrequency, TabLinks, textEllipsis, WROLModeMessage} from "./Common";
 import {Route} from "react-router-dom";
 
 class Settings extends React.Component {
@@ -450,12 +450,12 @@ export default function Admin(props) {
     ];
 
     return (
-        <>
+        <PageContainer>
             <TabLinks links={links}/>
             <Route path='/admin' exact component={Downloads}/>
             <Route path='/admin/settings' exact component={Settings}/>
             <Route path='/admin/wrol' exact component={WROLMode}/>
-        </>
+        </PageContainer>
     )
 
 }

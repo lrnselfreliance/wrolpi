@@ -16,7 +16,7 @@ import {
 import {Button, Checkbox, Dropdown, Form, Grid, Header, Portal, Segment, Table} from "semantic-ui-react";
 import {Route} from "react-router-dom";
 import {toast} from 'react-semantic-toasts';
-import {arraysEqual, enumerate, replaceNullValues, TabLinks} from './Common';
+import {arraysEqual, enumerate, PageContainer, replaceNullValues, TabLinks} from './Common';
 import _ from 'lodash';
 
 class InventorySummary extends React.Component {
@@ -1094,10 +1094,10 @@ export function InventoryRoute(props) {
         {text: 'Summary', to: '/inventory/summary'},
     ];
     return (
-        <>
+        <PageContainer>
             <TabLinks links={links}/>
             <Route path='/inventory' exact component={InventoryAddList}/>
             <Route path='/inventory/summary' exact component={InventorySummary}/>
-        </>
+        </PageContainer>
     )
 }

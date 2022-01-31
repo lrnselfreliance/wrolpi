@@ -4,8 +4,9 @@ import {deleteVideo, favoriteVideo} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import {Link} from "react-router-dom";
 import {humanFileSize, humanNumber, secondsToTimestamp, uploadDate, VideoCard} from "./Common";
-import {Confirm, Container, Segment, Tab} from "semantic-ui-react";
+import {Confirm, Segment, Tab} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 
 const MEDIA_PATH = '/media';
 
@@ -106,70 +107,76 @@ function VideoPage(props) {
     let tabPanes = [descriptionPane, statisticsPane, captionsPane];
 
     return (
-        <Container textAlign='left'>
-            <Button
-                style={{marginTop: '1em', marginBottom: '1em'}}
-                onClick={() => props.history.goBack()}
-            >
-                <Icon name='left arrow'/>
-                Back
-            </Button>
-            <Segment>
-                <video controls
-                       autoPlay={props.autoplay !== undefined ? props.autoplay : true}
-                       poster={posterUrl}
-                       id="player"
-                       playsInline={true}
-                       style={{maxWidth: '100%'}}
+        <>
+            <Container>
+                <Button
+                    style={{marginTop: '1em', marginBottom: '1em'}}
+                    onClick={() => props.history.goBack()}
                 >
-                    <source src={videoUrl} type="video/mp4"/>
-                    <track kind="captions" label="English captions" src={captionsUrl} srcLang="en" default/>
-                </video>
+                    <Icon name='left arrow'/>
+                    Back
+                </Button>
+            </Container>
 
-                <h2>{video.title || video.video_path}</h2>
-                {video.upload_date && <h3>{uploadDate(video.upload_date)}</h3>}
-                <h3>
-                    {channel && <Link to={`/videos/channel/${channel.link}/video`}>
-                        {channel.name}
-                    </Link>}
-                </h3>
+            <video controls
+                   autoPlay={props.autoplay !== undefined ? props.autoplay : true}
+                   poster={posterUrl}
+                   id="player"
+                   playsInline={true}
+                   style={{maxWidth: '100%'}}
+            >
+                <source src={videoUrl} type="video/mp4"/>
+                <track kind="captions" label="English captions" src={captionsUrl} srcLang="en" default/>
+            </video>
 
-                <p>
-                    {favorite_button}
-                    <a href={videoUrl}>
-                        <Button style={{margin: '0.5em'}}>
-                            <Icon name='download'/>
-                            Download
-                        </Button>
-                    </a>
-                    <Button
-                        color='red'
-                        onClick={() => setDeleteOpen(true)}
-                        style={{margin: '0.5em'}}
-                    >Delete</Button>
-                    <Confirm
-                        open={deleteOpen}
-                        content='Are you sure you want to delete this video?  All files related to this video will be deleted. It will not be downloaded again!'
-                        confirmButton='Delete'
-                        onCancel={() => setDeleteOpen(false)}
-                        onConfirm={() => handleDeleteVideo(video.id)}
-                    />
-                </p>
-            </Segment>
+            <Container style={{marginTop: '1em'}}>
+                <Segment>
 
-            <Tab panes={tabPanes}/>
+                    <h2>{video.title || video.video_path}</h2>
+                    {video.upload_date && <h3>{uploadDate(video.upload_date)}</h3>}
+                    <h3>
+                        {channel && <Link to={`/videos/channel/${channel.link}/video`}>
+                            {channel.name}
+                        </Link>}
+                    </h3>
 
-            <Grid columns={2} stackable>
-                <Grid.Row>
-                    <Grid.Column textAlign='left'>
-                        {props.prev && <><h3>Older</h3><VideoCard video={props.prev}/></>}
-                    </Grid.Column>
-                    <Grid.Column textAlign='left'>
-                        {props.next && <><h3>Newer</h3><VideoCard video={props.next}/></>}
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
-        </Container>
+                    <p>
+                        {favorite_button}
+                        <a href={videoUrl}>
+                            <Button style={{margin: '0.5em'}}>
+                                <Icon name='download'/>
+                                Download
+                            </Button>
+                        </a>
+                        <Button
+                            color='red'
+                            onClick={() => setDeleteOpen(true)}
+                            style={{margin: '0.5em'}}
+                        >Delete</Button>
+                        <Confirm
+                            open={deleteOpen}
+                            content='Are you sure you want to delete this video?  All files related to this video will be deleted. It will not be downloaded again!'
+                            confirmButton='Delete'
+                            onCancel={() => setDeleteOpen(false)}
+                            onConfirm={() => handleDeleteVideo(video.id)}
+                        />
+                    </p>
+                </Segment>
+
+                <Tab panes={tabPanes}/>
+
+                <Grid columns={2} stackable>
+                    <Grid.Row>
+                        <Grid.Column textAlign='left'>
+                            {props.prev && <><h3>Older</h3><VideoCard video={props.prev}/></>}
+                        </Grid.Column>
+                        <Grid.Column textAlign='left'>
+                            {props.next && <><h3>Newer</h3><VideoCard video={props.next}/></>}
+                        </Grid.Column>
+                    </Grid.Row>
+                </Grid>
+            </Container>
+        </>
     )
 }
 

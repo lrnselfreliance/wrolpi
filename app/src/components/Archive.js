@@ -3,6 +3,7 @@ import {Card, Confirm, Container, Icon, Image, Placeholder} from "semantic-ui-re
 import Paginator, {
     ClearButton,
     ExternalLink,
+    PageContainer,
     SearchInput,
     TabLinks,
     textEllipsis,
@@ -321,10 +322,10 @@ export function ArchiveRoute(props) {
         {text: 'Domains', to: '/archive/domains'},
         {text: 'Manage', to: '/archive/manage'},
     ];
-    return <>
+    return <PageContainer>
         <TabLinks links={links}/>
         <Route path='/archive' exact component={Archives}/>
         <Route path='/archive/domains' component={Domains}/>
         <Route path='/archive/manage' component={ManageArchives}/>
-    </>
+    </PageContainer>
 }

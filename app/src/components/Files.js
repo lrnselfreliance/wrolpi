@@ -3,7 +3,7 @@ import FileBrowser from 'react-keyed-file-browser';
 import {Button, Confirm, Header, Icon, Modal} from "semantic-ui-react";
 import 'react-keyed-file-browser/dist/react-keyed-file-browser.css';
 import {deleteFile, getFiles} from "../api";
-import {humanFileSize, secondsToDateTime} from "./Common";
+import {humanFileSize, PageContainer, secondsToDateTime} from "./Common";
 
 const icons = {
     File: <Icon name='file'/>,
@@ -112,6 +112,8 @@ class Files extends React.Component {
 
 export function FilesRoute(props) {
     return (
-        <Files/>
+        <PageContainer>
+            <Files/>
+        </PageContainer>
     );
 }

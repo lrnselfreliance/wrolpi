@@ -4,6 +4,7 @@ import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {Route} from "react-router-dom";
 import "../static/wrolpi.css";
 import {decryptOTP, encryptOTP} from "../api";
+import {PageContainer} from "./Common";
 
 class Encrypt extends React.Component {
     constructor(props) {
@@ -145,10 +146,8 @@ class OTP extends React.Component {
 
 export function AppsRoute(props) {
     return (
-        <>
-            <Container fluid>
-                <Route path='/apps/otp' exact component={OTP}/>
-            </Container>
-        </>
+        <PageContainer>
+            <Route path='/apps/otp' exact component={OTP}/>
+        </PageContainer>
     )
 }

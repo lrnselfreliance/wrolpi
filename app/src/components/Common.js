@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from "react";
-import {Card, Container, Form, Icon, Image, Input, Menu, Pagination, Progress} from 'semantic-ui-react';
+import {Card, Container, Form, Icon, Image, Input, Menu, Pagination, Progress, Responsive} from 'semantic-ui-react';
 import {Link, NavLink} from "react-router-dom";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
@@ -650,5 +650,22 @@ export function TabLinks({links}) {
                 </NavLink>
             )}
         </Menu>
+    )
+}
+
+export function PageContainer(props) {
+    return (
+        <>
+            <Responsive minWidth={770}>
+                <Container fluid style={{marginTop: '1em', padding: '1em'}}>
+                    {props.children}
+                </Container>
+            </Responsive>
+            <Responsive maxWidth={769}>
+                <Container style={{marginTop: '1em', padding: 0}}>
+                    {props.children}
+                </Container>
+            </Responsive>
+        </>
     )
 }

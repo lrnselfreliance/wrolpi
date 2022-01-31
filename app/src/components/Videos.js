@@ -5,7 +5,7 @@ import Paginator, {
     DEFAULT_LIMIT,
     defaultSearchOrder,
     defaultVideoOrder,
-    humanFileSize,
+    humanFileSize, PageContainer,
     Progresses,
     scrollToTop,
     searchOrders,
@@ -512,7 +512,7 @@ export function VideosRoute(props) {
     ];
 
     return (
-        <>
+        <PageContainer>
             <TabLinks links={links}/>
 
             <Route path='/videos' exact
@@ -545,7 +545,7 @@ export function VideosRoute(props) {
                    }
             />
             <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
-        </>
+        </PageContainer>
     )
 }
 

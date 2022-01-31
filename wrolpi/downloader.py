@@ -356,7 +356,7 @@ class DownloadManager:
                 download.started()
                 session.commit()
 
-                success = None
+                success = True
                 failure = None
                 try:
                     success = downloader.do_download(download)
@@ -414,9 +414,7 @@ class DownloadManager:
             curs.execute("UPDATE download SET status='new' WHERE status='pending' OR status='deferred'")
 
     def recurring_download(self, url: str, frequency: int, skip_download: bool = False) -> Download:
-        """
-        Schedule a recurring download.
-        """
+        """Schedule a recurring download."""
         with get_db_session(commit=True) as session:
             download = self.create_download(url, session=session, skip_download=True)
             download.frequency = frequency
@@ -628,12 +626,17 @@ class DownloadManager:
         downloads = [i.id for i in session.query(Download).filter_by(frequency=freq).order_by(Download.id)]
         index = downloads.index(download.id)
 
-        # Download was successful.  Spread the same-frequency downloads out.
+        # Download was successful.  Spread the same-frequency downloads out over their iteration.
         start_date = local_timezone(datetime(2000, 1, 1))
         # Weeks/months/etc since start_date.
         iterations = ((now() - start_date) // freq).total_seconds()
-        start_date = start_date + timedelta(seconds=iterations * freq)
+        # Download slots start the next nearest iteration since 2000-01-01.
+        # For example, if a weekly download was performed on 2000-01-01 it will get the same slot within
+        # 2000-01-01 to 2000-01-08.
+        start_date = start_date + timedelta(seconds=(iterations * freq) + freq)
         end_date = start_date + timedelta(seconds=freq)
+        # Get this downloads position in the next iteration.  If a download is performed at the 3rd slot this week,
+        # it will be downloaded the 3rd slot of next week.
         zagger = zig_zag(start_date, end_date)
         next_download = [i for i, j in zip(zagger, range(len(downloads)))][index]
         next_download = local_timezone(next_download)

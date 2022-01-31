@@ -129,4 +129,5 @@ def fake_now():
     try:
         yield set_test_now
     finally:
-        set_test_now(None)  # reset now() to its original functionality.
+        # reset now() to its original functionality.
+        set_test_now(None)  # noqa

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from wrolpi import downloader
-from wrolpi.dates import local_timezone
+from wrolpi.dates import local_timezone, Seconds
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download, DownloadFrequency
 from wrolpi.errors import UnrecoverableDownloadError, InvalidDownload, WROLModeEnabled
@@ -153,85 +153,6 @@ class TestDownloader(TestAPI):
         self.assertEqual(download.status, 'failed')
 
     @wrap_test_db
-    def test_recurring_downloads(self):
-        """
-        A recurring Download should be downloaded repeatedly forever.
-        """
-        _, session = get_db_context()
-
-        http_downloader = HTTPDownloader()
-        http_downloader.do_download.return_value = True
-        http_downloader.do_download: MagicMock  # noqa
-        self.mgr.register_downloader(http_downloader)
-
-        # Download every hour.
-        self.mgr.recurring_download('https://example.com', 3600, skip_download=True)
-
-        # One download is scheduled.
-        downloads = self.mgr.get_new_downloads(session)
-        self.assertEqual(
-            [(i.url, i.frequency) for i in downloads],
-            [('https://example.com', 3600)]
-        )
-
-        with mock.patch('wrolpi.downloader.now') as mock_now:
-            now = local_timezone(datetime(2020, 1, 1, 0, 0, 0))
-            mock_now.return_value = now
-
-            # Download is processed and successful, no longer "new".
-            self.mgr.do_downloads_sync()
-            http_downloader.do_download.assert_called_once()
-            self.assertEqual(list(self.mgr.get_new_downloads(session)), [])
-            downloads = list(self.mgr.get_recurring_downloads(session))
-            self.assertEqual(len(downloads), 1)
-            download = downloads[0]
-            expected = local_timezone(datetime(2020, 1, 1, 0, 0, 0))
-            self.assertEqual(download.next_download, expected)
-            self.assertEqual(download.last_successful_download, now)
-
-            # Download is not due for an hour.
-            self.mgr.renew_recurring_downloads(session)
-            self.assertEqual(list(self.mgr.get_new_downloads(session)), [])
-            self.assertEqual(download.last_successful_download, now)
-
-            # Download is due an hour later.
-            mock_now.return_value = local_timezone(datetime(2020, 1, 1, 2, 0, 1))
-            self.mgr.renew_recurring_downloads(session)
-            downloads = list(self.mgr.get_new_downloads(session))
-            self.assertEqual(len(downloads), 1)
-            download = downloads[0]
-            # Download is "new" but has not been done a second time.
-            self.assertEqual(download.next_download, expected)
-            self.assertEqual(download.last_successful_download, now)
-
-            # Try the download, but it fails.
-            http_downloader.do_download.reset_mock()
-            http_downloader.do_download.return_value = False
-            self.mgr.do_downloads_sync()
-            http_downloader.do_download.assert_called_once()
-            download = session.query(Download).one()
-            # Download is deferred, last successful download remains the same.
-            self.assertEqual(download.status, 'deferred')
-            self.assertEqual(download.last_successful_download, now)
-            # Download should be retried after the DEFAULT_RETRY_FREQUENCY.
-            expected = local_timezone(datetime(2020, 1, 1, 3, 0, 1))
-            self.assertEqual(download.next_download, expected)
-
-            # Try the download again, it finally succeeds.
-            http_downloader.do_download.reset_mock()
-            now = local_timezone(datetime(2020, 1, 1, 4, 0, 1))
-            mock_now.return_value = now
-            http_downloader.do_download.return_value = True
-            self.mgr.renew_recurring_downloads(session)
-            self.mgr.do_downloads_sync()
-            http_downloader.do_download.assert_called_once()
-            download = session.query(Download).one()
-            self.assertEqual(download.status, 'complete')
-            self.assertEqual(download.last_successful_download, now)
-            # Floats cause slightly wrong date.
-            self.assertEqual(download.next_download, local_timezone(datetime(2020, 1, 1, 4, 0, 0, 997200)))
-
-    @wrap_test_db
     @mock.patch('wrolpi.downloader.now', lambda: local_timezone(datetime(2020, 6, 5, 0, 0)))
     def test_delete_old_once_downloads(self):
         """
@@ -363,6 +284,79 @@ def test_get_next_download(test_session, test_download_manager, fake_now):
     d3 = Download(url='https://example.com/3', frequency=DownloadFrequency.weekly)
     test_session.add_all([d1, d2, d3])
     test_session.commit()
-    assert test_download_manager.get_next_download(d1) == local_timezone(datetime(2000, 1, 1))
-    assert test_download_manager.get_next_download(d2) == local_timezone(datetime(2000, 1, 4, 12))
-    assert test_download_manager.get_next_download(d3) == local_timezone(datetime(2000, 1, 2, 18))
+    # Downloads are spread out over the next week.
+    assert test_download_manager.get_next_download(d1) == local_timezone(datetime(2000, 1, 8))
+    assert test_download_manager.get_next_download(d2) == local_timezone(datetime(2000, 1, 11, 12))
+    assert test_download_manager.get_next_download(d3) == local_timezone(datetime(2000, 1, 9, 18))
+
+
+def test_recurring_downloads(test_session, test_download_manager, fake_now):
+    """
+    A recurring Download should be downloaded repeatedly forever.
+    """
+    _, session = get_db_context()
+
+    http_downloader = HTTPDownloader()
+    http_downloader.do_download = MagicMock()
+    http_downloader.do_download.return_value = True
+    test_download_manager.register_downloader(http_downloader)
+
+    # Download every hour.
+    test_download_manager.recurring_download('https://example.com', Seconds.hour, skip_download=True)
+
+    # One download is scheduled.
+    downloads = test_download_manager.get_new_downloads(session)
+    assert [(i.url, i.frequency) for i in downloads] == [('https://example.com', Seconds.hour)]
+
+    now = fake_now(datetime(2020, 1, 1, 0, 0, 0))
+
+    # Download is processed and successful, no longer "new".
+    test_download_manager.do_downloads_sync()
+    http_downloader.do_download.assert_called_once()
+    assert list(test_download_manager.get_new_downloads(session)) == []
+    downloads = list(test_download_manager.get_recurring_downloads(session))
+    assert len(downloads) == 1
+    download = downloads[0]
+    expected = local_timezone(datetime(2020, 1, 1, 1, 0, 0))
+    assert download.next_download == expected
+    assert download.last_successful_download == now
+
+    # Download is not due for an hour.
+    test_download_manager.renew_recurring_downloads(session)
+    assert list(test_download_manager.get_new_downloads(session)) == []
+    assert download.last_successful_download == now
+
+    # Download is due an hour later.
+    fake_now(datetime(2020, 1, 1, 2, 0, 1))
+    test_download_manager.renew_recurring_downloads(session)
+    (download,) = list(test_download_manager.get_new_downloads(session))
+    # Download is "new" but has not been downloaded a second time.
+    assert download.next_download == expected
+    assert download.last_successful_download == now
+    assert download.status == 'new'
+
+    # Try the download, but it fails.
+    http_downloader.do_download.reset_mock()
+    http_downloader.do_download.return_value = False
+    test_download_manager.do_downloads_sync()
+    http_downloader.do_download.assert_called_once()
+    download = session.query(Download).one()
+    # Download is deferred, last successful download remains the same.
+    assert download.status == 'deferred'
+    assert download.last_successful_download == now
+    # Download should be retried after the DEFAULT_RETRY_FREQUENCY.
+    expected = local_timezone(datetime(2020, 1, 1, 3, 0, 1))
+    assert download.next_download == expected
+
+    # Try the download again, it finally succeeds.
+    http_downloader.do_download.reset_mock()
+    now = fake_now(datetime(2020, 1, 1, 4, 0, 1))
+    http_downloader.do_download.return_value = True
+    test_download_manager.renew_recurring_downloads(session)
+    test_download_manager.do_downloads_sync()
+    http_downloader.do_download.assert_called_once()
+    download = session.query(Download).one()
+    assert download.status == 'complete'
+    assert download.last_successful_download == now
+    # Floats cause slightly wrong date.
+    assert download.next_download == local_timezone(datetime(2020, 1, 1, 5, 0, 0, 997200))

@@ -27,6 +27,7 @@ def set_test_now(dt: datetime):
         dt = local_timezone(dt)
     global TEST_DATETIME
     TEST_DATETIME = dt
+    return dt
 
 
 def set_timezone(tz: pytz.timezone):

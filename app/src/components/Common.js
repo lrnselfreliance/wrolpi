@@ -147,11 +147,11 @@ export function VideoCard({video}) {
 
 export function VideoCards({videos}) {
     return (
-        <Card.Group>
+        <CardGroupCentered>
             {videos.map((v) => {
                 return <VideoCard key={v['id']} video={v}/>
             })}
-        </Card.Group>
+        </CardGroupCentered>
     )
 }
 
@@ -506,14 +506,6 @@ export function changePageHistory(history, location, activePage, searchStr, sear
     scrollToTop();
 }
 
-export function objectToQuery(d) {
-    // Return an HTTP query string based on the provided dictionary.
-    // Do not include key/values when the value is null if noNull=true
-    let arr = Object.keys(d).map((k) => d[k] === null ? '' : `${k}=${d[k]}`);
-    arr = arr.filter((i) => i !== '')
-    return arr.join('&');
-}
-
 export function ClearButton({onClick, style, label, icon = 'close'}) {
     return <Button icon
                    labelPosition='right'
@@ -665,6 +657,23 @@ export function PageContainer(props) {
                 <Container style={{marginTop: '1em', padding: 0}}>
                     {props.children}
                 </Container>
+            </Responsive>
+        </>
+    )
+}
+
+export function CardGroupCentered(props) {
+    return (
+        <>
+            <Responsive minWidth={770}>
+                <Card.Group>
+                    {props.children}
+                </Card.Group>
+            </Responsive>
+            <Responsive maxWidth={769}>
+                <Card.Group centered>
+                    {props.children}
+                </Card.Group>
             </Responsive>
         </>
     )

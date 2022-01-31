@@ -1,6 +1,7 @@
 import React, {useState} from "react";
 import {Card, Confirm, Container, Icon, Image, Placeholder} from "semantic-ui-react";
 import Paginator, {
+    CardGroupCentered,
     ClearButton,
     ExternalLink,
     PageContainer,
@@ -162,7 +163,7 @@ function ArchiveCard({archive, syncArchive, deleteArchive, setDomain}) {
 
 function ArchiveCards({archives, syncArchive, deleteArchive, setDomain}) {
     return (
-        <Card.Group>
+        <CardGroupCentered>
             {archives.map((i) => {
                 return <ArchiveCard
                     key={i['id']}
@@ -172,7 +173,7 @@ function ArchiveCards({archives, syncArchive, deleteArchive, setDomain}) {
                     setDomain={setDomain}
                 />
             })}
-        </Card.Group>
+        </CardGroupCentered>
     )
 }
 

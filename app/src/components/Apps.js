@@ -1,6 +1,5 @@
 import React from 'react';
 import {Button, Divider, Segment, TextArea} from "semantic-ui-react";
-import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {Route} from "react-router-dom";
 import "../static/wrolpi.css";
 import {decryptOTP, encryptOTP} from "../api";

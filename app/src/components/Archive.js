@@ -256,9 +256,13 @@ class ManageArchives extends React.Component {
         return (<>
             <WROLModeMessage content='Cannot modify Archives'/>
             <Button secondary
+                    id='refresh_archives'
                     onClick={this.refresh}>
                 Refresh Archive Files
             </Button>
+            <label htmlFor='refresh_archives'>
+                Find any new archive files. Remove Archives which no longer have files.
+            </label>
         </>)
     }
 }

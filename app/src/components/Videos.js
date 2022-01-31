@@ -1,12 +1,12 @@
 import React from 'react';
-import {Link, NavLink, Route} from "react-router-dom";
+import {Link, Route} from "react-router-dom";
 import Paginator, {
     changePageHistory,
     DEFAULT_LIMIT,
     defaultSearchOrder,
     defaultVideoOrder,
-    humanFileSize, PageContainer,
-    Progresses,
+    humanFileSize,
+    PageContainer,
     scrollToTop,
     searchOrders,
     secondsToString,
@@ -68,25 +68,16 @@ class ManageVideos extends React.Component {
                 <WROLModeMessage content='Cannot modify Videos'/>
 
                 <p>
-                    <Button primary
-                            onClick={this.download}
-                    >
-                        Download Videos
-                    </Button>
-                    <label>Download any missing videos</label>
-                    <br/>
-                </p>
-
-                <p>
                     <Button secondary
+                            id='refresh_videos'
                             onClick={this.refresh}
                     >
                         Refresh Video Files
                     </Button>
-                    <label>Search for any videos in the media directory</label>
+                    <label htmlFor='refresh_videos'>
+                        Find any new video files. Remove any Videos which no longer have files.
+                    </label>
                 </p>
-
-                {this.state.streamUrl && <Progresses streamUrl={this.state.streamUrl}/>}
             </Container>
         )
     }

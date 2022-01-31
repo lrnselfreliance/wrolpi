@@ -9,7 +9,6 @@ import {
     Header,
     Loader,
     Placeholder,
-    Tab,
     Table
 } from "semantic-ui-react";
 import {

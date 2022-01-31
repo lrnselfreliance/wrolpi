@@ -37,8 +37,10 @@ const useSearch = () => {
     }
 
     useEffect(() => {
-        localSearchArchives(searchStr);
-        localSearchVideos(searchStr)
+        if (searchStr) {
+            localSearchArchives(searchStr);
+            localSearchVideos(searchStr)
+        }
     }, [searchStr]);
 
     return {searchStr, setSearchStr, archives, videos}

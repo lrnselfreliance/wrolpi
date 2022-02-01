@@ -91,8 +91,6 @@ class TestVideoFunctions(TestAPI):
             self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
             _, resp = api_app.test_client.put('/api/videos/channels/channel1', content=channel)
             self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
-            _, resp = api_app.test_client.patch('/api/videos/channels/channel1', content=channel)
-            self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
             _, resp = api_app.test_client.delete('/api/videos/channels/channel1')
             self.assertError(resp, HTTPStatus.FORBIDDEN, API_ERRORS[WROLModeEnabled]['code'])
 

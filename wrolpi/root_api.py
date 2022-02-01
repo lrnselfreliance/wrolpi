@@ -11,16 +11,16 @@ from pytz import UnknownTimeZoneError
 from sanic import Sanic, response, Blueprint, __version__ as sanic_version
 from sanic.request import Request
 from sanic.response import HTTPResponse
-from sanic_cors import CORS
+from sanic_ext import validate
+from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import set_sanic_url_parts, logger, get_config, wrol_mode_enabled, save_settings_config, \
     Base, get_media_directory, wrol_mode_check
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
-from wrolpi.errors import WROLModeEnabled, InvalidTimezone
+from wrolpi.errors import WROLModeEnabled, InvalidTimezone, API_ERRORS, APIError, ValidationError
 from wrolpi.media_path import MediaPath
-from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, EchoResponse, \
-    validate_doc, DownloadRequest
+from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, DownloadRequest, EchoResponse
 from wrolpi.vars import DOCKERIZED
 from wrolpi.version import __version__
 
@@ -29,17 +29,6 @@ logger = logger.getChild(__name__)
 api_app = Sanic(name='api_app')
 
 DEFAULT_HOST, DEFAULT_PORT = '127.0.0.1', '8081'
-
-# TODO Allow all requests to this webapp during development.  This should be restricted later.
-CORS(
-    api_app,
-    expose_headers=[
-        'Location',  # Expose this header so the App can send users to the location of a created object.
-    ],
-    resources={
-        '/*': {'origins': '*'},
-    }
-)
 
 root_api = Blueprint('RootAPI', url_prefix='/api')
 
@@ -105,11 +94,8 @@ def index(_):
 
 
 @root_api.route('/echo', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
-@validate_doc(
-    summary='Echo whatever is sent to this',
-    produces=EchoResponse,
-    tag='Testing',
-)
+@openapi.description('Echo whatever is sent to this.')
+@openapi.response(HTTPStatus.OK, EchoResponse)
 async def echo(request: Request):
     """
     Returns a JSON object containing details about the request sent to me.
@@ -125,20 +111,16 @@ async def echo(request: Request):
 
 
 @root_api.route('/settings', methods=['GET', 'OPTIONS'])
-@validate_doc(
-    summary='Get WROLPi settings',
-    produces=SettingsResponse,
-)
+@openapi.description('Get WROLPi settings')
+@openapi.response(HTTPStatus.OK, SettingsResponse)
 def get_settings(_: Request):
     config = dict(get_config())
     return json_response({'config': config, 'version': __version__})
 
 
 @root_api.patch('/settings')
-@validate_doc(
-    summary='Update WROLPi settings',
-    consumes=SettingsRequest,
-)
+@openapi.description('Update WROLPi settings')
+@validate(json=SettingsRequest)
 def update_settings(_: Request, data: dict):
     if wrol_mode_enabled() and 'wrol_mode' not in data:
         # Cannot update settings while WROL Mode is enabled, unless you want to disable WROL Mode.
@@ -159,32 +141,26 @@ def update_settings(_: Request, data: dict):
 
 
 @root_api.post('/valid_regex')
-@validate_doc(
-    summary='Check if the regex is valid',
-    consumes=RegexRequest,
-    responses=(
-            (HTTPStatus.OK, RegexResponse),
-            (HTTPStatus.BAD_REQUEST, RegexResponse),
-    )
-)
-def valid_regex(_: Request, data: dict):
+@openapi.description('Check if the regex is valid.')
+@openapi.response(HTTPStatus.OK, RegexResponse)
+@openapi.response(HTTPStatus.BAD_REQUEST, RegexResponse)
+@validate(RegexRequest)
+def valid_regex(_: Request, body: RegexRequest):
     try:
-        re.compile(data['regex'])
-        return response.json({'valid': True, 'regex': data['regex']})
+        re.compile(body.regex)
+        return response.json({'valid': True, 'regex': body.regex})
     except re.error:
-        return response.json({'valid': False, 'regex': data['regex']}, HTTPStatus.BAD_REQUEST)
+        return response.json({'valid': False, 'regex': body.regex}, HTTPStatus.BAD_REQUEST)
 
 
 @root_api.post('/download')
-@validate_doc(
-    summary='Download the many URLs that are provided.',
-    consumes=DownloadRequest,
-)
+@openapi.description('Download the many URLs that are provided.')
+@validate(DownloadRequest)
 @wrol_mode_check
-async def post_download(request: Request, data: dict):
+async def post_download(_: Request, body: DownloadRequest):
     # URLs are provided in a textarea, lets split all lines.
-    urls = [i.strip() for i in str(data['urls']).strip().splitlines()]
-    downloader = data.get('downloader')
+    urls = [i.strip() for i in str(body.urls).strip().splitlines()]
+    downloader = body.downloader
     if not downloader or downloader in ('auto', 'None', 'null'):
         downloader = None
     download_manager.create_downloads(urls, downloader=downloader, reset_attempts=True)
@@ -192,41 +168,44 @@ async def post_download(request: Request, data: dict):
 
 
 @root_api.get('/download')
-@validate_doc(
-    summary='Get all Downloads that need to be processed.',
-)
-async def get_downloads(request: Request):
+@openapi.description('Get all Downloads that need to be processed.')
+async def get_downloads(_: Request):
     data = download_manager.get_fe_downloads()
     return json_response(data)
 
 
 @root_api.post('/download/<download_id:int>/kill')
-async def kill_download(request: Request, download_id: int):
+@openapi.description('Kill a download.  It will be stopped if it is pending.')
+async def kill_download(_: Request, download_id: int):
     download_manager.kill_download(download_id)
     return response.empty()
 
 
 @root_api.post('/download/kill')
-async def kill_downloads(request: Request):
+@openapi.description('Kill all downloads.  Disable downloading.')
+async def kill_downloads(_: Request):
     download_manager.kill()
     return response.empty()
 
 
 @root_api.post('/download/enable')
-async def enable_downloads(request: Request):
+@openapi.description('Enable and start downloading.')
+async def enable_downloads(_: Request):
     download_manager.enable()
     return response.empty()
 
 
 @root_api.delete('/download/<download_id:integer>')
+@openapi.description('Delete a download')
 @wrol_mode_check
-async def delete_download(request: Request, download_id: int):
+async def delete_download(_: Request, download_id: int):
     deleted = download_manager.delete_download(download_id)
     return response.empty(HTTPStatus.NO_CONTENT if deleted else HTTPStatus.NOT_FOUND)
 
 
 @root_api.get('/downloaders')
-async def get_downloaders(request: Request):
+@openapi.description('List all Downloaders that can be specified by the user.')
+async def get_downloaders(_: Request):
     downloaders = download_manager.list_downloaders()
     downloaders.insert(0, dict(name='auto', pretty_name='Automatic'))
     disabled = download_manager.disabled.is_set()
@@ -271,3 +250,18 @@ def json_response(*a, **kwargs) -> HTTPResponse:
     """
     resp = response.json(*a, **kwargs, cls=CustomJSONEncoder, dumps=json.dumps)
     return resp
+
+
+def json_error_handler(request, exception: Exception):
+    error = API_ERRORS[type(exception)]
+    if isinstance(exception, ValidationError):
+        body = dict(error='Could not validate the contents of the request', code=error['code'])
+    else:
+        body = dict(message=str(exception), api_error=error['message'], code=error['code'])
+    if cause := exception.__cause__:
+        cause = API_ERRORS[type(cause)]
+        body['cause'] = dict(error=cause['message'], code=cause['code'])
+    return json_response(body, error['status'])
+
+
+api_app.error_handler.add(APIError, json_error_handler)

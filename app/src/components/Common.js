@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from "react";
-import {Card, Container, Form, Icon, Image, Input, Menu, Pagination, Progress, Responsive} from 'semantic-ui-react';
+import {Card, Container, Form, Icon, Image, Input, Menu, Pagination, Responsive} from 'semantic-ui-react';
 import {Link, NavLink} from "react-router-dom";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
@@ -393,61 +393,6 @@ export class APIForm extends React.Component {
         inputs[name] = !checked;
 
         this.setState({inputs: inputs}, this.checkDirty);
-    }
-
-}
-
-export class Progresses extends React.Component {
-
-    constructor(props) {
-        super(props);
-        this.state = {
-            progresses: [],
-        }
-        this.socket = null;
-    }
-
-    componentDidMount() {
-        this.socket = new WebSocket(this.props.streamUrl);
-        this.socket.onmessage = this.handleMessage;
-    }
-
-    handleMessage = async (e) => {
-        let data = await JSON.parse(e.data);
-        if (data.progresses) {
-            let progresses = [];
-            for (let i = 0; i < data.progresses.length; i++) {
-                let progress = data.progresses[i];
-                // Add a key to each progress.
-                progress.key = i;
-
-                if (progress.percent === 100) {
-                    progress.active = false;
-                    progress.success = true;
-                } else {
-                    progress.active = true;
-                    progress.success = false;
-                }
-
-                progresses = progresses.concat([progress]);
-            }
-            this.setState({progresses: progresses});
-        }
-    }
-
-    render() {
-        return <>
-            {this.state.progresses.map((i) =>
-                <Progress
-                    progress='ratio'
-                    key={i.key}
-                    active={i.active}
-                    success={i.success}
-                    total={i.total}
-                    value={i.value}
-                >{i.message || ''}</Progress>
-            )}
-        </>
     }
 
 }

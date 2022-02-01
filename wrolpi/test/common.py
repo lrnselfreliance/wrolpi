@@ -12,7 +12,7 @@ from typing import List, Optional
 import mock
 import websockets
 import yaml
-from sanic_openapi.api import Response
+from requests import Response
 
 from wrolpi.common import EXAMPLE_CONFIG_PATH, get_config, set_test_media_directory, get_media_directory
 from wrolpi.conftest import ROUTES_ATTACHED, test_db, test_client  # noqa

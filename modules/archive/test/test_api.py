@@ -58,7 +58,7 @@ def test_archives_search_no_query(archive_factory, test_client):
         archive_factory('example.com')
 
     # All archives are returned when no `search_str` is passed.
-    request, response = test_client.post('/api/archive/search')
+    request, response = test_client.post('/api/archive/search', content='{}')
     assert response.status_code == HTTPStatus.OK, response.json
     assert [i['id'] for i in response.json['archives']] == list(range(100, 80, -1))
     assert response.json['totals']['archives'] == 100

@@ -1,9 +1,11 @@
-from sanic_openapi import doc
+from dataclasses import dataclass
 
 
+@dataclass
 class PBFPostRequest:
-    pbf_url = doc.String()
+    pbf_url: str
 
 
+@dataclass
 class PBFPostResponse:
-    success = doc.String()
+    success: str

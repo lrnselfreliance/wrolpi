@@ -1,31 +1,37 @@
-from sanic_openapi import doc
+from dataclasses import dataclass
+from datetime import datetime
+from typing import List, Optional
 
 
+@dataclass
 class ArchiveDict:
-    id = doc.Integer()
-    url_id = doc.Integer()
-    domain_id = doc.Integer()
-    singlefile_path = doc.String()
-    readability_path = doc.String()
-    readability_json_path = doc.String()
-    readability_txt_path = doc.String()
-    screenshot_path = doc.String()
-    title = doc.String()
-    archive_datetime = doc.DateTime()
+    id: int
+    url_id: int
+    domain_id: int
+    singlefile_path: str
+    readability_path: str
+    readability_json_path: str
+    readability_txt_path: str
+    screenshot_path: str
+    title: str
+    archive_datetime: datetime
 
 
+@dataclass
 class DomainDict:
-    id = doc.Integer()
-    domain = doc.String()
+    id: int
+    domain: str
 
 
+@dataclass
 class ArchiveSearchRequest:
-    search_str = doc.String()
-    domain = doc.String()
-    offset = doc.Integer()
-    limit = doc.Integer()
+    search_str: Optional[str] = None
+    domain: Optional[str] = None
+    offset: Optional[int] = None
+    limit: Optional[int] = None
 
 
+@dataclass
 class ArchiveSearchResponse:
-    videos = doc.List(ArchiveDict)
-    totals = doc.Dictionary()
+    videos: List[ArchiveDict]
+    totals: dict

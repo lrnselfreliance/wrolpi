@@ -139,17 +139,10 @@ def update_channel(data: dict, link: str) -> Channel:
         if 'directory' in data:
             data['directory'] = str(data['directory'])
 
-        if 'download_frequency' in data:
-            try:
-                data['download_frequency'] = int(data['download_frequency'])
-            except ValueError:
-                if data['download_frequency'] in ('null', 'None', ''):
-                    data['download_frequency'] = None
-                else:
-                    raise APIError(f'Invalid download frequency {data["download_frequency"]}')
-
         if data.get('match_regex') in ('None', 'null'):
             data['match_regex'] = None
+
+        data['link'] = data.get('link') or link
 
         # Verify that the URL/Name/Link aren't taken
         check_for_channel_conflicts(
@@ -157,7 +150,7 @@ def update_channel(data: dict, link: str) -> Channel:
             id_=channel.id,
             url=data.get('url'),
             name=data.get('name'),
-            link=data.get('link'),
+            link=data['link'],
             directory=data.get('directory'),
         )
 

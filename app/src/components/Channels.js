@@ -144,8 +144,6 @@ class ChannelPage extends APIForm {
                 mkdir: false,
                 url: '',
                 match_regex: '',
-                generate_posters: false,
-                calculate_duration: true,
                 download_frequency: null,
             },
             statistics: null,
@@ -189,6 +187,7 @@ class ChannelPage extends APIForm {
     handleSubmit = async (e) => {
         e.preventDefault();
         let {inputs} = this.state;
+        inputs['mkdir'] = inputs['mkdir'] || false;
         let response = null;
         try {
             this.setLoading();

@@ -1,11 +1,13 @@
-from sanic_openapi import doc
+from dataclasses import dataclass
 
 
+@dataclass
 class EncryptOTPRequest:
-    otp = doc.String(required=True)
-    plaintext = doc.String(required=True)
+    otp: str
+    plaintext: str
 
 
+@dataclass
 class DecryptOTPRequest:
-    otp = doc.String(required=True)
-    ciphertext = doc.String(required=True)
+    otp: str
+    ciphertext: str

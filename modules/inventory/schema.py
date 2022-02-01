@@ -1,37 +1,43 @@
-from sanic_openapi import doc
+from dataclasses import dataclass
+from datetime import date, datetime
+from decimal import Decimal
 
 
+@dataclass
 class ItemPostRequest:
-    brand = doc.String()
-    name = doc.String(required=True)
-    item_size = doc.Float(required=True)
-    unit = doc.String(required=True)
-    count = doc.Float(required=True)
-    category = doc.String()
-    subcategory = doc.String()
-    expiration_date = doc.Date()
+    brand: str
+    name: str
+    item_size: Decimal
+    unit: str
+    count: Decimal
+    category: str
+    subcategory: str
+    expiration_date: date
 
 
+@dataclass
 class ItemPutRequest:
-    id = doc.Integer()  # Ignored in favor of URL
-    brand = doc.String()
-    name = doc.String(required=True)
-    item_size = doc.Float(required=True)
-    unit = doc.String(required=True)
-    count = doc.Float(required=True)
-    serving = doc.Float()
-    category = doc.String()
-    subcategory = doc.String()
-    expiration_date = doc.Date()
-    purchase_date = doc.Date()
-    created_at = doc.DateTime()
-    deleted_at = doc.DateTime()
-    inventory_id = doc.Integer(required=True)
+    id: int  # Ignored in favor of URL
+    brand: str
+    name: str
+    item_size: Decimal
+    unit: str
+    count: Decimal
+    serving: Decimal
+    category: str
+    subcategory: str
+    expiration_date: date
+    purchase_date: date
+    created_at: datetime
+    deleted_at: datetime
+    inventory_id: int
 
 
+@dataclass
 class InventoryPostRequest:
-    name = doc.String(required=True)
+    name: str
 
 
+@dataclass
 class InventoryPutRequest:
-    name = doc.String(required=True)
+    name: str

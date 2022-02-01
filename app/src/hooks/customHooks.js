@@ -16,7 +16,7 @@ export const useSearchParam = (key, defaultValue = null) => {
             params.append(key, value);
         }
         history.push({search: params.toString()});
-    }, [value])
+    }, [value, history, key])
 
     return [value, setValue];
 }
@@ -29,13 +29,13 @@ export const useSearch = () => {
 
     const localSearchArchives = async (term) => {
         setArchives(null);
-        const [archives, total] = await searchArchives(0, 6, null, term);
+        const [archives] = await searchArchives(0, 6, null, term);
         setArchives(archives);
     }
 
     const localSearchVideos = async (term) => {
         setVideos(null);
-        const [videos, total] = await searchVideos(0, 6, null, term);
+        const [videos] = await searchVideos(0, 6, null, term);
         setVideos(videos);
     }
 

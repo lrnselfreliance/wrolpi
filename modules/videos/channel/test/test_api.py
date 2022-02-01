@@ -60,7 +60,7 @@ class TestVideoAPI(TestAPI):
 
         # Create it
         request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.CREATED
+        assert response.status_code == HTTPStatus.CREATED, response.json
         location = response.headers['Location']
         request, response = api_app.test_client.get(location)
         created = response.json['channel']
@@ -89,20 +89,6 @@ class TestVideoAPI(TestAPI):
         self.assertDictContains(response.json['channel'], {
             'id': 1,
             'name': 'Example Channel 2',
-            'directory': channel_directory_name,
-            'match_regex': 'asdf',
-            'url': 'https://example.com/channel1',
-        })
-
-        # Patch it
-        patch = {'name': 'new name'}
-        request, response = api_app.test_client.patch(location, content=json.dumps(patch))
-        assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
-        request, response = api_app.test_client.get(location)
-        assert response.status_code == HTTPStatus.OK
-        self.assertDictContains(response.json['channel'], {
-            'id': 1,
-            'name': 'new name',
             'directory': channel_directory_name,
             'match_regex': 'asdf',
             'url': 'https://example.com/channel1',
@@ -361,9 +347,7 @@ class TestVideoAPI(TestAPI):
 
     @wrap_test_db
     def test_channel_no_download_frequency(self):
-        """
-        A channel does not require a download frequency.
-        """
+        """A channel does not require a download frequency."""
         channel_directory = tempfile.TemporaryDirectory(dir=self.tmp_dir.name).name
         os.mkdir(channel_directory)
 

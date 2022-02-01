@@ -10,7 +10,7 @@ pytest==6.2.5
 pytz==2021.3
 PyYAML==5.3.1
 requests==2.27.1
-sanic-ext==21.12.1
+sanic-ext==22.1.2
 sanic-testing==0.8.2
 sanic==21.12.1
 selenium==4.1.0

@@ -18,7 +18,7 @@ from wrolpi.common import set_sanic_url_parts, logger, get_config, wrol_mode_ena
     Base, get_media_directory, wrol_mode_check
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
-from wrolpi.errors import WROLModeEnabled, InvalidTimezone
+from wrolpi.errors import WROLModeEnabled, InvalidTimezone, API_ERRORS, APIError, ValidationError
 from wrolpi.media_path import MediaPath
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, DownloadRequest, EchoResponse
 from wrolpi.vars import DOCKERIZED
@@ -250,3 +250,18 @@ def json_response(*a, **kwargs) -> HTTPResponse:
     """
     resp = response.json(*a, **kwargs, cls=CustomJSONEncoder, dumps=json.dumps)
     return resp
+
+
+def json_error_handler(request, exception: Exception):
+    error = API_ERRORS[type(exception)]
+    if isinstance(exception, ValidationError):
+        body = dict(error='Could not validate the contents of the request', code=error['code'])
+    else:
+        body = dict(message=str(exception), api_error=error['message'], code=error['code'])
+    if cause := exception.__cause__:
+        cause = API_ERRORS[type(cause)]
+        body['cause'] = dict(error=cause['message'], code=cause['code'])
+    return json_response(body, error['status'])
+
+
+api_app.error_handler.add(APIError, json_error_handler)

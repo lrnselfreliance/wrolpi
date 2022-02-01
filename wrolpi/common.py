@@ -458,7 +458,7 @@ def get_absolute_media_path(path: str) -> Path:
     return path
 
 
-def get_relative_to_media_directory(path: str) -> Path:
+def get_relative_to_media_directory(path: Union[str, Path]) -> Path:
     """
     Get the path for a file/directory relative to the config media directory.
 
@@ -482,7 +482,7 @@ def minimize_dict(d: dict, keys: Iterable) -> Optional[dict]:
     return {k: d[k] for k in set(keys) & d.keys()}
 
 
-def make_media_directory(path: str):
+def make_media_directory(path: Union[str, Path]):
     """
     Make a directory relative within the media directory.
     """

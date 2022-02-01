@@ -12,7 +12,7 @@ from wrolpi.root_api import json_response
 from wrolpi.schema import JSONErrorResponse
 from .lib import get_minimal_channels, delete_channel, update_channel, get_channel, create_channel
 from ..schema import ChannelsResponse, ChannelResponse, ChannelPostRequest, \
-    ChannelPostResponse, ChannelPutRequest, SuccessResponse
+    ChannelPostResponse, ChannelPutRequest
 
 channel_bp = Blueprint('Channel', url_prefix='/api/videos/channels')
 
@@ -27,7 +27,7 @@ async def get_channels(_: Request):
     return json_response({'channels': channels})
 
 
-@channel_bp.route('/<link:str>', methods=['GET', 'OPTIONS'])
+@channel_bp.get('/<link:str>')
 @openapi.description('Get a Channel')
 @openapi.response(HTTPStatus.OK, ChannelResponse)
 def channel_get(_: Request, link: str):
@@ -42,14 +42,14 @@ def channel_get(_: Request, link: str):
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @validate(ChannelPostRequest)
 @wrol_mode_check
-def channel_post(_: Request, data: dict):
+def channel_post(_: Request, body: ChannelPostRequest):
     try:
         # Channel directory is relative to the media directory.  Channel directory may not be in "videos" directory!
-        data['directory'] = get_media_directory() / data['directory']
+        body.directory = get_media_directory() / body.directory
     except UnknownDirectory:
-        if data['mkdir']:
-            make_media_directory(data['directory'])
-            data['directory'] = get_relative_to_media_directory(data['directory'])
+        if body.mkdir:
+            make_media_directory(body.directory)
+            body.directory = get_relative_to_media_directory(body.directory)
         else:
             raise
     # Channel directory is relative to the media directory.  Channel directory may not be in "videos" directory!
@@ -57,16 +57,7 @@ def channel_post(_: Request, data: dict):
     if data.get('mkdir') is True:
         make_media_directory(data['directory'])
 
-    if download_frequency := data.get('download_frequency'):
-        try:
-            download_frequency = int(download_frequency)
-        except ValueError:
-            if download_frequency in ('null', 'None'):
-                download_frequency = None
-
-    data['download_frequency'] = download_frequency
-
-    channel = create_channel(data)
+    channel = create_channel(body.__dict__)  # TODO don't use the dataclass as a dict.
 
     # Refresh the videos asynchronously
     from ..api import refresh_videos
@@ -78,14 +69,13 @@ def channel_post(_: Request, data: dict):
 
 
 @channel_bp.put('/<link:str>')
-@channel_bp.patch('/<link:str>')
 @openapi.description('Update a Channel')
 @openapi.response(HTTPStatus.NO_CONTENT)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @validate(ChannelPutRequest)
 @wrol_mode_check
-def channel_update(_: Request, link: str, data: dict):
-    channel = update_channel(data, link)
+def channel_update(_: Request, link: str, body: ChannelPutRequest):
+    channel = update_channel(body.__dict__, link)
     return response.raw('', HTTPStatus.NO_CONTENT,
                         headers={'Location': f'/api/videos/channels/{channel.link}'})
 
@@ -93,7 +83,6 @@ def channel_update(_: Request, link: str, data: dict):
 @channel_bp.delete('/<link:str>')
 @openapi.description('Delete a Channel')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-@validate(SuccessResponse)
 @wrol_mode_check
 def channel_delete(_: Request, link: str):
     delete_channel(link)

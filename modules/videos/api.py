@@ -103,9 +103,9 @@ async def refresh_videos(channel_links: list = None):
 @validate(FavoriteRequest)
 @openapi.response(HTTPStatus.OK, FavoriteResponse)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
-async def favorite(_: Request, data: dict):
-    _favorite = video_lib.set_video_favorite(data['video_id'], data['favorite'])
-    ret = {'video_id': data['video_id'], 'favorite': _favorite}
+async def favorite(_: Request, body: FavoriteRequest):
+    _favorite = video_lib.set_video_favorite(body.video_id, body.favorite)
+    ret = {'video_id': body.video_id, 'favorite': _favorite}
     return json_response(ret, HTTPStatus.OK)
 
 

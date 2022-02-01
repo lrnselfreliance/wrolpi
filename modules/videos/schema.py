@@ -2,40 +2,38 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import List, Optional
 
+from modules.videos.lib import DEFAULT_DOWNLOAD_FREQUENCY
+from modules.videos.video.lib import DEFAULT_VIDEO_ORDER, VIDEO_QUERY_LIMIT
+
 
 @dataclass
 class ChannelPostRequest:
-    url: str
     name: str
-    match_regex: str
     directory: str
-    mkdir: bool
-    generate_posters: bool
-    calculate_duration: bool
-    download_frequency: str
+    calculate_duration: Optional[bool] = None
+    download_frequency: Optional[int] = DEFAULT_DOWNLOAD_FREQUENCY
+    generate_posters: Optional[bool] = None
+    match_regex: Optional[str] = None
+    mkdir: Optional[bool] = None
+    url: Optional[str] = None
 
 
 @dataclass
 class ChannelPutRequest:
-    url: str
-    name: str
-    match_regex: str
-    link: str
-    directory: str
-    generate_posters: bool
-    calculate_duration: bool
-    mkdir: bool
-    download_frequency: str
+    calculate_duration: Optional[bool] = None
+    directory: Optional[str] = None
+    download_frequency: Optional[int] = DEFAULT_DOWNLOAD_FREQUENCY
+    generate_posters: Optional[bool] = None
+    link: Optional[str] = None
+    match_regex: Optional[str] = None
+    mkdir: Optional[bool] = None
+    name: Optional[str] = None
+    url: Optional[str] = None
 
 
 @dataclass
 class RefreshRequest:
     channel_name: str
-
-
-@dataclass
-class SuccessResponse:
-    success: str
 
 
 @dataclass
@@ -129,11 +127,11 @@ class VideoResponse:
 
 @dataclass
 class VideoSearchRequest:
-    search_str: str
-    filters: Optional[List[str]] = field(default_factory=list)
+    search_str: Optional[str] = None
+    filters: List[str] = field(default_factory=list)
     offset: Optional[int] = None
-    limit: Optional[int] = None
-    order_by: Optional[str] = None
+    limit: Optional[int] = VIDEO_QUERY_LIMIT
+    order_by: Optional[str] = DEFAULT_VIDEO_ORDER
     channel_link: Optional[str] = None
 
 

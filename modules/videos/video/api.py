@@ -8,11 +8,11 @@ from sanic_ext.extensions.openapi import openapi
 from wrolpi.common import logger, wrol_mode_check, run_after, get_media_directory, \
     get_relative_to_media_directory
 from wrolpi.db import get_db_session
-from wrolpi.errors import ValidationError, InvalidOrderBy
+from wrolpi.errors import InvalidOrderBy
 from wrolpi.root_api import json_response
 from wrolpi.schema import JSONErrorResponse
-from .lib import get_video, VIDEO_ORDERS, DEFAULT_VIDEO_ORDER, video_search, get_video_for_app
-from ..common import get_matching_directories, video_limiter
+from .lib import get_video, VIDEO_ORDERS, video_search, get_video_for_app
+from ..common import get_matching_directories
 from ..lib import save_channels_config
 from ..schema import VideoResponse, VideoSearchRequest, VideoSearchResponse, \
     DirectoriesResponse, DirectoriesRequest
@@ -36,21 +36,18 @@ def video_get(_: Request, video_id: int):
 @openapi.response(HTTPStatus.OK, VideoSearchResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @validate(VideoSearchRequest)
-async def search(_: Request, data: dict):
-    try:
-        search_str = data.get('search_str')
-        channel_link = data.get('channel_link')
-        order_by = data.get('order_by', DEFAULT_VIDEO_ORDER)
-        offset = int(data.get('offset', 0))
-        limit = video_limiter(data.get('limit'))
-        filters = data.get('filters', None)
-    except Exception as e:
-        raise ValidationError('Unable to validate search queries') from e
-
-    if order_by not in VIDEO_ORDERS:
+async def search(_: Request, body: VideoSearchRequest):
+    if body.order_by not in VIDEO_ORDERS:
         raise InvalidOrderBy('Invalid order by')
 
-    videos, videos_total = video_search(search_str, offset, limit, channel_link, order_by, filters)
+    videos, videos_total = video_search(
+        body.search_str,
+        body.offset,
+        body.limit,
+        body.channel_link,
+        body.order_by,
+        body.filters,
+    )
 
     ret = {'videos': list(videos), 'totals': {'videos': videos_total}}
     return json_response(ret)

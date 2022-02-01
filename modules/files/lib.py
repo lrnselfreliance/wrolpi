@@ -126,6 +126,9 @@ def refresh_files():
 
 
 def search(search_str: str, limit: int, offset: int):
+    """
+    Search the "title" of each file.  The title is the words in the file's stem.
+    """
     with get_db_curs() as curs:
         stmt = '''
             SELECT id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total

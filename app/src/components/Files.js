@@ -2,8 +2,10 @@ import React from "react";
 import FileBrowser from 'react-keyed-file-browser';
 import {Button, Confirm, Header, Icon, Modal} from "semantic-ui-react";
 import 'react-keyed-file-browser/dist/react-keyed-file-browser.css';
-import {deleteFile, getFiles} from "../api";
-import {humanFileSize, PageContainer, secondsToDateTime} from "./Common";
+import {deleteFile, refreshFiles} from "../api";
+import Paginator, {humanFileSize, PageContainer, SearchInput, TabLinks} from "./Common";
+import {useBrowseFiles, useSearchFiles} from "../hooks/customHooks";
+import {Route} from "react-router-dom";
 
 const icons = {
     File: <Icon name='file'/>,
@@ -13,107 +15,143 @@ const icons = {
     PDF: <Icon name='file pdf'/>,
 };
 
-class Files extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            deleteOpen: false,
-            files: [],
-            openFolders: [],
-            previewOpen: false,
-            selectedFile: null,
-        };
-    }
+export function Files(props) {
+    const {searchFiles, setPage, limit, totalPages, activePage, searchStr, setSearchStr} = useSearchFiles(50);
+    const {browseFiles, setOpenFolders, fetchFiles} = useBrowseFiles();
 
-    async componentDidMount() {
-        await this.fetchFiles();
-    }
+    const [deleteOpen, setDeleteOpen] = React.useState(false);
+    const [previewOpen, setPreviewOpen] = React.useState(false);
+    const [selectedFile, setSelectedFile] = React.useState(null);
 
-    fetchFiles = async () => {
-        let {files} = await getFiles(this.state.openFolders);
-        for (let i = 0; i < files.length; i++) {
-            files[i]['modified'] = secondsToDateTime(files[i]['modified']);
-        }
-        this.setState({files: files});
-    }
-
-    handleFolderChange = async (file, browserProps) => {
+    const handleFolderChange = async (file, browserProps) => {
         let openFolders = Object.keys(browserProps.openFolders);
-        this.setState({openFolders}, this.fetchFiles);
+        setOpenFolders(openFolders);
     }
 
-    onDownloadFile = async () => {
+    const onDownloadFile = async () => {
         // Open file in new tab/window.
-        window.open(`/media/${this.state.selectedFile.key}`);
+        window.open(`/media/${selectedFile.key}`);
     }
 
-    onSelectFile = async (file) => {
-        this.setState({selectedFile: file}, this.openPreview);
+    const onSelectFile = async (file) => {
+        setSelectedFile(file);
+        openPreview();
     }
 
-    onDeleteFile = async () => {
-        await deleteFile(this.state.selectedFile.key);
-        await this.fetchFiles();
-        this.closePreview();
+    const onDeleteFile = async () => {
+        await deleteFile(selectedFile.key);
+        await fetchFiles();
+        closePreview();
     }
 
-    openPreview = () => {
-        this.setState({previewOpen: true});
+    const openPreview = () => {
+        setPreviewOpen(true);
     }
 
-    closePreview = () => {
-        this.setState({previewOpen: false, selectedFile: null, deleteOpen: false});
+    const closePreview = () => {
+        setPreviewOpen(false);
+        setSelectedFile(null);
+        setDeleteOpen(false);
     }
 
-    openDelete = () => {
-        this.setState({deleteOpen: true});
+    const openDelete = () => {
+        setDeleteOpen(true);
     }
 
-    closeDelete = () => {
-        this.setState({deleteOpen: false});
+    const closeDelete = () => {
+        setDeleteOpen(false);
     }
 
-    render() {
-        return <>
-            {this.state.selectedFile &&
-                <Modal closeIcon
-                       open={this.state.previewOpen}
-                       onClose={this.closePreview}
-                >
-                    <Modal.Header><Icon name='file'/>File Preview</Modal.Header>
-                    <Modal.Content>
-                        <Header>{this.state.selectedFile.name}</Header>
-                        <p>{humanFileSize(this.state.selectedFile.size)}</p>
-                    </Modal.Content>
-                    <Modal.Actions>
-                        <Button color='red' onClick={this.openDelete} floated='left'>Delete</Button>
-                        <Confirm
-                            open={this.state.deleteOpen}
-                            content={`Are you sure you want to delete ${this.state.selectedFile.key}`}
-                            onCancel={this.closeDelete}
-                            onConfirm={this.onDeleteFile}
-                        />
-                        <Button color='green' onClick={this.onDownloadFile}>Download</Button>
-                    </Modal.Actions>
-                </Modal>}
-            <FileBrowser
-                showActionBar={false}
-                canFilter={false}
-                files={this.state.files}
-                icons={icons}
-                onFolderOpen={this.handleFolderChange}
-                onFolderClose={this.handleFolderChange}
-                onSelectFile={this.onSelectFile}
-                detailRenderer={() => <></>} // Hide the preview that the 3rd party provided.
-            />
-        </>
+    let selectedModal = <></>;
+    if (selectedFile) {
+        selectedModal = (
+            <Modal closeIcon
+                   open={previewOpen}
+                   onClose={closePreview}
+            >
+                <Modal.Header><Icon name='file'/>File Preview</Modal.Header>
+                <Modal.Content>
+                    <Header>{selectedFile.name}</Header>
+                    <p>{humanFileSize(selectedFile.size)}</p>
+                </Modal.Content>
+                <Modal.Actions>
+                    <Button color='red' onClick={openDelete} floated='left'>Delete</Button>
+                    <Confirm
+                        open={deleteOpen}
+                        content={`Are you sure you want to delete ${selectedFile.key}`}
+                        onCancel={closeDelete}
+                        onConfirm={onDeleteFile}
+                    />
+                    <Button color='green' onClick={onDownloadFile}>Download</Button>
+                </Modal.Actions>
+            </Modal>);
     }
+
+    let browser;
+    let pagination = null;
+    if (searchStr) {
+        browser = (<FileBrowser
+            showActionBar={false}
+            canFilter={false}
+            files={searchFiles}
+            icons={icons}
+            onSelectFile={onSelectFile}
+            detailRenderer={() => <></>} // Hide the preview that the 3rd party provided.
+        />);
+        pagination = (
+            <div style={{marginTop: '3em', textAlign: 'center'}}>
+                <Paginator
+                    activePage={activePage}
+                    changePage={setPage}
+                    totalPages={totalPages}
+                />
+            </div>);
+    } else {
+        browser = (<FileBrowser
+            showActionBar={false}
+            canFilter={false}
+            files={browseFiles}
+            icons={icons}
+            onFolderOpen={handleFolderChange}
+            onFolderClose={handleFolderChange}
+            onSelectFile={onSelectFile}
+            detailRenderer={() => <></>} // Hide the preview that the 3rd party provided.
+        />);
+    }
+
+    console.log('Files', limit);
+    return <>
+        <SearchInput initValue={searchStr} onSubmit={setSearchStr}/>
+        {selectedModal}
+        {browser}
+        {pagination}
+    </>
+}
+
+function ManageFiles(props) {
+    return (<>
+        <Button secondary
+                id='refresh_files'
+                onClick={refreshFiles}>
+            Refresh Files
+        </Button>
+        <label htmlFor='refresh_files'>
+            Find and index any new files.
+        </label>
+    </>)
 }
 
 export function FilesRoute(props) {
+    const links = [
+        {text: 'Files', to: '/files', exact: true, key: 'files'},
+        {text: 'Manage', to: '/files/manage', exact: true, key: 'manage'},
+    ];
+
     return (
         <PageContainer>
-            <Files/>
+            <TabLinks links={links}/>
+            <Route path='/files' exact component={Files}/>
+            <Route path='/files/manage' exact component={ManageFiles}/>
         </PageContainer>
     );
 }

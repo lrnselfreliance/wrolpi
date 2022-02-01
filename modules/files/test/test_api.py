@@ -124,12 +124,15 @@ def do_search(test_client, search_str, total, expected):
     assert response.json['totals']['files'] == total
     for file, expected in zip_longest(response.json['files'], expected):
         assert_dict_contains(file, expected)
+        # FileBrowser in React requires a key.  We use the path.
+        assert file['path'] == file['key']
 
 
 def test_files_search(test_session, test_client, make_files_structure):
     # You can search an empty directory.
     do_search(test_client, 'nothing', 0, [])
 
+    # Create files in the temporary directory.  Add some contents so the mimetype can be tested.
     files = [
         'foo_is_the_name.txt',
         'archives/bar.txt',

@@ -352,18 +352,15 @@ export async function postDownload(urls, downloader) {
     return response;
 }
 
-
 export async function killDownload(download_id) {
     let response = await apiPost(`${API_URI}/download/${download_id}/kill`);
     return response;
 }
 
-
 export async function killDownloads() {
     let response = await apiPost(`${API_URI}/download/kill`);
     return response;
 }
-
 
 export async function startDownloads() {
     let response = await apiPost(`${API_URI}/download/enable`);
@@ -373,6 +370,16 @@ export async function startDownloads() {
 export async function getDownloaders() {
     let response = await apiGet(`${API_URI}/downloaders`);
     return await response.json();
+}
+
+export async function filesSearch(offset, limit, searchStr) {
+    const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit)};
+    const response = await apiPost(`${API_URI}/files/search`, body);
+    return await response.json();
+}
+
+export async function refreshFiles() {
+    return await apiPost(`${API_URI}/files/refresh`);
 }
 
 export async function getFiles(directories) {

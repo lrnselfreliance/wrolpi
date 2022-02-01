@@ -9,26 +9,27 @@ from wrolpi.media_path import MediaPathType
 class File(ModelHelper, Base):
     __tablename__ = 'file'
     id = Column(Integer, primary_key=True)
+    path = Column(MediaPathType)
 
     mimetype = Column(String)
     modification_datetime = Column(TZDateTime)
-    path = Column(MediaPathType)
     size = Column(Integer)
-    title = Column(String)
+    title = deferred(Column(String))  # used by textsearch column
 
     textsearch = deferred(
-        Column(tsvector, Computed('''to_tsvector('english'::regconfig, (COALESCE(title, ''::text) || ' '::text))''')))
+        Column(tsvector, Computed('''to_tsvector('english'::regconfig, title)''')))
 
     def __repr__(self):
         return f'<File id={self.id} path={self.path.relative_to(get_media_directory())} mime={self.mimetype}>'
 
     def __json__(self):
+        path = self.path.path.relative_to(get_media_directory())
         d = dict(
             id=self.id,
             mimetype=self.mimetype,
             modification_datetime=self.modification_datetime,
-            path=self.path.path.relative_to(get_media_directory()),
+            path=path,
             size=self.size,
-            title=self.title,
+            key=path,
         )
         return d

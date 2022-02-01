@@ -1,5 +1,5 @@
 import {useEffect, useState} from "react";
-import {fetchDomains, getVersion, searchArchives, searchVideos} from "../api";
+import {fetchDomains, filesSearch, getFiles, getVersion, searchArchives, searchVideos} from "../api";
 import {useHistory} from "react-router-dom";
 
 export const useSearchParam = (key, defaultValue = null) => {
@@ -129,4 +129,52 @@ export const useVersion = () => {
     })
 
     return version;
+}
+
+export const useSearchFiles = ({defaultLimit = 50}) => {
+    const [searchFiles, setSearchFiles] = useState([]);
+    const [totalPages, setTotalPages] = useState(0);
+    const [offset, setOffset] = useSearchParam('o');
+    const [limit, setLimit] = useSearchParam('l', defaultLimit);
+    const [searchStr, setSearchStr] = useSearchParam('q');
+    const [activePage, setActivePage] = useState(1);
+
+    const setPage = (i) => {
+        i = parseInt(i);
+        let l = parseInt(limit);
+        setOffset((l * i) - l);
+        setActivePage(i);
+    }
+
+    const localSearchFiles = async () => {
+        setSearchFiles([]);
+        setTotalPages(0);
+        if (searchStr) {
+            let {files, totals} = await filesSearch(offset, limit, searchStr);
+            setSearchFiles(files);
+            setTotalPages(Math.floor(totals['files'] / limit) + 1);
+        }
+    }
+
+    useEffect(() => {
+        localSearchFiles();
+    }, [searchStr, limit, offset, activePage]);
+
+    return {searchFiles, totalPages, limit, setLimit, setOffset, searchStr, setSearchStr, activePage, setPage};
+}
+
+export const useBrowseFiles = () => {
+    const [browseFiles, setBrowseFiles] = useState([]);
+    const [openFolders, setOpenFolders] = useState([]);
+
+    const fetchFiles = async () => {
+        let {files} = await getFiles(openFolders);
+        setBrowseFiles(files);
+    }
+
+    useEffect(() => {
+        fetchFiles();
+    }, [openFolders])
+
+    return {browseFiles, openFolders, setOpenFolders, fetchFiles};
 }

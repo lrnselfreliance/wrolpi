@@ -31,7 +31,7 @@ def upgrade():
         size INTEGER,
         modification_datetime TIMESTAMPTZ,
         textsearch tsvector GENERATED ALWAYS AS (
-            setweight(to_tsvector('english'::regconfig, COALESCE(title, ''::text)), 'A'::"char")
+            setweight(to_tsvector('english'::regconfig, title), 'A'::"char")
             ) stored
     )''')
     session.execute('CREATE INDEX file_path_idx ON file(path)')

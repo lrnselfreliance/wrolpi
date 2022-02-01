@@ -122,3 +122,18 @@ def test_delete_file(make_files_structure, test_directory):
         lib.delete_file('does not exist')
 
     assert (test_directory / 'baz').is_dir()
+
+
+@pytest.mark.parametrize(
+    'path,expected',
+    [
+        ('foo.mp4', ['foo']),
+        ('foo bar.txt', ['foo', 'bar']),
+        ('foo_bar.mp4', ['foo', 'bar']),
+        ('foo-bar', ['foo-bar']),
+        ('123 foo bar', ['123', 'foo', 'bar']),
+        ('123foo bar', ['123foo', 'bar']),
+    ]
+)
+def test_split_file_name(path, expected):
+    assert lib.split_file_name(Path(path)) == expected

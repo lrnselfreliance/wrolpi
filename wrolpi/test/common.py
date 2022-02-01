@@ -76,19 +76,7 @@ class PytestCase:
 
     @classmethod
     def assertDictContains(cls, d1: dict, d2: dict):  # noqa
-        if hasattr(d1, '__dict__'):
-            d1 = d1.__dict__
-        if hasattr(d2, '__dict__'):
-            d2 = d2.__dict__
-
-        for k2 in d2.keys():
-            assert d1, f'dict 1 is empty: {d1}'
-            assert d2, f'dict 1 is empty: {d2}'
-            assert k2 in d1, f'dict 1 does not contain {k2}'
-            if isinstance(d1[k2], dict):
-                cls.assertDictContains(d1[k2], d2[k2])
-            else:
-                assert d1[k2] == d2[k2], f'{k2} of value "{d1[k2]}" does not equal {d2[k2]} in dict 1'
+        assert_dict_contains(d1, d2)
 
     def assertError(self, response, http_status: int, code=None):  # noqa
         self.assertEqual(response.status_code, http_status)
@@ -217,3 +205,19 @@ async def get_all_ws_messages(ws) -> List[dict]:
             break
         messages.append(json.loads(message))
     return messages
+
+
+def assert_dict_contains(d1: dict, d2: dict):
+    if hasattr(d1, '__dict__'):
+        d1 = d1.__dict__
+    if hasattr(d2, '__dict__'):
+        d2 = d2.__dict__
+
+    for k2 in d2.keys():
+        assert d1, f'dict 1 is empty: {d1}'
+        assert d2, f'dict 1 is empty: {d2}'
+        assert k2 in d1, f'dict 1 does not contain {k2}'
+        if isinstance(d1[k2], dict):
+            assert_dict_contains(d1[k2], d2[k2])
+        else:
+            assert d1[k2] == d2[k2], f'{k2} of value "{d1[k2]}" does not equal {d2[k2]} in dict 1'

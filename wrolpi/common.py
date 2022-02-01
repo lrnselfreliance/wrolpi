@@ -638,3 +638,11 @@ def zig_zag(low: ZIG_TYPE, high: ZIG_TYPE) -> Generator[ZIG_TYPE, None, None]:
         if num >= high:
             divisor *= 2
             num = low + (diff / divisor)
+
+
+def walk(path: Path) -> Generator[Path, None, None]:
+    """Walk a directory structure yielding all files and directories."""
+    for path in path.iterdir():
+        yield path
+        if path.is_dir():
+            yield from walk(path)

@@ -6,8 +6,8 @@ from sanic import response
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi.common import get_media_directory
-from wrolpi.errors import InvalidFile
+from wrolpi.common import get_media_directory, api_param_limiter
+from wrolpi.errors import InvalidFile, ValidationError
 from wrolpi.root_api import get_blueprint, json_response
 from . import lib, schema
 
@@ -61,3 +61,23 @@ async def delete_file(_: Request, body: schema.DeleteRequest):
         raise InvalidFile('file cannot be empty')
     lib.delete_file(body.file)
     return response.empty()
+
+
+files_limit_limiter = api_param_limiter(100)
+files_offset_limiter = api_param_limiter(100, 0)
+
+
+@bp.post('/search')
+@validate_doc(
+    'Search files',
+    consumes=schema.FilesSearchRequest,
+    optional_body=True,
+)
+async def search(_: Request, data: dict):
+    try:
+        search_str = data.get('search_str')
+        domain = data.get('domain')
+        limit = files_limit_limiter(data.get('limit'))
+        offset = files_offset_limiter(data.get('offset'))
+    except Exception as e:
+        raise ValidationError('Unable to validate search queries') from e

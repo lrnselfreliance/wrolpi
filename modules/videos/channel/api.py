@@ -8,6 +8,7 @@ from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import logger, wrol_mode_check, make_media_directory, \
     get_media_directory
+from wrolpi.errors import UnknownDirectory
 from wrolpi.root_api import json_response
 from wrolpi.schema import JSONErrorResponse
 from .lib import get_minimal_channels, delete_channel, update_channel, get_channel, create_channel
@@ -43,19 +44,9 @@ def channel_get(_: Request, link: str):
 @validate(ChannelPostRequest)
 @wrol_mode_check
 def channel_post(_: Request, body: ChannelPostRequest):
-    try:
-        # Channel directory is relative to the media directory.  Channel directory may not be in "videos" directory!
-        body.directory = get_media_directory() / body.directory
-    except UnknownDirectory:
-        if body.mkdir:
-            make_media_directory(body.directory)
-            body.directory = get_relative_to_media_directory(body.directory)
-        else:
-            raise
-    # Channel directory is relative to the media directory.  Channel directory may not be in "videos" directory!
-    data['directory'] = get_media_directory() / data['directory']
-    if data.get('mkdir') is True:
-        make_media_directory(data['directory'])
+    body.directory = get_media_directory() / body.directory
+    if not body.directory.is_dir() and body.mkdir:
+        make_media_directory(body.directory)
 
     channel = create_channel(body.__dict__)  # TODO don't use the dataclass as a dict.
 
@@ -75,7 +66,7 @@ def channel_post(_: Request, body: ChannelPostRequest):
 @validate(ChannelPutRequest)
 @wrol_mode_check
 def channel_update(_: Request, link: str, body: ChannelPutRequest):
-    channel = update_channel(body.__dict__, link)
+    channel = update_channel(body.__dict__, link)  # TODO don't use the dataclass as a dict.
     return response.raw('', HTTPStatus.NO_CONTENT,
                         headers={'Location': f'/api/videos/channels/{channel.link}'})
 

@@ -3,11 +3,12 @@ from typing import List
 from urllib.request import Request
 
 from sanic import response
+from sanic_ext import validate
+from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import get_media_directory
 from wrolpi.errors import InvalidFile
 from wrolpi.root_api import get_blueprint, json_response
-from wrolpi.schema import validate_doc
 from . import lib, schema
 
 bp = get_blueprint('Files', '/api/files')
@@ -42,12 +43,10 @@ def paths_to_files(paths: List[pathlib.Path]):
 
 
 @bp.post('/')
-@validate_doc(
-    'List files in a directory',
-    consumes=schema.FilesRequest,
-)
-async def get_files(_: Request, data: dict):
-    directories = data.get('directories') or []
+@openapi.description('List files in a directory')
+@validate(schema.FilesRequest)
+async def get_files(_: Request, body: schema.FilesRequest):
+    directories = body.directories or []
 
     files = lib.list_files(directories)
     files = paths_to_files(files)
@@ -55,13 +54,10 @@ async def get_files(_: Request, data: dict):
 
 
 @bp.post('/delete')
-@validate_doc(
-    'Delete a single file.  Returns an error if WROL Mode is enabled.',
-    consumes=schema.DeleteRequest,
-)
-async def delete_file(_: Request, data: dict):
-    file = data.get('file')
-    if not file:
+@openapi.description('Delete a single file.  Returns an error if WROL Mode is enabled.')
+@validate(schema.DeleteRequest)
+async def delete_file(_: Request, body: schema.DeleteRequest):
+    if not body.file:
         raise InvalidFile('file cannot be empty')
-    lib.delete_file(file)
+    lib.delete_file(body.file)
     return response.empty()

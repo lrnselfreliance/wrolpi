@@ -1,9 +1,12 @@
-from sanic_openapi import doc
+from dataclasses import dataclass, field
+from typing import List
 
 
+@dataclass
 class FilesRequest:
-    directories = doc.List(doc.String())
+    directories: List[str] = field(default_factory=list)
 
 
+@dataclass
 class DeleteRequest:
-    file = doc.String()
+    file: str

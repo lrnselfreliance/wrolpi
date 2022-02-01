@@ -611,9 +611,7 @@ def test_download_channel_no_refresh(test_session, download_channel, video_downl
 
 
 def test_channel_post_directory(test_session, test_client, test_directory):
-    """
-    A Channel can be created with or without an existing directory.
-    """
+    """A Channel can be created with or without an existing directory."""
     # Channel can be created with a missing directory.
     data = dict(name='foo', directory='foo')
     request, response = test_client.post('/api/videos/channels', content=json.dumps(data))

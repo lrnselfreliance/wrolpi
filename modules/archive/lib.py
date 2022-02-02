@@ -390,14 +390,14 @@ def _refresh_archives():
         archive_groups = group_archive_files(archives_files)
         archive_count = 0
         for chunk in chunks(archive_groups, 20):
-            archive_count += 1
             with get_db_session(commit=True) as session:
                 for dt, files in chunk:
+                    archive_count += 1
                     singlefile_paths.add(str(files[0]))
                     upsert_archive(dt, files, session)
 
         if archive_count:
-            logger.info(f'Inserted/updated {archive_count} archives')
+            logger.info(f'Inserted/updated {archive_count} archives in {domain_directory}')
 
     singlefile_paths = list(singlefile_paths)
     with get_db_curs(commit=True) as curs:

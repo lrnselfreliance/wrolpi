@@ -1,5 +1,4 @@
 #! /usr/bin/env python3
-import pathlib
 from pathlib import Path
 from typing import Generator, Union
 
@@ -7,14 +6,12 @@ import srt
 import webvtt
 
 from wrolpi.common import logger
-from wrolpi.media_path import MediaPath
-from .models import Video
+
+__all__ = ['get_captions']
 
 
 def get_caption_text(caption_path: Union[str, Path]) -> Generator:
-    """
-    Return all text from each caption of a caption file.
-    """
+    """Return all text from each caption of a caption file."""
     if str(caption_path).endswith('vtt'):
         for caption in webvtt.read(caption_path):
             text = str(caption.text).strip()
@@ -38,15 +35,8 @@ def get_unique_caption_lines(caption_path: Union[str, Path]) -> Generator:
                 yield line
 
 
-def get_video_captions(video: Video):
-    """
-    Parse video captions from the video's captions file.
-    """
-    if isinstance(video.caption_path, MediaPath):
-        caption_path = video.caption_path.path
-    else:
-        caption_path = pathlib.Path(video.caption_path)
-
+def get_captions(caption_path: Path):
+    """Parse video captions from the video's captions file."""
     try:
         lines = get_unique_caption_lines(str(caption_path))
         block = '\n'.join(lines)

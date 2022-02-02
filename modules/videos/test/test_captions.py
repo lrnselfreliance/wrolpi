@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 from modules.videos import captions
@@ -46,11 +47,11 @@ class TestCaption(TestAPI):
         video1 = Video(title='scream', caption_path=str(self.vtt_path1))
         session.add(video1)
         session.commit()
-        video1.caption = captions.get_video_captions(video1)
+        video1.caption = captions.get_captions(video1.caption_path.path)
         video2 = Video(title='bar', caption_path=str(self.vtt_path2))
         session.add(video2)
         session.commit()
-        video2.caption = captions.get_video_captions(video2)
+        video2.caption = captions.get_captions(video2.caption_path.path)
 
         session.commit()
         session.flush()
@@ -91,3 +92,13 @@ class TestCaption(TestAPI):
             # Matches video2.title
             select_textsearch('bar')
             self.assertEqual(curs.fetchall(), [[2, ]])
+
+
+def test_bad_caption(test_directory):
+    """A caption file that cannot be parsed is ignored."""
+    bad_caption_file = PROJECT_DIR / 'test/bad_caption.en.vtt'
+    test_file = test_directory / 'bad_caption.en.vtt'
+    shutil.copy(bad_caption_file, test_file)
+
+    result = captions.get_captions(test_file)
+    assert result is None

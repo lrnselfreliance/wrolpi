@@ -1,6 +1,6 @@
 import React from 'react';
 import {Link, Route} from "react-router-dom";
-import Paginator, {
+import OldPaginator, {
     changePageHistory,
     DEFAULT_LIMIT,
     defaultSearchOrder,
@@ -401,7 +401,7 @@ class Videos extends React.Component {
         if (totalPages) {
             pagination = (
                 <div style={{marginTop: '3em', textAlign: 'center'}}>
-                    <Paginator
+                    <OldPaginator
                         activePage={activePage}
                         changePage={this.changePage}
                         totalPages={totalPages}
@@ -496,10 +496,10 @@ function ManageTab(props) {
 export function VideosRoute(props) {
 
     const links = [
-        {text: 'Videos', to: '/videos', exact: true},
-        {text: 'Favorites', to: '/videos/favorites'},
-        {text: 'Channels', to: '/videos/channel',},
-        {text: 'Manage', to: '/videos/manage'},
+        {text: 'Videos', to: '/videos', exact: true, key: 'videos'},
+        {text: 'Favorites', to: '/videos/favorites', key: 'favorites'},
+        {text: 'Channels', to: '/videos/channel', key: 'channel'},
+        {text: 'Manage', to: '/videos/manage', key: 'manage'},
     ];
 
     return (

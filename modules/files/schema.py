@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Optional
 
 
 @dataclass
@@ -10,3 +10,10 @@ class FilesRequest:
 @dataclass
 class DeleteRequest:
     file: str
+
+
+@dataclass
+class FilesSearchRequest:
+    search_str: str
+    limit: Optional[int] = 20
+    offset: Optional[int] = 0

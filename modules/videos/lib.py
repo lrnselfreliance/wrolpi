@@ -14,7 +14,7 @@ from wrolpi.dates import from_timestamp, Seconds
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.media_path import MediaPath
 from wrolpi.vars import PYTEST
-from .captions import get_video_captions
+from .captions import get_captions
 from .common import generate_video_paths, remove_duplicate_video_paths, apply_info_json, import_videos_config, \
     get_video_duration, is_valid_poster, convert_image, generate_video_poster
 from .models import Channel, Video
@@ -188,7 +188,7 @@ def validate_video(video: Video, channel_generate_poster: bool):
         # Video duration was not in the info json, use ffprobe.
         video.duration = get_video_duration(video_path)
     if not video.caption and video.caption_path:
-        video.caption = get_video_captions(video)
+        video.caption = get_captions(video.caption_path.path)
 
     if not video.size or not video.modification_datetime:
         stat = video_path.stat()

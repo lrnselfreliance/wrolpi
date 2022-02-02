@@ -6,7 +6,7 @@ from sanic import response
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi.common import get_media_directory
+from wrolpi.common import get_media_directory, api_param_limiter
 from wrolpi.errors import InvalidFile
 from wrolpi.root_api import get_blueprint, json_response
 from . import lib, schema
@@ -61,3 +61,21 @@ async def delete_file(_: Request, body: schema.DeleteRequest):
         raise InvalidFile('file cannot be empty')
     lib.delete_file(body.file)
     return response.empty()
+
+
+files_limit_limiter = api_param_limiter(100)
+files_offset_limiter = api_param_limiter(100, 0)
+
+
+@bp.post('/refresh')
+@openapi.description('Find and index all files')
+async def refresh(_: Request):
+    lib.refresh_files()
+    return response.empty()
+
+
+@bp.post('/search')
+@validate(schema.FilesSearchRequest)
+async def search_files(_: Request, body: schema.FilesSearchRequest):
+    files, total = lib.search(body.search_str, body.limit, body.offset)
+    return json_response(dict(files=files, totals=dict(files=total)))

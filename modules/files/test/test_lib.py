@@ -1,9 +1,12 @@
 from pathlib import Path
+from typing import List, Iterable
 
 import pytest
 
 from modules.files import lib
+from modules.files.models import File
 from wrolpi.errors import InvalidFile
+from wrolpi.media_path import MediaPathType
 
 
 def test_list_files(make_files_structure, test_directory):
@@ -122,3 +125,47 @@ def test_delete_file(make_files_structure, test_directory):
         lib.delete_file('does not exist')
 
     assert (test_directory / 'baz').is_dir()
+
+
+@pytest.mark.parametrize(
+    'path,expected',
+    [
+        ('foo.mp4', ['foo']),
+        ('foo bar.txt', ['foo', 'bar']),
+        ('foo_bar.mp4', ['foo', 'bar']),
+        ('foo-bar', ['foo-bar']),
+        ('123 foo bar', ['123', 'foo', 'bar']),
+        ('123foo bar', ['123foo', 'bar']),
+    ]
+)
+def test_split_file_name(path, expected):
+    assert lib.split_file_name(Path(path)) == expected
+
+
+def test_refresh_files(test_session, make_files_structure, test_directory):
+    files = make_files_structure([
+        'foo.txt',
+        'bar.txt',
+        'baz.txt',
+    ])
+    foo, bar, baz = files
+
+    def get_relative_strs(files_: Iterable[MediaPathType]) -> List[str]:
+        return sorted([str(i.path.path.relative_to(test_directory)) for i in files_])
+
+    lib.refresh_files()
+    results = test_session.query(File)
+    assert get_relative_strs(results) == ['bar.txt', 'baz.txt', 'foo.txt']
+
+    baz.unlink()
+
+    lib.refresh_files()
+    results = test_session.query(File)
+    assert get_relative_strs(results) == ['bar.txt', 'foo.txt']
+
+    foo.unlink()
+    bar.unlink()
+
+    lib.refresh_files()
+    results = test_session.query(File)
+    assert get_relative_strs(results) == []

@@ -5,17 +5,17 @@ import {Dropdown, Menu, Responsive} from "semantic-ui-react";
 const responsiveWidth = 500;
 
 const links = [
-    {text: 'Videos', to: '/videos'},
-    {text: 'Inventory', to: '/inventory'},
-    {text: 'Archive', to: '/archive'},
-    {text: 'Files', to: '/files'},
+    {text: 'Videos', to: '/videos', key: 'videos'},
+    {text: 'Inventory', to: '/inventory', key: 'inventory'},
+    {text: 'Archive', to: '/archive', key: 'archive'},
+    {text: 'Files', to: '/files', key: 'files'},
     {
-        text: 'Apps', links: [
+        key: 'apps', text: 'Apps', links: [
             {to: '/apps/otp', text: 'One Time Pad', exact: true},
         ]
     },
 ];
-const admin = {to: '/admin', text: 'Admin', exact: true};
+const admin = {to: '/admin', text: 'Admin', exact: true, key: 'admin'};
 const rightLinks = [admin,];
 
 const collapsedLinks = links.concat([admin,]);
@@ -67,22 +67,20 @@ export function NavBar() {
             {/*Show the links in a menu when on desktop*/}
             {links.map((link) => {
                 return (
-                    <Responsive minWidth={responsiveWidth} as={MenuLink} link={link} key={link.to}/>
+                    <Responsive minWidth={responsiveWidth} as={MenuLink} link={link} key={link.key}/>
                 )
             })}
             <Responsive minWidth={responsiveWidth} as={Menu.Menu} position="right">
-                {rightLinks.map((link) => {
-                    return (<MenuLink link={link} key={link.to}/>)
-                })}
+                {rightLinks.map((link) => <MenuLink link={link} key={link.key}/>)}
             </Responsive>
 
             {/*Show the menu items in a dropdown when on mobile*/}
             <Responsive as={Menu.Menu} maxWidth={responsiveWidth - 1} position='right'>
                 <Dropdown item icon="bars">
                     <Dropdown.Menu>
-                        {collapsedLinks.map((link) => {
-                            return (<MenuLink link={link} key={link.to}/>)
-                        })}
+                        {collapsedLinks.map((link) =>
+                            <MenuLink link={link} key={link.key}/>
+                        )}
                     </Dropdown.Menu>
                 </Dropdown>
             </Responsive>

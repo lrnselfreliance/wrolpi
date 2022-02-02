@@ -12,7 +12,7 @@ export const ARCHIVES_API = `${API_URI}/archive`;
 export const OTP_API = `${API_URI}/otp`;
 export const DEFAULT_LIMIT = 20;
 
-export default class Paginator extends React.Component {
+export default class OldPaginator extends React.Component {
     state = {
         boundaryRange: 1,
         siblingRange: 2,
@@ -52,6 +52,25 @@ export default class Paginator extends React.Component {
 
         )
     }
+}
+
+export function Paginator({activePage, onPageChange, totalPages, showFirstAndLast}) {
+    const handlePageChange = (e, {activePage}) => {
+        onPageChange(activePage);
+    }
+
+    return (
+        <Pagination
+            activePage={activePage}
+            boundaryRange={1}
+            onPageChange={handlePageChange}
+            size='mini'
+            siblingRange={2}
+            totalPages={totalPages}
+            firstItem={showFirstAndLast ? undefined : null}
+            lastItem={showFirstAndLast ? undefined : null}
+        />
+    )
 }
 
 export function secondsToDuration(video) {
@@ -582,6 +601,7 @@ export function TabLinks({links}) {
                     className={'item'}
                     exact={link.exact || false}
                     style={{padding: '1em'}}
+                    key={link.key}
                 >
                     {link.text}
                 </NavLink>

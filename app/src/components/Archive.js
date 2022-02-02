@@ -1,10 +1,11 @@
 import React, {useState} from "react";
 import {Card, Confirm, Container, Icon, Image, Placeholder} from "semantic-ui-react";
-import Paginator, {
+import {
     CardGroupCentered,
     ClearButton,
     ExternalLink,
     PageContainer,
+    Paginator,
     SearchInput,
     TabLinks,
     textEllipsis,
@@ -202,9 +203,8 @@ export function ArchivesList({archives, searchStr, syncArchive, localDeleteArchi
 }
 
 export function Archives() {
-    const {archivesData, setPage, totalPages, searchStr, activePage, setSearchStr, domain, setDomain, search} =
-        useArchives();
-    const {archives} = archivesData;
+    const {archives, setPage, totalPages, searchStr, activePage, setSearchStr, domain, setDomain, search} =
+        useArchives(20);
 
     const syncArchive = async (url) => {
         await postDownload(url, 'archive');
@@ -237,11 +237,7 @@ export function Archives() {
                 setDomain={setDomain}
             />
             <div style={{marginTop: '3em', textAlign: 'center'}}>
-                <Paginator
-                    activePage={activePage}
-                    changePage={setPage}
-                    totalPages={totalPages}
-                />
+                <Paginator activePage={activePage} totalPages={totalPages} onPageChange={setPage}/>
             </div>
         </>
     )
@@ -323,9 +319,9 @@ function Domains() {
 
 export function ArchiveRoute(props) {
     const links = [
-        {text: 'Archives', to: '/archive', exact: true},
-        {text: 'Domains', to: '/archive/domains'},
-        {text: 'Manage', to: '/archive/manage'},
+        {text: 'Archives', to: '/archive', exact: true, key: 'archive'},
+        {text: 'Domains', to: '/archive/domains', key: 'domains'},
+        {text: 'Manage', to: '/archive/manage', key: 'manage'},
     ];
     return <PageContainer>
         <TabLinks links={links}/>

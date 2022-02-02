@@ -1,5 +1,5 @@
 import {useEffect, useState} from "react";
-import {fetchDomains, getVersion, searchArchives, searchVideos} from "../api";
+import {fetchDomains, filesSearch, getFiles, getVersion, searchArchives, searchVideos} from "../api";
 import {useHistory} from "react-router-dom";
 
 export const useSearchParam = (key, defaultValue = null) => {
@@ -68,15 +68,26 @@ export const useDomains = () => {
     return [domains, total];
 }
 
-export const useArchives = (defaultLimit = 20) => {
-    const [archivesData, setArchives] = useState({archives: null, total: 0});
-    const [totalPages, setTotalPages] = useState(0);
-    const [activePage, setActivePage] = useState(1);
-
-    let [offset, setOffset] = useSearchParam('o');
+export const useArchives = ({defaultLimit = 20}) => {
     let [limit, setLimit] = useSearchParam('l', defaultLimit);
-    let [domain, setDomain] = useSearchParam('domain');
+    let [offset, setOffset] = useSearchParam('o');
     let [searchStr, setSearchStr] = useSearchParam('q');
+    let [domain, setDomain] = useSearchParam('domain');
+
+    const [archives, setArchives] = useState(null);
+    const [totalPages, setTotalPages] = useState(0);
+    const [activePage, setActivePage] = useState((offset / limit) + 1);
+
+    const search = async () => {
+        setArchives(null);
+        const [archives, total] = await searchArchives(offset, limit, domain, searchStr);
+        setTotalPages(Math.floor(total / limit) + 1);
+        setArchives(archives);
+    }
+
+    useEffect(() => {
+        search();
+    }, [offset, limit, domain, searchStr]);
 
     const setPage = (i) => {
         i = parseInt(i);
@@ -85,20 +96,8 @@ export const useArchives = (defaultLimit = 20) => {
         setActivePage(i);
     }
 
-    const search = async (term) => {
-        setArchives({archives: null, total: 0});
-        setTotalPages(0);
-        const [archives, total] = await searchArchives(offset, limit, domain, term);
-        setTotalPages(Math.floor(total / limit) + 1);
-        setArchives({archives, total});
-    }
-
-    useEffect(() => {
-        search(searchStr);
-    }, [offset, limit, domain, searchStr]);
-
     return {
-        archivesData,
+        archives,
         totalPages,
         setTotalPages,
         offset,
@@ -129,4 +128,53 @@ export const useVersion = () => {
     })
 
     return version;
+}
+
+export const useSearchFiles = ({defaultLimit = 50}) => {
+    let [limit, setLimit] = useSearchParam('l', defaultLimit);
+    let [offset, setOffset] = useSearchParam('o');
+    let [searchStr, setSearchStr] = useSearchParam('q');
+
+    const [searchFiles, setSearchFiles] = useState([]);
+    const [totalPages, setTotalPages] = useState(0);
+    const [activePage, setActivePage] = useState(1);
+
+    const localSearchFiles = async () => {
+        setSearchFiles([]);
+        setTotalPages(0);
+        if (searchStr) {
+            let [files, total] = await filesSearch(offset, limit, searchStr);
+            setSearchFiles(files);
+            setTotalPages(Math.floor(total / limit) + 1);
+        }
+    }
+
+    useEffect(() => {
+        localSearchFiles();
+    }, [searchStr, limit, offset, activePage]);
+
+    const setPage = (i) => {
+        i = parseInt(i);
+        let l = parseInt(limit);
+        setOffset((l * i) - l);
+        setActivePage(i);
+    }
+
+    return {searchFiles, totalPages, limit, setLimit, setOffset, searchStr, setSearchStr, activePage, setPage};
+}
+
+export const useBrowseFiles = () => {
+    const [browseFiles, setBrowseFiles] = useState([]);
+    const [openFolders, setOpenFolders] = useState([]);
+
+    const fetchFiles = async () => {
+        const files = await getFiles(openFolders);
+        setBrowseFiles(files);
+    }
+
+    useEffect(() => {
+        fetchFiles();
+    }, [openFolders])
+
+    return {browseFiles, openFolders, setOpenFolders, fetchFiles};
 }

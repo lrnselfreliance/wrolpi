@@ -373,7 +373,7 @@ def is_archive_file(path: pathlib.Path) -> bool:
         return False
     if bool(ARCHIVE_MATCHER.match(path.name)) or bool(NEW_ARCHIVE_MATCHER.match(path.name)):
         return True
-    return True
+    return False
 
 
 def _refresh_archives():

@@ -384,6 +384,8 @@ def test_refresh_archives(test_session, test_directory):
     (example / '2021-10-05 16:20:10-readability.html').touch()
     (example / '2021-10-05 16:20:11-readability.json').touch()
     (example / 'random file').touch()
+    (example / '2021-10-05 16:20:10.346827-something.html').mkdir()
+    (example / '2021-10-05 16:20:10 no extension').touch()
 
     # This single archive is found.
     _refresh_archives()

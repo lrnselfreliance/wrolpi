@@ -5,7 +5,6 @@ import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {getConfig} from "../api";
-import {useSearchParams} from "../hooks/customHooks";
 
 export const API_URI = `http://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -55,26 +54,21 @@ export default class OldPaginator extends React.Component {
     }
 }
 
-export function Paginator(props) {
-    let {activePage, setPage} = useSearchParams(props.defaultLimit || 20);
-
-    const handlePaginationChange = (e, {activePage}) => {
-        setPage(activePage);
+export function Paginator({activePage, onPageChange, totalPages, showFirstAndLast}) {
+    const handlePageChange = (e, {activePage}) => {
+        onPageChange(activePage);
     }
 
     return (
         <Pagination
             activePage={activePage}
             boundaryRange={1}
-            onPageChange={handlePaginationChange}
+            onPageChange={handlePageChange}
             size='mini'
             siblingRange={2}
-            totalPages={props.totalPages}
-            ellipsisItem={true}
-            firstItem={null}
-            lastItem={null}
-            prevItem={true}
-            nextItem={true}
+            totalPages={totalPages}
+            firstItem={showFirstAndLast ? undefined : null}
+            lastItem={showFirstAndLast ? undefined : null}
         />
     )
 }
@@ -607,6 +601,7 @@ export function TabLinks({links}) {
                     className={'item'}
                     exact={link.exact || false}
                     style={{padding: '1em'}}
+                    key={link.key}
                 >
                     {link.text}
                 </NavLink>

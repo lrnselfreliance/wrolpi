@@ -443,9 +443,9 @@ class Downloads extends React.Component {
 export default function Admin(props) {
 
     const links = [
-        {text: 'Downloads', to: '/admin', exact: true},
-        {text: 'Settings', to: '/admin/settings'},
-        {text: 'WROL Mode', to: '/admin/wrol'},
+        {text: 'Downloads', to: '/admin', exact: true, key: 'admin'},
+        {text: 'Settings', to: '/admin/settings', key: 'settings'},
+        {text: 'WROL Mode', to: '/admin/wrol', key: 'wrol'},
     ];
 
     return (

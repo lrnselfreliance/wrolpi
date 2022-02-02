@@ -1,4 +1,4 @@
-import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, OTP_API, VIDEOS_API} from "./components/Common";
+import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, OTP_API, secondsToDateTime, VIDEOS_API} from "./components/Common";
 import {toast} from 'react-semantic-toasts';
 
 function timeoutPromise(ms, promise) {
@@ -303,8 +303,8 @@ export async function deleteArchive(archive_id) {
 
 export async function searchArchives(offset, limit, domain = null, searchStr = null) {
     // Build a search query to retrieve a list of videos from the API
-    offset = offset || 0;
-    limit = limit || DEFAULT_LIMIT;
+    offset = parseInt(offset || 0);
+    limit = parseInt(limit || DEFAULT_LIMIT);
     let body = {offset, limit};
     if (domain) {
         body['domain'] = domain;
@@ -372,10 +372,33 @@ export async function getDownloaders() {
     return await response.json();
 }
 
+const replaceFileDatetimes = (files) => {
+    for (let i = 0; i < files.length; i++) {
+        let file = files[i]['modified'];
+        if (file['modified']) {
+            files[i]['modified'] = secondsToDateTime(file['modified']);
+        }
+    }
+    return files;
+}
+
 export async function filesSearch(offset, limit, searchStr) {
     const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit)};
     const response = await apiPost(`${API_URI}/files/search`, body);
-    return await response.json();
+
+    if (response.status === 200) {
+        let data = await response.json();
+        let [files, total] = [data['files'], data['totals']['files']];
+        files = replaceFileDatetimes(files);
+        return [files, total];
+    } else {
+        toast({
+            type: 'error',
+            title: 'Unable to search files',
+            description: 'Cannot search files.  See server logs.',
+            time: 5000,
+        });
+    }
 }
 
 export async function refreshFiles() {
@@ -385,7 +408,9 @@ export async function refreshFiles() {
 export async function getFiles(directories) {
     let body = {directories: directories || []};
     let response = await apiPost(`${API_URI}/files`, body);
-    return await response.json();
+    let {files} = await response.json();
+    files = replaceFileDatetimes(files);
+    return files;
 }
 
 export async function deleteFile(file) {

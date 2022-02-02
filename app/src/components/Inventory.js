@@ -1090,8 +1090,8 @@ class InventoryAddList extends React.Component {
 
 export function InventoryRoute(props) {
     const links = [
-        {text: 'List', to: '/inventory', exact: true},
-        {text: 'Summary', to: '/inventory/summary'},
+        {text: 'List', to: '/inventory', exact: true, key: 'inventory'},
+        {text: 'Summary', to: '/inventory/summary', key: 'summary'},
     ];
     return (
         <PageContainer>

@@ -15,7 +15,7 @@ const icons = {
     PDF: <Icon name='file pdf'/>,
 };
 
-export function Files(props) {
+export function Files() {
     const {searchFiles, setPage, totalPages, activePage, searchStr, setSearchStr} = useSearchFiles(50);
     const {browseFiles, setOpenFolders, fetchFiles} = useBrowseFiles();
 
@@ -127,7 +127,7 @@ export function Files(props) {
     </>
 }
 
-function ManageFiles(props) {
+function ManageFiles() {
     return (<>
         <Button secondary
                 id='refresh_files'

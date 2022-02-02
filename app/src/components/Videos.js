@@ -496,10 +496,10 @@ function ManageTab(props) {
 export function VideosRoute(props) {
 
     const links = [
-        {text: 'Videos', to: '/videos', exact: true},
-        {text: 'Favorites', to: '/videos/favorites'},
-        {text: 'Channels', to: '/videos/channel',},
-        {text: 'Manage', to: '/videos/manage'},
+        {text: 'Videos', to: '/videos', exact: true, key: 'videos'},
+        {text: 'Favorites', to: '/videos/favorites', key: 'favorites'},
+        {text: 'Channels', to: '/videos/channel', key: 'channel'},
+        {text: 'Manage', to: '/videos/manage', key: 'manage'},
     ];
 
     return (

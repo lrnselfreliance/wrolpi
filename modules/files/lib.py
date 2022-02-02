@@ -127,6 +127,8 @@ def _refresh_files():
     with get_db_curs(commit=True) as curs:
         curs.execute('DELETE FROM file WHERE idempotency IS NULL')
 
+    logger.info('Done refreshing Files')
+
 
 @wraps(_refresh_files)
 def refresh_files():

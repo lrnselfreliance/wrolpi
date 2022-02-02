@@ -28,7 +28,7 @@ class File(ModelHelper, Base):
         d = dict(
             id=self.id,
             mimetype=self.mimetype,
-            modification_datetime=self.modification_datetime,
+            modified=self.modification_datetime,  # React browser expects this.
             path=path,
             size=self.size,
             key=path,

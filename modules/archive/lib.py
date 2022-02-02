@@ -5,8 +5,9 @@ import pathlib
 import re
 import subprocess
 import tempfile
+from datetime import datetime
 from itertools import groupby
-from typing import Iterator
+from typing import Iterator, Optional
 
 import requests
 from bs4 import BeautifulSoup
@@ -14,8 +15,8 @@ from selenium import webdriver
 from sqlalchemy.orm import Session
 
 from modules.archive.models import Domain, Archive
-from wrolpi.common import get_media_directory, logger, chunks, extract_domain, chdir
-from wrolpi.dates import now, strptime_ms, strftime_ms, Seconds
+from wrolpi.common import get_media_directory, logger, chunks, extract_domain, chdir, escape_file_name, walk
+from wrolpi.dates import now, Seconds, local_timezone
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidDomain, UnknownURL, InvalidArchive
 from wrolpi.vars import DOCKERIZED, PYTEST
@@ -47,18 +48,20 @@ def get_domain_directory(url: str) -> pathlib.Path:
     return directory
 
 
-def get_new_archive_files(url: str):
+def get_new_archive_files(url: str, title: Optional[str]):
     """
     Create a list of archive files using a shared name schema.  Raise an error if any of them exist.
     """
     directory = get_domain_directory(url)
-    dt = strftime_ms(now())
+    dt = now().strftime('%Y-%m-%d-%H-%M-%S')
 
-    singlefile_path = directory / f'{dt}.html'
-    readability_path = directory / f'{dt}-readability.html'
-    readability_txt_path = directory / f'{dt}-readability.txt'
-    readability_json_path = directory / f'{dt}-readability.json'
-    screenshot_path = directory / f'{dt}.png'
+    title = escape_file_name(title or 'NA')
+    prefix = f'{dt}_{title}'
+    singlefile_path = directory / f'{prefix}.html'
+    readability_path = directory / f'{prefix}-readability.html'
+    readability_txt_path = directory / f'{prefix}-readability.txt'
+    readability_json_path = directory / f'{prefix}-readability.json'
+    screenshot_path = directory / f'{prefix}.png'
 
     ret = (singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path)
 
@@ -196,8 +199,6 @@ def do_archive(url: str) -> Archive:
     record in the DB.  Create Domain/URL if missing.
     """
     logger.info(f'Archiving {url}')
-    singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path = \
-        get_new_archive_files(url)
 
     if DOCKERIZED or PYTEST:
         # Perform the archive in the Archive docker container.  (Typically in the development environment).
@@ -205,6 +206,30 @@ def do_archive(url: str) -> Archive:
     else:
         # Perform the archive using locally installed executables.
         singlefile, readability, screenshot = local_archive(url)
+
+    # First try to get the title from Readability.
+    title = readability.get('title') if readability else None
+
+    if not title and singlefile:
+        # Try to get the title ourselves from the HTML.
+        title = get_title_from_html(singlefile, url=url)
+        if readability:
+            # Readability could not find title, lets use ours.
+            readability['title'] = title
+
+    singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path = \
+        get_new_archive_files(url, title)
+
+    if readability:
+        # Write the readability parts to their own files.  Write what is left after pops to the JSON file.
+        with readability_path.open('wt') as fh:
+            fh.write(readability.pop('content'))
+        with readability_txt_path.open('wt') as fh:
+            readability_txt = readability.pop('textContent')
+            fh.write(readability_txt)
+    else:
+        # No readability was returned, so there are no files.
+        readability_txt = readability_path = readability_txt_path = None
 
     # Store the single-file HTML in its own file.
     with singlefile_path.open('wt') as fh:
@@ -215,27 +240,8 @@ def do_archive(url: str) -> Archive:
     else:
         screenshot_path = None
 
-    # Store the Readability into separate files.  This allows the user to view text-only or html articles.
-    title = None
-    readability_txt = None
-    if readability:
-        title = readability.get('title')
-
-        # Write the readability parts to their own files.  Write what is left after pops to the JSON file.
-        with readability_path.open('wt') as fh:
-            fh.write(readability.pop('content'))
-        with readability_txt_path.open('wt') as fh:
-            readability_txt = readability.pop('textContent')
-            fh.write(readability_txt)
-    else:
-        readability_path = readability_txt_path = None
-
     # Always write a JSON file that contains at least the URL.
     readability = readability or {}
-    # Use the Readability title, or try and extract one from singlefile.
-    if not title and singlefile:
-        title = get_title_from_html(singlefile, url=url)
-        readability['title'] = title
     readability['url'] = url
     with readability_json_path.open('wt') as fh:
         fh.write(json.dumps(readability))
@@ -304,6 +310,13 @@ def delete_archive(archive_id: int):
         archive.delete()
 
 
+def archive_strptime(dt: str) -> datetime:
+    try:
+        return local_timezone(datetime.strptime(dt, '%Y-%m-%d-%H-%M-%S'))
+    except ValueError:
+        return local_timezone(datetime.strptime(dt, '%Y-%m-%d %H:%M:%S'))
+
+
 def group_archive_files(files: Iterator[pathlib.Path]) -> groupby:
     """
     Group archive files by their timestamp.
@@ -311,10 +324,10 @@ def group_archive_files(files: Iterator[pathlib.Path]) -> groupby:
     # groupby requires the files to be sorted.
     files = sorted(files)
     # Group archive files by their datetime at the beginning of the file.
-    groups = groupby(files, key=lambda i: i.name[:26])
+    groups = groupby(files, key=lambda i: i.name[:19])
     for dt, files in groups:
         try:
-            dt = strptime_ms(dt)
+            dt = archive_strptime(dt)
         except ValueError:
             logger.info(f'Ignoring invalid archives of {dt=}')
             continue
@@ -345,15 +358,22 @@ def group_archive_files(files: Iterator[pathlib.Path]) -> groupby:
 
 
 ARCHIVE_MATCHER = re.compile(r'\d{4}-\d\d-\d\d (\d\d:){2}\d\d\.\d{6}.*$')
+NEW_ARCHIVE_MATCHER = re.compile(r'\d{4}-(\d{2}-){4}\d\d_.*$')
 ARCHIVE_SUFFIXES = {'.txt', '.html', '.json', '.png', '.jpg', '.jpeg'}
 
 
 def is_archive_file(path: pathlib.Path) -> bool:
     """
-    Archive files are expected to start with the following: %Y-%m-%d %H:%M:%S.%f
+    Archive files are expected to start with the following: %Y-%m-%d-%H-%M-%S
     they must have one of the following suffixes: .txt, .html, .json, .png, .jpg, .jpeg
     """
-    return path.is_file() and path.suffix.lower() in ARCHIVE_SUFFIXES and bool(ARCHIVE_MATCHER.match(path.name))
+    if not path.is_file():
+        return False
+    if path.suffix.lower() not in ARCHIVE_SUFFIXES:
+        return False
+    if bool(ARCHIVE_MATCHER.match(path.name)) or bool(NEW_ARCHIVE_MATCHER.match(path.name)):
+        return True
+    return False
 
 
 def _refresh_archives():
@@ -366,18 +386,18 @@ def _refresh_archives():
     singlefile_paths = set()
     for domain_directory in filter(lambda i: i.is_dir(), archive_directory.iterdir()):
         logger.debug(f'Refreshing directory: {domain_directory}')
-        archives_files = filter(is_archive_file, domain_directory.iterdir())
+        archives_files = filter(is_archive_file, walk(domain_directory))
         archive_groups = group_archive_files(archives_files)
         archive_count = 0
         for chunk in chunks(archive_groups, 20):
-            archive_count += 1
             with get_db_session(commit=True) as session:
                 for dt, files in chunk:
+                    archive_count += 1
                     singlefile_paths.add(str(files[0]))
                     upsert_archive(dt, files, session)
 
         if archive_count:
-            logger.info(f'Inserted/updated {archive_count} archives')
+            logger.info(f'Inserted/updated {archive_count} archives in {domain_directory}')
 
     singlefile_paths = list(singlefile_paths)
     with get_db_curs(commit=True) as curs:

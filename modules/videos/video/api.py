@@ -58,8 +58,8 @@ async def search(_: Request, body: VideoSearchRequest):
 @openapi.response(HTTPStatus.OK, DirectoriesResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @validate(DirectoriesRequest)
-def directories(_, data):
-    search_str = str(get_media_directory() / data['search_str'])
+def directories(_, body: DirectoriesRequest):
+    search_str = str(get_media_directory() / (body.search_str or ''))
     dirs = get_matching_directories(search_str)
     dirs = [str(get_relative_to_media_directory(i)) for i in dirs]
     return response.json({'directories': dirs})

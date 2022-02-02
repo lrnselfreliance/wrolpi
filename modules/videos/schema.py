@@ -148,7 +148,7 @@ class PaginationQuery:
 
 @dataclass
 class DirectoriesRequest:
-    search_str: str
+    search_str: Optional[str] = ''
 
 
 @dataclass

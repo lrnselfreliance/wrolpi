@@ -21,6 +21,23 @@ export const useSearchParam = (key, defaultValue = null) => {
     return [value, setValue];
 }
 
+export const useSearchParams = ({defaultLimit = 20}) => {
+    let [limit, setLimit] = useSearchParam('l', defaultLimit);
+    let [offset, setOffset] = useSearchParam('o');
+    let [searchStr, setSearchStr] = useSearchParam('q');
+
+    let [activePage, setActivePage] = useState(1);
+
+    const setPage = (i) => {
+        i = parseInt(i);
+        let l = parseInt(limit);
+        setOffset((l * i) - l);
+        setActivePage(i);
+    }
+
+    return {limit, setLimit, offset, setOffset, searchStr, setSearchStr, activePage, setPage};
+}
+
 export const useSearch = () => {
     let [searchStr, setSearchStr] = useSearchParam('q');
 
@@ -73,17 +90,8 @@ export const useArchives = (defaultLimit = 20) => {
     const [totalPages, setTotalPages] = useState(0);
     const [activePage, setActivePage] = useState(1);
 
-    let [offset, setOffset] = useSearchParam('o');
-    let [limit, setLimit] = useSearchParam('l', defaultLimit);
+    let {limit, setLimit, offset, setOffset, searchStr, setSearchStr, setPage} = useSearchParams(defaultLimit);
     let [domain, setDomain] = useSearchParam('domain');
-    let [searchStr, setSearchStr] = useSearchParam('q');
-
-    const setPage = (i) => {
-        i = parseInt(i);
-        let l = parseInt(limit);
-        setOffset((l * i) - l);
-        setActivePage(i);
-    }
 
     const search = async (term) => {
         setArchives({archives: null, total: 0});
@@ -132,19 +140,11 @@ export const useVersion = () => {
 }
 
 export const useSearchFiles = ({defaultLimit = 50}) => {
+    let {limit, setLimit, offset, setOffset, searchStr, setSearchStr, activePage, setPage} =
+        useSearchParams(defaultLimit);
+
     const [searchFiles, setSearchFiles] = useState([]);
     const [totalPages, setTotalPages] = useState(0);
-    const [offset, setOffset] = useSearchParam('o');
-    const [limit, setLimit] = useSearchParam('l', defaultLimit);
-    const [searchStr, setSearchStr] = useSearchParam('q');
-    const [activePage, setActivePage] = useState(1);
-
-    const setPage = (i) => {
-        i = parseInt(i);
-        let l = parseInt(limit);
-        setOffset((l * i) - l);
-        setActivePage(i);
-    }
 
     const localSearchFiles = async () => {
         setSearchFiles([]);

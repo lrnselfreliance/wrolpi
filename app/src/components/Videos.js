@@ -1,6 +1,6 @@
 import React from 'react';
 import {Link, Route} from "react-router-dom";
-import Paginator, {
+import OldPaginator, {
     changePageHistory,
     DEFAULT_LIMIT,
     defaultSearchOrder,
@@ -401,7 +401,7 @@ class Videos extends React.Component {
         if (totalPages) {
             pagination = (
                 <div style={{marginTop: '3em', textAlign: 'center'}}>
-                    <Paginator
+                    <OldPaginator
                         activePage={activePage}
                         changePage={this.changePage}
                         totalPages={totalPages}

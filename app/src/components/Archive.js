@@ -1,10 +1,10 @@
 import React, {useState} from "react";
 import {Card, Confirm, Container, Icon, Image, Placeholder} from "semantic-ui-react";
-import Paginator, {
+import {
     CardGroupCentered,
     ClearButton,
     ExternalLink,
-    PageContainer,
+    PageContainer, Paginator,
     SearchInput,
     TabLinks,
     textEllipsis,
@@ -237,11 +237,7 @@ export function Archives() {
                 setDomain={setDomain}
             />
             <div style={{marginTop: '3em', textAlign: 'center'}}>
-                <Paginator
-                    activePage={activePage}
-                    changePage={setPage}
-                    totalPages={totalPages}
-                />
+                <Paginator totalPages={totalPages}/>
             </div>
         </>
     )

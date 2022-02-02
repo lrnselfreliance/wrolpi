@@ -5,6 +5,7 @@ import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {getConfig} from "../api";
+import {useSearchParams} from "../hooks/customHooks";
 
 export const API_URI = `http://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -12,7 +13,7 @@ export const ARCHIVES_API = `${API_URI}/archive`;
 export const OTP_API = `${API_URI}/otp`;
 export const DEFAULT_LIMIT = 20;
 
-export default class Paginator extends React.Component {
+export default class OldPaginator extends React.Component {
     state = {
         boundaryRange: 1,
         siblingRange: 2,
@@ -52,6 +53,30 @@ export default class Paginator extends React.Component {
 
         )
     }
+}
+
+export function Paginator(props) {
+    let {activePage, setPage} = useSearchParams(props.defaultLimit || 20);
+
+    const handlePaginationChange = (e, {activePage}) => {
+        setPage(activePage);
+    }
+
+    return (
+        <Pagination
+            activePage={activePage}
+            boundaryRange={1}
+            onPageChange={handlePaginationChange}
+            size='mini'
+            siblingRange={2}
+            totalPages={props.totalPages}
+            ellipsisItem={true}
+            firstItem={null}
+            lastItem={null}
+            prevItem={true}
+            nextItem={true}
+        />
+    )
 }
 
 export function secondsToDuration(video) {

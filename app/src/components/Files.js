@@ -3,7 +3,7 @@ import FileBrowser from 'react-keyed-file-browser';
 import {Button, Confirm, Header, Icon, Modal} from "semantic-ui-react";
 import 'react-keyed-file-browser/dist/react-keyed-file-browser.css';
 import {deleteFile, refreshFiles} from "../api";
-import Paginator, {humanFileSize, PageContainer, SearchInput, TabLinks} from "./Common";
+import {Paginator, humanFileSize, PageContainer, SearchInput, TabLinks} from "./Common";
 import {useBrowseFiles, useSearchFiles} from "../hooks/customHooks";
 import {Route} from "react-router-dom";
 
@@ -16,7 +16,7 @@ const icons = {
 };
 
 export function Files(props) {
-    const {searchFiles, setPage, limit, totalPages, activePage, searchStr, setSearchStr} = useSearchFiles(50);
+    const {searchFiles, setPage, totalPages, activePage, searchStr, setSearchStr} = useSearchFiles(50);
     const {browseFiles, setOpenFolders, fetchFiles} = useBrowseFiles();
 
     const [deleteOpen, setDeleteOpen] = React.useState(false);
@@ -119,7 +119,6 @@ export function Files(props) {
         />);
     }
 
-    console.log('Files', limit);
     return <>
         <SearchInput initValue={searchStr} onSubmit={setSearchStr}/>
         {selectedModal}

@@ -2,7 +2,7 @@ import json
 import pathlib
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Generator
 
 from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, Computed
 from sqlalchemy.orm import relationship, Session, deferred
@@ -81,24 +81,27 @@ class Video(ModelHelper, Base):
         self.poster_path = None
         self.video_path = None
 
+    def my_paths(self) -> Generator[Path, None, None]:
+        """Return all paths of this Video.  Returns nothing if all paths are None."""  # noqa
+        if self.description_path:  # noqa
+            yield self.description_path.path
+        if self.poster_path:
+            yield self.poster_path.path
+        if self.caption_path:
+            yield self.caption_path.path
+        if self.info_json_path:
+            yield self.info_json_path.path
+        if self.video_path:
+            yield self.video_path.path
+
     def delete(self):
         """
         Remove all files related to this video.  Add it to it's Channel's skip list.
-
-        Raises: UnknownFile if the video has no files.
         """
-        from modules.videos.common import get_absolute_video_files
-        video_files = get_absolute_video_files(self)
-        for path in video_files:
-            try:
-                path.path.unlink()
-            except FileNotFoundError:
-                pass
+        for path in self.my_paths():
+            path.unlink(missing_ok=True)
 
         self._clear_paths()
-
-        if not video_files:
-            raise UnknownFile('No video files were deleted')
 
         needs_save = bool(self.favorite)
 

@@ -5,6 +5,7 @@ import pathlib
 import re
 import subprocess
 import tempfile
+from datetime import datetime
 from itertools import groupby
 from typing import Iterator, Optional
 
@@ -14,8 +15,8 @@ from selenium import webdriver
 from sqlalchemy.orm import Session
 
 from modules.archive.models import Domain, Archive
-from wrolpi.common import get_media_directory, logger, chunks, extract_domain, chdir
-from wrolpi.dates import now, strptime_ms, Seconds, strftime
+from wrolpi.common import get_media_directory, logger, chunks, extract_domain, chdir, escape_file_name, walk
+from wrolpi.dates import now, Seconds, local_timezone
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidDomain, UnknownURL, InvalidArchive
 from wrolpi.vars import DOCKERIZED, PYTEST
@@ -57,9 +58,9 @@ def get_new_archive_files(url: str, title: Optional[str]):
     title = escape_file_name(title or 'NA')
     prefix = f'{dt}_{title}'
     singlefile_path = directory / f'{prefix}.html'
-    readability_path = directory / f'{prefix}.readability.html'
-    readability_txt_path = directory / f'{prefix}.readability.txt'
-    readability_json_path = directory / f'{prefix}.readability.json'
+    readability_path = directory / f'{prefix}-readability.html'
+    readability_txt_path = directory / f'{prefix}-readability.txt'
+    readability_json_path = directory / f'{prefix}-readability.json'
     screenshot_path = directory / f'{prefix}.png'
 
     ret = (singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path)
@@ -309,6 +310,13 @@ def delete_archive(archive_id: int):
         archive.delete()
 
 
+def archive_strptime(dt: str) -> datetime:
+    try:
+        return local_timezone(datetime.strptime(dt, '%Y-%m-%d-%H-%M-%S'))
+    except ValueError:
+        return local_timezone(datetime.strptime(dt, '%Y-%m-%d %H:%M:%S'))
+
+
 def group_archive_files(files: Iterator[pathlib.Path]) -> groupby:
     """
     Group archive files by their timestamp.
@@ -316,10 +324,10 @@ def group_archive_files(files: Iterator[pathlib.Path]) -> groupby:
     # groupby requires the files to be sorted.
     files = sorted(files)
     # Group archive files by their datetime at the beginning of the file.
-    groups = groupby(files, key=lambda i: i.name[:26])
+    groups = groupby(files, key=lambda i: i.name[:19])
     for dt, files in groups:
         try:
-            dt = strptime_ms(dt)
+            dt = archive_strptime(dt)
         except ValueError:
             logger.info(f'Ignoring invalid archives of {dt=}')
             continue
@@ -350,15 +358,22 @@ def group_archive_files(files: Iterator[pathlib.Path]) -> groupby:
 
 
 ARCHIVE_MATCHER = re.compile(r'\d{4}-\d\d-\d\d (\d\d:){2}\d\d\.\d{6}.*$')
+NEW_ARCHIVE_MATCHER = re.compile(r'\d{4}-(\d{2}-){4}\d\d_.*$')
 ARCHIVE_SUFFIXES = {'.txt', '.html', '.json', '.png', '.jpg', '.jpeg'}
 
 
 def is_archive_file(path: pathlib.Path) -> bool:
     """
-    Archive files are expected to start with the following: %Y-%m-%d %H:%M:%S.%f
+    Archive files are expected to start with the following: %Y-%m-%d-%H-%M-%S
     they must have one of the following suffixes: .txt, .html, .json, .png, .jpg, .jpeg
     """
-    return path.is_file() and path.suffix.lower() in ARCHIVE_SUFFIXES and bool(ARCHIVE_MATCHER.match(path.name))
+    if not path.is_file():
+        return False
+    if path.suffix.lower() not in ARCHIVE_SUFFIXES:
+        return False
+    if bool(ARCHIVE_MATCHER.match(path.name)) or bool(NEW_ARCHIVE_MATCHER.match(path.name)):
+        return True
+    return True
 
 
 def _refresh_archives():
@@ -371,7 +386,7 @@ def _refresh_archives():
     singlefile_paths = set()
     for domain_directory in filter(lambda i: i.is_dir(), archive_directory.iterdir()):
         logger.debug(f'Refreshing directory: {domain_directory}')
-        archives_files = filter(is_archive_file, domain_directory.iterdir())
+        archives_files = filter(is_archive_file, walk(domain_directory))
         archive_groups = group_archive_files(archives_files)
         archive_count = 0
         for chunk in chunks(archive_groups, 20):
@@ -419,6 +434,7 @@ def upsert_archive(dt: str, files, session: Session):
     """
     singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path = files
     # Extract the URL from the JSON.  Fail if this is not possible.
+    print(singlefile_path, readability_json_path)
     try:
         with readability_json_path.open() as fh:
             json_contents = json.load(fh)
@@ -501,12 +517,3 @@ def search(search_str: str, domain: str, limit: int, offset: int):
     results = get_ranked_models(ranked_ids, Archive)
 
     return results, total
-
-
-# These characters are invalid in Windows or Linux.
-INVALID_FILE_CHARS = re.compile(r'[/<>:\|"\\\?\*]')
-
-
-def escape_file_name(name: str) -> str:
-    """Replace any invalid characters in a file name with "_"."""
-    return INVALID_FILE_CHARS.sub('', name)

@@ -646,3 +646,12 @@ def walk(path: Path) -> Generator[Path, None, None]:
         yield path
         if path.is_dir():
             yield from walk(path)
+
+
+# These characters are invalid in Windows or Linux.
+INVALID_FILE_CHARS = re.compile(r'[/<>:\|"\\\?\*]')
+
+
+def escape_file_name(name: str) -> str:
+    """Replace any invalid characters in a file name with "_"."""
+    return INVALID_FILE_CHARS.sub('', name)

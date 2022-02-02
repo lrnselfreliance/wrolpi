@@ -3,17 +3,15 @@ import pathlib
 from datetime import datetime
 
 import mock
-import pytest
 
-from modules.archive import lib
 from modules.archive.lib import get_or_create_domain, _refresh_archives, \
-    get_new_archive_files, delete_archive, do_archive, get_domains
+    get_new_archive_files, delete_archive, do_archive, get_domains, get_archive_directory, group_archive_files
 from modules.archive.models import Archive, Domain
-from wrolpi.common import get_media_directory
+from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_session
 from wrolpi.media_path import MediaPath
 from wrolpi.root_api import CustomJSONEncoder
-from wrolpi.test.common import TestAPI, wrap_test_db, wrap_media_directory
+from wrolpi.test.common import TestAPI, wrap_test_db
 
 
 def make_fake_request_archive(readability=True, screenshot=True, title=True):
@@ -88,42 +86,6 @@ class TestArchive(TestAPI):
             except ValueError as e:
                 self.assertIn('relative', str(e), f'Relative path error was not raised')
 
-    @wrap_test_db
-    def test_refresh_archives(self):
-        with wrap_media_directory():
-            archive_directory = get_media_directory() / 'archive'
-            archive_directory.mkdir()
-
-            # Make some test files to refresh.
-            example = archive_directory / 'example.com'
-            example.mkdir()
-            (example / '2021-10-05 16:20:10.346823.html').touch()
-            (example / '2021-10-05 16:20:10.346823.png').touch()
-            (example / '2021-10-05 16:20:10.346823-readability.txt').touch()
-            (example / '2021-10-05 16:20:10.346823-readability.json').touch()
-            (example / '2021-10-05 16:20:10.346823-readability.html').touch()
-            with (example / '2021-10-05 16:20:10.346823-readability.json').open('wt') as fh:
-                json.dump({'url': 'foo'}, fh)
-
-            # These should log an error because they are missing the singlefile path.
-            (example / '2021-10-05 16:20:10.346824-readability.html').touch()
-            (example / '2021-10-05 16:20:10.346825-readability.json').touch()
-            # These are not archives and should be ignored.
-            (example / '2021-10-05 16:20:10.346826-something.html').touch()
-            (example / 'random file').touch()
-            (example / '2021-10-05 16:20:10.346827-something.html').mkdir()
-            (example / '2021-10-05 16:20:10 invalid date').touch()
-
-            # This single archive is found.
-            _refresh_archives()
-            with get_db_session() as session:
-                self.assertEqual(session.query(Archive).count(), 1)
-
-            # Running the refresh does not result in a new archive.
-            _refresh_archives()
-            with get_db_session() as session:
-                self.assertEqual(session.query(Archive).count(), 1)
-
 
 def test_archive_refresh_deleted_archive(test_session, archive_directory, archive_factory):
     """
@@ -176,9 +138,7 @@ def test_archive_refresh_deleted_archive(test_session, archive_directory, archiv
 
 
 def test_refresh_archives_fills_contents(test_session, archive_factory, test_client):
-    """
-    Refreshing archives fills in any missing contents.
-    """
+    """Refreshing archives fills in any missing contents."""
     archive1 = archive_factory('example.com', 'https://example.com/one')
     archive2 = archive_factory('example.com', 'https://example.com/one')
     archive3 = archive_factory('example.org')
@@ -320,17 +280,17 @@ def test_get_new_archive_files(fake_now):
     fake_now(datetime(2001, 1, 1))
     s, r, t, j, c = map(str, get_new_archive_files('https://example.com/two', None))
     assert str(s).endswith('archive/example.com/2001-01-01-00-00-00_NA.html')
-    assert str(r).endswith('archive/example.com/2001-01-01-00-00-00_NA.readability.html')
-    assert str(t).endswith('archive/example.com/2001-01-01-00-00-00_NA.readability.txt')
-    assert str(j).endswith('archive/example.com/2001-01-01-00-00-00_NA.readability.json')
+    assert str(r).endswith('archive/example.com/2001-01-01-00-00-00_NA-readability.html')
+    assert str(t).endswith('archive/example.com/2001-01-01-00-00-00_NA-readability.txt')
+    assert str(j).endswith('archive/example.com/2001-01-01-00-00-00_NA-readability.json')
     assert str(c).endswith('archive/example.com/2001-01-01-00-00-00_NA.png')
 
     s, r, t, j, c = get_new_archive_files('https://www.example.com/one', 'Title')
     # Leading www. is removed.
     assert str(s).endswith('archive/example.com/2001-01-01-00-00-00_Title.html')
-    assert str(r).endswith('archive/example.com/2001-01-01-00-00-00_Title.readability.html')
-    assert str(t).endswith('archive/example.com/2001-01-01-00-00-00_Title.readability.txt')
-    assert str(j).endswith('archive/example.com/2001-01-01-00-00-00_Title.readability.json')
+    assert str(r).endswith('archive/example.com/2001-01-01-00-00-00_Title-readability.html')
+    assert str(t).endswith('archive/example.com/2001-01-01-00-00-00_Title-readability.txt')
+    assert str(j).endswith('archive/example.com/2001-01-01-00-00-00_Title-readability.json')
     assert str(c).endswith('archive/example.com/2001-01-01-00-00-00_Title.png')
 
 
@@ -348,11 +308,11 @@ def test_title_in_filename(test_session, fake_now, test_directory):
     assert str(archive1.singlefile_path.path.relative_to(test_directory)) == \
            'archive/2000-01-01-00-00-00_ジにてこちら.html'
     assert str(archive1.readability_path.path.relative_to(test_directory)) == \
-           'archive/2000-01-01-00-00-00_ジにてこちら.readability.html'
+           'archive/2000-01-01-00-00-00_ジにてこちら-readability.html'
     assert str(archive1.readability_txt_path.path.relative_to(test_directory)) == \
-           'archive/2000-01-01-00-00-00_ジにてこちら.readability.txt'
+           'archive/2000-01-01-00-00-00_ジにてこちら-readability.txt'
     assert str(archive1.readability_json_path.path.relative_to(test_directory)) == \
-           'archive/2000-01-01-00-00-00_ジにてこちら.readability.json'
+           'archive/2000-01-01-00-00-00_ジにてこちら-readability.json'
     assert str(archive1.screenshot_path.path.relative_to(test_directory)) == \
            'archive/2000-01-01-00-00-00_ジにてこちら.png'
 
@@ -372,11 +332,11 @@ def test_title_in_filename(test_session, fake_now, test_directory):
     assert str(archive2.singlefile_path.path.relative_to(test_directory)) == \
            'archive/2000-01-01-00-00-00_NA.html'
     assert str(archive2.readability_path.path.relative_to(test_directory)) == \
-           'archive/2000-01-01-00-00-00_NA.readability.html'
+           'archive/2000-01-01-00-00-00_NA-readability.html'
     assert str(archive2.readability_txt_path.path.relative_to(test_directory)) == \
-           'archive/2000-01-01-00-00-00_NA.readability.txt'
+           'archive/2000-01-01-00-00-00_NA-readability.txt'
     assert str(archive2.readability_json_path.path.relative_to(test_directory)) == \
-           'archive/2000-01-01-00-00-00_NA.readability.json'
+           'archive/2000-01-01-00-00-00_NA-readability.json'
     assert str(archive2.screenshot_path.path.relative_to(test_directory)) == \
            'archive/2000-01-01-00-00-00_NA.png'
 
@@ -396,30 +356,68 @@ def test_title_in_filename(test_session, fake_now, test_directory):
     assert str(archive3.singlefile_path.path.relative_to(test_directory)) == \
            'archive/2000-01-01-00-00-00_dangerous ;_title.html'
     assert str(archive3.readability_path.path.relative_to(test_directory)) == \
-           'archive/2000-01-01-00-00-00_dangerous ;_title.readability.html'
+           'archive/2000-01-01-00-00-00_dangerous ;_title-readability.html'
     assert str(archive3.readability_txt_path.path.relative_to(test_directory)) == \
-           'archive/2000-01-01-00-00-00_dangerous ;_title.readability.txt'
+           'archive/2000-01-01-00-00-00_dangerous ;_title-readability.txt'
     assert str(archive3.readability_json_path.path.relative_to(test_directory)) == \
-           'archive/2000-01-01-00-00-00_dangerous ;_title.readability.json'
+           'archive/2000-01-01-00-00-00_dangerous ;_title-readability.json'
     assert str(archive3.screenshot_path.path.relative_to(test_directory)) == \
            'archive/2000-01-01-00-00-00_dangerous ;_title.png'
 
 
-@pytest.mark.parametrize(
-    'name,expected', [
-        ('', ''),
-        ('foo', 'foo'),
-        ('foo\\', 'foo'),
-        ('foo/', 'foo'),
-        ('foo<', 'foo'),
-        ('foo>', 'foo'),
-        ('foo:', 'foo'),
-        ('foo|', 'foo'),
-        ('foo"', 'foo'),
-        ('foo?', 'foo'),
-        ('foo*', 'foo'),
-        ('foo&', 'foo&'),
+def test_refresh_archives(test_session, test_directory):
+    """Archives can be found and put in the database.  A single Archive will have multiple files."""
+    archive_directory = get_archive_directory()
+
+    # Make some test files to refresh.
+    example = archive_directory / 'example.com'
+    example.mkdir()
+    (example / '2021-10-05 16:20:10.346823.html').touch()
+    (example / '2021-10-05 16:20:10.346823.png').touch()
+    (example / '2021-10-05 16:20:10.346823-readability.txt').touch()
+    (example / '2021-10-05 16:20:10.346823-readability.json').touch()
+    (example / '2021-10-05 16:20:10.346823-readability.html').touch()
+    with (example / '2021-10-05 16:20:10.346823-readability.json').open('wt') as fh:
+        json.dump({'url': 'foo'}, fh)
+
+    # These should log an error because they are missing the singlefile path.
+    (example / '2021-10-05 16:20:10-readability.html').touch()
+    (example / '2021-10-05 16:20:11-readability.json').touch()
+    (example / 'random file').touch()
+
+    # This single archive is found.
+    _refresh_archives()
+    with get_db_session() as session:
+        assert session.query(Archive).count() == 1
+
+    # Running the refresh does not result in a new archive.
+    _refresh_archives()
+    with get_db_session() as session:
+        assert session.query(Archive).count() == 1
+
+    # Archives file format was changed, lets check the new formats are found.
+    (example / '2021-10-05-16-20-10_The Title.html').touch()
+    (example / '2021-10-05-16-20-10_The Title-readability.json').write_text(json.dumps({'url': 'bar'}))
+    _refresh_archives()
+    with get_db_session() as session:
+        assert session.query(Archive).count() == 2
+
+
+def test_group_archive_files(test_directory):
+    files = [
+        pathlib.Path('2021-10-05 16:20:10.346823.html'),
+        pathlib.Path('2021-10-05 16:20:10.346823-readability.json'),
+        pathlib.Path('2000-01-01-00-00-00_Title.html'),
+        pathlib.Path('2000-01-01-00-00-00_Title-readability.json'),
     ]
-)
-def test_escape_file_name(name, expected):
-    assert lib.escape_file_name(name) == expected
+    assert list(group_archive_files(files)) == [
+        (local_timezone(datetime(2000, 1, 1, 0, 0, 0)),
+         (
+             pathlib.Path('2000-01-01-00-00-00_Title.html'), None, None,
+             pathlib.Path('2000-01-01-00-00-00_Title-readability.json'), None,
+         )),
+        (local_timezone(datetime(2021, 10, 5, 16, 20, 10)),
+         (
+             pathlib.Path('2021-10-05 16:20:10.346823.html'), None, None,
+             pathlib.Path('2021-10-05 16:20:10.346823-readability.json'), None)),
+    ]

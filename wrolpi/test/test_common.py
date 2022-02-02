@@ -7,7 +7,8 @@ from decimal import Decimal
 
 import pytest
 
-from wrolpi.common import combine_dicts, insert_parameter, date_range, api_param_limiter, chdir, zig_zag
+from wrolpi.common import combine_dicts, insert_parameter, date_range, api_param_limiter, chdir, zig_zag, \
+    escape_file_name
 from wrolpi.dates import set_timezone, now
 from wrolpi.errors import InvalidTimezone
 from wrolpi.test.common import build_test_directories, wrap_media_directory
@@ -315,3 +316,23 @@ def test_zig_zag(low, high, expected):
         result = next(zagger)
         assert result == i
         assert low <= result < high
+
+
+@pytest.mark.parametrize(
+    'name,expected', [
+        ('', ''),
+        ('foo', 'foo'),
+        ('foo\\', 'foo'),
+        ('foo/', 'foo'),
+        ('foo<', 'foo'),
+        ('foo>', 'foo'),
+        ('foo:', 'foo'),
+        ('foo|', 'foo'),
+        ('foo"', 'foo'),
+        ('foo?', 'foo'),
+        ('foo*', 'foo'),
+        ('foo&', 'foo&'),
+    ]
+)
+def test_escape_file_name(name, expected):
+    assert escape_file_name(name) == expected

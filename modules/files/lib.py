@@ -3,6 +3,7 @@ import re
 from functools import wraps
 from pathlib import Path
 from typing import List
+from uuid import uuid4
 
 import magic
 import psycopg2
@@ -16,6 +17,8 @@ from wrolpi.errors import InvalidFile
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
+
+__all__ = ['list_files', 'delete_file', 'split_file_name', 'upsert_file', 'refresh_files', 'search']
 
 
 def filter_parent_directories(directories: List[Path]) -> List[Path]:
@@ -108,11 +111,21 @@ def upsert_file(path: Path, session: Session) -> File:
 def _refresh_files():
     """Find and index all files"""
     logger.info('Refreshing Files')
+    # Mark all files as unverified.  Any records that are unverified after refresh will be deleted.
+    with get_db_curs(commit=True) as curs:
+        curs.execute('UPDATE file SET idempotency=null')
+
     paths = filter(lambda i: i.is_file(), walk(get_media_directory()))
+    idempotency = str(uuid4())
     for chunk in chunks(paths, 20):
         with get_db_session(commit=True) as session:
             for path in chunk:
-                upsert_file(path, session)
+                file = upsert_file(path, session)
+                file.idempotency = idempotency
+
+    # Remove any records where the file no longer exists.
+    with get_db_curs(commit=True) as curs:
+        curs.execute('DELETE FROM file WHERE idempotency IS NULL')
 
 
 @wraps(_refresh_files)

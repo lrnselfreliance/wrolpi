@@ -11,6 +11,7 @@ class File(ModelHelper, Base):
     id = Column(Integer, primary_key=True)
     path = Column(MediaPathType)
 
+    idempotency = Column(String)
     mimetype = Column(String)
     modification_datetime = Column(TZDateTime)
     size = Column(Integer)

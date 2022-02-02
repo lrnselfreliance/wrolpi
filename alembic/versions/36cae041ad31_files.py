@@ -32,7 +32,8 @@ def upgrade():
         modification_datetime TIMESTAMPTZ,
         textsearch tsvector GENERATED ALWAYS AS (
             setweight(to_tsvector('english'::regconfig, title), 'A'::"char")
-            ) stored
+            ) stored,
+        idempotency TEXT
     )''')
     session.execute('CREATE INDEX file_path_idx ON file(path)')
     session.execute('CREATE INDEX file_mimetype_idx ON file(textsearch)')

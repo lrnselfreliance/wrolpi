@@ -1,6 +1,7 @@
 import {useEffect, useState} from "react";
 import {fetchDomains, filesSearch, getFiles, getVersion, searchArchives, searchVideos} from "../api";
 import {useHistory} from "react-router-dom";
+import {secondsToDateTime} from "../components/Common";
 
 export const useSearchParam = (key, defaultValue = null) => {
     // Get a window.location.search param.
@@ -139,6 +140,15 @@ export const useVersion = () => {
     return version;
 }
 
+const replaceFileDatetimes = (files) => {
+    for (let i = 0; i < files.length; i++) {
+        if (files[i]['modified']) {
+            files[i]['modified'] = secondsToDateTime(files[i]['modified']);
+        }
+    }
+    return files;
+}
+
 export const useSearchFiles = ({defaultLimit = 50}) => {
     let {limit, setLimit, offset, setOffset, searchStr, setSearchStr, activePage, setPage} =
         useSearchParams(defaultLimit);
@@ -151,6 +161,7 @@ export const useSearchFiles = ({defaultLimit = 50}) => {
         setTotalPages(0);
         if (searchStr) {
             let {files, totals} = await filesSearch(offset, limit, searchStr);
+            files = replaceFileDatetimes(files);
             setSearchFiles(files);
             setTotalPages(Math.floor(totals['files'] / limit) + 1);
         }
@@ -169,6 +180,7 @@ export const useBrowseFiles = () => {
 
     const fetchFiles = async () => {
         let {files} = await getFiles(openFolders);
+        files = replaceFileDatetimes(files);
         setBrowseFiles(files);
     }
 

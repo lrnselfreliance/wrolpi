@@ -434,7 +434,6 @@ def upsert_archive(dt: str, files, session: Session):
     """
     singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path = files
     # Extract the URL from the JSON.  Fail if this is not possible.
-    print(singlefile_path, readability_json_path)
     try:
         with readability_json_path.open() as fh:
             json_contents = json.load(fh)

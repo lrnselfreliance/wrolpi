@@ -3,7 +3,9 @@ import pathlib
 from datetime import datetime
 
 import mock
+import pytest
 
+from modules.archive import lib
 from modules.archive.lib import get_or_create_domain, _refresh_archives, \
     get_new_archive_files, delete_archive, do_archive, get_domains
 from modules.archive.models import Archive, Domain
@@ -33,23 +35,6 @@ class TestArchive(TestAPI):
     def setUp(self) -> None:
         super().setUp()
         (pathlib.Path(self.tmp_dir.name) / 'archive').mkdir(exist_ok=True)
-
-    @mock.patch('modules.archive.lib.now', lambda: datetime(2001, 1, 1))
-    def test_get_new_archive_files(self):
-        s, r, t, j, c = map(str, get_new_archive_files('https://example.com/two'))
-        assert str(s).endswith('archive/example.com/2001-01-01 00:00:00.000000.html')
-        assert str(r).endswith('archive/example.com/2001-01-01 00:00:00.000000-readability.html')
-        assert str(t).endswith('archive/example.com/2001-01-01 00:00:00.000000-readability.txt')
-        assert str(j).endswith('archive/example.com/2001-01-01 00:00:00.000000-readability.json')
-        assert str(c).endswith('archive/example.com/2001-01-01 00:00:00.000000.png')
-
-        s, r, t, j, c = get_new_archive_files('https://www.example.com/one')
-        # Leading www. is removed.
-        assert str(s).endswith('archive/example.com/2001-01-01 00:00:00.000000.html')
-        assert str(r).endswith('archive/example.com/2001-01-01 00:00:00.000000-readability.html')
-        assert str(t).endswith('archive/example.com/2001-01-01 00:00:00.000000-readability.txt')
-        assert str(j).endswith('archive/example.com/2001-01-01 00:00:00.000000-readability.json')
-        assert str(c).endswith('archive/example.com/2001-01-01 00:00:00.000000.png')
 
     @wrap_test_db
     def test_no_screenshot(self):
@@ -328,3 +313,113 @@ def test_get_title_from_html(test_session, fake_now):
     with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
         archive = do_archive('example.com')
         assert archive.title is None
+
+
+def test_get_new_archive_files(fake_now):
+    """Archive files have a specific format so they are sorted by datetime, and are near each other."""
+    fake_now(datetime(2001, 1, 1))
+    s, r, t, j, c = map(str, get_new_archive_files('https://example.com/two', None))
+    assert str(s).endswith('archive/example.com/2001-01-01-00-00-00_NA.html')
+    assert str(r).endswith('archive/example.com/2001-01-01-00-00-00_NA.readability.html')
+    assert str(t).endswith('archive/example.com/2001-01-01-00-00-00_NA.readability.txt')
+    assert str(j).endswith('archive/example.com/2001-01-01-00-00-00_NA.readability.json')
+    assert str(c).endswith('archive/example.com/2001-01-01-00-00-00_NA.png')
+
+    s, r, t, j, c = get_new_archive_files('https://www.example.com/one', 'Title')
+    # Leading www. is removed.
+    assert str(s).endswith('archive/example.com/2001-01-01-00-00-00_Title.html')
+    assert str(r).endswith('archive/example.com/2001-01-01-00-00-00_Title.readability.html')
+    assert str(t).endswith('archive/example.com/2001-01-01-00-00-00_Title.readability.txt')
+    assert str(j).endswith('archive/example.com/2001-01-01-00-00-00_Title.readability.json')
+    assert str(c).endswith('archive/example.com/2001-01-01-00-00-00_Title.png')
+
+
+def test_title_in_filename(test_session, fake_now, test_directory):
+    """
+    The Archive files have the title in the path.
+    """
+    fake_now(datetime(2000, 1, 1))
+
+    with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
+        archive1 = do_archive('example.com')
+
+    assert archive1.title == 'ジにてこちら'
+
+    assert str(archive1.singlefile_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_ジにてこちら.html'
+    assert str(archive1.readability_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_ジにてこちら.readability.html'
+    assert str(archive1.readability_txt_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_ジにてこちら.readability.txt'
+    assert str(archive1.readability_json_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_ジにてこちら.readability.json'
+    assert str(archive1.screenshot_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_ジにてこちら.png'
+
+    def fake_request_archive(_):
+        singlefile = '<html>\ntest single-file\nジにてこちら\n</html>'  # no title in HTML
+        r = dict(
+            # No Title from Readability.
+            content=f'<html>test readability content</html>',
+            textContent='<html>test readability textContent</html>',
+        )
+        s = b'screenshot data'
+        return singlefile, r, s
+
+    with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
+        archive2 = do_archive('example.com')
+
+    assert str(archive2.singlefile_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_NA.html'
+    assert str(archive2.readability_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_NA.readability.html'
+    assert str(archive2.readability_txt_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_NA.readability.txt'
+    assert str(archive2.readability_json_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_NA.readability.json'
+    assert str(archive2.screenshot_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_NA.png'
+
+    def fake_request_archive(_):
+        singlefile = '<html>\ntest single-file\nジにてこちら\n<title>dangerous ;\\//_title</html></html>'
+        r = dict(
+            # No Title from Readability.
+            content=f'<html>test readability content</html>',
+            textContent='<html>test readability textContent</html>',
+        )
+        s = b'screenshot data'
+        return singlefile, r, s
+
+    with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
+        archive3 = do_archive('example.com')
+
+    assert str(archive3.singlefile_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_dangerous ;_title.html'
+    assert str(archive3.readability_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_dangerous ;_title.readability.html'
+    assert str(archive3.readability_txt_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_dangerous ;_title.readability.txt'
+    assert str(archive3.readability_json_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_dangerous ;_title.readability.json'
+    assert str(archive3.screenshot_path.path.relative_to(test_directory)) == \
+           'archive/2000-01-01-00-00-00_dangerous ;_title.png'
+
+
+@pytest.mark.parametrize(
+    'name,expected', [
+        ('', ''),
+        ('foo', 'foo'),
+        ('foo\\', 'foo'),
+        ('foo/', 'foo'),
+        ('foo<', 'foo'),
+        ('foo>', 'foo'),
+        ('foo:', 'foo'),
+        ('foo|', 'foo'),
+        ('foo"', 'foo'),
+        ('foo?', 'foo'),
+        ('foo*', 'foo'),
+        ('foo&', 'foo&'),
+    ]
+)
+def test_escape_file_name(name, expected):
+    assert lib.escape_file_name(name) == expected

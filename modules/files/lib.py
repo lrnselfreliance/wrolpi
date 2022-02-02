@@ -9,11 +9,13 @@ import psycopg2
 from sqlalchemy.orm import Session
 
 from modules.files.models import File
-from wrolpi.common import get_media_directory, wrol_mode_check, walk, chunks
+from wrolpi.common import get_media_directory, wrol_mode_check, walk, chunks, logger
 from wrolpi.dates import from_timestamp
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidFile
 from wrolpi.vars import PYTEST
+
+logger = logger.getChild(__name__)
 
 
 def filter_parent_directories(directories: List[Path]) -> List[Path]:
@@ -86,6 +88,7 @@ def split_file_name(path: Path) -> List[str]:
 
 
 def upsert_file(path: Path, session: Session) -> File:
+    """Update/insert a File in the DB.  Gather metadata about it."""
     file = session.query(File).filter_by(path=path).one_or_none()
     if not file:
         file = File(path=path)
@@ -104,6 +107,7 @@ def upsert_file(path: Path, session: Session) -> File:
 
 def _refresh_files():
     """Find and index all files"""
+    logger.info('Refreshing Files')
     paths = filter(lambda i: i.is_file(), walk(get_media_directory()))
     for chunk in chunks(paths, 20):
         with get_db_session(commit=True) as session:
@@ -113,9 +117,7 @@ def _refresh_files():
 
 @wraps(_refresh_files)
 def refresh_files():
-    """
-    Schedule a refresh task if not testing.  If testing, do a synchronous refresh.
-    """
+    """Schedule a refresh task if not testing.  If testing, do a synchronous refresh."""
     if PYTEST:
         return _refresh_files()
 

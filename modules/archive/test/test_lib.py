@@ -490,7 +490,7 @@ def test_migrate_archive_files(test_session, archive_directory, archive_factory)
     # Archive6
     (example_org_directory / '2000-01-01 00:00:00.000000.html').touch()
     path = example_org_directory / '2000-01-01 00:00:00.000000.readability.json'
-    path.write_text(json.dumps({'title': 'invalid#*: title'}))
+    path.write_text(json.dumps({'title': 'A' * 500}))  # Really long file name.
 
     # Migration forms a plan, then performs it.
     plan = lib.migrate_archive_files()
@@ -510,9 +510,10 @@ def test_migrate_archive_files(test_session, archive_directory, archive_factory)
         (pathlib.Path('example.com/2021-10-05 16:20:10.346823.readability.json'),
          pathlib.Path('example.com/2021-10-05-16-20-10_my title.readability.json')),
         (pathlib.Path('example.org/2000-01-01 00:00:00.000000.html'),
-         pathlib.Path('example.org/2000-01-01-00-00-00_invalid# title.html')),
+         pathlib.Path('example.org/2000-01-01-00-00-00_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.html')),
         (pathlib.Path('example.org/2000-01-01 00:00:00.000000.readability.json'),
-         pathlib.Path('example.org/2000-01-01-00-00-00_invalid# title.readability.json')),
+         pathlib.Path(
+             'example.org/2000-01-01-00-00-00_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.readability.json')),
     ]
     # New Archive files still exist.
     assert all(i.is_file() for i in archive1.my_paths())

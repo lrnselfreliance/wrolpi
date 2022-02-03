@@ -78,6 +78,7 @@ def get_new_archive_files(url: str, title: Optional[str]) -> ArchiveFiles:
     dt = archive_strftime(now())
 
     title = escape_file_name(title or 'NA')
+    title = title[:50]
     prefix = f'{dt}_{title}'
     singlefile_path = directory / f'{prefix}.html'
     readability_path = directory / f'{prefix}.readability.html'
@@ -406,6 +407,8 @@ def migrate_archive_files():
             archive_files: ArchiveFiles
             with archive_files.readability_json.open() as fh:
                 title = escape_file_name(json.load(fh).get('title') or 'NA')
+
+            title = title[:50]
 
             dt = archive_strftime(dt)
             prefix = f'{dt}_{title}'

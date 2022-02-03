@@ -46,7 +46,10 @@ archive_offset_limiter = api_param_limiter(100, 0)
 
 
 @bp.post('/search')
-@openapi.description('Search archive contents and titles')
+@openapi.definition(
+    summary='Search archive contents and titles',
+    body=ArchiveSearchRequest,
+)
 @openapi.response(HTTPStatus.OK, ArchiveSearchResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @validate(ArchiveSearchRequest)

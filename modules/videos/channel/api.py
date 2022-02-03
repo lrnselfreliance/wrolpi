@@ -8,7 +8,6 @@ from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import logger, wrol_mode_check, make_media_directory, \
     get_media_directory
-from wrolpi.errors import UnknownDirectory
 from wrolpi.root_api import json_response
 from wrolpi.schema import JSONErrorResponse
 from .lib import get_minimal_channels, delete_channel, update_channel, get_channel, create_channel
@@ -38,7 +37,10 @@ def channel_get(_: Request, link: str):
 
 
 @channel_bp.post('/')
-@openapi.description('Insert a Channel')
+@openapi.definition(
+    description='Insert a Channel',
+    body=ChannelPostRequest,
+)
 @openapi.response(HTTPStatus.OK, ChannelPostResponse)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @validate(ChannelPostRequest)
@@ -60,7 +62,10 @@ def channel_post(_: Request, body: ChannelPostRequest):
 
 
 @channel_bp.put('/<link:str>')
-@openapi.description('Update a Channel')
+@openapi.definition(
+    description='Update a Channel',
+    body=ChannelPutRequest,
+)
 @openapi.response(HTTPStatus.NO_CONTENT)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @validate(ChannelPutRequest)

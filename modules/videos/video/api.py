@@ -32,7 +32,10 @@ def video_get(_: Request, video_id: int):
 
 
 @video_bp.post('/search')
-@openapi.description('Search Video titles and captions')
+@openapi.definition(
+    summary='Search Video titles and captions',
+    body=VideoSearchRequest,
+)
 @openapi.response(HTTPStatus.OK, VideoSearchResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @validate(VideoSearchRequest)
@@ -54,7 +57,10 @@ async def search(_: Request, body: VideoSearchRequest):
 
 
 @video_bp.post('/directories')
-@openapi.description('Get all directories that match the search_str, prefixed by the media directory.')
+@openapi.definition(
+    summary='Get all directories that match the search_str, prefixed by the media directory.',
+    body=DirectoriesRequest,
+)
 @openapi.response(HTTPStatus.OK, DirectoriesResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @validate(DirectoriesRequest)

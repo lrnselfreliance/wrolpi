@@ -43,7 +43,10 @@ def paths_to_files(paths: List[pathlib.Path]):
 
 
 @bp.post('/')
-@openapi.description('List files in a directory')
+@openapi.definition(
+    summary='List files in a directory',
+    body=schema.FilesRequest,
+)
 @validate(schema.FilesRequest)
 async def get_files(_: Request, body: schema.FilesRequest):
     directories = body.directories or []
@@ -54,7 +57,10 @@ async def get_files(_: Request, body: schema.FilesRequest):
 
 
 @bp.post('/delete')
-@openapi.description('Delete a single file.  Returns an error if WROL Mode is enabled.')
+@openapi.definition(
+    summary='Delete a single file.  Returns an error if WROL Mode is enabled.',
+    body=schema.DeleteRequest,
+)
 @validate(schema.DeleteRequest)
 async def delete_file(_: Request, body: schema.DeleteRequest):
     if not body.file:
@@ -75,6 +81,10 @@ async def refresh(_: Request):
 
 
 @bp.post('/search')
+@openapi.definition(
+    summary='Search Files',
+    body=schema.FilesSearchRequest,
+)
 @validate(schema.FilesSearchRequest)
 async def search_files(_: Request, body: schema.FilesSearchRequest):
     files, total = lib.search(body.search_str, body.limit, body.offset)

@@ -99,7 +99,10 @@ async def refresh_videos(channel_links: list = None):
 
 
 @content_bp.post('/favorite')
-@openapi.description('Toggle the favorite flag on a video')
+@openapi.definition(
+    description='Toggle the favorite flag on a video',
+    body=FavoriteRequest,
+)
 @validate(FavoriteRequest)
 @openapi.response(HTTPStatus.OK, FavoriteResponse)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)

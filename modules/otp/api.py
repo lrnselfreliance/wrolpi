@@ -15,7 +15,10 @@ bp = get_blueprint('OTP', '/api/otp')
 
 
 @bp.post('/encrypt_otp')
-@openapi.description('Encrypt a message with OTP.')
+@openapi.definition(
+    summary='Encrypt a message with OTP.',
+    body=EncryptOTPRequest,
+)
 @validate(EncryptOTPRequest)
 async def post_encrypt_otp(_: Request, data: dict):
     data = encrypt_otp(data['otp'], data['plaintext'])
@@ -23,7 +26,10 @@ async def post_encrypt_otp(_: Request, data: dict):
 
 
 @bp.post('/decrypt_otp')
-@openapi.description('Decrypt a message with OTP.')
+@openapi.definition(
+    summary='Decrypt a message with OTP.',
+    body=DecryptOTPRequest,
+)
 @validate(DecryptOTPRequest)
 async def post_decrypt_otp(_: Request, data: dict):
     data = decrypt_otp(data['otp'], data['ciphertext'])

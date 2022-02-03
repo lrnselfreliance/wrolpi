@@ -97,9 +97,6 @@ def index(_):
 @openapi.description('Echo whatever is sent to this.')
 @openapi.response(HTTPStatus.OK, EchoResponse)
 async def echo(request: Request):
-    """
-    Returns a JSON object containing details about the request sent to me.
-    """
     ret = dict(
         form=request.form,
         headers=dict(request.headers),

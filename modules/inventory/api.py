@@ -46,7 +46,10 @@ def inventory_get(_: Request, inventory_id: int):
 
 
 @bp.post('/')
-@openapi.description('Save a new inventory')
+@openapi.definition(
+    summary='Save a new inventory',
+    body=InventoryPostRequest,
+)
 @validate(InventoryPostRequest)
 @run_after(save_inventories_file)
 def post_inventory(_: Request, data: dict):
@@ -58,7 +61,10 @@ def post_inventory(_: Request, data: dict):
 
 
 @bp.put('/<inventory_id:int>')
-@openapi.description('Update an inventory')
+@openapi.definition(
+    summary='Update an inventory',
+    body=InventoryPutRequest,
+)
 @validate(InventoryPutRequest)
 @run_after(save_inventories_file)
 def put_inventory(_: Request, inventory_id: int, data: dict):
@@ -85,7 +91,10 @@ def items_get(_: Request, inventory_id: int):
 
 
 @bp.post('/<inventory_id:int>/item')
-@openapi.description("Save an item into it's inventory.")
+@openapi.definition(
+    summary="Save an item into it's inventory.",
+    body=ItemPostRequest,
+)
 @validate(ItemPostRequest)
 @run_after(save_inventories_file)
 def post_item(_: Request, inventory_id: int, data: dict):
@@ -97,7 +106,10 @@ def post_item(_: Request, inventory_id: int, data: dict):
 
 
 @bp.put('/item/<item_id:int>')
-@openapi.description("Update an item.")
+@openapi.definition(
+    summary='Update an item.',
+    body=ItemPutRequest,
+)
 @validate(ItemPutRequest)
 @run_after(save_inventories_file)
 def put_item(_: Request, item_id: int, data: dict):

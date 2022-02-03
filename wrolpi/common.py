@@ -641,7 +641,7 @@ def zig_zag(low: ZIG_TYPE, high: ZIG_TYPE) -> Generator[ZIG_TYPE, None, None]:
 
 
 def walk(path: Path) -> Generator[Path, None, None]:
-    """Walk a directory structure yielding all files and directories."""
+    """Recursively Walk a directory structure yielding all files and directories."""
     for path in path.iterdir():
         yield path
         if path.is_dir():

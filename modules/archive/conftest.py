@@ -5,8 +5,9 @@ from uuid import uuid4
 
 import pytest
 
+from modules.archive.lib import archive_strftime
 from modules.archive.models import Archive, Domain
-from wrolpi.dates import strftime_ms
+from wrolpi.dates import local_timezone
 
 
 @pytest.fixture
@@ -26,7 +27,7 @@ def archive_factory(test_session, archive_directory):
 
     now = time_generator()
 
-    def _(domain: str = None, url: str = None, title: str = None, contents: str = None) -> Archive:
+    def _(domain: str = None, url: str = None, title: str = 'NA', contents: str = None) -> Archive:
         if domain:
             assert '/' not in domain
 
@@ -36,13 +37,14 @@ def archive_factory(test_session, archive_directory):
         domain_dir = archive_directory / domain_dir
         domain_dir.mkdir(exist_ok=True)
 
-        timestamp = strftime_ms(next(now))
+        archive_datetime = local_timezone(next(now))
+        timestamp = archive_strftime(archive_datetime)
 
-        singlefile_path = domain_dir / f'{timestamp}.html'
-        screenshot_path = domain_dir / f'{timestamp}.png'
-        readability_path = domain_dir / f'{timestamp}-readability.html'
-        readability_txt_path = domain_dir / f'{timestamp}-readability.txt'
-        readability_json_path = domain_dir / f'{timestamp}-readability.json'
+        singlefile_path = domain_dir / f'{timestamp}_{title}.html'
+        screenshot_path = domain_dir / f'{timestamp}_{title}.png'
+        readability_path = domain_dir / f'{timestamp}_{title}.readability.html'
+        readability_txt_path = domain_dir / f'{timestamp}_{title}.readability.txt'
+        readability_json_path = domain_dir / f'{timestamp}_{title}.readability.json'
 
         with readability_json_path.open('wt') as fh:
             json.dump({'url': url}, fh)
@@ -68,7 +70,7 @@ def archive_factory(test_session, archive_directory):
             url=url,
             domain_id=domain.id,
             contents=contents,
-            archive_datetime=timestamp,
+            archive_datetime=archive_datetime,
         )
         test_session.add(archive)
 

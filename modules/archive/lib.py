@@ -5,6 +5,7 @@ import pathlib
 import re
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime
 from itertools import groupby
 from typing import Iterator, Optional
@@ -24,6 +25,26 @@ from wrolpi.vars import DOCKERIZED, PYTEST
 logger = logger.getChild(__name__)
 
 ARCHIVE_SERVICE = 'http://archive:8080'
+
+
+@dataclass
+class ArchiveFiles:
+    """Every Archive will have some of these files."""
+    singlefile: pathlib.Path = None
+    readability: pathlib.Path = None
+    readability_txt: pathlib.Path = None
+    readability_json: pathlib.Path = None
+    screenshot: pathlib.Path = None
+
+    def __repr__(self):
+        singlefile = str(self.singlefile.relative_to(get_archive_directory())) if self.singlefile else None
+        readability = str(self.readability.relative_to(get_archive_directory())) if self.readability else None
+        readability_txt = str(
+            self.readability_txt.relative_to(get_archive_directory())) if self.readability_txt else None
+        readability_json = str(
+            self.readability_json.relative_to(get_archive_directory())) if self.readability_json else None
+        screenshot = str(self.screenshot.relative_to(get_archive_directory())) if self.screenshot else None
+        return f'<ArchiveFiles {singlefile=} {readability=} {readability_txt=} {readability_json=} {screenshot=}>'
 
 
 def get_archive_directory() -> pathlib.Path:
@@ -48,28 +69,36 @@ def get_domain_directory(url: str) -> pathlib.Path:
     return directory
 
 
-def get_new_archive_files(url: str, title: Optional[str]):
+def get_new_archive_files(url: str, title: Optional[str]) -> ArchiveFiles:
     """
     Create a list of archive files using a shared name schema.  Raise an error if any of them exist.
     """
     directory = get_domain_directory(url)
-    dt = now().strftime('%Y-%m-%d-%H-%M-%S')
+    # Datetime is valid in Linux and Windows.
+    dt = archive_strftime(now())
 
     title = escape_file_name(title or 'NA')
     prefix = f'{dt}_{title}'
     singlefile_path = directory / f'{prefix}.html'
-    readability_path = directory / f'{prefix}-readability.html'
-    readability_txt_path = directory / f'{prefix}-readability.txt'
-    readability_json_path = directory / f'{prefix}-readability.json'
+    readability_path = directory / f'{prefix}.readability.html'
+    readability_txt_path = directory / f'{prefix}.readability.txt'
+    readability_json_path = directory / f'{prefix}.readability.json'
     screenshot_path = directory / f'{prefix}.png'
 
-    ret = (singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path)
+    paths = (singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path)
 
-    for path in ret:
+    for path in paths:
         if path.exists():
             raise FileExistsError(f'New archive file already exists: {path}')
 
-    return ret
+    archive_files = ArchiveFiles(
+        singlefile_path,
+        readability_path,
+        readability_txt_path,
+        readability_json_path,
+        screenshot_path,
+    )
+    return archive_files
 
 
 ARCHIVE_TIMEOUT = Seconds.minute * 10  # Wait at most 10 minutes for response.
@@ -120,9 +149,7 @@ def request_archive(url: str):
 
 
 def local_singlefile(url: str):
-    """
-    Run the single-file executable to create an HTML file archive.
-    """
+    """Run the single-file executable to create an HTML file archive."""
     single_file_path = pathlib.Path('/usr/bin/single-file')
     if not single_file_path.is_file():
         raise FileNotFoundError(f'single-file not found at {single_file_path}')
@@ -139,9 +166,7 @@ def local_singlefile(url: str):
 
 
 def local_screenshot(url: str) -> bytes:
-    """
-    Take a screenshot of the URL using selenium.
-    """
+    """Take a screenshot of the URL using selenium."""
     logger.info(f'Screenshot: {url}')
 
     # Set Chromium to headless.  Use a wide window size so that screenshot will be the "desktop" version of the page.
@@ -161,9 +186,7 @@ def local_screenshot(url: str) -> bytes:
 
 
 def local_extract_readability(path: str, url: str) -> dict:
-    """
-    Extract the readability from an HTML file, typically from single-file.
-    """
+    """Extract the readability from an HTML file, typically from single-file."""
     logger.info(f'readability for {url}')
     readability_path = pathlib.Path('/usr/bin/readability-extractor')
     if not readability_path.is_file():
@@ -178,9 +201,7 @@ def local_extract_readability(path: str, url: str) -> dict:
 
 
 def local_archive(url: str):
-    """
-    Perform an archive of the provided URL using local resources (without the Archive docker container).
-    """
+    """Perform an archive of the provided URL using local resources (without the Archive docker container)."""
     # Archives must be performed in the wrolpi home directory because chrome saves the screenshot there, and will
     # raise an error if global $HOME is not a real user directory. :(
     with chdir('/home/wrolpi', with_home=True):
@@ -217,33 +238,32 @@ def do_archive(url: str) -> Archive:
             # Readability could not find title, lets use ours.
             readability['title'] = title
 
-    singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path = \
-        get_new_archive_files(url, title)
+    archive_files = get_new_archive_files(url, title)
 
     if readability:
         # Write the readability parts to their own files.  Write what is left after pops to the JSON file.
-        with readability_path.open('wt') as fh:
+        with archive_files.readability.open('wt') as fh:
             fh.write(readability.pop('content'))
-        with readability_txt_path.open('wt') as fh:
+        with archive_files.readability_txt.open('wt') as fh:
             readability_txt = readability.pop('textContent')
             fh.write(readability_txt)
     else:
         # No readability was returned, so there are no files.
-        readability_txt = readability_path = readability_txt_path = None
+        readability_txt = archive_files.readability_txt = archive_files.readability = None
 
     # Store the single-file HTML in its own file.
-    with singlefile_path.open('wt') as fh:
+    with archive_files.singlefile.open('wt') as fh:
         fh.write(singlefile)
     if screenshot:
-        with screenshot_path.open('wb') as fh:
+        with archive_files.screenshot.open('wb') as fh:
             fh.write(screenshot)
     else:
-        screenshot_path = None
+        archive_files.screenshot = None
 
     # Always write a JSON file that contains at least the URL.
     readability = readability or {}
     readability['url'] = url
-    with readability_json_path.open('wt') as fh:
+    with archive_files.readability_json.open('wt') as fh:
         fh.write(json.dumps(readability))
 
     with get_db_session(commit=True) as session:
@@ -251,11 +271,11 @@ def do_archive(url: str) -> Archive:
         archive = Archive(
             title=title,
             archive_datetime=now(),
-            singlefile_path=singlefile_path,
-            readability_path=readability_path,
-            readability_json_path=readability_json_path,
-            readability_txt_path=readability_txt_path,
-            screenshot_path=screenshot_path,
+            singlefile_path=archive_files.singlefile,
+            readability_path=archive_files.readability,
+            readability_json_path=archive_files.readability_json,
+            readability_txt_path=archive_files.readability_txt,
+            screenshot_path=archive_files.screenshot,
             contents=readability_txt,
             url=url,
             domain_id=domain.id,
@@ -317,6 +337,10 @@ def archive_strptime(dt: str) -> datetime:
         return local_timezone(datetime.strptime(dt, '%Y-%m-%d %H:%M:%S'))
 
 
+def archive_strftime(dt: datetime) -> str:
+    return dt.strftime('%Y-%m-%d-%H-%M-%S')
+
+
 def group_archive_files(files: Iterator[pathlib.Path]) -> groupby:
     """
     Group archive files by their timestamp.
@@ -333,32 +357,92 @@ def group_archive_files(files: Iterator[pathlib.Path]) -> groupby:
             continue
 
         # Sort the files into their respective slots.
-        singlefile_path = readability_path = readability_txt_path = readability_json_path = screenshot_path = None
+        archive_files = ArchiveFiles()
         file = None
         for file in files:
-            if file.name.endswith('-readability.html'):
-                readability_path = file
-            elif file.name.endswith('.html'):
-                singlefile_path = file
-            elif file.name.endswith('.png') or file.name.endswith('.jpg') or file.name.endswith('.jpeg'):
-                screenshot_path = file
-            elif file.name.endswith('-readability.json'):
-                readability_json_path = file
-            elif file.name.endswith('-readability.txt'):
-                readability_txt_path = file
+            name = file.name
+            # TODO remove the -readability matching once migrated.
+            if name.endswith('.readability.html') or name.endswith('-readability.html'):
+                archive_files.readability = file
+            elif name.endswith('.html'):
+                archive_files.singlefile = file
+            elif name.endswith('.png') or name.endswith('.jpg') or name.endswith('.jpeg'):
+                archive_files.screenshot = file
+            elif name.endswith('.readability.json') or name.endswith('-readability.json'):
+                archive_files.readability_json = file
+            elif name.endswith('.readability.txt') or name.endswith('-readability.txt'):
+                archive_files.readability_txt = file
 
-        if not singlefile_path:
+        if not archive_files.singlefile:
             logger.warning(f'Archive does not have a singlefile html!  Ignoring. {file}')
             continue
-        if not readability_json_path:
+        if not archive_files.readability_json:
             logger.warning(f'Archive does not have a json file!  Ignoring. {file}')
             continue
 
-        yield dt, (singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path)
+        yield dt, archive_files
 
 
-ARCHIVE_MATCHER = re.compile(r'\d{4}-\d\d-\d\d (\d\d:){2}\d\d\.\d{6}.*$')
-NEW_ARCHIVE_MATCHER = re.compile(r'\d{4}-(\d{2}-){4}\d\d_.*$')
+OLD_ARCHIVE_MATCHER = re.compile(r'\d{4}-\d\d-\d\d (\d\d:){2}\d\d\.\d{6}.*$')
+
+
+def migrate_archive_files():
+    """
+    Rename Archive files from "YYYY-mm-dd HH:MM:SS.ZZZZZ.html" to "YYYY-mm-dd-HH-MM-SS_{TITLE}.html" and all their
+    associated files.
+    """
+    archive_directory = get_archive_directory()
+
+    def _is_archive_file(path: pathlib.Path) -> bool:
+        return path.is_file() and path.suffix.lower() in ARCHIVE_SUFFIXES and bool(OLD_ARCHIVE_MATCHER.match(path.name))
+
+    plan = []
+
+    # It is safer to plan the renames before we make them.
+    for domain_directory in filter(lambda i: i.is_dir(), archive_directory.iterdir()):
+        all_archives_files = filter(_is_archive_file, walk(domain_directory))
+        archive_groups = group_archive_files(all_archives_files)
+        for dt, archive_files in archive_groups:
+            archive_files: ArchiveFiles
+            with archive_files.readability_json.open() as fh:
+                title = escape_file_name(json.load(fh).get('title') or 'NA')
+
+            dt = archive_strftime(dt)
+            prefix = f'{dt}_{title}'
+            singlefile_path = domain_directory / f'{prefix}.html'
+            readability_path = domain_directory / f'{prefix}.readability.html'
+            readability_txt_path = domain_directory / f'{prefix}.readability.txt'
+            readability_json_path = domain_directory / f'{prefix}.readability.json'
+            screenshot_path = domain_directory / f'{prefix}.png'
+
+            # Every Archive is required to have these files.
+            plan.append((archive_files.singlefile, singlefile_path))
+            plan.append((archive_files.readability_json, readability_json_path))
+            # These files are optional.
+            if archive_files.readability:
+                plan.append((archive_files.readability, readability_path))
+            if archive_files.readability_txt:
+                plan.append((archive_files.readability_txt, readability_txt_path))
+            if archive_files.screenshot:
+                plan.append((archive_files.screenshot, screenshot_path))
+
+    if not plan:
+        logger.info('Could not find any Archive files to migrate.  Was it already performed?')
+        return plan
+
+    # Check that all new files do not exist.
+    for old, new in plan:
+        if new.exists():
+            raise FileExistsError(f'Cannot migrate archive files! {new} already exists!')
+
+    # Finally, move all the files now that its safe.
+    for old, new in plan:
+        old.rename(new)
+
+    return plan
+
+
+ARCHIVE_MATCHER = re.compile(r'\d{4}(-\d\d){5}_.*$')
 ARCHIVE_SUFFIXES = {'.txt', '.html', '.json', '.png', '.jpg', '.jpeg'}
 
 
@@ -367,13 +451,7 @@ def is_archive_file(path: pathlib.Path) -> bool:
     Archive files are expected to start with the following: %Y-%m-%d-%H-%M-%S
     they must have one of the following suffixes: .txt, .html, .json, .png, .jpg, .jpeg
     """
-    if not path.is_file():
-        return False
-    if path.suffix.lower() not in ARCHIVE_SUFFIXES:
-        return False
-    if bool(ARCHIVE_MATCHER.match(path.name)) or bool(NEW_ARCHIVE_MATCHER.match(path.name)):
-        return True
-    return False
+    return path.is_file() and path.suffix.lower() in ARCHIVE_SUFFIXES and bool(ARCHIVE_MATCHER.match(path.name))
 
 
 def _refresh_archives():
@@ -383,18 +461,22 @@ def _refresh_archives():
     """
     archive_directory = get_archive_directory()
 
+    # TODO remove this later when everyone has migrated their files.
+    migrate_archive_files()
+
     singlefile_paths = set()
     for domain_directory in filter(lambda i: i.is_dir(), archive_directory.iterdir()):
         logger.debug(f'Refreshing directory: {domain_directory}')
-        archives_files = filter(is_archive_file, walk(domain_directory))
-        archive_groups = group_archive_files(archives_files)
+        all_archives_files = filter(is_archive_file, walk(domain_directory))
+        archive_groups = group_archive_files(all_archives_files)
+        archive_groups = list(archive_groups)
         archive_count = 0
         for chunk in chunks(archive_groups, 20):
             with get_db_session(commit=True) as session:
-                for dt, files in chunk:
+                for dt, archive_files in chunk:
                     archive_count += 1
-                    singlefile_paths.add(str(files[0]))
-                    upsert_archive(dt, files, session)
+                    singlefile_paths.add(str(archive_files.singlefile))
+                    upsert_archive(dt, archive_files, session)
 
         if archive_count:
             logger.info(f'Inserted/updated {archive_count} archives in {domain_directory}')
@@ -428,14 +510,11 @@ async def refresh_archives():
     _refresh_archives()
 
 
-def upsert_archive(dt: str, files, session: Session):
-    """
-    Get or create an Archive and it's URL/Domain.  If it already exists, update it with these new files.
-    """
-    singlefile_path, readability_path, readability_txt_path, readability_json_path, screenshot_path = files
+def upsert_archive(dt: str, archive_files: ArchiveFiles, session: Session):
+    """Get or create an Archive and it's URL/Domain.  If it already exists, update it with these new files."""
     # Extract the URL from the JSON.  Fail if this is not possible.
     try:
-        with readability_json_path.open() as fh:
+        with archive_files.readability_json.open() as fh:
             json_contents = json.load(fh)
             url = json_contents['url']
     except Exception as e:
@@ -443,23 +522,20 @@ def upsert_archive(dt: str, files, session: Session):
 
     domain = get_or_create_domain(session, url)
     # Get the existing Archive, or create a new one.
-    archive = session.query(Archive).filter_by(singlefile_path=singlefile_path).one_or_none()
+    archive = session.query(Archive).filter_by(singlefile_path=archive_files.singlefile).one_or_none()
     if not archive:
         # No archive matches this singlefile_path, create a new one.
-        archive = Archive(
-            url=url,
-            domain_id=domain.id,
-        )
+        archive = Archive(url=url, domain_id=domain.id)
         session.add(archive)
         session.flush()
 
     # Update the archive with the files that we have.
     archive.archive_datetime = dt
-    archive.singlefile_path = singlefile_path
-    archive.readability_path = readability_path
-    archive.readability_txt_path = readability_txt_path
-    archive.readability_json_path = readability_json_path
-    archive.screenshot_path = screenshot_path
+    archive.singlefile_path = archive_files.singlefile
+    archive.readability_path = archive_files.readability
+    archive.readability_txt_path = archive_files.readability_txt
+    archive.readability_json_path = archive_files.readability_json
+    archive.screenshot_path = archive_files.screenshot
 
 
 def get_domains():

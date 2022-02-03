@@ -80,7 +80,7 @@ index_html = '''
     This is a WROLPi API.
     <ul>
         <li>You can test it at this endpoint <a href="/api/echo">/api/echo</a></li>
-        <li>You can view the docs at <a href="/swagger">/swagger</a></li>
+        <li>You can view the docs at <a href="/docs">/docs</a></li>
     </ul>
 </p>
 </body>

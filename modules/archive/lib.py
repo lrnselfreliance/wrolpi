@@ -8,7 +8,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from itertools import groupby
-from typing import Iterator, Optional
+from typing import Iterator, Optional, Tuple, List
 
 import requests
 from bs4 import BeautifulSoup
@@ -562,7 +562,7 @@ def get_domains():
         return domains
 
 
-def search(search_str: str, domain: str, limit: int, offset: int):
+def search(search_str: str, domain: str, limit: int, offset: int) -> Tuple[List[Archive], int]:
     with get_db_curs() as curs:
         columns = 'id, COUNT(*) OVER() AS total'
         params = dict(offset=offset, limit=limit)

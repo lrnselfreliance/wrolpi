@@ -1,6 +1,6 @@
 import pytest
 
-from modules.otp.common import format_message, encrypt_otp, decrypt_otp, generate_pdf
+from modules.otp.lib import format_message, encrypt_otp, decrypt_otp, generate_pdf
 
 
 @pytest.mark.parametrize(

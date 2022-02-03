@@ -14,11 +14,9 @@ from wrolpi.root_api import add_blueprint, json_response
 from wrolpi.schema import JSONErrorResponse
 from .channel import lib as channel_lib
 from .channel.api import channel_bp
-from .lib import _refresh_videos, get_statistics
-from .schema import StreamResponse, \
-    FavoriteRequest, FavoriteResponse, VideosStatisticsResponse
 from .video import lib as video_lib
 from .video.api import video_bp
+from . import lib, schema
 
 content_bp = Blueprint('VideoContent', '/api/videos')
 bp = Blueprint('Videos', '/api/videos').group(
@@ -36,7 +34,7 @@ refresh_queue, refresh_event = create_websocket_feed('refresh', '/feeds/refresh'
 @content_bp.post('/refresh')
 @content_bp.post('/refresh/<link:str>')
 @openapi.description('Search for videos that have previously been downloaded and stored.')
-@openapi.response(HTTPStatus.OK, StreamResponse)
+@openapi.response(HTTPStatus.OK, schema.StreamResponse)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @wrol_mode_check
 async def refresh(_, link: str = None):
@@ -74,7 +72,7 @@ download_queue, download_event = create_websocket_feed('download', '/feeds/downl
 @content_bp.post('/download')
 @content_bp.post('/download/<link:str>')
 @openapi.description('Update channel catalogs, download any missing videos')
-@openapi.response(HTTPStatus.OK, StreamResponse)
+@openapi.response(HTTPStatus.OK, schema.StreamResponse)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @wrol_mode_check
 def download(_, link: str = None):
@@ -93,27 +91,27 @@ def download(_, link: str = None):
     return response.json({'code': 'stream-started', 'stream_url': stream_url})
 
 
-@wraps(_refresh_videos)
+@wraps(lib.refresh_videos)
 async def refresh_videos(channel_links: list = None):
-    return _refresh_videos(channel_links=channel_links)
+    return lib.refresh_videos(channel_links=channel_links)
 
 
 @content_bp.post('/favorite')
 @openapi.definition(
     description='Toggle the favorite flag on a video',
-    body=FavoriteRequest,
+    body=schema.FavoriteRequest,
 )
-@validate(FavoriteRequest)
-@openapi.response(HTTPStatus.OK, FavoriteResponse)
+@validate(schema.FavoriteRequest)
+@openapi.response(HTTPStatus.OK, schema.FavoriteResponse)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
-async def favorite(_: Request, body: FavoriteRequest):
+async def favorite(_: Request, body: schema.FavoriteRequest):
     _favorite = video_lib.set_video_favorite(body.video_id, body.favorite)
     ret = {'video_id': body.video_id, 'favorite': _favorite}
     return json_response(ret, HTTPStatus.OK)
 
 
 @content_bp.get('/statistics')
-@openapi.response(HTTPStatus.OK, VideosStatisticsResponse)
+@openapi.response(HTTPStatus.OK, schema.VideosStatisticsResponse)
 async def statistics(_: Request):
-    ret = await get_statistics()
+    ret = await lib.get_statistics()
     return json_response(ret, HTTPStatus.OK)

@@ -8,8 +8,7 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.root_api import get_blueprint
-from .common import generate_pdf, encrypt_otp, decrypt_otp
-from .schema import EncryptOTPRequest, DecryptOTPRequest
+from . import lib, schema
 
 bp = get_blueprint('OTP', '/api/otp')
 
@@ -17,22 +16,22 @@ bp = get_blueprint('OTP', '/api/otp')
 @bp.post('/encrypt_otp')
 @openapi.definition(
     summary='Encrypt a message with OTP.',
-    body=EncryptOTPRequest,
+    body=schema.EncryptOTPRequest,
 )
-@validate(EncryptOTPRequest)
+@validate(schema.EncryptOTPRequest)
 async def post_encrypt_otp(_: Request, data: dict):
-    data = encrypt_otp(data['otp'], data['plaintext'])
+    data = lib.encrypt_otp(data['otp'], data['plaintext'])
     return response.json(data)
 
 
 @bp.post('/decrypt_otp')
 @openapi.definition(
     summary='Decrypt a message with OTP.',
-    body=DecryptOTPRequest,
+    body=schema.DecryptOTPRequest,
 )
-@validate(DecryptOTPRequest)
+@validate(schema.DecryptOTPRequest)
 async def post_decrypt_otp(_: Request, data: dict):
-    data = decrypt_otp(data['otp'], data['ciphertext'])
+    data = lib.decrypt_otp(data['otp'], data['ciphertext'])
     return response.json(data)
 
 
@@ -44,5 +43,5 @@ async def get_new_otp_pdf(_: Request):
         'Content-type': 'application/pdf',
         'Content-Disposition': f'attachment;filename={filename}'
     }
-    contents = generate_pdf()
+    contents = lib.generate_pdf()
     return response.raw(contents, HTTPStatus.OK, headers)

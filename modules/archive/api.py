@@ -9,8 +9,7 @@ from sanic_ext.extensions.openapi import openapi
 from wrolpi.common import logger, wrol_mode_check, api_param_limiter
 from wrolpi.root_api import get_blueprint, json_response
 from wrolpi.schema import JSONErrorResponse
-from . import lib
-from .schema import ArchiveSearchRequest, ArchiveSearchResponse
+from . import lib, schema
 
 NAME = 'archive'
 
@@ -48,12 +47,12 @@ archive_offset_limiter = api_param_limiter(100, 0)
 @bp.post('/search')
 @openapi.definition(
     summary='Search archive contents and titles',
-    body=ArchiveSearchRequest,
+    body=schema.ArchiveSearchRequest,
 )
-@openapi.response(HTTPStatus.OK, ArchiveSearchResponse)
+@openapi.response(HTTPStatus.OK, schema.ArchiveSearchResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-@validate(ArchiveSearchRequest)
-async def search_archives(_: Request, body: ArchiveSearchRequest):
+@validate(schema.ArchiveSearchRequest)
+async def search_archives(_: Request, body: schema.ArchiveSearchRequest):
     search_str = body.search_str
     domain = body.domain
     limit = archive_limit_limiter(body.limit)

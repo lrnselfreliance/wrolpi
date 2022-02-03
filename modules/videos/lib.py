@@ -247,7 +247,7 @@ def convert_or_generate_poster(video: Video) -> Optional[pathlib.Path]:
             logger.error(f'Failed to generate poster for {video}', exc_info=e)
 
 
-def _refresh_videos(channel_links: list = None):
+def refresh_videos(channel_links: list = None):
     """
     Find any videos in the channel directories and add them to the DB.  Delete DB records of any videos not in the
     file system.

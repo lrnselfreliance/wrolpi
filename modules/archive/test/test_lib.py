@@ -147,18 +147,24 @@ def test_fills_contents_with_refresh(test_session, archive_factory, test_client)
     archive3 = archive_factory('example.org')
     archive4 = archive_factory('example.org')  # has no contents
 
+    # Clear the title, this will be filled in.
+    archive1.title = archive2.title = archive3.title = archive4.title = None
+    # Title can be found in archive3's singlefile
+    archive3.singlefile_path.path.write_text('<html> some stuff<title>last title</title> other stuff</html>')
+
     contents_title_archive = [
         ('foo bar qux', 'my archive', archive1),
         ('foo baz qux qux', 'other archive', archive2),
-        ('baz qux qux qux', 'archive third', archive3),
+        ('baz qux qux qux', None, archive3),
     ]
-    for contents, title, archive in contents_title_archive:
+    for contents, json_title, archive in contents_title_archive:
         with archive.readability_txt_path.path.open('wt') as fh:
-            archive.title = title
             fh.write(contents)
+        if json_title:
+            archive.readability_json_path.path.write_text(json.dumps({'title': json_title, 'url': archive.url}))
     test_session.commit()
 
-    # Contents are empty.
+    # Contents are empty.  Archives are all missing the title.
     assert not archive1.contents
     assert not archive2.contents
     assert not archive3.contents
@@ -172,6 +178,11 @@ def test_fills_contents_with_refresh(test_session, archive_factory, test_client)
     assert archive2.contents
     assert archive3.contents
     assert not archive4.contents
+
+    # Missing title is filled.
+    assert archive1.title == 'my archive'
+    assert archive2.title == 'other archive'
+    assert archive3.title == 'last title'  # from json
 
 
 def test_delete_archive(test_session, archive_factory):

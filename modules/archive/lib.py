@@ -514,12 +514,13 @@ async def refresh_archives():
 
 
 def upsert_archive(dt: str, archive_files: ArchiveFiles, session: Session):
-    """Get or create an Archive and it's URL/Domain.  If it already exists, update it with these new files."""
+    """Get or create an Archive, and it's URL/Domain.  If it already exists, update it with these new files."""
     # Extract the URL from the JSON.  Fail if this is not possible.
     try:
         with archive_files.readability_json.open() as fh:
             json_contents = json.load(fh)
             url = json_contents['url']
+            title = json_contents.get('title')
     except Exception as e:
         raise InvalidArchive() from e
 
@@ -531,6 +532,12 @@ def upsert_archive(dt: str, archive_files: ArchiveFiles, session: Session):
         archive = Archive(url=url, domain_id=domain.id)
         session.add(archive)
         session.flush()
+
+    if not archive.title and title:
+        archive.title = title
+    if not archive.title and archive_files.singlefile:
+        # As a last resort, get the title from the HTML.
+        archive.title = get_title_from_html(archive_files.singlefile.read_text(), url)
 
     # Update the archive with the files that we have.
     archive.archive_datetime = dt

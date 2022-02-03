@@ -1,6 +1,6 @@
 import pytest
 
-from modules.otp.lib import format_message, encrypt_otp, decrypt_otp, generate_pdf
+from modules.otp import lib
 
 
 @pytest.mark.parametrize(
@@ -25,7 +25,7 @@ from modules.otp.lib import format_message, encrypt_otp, decrypt_otp, generate_p
     ],
 )
 def test_encrypt_otp(otp, plaintext, ciphertext):
-    result = encrypt_otp(otp, plaintext)
+    result = lib.encrypt_otp(otp, plaintext)
     expected = dict(
         otp=otp,
         plaintext=plaintext,
@@ -36,7 +36,7 @@ def test_encrypt_otp(otp, plaintext, ciphertext):
     # Whitespace is ignored
     plaintext = f'\t   {plaintext}'
     otp = f'\n {otp} '
-    result = encrypt_otp(otp, plaintext)
+    result = lib.encrypt_otp(otp, plaintext)
     expected = dict(
         otp=otp.strip(),
         plaintext=plaintext.strip(),
@@ -63,7 +63,7 @@ def test_encrypt_otp(otp, plaintext, ciphertext):
     ],
 )
 def test_decrypt_otp(otp, ciphertext, plaintext):
-    result = decrypt_otp(otp, ciphertext)
+    result = lib.decrypt_otp(otp, ciphertext)
     expected = dict(
         otp=otp,
         plaintext=plaintext,
@@ -92,7 +92,7 @@ def test_decrypt_otp(otp, ciphertext, plaintext):
     ]
 )
 def test_format_message(message, expected):
-    result = format_message(message)
+    result = lib.format_message(message)
     assert result == expected
 
 
@@ -100,4 +100,4 @@ def test_latex_pdf():
     """
     Generate a OTP PDF.
     """
-    assert generate_pdf()
+    assert lib.generate_pdf()

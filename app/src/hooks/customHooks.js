@@ -3,11 +3,14 @@ import {
     fetchDomains,
     filesSearch,
     getDevices,
+    getDownloaders,
     getFiles,
     getVersion,
+    killDownloads,
     searchArchives,
     searchVideos,
-    setHotspot
+    setHotspot,
+    startDownloads
 } from "../api";
 import {useHistory} from "react-router-dom";
 
@@ -205,9 +208,36 @@ export const useHotspot = () => {
 
     const localSetHotspot = async (on) => {
         setOn(null);
-        setHotspot(on);
-        fetchDevices();
+        await setHotspot(on);
+        await fetchDevices();
     }
 
     return {on, setOn, setHotspot: localSetHotspot};
+}
+
+export const useDownloaders = () => {
+    const [on, setOn] = useState(null);
+    const [downloaders, setDownloaders] = useState(null);
+
+    const fetchDownloaders = async () => {
+        let data = await getDownloaders();
+        setDownloaders(data['downloaders']);
+        setOn(!data['manager_disabled']);
+    }
+
+    useEffect(() => {
+        fetchDownloaders();
+    }, []);
+
+    const localSetDownloads = async (on) => {
+        setOn(null);
+        if (on) {
+            await startDownloads();
+        } else {
+            await killDownloads();
+        }
+        await fetchDownloaders();
+    }
+
+    return {on, setOn, downloaders, setDownloads: localSetDownloads};
 }

@@ -1,10 +1,11 @@
 import React, {useEffect, useState} from "react";
-import {Card, Container, Form, Icon, Image, Input, Menu, Pagination, Responsive} from 'semantic-ui-react';
+import {Card, Checkbox, Container, Form, Icon, Image, Input, Menu, Pagination, Responsive} from 'semantic-ui-react';
 import {Link, NavLink} from "react-router-dom";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {getConfig} from "../api";
+import {useDownloaders, useHotspot} from "../hooks/customHooks";
 
 export const API_URI = `http://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -642,4 +643,25 @@ export function CardGroupCentered(props) {
             </Responsive>
         </>
     )
+}
+
+export function HotspotToggle() {
+    let {on, setHotspot} = useHotspot();
+    return <Checkbox toggle
+                     label={on === null ?
+                         'Toggle the WiFi Hotspot.  Only supported on Raspberry Pi.' : 'Toggle WiFi Hotspot'}
+                     disabled={on === null}
+                     checked={on === true}
+                     onChange={(e, data) => setHotspot(data.checked)}
+    />;
+}
+
+export function DisableDownloadsToggle() {
+    let {on, setDownloads} = useDownloaders();
+    return <Checkbox toggle
+                     label={on ? 'Downloading Enabled' : 'Downloading Disabled'}
+                     disabled={on === null}
+                     checked={on === true}
+                     onChange={(e, data) => setDownloads(data.checked)}
+    />;
 }

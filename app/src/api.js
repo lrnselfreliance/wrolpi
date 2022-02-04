@@ -33,6 +33,11 @@ async function apiCall(url, method, body, ms = 10000) {
     try {
         // await the response or error.
         let response = await timeoutPromise(ms, promise);
+        if (200 <= response.status < 300) {
+            // Request was successful.
+            return response;
+        }
+        // Request encountered an error.
         let copy = response.clone();
         let code = (await copy.json())['code'];
         if (response.status === 403 && code === 17) {
@@ -360,17 +365,24 @@ export async function killDownload(download_id) {
 
 export async function killDownloads() {
     let response = await apiPost(`${API_URI}/download/kill`);
+    console.log('killDownloads', response);
     return response;
 }
 
 export async function startDownloads() {
     let response = await apiPost(`${API_URI}/download/enable`);
+    console.log('startDownloads', response);
     return response;
 }
 
 export async function getDownloaders() {
-    let response = await apiGet(`${API_URI}/downloaders`);
-    return await response.json();
+    try {
+        let response = await apiGet(`${API_URI}/downloaders`);
+        return await response.json();
+    } catch (e) {
+        console.log('getDownloaders', e);
+        return {};
+    }
 }
 
 const replaceFileDatetimes = (files) => {

@@ -14,8 +14,9 @@ from sanic.response import HTTPResponse
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
+from wrolpi import admin
 from wrolpi.common import set_sanic_url_parts, logger, get_config, wrol_mode_enabled, save_settings_config, \
-    Base, get_media_directory, wrol_mode_check
+    Base, get_media_directory, wrol_mode_check, native_only
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, InvalidTimezone, API_ERRORS, APIError, ValidationError
@@ -208,6 +209,35 @@ async def get_downloaders(_: Request):
     disabled = download_manager.disabled.is_set()
     ret = dict(downloaders=downloaders, manager_disabled=disabled)
     return json_response(ret)
+
+
+@root_api.get('/hotspot')
+@native_only
+@openapi.description('Get the status of the hotspot')
+async def hotspot(_: Request):
+    devices = admin.hotspot_status()
+    ret = dict(devices=devices)
+    return json_response(ret)
+
+
+@root_api.post('/hotspot/on')
+@openapi.description('Turn on the hotspot')
+@native_only
+async def hotspot_on(_: Request):
+    result = admin.hotspot_off()
+    if result:
+        return response.empty()
+    return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+@root_api.post('/hotspot/off')
+@openapi.description('Turn off the hotspot')
+@native_only
+async def hotspot_(_: Request):
+    result = admin.hotspot_off()
+    if result:
+        return response.empty()
+    return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
 
 
 class CustomJSONEncoder(json.JSONEncoder):

@@ -1,5 +1,14 @@
 import {useEffect, useState} from "react";
-import {fetchDomains, filesSearch, getFiles, getVersion, searchArchives, searchVideos} from "../api";
+import {
+    fetchDomains,
+    filesSearch,
+    getDevices,
+    getFiles,
+    getVersion,
+    searchArchives,
+    searchVideos,
+    setHotspot
+} from "../api";
 import {useHistory} from "react-router-dom";
 
 export const useSearchParam = (key, defaultValue = null) => {
@@ -177,4 +186,28 @@ export const useBrowseFiles = () => {
     }, [openFolders])
 
     return {browseFiles, openFolders, setOpenFolders, fetchFiles};
+}
+
+export const useHotspot = () => {
+    const [on, setOn] = useState(null);
+
+    const fetchDevices = async () => {
+        const devices = await getDevices();
+        if (devices && devices['wlan0']) {
+            let wlan0 = devices['wlan0'];
+            setOn(wlan0['connection'] === 'connected');
+        }
+    }
+
+    useEffect(() => {
+        fetchDevices();
+    });
+
+    const localSetHotspot = async (on) => {
+        setOn(null);
+        setHotspot(on);
+        fetchDevices();
+    }
+
+    return {on, setOn, setHotspot: localSetHotspot};
 }

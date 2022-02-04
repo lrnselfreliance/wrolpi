@@ -24,6 +24,22 @@ import {
 import TimezoneSelect from 'react-timezone-select';
 import {PageContainer, secondsToDate, secondsToFrequency, TabLinks, textEllipsis, WROLModeMessage} from "./Common";
 import {Route} from "react-router-dom";
+import {useHotspot} from "../hooks/customHooks";
+
+function HotspotToggle() {
+    let {on, setHotspot} = useHotspot();
+    return (
+        <>
+            <Checkbox toggle
+                      label='Toggle the WiFi Hotspot.  Only supported on Raspberry Pi.'
+                      disabled={on === null}
+                      defaultIndeterminate={on === null}
+                      checked={on === true}
+                      onChange={(e, data) => setHotspot(data.checked)}
+            />
+        </>
+    );
+}
 
 class Settings extends React.Component {
 
@@ -78,6 +94,12 @@ class Settings extends React.Component {
         return (
             <Container fluid>
                 <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
+
+                <p>
+                    <HotspotToggle/>
+                </p>
+
+                <Divider/>
                 <p>
                     The global settings for your server.
                 </p>

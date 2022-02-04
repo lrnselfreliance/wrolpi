@@ -437,16 +437,23 @@ export async function getVersion() {
     return data['version'];
 }
 
-export async function getDevices() {
+export async function getHotspotStatus() {
     let response = await apiGet(`${API_URI}/hotspot`);
     if (response.status === 200) {
-        let {devices} = await response.json();
-        return devices;
+        let {status} = await response.json();
+        return status;
     } else {
         let code = (await response.json())['code'];
         if (response.status === 400 && code === 34) {
             // Must not be running on a RPi.  Don't warn the user.
             return null;
+        } else {
+            toast({
+                type: 'error',
+                title: "Can't get Hotspot status",
+                description: 'Failed to get Hotspot status.  Check client and server logs.',
+                time: 5000,
+            });
         }
     }
     return null;
@@ -468,6 +475,13 @@ export async function setHotspot(on) {
                 type: 'error',
                 title: 'Unsupported!',
                 description: 'Hotspot is only supported on a Raspberry Pi!',
+                time: 5000,
+            });
+        } else {
+            toast({
+                type: 'error',
+                title: 'Error!',
+                description: 'Could not modify hotspot.  See server logs.',
                 time: 5000,
             });
         }

@@ -1,5 +1,5 @@
+import enum
 import pathlib
-import re
 import subprocess
 
 from wrolpi.common import logger
@@ -15,76 +15,53 @@ NMCLI_BIN = pathlib.Path('/usr/bin/nmcli')
 if not NMCLI_BIN.is_file() and not PYTEST:
     logger.error('COULD NOT FIND nmcli!!!')
 
-DEVICE_NAMES = ('wlan0', 'eth0')
 
-DEVICE_MATCH = re.compile(r'^(.+?): (connected|unavailable).*$')
-MAC_MATCH = re.compile(r'.+?(\w+?) \(.+?\), ([0-9A-F:]{17}).*')
-INET_MATCH = re.compile(r'.+?(inet[46]) ([a-f0-9\./:]+).*')
-
-
-def parse_nmcli_status(status: bytes) -> dict:
-    status = status.decode()
-
-    parsed = dict()
-    device = dict()
-    device_name = None
-    for line in status.splitlines():
-        if match := DEVICE_MATCH.match(line):
-            device_name, connection = match.groups()
-            if device_name not in DEVICE_NAMES:
-                # We don't care about this device.
-                device_name = None
-                continue
-            device['connection'] = connection
-        elif match := MAC_MATCH.match(line):
-            kind, mac = match.groups()
-            device['kind'] = kind
-            device['mac'] = mac
-        elif match := INET_MATCH.match(line):
-            net, ip = match.groups()
-            if net == 'inet4':
-                device[net] = ip
-            elif net in device:
-                device[net].append(ip)
-            else:
-                device[net] = [ip, ]
-        elif line == '' and device_name:
-            # Completed this device block
-            parsed[device_name] = device
-            device = dict()
-            device_name = None
-
-    return parsed
+class HotspotStatus(enum.Enum):
+    disconnected = enum.auto()  # Radio is on, but Hotspot is not connected.
+    unavailable = enum.auto()  # Radio is off.
+    connected = enum.auto()  # Radio is on, Hotspot is on.
 
 
-def hotspot_status():
+def hotspot_status() -> HotspotStatus:
     cmd = (NMCLI_BIN,)
-    output = subprocess.check_output(cmd, stderr=subprocess.PIPE, timeout=10)
+    output = subprocess.check_output(cmd).decode().strip()
 
-    parsed = parse_nmcli_status(output)
+    for line in output.splitlines():
+        if line.startswith('wlan0: connected'):
+            return HotspotStatus.connected
+        elif line.startswith('wlan0: disconnected'):
+            return HotspotStatus.disconnected
+        elif line.startswith('wlan0: unavailable'):
+            return HotspotStatus.unavailable
 
-    devices = dict()
-    for device_name, status in parsed.items():
-        devices[device_name] = dict(
-            kind=status.get('kind'),
-            inet4=status.get('inet4'),
-            inet6=status.get('inet6'),
-            connection=status.get('connection'),
-        )
-    return devices
+    raise Exception(f'Unknown status! {output=}')
 
 
-def hotspot_on():
-    cmd = (SUDO_BIN, NMCLI_BIN, 'radio', 'wifi', 'on')
-    code = subprocess.check_call(cmd)
-    if code == 0:
+def enable_hotspot():
+    """
+    Turn the wlan0 interface into a hotspot.  If wlan0 is already running, replace that with a hotspot.
+    """
+    status = hotspot_status()
+    logger.warning(f'Hotspot status: {status}')
+
+    if status == HotspotStatus.connected:
+        disable_hotspot()
+        return enable_hotspot()
+    elif status == HotspotStatus.disconnected:
+        # Radio is on, but not connected.  Good, turn it into a hotspot.
+        cmd = (SUDO_BIN, NMCLI_BIN, 'device', 'wifi', 'hotspot', 'ifname', 'wlan0',
+               'ssid', 'WROLPi', 'password', 'wrolpi hotspot')
+        subprocess.check_call(cmd)
         return True
-    return False
+    elif status == HotspotStatus.unavailable:
+        # Radio is not on, turn it on.
+        cmd = (SUDO_BIN, NMCLI_BIN, 'radio', 'wifi', 'on')
+        subprocess.check_call(cmd)
+        return enable_hotspot()
 
 
-def hotspot_off():
+def disable_hotspot():
+    """Turn off the wlan0 interface."""
     cmd = (SUDO_BIN, NMCLI_BIN, 'radio', 'wifi', 'off')
-    code = subprocess.check_call(cmd)
-    if code == 0:
-        return True
-    return False
+    subprocess.check_call(cmd)
+    return True

@@ -2,7 +2,7 @@ import {useEffect, useState} from "react";
 import {
     fetchDomains,
     filesSearch,
-    getDevices,
+    getHotspotStatus,
     getDownloaders,
     getFiles,
     getVersion,
@@ -194,22 +194,20 @@ export const useBrowseFiles = () => {
 export const useHotspot = () => {
     const [on, setOn] = useState(null);
 
-    const fetchDevices = async () => {
-        const devices = await getDevices();
-        if (devices && devices['wlan0']) {
-            let wlan0 = devices['wlan0'];
-            setOn(wlan0['connection'] === 'connected');
-        }
+    const fetchHotspotStatus = async () => {
+        const status = await getHotspotStatus();
+        // Wi-Fi can be: connected, disconnected, unavailable.
+        setOn(status === 'connected');
     }
 
     useEffect(() => {
-        fetchDevices();
-    });
+        fetchHotspotStatus();
+    }, []);
 
     const localSetHotspot = async (on) => {
         setOn(null);
         await setHotspot(on);
-        await fetchDevices();
+        await fetchHotspotStatus();
     }
 
     return {on, setOn, setHotspot: localSetHotspot};

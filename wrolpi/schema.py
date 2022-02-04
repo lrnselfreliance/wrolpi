@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 
 @dataclass
@@ -52,7 +52,7 @@ class EventsResponse:
 @dataclass
 class DownloadRequest:
     urls: str
-    downloader: str
+    downloader: Optional[str] = None
 
 
 @dataclass

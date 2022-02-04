@@ -2,9 +2,9 @@ import {useEffect, useState} from "react";
 import {
     fetchDomains,
     filesSearch,
-    getHotspotStatus,
     getDownloaders,
     getFiles,
+    getHotspotStatus,
     getVersion,
     killDownloads,
     searchArchives,
@@ -196,8 +196,16 @@ export const useHotspot = () => {
 
     const fetchHotspotStatus = async () => {
         const status = await getHotspotStatus();
-        // Wi-Fi can be: connected, disconnected, unavailable.
-        setOn(status === 'connected');
+        if (status === 'connected') {
+            // Hotspot is on.
+            setOn(true);
+        } else if (status === 'disconnected' || status === 'unavailable') {
+            // Hotspot can be turned on.
+            setOn(false);
+        } else {
+            // Hotspot is not supported.  API is probably running in a Docker container.
+            setOn(null);
+        }
     }
 
     useEffect(() => {

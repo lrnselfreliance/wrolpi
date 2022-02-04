@@ -648,8 +648,7 @@ export function CardGroupCentered(props) {
 export function HotspotToggle() {
     let {on, setHotspot} = useHotspot();
     return <Checkbox toggle
-                     label={on === null ?
-                         'Toggle the WiFi Hotspot.  Only supported on Raspberry Pi.' : 'Toggle WiFi Hotspot'}
+                     label='WiFi Hotspot'
                      disabled={on === null}
                      checked={on === true}
                      onChange={(e, data) => setHotspot(data.checked)}

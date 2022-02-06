@@ -140,6 +140,10 @@ class InvalidFile(APIError):
     pass
 
 
+class NativeOnly(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -307,5 +311,10 @@ API_ERRORS = {
         'code': next(error_codes),
         'message': 'File does not exist or is a directory',
         'status': HTTPStatus.BAD_REQUEST,
-    }
+    },
+    NativeOnly: {
+        'code': next(error_codes),
+        'message': 'This functionality is only supported outside a docker container',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
 }

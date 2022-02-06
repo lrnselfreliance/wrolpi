@@ -33,8 +33,14 @@ async function apiCall(url, method, body, ms = 10000) {
     try {
         // await the response or error.
         let response = await timeoutPromise(ms, promise);
+        if (200 <= response.status < 300) {
+            // Request was successful.
+            return response;
+        }
+        // Request encountered an error.
         let copy = response.clone();
-        if (response.status === 403 && (await copy.json())['code'] === 17) {
+        let code = (await copy.json())['code'];
+        if (response.status === 403 && code === 17) {
             toast({
                 type: 'error',
                 title: 'WROL Mode is enabled!',
@@ -359,17 +365,24 @@ export async function killDownload(download_id) {
 
 export async function killDownloads() {
     let response = await apiPost(`${API_URI}/download/kill`);
+    console.log('killDownloads', response);
     return response;
 }
 
 export async function startDownloads() {
     let response = await apiPost(`${API_URI}/download/enable`);
+    console.log('startDownloads', response);
     return response;
 }
 
 export async function getDownloaders() {
-    let response = await apiGet(`${API_URI}/downloaders`);
-    return await response.json();
+    try {
+        let response = await apiGet(`${API_URI}/downloaders`);
+        return await response.json();
+    } catch (e) {
+        console.log('getDownloaders', e);
+        return {};
+    }
 }
 
 const replaceFileDatetimes = (files) => {
@@ -422,4 +435,55 @@ export async function getVersion() {
     let response = await apiGet(`${API_URI}/settings`);
     let data = await response.json();
     return data['version'];
+}
+
+export async function getHotspotStatus() {
+    let response = await apiGet(`${API_URI}/hotspot`);
+    if (response.status === 200) {
+        let {status} = await response.json();
+        return status;
+    } else {
+        let code = (await response.json())['code'];
+        if (response.status === 400 && code === 34) {
+            // Must not be running on a RPi.  Don't warn the user.
+            return null;
+        } else {
+            toast({
+                type: 'error',
+                title: "Can't get Hotspot status",
+                description: 'Failed to get Hotspot status.  Check client and server logs.',
+                time: 5000,
+            });
+        }
+    }
+    return null;
+}
+
+export async function setHotspot(on) {
+    let response;
+    if (on) {
+        response = await apiPost(`${API_URI}/hotspot/on`);
+    } else {
+        response = await apiPost(`${API_URI}/hotspot/off`);
+    }
+    if (response.status === 204) {
+        return null;
+    } else {
+        let code = (await response.json())['code'];
+        if (code === 34) {
+            toast({
+                type: 'error',
+                title: 'Unsupported!',
+                description: 'Hotspot is only supported on a Raspberry Pi!',
+                time: 5000,
+            });
+        } else {
+            toast({
+                type: 'error',
+                title: 'Error!',
+                description: 'Could not modify hotspot.  See server logs.',
+                time: 5000,
+            });
+        }
+    }
 }

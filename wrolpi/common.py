@@ -27,8 +27,9 @@ from sqlalchemy import types
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
 
-from wrolpi.errors import WROLModeEnabled
-from wrolpi.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, PROJECT_DIR, PYTEST, MODULES_DIR
+from wrolpi.errors import WROLModeEnabled, NativeOnly
+from wrolpi.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, PROJECT_DIR, PYTEST, MODULES_DIR, \
+    DOCKERIZED
 
 logger = logging.getLogger()
 ch = logging.StreamHandler()
@@ -655,3 +656,14 @@ INVALID_FILE_CHARS = re.compile(r'[/<>:\|"\\\?\*]')
 def escape_file_name(name: str) -> str:
     """Replace any invalid characters in a file name with "_"."""
     return INVALID_FILE_CHARS.sub('', name)
+
+
+def native_only(func: callable):
+    """Wraps a function.  Raises NativeOnly if run while Dockerized."""
+    @wraps(func)
+    def wrapped(*a, **kw):
+        if DOCKERIZED:
+            raise NativeOnly('Only supported on a Raspberry Pi')
+        return func(*a, **kw)
+
+    return wrapped

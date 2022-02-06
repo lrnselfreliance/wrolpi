@@ -1,5 +1,17 @@
 import {useEffect, useState} from "react";
-import {fetchDomains, filesSearch, getFiles, getVersion, searchArchives, searchVideos} from "../api";
+import {
+    fetchDomains,
+    filesSearch,
+    getDownloaders,
+    getFiles,
+    getHotspotStatus,
+    getVersion,
+    killDownloads,
+    searchArchives,
+    searchVideos,
+    setHotspot,
+    startDownloads
+} from "../api";
 import {useHistory} from "react-router-dom";
 
 export const useSearchParam = (key, defaultValue = null) => {
@@ -177,4 +189,61 @@ export const useBrowseFiles = () => {
     }, [openFolders])
 
     return {browseFiles, openFolders, setOpenFolders, fetchFiles};
+}
+
+export const useHotspot = () => {
+    const [on, setOn] = useState(null);
+
+    const fetchHotspotStatus = async () => {
+        const status = await getHotspotStatus();
+        if (status === 'connected') {
+            // Hotspot is on.
+            setOn(true);
+        } else if (status === 'disconnected' || status === 'unavailable') {
+            // Hotspot can be turned on.
+            setOn(false);
+        } else {
+            // Hotspot is not supported.  API is probably running in a Docker container.
+            setOn(null);
+        }
+    }
+
+    useEffect(() => {
+        fetchHotspotStatus();
+    }, []);
+
+    const localSetHotspot = async (on) => {
+        setOn(null);
+        await setHotspot(on);
+        await fetchHotspotStatus();
+    }
+
+    return {on, setOn, setHotspot: localSetHotspot};
+}
+
+export const useDownloaders = () => {
+    const [on, setOn] = useState(null);
+    const [downloaders, setDownloaders] = useState(null);
+
+    const fetchDownloaders = async () => {
+        let data = await getDownloaders();
+        setDownloaders(data['downloaders']);
+        setOn(!data['manager_disabled']);
+    }
+
+    useEffect(() => {
+        fetchDownloaders();
+    }, []);
+
+    const localSetDownloads = async (on) => {
+        setOn(null);
+        if (on) {
+            await startDownloads();
+        } else {
+            await killDownloads();
+        }
+        await fetchDownloaders();
+    }
+
+    return {on, setOn, downloaders, setDownloads: localSetDownloads};
 }

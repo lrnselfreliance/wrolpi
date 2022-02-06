@@ -11,18 +11,18 @@ import {
     Placeholder,
     Table
 } from "semantic-ui-react";
-import {
-    getConfig,
-    getDownloaders,
-    getDownloads,
-    killDownload,
-    killDownloads,
-    postDownload,
-    saveConfig,
-    startDownloads
-} from "../api";
+import {getConfig, getDownloads, killDownload, postDownload, saveConfig} from "../api";
 import TimezoneSelect from 'react-timezone-select';
-import {PageContainer, secondsToDate, secondsToFrequency, TabLinks, textEllipsis, WROLModeMessage} from "./Common";
+import {
+    DisableDownloadsToggle,
+    HotspotToggle,
+    PageContainer,
+    secondsToDate,
+    secondsToFrequency,
+    TabLinks,
+    textEllipsis,
+    WROLModeMessage
+} from "./Common";
 import {Route} from "react-router-dom";
 
 class Settings extends React.Component {
@@ -78,6 +78,10 @@ class Settings extends React.Component {
         return (
             <Container fluid>
                 <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
+
+                <HotspotToggle/>
+
+                <Divider/>
                 <p>
                     The global settings for your server.
                 </p>
@@ -305,17 +309,6 @@ class Downloads extends React.Component {
 
     async componentDidMount() {
         await this.fetchDownloads();
-        await this.fetchStatus();
-    }
-
-    killDownloads = async () => {
-        await killDownloads();
-        this.setState({stopOpen: false}, this.fetchStatus);
-    }
-
-    startDownloads = async () => {
-        await startDownloads();
-        this.setState({stopOpen: false}, this.fetchStatus);
     }
 
     closeStop = () => {
@@ -333,11 +326,6 @@ class Downloads extends React.Component {
             recurring_downloads: data.recurring_downloads,
             pending_downloads: data.pending_downloads,
         });
-    }
-
-    fetchStatus = async () => {
-        let data = await getDownloaders();
-        this.setState({disabled: data['manager_disabled']});
     }
 
     render() {
@@ -378,7 +366,9 @@ class Downloads extends React.Component {
             onceTable = (<Table>
                 {stoppableHeader}
                 <Table.Body>
-                    {this.state.once_downloads.map((i) => <StoppableRow {...i} fetchDownloads={this.fetchDownloads}/>)}
+                    {this.state.once_downloads.map((i) =>
+                        <StoppableRow {...i} fetchDownloads={this.fetchDownloads} key={i.id}/>
+                    )}
                 </Table.Body>
             </Table>);
         }
@@ -390,46 +380,15 @@ class Downloads extends React.Component {
             recurringTable = (<Table>
                 {nonStoppableHeader}
                 <Table.Body>
-                    {this.state.recurring_downloads.map((i) => <DownloadRow {...i}/>)}
+                    {this.state.recurring_downloads.map((i) => <DownloadRow {...i} key={i.id}/>)}
                 </Table.Body>
             </Table>);
-        }
-
-        let {stopOpen} = this.state;
-        let allButton = (<>
-                <Button
-                    onClick={this.openStop}
-                    color='red'
-                >Disable Downloads</Button>
-                <Confirm
-                    open={stopOpen}
-                    content='Are you sure you want to stop all downloads?'
-                    confirmButton='Stop'
-                    onCancel={this.closeStop}
-                    onConfirm={this.killDownloads}
-                />
-            </>
-        );
-        if (this.state.disabled === true) {
-            allButton = (<>
-                <Button
-                    onClick={this.openStop}
-                    color='green'
-                >Enable Downloads</Button>
-                <Confirm
-                    open={stopOpen}
-                    content='Are you sure you want to start all downloads?'
-                    confirmButton='Start'
-                    onCancel={this.closeStop}
-                    onConfirm={this.startDownloads}
-                />
-            </>);
         }
 
         return (
             <div>
                 <WROLModeMessage content='Downloads are disabled because WROL Mode is enabled.'/>
-                {allButton}
+                <DisableDownloadsToggle/>
                 <Header as='h1'>Downloads</Header>
                 {onceTable}
 

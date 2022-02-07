@@ -84,6 +84,13 @@ cp /opt/wrolpi/50x.html /var/www/50x.html
 grep wrolpi /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
 chown -R wrolpi:wrolpi /opt/wrolpi
 
+# Give WROLPi user a few privileged commands via sudo without password.
+cat > /etc/sudoers.d/90-wrolpi << 'EOF'
+%wrolpi ALL=(ALL) NOPASSWD:/usr/bin/nmcli,/usr/bin/cpufreq-set
+EOF
+# Verify this new file is valid.
+visudo -c -f /etc/sudoers.d/90-wrolpi
+
 # Create the media directory.  This should be mounted by the maintainer.
 [ -d /media/wrolpi ] || mkdir /media/wrolpi
 chown -R wrolpi:wrolpi /media/wrolpi

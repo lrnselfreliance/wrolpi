@@ -88,6 +88,7 @@ chown -R wrolpi:wrolpi /opt/wrolpi
 cat > /etc/sudoers.d/90-wrolpi << 'EOF'
 %wrolpi ALL=(ALL) NOPASSWD:/usr/bin/nmcli,/usr/bin/cpufreq-set
 EOF
+chmod 660 /etc/sudoers.d/90-wrolpi
 # Verify this new file is valid.
 visudo -c -f /etc/sudoers.d/90-wrolpi
 

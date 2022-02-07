@@ -52,7 +52,6 @@ def channel_post(_: Request, body: schema.ChannelPostRequest):
     bd_edit = body.__dict__
     bd_edit['name'] = bd_edit['name'].strip()
     channel = lib.create_channel(bd_edit)  # TODO don't use the dataclass as a dict.
-    print(channel)
 
     # Refresh the videos asynchronously
     from ..api import refresh_videos

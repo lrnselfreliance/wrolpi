@@ -114,11 +114,8 @@ sudo -u postgres psql -c '\l' | grep wrolpi || (
     sudo -u postgres psql -c "alter user wrolpi password 'wrolpi'" &&
     sudo -u postgres createdb -O wrolpi wrolpi
 )
-# Init/upgrade the WROLPi database.
+# Initialize/upgrade the WROLPi database.
 (cd /opt/wrolpi && /usr/bin/python3 /opt/wrolpi/main.py db upgrade)
-
-# Configure the hotspot.
-bash /opt/wrolpi/scripts/hotspot.sh
 
 set +x
 

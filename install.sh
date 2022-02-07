@@ -84,7 +84,7 @@ cp /opt/wrolpi/50x.html /var/www/50x.html
 grep wrolpi /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
 chown -R wrolpi:wrolpi /opt/wrolpi
 
-# Give WROLPi user a few privileged commands via sudo without password.
+# Give WROLPi group a few privileged commands via sudo without password.
 cat > /etc/sudoers.d/90-wrolpi << 'EOF'
 %wrolpi ALL=(ALL) NOPASSWD:/usr/bin/nmcli,/usr/bin/cpufreq-set
 EOF

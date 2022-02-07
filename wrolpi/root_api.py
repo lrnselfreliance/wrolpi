@@ -15,7 +15,6 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi import admin
-from wrolpi.admin import HotspotStatus
 from wrolpi.common import set_sanic_url_parts, logger, get_config, wrol_mode_enabled, save_settings_config, \
     Base, get_media_directory, wrol_mode_check, native_only
 from wrolpi.dates import set_timezone
@@ -239,6 +238,38 @@ async def hotspot_on(_: Request):
 @native_only
 async def hotspot_off(_: Request):
     result = admin.disable_hotspot()
+    if result:
+        return response.empty()
+    return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+@root_api.get('/throttle')
+@openapi.description('Get status of CPU throttling')
+@native_only
+async def throttle_status(_: Request):
+    status = admin.throttle_status()
+    # Get the name of the enum.
+    status = status.name
+
+    ret = dict(status=status)
+    return json_response(ret)
+
+
+@root_api.post('/throttle/on')
+@openapi.description('Turn on CPU throttling')
+@native_only
+async def throttle_on(_: Request):
+    result = admin.throttle_cpu_on()
+    if result:
+        return response.empty()
+    return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+@root_api.post('/throttle/off')
+@openapi.description('Turn off CPU throttling')
+@native_only
+async def throttle_off(_: Request):
+    result = admin.throttle_cpu_off()
     if result:
         return response.empty()
     return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)

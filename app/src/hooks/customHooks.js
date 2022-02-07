@@ -5,11 +5,13 @@ import {
     getDownloaders,
     getFiles,
     getHotspotStatus,
+    getThrottleStatus,
     getVersion,
     killDownloads,
     searchArchives,
     searchVideos,
     setHotspot,
+    setThrottle,
     startDownloads
 } from "../api";
 import {useHistory} from "react-router-dom";
@@ -246,4 +248,31 @@ export const useDownloaders = () => {
     }
 
     return {on, setOn, downloaders, setDownloads: localSetDownloads};
+}
+
+export const useThrottle = () => {
+    const [on, setOn] = useState(null);
+
+    const fetchThrottleStatus = async () => {
+        const status = await getThrottleStatus();
+        if (status === 'powersave') {
+            setOn(true);
+        } else if (status === 'ondemand') {
+            setOn(false);
+        } else {
+            setOn(null);
+        }
+    }
+
+    useEffect(() => {
+        fetchThrottleStatus();
+    }, []);
+
+    const localSetThrottle = async (on) => {
+        setOn(null);
+        await setThrottle(on);
+        await fetchThrottleStatus();
+    }
+
+    return {on, setOn, setThrottle: localSetThrottle};
 }

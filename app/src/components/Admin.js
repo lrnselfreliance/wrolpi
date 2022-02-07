@@ -21,6 +21,7 @@ import {
     secondsToFrequency,
     TabLinks,
     textEllipsis,
+    ThrottleToggle,
     WROLModeMessage
 } from "./Common";
 import {Route} from "react-router-dom";
@@ -80,6 +81,8 @@ class Settings extends React.Component {
                 <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
 
                 <HotspotToggle/>
+                <br/>
+                <ThrottleToggle style={{marginTop: '0.5em'}}/>
 
                 <Divider/>
                 <p>

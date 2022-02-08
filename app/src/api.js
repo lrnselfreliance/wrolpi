@@ -487,3 +487,54 @@ export async function setHotspot(on) {
         }
     }
 }
+
+export async function getThrottleStatus() {
+    let response = await apiGet(`${API_URI}/throttle`);
+    if (response.status === 200) {
+        let {status} = await response.json();
+        return status;
+    } else {
+        let code = (await response.json())['code'];
+        if (response.status === 400 && code === 34) {
+            // Must not be running on a RPi.  Don't warn the user.
+            return null;
+        } else {
+            toast({
+                type: 'error',
+                title: "Can't get throttle status",
+                description: 'Failed to get CPU Throttle status.  Check client and server logs.',
+                time: 5000,
+            });
+        }
+    }
+    return null;
+}
+
+export async function setThrottle(on) {
+    let response;
+    if (on) {
+        response = await apiPost(`${API_URI}/throttle/on`);
+    } else {
+        response = await apiPost(`${API_URI}/throttle/off`);
+    }
+    if (response.status === 204) {
+        return null;
+    } else {
+        let code = (await response.json())['code'];
+        if (code === 34) {
+            toast({
+                type: 'error',
+                title: 'Unsupported!',
+                description: 'Throttle is only supported on a Raspberry Pi!',
+                time: 5000,
+            });
+        } else {
+            toast({
+                type: 'error',
+                title: 'Error!',
+                description: 'Could not modify throttle.  See server logs.',
+                time: 5000,
+            });
+        }
+    }
+}

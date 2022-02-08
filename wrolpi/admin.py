@@ -3,7 +3,7 @@ import pathlib
 import subprocess
 
 from wrolpi.common import logger
-from wrolpi.vars import PYTEST
+from wrolpi.vars import PYTEST, DEFAULT_CPU_FREQUENCY
 
 logger = logger.getChild(__name__)
 
@@ -11,9 +11,20 @@ logger = logger.getChild(__name__)
 SUDO_BIN = pathlib.Path('/usr/bin/sudo')
 if not SUDO_BIN.is_file() and not PYTEST:
     logger.error('COULD NOT FIND sudo!!!')
+
 NMCLI_BIN = pathlib.Path('/usr/bin/nmcli')
 if not NMCLI_BIN.is_file() and not PYTEST:
     logger.error('COULD NOT FIND nmcli!!!')
+
+CPUFREQ_INFO_BIN = pathlib.Path('/usr/bin/cpufreq-info')
+if not CPUFREQ_INFO_BIN.is_file() and not PYTEST:
+    logger.error('COULD NOT FIND cpufreq-info!!!')
+
+CPUFREQ_SET_BIN = pathlib.Path('/usr/bin/cpufreq-set')
+if not CPUFREQ_SET_BIN.is_file() and not PYTEST:
+    logger.error('COULD NOT FIND cpufreq-set!!!')
+
+POWER_SAVE_FREQ = 'powersave'  # noqa
 
 
 class HotspotStatus(enum.Enum):
@@ -63,5 +74,47 @@ def enable_hotspot():
 def disable_hotspot():
     """Turn off the wlan0 interface."""
     cmd = (SUDO_BIN, NMCLI_BIN, 'radio', 'wifi', 'off')
+    subprocess.check_call(cmd)
+    return True
+
+
+class GovernorStatus(enum.Enum):
+    ondemand = enum.auto()
+    powersave = enum.auto()
+    unknown = enum.auto()
+    # These are unused by WROLPi.
+    # performance = enum.auto()
+    # schedutil = enum.auto()
+    # userspace = enum.auto()
+    # conservative = enum.auto()
+
+
+GOVERNOR_MAP = {
+    'The governor "ondemand" may decide ': GovernorStatus.ondemand,
+    'The governor "powersave" may decide ': GovernorStatus.powersave,
+}
+
+
+def throttle_status() -> GovernorStatus:
+    cmd = (CPUFREQ_INFO_BIN,)
+    output = subprocess.check_output(cmd)
+    output = output.decode().strip()
+
+    for line in output.splitlines():
+        for governor, status in GOVERNOR_MAP.items():
+            if governor in line:
+                return status
+
+    return GovernorStatus.unknown
+
+
+def throttle_cpu_on() -> bool:
+    cmd = (SUDO_BIN, CPUFREQ_SET_BIN, '-g', POWER_SAVE_FREQ)
+    subprocess.check_call(cmd)
+    return True
+
+
+def throttle_cpu_off() -> bool:
+    cmd = (SUDO_BIN, CPUFREQ_SET_BIN, '-g', DEFAULT_CPU_FREQUENCY)
     subprocess.check_call(cmd)
     return True

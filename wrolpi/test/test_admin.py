@@ -61,3 +61,19 @@ def test_enable_hotspot_connected():
                 call((PosixPath('/usr/bin/sudo'), PosixPath('/usr/bin/nmcli'), 'device', 'wifi', 'hotspot', 'ifname',
                       'wlan0', 'ssid', 'WROLPi', 'password', 'wrolpi hotspot'))]
         )
+
+
+def test_throttle_on():
+    with mock.patch('wrolpi.admin.subprocess') as mock_subprocess:
+        assert admin.throttle_cpu_on()
+        mock_subprocess.check_call.assert_called_once_with(
+            (PosixPath('/usr/bin/sudo'), PosixPath('/usr/bin/cpufreq-set'), '-g', 'powersave')
+        )
+
+
+def test_throttle_off():
+    with mock.patch('wrolpi.admin.subprocess') as mock_subprocess:
+        assert admin.throttle_cpu_off()
+        mock_subprocess.check_call.assert_called_once_with(
+            (PosixPath('/usr/bin/sudo'), PosixPath('/usr/bin/cpufreq-set'), '-g', 'ondemand')
+        )

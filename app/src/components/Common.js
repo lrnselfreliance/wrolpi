@@ -5,7 +5,7 @@ import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {getConfig} from "../api";
-import {useDownloaders, useHotspot} from "../hooks/customHooks";
+import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
 
 export const API_URI = `http://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -645,13 +645,23 @@ export function CardGroupCentered(props) {
     )
 }
 
-export function HotspotToggle() {
+export function HotspotToggle(props) {
     let {on, setHotspot} = useHotspot();
-    return <Checkbox toggle
+    return <Checkbox toggle {...props}
                      label='WiFi Hotspot'
                      disabled={on === null}
                      checked={on === true}
                      onChange={(e, data) => setHotspot(data.checked)}
+    />;
+}
+
+export function ThrottleToggle(props) {
+    let {on, setThrottle} = useThrottle();
+    return <Checkbox toggle {...props}
+                     label='CPU Power-save'
+                     disabled={on === null}
+                     checked={on === true}
+                     onChange={(e, data) => setThrottle(data.checked)}
     />;
 }
 

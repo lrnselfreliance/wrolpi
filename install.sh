@@ -84,6 +84,14 @@ cp /opt/wrolpi/50x.html /var/www/50x.html
 grep wrolpi /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
 chown -R wrolpi:wrolpi /opt/wrolpi
 
+# Give WROLPi group a few privileged commands via sudo without password.
+cat > /etc/sudoers.d/90-wrolpi << 'EOF'
+%wrolpi ALL=(ALL) NOPASSWD:/usr/bin/nmcli,/usr/bin/cpufreq-set
+EOF
+chmod 660 /etc/sudoers.d/90-wrolpi
+# Verify this new file is valid.
+visudo -c -f /etc/sudoers.d/90-wrolpi
+
 # Create the media directory.  This should be mounted by the maintainer.
 [ -d /media/wrolpi ] || mkdir /media/wrolpi
 chown -R wrolpi:wrolpi /media/wrolpi
@@ -106,11 +114,8 @@ sudo -u postgres psql -c '\l' | grep wrolpi || (
     sudo -u postgres psql -c "alter user wrolpi password 'wrolpi'" &&
     sudo -u postgres createdb -O wrolpi wrolpi
 )
-# Init/upgrade the WROLPi database.
+# Initialize/upgrade the WROLPi database.
 (cd /opt/wrolpi && /usr/bin/python3 /opt/wrolpi/main.py db upgrade)
-
-# Configure the hotspot.
-bash /opt/wrolpi/scripts/hotspot.sh
 
 set +x
 

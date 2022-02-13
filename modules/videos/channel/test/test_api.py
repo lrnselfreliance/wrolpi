@@ -50,7 +50,7 @@ class TestVideoAPI(TestAPI):
         new_channel = dict(
             directory=channel_directory,
             match_regex='asdf',
-            name='Example Channel 1',
+            name='   Example Channel 1  ',
             url='https://example.com/channel1',
         )
 
@@ -66,6 +66,9 @@ class TestVideoAPI(TestAPI):
         created = response.json['channel']
         self.assertIsNotNone(created)
         self.assertIsNotNone(created['id'])
+
+        # Channel name leading/trailing whitespace should be stripped
+        assert created['name'] == 'Example Channel 1'
 
         # Channel directory should be relative to the media directory
         assert not pathlib.Path(created['directory']).is_absolute(), \

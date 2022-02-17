@@ -375,13 +375,11 @@ export async function killDownload(download_id) {
 
 export async function killDownloads() {
     let response = await apiPost(`${API_URI}/download/kill`);
-    console.log('killDownloads', response);
     return response;
 }
 
 export async function startDownloads() {
     let response = await apiPost(`${API_URI}/download/enable`);
-    console.log('startDownloads', response);
     return response;
 }
 

@@ -67,7 +67,6 @@ class Settings extends React.Component {
             throttle_on_startup: this.state.throttle_on_startup,
             timezone: this.state.timezone.value,
         }
-        console.log(settings);
         await saveSettings(settings);
     }
 

@@ -72,7 +72,7 @@ def channel_post(_: Request, body: schema.ChannelPostRequest):
 @validate(schema.ChannelPutRequest)
 @wrol_mode_check
 def channel_update(_: Request, link: str, body: schema.ChannelPutRequest):
-    channel = lib.update_channel(body.__dict__, link)  # TODO don't use the dataclass as a dict.
+    channel = lib.update_channel(body.__dict__, link)
     return response.raw('', HTTPStatus.NO_CONTENT,
                         headers={'Location': f'/api/videos/channels/{channel.link}'})
 

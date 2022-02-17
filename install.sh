@@ -47,7 +47,8 @@ curl -fsSL https://deb.nodesource.com/setup_14.x | bash -
 # Install dependencies
 apt install -y git apt-transport-https ca-certificates curl gnupg-agent gcc libpq-dev software-properties-common \
   postgresql-12 nginx-full nginx-doc python3.8-minimal python3.8-dev python3.8-doc python3.8-venv \
-  ffmpeg hostapd nodejs yarn texlive-latex-base texlive-latex-extra chromium-browser chromium-chromedriver
+  ffmpeg hostapd nodejs yarn texlive-latex-base texlive-latex-extra chromium-browser chromium-chromedriver \
+  cpufrequtils network-manager
 
 # Install Archiving tools.
 npm install -g "gildas-lormeau/SingleFile#master"
@@ -94,7 +95,7 @@ visudo -c -f /etc/sudoers.d/90-wrolpi
 
 # Create the media directory.  This should be mounted by the maintainer.
 [ -d /media/wrolpi ] || mkdir /media/wrolpi
-chown -R wrolpi:wrolpi /media/wrolpi
+chown wrolpi:wrolpi /media/wrolpi
 
 # Install the systemd services
 cp /opt/wrolpi/systemd/wrolpi-api.service /etc/systemd/system/

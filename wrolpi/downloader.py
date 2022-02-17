@@ -444,9 +444,7 @@ class DownloadManager:
 
     @optional_session
     def get_recurring_downloads(self, session: Session = None, limit: int = None):
-        """
-        Get all Downloads that will be downloaded in the future.
-        """
+        """Get all Downloads that will be downloaded in the future."""
         query = session.query(Download).filter(
             Download.frequency != None  # noqa
         ).order_by(
@@ -461,9 +459,7 @@ class DownloadManager:
 
     @optional_session
     def get_once_downloads(self, session: Session = None, limit: int = None):
-        """
-        Get all Downloads that will not reoccur.
-        """
+        """Get all Downloads that will not reoccur."""
         query = session.query(Download).filter(
             Download.frequency == None  # noqa
         ).order_by(

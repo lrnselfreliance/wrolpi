@@ -7,91 +7,50 @@ from decimal import Decimal
 
 import pytest
 
-from wrolpi.common import combine_dicts, insert_parameter, date_range, api_param_limiter, chdir, zig_zag, \
+from wrolpi.common import insert_parameter, date_range, api_param_limiter, chdir, zig_zag, \
     escape_file_name
 from wrolpi.dates import set_timezone, now
 from wrolpi.errors import InvalidTimezone
-from wrolpi.test.common import build_test_directories, wrap_media_directory
+from wrolpi.test.common import build_test_directories
 
 
-@pytest.mark.parametrize(
-    'data,expected',
-    (
-            (
-                    [dict()],
-                    dict()
-            ), (
-                    [dict(a='b')],
-                    dict(a='b')
-            ), (
-                    [dict(a='b'), dict(b='c')],
-                    dict(a='b', b='c')
-            ), (
-                    [dict(b='c'), dict(a='b')],
-                    dict(a='b', b='c'),
-            ), (
-                    [dict(a=dict(b='c'), d='e'), dict(a=(dict(f='g')))],
-                    dict(a=dict(b='c', f='g'), d='e'),
-            ), (
-                    [dict(a=dict(b='c'), d='e'), dict(a=(dict(b='g')))],
-                    dict(a=dict(b='c'), d='e'),
-            ), (
-                    [dict(a=dict(b='c'), d=[1, 2, 3]), dict(a=(dict(b='g')))],
-                    dict(a=dict(b='c'), d=[1, 2, 3]),
-            ), (
-                    [dict(a='b', c=dict(d='e')), dict(a='c', e='f')],
-                    dict(a='b', c=dict(d='e'), e='f')
-            ), (
-                    [dict(a='b'), dict(a='c', d='e'), dict(e='f', a='d')],
-                    dict(a='b', d='e', e='f')
-            ), (
-                    [dict(a='b'), dict(), dict(e='f', a='d')],
-                    dict(a='b', e='f')
-            )
-    )
-)
-def test_combine_dicts(data, expected):
-    assert combine_dicts(*data) == expected
+def test_build_video_directories(test_directory):
+    structure = [
+        'channel1/vid1.mp4',
+    ]
+    with build_test_directories(structure) as tempdir:
+        assert (tempdir / 'channel1').is_dir()
+        assert (tempdir / 'channel1/vid1.mp4').is_file()
 
+    structure = [
+        'channel2/',
+        'channel2.1/channel2.2/',
+    ]
+    with build_test_directories(structure) as tempdir:
+        assert (tempdir / 'channel2').is_dir()
+        assert (tempdir / 'channel2.1/channel2.2').is_dir()
 
-def test_build_video_directories():
-    with wrap_media_directory():
-        structure = [
-            'channel1/vid1.mp4',
-        ]
-        with build_test_directories(structure) as tempdir:
-            assert (tempdir / 'channel1').is_dir()
-            assert (tempdir / 'channel1/vid1.mp4').is_file()
+    structure = [
+        'channel3/vid1.mp4',
+        'channel3/vid2.mp4',
+        'channel4/vid1.mp4',
+        'channel4/vid1.en.vtt',
+        'channel5/',
+    ]
+    with build_test_directories(structure) as tempdir:
+        assert (tempdir / 'channel3/vid1.mp4').is_file()
+        assert (tempdir / 'channel3').is_dir()
+        assert (tempdir / 'channel3/vid2.mp4').is_file()
+        assert (tempdir / 'channel4/vid1.mp4').is_file()
+        assert (tempdir / 'channel4/vid1.en.vtt').is_file()
+        assert (tempdir / 'channel5').is_dir()
 
-        structure = [
-            'channel2/',
-            'channel2.1/channel2.2/',
-        ]
-        with build_test_directories(structure) as tempdir:
-            assert (tempdir / 'channel2').is_dir()
-            assert (tempdir / 'channel2.1/channel2.2').is_dir()
-
-        structure = [
-            'channel3/vid1.mp4',
-            'channel3/vid2.mp4',
-            'channel4/vid1.mp4',
-            'channel4/vid1.en.vtt',
-            'channel5/',
-        ]
-        with build_test_directories(structure) as tempdir:
-            assert (tempdir / 'channel3/vid1.mp4').is_file()
-            assert (tempdir / 'channel3').is_dir()
-            assert (tempdir / 'channel3/vid2.mp4').is_file()
-            assert (tempdir / 'channel4/vid1.mp4').is_file()
-            assert (tempdir / 'channel4/vid1.en.vtt').is_file()
-            assert (tempdir / 'channel5').is_dir()
-
-        structure = [
-            'channel6/subdirectory/vid1.mp4',
-        ]
-        with build_test_directories(structure) as tempdir:
-            assert (tempdir / 'channel6/subdirectory').is_dir()
-            assert (tempdir / 'channel6/subdirectory/vid1.mp4').is_file()
+    structure = [
+        'channel6/subdirectory/vid1.mp4',
+    ]
+    with build_test_directories(structure) as tempdir:
+        assert (tempdir / 'channel6/subdirectory').is_dir()
+        assert (tempdir / 'channel6/subdirectory/vid1.mp4').is_file()
 
 
 def test_insert_parameter():

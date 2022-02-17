@@ -8,6 +8,7 @@ import pytest
 from PIL import Image
 
 from modules.videos.downloader import VideoDownloader, ChannelDownloader
+from modules.videos.lib import set_test_channels_config, set_test_downloader_config
 from modules.videos.models import Channel, Video
 from wrolpi.common import sanitize_link
 from wrolpi.downloader import DownloadFrequency, DownloadManager, Download
@@ -152,3 +153,21 @@ def video_download_manager(test_download_manager) -> DownloadManager:
     with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:  # prevent real downloads
         mock_extract_info.side_effect = Exception('You must patch modules.videos.downloader.YDL.extract_info!')
         yield test_download_manager
+
+
+@pytest.fixture
+def test_channels_config(test_directory):
+    (test_directory / 'config').mkdir(exist_ok=True)
+    config_path = test_directory / 'config/channels.yaml'
+    set_test_channels_config(True)
+    yield config_path
+    set_test_channels_config(False)
+
+
+@pytest.fixture
+def test_downloader_config(test_directory):
+    (test_directory / 'config').mkdir(exist_ok=True)
+    config_path = test_directory / 'config/downloader.yaml'
+    set_test_downloader_config(True)
+    yield config_path
+    set_test_downloader_config(False)

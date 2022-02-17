@@ -8,8 +8,7 @@ from uuid import uuid1
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Session
 
-from wrolpi.common import logger, chunks, get_config
-from wrolpi.common import save_settings_config
+from wrolpi.common import logger, chunks, ConfigFile, WROLPiConfig
 from wrolpi.dates import from_timestamp, Seconds
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.media_path import MediaPath
@@ -289,10 +288,186 @@ def refresh_videos(channel_links: list = None):
     logger.info('Refresh of video files complete')
 
 
-def get_channels_config(session: Session) -> dict:
-    """
-    Create a dictionary that contains all the Channels from the DB.
-    """
+class ChannelsConfig(ConfigFile):
+    file_name = 'channels.yaml'
+    default_config = dict(
+        channels={
+            'wrolpi': dict(
+                name='WROLPi',
+                url='https://www.youtube.com/channel/UC4t8bw1besFTyjW7ZBCOIrw/videos',
+                directory='videos/wrolpi',
+                download_frequency=604800,
+            )
+        },
+        favorites=dict(),
+    )
+
+    @property
+    def channels(self) -> dict:
+        return self._config['channels']
+
+    @channels.setter
+    def channels(self, value: dict):
+        self.update({'channels': value})
+
+    @property
+    def favorites(self) -> dict:
+        return self._config['favorites']
+
+    @favorites.setter
+    def favorites(self, value: dict):
+        self.update({'favorites': value})
+
+
+CHANNELS_CONFIG: ChannelsConfig = ChannelsConfig(global_=True)
+TEST_CHANNELS_CONFIG: ChannelsConfig = None
+
+
+def get_channels_config():
+    global TEST_CHANNELS_CONFIG
+    if isinstance(TEST_CHANNELS_CONFIG, ConfigFile):
+        return TEST_CHANNELS_CONFIG
+
+    global CHANNELS_CONFIG
+    return CHANNELS_CONFIG
+
+
+def set_test_channels_config(enable: bool):
+    global TEST_CHANNELS_CONFIG
+    if enable is True:
+        TEST_CHANNELS_CONFIG = ChannelsConfig()
+    else:
+        TEST_CHANNELS_CONFIG = None
+
+
+class DownloaderConfig(ConfigFile):
+    file_name = 'downloader.yaml'
+    default_config = dict(
+        continue_dl=True,
+        dateafter='19900101',
+        file_name_format='%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s',
+        format='22 / 135 / 18 / 43',
+        nooverwrites=True,
+        quiet=False,
+        writeautomaticsub=True,
+        writeinfojson=True,
+        writesubtitles=True,
+        writethumbnail=True,
+        youtube_include_dash_manifest=False,
+    )
+
+    @property
+    def continue_dl(self) -> bool:
+        return self._config['continue_dl']
+
+    @continue_dl.setter
+    def continue_dl(self, value: bool):
+        self.update({'continue_dl': value})
+
+    @property
+    def dateafter(self) -> str:
+        return self._config['dateafter']
+
+    @dateafter.setter
+    def dateafter(self, value: str):
+        self.update({'dateafter': value})
+
+    @property
+    def file_name_format(self) -> str:
+        return self._config['file_name_format']
+
+    @file_name_format.setter
+    def file_name_format(self, value: str):
+        self.update({'file_name_format': value})
+
+    @property
+    def format(self) -> str:
+        return self._config['format']
+
+    @format.setter
+    def format(self, value: str):
+        self.update({'format': value})
+
+    @property
+    def nooverwrites(self) -> bool:
+        return self._config['nooverwrites']
+
+    @nooverwrites.setter
+    def nooverwrites(self, value: bool):
+        self.update({'nooverwrites': value})
+
+    @property
+    def quiet(self) -> bool:
+        return self._config['quiet']
+
+    @quiet.setter
+    def quiet(self, value: bool):
+        self.update({'quiet': value})
+
+    @property
+    def writeautomaticsub(self) -> bool:
+        return self._config['writeautomaticsub']
+
+    @writeautomaticsub.setter
+    def writeautomaticsub(self, value: bool):
+        self.update({'writeautomaticsub': value})
+
+    @property
+    def writeinfojson(self) -> bool:
+        return self._config['writeinfojson']
+
+    @writeinfojson.setter
+    def writeinfojson(self, value: bool):
+        self.update({'writeinfojson': value})
+
+    @property
+    def writesubtitles(self) -> bool:
+        return self._config['writesubtitles']
+
+    @writesubtitles.setter
+    def writesubtitles(self, value: bool):
+        self.update({'writesubtitles': value})
+
+    @property
+    def writethumbnail(self) -> bool:
+        return self._config['writethumbnail']
+
+    @writethumbnail.setter
+    def writethumbnail(self, value: bool):
+        self.update({'writethumbnail': value})
+
+    @property
+    def youtube_include_dash_manifest(self) -> bool:
+        return self._config['youtube_include_dash_manifest']
+
+    @youtube_include_dash_manifest.setter
+    def youtube_include_dash_manifest(self, value: bool):
+        self.update({'youtube_include_dash_manifest': value})
+
+
+DOWNLOADER_CONFIG: DownloaderConfig = DownloaderConfig(global_=True)
+TEST_DOWNLOADER_CONFIG: DownloaderConfig = None
+
+
+def get_downloader_config():
+    global TEST_DOWNLOADER_CONFIG
+    if isinstance(TEST_DOWNLOADER_CONFIG, DownloaderConfig):
+        return TEST_DOWNLOADER_CONFIG
+
+    global DOWNLOADER_CONFIG
+    return DOWNLOADER_CONFIG
+
+
+def set_test_downloader_config(enabled: bool):
+    global TEST_DOWNLOADER_CONFIG
+    if enabled:
+        TEST_DOWNLOADER_CONFIG = DownloaderConfig()
+    else:
+        TEST_DOWNLOADER_CONFIG = None
+
+
+def get_channels_config_from_db(session: Session) -> dict:
+    """Create a dictionary that contains all the Channels from the DB."""
     channels = session.query(Channel).order_by(Channel.link).all()
     channels = {i.link: i.config_view() for i in channels}
 
@@ -315,10 +490,11 @@ def save_channels_config(session=None, preserve_favorites: bool = True):
     """
     Pull the Channel information from the DB, save it to the config.
     """
-    config = get_channels_config(session)
+    config = get_channels_config_from_db(session)
+    channels_config = get_channels_config()
     if preserve_favorites:
-        config['favorites'].update(get_config().get('favorites', {}))
-    save_settings_config(config)
+        config['favorites'].update(channels_config.favorites or {})
+    channels_config.update(config)
 
 
 async def get_statistics():

@@ -12,11 +12,11 @@ from wrolpi.common import create_websocket_feed, get_sanic_url, \
 from wrolpi.common import logger
 from wrolpi.root_api import add_blueprint, json_response
 from wrolpi.schema import JSONErrorResponse
+from . import lib, schema
 from .channel import lib as channel_lib
 from .channel.api import channel_bp
 from .video import lib as video_lib
 from .video.api import video_bp
-from . import lib, schema
 
 content_bp = Blueprint('VideoContent', '/api/videos')
 bp = Blueprint('Videos', '/api/videos').group(

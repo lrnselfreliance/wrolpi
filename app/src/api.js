@@ -1,4 +1,12 @@
-import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, OTP_API, secondsToDateTime, VIDEOS_API} from "./components/Common";
+import {
+    API_URI,
+    ARCHIVES_API,
+    DEFAULT_LIMIT,
+    emptyToNull,
+    OTP_API,
+    secondsToDateTime,
+    VIDEOS_API
+} from "./components/Common";
 import {toast} from 'react-semantic-toasts';
 
 function timeoutPromise(ms, promise) {
@@ -87,12 +95,13 @@ let apiPatch = async (url, body) => {
     return await apiCall(url, 'PATCH', body)
 };
 
-
 export async function updateChannel(link, channel) {
+    channel = emptyToNull(channel);
     return await apiPut(`${VIDEOS_API}/channels/${link}`, channel);
 }
 
 export async function createChannel(channel) {
+    channel = emptyToNull(channel);
     return await apiPost(`${VIDEOS_API}/channels`, channel);
 }
 
@@ -160,14 +169,13 @@ export async function getDirectories(search_str) {
     return [];
 }
 
-export async function getConfig() {
+export async function getSettings() {
     let response = await apiGet(`${API_URI}/settings`);
-    let data = await response.json();
-    return data['config'];
+    return await response.json();
 }
 
-export async function saveConfig(config) {
-    return await apiPatch(`${API_URI}/settings`, config);
+export async function saveSettings(settings) {
+    return await apiPatch(`${API_URI}/settings`, settings);
 }
 
 export async function getDownloads() {
@@ -291,10 +299,12 @@ export async function getItems(inventoryId) {
 }
 
 export async function saveItem(inventoryId, item) {
+    item = emptyToNull(item);
     return await apiPost(`${API_URI}/inventory/${inventoryId}/item`, item);
 }
 
 export async function updateItem(itemId, item) {
+    item = emptyToNull(item);
     return await apiPut(`${API_URI}/inventory/item/${itemId}`, item);
 }
 
@@ -365,13 +375,11 @@ export async function killDownload(download_id) {
 
 export async function killDownloads() {
     let response = await apiPost(`${API_URI}/download/kill`);
-    console.log('killDownloads', response);
     return response;
 }
 
 export async function startDownloads() {
     let response = await apiPost(`${API_URI}/download/enable`);
-    console.log('startDownloads', response);
     return response;
 }
 
@@ -438,25 +446,8 @@ export async function getVersion() {
 }
 
 export async function getHotspotStatus() {
-    let response = await apiGet(`${API_URI}/hotspot`);
-    if (response.status === 200) {
-        let {status} = await response.json();
-        return status;
-    } else {
-        let code = (await response.json())['code'];
-        if (response.status === 400 && code === 34) {
-            // Must not be running on a RPi.  Don't warn the user.
-            return null;
-        } else {
-            toast({
-                type: 'error',
-                title: "Can't get Hotspot status",
-                description: 'Failed to get Hotspot status.  Check client and server logs.',
-                time: 5000,
-            });
-        }
-    }
-    return null;
+    let response = await getSettings();
+    return response['hotspot_status'];
 }
 
 export async function setHotspot(on) {
@@ -489,25 +480,8 @@ export async function setHotspot(on) {
 }
 
 export async function getThrottleStatus() {
-    let response = await apiGet(`${API_URI}/throttle`);
-    if (response.status === 200) {
-        let {status} = await response.json();
-        return status;
-    } else {
-        let code = (await response.json())['code'];
-        if (response.status === 400 && code === 34) {
-            // Must not be running on a RPi.  Don't warn the user.
-            return null;
-        } else {
-            toast({
-                type: 'error',
-                title: "Can't get throttle status",
-                description: 'Failed to get CPU Throttle status.  Check client and server logs.',
-                time: 5000,
-            });
-        }
-    }
-    return null;
+    let response = await getSettings();
+    return response['throttle_status'];
 }
 
 export async function setThrottle(on) {

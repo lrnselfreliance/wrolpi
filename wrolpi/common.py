@@ -10,26 +10,27 @@ import queue
 import re
 import string
 import tempfile
+from copy import deepcopy
 from datetime import datetime, date
 from decimal import Decimal
 from functools import wraps
 from itertools import islice, filterfalse, tee
-from multiprocessing import Event, Queue
+from multiprocessing import Event, Queue, Lock, Manager
 from pathlib import Path
-from typing import Union, Callable, Tuple, Dict, Mapping, List, Iterable, Optional, Generator
+from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any
 from urllib.parse import urlunsplit, urlparse
 
 import yaml
-from cachetools import cached, TTLCache
 from sanic import Blueprint
 from sanic.request import Request
 from sqlalchemy import types
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
 
+from wrolpi.dates import DEFAULT_TIMEZONE
 from wrolpi.errors import WROLModeEnabled, NativeOnly
-from wrolpi.vars import CONFIG_PATH, EXAMPLE_CONFIG_PATH, PUBLIC_HOST, PUBLIC_PORT, PROJECT_DIR, PYTEST, MODULES_DIR, \
-    DOCKERIZED
+from wrolpi.vars import PUBLIC_HOST, PUBLIC_PORT, PYTEST, MODULES_DIR, \
+    DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY
 
 logger = logging.getLogger()
 ch = logging.StreamHandler()
@@ -167,94 +168,174 @@ def get_sanic_url(scheme: str = 'http', path: str = None, query: list = None, fr
     return unparsed
 
 
-def get_example_config() -> dict:
-    config_path = EXAMPLE_CONFIG_PATH
-    with open(str(config_path), 'rt') as fh:
-        config = yaml.load(fh, Loader=yaml.Loader)
-    return dict(config)
-
-
-def get_local_config() -> dict:
-    config_path = CONFIG_PATH
-    with open(str(config_path), 'rt') as fh:
-        config = yaml.load(fh, Loader=yaml.Loader)
-    return dict(config)
-
-
-def get_config() -> dict:
-    try:
-        return get_local_config()
-    except FileNotFoundError:
-        return get_example_config()
-
-
-def combine_dicts(*dicts: dict) -> dict:
+class ConfigFile:
     """
-    Recursively combine dictionaries, preserving the leftmost value.
-
-    >>> a = dict(a='b', c=dict(d='e'))
-    >>> b = dict(a='c', e='f')
-    >>> combine_dicts(a, b)
-    dict(a='b', c=dict(d='e'), e='f')
+    This class keeps track of the contents of a config file.  You can update the config by calling
+    .update(), or by creating a property that does so.  Save your changes using .save().
     """
-    if len(dicts) == 0:
-        raise IndexError('No dictionaries to iterate through')
-    elif len(dicts) == 1:
-        return dicts[0]
-    a, b = dicts[-2:]
-    c = dicts[:-2]
-    new = {}
-    keys = set(a.keys())
-    keys = keys.union(b.keys())
-    for k in keys:
-        if k in b and k in a and isinstance(b[k], Mapping):
-            value = combine_dicts(a[k], b[k])
-        else:
-            value = a.get(k, b.get(k))
-        new[k] = value
-    if c:
-        return combine_dicts(*c, new)
-    return new
+    file_name: str = None
+    default_config: dict = None
+
+    def __init__(self, global_: bool = False):
+        if PYTEST and global_:
+            # Do not load a global config on import while testing.  A global instance will never be used for testing.
+            return
+
+        config_file = self.get_file()
+        self.file_lock = Lock()
+        self._config = Manager().dict()
+        # Use the default settings to initialize the config.
+        self._config.update(deepcopy(self.default_config))
+        if config_file.is_file():
+            # Use the config file to get the values the user set.
+            with config_file.open('rt') as fh:
+                self._config.update(yaml.load(fh, Loader=yaml.Loader))
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__} file={self.get_file()}>'
+
+    def save(self):
+        """
+        Write this config to its file.
+
+        Use the existing config file as a template; if any values are missing in the new config, use the values from the
+        config file.
+        """
+        config_file = self.get_file()
+        # Don't overwrite a real config while testing.
+        if PYTEST and not str(config_file).startswith('/tmp'):
+            raise ValueError(f'Refusing to save config file while testing: {config_file}')
+
+        # Only one process can write to the file.
+        self.file_lock.acquire(block=True, timeout=5.0)
+
+        try:
+            # Config directory may not exist.
+            if not config_file.parent.is_dir():
+                config_file.parent.mkdir()
+
+            # Read the existing config, replace all values, then save.
+            if config_file.is_file():
+                with config_file.open('rt') as fh:
+                    config = yaml.load(fh, Loader=yaml.Loader)
+            else:
+                # Config file does not yet exist.
+                config = dict()
+
+            config.update({k: v for k, v in self._config.items() if v is not None})
+            with config_file.open('wt') as fh:
+                yaml.dump(config, fh)
+        finally:
+            self.file_lock.release()
+
+    def get_file(self) -> Path:
+        if not self.file_name:
+            raise NotImplementedError(f'You must define a file name for this {self.__class__.__name__} config.')
+
+        if PYTEST:
+            return get_media_directory() / f'config/{self.file_name}'
+
+        return CONFIG_DIR / self.file_name
+
+    def update(self, config: dict):
+        """
+        Update any values of this config.  Save the config to its file.
+        """
+        config = {k: v for k, v in config.items() if k in self._config}
+        self._config.update(config)
+        self.save()
+
+    def dict(self):
+        """
+        Get a deepcopy of this config.
+        """
+        if not hasattr(self, '_config'):
+            raise NotImplementedError('You cannot use a global config while testing!')
+
+        return deepcopy(self._config)
 
 
-def save_settings_config(config=None):
-    """
-    Save new settings to local.yaml, overwriting what is there.  This function updates the config file from three
-    sources: the config object argument, the local config, then the example config; in that order.
-    """
-    config = config or {}
-    example_config = get_example_config()
-    # Remove the example channel, that shouldn't be saved to local
-    example_config.pop('channels')
-    try:
-        local_config = get_local_config()
-    except FileNotFoundError:
-        # Local config does not yet exist, lets create it
-        local_config = {}
+class WROLPiConfig(ConfigFile):
+    file_name = 'wrolpi.yaml'
+    default_config = dict(
+        download_on_startup=True,
+        hotspot_on_startup=True,
+        throttle_on_startup=False,
+        timezone=str(DEFAULT_TIMEZONE),
+        wrol_mode=False,
+    )
 
-    if 'channels' in config and 'channels' in local_config:
-        del local_config['channels']
+    @property
+    def download_on_startup(self) -> bool:
+        return self._config['download_on_startup']
 
-    if ('channels' in config or 'channels' in local_config) and 'channels' in example_config:
-        del example_config['channels']
+    @download_on_startup.setter
+    def download_on_startup(self, value: bool):
+        self.update({'download_on_startup': value})
 
-    # Create a new config using the values in order of: config -> local_config -> example_config
-    all_keys = list(config.keys()) + list(local_config.keys()) + list(example_config.keys())
-    new_config = {i: config.get(i, local_config.get(i, example_config.get(i))) for i in all_keys}
+    @property
+    def hotspot_on_startup(self) -> bool:
+        return self._config['hotspot_on_startup']
 
-    logger.info(f'Writing config to file: {CONFIG_PATH}')
-    with open(str(CONFIG_PATH), 'wt') as fh:
-        yaml.dump(new_config, fh)
+    @hotspot_on_startup.setter
+    def hotspot_on_startup(self, value: bool):
+        self.update({'hotspot_on_startup': value})
+
+    @property
+    def throttle_on_startup(self) -> bool:
+        return self._config['throttle_on_startup']
+
+    @throttle_on_startup.setter
+    def throttle_on_startup(self, value: bool):
+        self.update({'throttle_on_startup': value})
+
+    @property
+    def timezone(self) -> str:
+        return self._config['timezone']
+
+    @timezone.setter
+    def timezone(self, value: str):
+        self.update({'timezone': value})
+
+    @property
+    def wrol_mode(self) -> bool:
+        return self._config['wrol_mode']
+
+    @wrol_mode.setter
+    def wrol_mode(self, value: bool):
+        self.update({'wrol_mode': value})
 
 
-@cached(cache=TTLCache(maxsize=1, ttl=30))
+WROLPI_CONFIG: WROLPiConfig = WROLPiConfig(global_=True)
+TEST_WROLPI_CONFIG: WROLPiConfig = None
+
+
+def get_config() -> WROLPiConfig:
+    """Read the global WROLPi yaml config file."""
+    global TEST_WROLPI_CONFIG
+    if isinstance(TEST_WROLPI_CONFIG, WROLPiConfig):
+        return TEST_WROLPI_CONFIG
+
+    global WROLPI_CONFIG
+    return WROLPI_CONFIG
+
+
+def set_test_config(enable: bool):
+    global TEST_WROLPI_CONFIG
+    if enable:
+        TEST_WROLPI_CONFIG = WROLPiConfig()
+    else:
+        TEST_WROLPI_CONFIG = None
+
+
 def wrol_mode_enabled() -> bool:
-    """
-    Return the boolean value of the `wrol_mode` in the config.
-    """
-    config = get_config()
-    enabled = config.get('wrol_mode', False)
-    return bool(enabled)
+    """Return True if WROL Mode is enabled."""
+    return get_config().wrol_mode
+
+
+def set_wrol_mode(enable: bool):
+    """Enable or disable WROL Mode for all processes.  This also updates the config file."""
+    get_config().wrol_mode = enable
 
 
 def wrol_mode_check(func):
@@ -327,13 +408,6 @@ def remove_whitespace(s: str) -> str:
     return WHITESPACE.sub('', s)
 
 
-def remove_dict_value_whitespace(d: Dict) -> Dict:
-    """
-    Remove the whitespace around a the values in a dictionary.  Handles if the value isn't a string.
-    """
-    return {k: v.strip() if hasattr(v, 'strip') else v for k, v in d.items()}
-
-
 def run_after(after: callable, *args, **kwargs) -> callable:
     """
     Run the `after` function sometime in the future ofter the wrapped function returns.
@@ -369,7 +443,6 @@ def run_after(after: callable, *args, **kwargs) -> callable:
 
 
 TEST_MEDIA_DIRECTORY = None
-MEDIA_DIRECTORY = None
 
 
 def set_test_media_directory(path):
@@ -383,11 +456,13 @@ def set_test_media_directory(path):
 
 
 def get_media_directory() -> Path:
-    """
-    Get the media directory configured in local.yaml.
+    """Get the media directory.
+
+    This will typically be /opt/wrolpi, or something else from the .env.
+
+    During testing, this function returns TEST_MEDIA_DIRECTORY.
     """
     global TEST_MEDIA_DIRECTORY
-    global MEDIA_DIRECTORY
 
     if PYTEST and not TEST_MEDIA_DIRECTORY:
         raise ValueError('No test media directory set during testing!!')
@@ -395,16 +470,6 @@ def get_media_directory() -> Path:
     if isinstance(TEST_MEDIA_DIRECTORY, pathlib.Path):
         return TEST_MEDIA_DIRECTORY
 
-    if isinstance(MEDIA_DIRECTORY, pathlib.Path):
-        return MEDIA_DIRECTORY
-
-    config = get_config()
-    media_directory = config['media_directory']
-    media_directory = Path(media_directory)
-    if not media_directory.is_absolute():
-        # Media directory is relative.  Assume that is relative to the project directory.
-        media_directory = PROJECT_DIR / media_directory
-    MEDIA_DIRECTORY = media_directory.absolute()
     return MEDIA_DIRECTORY
 
 
@@ -660,6 +725,7 @@ def escape_file_name(name: str) -> str:
 
 def native_only(func: callable):
     """Wraps a function.  Raises NativeOnly if run while Dockerized."""
+
     @wraps(func)
     def wrapped(*a, **kw):
         if DOCKERIZED:
@@ -667,3 +733,28 @@ def native_only(func: callable):
         return func(*a, **kw)
 
     return wrapped
+
+
+def read_yaml(path: Path):
+    with path.open('rt') as fh:
+        return yaml.load(fh, Loader=yaml.Loader)
+
+
+def recursive_map(obj: Any, func: callable):
+    """
+    Apply `func` to all values of any dictionaries; or items in any list/set/tuple.
+
+    >>> recursive_map({'foo ': ' bar '}, lambda i: i.strip() if hasattr(i, 'strip') else i)
+    {'foo ': 'bar'}
+    >>> recursive_map(['foo ', ' bar '], lambda i: i.strip() if hasattr(i, 'strip') else i)
+    ['foo', 'bar']
+    """
+    if isinstance(obj, dict):
+        obj = obj.copy()
+        for key, value in obj.items():
+            obj[key] = recursive_map(value, func)
+        return obj
+    elif isinstance(obj, (list, set, tuple)):
+        type_ = type(obj)
+        return type_(map(lambda i: recursive_map(i, func), obj))
+    return func(obj)

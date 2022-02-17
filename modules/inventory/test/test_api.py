@@ -1,3 +1,4 @@
+import json
 from http import HTTPStatus
 
 from modules.inventory import Item
@@ -49,3 +50,47 @@ def test_delete_item(test_session, init_test_inventory, test_client):
     assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
     test_session.refresh(item)
     assert item.deleted_at
+
+
+def test_item_api(test_session, init_test_inventory, test_client):
+    """An Item can be added to an Inventory."""
+    inventory_id = init_test_inventory.id
+    item = {'brand': 'Salty', 'name': 'Salt', 'item_size': '1', 'unit': 'lbs', 'count': '5',
+            'category': 'cooking ingredients', 'subcategory': 'salt', 'expiration_date': None}
+    request, response = test_client.post(f'/api/inventory/{inventory_id}/item', content=json.dumps(item))
+    assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
+
+    # Get the Item we just created.
+    request, response = test_client.get(f'/api/inventory/{inventory_id}/item')
+    assert response.status_code == HTTPStatus.OK
+    # assert item == response.json['items'][0]
+    item = response.json['items'][0]
+
+    expiration_dates = (12345.12345, None)
+    for expiration_date in expiration_dates:
+        item['expiration_date'] = expiration_date
+        request, response = test_client.put(f'/api/inventory/item/{item["id"]}', content=json.dumps(item))
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.json
+
+
+def test_inventory_api(test_session, test_client):
+    """An Inventory can be created."""
+    inventory = dict(name='foo')
+    request, response = test_client.post('/api/inventory', content=json.dumps(inventory))
+    assert response.status_code == HTTPStatus.CREATED, response.status_code
+
+    request, response = test_client.get('/api/inventory')
+    assert response.status_code == HTTPStatus.OK
+    inventory = response.json['inventories'][0]
+    inventory_id = inventory['id']
+
+    inventory = dict(name='new name')
+    request, response = test_client.put(f'/api/inventory/{inventory_id}', content=json.dumps(inventory))
+    assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
+
+    request, response = test_client.delete(f'/api/inventory/{inventory_id}')
+    assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
+
+    request, response = test_client.get('/api/inventory')
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.json['inventories']) == 0

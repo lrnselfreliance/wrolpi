@@ -1,4 +1,3 @@
-import json
 import pathlib
 import tempfile
 import unittest
@@ -6,18 +5,14 @@ from contextlib import contextmanager
 from functools import partialmethod
 from http import HTTPStatus
 from itertools import zip_longest
-from shutil import copyfile
-from typing import List, Optional
+from typing import List
 
 import mock
-import websockets
-import yaml
 from requests import Response
 
-from wrolpi.common import EXAMPLE_CONFIG_PATH, get_config, set_test_media_directory, get_media_directory
+from wrolpi.common import set_test_media_directory, get_media_directory
 from wrolpi.conftest import ROUTES_ATTACHED, test_db, test_client  # noqa
 from wrolpi.db import postgres_engine
-from wrolpi.vars import PROJECT_DIR
 
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
 
@@ -120,21 +115,11 @@ class ExtendedTestCase(PytestCase, unittest.TestCase):
 class TestAPI(ExtendedTestCase):
 
     def setUp(self) -> None:
-        self.config_path_patch = mock.patch('wrolpi.vars.CONFIG_PATH', TEST_CONFIG_PATH.name)
-        self.config_path_patch.start()
         self.tmp_dir = tempfile.TemporaryDirectory()
         self.tmp_path = pathlib.Path(self.tmp_dir.name)
-        set_test_media_directory(self.tmp_dir.name)
-        # Copy the example config to test against
-        copyfile(str(EXAMPLE_CONFIG_PATH), TEST_CONFIG_PATH.name)
-        # Setup the testing video root directory
-        config = get_config()
-        config['media_directory'] = str(PROJECT_DIR / 'test')
-        with open(TEST_CONFIG_PATH.name, 'wt') as fh:
-            fh.write(yaml.dump(config))
+        set_test_media_directory(self.tmp_path)
 
     def tearDown(self) -> None:
-        self.config_path_patch.stop()
         set_test_media_directory(None)
 
     def assertHTTPStatus(self, response: Response, status: int):
@@ -143,22 +128,6 @@ class TestAPI(ExtendedTestCase):
     assertOK = partialmethod(assertHTTPStatus, status=HTTPStatus.OK)
     assertCONFLICT = partialmethod(assertHTTPStatus, status=HTTPStatus.CONFLICT)
     assertNO_CONTENT = partialmethod(assertHTTPStatus, status=HTTPStatus.NO_CONTENT)
-
-
-@contextmanager
-def wrap_media_directory(path: Optional[pathlib.Path] = None):
-    cleanup = False
-    if not path:
-        path = tempfile.TemporaryDirectory()
-        cleanup = True
-
-    set_test_media_directory(path.name)
-    try:
-        yield
-    finally:
-        set_test_media_directory(None)
-        if cleanup:
-            path.cleanup()
 
 
 @contextmanager
@@ -194,17 +163,6 @@ def build_test_directories(paths: List[str], tmp_dir: pathlib.Path = None) -> pa
         (tmp_dir / file).touch()
 
     yield tmp_dir.absolute()
-
-
-async def get_all_ws_messages(ws) -> List[dict]:
-    messages = []
-    while True:
-        try:
-            message = await ws.recv()
-        except websockets.exceptions.ConnectionClosedOK:
-            break
-        messages.append(json.loads(message))
-    return messages
 
 
 def assert_dict_contains(d1: dict, d2: dict):

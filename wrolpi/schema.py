@@ -14,9 +14,14 @@ class SettingsResponse:
 
 @dataclass
 class SettingsRequest:
-    media_directory: str
-    wrol_mode: bool
-    timezone: str
+    download_on_startup: Optional[bool] = None
+    hotspot_on_startup: Optional[bool] = None
+    hotspot_status: Optional[bool] = None
+    media_directory: Optional[str] = None
+    throttle_on: Optional[bool] = None
+    throttle_on_startup: Optional[bool] = None
+    timezone: Optional[str] = None
+    wrol_mode: Optional[bool] = None
 
 
 @dataclass

@@ -144,6 +144,10 @@ class NativeOnly(APIError):
     pass
 
 
+class HotspotError(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -317,4 +321,9 @@ API_ERRORS = {
         'message': 'This functionality is only supported outside a docker container',
         'status': HTTPStatus.BAD_REQUEST,
     },
+    HotspotError: {
+        'code': next(error_codes),
+        'message': 'Updating/accessing Hotspot encountered an error',
+        'status': HTTPStatus.INTERNAL_SERVER_ERROR,
+    }
 }

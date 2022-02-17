@@ -109,10 +109,8 @@ venv.bak/
 test/videos
 test/archive
 
-# local configs
-config/local.yaml
-config/local.yaml.bak
-config/inventories.yaml
+# docker configs
+test/config
 
 app/package-lock.json
 modules/node_modules/

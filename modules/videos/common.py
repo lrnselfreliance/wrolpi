@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 
 from wrolpi import before_startup
-from wrolpi.common import logger, get_config, iterify, get_media_directory, \
+from wrolpi.common import logger, iterify, get_media_directory, \
     minimize_dict, api_param_limiter
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
@@ -35,19 +35,6 @@ VIDEO_QUERY_LIMIT = 20
 VIDEO_QUERY_MAX_LIMIT = 100
 # These are the supported video formats.  These are in order of their preference.
 VIDEO_EXTENSIONS = ('mp4', 'ogg', 'webm', 'flv')
-
-
-def load_downloader_config() -> dict:
-    config = get_config()
-    downloader = config['downloader']
-    return downloader
-
-
-def load_channels_config() -> dict:
-    config = get_config()
-    channels = config['channels']
-    return channels
-
 
 video_limiter = api_param_limiter(100)
 
@@ -81,8 +68,9 @@ def import_videos_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
     logger.info('Importing videos config')
     try:
-        config = get_config()
-        config, favorites = config['channels'], config.get('favorites', {})
+        from .lib import get_channels_config
+        config = get_channels_config()
+        config, favorites = config.channels, config.favorites
 
         with get_db_session(commit=True) as session:
             for link in config:

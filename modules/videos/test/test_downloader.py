@@ -267,24 +267,6 @@ class TestVideosDownloaders(TestAPI):
             self.assertEqual(download.status, 'new')
 
     @wrap_test_db
-    def test_invalid_download_url(self):
-        """
-        An invalid url should not be attempted again.
-        """
-        _, session = get_db_context()
-        with mock.patch('modules.videos.downloader.VideoDownloader.valid_url') as mock_valid_url, \
-                mock.patch('wrolpi.downloader.DownloadManager.get_downloader') as mock_get_downloader, \
-                mock.patch('modules.videos.downloader.YDL') as mock_ydl:
-            mock_get_downloader.return_value = (VideoDownloader, {'channel': 'foo', 'id': 'some id'})
-            mock_valid_url.return_value = (True, None)
-            mock_ydl.extract_info.side_effect = UnsupportedError('oops')
-            self.mgr.create_download('url', session)
-
-        with get_db_session() as session:
-            download = self.mgr.get_downloads(session)[0]
-            assert download.status == 'failed'
-
-    @wrap_test_db
     def test_get_or_create_channel(self):
         """
         A Channel may need to be created for an arbitrary download.  Attempt to use an existing Channel if we can
@@ -416,3 +398,18 @@ def test_channel_download_no_download(test_session, video_download_manager, simp
 
     with pytest.raises(InvalidDownload):
         download_channel(simple_channel.link)
+
+
+def test_invalid_download_url(test_session, test_download_manager, test_downloader_config):
+    """An invalid url should not be attempted again."""
+    _, session = get_db_context()
+    with mock.patch('modules.videos.downloader.VideoDownloader.valid_url') as mock_valid_url, \
+            mock.patch('wrolpi.downloader.DownloadManager.get_downloader') as mock_get_downloader, \
+            mock.patch('modules.videos.downloader.YDL') as mock_ydl:
+        mock_get_downloader.return_value = (VideoDownloader(), {'channel': 'foo', 'id': 'some id'})
+        mock_valid_url.return_value = (True, None)
+        mock_ydl.extract_info.side_effect = UnsupportedError('oops')
+        test_download_manager.create_download('url', session)
+
+    download = test_download_manager.get_downloads(test_session)[0]
+    assert download.status == 'failed'

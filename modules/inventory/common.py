@@ -3,14 +3,12 @@ from functools import partial
 from pathlib import Path
 from typing import List, Tuple
 
-import yaml
 from pint import Quantity
 
 from wrolpi import before_startup
-from wrolpi.common import logger, Base
+from wrolpi.common import logger, Base, ConfigFile
 from wrolpi.db import get_db_session
 from wrolpi.errors import NoInventories, InventoriesVersionMismatch
-from wrolpi.vars import CONFIG_DIR
 from .inventory import unit_registry, get_items, get_inventories, increment_inventories_version, \
     get_inventories_version
 from .models import Inventory, Item
@@ -98,23 +96,61 @@ def quantity_to_tuple(quantity: unit_registry.Quantity) -> Tuple[Decimal, Quanti
 
 
 def cleanup_quantity(quantity: Quantity) -> Quantity:
-    """
-    Remove trailing zeros from a Quantity.
-    """
+    """Remove trailing zeros from a Quantity."""
     num, unit = quantity_to_tuple(quantity)
     num = round(num, UNIT_PRECISION)
     num = str(num).rstrip('0').rstrip('.')
     return Decimal(num) * unit
 
 
-DEFAULT_SAVE_PATH = CONFIG_DIR / 'inventories.yaml'
+class InventoriesConfig(ConfigFile):
+    file_name = 'inventories.yaml'
+    default_config = dict(
+        inventories=[],
+        version=1,
+    )
+
+    @property
+    def inventories(self) -> dict:
+        return self._config['inventories']
+
+    @inventories.setter
+    def inventories(self, value: dict):
+        self.update({'inventories': value})
+
+    @property
+    def version(self) -> int:
+        return self._config['version']
+
+    @version.setter
+    def version(self, value: int):
+        self.update({'version': value})
 
 
-def save_inventories_file(path: str = None):
-    """
-    Write all inventories and their respective items to a YAML file.
-    """
-    path: Path = Path(path) if path else DEFAULT_SAVE_PATH
+INVENTORIES_CONFIG: InventoriesConfig = InventoriesConfig(global_=True)
+TEST_INVENTORIES_CONFIG: InventoriesConfig = None
+
+
+def get_inventories_config():
+    global TEST_INVENTORIES_CONFIG
+    if isinstance(TEST_INVENTORIES_CONFIG, ConfigFile):
+        return TEST_INVENTORIES_CONFIG
+
+    global INVENTORIES_CONFIG
+    return INVENTORIES_CONFIG
+
+
+def set_test_inventories_config(enabled: bool):
+    global TEST_INVENTORIES_CONFIG
+    if enabled:
+        TEST_INVENTORIES_CONFIG = InventoriesConfig()
+    else:
+        TEST_INVENTORIES_CONFIG = None
+
+
+def save_inventories_file():
+    """Write all inventories and their respective items to a YAML file."""
+    config = get_inventories_config()
 
     inventories = []
     for inventory in get_inventories():
@@ -124,44 +160,22 @@ def save_inventories_file(path: str = None):
         raise NoInventories('No Inventories are in the database!')
 
     with increment_inventories_version() as version:
-        if path.is_file():
-            # Check that we aren't overwriting our inventories with empty inventories.
-            with open(path, 'rt') as fh:
-                old = yaml.load(fh, Loader=yaml.Loader)
-                if old and not inventories:
-                    raise FileExistsError(f'Refusing to overwrite non-empty inventories.yaml with empty inventories.'
-                                          f'  {path}')
+        if config.version and config.version > version:
+            raise InventoriesVersionMismatch(
+                f'Inventories config version is {config.version} but DB version is {get_inventories_version()}')
 
-                if old and old.get('version') > version:
-                    raise InventoriesVersionMismatch(
-                        f'Inventories config version is {old["version"]} but DB version is {get_inventories_version()}')
-
-        with open(path, 'wt') as fh:
-            contents = dict(
-                version=version,
-                inventories=inventories,
-            )
-
-            yaml.dump(contents, fh)
+        config.inventories = inventories
+        config.version = version
+        config.save()
 
 
 @before_startup
-def import_inventories_file(path: str = None):
-    path: Path = Path(path) if path else DEFAULT_SAVE_PATH
-
-    if not path.is_file():
-        logger.warning(f'No inventories config file at {path}')
-        return
-
-    with open(path, 'rt') as fh:
-        contents = yaml.load(fh, Loader=yaml.Loader)
-
-    if not contents or 'inventories' not in contents:
-        raise ValueError('Inventories file does not contain the expected "inventories" list.')
+def import_inventories_file():
+    config = get_inventories_config()
 
     inventories = get_inventories()
     inventories_names = {i.name for i in inventories}
-    new_inventories = [i for i in contents['inventories'] if i['name'] not in inventories_names]
+    new_inventories = [i for i in config.inventories if i['name'] not in inventories_names]
     with get_db_session(commit=True) as session:
         for inventory in new_inventories:
             items = inventory['items']

@@ -19,8 +19,8 @@ bp = get_blueprint('OTP', '/api/otp')
     body=schema.EncryptOTPRequest,
 )
 @validate(schema.EncryptOTPRequest)
-async def post_encrypt_otp(_: Request, data: dict):
-    data = lib.encrypt_otp(data['otp'], data['plaintext'])
+async def post_encrypt_otp(_: Request, body: schema.EncryptOTPRequest):
+    data = lib.encrypt_otp(body.otp, body.plaintext)
     return response.json(data)
 
 
@@ -30,8 +30,8 @@ async def post_encrypt_otp(_: Request, data: dict):
     body=schema.DecryptOTPRequest,
 )
 @validate(schema.DecryptOTPRequest)
-async def post_decrypt_otp(_: Request, data: dict):
-    data = lib.decrypt_otp(data['otp'], data['ciphertext'])
+async def post_decrypt_otp(_: Request, body: schema.DecryptOTPRequest):
+    data = lib.decrypt_otp(body.otp, body.ciphertext)
     return response.json(data)
 
 

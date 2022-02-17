@@ -210,8 +210,8 @@ class ConfigFile:
         self.file_lock.acquire(block=True, timeout=5.0)
 
         try:
-            # Config directory may not exist while testing.
-            if PYTEST and not config_file.parent.is_dir():
+            # Config directory may not exist.
+            if not config_file.parent.is_dir():
                 config_file.parent.mkdir()
 
             # Read the existing config, replace all values, then save.

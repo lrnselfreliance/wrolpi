@@ -122,10 +122,13 @@ async def set_log_level(args):
     Set the level at the root logger so all children that have been created (or will be created) share the same level.
     """
     root_logger = logging.getLogger()
+    sa_logger = logging.getLogger('sqlalchemy.engine')
     if args.verbose == 1:
         root_logger.setLevel(logging.INFO)
+        sa_logger.setLevel(logging.INFO)
     elif args.verbose and args.verbose >= 2:
         root_logger.setLevel(logging.DEBUG)
+        sa_logger.setLevel(logging.DEBUG)
 
     # Always warn about the log level so we know what will be logged
     effective_level = logger.getEffectiveLevel()
@@ -137,6 +140,9 @@ async def set_log_level(args):
 @limit_concurrent(1)
 def periodic_downloads(app: Sanic, loop):
     """A simple function that perpetually calls downloader_manager.do_downloads() after sleeping."""
+    # Set all downloads to new.
+    download_manager.reset_downloads()
+
     config = get_config()
     if config.wrol_mode:
         logger.warning(f'Not starting download worker because WROL Mode is enabled.')
@@ -148,9 +154,6 @@ def periodic_downloads(app: Sanic, loop):
         return
 
     logger.info('Starting download manager.')
-
-    # Set all downloads to new.
-    download_manager.reset_downloads()
 
     async def _periodic_download():
         download_manager.renew_recurring_downloads()

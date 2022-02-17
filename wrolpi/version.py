@@ -1,4 +1,4 @@
-__version__ = '0.2.2-beta'
+__version__ = '0.3.1-beta'
 
 import subprocess
 

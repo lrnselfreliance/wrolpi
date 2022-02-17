@@ -59,7 +59,7 @@ DEFAULT_INVENTORIES = [
 sort_categories = partial(sorted, key=itemgetter(1, 0))
 
 
-def get_inventories() -> List[Base]:
+def get_inventories() -> List[Inventory]:
     with get_db_session() as session:
         inventories = session.query(Inventory).filter(
             Inventory.deleted_at == None,  # noqa

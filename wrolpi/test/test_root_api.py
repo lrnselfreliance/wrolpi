@@ -2,6 +2,9 @@ import json
 from http import HTTPStatus
 from itertools import zip_longest
 
+from mock import mock
+
+from wrolpi.common import get_config
 from wrolpi.dates import strptime
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Download
@@ -154,3 +157,57 @@ class TestRootAPI(TestAPI):
         recurring_downloads = response.json['recurring_downloads']
         for d1, d2 in zip_longest(expected, recurring_downloads):
             self.assertDictContains(d2, d1)
+
+
+def test_hotspot_settings(test_session, test_client, test_config):
+    """
+    The User can toggle the Hotspot via /settings.  The Hotspot can be automatically started on startup.
+    """
+    config = get_config()
+    assert config.hotspot_on_startup is True
+
+    with mock.patch('wrolpi.root_api.admin') as mock_admin:
+        # Turning on the hotspot succeeds.
+        mock_admin.enable_hotspot.return_value = True
+        request, response = test_client.patch('/api/settings', content=json.dumps({'hotspot_status': True}))
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.json
+        mock_admin.enable_hotspot.assert_called_once()
+        mock_admin.reset_mock()
+
+        # Turning on the hotspot fails.
+        mock_admin.enable_hotspot.return_value = False
+        request, response = test_client.patch('/api/settings', content=json.dumps({'hotspot_status': True}))
+        assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR, response.json
+        assert response.json['code'] == 35
+        mock_admin.enable_hotspot.assert_called_once()
+
+        # Turning off the hotspot succeeds.
+        mock_admin.disable_hotspot.return_value = True
+        request, response = test_client.patch('/api/settings', content=json.dumps({'hotspot_status': False}))
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.json
+        mock_admin.disable_hotspot.assert_called_once()
+        mock_admin.reset_mock()
+
+        # Turning off the hotspot succeeds.
+        mock_admin.disable_hotspot.return_value = False
+        request, response = test_client.patch('/api/settings', content=json.dumps({'hotspot_status': False}))
+        assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR, response.json
+        assert response.json['code'] == 35
+        mock_admin.disable_hotspot.assert_called_once()
+
+        config = get_config()
+        assert config.hotspot_on_startup is True
+
+
+def test_throttle_toggle(test_session, test_client, test_config):
+    with mock.patch('wrolpi.admin.subprocess') as mock_subprocess:
+        mock_subprocess.check_output.side_effect = [
+            b'wlan0: unavailable',
+            b'The governor "ondemand" may decide ',
+        ]
+        request, response = test_client.get('/api/settings')
+
+    # Throttle is off by default.
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['throttle_on_startup'] is False
+    assert response.json['throttle_status'] == 'ondemand'

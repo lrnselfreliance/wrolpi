@@ -4,7 +4,7 @@ import {Link, NavLink} from "react-router-dom";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {getConfig} from "../api";
+import {getConfig, getSettings} from "../api";
 import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
 
 export const API_URI = `http://${window.location.host}/api`;
@@ -560,8 +560,8 @@ export const useWROLMode = () => {
     const [enabled, setEnabled] = useState(false);
 
     const fetchStatus = async () => {
-        let config = await getConfig();
-        setEnabled(config['wrol_mode']);
+        let settings = await getSettings();
+        setEnabled(settings.wrol_mode);
     }
 
     useEffect(() => {
@@ -673,4 +673,15 @@ export function DisableDownloadsToggle() {
                      checked={on === true}
                      onChange={(e, data) => setDownloads(data.checked)}
     />;
+}
+
+export function emptyToNull(obj) {
+    const keys = Object.keys(obj);
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        if (obj[key] === '') {
+            obj[key] = null;
+        }
+    }
+    return obj;
 }

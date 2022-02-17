@@ -18,9 +18,9 @@ from wrolpi.downloader import Downloader, Download
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
-from .common import load_downloader_config, apply_info_json, get_channel_source_id, get_no_channel_directory, \
+from .common import apply_info_json, get_channel_source_id, get_no_channel_directory, \
     get_videos_directory
-from .lib import upsert_video, refresh_channel_videos
+from .lib import upsert_video, refresh_channel_videos, get_downloader_config
 from .models import Video, Channel
 from .video_url_resolver import video_url_resolver
 
@@ -217,11 +217,11 @@ class VideoDownloader(Downloader, ABC):
             raise ValueError(f'Output directory does not exist! {out_dir=}')
 
         # YoutubeDL expects specific options, add onto the default options
-        config = load_downloader_config()
+        config = get_downloader_config().dict()
         options = config.copy()
         options['outtmpl'] = f'{out_dir}/{config["file_name_format"]}'
         options['merge_output_format'] = PREFERRED_VIDEO_EXTENSION
-        # We don't need format when getting the filename.
+        # We don't need "format" when getting the filename.
         del options['format']
 
         logger.debug(f'Downloading {url} to {out_dir}')

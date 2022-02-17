@@ -8,8 +8,8 @@ import sys
 import pytz
 from sanic import Sanic
 
-from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, after_startup, limit_concurrent
-from wrolpi.common import logger, get_config, wrol_mode_enabled, import_modules, check_media_directory
+from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, after_startup, limit_concurrent, admin
+from wrolpi.common import logger, get_config, import_modules, check_media_directory, set_wrol_mode
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED
@@ -89,9 +89,14 @@ async def main(loop):
 
     # Set the Timezone
     config = get_config()
-    if 'timezone' in config:
-        tz = pytz.timezone(config['timezone'])
+    if config.timezone:
+        tz = pytz.timezone(config.timezone)
         set_timezone(tz)
+
+    if config.hotspot_on_startup:
+        admin.enable_hotspot()
+    if config.throttle_on_startup:
+        admin.throttle_cpu_on()
 
     check_media_directory()
 
@@ -131,12 +136,15 @@ async def set_log_level(args):
 @after_startup
 @limit_concurrent(1)
 def periodic_downloads(app: Sanic, loop):
-    """
-    A simple function that perpetually calls downloader_manager.do_downloads() after sleeping.
-    """
-    if wrol_mode_enabled():
+    """A simple function that perpetually calls downloader_manager.do_downloads() after sleeping."""
+    config = get_config()
+    if config.wrol_mode:
         logger.warning(f'Not starting download worker because WROL Mode is enabled.')
         return
+    if config.download_on_startup is False:
+        logger.warning(f'Not starting download worker because Downloads are disabled on startup.')
+        return
+
     logger.info('Starting download manager.')
 
     # Set all downloads to new.

@@ -15,11 +15,11 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi import admin
-from wrolpi.common import set_sanic_url_parts, logger, get_config, wrol_mode_enabled, save_settings_config, \
-    Base, get_media_directory, wrol_mode_check, native_only
+from wrolpi.common import set_sanic_url_parts, logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
+    wrol_mode_check, native_only, set_wrol_mode
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
-from wrolpi.errors import WROLModeEnabled, InvalidTimezone, API_ERRORS, APIError, ValidationError
+from wrolpi.errors import WROLModeEnabled, InvalidTimezone, API_ERRORS, APIError, ValidationError, HotspotError
 from wrolpi.media_path import MediaPath
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, DownloadRequest, EchoResponse
 from wrolpi.vars import DOCKERIZED
@@ -112,30 +112,63 @@ async def echo(request: Request):
 @openapi.description('Get WROLPi settings')
 @openapi.response(HTTPStatus.OK, SettingsResponse)
 def get_settings(_: Request):
-    config = dict(get_config())
-    return json_response({'config': config, 'version': __version__})
+    config = get_config()
+
+    settings = {
+        'download_on_startup': config.download_on_startup,
+        'hotspot_on_startup': config.hotspot_on_startup,
+        'hotspot_status': admin.hotspot_status().name,
+        'media_directory': get_media_directory(),
+        'throttle_on_startup': config.throttle_on_startup,
+        'throttle_status': admin.throttle_status().name,
+        'timezone': config.timezone,
+        'version': __version__,
+        'wrol_mode': config.wrol_mode,
+    }
+    return json_response(settings)
 
 
 @root_api.patch('/settings')
 @openapi.description('Update WROLPi settings')
 @validate(json=SettingsRequest)
-def update_settings(_: Request, data: dict):
-    if wrol_mode_enabled() and 'wrol_mode' not in data:
+def update_settings(_: Request, body: SettingsRequest):
+    if wrol_mode_enabled() and body.wrol_mode is None:
         # Cannot update settings while WROL Mode is enabled, unless you want to disable WROL Mode.
         raise WROLModeEnabled()
 
+    if body.wrol_mode is False:
+        # Disable WROL Mode
+        set_wrol_mode(False)
+        return response.empty()
+    elif body.wrol_mode is True:
+        # Enable WROL Mode
+        set_wrol_mode(True)
+        return response.empty()
+
     try:
-        if data.get('timezone'):
-            set_timezone(data['timezone'])
+        if body.timezone:
+            set_timezone(body.timezone)
     except UnknownTimeZoneError:
-        raise InvalidTimezone(f'Invalid timezone: {data["timezone"]}')
+        raise InvalidTimezone(f'Invalid timezone: {body.timezone}')
 
-    save_settings_config(data)
+    # Remove any keys with None values, then save the config.
+    config = {k: v for k, v in body.__dict__.items() if v is not None}
+    wrolpi_config = get_config()
+    wrolpi_config.update(config)
 
-    if data.get('wrolpi_mode'):
+    if body.wrol_mode:
         download_manager.kill()
 
-    return response.raw('', HTTPStatus.NO_CONTENT)
+    if body.hotspot_status is True:
+        # Turn on Hotspot
+        if admin.enable_hotspot() is False:
+            raise HotspotError('Could not turn on hotspot')
+    elif body.hotspot_status is False:
+        # Turn off Hotspot
+        if admin.disable_hotspot() is False:
+            raise HotspotError('Could not turn off hotspot')
+
+    return response.empty()
 
 
 @root_api.post('/valid_regex')
@@ -211,18 +244,6 @@ async def get_downloaders(_: Request):
     return json_response(ret)
 
 
-@root_api.get('/hotspot')
-@native_only
-@openapi.description('Get the status of the hotspot')
-async def hotspot(_: Request):
-    status = admin.hotspot_status()
-    # Get the name of the enum.
-    status = status.name
-
-    ret = dict(status=status)
-    return json_response(ret)
-
-
 @root_api.post('/hotspot/on')
 @openapi.description('Turn on the hotspot')
 @native_only
@@ -241,18 +262,6 @@ async def hotspot_off(_: Request):
     if result:
         return response.empty()
     return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
-
-
-@root_api.get('/throttle')
-@openapi.description('Get status of CPU throttling')
-@native_only
-async def throttle_status(_: Request):
-    status = admin.throttle_status()
-    # Get the name of the enum.
-    status = status.name
-
-    ret = dict(status=status)
-    return json_response(ret)
 
 
 @root_api.post('/throttle/on')

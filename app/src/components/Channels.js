@@ -18,8 +18,7 @@ import {
     downloadChannel,
     getChannel,
     getChannels,
-    getConfig,
-    getDirectories,
+    getDirectories, getSettings,
     refreshChannel,
     updateChannel,
     validateRegex
@@ -57,11 +56,11 @@ class DirectoryInput extends React.Component {
     }
 
     async componentDidMount() {
-        let global_config = await getConfig();
+        let settings = await getSettings();
         let directories = await getDirectories(this.state.directory);
         this.setState({
             directories,
-            mediaDirectory: global_config.media_directory,
+            mediaDirectory: settings.media_directory,
             directory: this.props.value,
         });
     }

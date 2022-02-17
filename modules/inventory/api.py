@@ -5,7 +5,7 @@ from sanic.request import Request
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi.common import run_after, remove_dict_value_whitespace
+from wrolpi.common import run_after, recursive_map
 from wrolpi.errors import ValidationError
 from wrolpi.root_api import get_blueprint, json_response
 from . import common, inventory, schema
@@ -48,9 +48,8 @@ def inventory_get(_: Request, inventory_id: int):
 )
 @validate(schema.InventoryPostRequest)
 @run_after(common.save_inventories_file)
-def post_inventory(_: Request, data: dict):
-    # Cleanup the whitespace.
-    data = remove_dict_value_whitespace(data)
+def post_inventory(_: Request, body: schema.InventoryPostRequest):
+    data = remove_whitespace(body.__dict__)
 
     inventory.save_inventory(data)
     return response.empty(HTTPStatus.CREATED)
@@ -63,9 +62,8 @@ def post_inventory(_: Request, data: dict):
 )
 @validate(schema.InventoryPutRequest)
 @run_after(common.save_inventories_file)
-def put_inventory(_: Request, inventory_id: int, data: dict):
-    # Cleanup the whitespace.
-    data = remove_dict_value_whitespace(data)
+def put_inventory(_: Request, inventory_id: int, body: schema.InventoryPutRequest):
+    data = remove_whitespace(body.__dict__)
 
     inventory.update_inventory(inventory_id, data)
     return response.empty()
@@ -93,9 +91,8 @@ def items_get(_: Request, inventory_id: int):
 )
 @validate(schema.ItemPostRequest)
 @run_after(common.save_inventories_file)
-def post_item(_: Request, inventory_id: int, data: dict):
-    # Cleanup the whitespace.
-    data = remove_dict_value_whitespace(data)
+def post_item(_: Request, inventory_id: int, body: schema.ItemPostRequest):
+    data = remove_whitespace(body.__dict__)
 
     inventory.save_item(inventory_id, data)
     return response.empty()
@@ -108,9 +105,8 @@ def post_item(_: Request, inventory_id: int, data: dict):
 )
 @validate(schema.ItemPutRequest)
 @run_after(common.save_inventories_file)
-def put_item(_: Request, item_id: int, data: dict):
-    # Cleanup the whitespace.
-    data = remove_dict_value_whitespace(data)
+def put_item(_: Request, item_id: int, body: schema.ItemPutRequest):
+    data = remove_whitespace(body.__dict__)
 
     inventory.update_item(item_id, data)
     return response.empty()
@@ -131,3 +127,7 @@ def item_delete(_: Request, item_ids: str):
 
     inventory.delete_items(item_ids)
     return response.empty()
+
+
+def remove_whitespace(obj):
+    return recursive_map(obj, lambda i: i.strip() if hasattr(i, 'strip') else i)

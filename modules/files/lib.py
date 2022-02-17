@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import List
 from uuid import uuid4
 
-import magic
 import psycopg2
 from sqlalchemy.orm import Session
 
@@ -15,6 +14,13 @@ from wrolpi.dates import from_timestamp
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidFile
 from wrolpi.vars import PYTEST
+
+try:
+    import magic
+    have_magic = True
+except ImportError:
+    logger.error('Could not import magic.  Is libmagic installed?')
+    have_magic = False
 
 logger = logger.getChild(__name__)
 
@@ -96,7 +102,7 @@ def upsert_file(path: Path, session: Session) -> File:
     if not file:
         file = File(path=path)
         session.add(file)
-    if not file.mimetype:
+    if not file.mimetype and have_magic:
         file.mimetype = magic.from_file(str(path), mime=True)
     if not file.title:
         file.title = split_file_name(path)

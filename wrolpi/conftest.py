@@ -9,12 +9,11 @@ from unittest import mock
 from uuid import uuid1
 
 import pytest
-import yaml
 from sanic_testing.testing import SanicTestClient
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
-from wrolpi.common import set_test_media_directory, Base, get_example_config
+from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.dates import set_test_now
 from wrolpi.db import postgres_engine, get_db_args
 from wrolpi.downloader import DownloadManager
@@ -87,17 +86,14 @@ def test_directory() -> pathlib.Path:
 
 
 @pytest.fixture(autouse=True)
-def test_config():
+def test_config(test_directory):
     """
     Create a test config based off the example config.
     """
-    test_config_path = tempfile.NamedTemporaryFile(mode='rt')
-    with mock.patch('wrolpi.vars.CONFIG_PATH', test_config_path.name), \
-            mock.patch('wrolpi.common.CONFIG_PATH', test_config_path.name):
-        config = get_example_config()
-        with open(test_config_path.name, 'wt') as fh:
-            fh.write(yaml.dump(config))
-        yield pathlib.Path(test_config_path.name)
+    config_path = test_directory / 'config/wrolpi.yaml'
+    set_test_config(True)
+    yield config_path
+    set_test_config(False)
 
 
 ROUTES_ATTACHED = False

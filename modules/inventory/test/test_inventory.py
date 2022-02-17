@@ -1,5 +1,4 @@
-import os
-import tempfile
+from decimal import Decimal
 from decimal import Decimal
 from itertools import zip_longest
 from typing import List, Iterable
@@ -15,7 +14,7 @@ from wrolpi.errors import NoInventories, InventoriesVersionMismatch
 from wrolpi.test.common import PytestCase
 from .. import init
 from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
-    compact_unit, cleanup_quantity, save_inventories_file, import_inventories_file
+    compact_unit, cleanup_quantity, save_inventories_file, import_inventories_file, get_inventories_config
 from ..inventory import unit_registry, \
     get_inventories, save_inventory, update_inventory, \
     delete_inventory, get_categories
@@ -189,75 +188,6 @@ class TestInventory(PytestCase):
         for idx, (i, j) in enumerate(zip_longest(inventory, expected)):
             self.assertEqual(i, j, f'named inventory {idx} is not equal')
 
-    def test_inventories_file(self, test_session):
-        self.prepare()
-
-        with tempfile.NamedTemporaryFile() as tf:
-            # Can't import an empty file.
-            self.assertRaises(ValueError, import_inventories_file, tf.name)
-
-            save_inventories_file(tf.name)
-
-            # Clear out the DB so the import will be tested
-            with get_db_session(commit=True) as session:
-                session.query(Item).delete()
-                session.query(Inventory).delete()
-
-            import_inventories_file(tf.name)
-
-        inventories = get_inventories()
-        self.assertEqual(len(inventories), 1)
-        # ID has increased because we did not reset the sequence when deleting from the table.
-        self.assertEqual(inventories[0].id, 2)
-        self.assertEqual(inventories[0].name, 'Food Storage')
-
-        # All items in the DB match those in the test list, except for the "deleted" item.
-        non_deleted_items = [i for i in inventories[0].items if i.deleted_at is None]
-        self.assertEqual(len(non_deleted_items), len(TEST_ITEMS) - 1)
-        test_items = {(i['name'], i['brand'], i['count']) for i in TEST_ITEMS[:-1]}
-        db_items = {(i.name, i.brand, i.count) for i in non_deleted_items}
-        self.assertEqual(test_items, db_items)
-
-    def test_inventories_version(self, test_session):
-        """
-        You can't save over a newer version of an inventory.
-        """
-        self.prepare()
-        with tempfile.NamedTemporaryFile(delete=False) as tf:
-            pass
-
-        try:
-            with open(tf.name, 'rt') as fh:
-                # Version is set to 1 on first save.
-                save_inventories_file(tf.name)
-                inventories_contents = yaml.load(fh, Loader=yaml.Loader)
-                self.assertEqual(inventories_contents['version'], 1)
-
-            with open(tf.name, 'rt') as fh:
-                # Version is incremented when saving.
-                save_inventories_file(tf.name)
-                inventories_contents = yaml.load(fh, Loader=yaml.Loader)
-                self.assertEqual(inventories_contents['version'], 2)
-
-            with open(tf.name, 'wt') as fh:
-                # Version is greater than what will be saved.
-                inventories_contents['version'] = 5
-                yaml.dump(inventories_contents, fh)
-
-                self.assertRaises(InventoriesVersionMismatch, save_inventories_file, tf.name)
-
-        finally:
-            os.unlink(tf.name)
-
-    def test_no_inventories(self, test_session, tmp_path):
-        """
-        Can't save empty inventories.
-        """
-        try:
-            save_inventories_file(tmp_path.name)
-        except NoInventories:
-            pass
-
 
 def quantity_to_string(quantity: Quantity) -> str:
     quantity = cleanup_quantity(quantity)
@@ -333,3 +263,66 @@ length = gallon.dimensionality
 def test_sum_by_key(items, expected):
     items = [Item(**i) for i in items]
     assert sum_by_key(items, lambda i: (i.category,)) == expected
+
+
+def test_no_inventories(test_session, test_directory):
+    """Can't save empty inventories."""
+    try:
+        save_inventories_file()
+    except NoInventories:
+        pass
+
+
+def test_inventories_version(test_session, test_directory, init_test_inventory):
+    """You can't save over a newer version of an inventory."""
+    for item in TEST_ITEMS:
+        item = Item(**item)
+        test_session.add(item)
+    test_session.commit()
+
+    # Version is set to 1 on first save.
+    save_inventories_file()
+    config = get_inventories_config()
+    assert config.version == 1
+
+    # Version is incremented when saving.
+    save_inventories_file()
+    config = get_inventories_config()
+    assert config.version == 2
+
+    # Version is greater than what will be saved.
+    with config.get_file().open('wt') as fh:
+        config._config['version'] = 5
+        yaml.dump(config._config, fh)
+    with pytest.raises(InventoriesVersionMismatch):
+        save_inventories_file()
+
+
+def test_inventories_config(test_session, test_directory, init_test_inventory):
+    for item in TEST_ITEMS:
+        item = Item(**item)
+        test_session.add(item)
+    test_session.commit()
+
+    # Save the Inventories/Items that were created above.
+    save_inventories_file()
+
+    # Clear out the DB so the import will be tested
+    test_session.query(Item).delete()
+    test_session.query(Inventory).delete()
+    test_session.commit()
+
+    import_inventories_file()
+
+    inventories = get_inventories()
+    assert len(inventories) == 1
+    # ID has increased because we did not reset the sequence when deleting from the table.
+    assert inventories[0].id == 2
+    assert inventories[0].name == 'Food Storage'
+
+    # All items in the DB match those in the test list, except for the "deleted" item.
+    non_deleted_items = [i for i in inventories[0].items if i.deleted_at is None]
+    assert len(non_deleted_items) == len(TEST_ITEMS) - 1
+    test_items = {(i['name'], i['brand'], i['count']) for i in TEST_ITEMS[:-1]}
+    db_items = {(i.name, i.brand, i.count) for i in non_deleted_items}
+    assert test_items == db_items

@@ -11,7 +11,7 @@ import {
     Placeholder,
     Table
 } from "semantic-ui-react";
-import {getConfig, getDownloads, killDownload, postDownload, saveConfig} from "../api";
+import {getDownloads, getSettings, killDownload, postDownload, saveSettings} from "../api";
 import TimezoneSelect from 'react-timezone-select';
 import {
     DisableDownloadsToggle,
@@ -33,48 +33,59 @@ class Settings extends React.Component {
         this.state = {
             disabled: false,
             ready: false,
-            validTimezone: true,
-            timezone: '',
+
+            download_on_startup: null,
+            hotspot_on_startup: null,
+            hotspot_status: null,
+            throttle_on_startup: null,
+            throttle_status: null,
+            timezone: {timezone: null},
         }
-        this.mediaDirectory = React.createRef();
 
         this.handleSubmit = this.handleSubmit.bind(this);
     }
 
     async componentDidMount() {
-        let config = await getConfig();
+        const settings = await getSettings();
         this.setState({
             ready: true,
-            disabled: config.wrol_mode,
-            timezone: config.timezone || '',
+            disabled: settings.wrol_mode,
+            download_on_startup: settings.download_on_startup,
+            hotspot_on_startup: settings.hotspot_on_startup,
+            hotspot_status: settings.hotspot_status,
+            throttle_on_startup: settings.throttle_on_startup,
+            throttle_status: settings.throttle_status,
+            timezone: {value: settings.timezone, label: settings.timezone},
         });
-        this.mediaDirectory.current.value = config.media_directory;
     }
 
     async handleSubmit(e) {
         e.preventDefault();
-        let config = {
-            media_directory: this.mediaDirectory.current.value,
+        let settings = {
+            download_on_startup: this.state.download_on_startup,
+            hotspot_on_startup: this.state.hotspot_on_startup,
+            throttle_on_startup: this.state.throttle_on_startup,
             timezone: this.state.timezone.value,
-        };
-        this.setState({validTimezone: true});
-        let response = await saveConfig(config);
-        if (response.status !== 200) {
-            let json = await response.json();
-            if (json.api_error === 'Invalid timezone') {
-                this.setState({validTimezone: false});
-            }
         }
+        console.log(settings);
+        await saveSettings(settings);
     }
 
     handleTimezoneChange = async (timezone) => {
-        this.setState({timezone});
+        this.setState({timezone: timezone});
+    }
+
+    handleInputChange = async (e, name, checked) => {
+        e.preventDefault();
+        this.setState({[name]: checked});
     }
 
     render() {
         if (this.state.ready === false) {
             return <Loader active inline='centered'/>
         }
+
+        let {disabled, download_on_startup, hotspot_on_startup, throttle_on_startup, timezone} = this.state;
 
         return (
             <Container fluid>
@@ -83,46 +94,52 @@ class Settings extends React.Component {
                 <HotspotToggle/>
                 <br/>
                 <ThrottleToggle style={{marginTop: '0.5em'}}/>
-
                 <Divider/>
-                <p>
-                    The global settings for your server.
-                </p>
+
+                <Header as='h3'>
+                    The settings for your WROLPi.
+                </Header>
                 <p className="text-muted">
-                    When saved, these will be written to your <i>local.yaml</i> file. Storing these settings in your
-                    local configuration file (rather than the database) allows your WROLPi to be rebuilt and save your
-                    settings.
+                    Any changes will be written to <i>config/wrolpi.yaml</i>.
                 </p>
-                <Divider/>
+
                 <Form id="settings" onSubmit={this.handleSubmit}>
+                    <Checkbox toggle
+                              style={{marginTop: '0.5em', marginBottom: '0.5em'}}
+                              label='Download on Startup'
+                              disabled={disabled || download_on_startup === null}
+                              checked={download_on_startup === true}
+                              onChange={(e, d) => this.handleInputChange(e, 'download_on_startup', d.checked)}
+                    />
 
-                    <Form.Field>
-                        <label>Media Directory</label>
-                        <input
-                            disabled={this.state.disabled}
-                            type="text"
-                            placeholder="/some/absolute/path"
-                            ref={this.mediaDirectory}
-                        />
-                    </Form.Field>
+                    <br/>
+                    <Checkbox toggle
+                              style={{marginTop: '0.5em', marginBottom: '0.5em'}}
+                              label='WiFi Hotspot on Startup'
+                              disabled={disabled || hotspot_on_startup === null}
+                              checked={hotspot_on_startup === true}
+                              onChange={(e, d) => this.handleInputChange(e, 'hotspot_on_startup', d.checked)}
+                    />
 
-                    <p>
-                        <b>This directory must already exist</b>.
-                        The directory in which your media will be stored. Typically, this will be some external
-                        drive like <i>/media/wrolpi</i>.
-                    </p>
+                    <br/>
 
-                    <Divider/>
+                    <Checkbox toggle
+                              style={{marginTop: '0.5em', marginBottom: '0.5em'}}
+                              label='CPU Power-save on Startup'
+                              disabled={disabled || throttle_on_startup === null}
+                              checked={throttle_on_startup === true}
+                              onChange={(e, d) => this.handleInputChange(e, 'throttle_on_startup', d.checked)}
+                    />
 
                     <Form.Field>
                         <label>Timezone</label>
                         <TimezoneSelect
-                            value={this.state.timezone}
+                            value={timezone}
                             onChange={this.handleTimezoneChange}
                         />
                     </Form.Field>
 
-                    <Button color="blue" type="submit" disabled={this.state.disabled}>
+                    <Button color="blue" type="submit" disabled={disabled}>
                         Save
                     </Button>
 
@@ -142,8 +159,8 @@ class WROLMode extends React.Component {
     }
 
     async componentDidMount() {
-        let config = await getConfig();
-        this.setState({ready: true, WROLMode: config.wrol_mode});
+        let settings = await getSettings();
+        this.setState({ready: true, WROLMode: settings.wrol_mode});
     }
 
     toggleWROLMode = async () => {
@@ -151,7 +168,7 @@ class WROLMode extends React.Component {
         let config = {
             wrol_mode: !this.state.WROLMode,
         }
-        await saveConfig(config);
+        await saveSettings(config);
         this.setState({disabled: !this.state.WROLMode, WROLMode: !this.state.WROLMode});
     }
 

@@ -11,7 +11,7 @@ from PIL import Image
 
 from modules.videos.models import Channel, Video
 from modules.videos.test.common import create_channel_structure
-from wrolpi.common import get_absolute_media_path, get_config
+from wrolpi.common import get_absolute_media_path
 from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_session
 from wrolpi.test.common import build_test_directories, wrap_test_db, TestAPI
@@ -19,7 +19,7 @@ from wrolpi.vars import PROJECT_DIR
 from ..common import get_matching_directories, convert_image, remove_duplicate_video_paths, \
     apply_info_json, get_video_duration, generate_video_poster, replace_extension, is_valid_poster, \
     import_videos_config
-from ..lib import save_channels_config
+from ..lib import save_channels_config, get_channels_config
 
 
 class TestCommon(TestAPI):
@@ -309,7 +309,7 @@ def test_update_censored_videos(test_session, video_factory, simple_channel):
     check_censored([(vid1.id, True), (vid2.id, True), (vid3.id, True), (vid4.id, False)])
 
 
-def test_import_favorites(test_session, simple_channel, video_factory):
+def test_import_favorites(test_session, simple_channel, video_factory, test_channels_config):
     """
     A favorited Video will be preserved through everything (channel deletion, DB wipe) and can be imported and will be
     favorited again.
@@ -331,8 +331,8 @@ def test_import_favorites(test_session, simple_channel, video_factory):
 
     # Save config, verify that favorite is set.
     save_channels_config()
-    config = get_config()
-    assert config['favorites'] == favorites
+    config = get_channels_config()
+    assert config.favorites == favorites
 
     def import_and_verify(favorited_ids: List[int]):
         with mock.patch('modules.videos.common.get_channel_source_id', lambda i: 'foo'):
@@ -351,8 +351,8 @@ def test_import_favorites(test_session, simple_channel, video_factory):
     test_session.query(Video).filter_by(id=vid2.id).delete()
     test_session.commit()
     save_channels_config()
-    config = get_config()
-    assert config['favorites'] == favorites
+    config = get_channels_config()
+    assert config.favorites == favorites
     import_and_verify([vid3.id])
 
     # Add vid2 again, it should be favorited on import.
@@ -363,6 +363,6 @@ def test_import_favorites(test_session, simple_channel, video_factory):
 
     # Deleting the Video in the model really removes the favorite status.
     vid3.delete()
-    config = get_config()
-    assert config['favorites'] == {'NO CHANNEL': {vid2.video_path.path.name: {'favorite': favorite}}}
+    config = get_channels_config()
+    assert config.favorites == {'NO CHANNEL': {vid2.video_path.path.name: {'favorite': favorite}}}
     import_and_verify([vid2.id])

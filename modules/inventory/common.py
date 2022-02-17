@@ -127,7 +127,7 @@ class InventoriesConfig(ConfigFile):
         self.update({'version': value})
 
 
-INVENTORIES_CONFIG: InventoriesConfig = None
+INVENTORIES_CONFIG: InventoriesConfig = InventoriesConfig(global_=True)
 TEST_INVENTORIES_CONFIG: InventoriesConfig = None
 
 
@@ -137,10 +137,6 @@ def get_inventories_config():
         return TEST_INVENTORIES_CONFIG
 
     global INVENTORIES_CONFIG
-    if isinstance(INVENTORIES_CONFIG, ConfigFile):
-        return INVENTORIES_CONFIG
-
-    INVENTORIES_CONFIG = InventoriesConfig()
     return INVENTORIES_CONFIG
 
 

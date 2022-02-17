@@ -9,7 +9,7 @@ import pytz
 from sanic import Sanic
 
 from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, after_startup, limit_concurrent, admin
-from wrolpi.common import logger, get_config, import_modules, check_media_directory, set_wrol_mode
+from wrolpi.common import logger, get_config, import_modules, check_media_directory
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED

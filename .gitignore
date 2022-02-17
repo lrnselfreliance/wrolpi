@@ -110,7 +110,7 @@ test/videos
 test/archive
 
 # testing configs
-test/config/*
+test/config
 
 app/package-lock.json
 modules/node_modules/

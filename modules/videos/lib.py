@@ -319,7 +319,7 @@ class ChannelsConfig(ConfigFile):
         self.update({'favorites': value})
 
 
-CHANNELS_CONFIG: ChannelsConfig = None
+CHANNELS_CONFIG: ChannelsConfig = ChannelsConfig(global_=True)
 TEST_CHANNELS_CONFIG: ChannelsConfig = None
 
 
@@ -329,10 +329,6 @@ def get_channels_config():
         return TEST_CHANNELS_CONFIG
 
     global CHANNELS_CONFIG
-    if isinstance(CHANNELS_CONFIG, ConfigFile):
-        return CHANNELS_CONFIG
-
-    CHANNELS_CONFIG = ChannelsConfig()
     return CHANNELS_CONFIG
 
 
@@ -449,21 +445,25 @@ class DownloaderConfig(ConfigFile):
         self.update({'youtube_include_dash_manifest': value})
 
 
-DOWNLOADER_CONFIG: DownloaderConfig = None
+DOWNLOADER_CONFIG: DownloaderConfig = DownloaderConfig(global_=True)
 TEST_DOWNLOADER_CONFIG: DownloaderConfig = None
 
 
 def get_downloader_config():
     global TEST_DOWNLOADER_CONFIG
-    if isinstance(TEST_DOWNLOADER_CONFIG, WROLPiConfig):
+    if isinstance(TEST_DOWNLOADER_CONFIG, DownloaderConfig):
         return TEST_DOWNLOADER_CONFIG
 
     global DOWNLOADER_CONFIG
-    if isinstance(DOWNLOADER_CONFIG, WROLPiConfig):
-        return DOWNLOADER_CONFIG
-
-    DOWNLOADER_CONFIG = DownloaderConfig()
     return DOWNLOADER_CONFIG
+
+
+def set_test_downloader_config(enabled: bool):
+    global TEST_DOWNLOADER_CONFIG
+    if enabled:
+        TEST_DOWNLOADER_CONFIG = DownloaderConfig()
+    else:
+        TEST_DOWNLOADER_CONFIG = None
 
 
 def get_channels_config_from_db(session: Session) -> dict:

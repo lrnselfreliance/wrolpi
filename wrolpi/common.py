@@ -176,7 +176,11 @@ class ConfigFile:
     file_name: str = None
     default_config: dict = None
 
-    def __init__(self):
+    def __init__(self, global_: bool = False):
+        if PYTEST and global_:
+            # Do not load a global config on import while testing.  A global instance will never be used for testing.
+            return
+
         config_file = self.get_file()
         self.file_lock = Lock()
         self._config = Manager().dict()
@@ -186,6 +190,9 @@ class ConfigFile:
             # Use the config file to get the values the user set.
             with config_file.open('rt') as fh:
                 self._config.update(yaml.load(fh, Loader=yaml.Loader))
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__} file={self.get_file()}>'
 
     def save(self):
         """
@@ -242,6 +249,9 @@ class ConfigFile:
         """
         Get a deepcopy of this config.
         """
+        if not hasattr(self, '_config'):
+            raise NotImplementedError('You cannot use a global config while testing!')
+
         return deepcopy(self._config)
 
 
@@ -296,7 +306,7 @@ class WROLPiConfig(ConfigFile):
         self.update({'wrol_mode': value})
 
 
-WROLPI_CONFIG: WROLPiConfig = None
+WROLPI_CONFIG: WROLPiConfig = WROLPiConfig(global_=True)
 TEST_WROLPI_CONFIG: WROLPiConfig = None
 
 
@@ -307,11 +317,6 @@ def get_config() -> WROLPiConfig:
         return TEST_WROLPI_CONFIG
 
     global WROLPI_CONFIG
-    if isinstance(WROLPI_CONFIG, WROLPiConfig):
-        return WROLPI_CONFIG
-
-    # Create the config instance once.
-    WROLPI_CONFIG = WROLPiConfig()
     return WROLPI_CONFIG
 
 

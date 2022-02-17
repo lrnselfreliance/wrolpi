@@ -94,7 +94,7 @@ visudo -c -f /etc/sudoers.d/90-wrolpi
 
 # Create the media directory.  This should be mounted by the maintainer.
 [ -d /media/wrolpi ] || mkdir /media/wrolpi
-chown -R wrolpi:wrolpi /media/wrolpi
+chown wrolpi:wrolpi /media/wrolpi
 
 # Install the systemd services
 cp /opt/wrolpi/systemd/wrolpi-api.service /etc/systemd/system/

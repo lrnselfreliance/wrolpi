@@ -109,7 +109,7 @@ venv.bak/
 test/videos
 test/archive
 
-# testing configs
+# docker configs
 test/config
 
 app/package-lock.json

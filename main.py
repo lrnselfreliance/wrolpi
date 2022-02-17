@@ -125,8 +125,10 @@ async def set_log_level(args):
     sa_logger = logging.getLogger('sqlalchemy.engine')
     if args.verbose == 1:
         root_logger.setLevel(logging.INFO)
+    elif args.verbose and args.verbose == 2:
+        root_logger.setLevel(logging.DEBUG)
         sa_logger.setLevel(logging.INFO)
-    elif args.verbose and args.verbose >= 2:
+    elif args.verbose and args.verbose >= 3:
         root_logger.setLevel(logging.DEBUG)
         sa_logger.setLevel(logging.DEBUG)
 

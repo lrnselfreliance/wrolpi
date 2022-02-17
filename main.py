@@ -140,9 +140,11 @@ def periodic_downloads(app: Sanic, loop):
     config = get_config()
     if config.wrol_mode:
         logger.warning(f'Not starting download worker because WROL Mode is enabled.')
+        download_manager.kill()
         return
     if config.download_on_startup is False:
         logger.warning(f'Not starting download worker because Downloads are disabled on startup.')
+        download_manager.kill()
         return
 
     logger.info('Starting download manager.')

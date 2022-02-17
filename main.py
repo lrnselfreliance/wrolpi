@@ -127,7 +127,6 @@ async def set_log_level(args):
         root_logger.setLevel(logging.INFO)
     elif args.verbose and args.verbose == 2:
         root_logger.setLevel(logging.DEBUG)
-        sa_logger.setLevel(logging.INFO)
     elif args.verbose and args.verbose >= 3:
         root_logger.setLevel(logging.DEBUG)
         sa_logger.setLevel(logging.DEBUG)

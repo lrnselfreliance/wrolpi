@@ -10,7 +10,6 @@ RUN pdflatex --version
 
 # Install WROLPi
 COPY main.py /opt/wrolpi/
-COPY config /opt/wrolpi/config
 COPY wrolpi /opt/wrolpi/wrolpi
 COPY modules /opt/wrolpi/modules
 COPY requirements.txt /opt/wrolpi/requirements.txt

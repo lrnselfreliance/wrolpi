@@ -20,7 +20,7 @@ jobs:
     steps:
       - checkout
       - run: sudo apt-get update
-      - run: sudo apt-get install -y ffmpeg
+      - run: sudo apt-get install -y ffmpeg texlive-latex-base texlive-latex-extra
       - run:
           name: Install Requirements
           command: |

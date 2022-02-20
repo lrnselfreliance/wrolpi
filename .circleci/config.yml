@@ -10,9 +10,12 @@ jobs:
     # See: https://circleci.com/docs/2.0/configuration-reference/#docker-machine-macos-windows-executor
     docker:
       - image: cimg/python:3.8
-    environment:
-      DATABASE_URL: postgresql://postgres@localhost/wrolpi?sslmode=disable
-        - image: cimg/postgres:12.0
+      - image: cimg/postgres:12.0
+        environment:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: wrolpi
+          POSTGRES_PASSWORD: "wrolpi"
+          POSTGRES_PORT: 54321
     # Add steps to the job
     # See: https://circleci.com/docs/2.0/configuration-reference/#steps
     steps:

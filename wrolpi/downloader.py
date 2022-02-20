@@ -590,7 +590,7 @@ class DownloadManager:
         return data
 
     @optional_session
-    def get_pending_downloads(self, session: Session):
+    def get_pending_downloads(self, session: Session) -> List[Download]:
         return session.query(Download).filter_by(status='pending').all()
 
     @optional_session

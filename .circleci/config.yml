@@ -28,7 +28,7 @@ jobs:
             . venv/bin/activate
             pip install -r requirements.txt
       - run:
-          command: 'pytest -svv wrolpi modules'
+          command: './venv/bin/pytest -svv wrolpi modules'
       - save_cache:
           key: deps9-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
           paths:

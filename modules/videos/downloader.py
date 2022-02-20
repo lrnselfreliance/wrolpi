@@ -163,6 +163,7 @@ class VideoDownloader(Downloader, ABC):
                 str(YT_DLP_BIN),
                 '-cw',  # Continue downloads, do not clobber existing files.
                 '-f', PREFERRED_VIDEO_FORMAT,
+                '--match-filter', '!is_live',  # Do not attempt to download Live videos.
                 '--write-subs',
                 '--write-auto-subs',
                 '--write-thumbnail',
@@ -217,9 +218,8 @@ class VideoDownloader(Downloader, ABC):
             raise ValueError(f'Output directory does not exist! {out_dir=}')
 
         # YoutubeDL expects specific options, add onto the default options
-        config = get_downloader_config().dict()
-        options = config.copy()
-        options['outtmpl'] = f'{out_dir}/{config["file_name_format"]}'
+        options = get_downloader_config().dict()
+        options['outtmpl'] = f'{out_dir}/{options["file_name_format"]}'
         options['merge_output_format'] = PREFERRED_VIDEO_EXTENSION
         # We don't need "format" when getting the filename.
         del options['format']

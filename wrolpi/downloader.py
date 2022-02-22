@@ -14,7 +14,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
 from wrolpi.common import Base, ModelHelper, logger, iterify, wrol_mode_check, zig_zag
-from wrolpi.dates import TZDateTime, now, Seconds, local_timezone
+from wrolpi.dates import TZDateTime, now, Seconds, local_timezone, recursive_replace_tz
 from wrolpi.db import get_db_session, get_db_curs, get_db_context, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
@@ -578,14 +578,63 @@ class DownloadManager:
         """
         return list(filter(lambda i: i.listable, self.instances))
 
-    @optional_session
-    def get_fe_downloads(self, session: Session = None):
-        """
-        Get downloads for the Frontend.
-        """
+    # Downloads should be sorted by their status in a particular order.
+    _status_order = '''CASE
+                        WHEN (status = 'pending') THEN 0
+                        WHEN (status = 'failed') THEN 1
+                        WHEN (status = 'new') THEN 2
+                        WHEN (status = 'deferred') THEN 3
+                        WHEN (status = 'complete') THEN 4
+                    END'''
+
+    def get_fe_downloads(self):
+        """Get downloads for the Frontend."""
+        # Use custom SQL because SQLAlchemy is slow.
+        with get_db_curs() as curs:
+            stmt = f'''
+                SELECT
+                    downloader,
+                    frequency,
+                    id,
+                    last_successful_download,
+                    next_download,
+                    status,
+                    url
+                FROM download
+                WHERE frequency IS NOT NULL
+                ORDER BY
+                    {self._status_order},
+                    next_download,
+                    frequency
+            '''
+            curs.execute(stmt)
+            recurring_downloads = list(map(dict, curs.fetchall()))
+            recurring_downloads = recursive_replace_tz(recurring_downloads)
+
+            stmt = f'''
+                SELECT
+                    downloader,
+                    frequency,
+                    id,
+                    last_successful_download,
+                    next_download,
+                    status,
+                    url
+                FROM download
+                WHERE frequency IS NULL
+                ORDER BY
+                    {self._status_order},
+                    last_successful_download DESC,
+                    id
+                LIMIT 100
+            '''
+            curs.execute(stmt)
+            once_downloads = list(map(dict, curs.fetchall()))
+            once_downloads = recursive_replace_tz(once_downloads)
+
         data = dict(
-            recurring_downloads=self.get_recurring_downloads(session=session),
-            once_downloads=self.get_once_downloads(session=session, limit=100),
+            recurring_downloads=recurring_downloads,
+            once_downloads=once_downloads,
         )
         return data
 

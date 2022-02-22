@@ -178,4 +178,4 @@ def assert_dict_contains(d1: dict, d2: dict):
         if isinstance(d1[k2], dict):
             assert_dict_contains(d1[k2], d2[k2])
         else:
-            assert d1[k2] == d2[k2], f'{k2} of value "{d1[k2]}" does not equal {d2[k2]} in dict 1'
+            assert d1[k2] == d2[k2], f'{k2} of value {d1[k2]} does not equal {d2[k2]} in dict 1'

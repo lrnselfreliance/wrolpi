@@ -97,6 +97,12 @@ def from_timestamp(timestamp: float) -> datetime:
     return local_timezone(datetime.fromtimestamp(timestamp))
 
 
+def recursive_replace_tz(obj, tz=pytz.utc):
+    """Recursively replace the timezone of any datetimes."""
+    from wrolpi.common import recursive_map
+    return recursive_map(obj, lambda i: i.replace(tzinfo=tz) if isinstance(i, datetime) else i)
+
+
 class TZDateTime(types.TypeDecorator):
     impl = types.DateTime
     cache_ok = True

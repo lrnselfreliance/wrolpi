@@ -395,7 +395,7 @@ export async function getDownloaders() {
 
 const replaceFileDatetimes = (files) => {
     for (let i = 0; i < files.length; i++) {
-        let file = files[i]['modified'];
+        let file = files[i];
         if (file['modified']) {
             files[i]['modified'] = secondsToDateTime(file['modified']);
         }

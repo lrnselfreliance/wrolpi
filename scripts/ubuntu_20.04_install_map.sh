@@ -47,9 +47,7 @@ fi
 # Use D.C. to initialized DB because it is so small.
 wget --continue https://download.geofabrik.de/north-america/us/district-of-columbia-latest.osm.pbf \
   -O /tmp/district-of-columbia-latest.osm.pbf
-sudo -u wrolpi /usr/bin/osm2pgsql -d gis --create --slim -G --hstore --tag-transform-script \
-  /opt/openstreetmap-carto/openstreetmap-carto.lua -C 2000 --number-processes 4 \
-  -S /opt/openstreetmap-carto/openstreetmap-carto.style /tmp/district-of-columbia-latest.osm.pbf
+sudo -u wrolpi /bin/bash /opt/wrolpi/scripts/import_map.sh /tmp/district-of-columbia-latest.osm.pbf
 # Initialize indexes and global polygons.
 sudo -u wrolpi psql -d gis -f /opt/openstreetmap-carto/indexes.sql
 sudo -u wrolpi /opt/openstreetmap-carto/scripts/get-external-data.py -d gis -U wrolpi

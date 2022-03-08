@@ -27,7 +27,7 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 - [x] Food Inventory management
 - [x] Wi-Fi Hotspot
 - [x] Universal search
-- [ ] Map viewer & downloader
+- [x] Map viewer & downloader
 - [ ] eBook viewer
 - [ ] Wiki viewer & downloader
 - [ ] Synchronizer and/or duplicator
@@ -51,9 +51,12 @@ You can try out WROLPi by running the docker containers.
     * `docker-compose up -d db`
 5. Initialize the database
     * `docker-compose run --rm api db upgrade`
-6. Start the docker containers
+6. Create volumes
+    * `docker volume create --name=openstreetmap-data`
+    * `docker volume create --name=openstreetmap-rendered-tiles`
+7. Start the docker containers
     * `docker-compose up`
-7. Navigate to WROLPi
+8. Navigate to WROLPi
     * http://0.0.0.0:8080
 
 # RaspberryPi Install

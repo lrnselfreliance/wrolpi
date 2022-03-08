@@ -6,9 +6,10 @@ const responsiveWidth = 500;
 
 const links = [
     {text: 'Videos', to: '/videos', key: 'videos'},
-    {text: 'Inventory', to: '/inventory', key: 'inventory'},
     {text: 'Archive', to: '/archive', key: 'archive'},
+    {text: 'Map', to: '/map', key: 'map'},
     {text: 'Files', to: '/files', key: 'files'},
+    {text: 'Inventory', to: '/inventory', key: 'inventory'},
     {
         key: 'apps', text: 'Apps', links: [
             {to: '/apps/otp', text: 'One Time Pad', exact: true},

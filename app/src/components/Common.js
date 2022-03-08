@@ -1,10 +1,22 @@
 import React, {useEffect, useState} from "react";
-import {Card, Checkbox, Container, Form, Icon, Image, Input, Menu, Pagination, Responsive} from 'semantic-ui-react';
+import {
+    Card,
+    Checkbox,
+    Container,
+    Form,
+    Icon,
+    Image,
+    Input,
+    Menu,
+    Pagination,
+    Popup,
+    Responsive
+} from 'semantic-ui-react';
 import {Link, NavLink} from "react-router-dom";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {getConfig, getSettings} from "../api";
+import {getSettings} from "../api";
 import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
 
 export const API_URI = `http://${window.location.host}/api`;
@@ -256,15 +268,13 @@ export function secondsToTimestamp(seconds) {
 }
 
 export function humanFileSize(bytes, si = false, dp = 1) {
-    const thresh = si ? 1000 : 1024;
+    const thresh = 1024;
 
     if (Math.abs(bytes) < thresh) {
         return bytes + ' B';
     }
 
-    const units = si
-        ? ['kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB']
-        : ['KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+    const units = ['kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
     let u = -1;
     const r = 10 ** dp;
 
@@ -684,4 +694,24 @@ export function emptyToNull(obj) {
         }
     }
     return obj;
+}
+
+export function HelpPopup({icon, size, content, position}) {
+    return <Popup
+        content={content}
+        size={size || null}
+        position={position || 'left center'}
+        trigger={
+            <Icon circular link name={icon || 'question'} size='small'
+                  style={{marginLeft: '0.25em', marginRight: '0.25em'}}
+            />}
+    />
+}
+
+export function minutesToTimestamp(minutes) {
+    minutes = Math.round(minutes);
+    const hours = String(Math.floor(minutes / 60)).padStart(1, '0');
+    minutes = minutes - (hours * 60);
+    minutes = String(minutes).padStart(2, '0');
+    return `${hours}:${minutes}`
 }

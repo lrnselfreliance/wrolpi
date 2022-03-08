@@ -2,6 +2,7 @@
 version: '3'
 services:
   db:
+    # https://github.com/docker-library/docs/tree/master/postgres
     image: postgres:12
     environment:
       - POSTGRES_DB=wrolpi
@@ -60,6 +61,20 @@ services:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:3000' ]
     user: '${UID-1000}:${GID-1000}'
 
+  map:
+    # https://github.com/Overv/openstreetmap-tile-server
+    image: overv/openstreetmap-tile-server:v1.6.0
+    volumes:
+      - 'openstreetmap-data:/var/lib/postgresql/12/main'
+      - 'openstreetmap-rendered-tiles:/var/lib/mod_tile'
+      - './modules/map/leaflet.html:/var/www/html/index.html'
+      - './modules/map/leaflet.js:/var/www/html/leaflet.js'
+      - './modules/map/leaflet.css:/var/www/html/leaflet.css'
+    ports:
+      - '8084:80'
+    command: 'run'
+    shm_size: 1g  # Increase shared size to render large map tiles
+
   web:
     depends_on:
       - app
@@ -73,3 +88,9 @@ services:
       - './test:/opt/media'
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:80' ]
+
+volumes:
+  openstreetmap-data:
+    external: true
+  openstreetmap-rendered-tiles:
+    external: true

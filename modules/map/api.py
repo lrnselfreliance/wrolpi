@@ -1,41 +1,54 @@
 import asyncio
 from http import HTTPStatus
 from pathlib import Path
-from urllib.parse import urlparse
 
-from sanic import Blueprint, response
+from sanic import Request, response
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from modules.map.schema import PBFPostRequest, PBFPostResponse
-from wrolpi.common import create_websocket_feed
+from modules.map import lib, schema
+from wrolpi.common import wrol_mode_check, get_media_directory
+from wrolpi.errors import ValidationError
+from wrolpi.root_api import get_blueprint, json_response
+from wrolpi.vars import PYTEST, DOCKERIZED
 
-NAME = 'map'
-
-api_bp = Blueprint('Map', url_prefix='/map')
-
-download_queue, download_event = create_websocket_feed('pbf_progress', '/feeds/pbf_progress', api_bp)
+bp = get_blueprint('Map', '/api/map')
 
 
-@api_bp.route('/pbf', methods=['POST'])
-@openapi.description('Queue a PBF file for download and processing')
-@openapi.response(HTTPStatus.OK, PBFPostResponse)
-@validate(PBFPostRequest)
-def pbf_post(request, data: dict):
-    pbf_url = data.get('pbf_url')
-    parsed = urlparse(pbf_url)
-    if not parsed.scheme or not parsed.netloc or not parsed.path:
-        return response.json({'error': 'Invalid PBF url'}, HTTPStatus.BAD_REQUEST)
+@bp.post('/import')
+@openapi.definition(
+    summary='Import PBF map files',
+    body=schema.ImportPost,
+)
+@validate(schema.ImportPost)
+@wrol_mode_check
+async def import_pbfs(request: Request, body: schema.ImportPost):
+    if lib.IMPORT_EVENT.is_set():
+        return response.json({'error': 'Map import already running'}, HTTPStatus.CONFLICT)
 
-    # Get the size of the PBF file.  Also, check that it is accessible.
-    try:
-        size, filename = get_http_file_info(pbf_url)
-    except LookupError:
-        # Couldn't get the size of the file, probably doesn't exist
-        return response.json({'error': 'Failed to get file size.  Does it exists?', 'url': pbf_url},
-                             HTTPStatus.NOT_FOUND)
+    pbfs = [i for i in body.pbfs if i]
+    if not pbfs:
+        raise ValidationError('No PBF files were provided')
 
-    destination = Path('/tmp') / filename
-    coro = download_file(pbf_url, size, destination)
-    asyncio.ensure_future(coro)
-    return response.json({'success': 'File download started'})
+    if PYTEST:
+        await lib.import_pbfs(pbfs)
+    else:
+        asyncio.create_task(lib.import_pbfs(pbfs))
+    return response.empty()
+
+
+@bp.get('/pbf')
+@openapi.description('Find any PBF map files, get their import status')
+def pbf(request: Request):
+    pbfs = lib.get_pbf_import_status()
+    pbfs = sorted(pbfs, key=lambda i: str(i.path))
+    importing = lib.IMPORTING.get('pbf')
+    if importing:
+        importing = Path(importing).relative_to(get_media_directory())
+    body = dict(
+        pbfs=pbfs,
+        importing=importing,
+        import_running=lib.IMPORT_EVENT.is_set(),
+        dockerized=DOCKERIZED,
+    )
+    return json_response(body, HTTPStatus.OK)

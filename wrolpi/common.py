@@ -409,9 +409,7 @@ def remove_whitespace(s: str) -> str:
 
 
 def run_after(after: callable, *args, **kwargs) -> callable:
-    """
-    Run the `after` function sometime in the future ofter the wrapped function returns.
-    """
+    """Run the `after` function sometime in the future ofter the wrapped function returns."""
     if not inspect.iscoroutinefunction(after):
         synchronous_after = after
 

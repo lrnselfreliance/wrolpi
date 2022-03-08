@@ -119,6 +119,7 @@ docker/archive/package-lock.json
 
 # open street map files
 *.pbf
+mapnik.xml
 
 # docker override
 docker-compose.override.yml

@@ -328,6 +328,11 @@ class Downloads extends React.Component {
 
     async componentDidMount() {
         await this.fetchDownloads();
+        this.intervalId = setInterval(this.fetchDownloads, 1000 * 10);
+    }
+
+    componentWillUnmount() {
+        clearInterval(this.intervalId);
     }
 
     closeStop = () => {

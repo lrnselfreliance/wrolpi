@@ -15,6 +15,7 @@ import {Saver} from "./components/Upload";
 import {MoreButton, PageContainer, SearchInput} from "./components/Common";
 import {FilesRoute} from "./components/Files";
 import {useSearch, useVersion} from "./hooks/customHooks";
+import {MapRoute} from "./components/Map";
 
 function Welcome() {
     const {searchStr, setSearchStr, archives, videos} = useSearch();
@@ -88,6 +89,7 @@ export default function App() {
                     <Route path="/apps" component={AppsRoute}/>
                     <Route path="/inventory" component={InventoryRoute}/>
                     <Route path='/archive' component={ArchiveRoute}/>
+                    <Route path='/map' component={MapRoute}/>
                     <Route path='/files' component={FilesRoute}/>
                     <Route component={PageNotFound}/>
                 </Switch>

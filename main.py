@@ -59,7 +59,7 @@ async def main(loop):
 
     # DB Parser for running Alembic migrations
     db_parser = sub_commands.add_parser('db')
-    db_parser.add_argument('command', help=f'Supported commands: upgrade, downgrade')
+    db_parser.add_argument('command', help='Supported commands: upgrade, downgrade')
 
     args = parser.parse_args()
 

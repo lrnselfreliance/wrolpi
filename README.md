@@ -2,6 +2,7 @@
 
 [![Build Status](https://img.shields.io/travis/lrnselfreliance/wrolpi?style=flat-square)](https://travis-ci.com/lrnselfreliance/wrolpi)
 [![License: GPL v3](https://img.shields.io/github/license/lrnselfreliance/wrolpi?style=flat-square)](https://github.com/lrnselfreliance/wrolpi/blob/master/LICENSE)
+[![Discord](https://img.shields.io/discord/900430987987681330?label=Discord&logo=discord)](https://discord.gg/HrwFk7nqA2)
 
 **Take your internet, off-grid.**
 

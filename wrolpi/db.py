@@ -30,7 +30,7 @@ def get_db_args(dbname: str = None):
     elif PYTEST:
         # Pytest is running but we're not in docker, use the exposed docker container port.
         db_args['user'] = 'postgres'
-        db_args['port'] = 54321
+        db_args['port'] = 5432
 
     return db_args
 

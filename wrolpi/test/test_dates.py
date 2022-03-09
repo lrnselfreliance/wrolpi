@@ -5,7 +5,7 @@ from sqlalchemy import Column, Integer
 from wrolpi.common import Base
 from wrolpi.dates import TZDateTime, local_timezone, strftime_ms
 from wrolpi.db import get_db_session, get_db_curs
-from wrolpi.test.common import TestAPI, wrap_test_db
+from wrolpi.test.common import TestAPI, wrap_test_db, skip_circleci
 
 
 class TestTable(Base):
@@ -17,6 +17,7 @@ class TestTable(Base):
     dt = Column(TZDateTime)
 
 
+@skip_circleci
 class TestDates(TestAPI):
 
     def assert_raw_datetime(self, expected_datetime: str):

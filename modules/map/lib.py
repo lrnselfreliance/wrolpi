@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from modules.map.models import MapFile
 from wrolpi.common import get_media_directory, walk, logger
+from wrolpi.dates import now
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.vars import PYTEST, PROJECT_DIR
 
@@ -108,7 +109,9 @@ async def import_pbf(pbf: Path):
     """Run the osm2pgsql binary to import a PBF map file."""
     cmd = f'/bin/bash {PROJECT_DIR}/scripts/import_map.sh {pbf.absolute()}'
     logger.debug(f'Running import script: {cmd}')
+    start = now()
     proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
+    logger.debug(f'Import of {pbf} took {now() - start}')
 
     stdout, stderr = await proc.communicate()
     if proc.returncode != 0:

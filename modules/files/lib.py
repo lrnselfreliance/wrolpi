@@ -157,7 +157,7 @@ def search(search_str: str, limit: int, offset: int):
             SELECT id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total
             FROM file
             WHERE textsearch @@ websearch_to_tsquery(%(search_str)s)
-            ORDER BY 2, 1
+            ORDER BY 1, 2
             OFFSET %(offset)s LIMIT %(limit)s
         '''
         params = dict(search_str=search_str, offset=offset, limit=limit)

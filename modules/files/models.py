@@ -18,7 +18,7 @@ class File(ModelHelper, Base):
     title = deferred(Column(String))  # used by textsearch column
 
     textsearch = deferred(
-        Column(tsvector, Computed('''to_tsvector('english'::regconfig, title)''')))
+        Column(tsvector, Computed('''setweight(to_tsvector('english'::regconfig, title), 'A'::"char")''')))
 
     def __repr__(self):
         return f'<File id={self.id} path={self.path.relative_to(get_media_directory())} mime={self.mimetype}>'

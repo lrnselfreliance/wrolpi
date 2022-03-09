@@ -137,7 +137,7 @@ def test_files_search(test_session, test_client, make_files_structure):
         'foo_is_the_name.txt',
         'archives/bar.txt',
         'baz.mp4',
-        'baz two.mp4'
+        'baz baz two.mp4'
     ]
     foo, bar, baz, baz2 = make_files_structure(files)
     foo.write_text('foo contents')
@@ -152,8 +152,8 @@ def test_files_search(test_session, test_client, make_files_structure):
     do_search(test_client, 'foo', 1, [dict(path='foo_is_the_name.txt', mimetype='text/plain', size=12)])
     do_search(test_client, 'bar', 1, [dict(path='archives/bar.txt', mimetype='text/plain', size=16)])
     do_search(test_client, 'baz', 2, [
-        dict(path='baz two.mp4', mimetype='video/mp4', size=1055736),
+        dict(path='baz baz two.mp4', mimetype='video/mp4', size=1055736),
         dict(path='baz.mp4', mimetype='video/mp4', size=1055736),
     ])
-    do_search(test_client, 'two', 1, [dict(path='baz two.mp4', mimetype='video/mp4', size=1055736)])
+    do_search(test_client, 'two', 1, [dict(path='baz baz two.mp4', mimetype='video/mp4', size=1055736)])
     do_search(test_client, 'nothing', 0, [])

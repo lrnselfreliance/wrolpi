@@ -55,8 +55,6 @@ def test_session() -> Session:
     """
     Pytest Fixture to get a test database session.
     """
-    import os
-    print(f'{os.environ=}')
     test_engine, session = test_db()
 
     def fake_get_db_session():

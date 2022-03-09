@@ -14,7 +14,7 @@ from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_session
 from wrolpi.media_path import MediaPath
 from wrolpi.root_api import CustomJSONEncoder
-from wrolpi.test.common import TestAPI, wrap_test_db
+from wrolpi.test.common import TestAPI, wrap_test_db, skip_circleci
 
 
 def make_fake_request_archive(readability=True, screenshot=True, title=True):
@@ -291,6 +291,7 @@ def test_get_title_from_html(test_session, fake_now):
         assert archive.title is None
 
 
+@skip_circleci
 def test_get_new_archive_files(fake_now):
     """Archive files have a specific format so they are sorted by datetime, and are near each other."""
     fake_now(datetime(2001, 1, 1))
@@ -311,6 +312,7 @@ def test_get_new_archive_files(fake_now):
     assert str(archive_files.screenshot).endswith('archive/example.com/2001-01-01-00-00-00_Title.png')
 
 
+@skip_circleci
 def test_title_in_filename(test_session, fake_now, test_directory):
     """
     The Archive files have the title in the path.
@@ -382,6 +384,7 @@ def test_title_in_filename(test_session, fake_now, test_directory):
            'archive/2000-01-01-00-00-00_dangerous ;_title.png'
 
 
+@skip_circleci
 def test_refresh_archives(test_session, test_directory):
     """Archives can be found and put in the database.  A single Archive will have multiple files."""
     archive_directory = get_archive_directory()
@@ -477,6 +480,7 @@ def test_is_archive_file(name, expected, test_directory):
     assert lib.is_archive_file(path) == expected
 
 
+@skip_circleci
 def test_migrate_archive_files(test_session, archive_directory, archive_factory):
     """Test that migration of all old Archive formatted files are migrated."""
     # Create some updated archives that should be ignored.

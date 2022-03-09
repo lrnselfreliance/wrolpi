@@ -1,3 +1,4 @@
+import os
 import pathlib
 import tempfile
 import unittest
@@ -8,6 +9,7 @@ from itertools import zip_longest
 from typing import List
 
 import mock
+import pytest
 from requests import Response
 
 from wrolpi.common import set_test_media_directory, get_media_directory
@@ -15,6 +17,10 @@ from wrolpi.conftest import ROUTES_ATTACHED, test_db, test_client  # noqa
 from wrolpi.db import postgres_engine
 
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
+
+skip_circleci = pytest.mark.skipif(
+    os.environ.get('CIRCLECI', '').strip().lower() == 'true',
+    reason='This test is not supported in Circle CI')
 
 
 def wrap_test_db(func):

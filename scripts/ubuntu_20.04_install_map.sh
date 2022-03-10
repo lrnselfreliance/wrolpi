@@ -49,8 +49,9 @@ fi
 # Use D.C. to initialized DB because it is so small.
 wget --continue https://download.geofabrik.de/north-america/us/district-of-columbia-latest.osm.pbf \
   -O /tmp/district-of-columbia-latest.osm.pbf
+
 # Initialize indexes and global polygons.   This may take multiple tries.
-set +x
+set +e
 MAX_TRIES=3
 COUNT=0
 SUCCESS=false
@@ -72,6 +73,8 @@ if [[ "${SUCCESS}" == false ]]; then
   echo "Could not import map data"
   exit 6
 fi
+
+set -e
 
 cat >/usr/local/etc/renderd.conf <<'EOF'
 [renderd]

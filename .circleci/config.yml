@@ -29,10 +29,6 @@ jobs:
             pip install -r requirements.txt
       - run:
           command: './venv/bin/pytest -svv wrolpi modules'
-      - save_cache:
-          key: deps9-{{ .Branch }}-{{ checksum "Pipfile.lock" }}
-          paths:
-            - "venv"
 
 # Invoke jobs via workflows
 # See: https://circleci.com/docs/2.0/configuration-reference/#workflows

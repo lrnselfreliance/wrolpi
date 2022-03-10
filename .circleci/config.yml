@@ -5,7 +5,7 @@ version: 2.1
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/2.0/configuration-reference/#jobs
 jobs:
-  api-tests-three-eight:
+  api-tests-eight:
     docker:
       - image: cimg/python:3.8
       - image: cimg/postgres:12.9
@@ -25,7 +25,7 @@ jobs:
             pip install -r requirements.txt
       - run:
           command: './venv/bin/pytest -svv wrolpi modules'
-  api-tests-three-nine:
+  api-tests-nine:
     docker:
       - image: cimg/python:3.9
       - image: cimg/postgres:13.5
@@ -45,9 +45,29 @@ jobs:
             pip install -r requirements.txt
       - run:
           command: './venv/bin/pytest -svv wrolpi modules'
-  api-tests-three-ten:
+  api-tests-ten:
     docker:
       - image: cimg/python:3.10
+      - image: cimg/postgres:14.1
+        environment:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: wrolpi
+          POSTGRES_PASSWORD: "wrolpi"
+    steps:
+      - checkout
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y ffmpeg texlive-latex-base texlive-latex-extra
+      - run:
+          name: Install Requirements
+          command: |
+            python3 -m venv venv
+            . venv/bin/activate
+            pip install -r requirements.txt
+      - run:
+          command: './venv/bin/pytest -svv wrolpi modules'
+  api-tests-eleven:
+    docker:
+      - image: cimg/python:3.11
       - image: cimg/postgres:14.1
         environment:
           POSTGRES_USER: postgres
@@ -69,6 +89,7 @@ jobs:
 workflows:
   wrolpi-api-tests:
     jobs:
-      - api-tests-three-eight
-      - api-tests-three-nine
-      - api-tests-three-ten
+      - api-tests-eight
+      - api-tests-nine
+      - api-tests-ten
+      - api-tests-eleven

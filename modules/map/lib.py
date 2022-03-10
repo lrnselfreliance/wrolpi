@@ -7,8 +7,8 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from modules.map.models import MapFile
-from wrolpi.common import get_media_directory, walk, logger
-from wrolpi.dates import now
+from wrolpi.common import get_media_directory, walk, logger, wrol_mode_check
+from wrolpi.dates import now, timedelta_to_timestamp
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.vars import PYTEST, PROJECT_DIR
 
@@ -112,7 +112,8 @@ async def import_pbf(pbf: Path):
     proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
 
     stdout, stderr = await proc.communicate()
-    logger.debug(f'Import of {pbf} took {now() - start}')
+    elapsed = now() - start
+    logger.info(f'Import of {pbf} took {timedelta_to_timestamp(elapsed)}')
     if proc.returncode != 0:
         for line in stdout.decode().splitlines():
             logger.info(line)
@@ -136,6 +137,7 @@ def get_pbf_import_status(session: Session = None):
 MOD_TILE_CACHE_DIR = Path('/var/lib/mod_tile/ajt')
 
 
+@wrol_mode_check
 def clear_mod_tile():
     """Remove all cached map tile files"""
     if PYTEST:

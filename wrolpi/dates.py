@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 from enum import Enum
 
 import pytz
@@ -95,6 +95,37 @@ def strptime_ms(dt: str) -> datetime:
 
 def from_timestamp(timestamp: float) -> datetime:
     return local_timezone(datetime.fromtimestamp(timestamp))
+
+
+def seconds_to_timestamp(seconds: int) -> str:
+    """Convert an integer into a timestamp string."""
+    weeks = seconds // Seconds.week
+    seconds = seconds % Seconds.week
+    days = seconds // Seconds.day
+    seconds = seconds % Seconds.day
+    hours = seconds // Seconds.hour
+    seconds = seconds % Seconds.hour
+    minutes = seconds // Seconds.minute
+    seconds = seconds % Seconds.minute
+    timestamp = f'{hours:02}:{minutes:02}:{seconds:02}'
+    if weeks:
+        timestamp = f'{weeks}w {days}d {timestamp}'
+    elif days:
+        timestamp = f'{days}d {timestamp}'
+    return timestamp
+
+
+def timedelta_to_timestamp(delta: timedelta) -> str:
+    """Convert a datetime.timestamp into a timestamp string.
+
+    >>> timedelta_to_timestamp(timedelta(seconds=60))
+    '00:01:00'
+    >>> timedelta_to_timestamp(timedelta(weeks=1, days=1, seconds=7))
+    '1w 1d 00:00:07'
+    >>> timedelta_to_timestamp(timedelta(days=10))
+    '1w 3d 00:00:00'
+    """
+    return seconds_to_timestamp(int(delta.total_seconds()))
 
 
 def recursive_replace_tz(obj, tz=pytz.utc):

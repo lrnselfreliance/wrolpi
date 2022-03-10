@@ -110,9 +110,9 @@ async def import_pbf(pbf: Path):
     logger.debug(f'Running import script: {cmd}')
     start = now()
     proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
-    logger.debug(f'Import of {pbf} took {now() - start}')
 
     stdout, stderr = await proc.communicate()
+    logger.debug(f'Import of {pbf} took {now() - start}')
     if proc.returncode != 0:
         for line in stdout.decode().splitlines():
             logger.info(line)

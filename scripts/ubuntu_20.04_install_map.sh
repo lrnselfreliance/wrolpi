@@ -55,20 +55,20 @@ set +e
 MAX_TRIES=3
 COUNT=0
 SUCCESS=false
+external_data=false
 dc_import=false
 indexes=false
-external_data=false
 while [ "${COUNT}" -lt "${MAX_TRIES}" ]; do
+  [[ "${external_data}" = false ]] &&
+    sudo -u wrolpi /opt/openstreetmap-carto/scripts/get-external-data.py -d gis -U wrolpi &&
+    external_data=true
   [[ "${dc_import}" = false ]] &&
     sudo -u wrolpi /bin/bash /opt/wrolpi/scripts/import_map.sh /tmp/district-of-columbia-latest.osm.pbf &&
     dc_import=true
   [[ "${indexes}" = false ]] &&
     sudo -u wrolpi psql -d gis -f /opt/openstreetmap-carto/indexes.sql &&
     indexes=true
-  [[ "${external_data}" = false ]] &&
-    sudo -u wrolpi /opt/openstreetmap-carto/scripts/get-external-data.py -d gis -U wrolpi &&
-    external_data=true
-  if [[ "${dc_import}" == true && "${indexes}" == true && "${external_data}" == true ]]; then
+  if [[ "${external_data}" == true && "${dc_import}" == true && "${indexes}" == true ]]; then
     SUCCESS=true
     break
   fi

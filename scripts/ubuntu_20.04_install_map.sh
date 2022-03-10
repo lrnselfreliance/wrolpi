@@ -63,7 +63,10 @@ while [ "${COUNT}" -lt "${MAX_TRIES}" ]; do
     sudo -u wrolpi /opt/openstreetmap-carto/scripts/get-external-data.py -d gis -U wrolpi &&
     external_data=true
   [[ "${dc_import}" = false ]] &&
-    sudo -u wrolpi /bin/bash /opt/wrolpi/scripts/import_map.sh /tmp/district-of-columbia-latest.osm.pbf &&
+    # Run import in "create" mode so basic tables will be created.
+    sudo -u wrolpi osm2pgsql -d gis --create --slim -G --hstore --tag-transform-script \
+      /opt/openstreetmap-carto/openstreetmap-carto.lua -C 2000 --number-processes 4 \
+      -S /opt/openstreetmap-carto/openstreetmap-carto.style /tmp/district-of-columbia-latest.osm.pbf &&
     dc_import=true
   [[ "${indexes}" = false ]] &&
     sudo -u wrolpi psql -d gis -f /opt/openstreetmap-carto/indexes.sql &&

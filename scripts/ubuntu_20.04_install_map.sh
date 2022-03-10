@@ -49,10 +49,22 @@ fi
 # Use D.C. to initialized DB because it is so small.
 wget --continue https://download.geofabrik.de/north-america/us/district-of-columbia-latest.osm.pbf \
   -O /tmp/district-of-columbia-latest.osm.pbf
-sudo -u wrolpi /bin/bash /opt/wrolpi/scripts/import_map.sh /tmp/district-of-columbia-latest.osm.pbf
-# Initialize indexes and global polygons.
-sudo -u wrolpi psql -d gis -f /opt/openstreetmap-carto/indexes.sql
-sudo -u wrolpi /opt/openstreetmap-carto/scripts/get-external-data.py -d gis -U wrolpi
+# Initialize indexes and global polygons.   This may take multiple tries.
+set +x
+MAX_TRIES=3
+COUNT=0
+while [ "${COUNT}" -lt "${MAX_TRIES}" ]; do
+  sudo -u wrolpi /bin/bash /opt/wrolpi/scripts/import_map.sh /tmp/district-of-columbia-latest.osm.pbf
+  dc_import=$?
+  sudo -u wrolpi psql -d gis -f /opt/openstreetmap-carto/indexes.sql
+  indexes=$?
+  sudo -u wrolpi /opt/openstreetmap-carto/scripts/get-external-data.py -d gis -U wrolpi
+  external_data=$?
+  if [[ "${dc_import}" == 0 && "${indexes}" == 0 && "${external_data}" == 0 ]]; then
+    break
+  fi
+  ((COUNT = COUNT + 1))
+done
 
 cat >/usr/local/etc/renderd.conf <<'EOF'
 [renderd]

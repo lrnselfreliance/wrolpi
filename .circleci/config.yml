@@ -5,7 +5,7 @@ version: 2.1
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/2.0/configuration-reference/#jobs
 jobs:
-  api-tests-3.8:
+  api-tests-three-eight:
     docker:
       - image: cimg/python:3.8
       - image: cimg/postgres:12.9
@@ -25,10 +25,10 @@ jobs:
             pip install -r requirements.txt
       - run:
           command: './venv/bin/pytest -svv wrolpi modules'
-  api-tests-3.9:
+  api-tests-three-nine:
     docker:
       - image: cimg/python:3.9
-      - image: cimg/postgres:12.9
+      - image: cimg/postgres:13.5
         environment:
           POSTGRES_USER: postgres
           POSTGRES_DB: wrolpi
@@ -45,10 +45,10 @@ jobs:
             pip install -r requirements.txt
       - run:
           command: './venv/bin/pytest -svv wrolpi modules'
-  api-tests-3.10:
+  api-tests-three-ten:
     docker:
       - image: cimg/python:3.10
-      - image: cimg/postgres:12.9
+      - image: cimg/postgres:14.1
         environment:
           POSTGRES_USER: postgres
           POSTGRES_DB: wrolpi
@@ -69,6 +69,6 @@ jobs:
 workflows:
   wrolpi-api-tests:
     jobs:
-      - api-tests-3.8
-      - api-tests-3.9
-      - api-tests-3.10
+      - api-tests-three-eight
+      - api-tests-three-nine
+      - api-tests-three-ten

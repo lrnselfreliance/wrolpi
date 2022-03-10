@@ -19,8 +19,6 @@ from wrolpi.db import postgres_engine, get_db_args
 from wrolpi.downloader import DownloadManager
 from wrolpi.root_api import BLUEPRINTS, api_app
 
-os.environ['DB_PORT'] = '54321'
-
 
 def get_test_db_engine():
     suffix = str(uuid1()).replace('-', '')

@@ -65,26 +65,6 @@ jobs:
             pip install -r requirements.txt
       - run:
           command: './venv/bin/pytest -svv wrolpi modules'
-  api-tests-eleven:
-    docker:
-      - image: cimg/python:3.11
-      - image: cimg/postgres:14.1
-        environment:
-          POSTGRES_USER: postgres
-          POSTGRES_DB: wrolpi
-          POSTGRES_PASSWORD: "wrolpi"
-    steps:
-      - checkout
-      - run: sudo apt-get update
-      - run: sudo apt-get install -y ffmpeg texlive-latex-base texlive-latex-extra
-      - run:
-          name: Install Requirements
-          command: |
-            python3 -m venv venv
-            . venv/bin/activate
-            pip install -r requirements.txt
-      - run:
-          command: './venv/bin/pytest -svv wrolpi modules'
 
 workflows:
   wrolpi-api-tests:
@@ -92,4 +72,3 @@ workflows:
       - api-tests-eight
       - api-tests-nine
       - api-tests-ten
-      - api-tests-eleven

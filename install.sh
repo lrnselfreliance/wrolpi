@@ -47,4 +47,6 @@ git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi || :
 (cd /opt/wrolpi && git fetch && git checkout "${BRANCH}" && git reset --hard origin/"${BRANCH}") || exit 4
 
 /opt/wrolpi/scripts/ubuntu_20.04_install.sh 2>&1 | tee /opt/wrolpi/install.log
+
+echo "Install end $(date '+%Y-%m-%d %H:%M:%S')" >>/opt/wrolpi/install.log
 exit $?

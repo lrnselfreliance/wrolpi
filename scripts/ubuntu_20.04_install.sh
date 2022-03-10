@@ -3,6 +3,8 @@
 set -x
 set -e
 
+echo "Ubuntu 20.04 install start: $(date '+%Y-%m-%d %H:%M:%S')"
+
 # Install npm repos.
 curl -fsSL https://deb.nodesource.com/setup_14.x | bash -
 # Update if we haven't updated in the last day.

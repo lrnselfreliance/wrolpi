@@ -53,6 +53,7 @@ wget --continue https://download.geofabrik.de/north-america/us/district-of-colum
 set +x
 MAX_TRIES=3
 COUNT=0
+SUCCESS=false
 while [ "${COUNT}" -lt "${MAX_TRIES}" ]; do
   sudo -u wrolpi /bin/bash /opt/wrolpi/scripts/import_map.sh /tmp/district-of-columbia-latest.osm.pbf
   dc_import=$?
@@ -61,10 +62,16 @@ while [ "${COUNT}" -lt "${MAX_TRIES}" ]; do
   sudo -u wrolpi /opt/openstreetmap-carto/scripts/get-external-data.py -d gis -U wrolpi
   external_data=$?
   if [[ "${dc_import}" == 0 && "${indexes}" == 0 && "${external_data}" == 0 ]]; then
+    SUCCESS=true
     break
   fi
   ((COUNT = COUNT + 1))
 done
+
+if [[ "${SUCCESS}" == false ]]; then
+  echo "Could not import map data"
+  exit 6
+fi
 
 cat >/usr/local/etc/renderd.conf <<'EOF'
 [renderd]

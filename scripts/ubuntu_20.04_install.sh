@@ -28,7 +28,7 @@ pip3 --version || (
 pip3 install -r /opt/wrolpi/requirements.txt
 
 # Build React app
-[ ! -f /usr/local/bin/serve ] && npm -g install serve
+[[ ! -f /usr/local/bin/serve || ! -f /usr/bin/serve ]] && npm -g install serve
 cd /opt/wrolpi/app || exit 5
 npm install || npm install || npm install || npm install # try install multiple times
 npm run build

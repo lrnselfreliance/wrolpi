@@ -97,11 +97,10 @@ async def import_pbfs(pbfs: List[str]):
                 with get_db_session(commit=True) as session:
                     map_file = get_or_create_map_file(pbf, session)
                     map_file.imported = True
-
+    finally:
         if any_success:
             # A map was imported, remove the tile cache files.
             clear_mod_tile()
-    finally:
         IMPORT_EVENT.clear()
 
 

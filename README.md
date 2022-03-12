@@ -50,13 +50,13 @@ You can try out WROLPi by running the docker containers.
     * `cd wrolpi`
 4. Build the containers
    * `docker-compose build --parallel`
-5. Start the database.
+5. Create volumes
+   * `docker volume create --name=openstreetmap-data`
+   * `docker volume create --name=openstreetmap-rendered-tiles`
+6. Start the database.
     * `docker-compose up -d db`
-6. Initialize the database
+7. Initialize the database
     * `docker-compose run --rm api db upgrade`
-7. Create volumes
-    * `docker volume create --name=openstreetmap-data`
-    * `docker volume create --name=openstreetmap-rendered-tiles`
 8. Start the docker containers
     * `docker-compose up`
 9. Browse to WROLPi

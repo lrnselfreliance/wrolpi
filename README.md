@@ -23,12 +23,12 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 # Features
 
 - [x] Video player & downloader
-- [x] One-Time pad generator, encrypter/decrypter
 - [x] Web archiver
-- [x] Food Inventory management
+- [x] Map viewer
 - [x] Wi-Fi Hotspot
 - [x] Universal search
-- [x] Map viewer
+- [x] Food Inventory management
+- [x] One-Time pad generator, encrypter/decrypter
 - [ ] eBook viewer
 - [ ] Wiki viewer & downloader
 - [ ] Synchronizer and/or duplicator

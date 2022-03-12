@@ -3,7 +3,6 @@ import {Card, Confirm, Container, Icon, Image, Placeholder} from "semantic-ui-re
 import {
     CardGroupCentered,
     ClearButton,
-    ExternalLink,
     PageContainer,
     Paginator,
     SearchInput,
@@ -20,44 +19,6 @@ import Table from "semantic-ui-react/dist/commonjs/collections/Table";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useArchives, useDomains} from "../hooks/customHooks";
 
-
-function FailedArchiveCard({archive, syncArchive, deleteArchive}) {
-
-    let syncIcon = (
-        <Button onClick={syncArchive}>
-            <Icon name='sync' size='big'/>
-        </Button>
-    );
-
-    let trashIcon = (
-        <Button onClick={deleteArchive}>
-            <Icon name='trash' size='big'/>
-        </Button>
-    );
-
-    let externalIcon = (
-        <a href={archive.url} target='_blank' rel='noopener noreferrer'>
-            <Icon name='sign-out' size='big'/>
-        </a>
-    );
-
-    return (
-        <Card>
-            <Card.Content>
-                <Card.Header>
-                    {archive.url}
-                </Card.Header>
-                <Card.Description>
-                    <p>Failed!</p>
-                    {syncIcon}
-                    {trashIcon}
-                    {externalIcon}
-                </Card.Description>
-            </Card.Content>
-        </Card>
-    );
-}
-
 function ArchiveCard({archive, syncArchive, deleteArchive, setDomain}) {
     const [syncOpen, setSyncOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -71,14 +32,10 @@ function ArchiveCard({archive, syncArchive, deleteArchive, setDomain}) {
         await deleteArchive(archive.id);
     }
 
-    let imageSrc = archive.screenshot_path ? `/media/${archive.screenshot_path}` : null;
-    let singlefileUrl = archive.singlefile_path ? `/media/${archive.singlefile_path}` : null;
+    let imageSrc = archive.screenshot_path ? `/media/${encodeURIComponent(archive.screenshot_path)}` : null;
+    let singlefileUrl = archive.singlefile_path ? `/media/${encodeURIComponent(archive.singlefile_path)}` : null;
 
-    if (archive.status === 'failed') {
-        return <FailedArchiveCard archive={archive} syncArchive={localSyncArchive} deleteArchive={localDeleteArchive}/>;
-    }
-
-    let readabilityUrl = archive.readability_path ? `/media/${archive.readability_path}` : null;
+    let readabilityUrl = archive.readability_path ? `/media/${encodeURIComponent(archive.readability_path)}` : null;
     let readabilityIcon = <Button icon disabled><Icon name='book' size='large'/></Button>;
     if (readabilityUrl) {
         readabilityIcon = (
@@ -130,15 +87,15 @@ function ArchiveCard({archive, syncArchive, deleteArchive, setDomain}) {
 
     return (
         <Card>
-            <ExternalLink to={singlefileUrl} className='no-link-underscore card-link'>
+            <a href={singlefileUrl} target='_blank' className='no-link-underscore card-link'>
                 <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
-            </ExternalLink>
+            </a>
             <Card.Content>
                 <Card.Header>
                     <Container textAlign='left'>
-                        <ExternalLink to={singlefileUrl} className='no-link-underscore card-link'>
+                        <a href={singlefileUrl} target='_blank' className='no-link-underscore card-link'>
                             <p>{textEllipsis(archive.title || archive.url, 100)}</p>
-                        </ExternalLink>
+                        </a>
                     </Container>
                 </Card.Header>
                 <a onClick={() => setDomain(domain)} className="no-link-underscore card-link">

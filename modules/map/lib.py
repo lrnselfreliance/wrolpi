@@ -113,12 +113,14 @@ async def import_pbf(pbf: Path):
 
     stdout, stderr = await proc.communicate()
     elapsed = now() - start
-    logger.info(f'Import of {pbf} took {timedelta_to_timestamp(elapsed)}')
+    success = 'Successful' if proc.returncode == 0 else 'Unsuccessful'
+    logger.info(f'{success} import of {pbf.name} took {timedelta_to_timestamp(elapsed)}')
     if proc.returncode != 0:
+        # Log all lines.  Truncate long lines.
         for line in stdout.decode().splitlines():
-            logger.info(line)
+            logger.debug(line[:500])
         for line in stderr.decode().splitlines():
-            logger.error(line)
+            logger.error(line[:500])
         raise ValueError(f'Importing PBF failed with return code {proc.returncode}')
 
 

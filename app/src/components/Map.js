@@ -70,12 +70,11 @@ class ManageMap extends React.Component {
 
     tableRow = (pbf, disabled) => {
         let ref = React.createRef();
-        const {size, path, imported} = pbf;
-        const raspberryPi4Estimation = 3000000;
+        const {size, path, imported, time_to_import} = pbf;
         let sizeCells = (<>
             <Table.Cell>{humanFileSize(size)}</Table.Cell>
             <Table.Cell>{humanFileSize(size * 25)}</Table.Cell>
-            <Table.Cell>{minutesToTimestamp(size / raspberryPi4Estimation)}</Table.Cell>
+            <Table.Cell>{time_to_import}</Table.Cell>
         </>);
         return <Table.Row key={path}>
             <Table.Cell collapsing>

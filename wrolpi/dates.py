@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, date, timezone, timedelta
 from enum import Enum
+from typing import Union
 
 import pytz
 from sqlalchemy import types
@@ -97,8 +98,9 @@ def from_timestamp(timestamp: float) -> datetime:
     return local_timezone(datetime.fromtimestamp(timestamp))
 
 
-def seconds_to_timestamp(seconds: int) -> str:
+def seconds_to_timestamp(seconds: Union[int, float]) -> str:
     """Convert an integer into a timestamp string."""
+    seconds = int(seconds)
     weeks = seconds // Seconds.week
     seconds = seconds % Seconds.week
     days = seconds // Seconds.day
@@ -125,7 +127,7 @@ def timedelta_to_timestamp(delta: timedelta) -> str:
     >>> timedelta_to_timestamp(timedelta(days=10))
     '1w 3d 00:00:00'
     """
-    return seconds_to_timestamp(int(delta.total_seconds()))
+    return seconds_to_timestamp(delta.total_seconds())
 
 
 def recursive_replace_tz(obj, tz=pytz.utc):

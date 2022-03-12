@@ -74,6 +74,7 @@ class TestDates(TestAPI):
     (timedelta(weeks=1, days=1, seconds=7), '1w 1d 00:00:07'),
     (timedelta(weeks=16, days=3, hours=17, minutes=46, seconds=39), '16w 3d 17:46:39'),
     (timedelta(days=10), '1w 3d 00:00:00'),
+    (timedelta(days=10, microseconds=1000), '1w 3d 00:00:00'),
 ])
 def test_timedelta_to_timestamp(td, expected):
     assert timedelta_to_timestamp(td) == expected

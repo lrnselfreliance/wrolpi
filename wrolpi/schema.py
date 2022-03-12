@@ -44,17 +44,6 @@ class EchoResponse:
 
 
 @dataclass
-class EventObject:
-    name: str
-    is_set: str
-
-
-@dataclass
-class EventsResponse:
-    events: List[EventObject]
-
-
-@dataclass
 class DownloadRequest:
     urls: str
     downloader: Optional[str] = None

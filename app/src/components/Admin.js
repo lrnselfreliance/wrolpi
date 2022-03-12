@@ -208,7 +208,7 @@ class DownloadRow extends React.Component {
         }
         return (
             <Table.Row positive={positive}>
-                <Table.Cell>{textEllipsis(url, 50)}</Table.Cell>
+                <Table.Cell><a href={url} target='_blank'>{textEllipsis(url, 50)}</a></Table.Cell>
                 <Table.Cell>{secondsToFrequency(frequency)}</Table.Cell>
                 <Table.Cell>{last_successful_download ? secondsToDate(last_successful_download) : null}</Table.Cell>
                 <Table.Cell>{secondsToDate(next_download)}</Table.Cell>
@@ -305,7 +305,7 @@ class StoppableRow extends React.Component {
 
         return (
             <Table.Row positive={positive} negative={negative} warning={warning}>
-                <Table.Cell>{textEllipsis(url, 50)}</Table.Cell>
+                <Table.Cell><a href={url} target='_blank'>{textEllipsis(url, 50)}</a></Table.Cell>
                 <Table.Cell>{last_successful_download ? secondsToDate(last_successful_download) : null}</Table.Cell>
                 <Table.Cell>{status}</Table.Cell>
                 {buttonCell}
@@ -328,6 +328,11 @@ class Downloads extends React.Component {
 
     async componentDidMount() {
         await this.fetchDownloads();
+        this.intervalId = setInterval(this.fetchDownloads, 1000 * 10);
+    }
+
+    componentWillUnmount() {
+        clearInterval(this.intervalId);
     }
 
     closeStop = () => {

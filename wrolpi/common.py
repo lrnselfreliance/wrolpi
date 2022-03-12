@@ -409,9 +409,7 @@ def remove_whitespace(s: str) -> str:
 
 
 def run_after(after: callable, *args, **kwargs) -> callable:
-    """
-    Run the `after` function sometime in the future ofter the wrapped function returns.
-    """
+    """Run the `after` function sometime in the future ofter the wrapped function returns."""
     if not inspect.iscoroutinefunction(after):
         synchronous_after = after
 
@@ -715,7 +713,7 @@ def walk(path: Path) -> Generator[Path, None, None]:
 
 
 # These characters are invalid in Windows or Linux.
-INVALID_FILE_CHARS = re.compile(r'[/<>:\|"\\\?\*]')
+INVALID_FILE_CHARS = re.compile(r'[/<>:\|"\\\?\*%]')
 
 
 def escape_file_name(name: str) -> str:

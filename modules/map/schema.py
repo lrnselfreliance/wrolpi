@@ -1,11 +1,7 @@
 from dataclasses import dataclass
+from typing import List
 
 
 @dataclass
-class PBFPostRequest:
-    pbf_url: str
-
-
-@dataclass
-class PBFPostResponse:
-    success: str
+class ImportPost:
+    pbfs: List[str]

@@ -26,11 +26,9 @@ def get_db_args(dbname: str = None):
         # Deployed in docker, use the docker database.
         db_args['user'] = 'postgres'
         db_args['host'] = 'db'
-        db_args['port'] = 5432
     elif PYTEST:
-        # Pytest is running but we're not in docker, use the exposed docker container port.
+        # Pytest is running, but we're not in docker, use the exposed docker container port.
         db_args['user'] = 'postgres'
-        db_args['port'] = 5432
 
     return db_args
 

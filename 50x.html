@@ -21,7 +21,28 @@
 <hr/>
 
 <h2>Can't start the services?</h2>
-<p>You can view the media directory by <a href="/media">clicking here</a></p>
+<p>You can view the media directory by <a id="media_link" href="/media">navigating to /media</a></p>
+
+<p>The map may be available <a id="map_link" href="#">by navigating to port 8084</a></p>
+
+<script>
+    // Get the current hostname (probably an IP) link to my :8084 above.
+    let hostname = window.location.hostname;
+
+    let media_a = document.getElementById('media_link');
+    if (media_a) {
+        let media_url = `http://${hostname}/media`;
+        media_a.setAttribute('href', media_url);
+        media_a.textContent = `by navigating to ${media_url}`;
+    }
+
+    let map_a = document.getElementById('map_link');
+    if (map_a) {
+        let map_url = `http://${hostname}:8084`;
+        map_a.setAttribute('href', map_url);
+        map_a.textContent = `by navigating to ${map_url}`;
+    }
+</script>
 
 </body>
 </html>

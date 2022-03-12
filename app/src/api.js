@@ -388,7 +388,6 @@ export async function getDownloaders() {
         let response = await apiGet(`${API_URI}/downloaders`);
         return await response.json();
     } catch (e) {
-        console.log('getDownloaders', e);
         return {};
     }
 }
@@ -510,5 +509,25 @@ export async function setThrottle(on) {
                 time: 5000,
             });
         }
+    }
+}
+
+export async function getMapImportStatus() {
+    let response = await apiGet(`${API_URI}/map/pbf`);
+    return await response.json();
+}
+
+export async function importPbfs(pbfs) {
+    let body = {'pbfs': pbfs};
+    let response = await apiPost(`${API_URI}/map/import`, body);
+    if (response.status === 204) {
+        return null;
+    } else {
+        toast({
+            type: 'error',
+            title: 'Error!',
+            description: 'Could not start import!  See server logs.',
+            time: 5000,
+        });
     }
 }

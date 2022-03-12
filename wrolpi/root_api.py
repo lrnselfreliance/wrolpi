@@ -6,9 +6,11 @@ from decimal import Decimal
 from functools import wraps
 from http import HTTPStatus
 from pathlib import Path
+from typing import Union
 
 from pytz import UnknownTimeZoneError
 from sanic import Sanic, response, Blueprint, __version__ as sanic_version
+from sanic.blueprint_group import BlueprintGroup
 from sanic.request import Request
 from sanic.response import HTTPResponse
 from sanic_ext import validate
@@ -45,7 +47,7 @@ def get_blueprint(name: str, url_prefix: str) -> Blueprint:
     return bp
 
 
-def add_blueprint(bp: Blueprint):
+def add_blueprint(bp: Union[Blueprint, BlueprintGroup]):
     BLUEPRINTS.append(bp)
 
 

@@ -22,7 +22,6 @@ services:
       - './main.py:/opt/wrolpi/main.py'
       - './wrolpi:/opt/wrolpi/wrolpi'
       - './modules:/opt/wrolpi/modules'
-      - './config:/opt/wrolpi/config'
       - './test:/opt/wrolpi/test'
       - './test:/media/wrolpi'
       - './alembic:/opt/wrolpi/alembic'

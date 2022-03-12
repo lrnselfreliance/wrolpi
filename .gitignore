@@ -105,9 +105,10 @@ venv.bak/
 # intellij
 .idea/
 
-# example videos
+# example files
 test/videos
 test/archive
+test/map
 
 # docker configs
 test/config

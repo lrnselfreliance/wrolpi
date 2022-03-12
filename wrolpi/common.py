@@ -717,7 +717,7 @@ INVALID_FILE_CHARS = re.compile(r'[/<>:\|"\\\?\*%]')
 
 
 def escape_file_name(name: str) -> str:
-    """Replace any invalid characters in a file name with "_"."""
+    """Remove any invalid characters in a file name."""
     return INVALID_FILE_CHARS.sub('', name)
 
 

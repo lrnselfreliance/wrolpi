@@ -30,8 +30,17 @@ while getopts ":hb:" option; do
   esac
 done
 
-if (! grep 'Raspberry Pi' /proc/cpuinfo >/dev/null); then
-  echo 'This script can only be run on a Raspberry Pi!' && exit 2
+rpi=false
+debian11=false
+if (grep 'Raspberry Pi' /proc/cpuinfo >/dev/null); then
+  rpi=true
+fi
+if (grep 'PRETTY_NAME="Debian GNU/Linux 11 (bullseye)"' /etc/os-release >/dev/null); then
+  debian11=true
+fi
+
+if [[ ${rpi} == false && ${debian11} == false ]]; then
+  echo 'This script can only be run on a Raspberry Pi or Debian 11!' && exit 2
 fi
 
 set -x
@@ -46,10 +55,15 @@ git --version
 git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi || :
 (cd /opt/wrolpi && git fetch && git checkout "${BRANCH}" && git reset --hard origin/"${BRANCH}") || exit 4
 
-/opt/wrolpi/scripts/ubuntu_20.04_install.sh 2>&1 | tee /opt/wrolpi/install.log
-install_code=$?
+if [ ${rpi} == true ]; then
+  /opt/wrolpi/scripts/install_ubuntu_20.04.sh 2>&1 | tee /opt/wrolpi/install.log
+  install_code=${PIPESTATUS[0]}
+elif [ ${debian11} == true ]; then
+  /opt/wrolpi/scripts/install_debian_11.sh 2>&1 | tee /opt/wrolpi/install.log
+  install_code=${PIPESTATUS[0]}
+fi
 
 set +x
 
 echo "Install end $(date '+%Y-%m-%d %H:%M:%S')" >>/opt/wrolpi/install.log
-exit ${install_code}
+exit "${install_code}"

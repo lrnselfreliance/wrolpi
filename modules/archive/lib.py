@@ -153,6 +153,8 @@ def local_singlefile(url: str):
     """Run the single-file executable to create an HTML file archive."""
     single_file_path = pathlib.Path('/usr/bin/single-file')
     if not single_file_path.is_file():
+        single_file_path = pathlib.Path('/usr/local/bin/single-file')
+    if not single_file_path.is_file():
         raise FileNotFoundError(f'single-file not found at {single_file_path}')
 
     cmd = (str(single_file_path),
@@ -190,6 +192,8 @@ def local_extract_readability(path: str, url: str) -> dict:
     """Extract the readability from an HTML file, typically from single-file."""
     logger.info(f'readability for {url}')
     readability_path = pathlib.Path('/usr/bin/readability-extractor')
+    if not readability_path.is_file():
+        readability_path = pathlib.Path('/usr/local/bin/readability-extractor')
     if not readability_path.is_file():
         raise FileNotFoundError(f'Readability extractor not found at {readability_path}')
 

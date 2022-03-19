@@ -15,7 +15,7 @@ apt install -y apt-transport-https ca-certificates curl gnupg-agent gcc libpq-de
   cpufrequtils network-manager
 
 # Install Archiving tools.
-npm install -g "gildas-lormeau/SingleFile#master"
+npm install -g 'git+https://github.com/gildas-lormeau/SingleFile'
 npm install -g 'git+https://github.com/pirate/readability-extractor'
 
 # Setup the virtual environment that main.py expects

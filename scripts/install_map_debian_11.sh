@@ -55,7 +55,7 @@ sudo -u wrolpi psql -d gis -f /opt/openstreetmap-carto/indexes.sql
 cp /opt/wrolpi/etc/debian11/renderd.conf /etc/renderd.conf
 # Configure Apache2 to listen on 8084.
 cp /opt/wrolpi/etc/debian11/ports.conf /etc/apache2/ports.conf
-cp /opt/wrolpi/etc/debian11/000-defaults.conf /etc/apache2/sites-available/000-default.conf
+cp /opt/wrolpi/etc/debian11/000-default.conf /etc/apache2/sites-available/000-default.conf
 # Copy Leaflet files to Apache's directory so they can be used offline.
 cp /opt/wrolpi/etc/debian11/index.html \
   /opt/wrolpi/modules/map/leaflet.js \

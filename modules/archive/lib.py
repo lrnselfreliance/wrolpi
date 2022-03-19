@@ -150,6 +150,11 @@ SINGLE_FILE_PATH = which('single-file',
                          '/usr/bin/single-file',  # rpi ubuntu
                          '/usr/local/bin/single-file',  # debian
                          warn=True)
+CHROMIUM = which('chromium-browser',
+                 '/usr/bin/chromium-browser',  # rpi ubuntu
+                 '/usr/bin/chromium',  # debian
+                 warn=True
+                 )
 
 
 def local_singlefile(url: str):
@@ -159,7 +164,7 @@ def local_singlefile(url: str):
 
     cmd = (str(SINGLE_FILE_PATH),
            url,
-           '--browser-executable-path', '/usr/bin/chromium-browser',
+           '--browser-executable-path', CHROMIUM,
            '--browser-args', '["--no-sandbox"]',
            '--dump-content')
     logger.debug(f'archive cmd: {cmd}')

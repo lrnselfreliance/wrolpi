@@ -64,7 +64,8 @@ def test_enable_hotspot_connected():
 
 
 def test_throttle_on():
-    with mock.patch('wrolpi.admin.subprocess') as mock_subprocess:
+    with mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
+            mock.patch('wrolpi.admin.CPUFREQ_SET', PosixPath('/usr/bin/cpufreq-set')):
         assert admin.throttle_cpu_on()
         mock_subprocess.check_call.assert_called_once_with(
             (PosixPath('/usr/bin/sudo'), PosixPath('/usr/bin/cpufreq-set'), '-g', 'powersave')
@@ -72,7 +73,8 @@ def test_throttle_on():
 
 
 def test_throttle_off():
-    with mock.patch('wrolpi.admin.subprocess') as mock_subprocess:
+    with mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
+            mock.patch('wrolpi.admin.CPUFREQ_SET', PosixPath('/usr/bin/cpufreq-set')):
         assert admin.throttle_cpu_off()
         mock_subprocess.check_call.assert_called_once_with(
             (PosixPath('/usr/bin/sudo'), PosixPath('/usr/bin/cpufreq-set'), '-g', 'ondemand')

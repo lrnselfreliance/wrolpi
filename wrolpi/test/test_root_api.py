@@ -61,8 +61,9 @@ class TestRootAPI(TestAPI):
         assert json.loads(response.body) == {'valid': False, 'regex': '.*(missing parenthesis.*'}
 
     def test_get_settings(self):
-        request, response = api_app.test_client.get('/api/settings')
-        self.assertOK(response)
+        with mock.patch('wrolpi.admin.CPUFREQ_INFO', '/usr/bin/cpufreq-info'):
+            request, response = api_app.test_client.get('/api/settings')
+            self.assertOK(response)
 
     @wrap_test_db
     def test_get_downloads(self):

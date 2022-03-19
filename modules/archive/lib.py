@@ -16,6 +16,7 @@ from selenium import webdriver
 from sqlalchemy.orm import Session
 
 from modules.archive.models import Domain, Archive
+from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, logger, chunks, extract_domain, chdir, escape_file_name, walk
 from wrolpi.dates import now, Seconds, local_timezone
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
@@ -55,9 +56,7 @@ def get_archive_directory() -> pathlib.Path:
 
 
 def get_domain_directory(url: str) -> pathlib.Path:
-    """
-    Get the archive directory for a particular domain.
-    """
+    """Get the archive directory for a particular domain."""
     domain = extract_domain(url)
     directory = get_archive_directory() / domain
     if directory.is_dir():
@@ -70,9 +69,7 @@ def get_domain_directory(url: str) -> pathlib.Path:
 
 
 def get_new_archive_files(url: str, title: Optional[str]) -> ArchiveFiles:
-    """
-    Create a list of archive files using a shared name schema.  Raise an error if any of them exist.
-    """
+    """Create a list of archive files using a shared name schema.  Raise an error if any of them exist."""
     directory = get_domain_directory(url)
     # Datetime is valid in Linux and Windows.
     dt = archive_strftime(now())
@@ -149,15 +146,18 @@ def request_archive(url: str):
     return singlefile, readability, screenshot
 
 
+SINGLE_FILE_PATH = which('single-file',
+                         '/usr/bin/single-file',  # rpi ubuntu
+                         '/usr/local/bin/single-file',  # debian
+                         warn=True)
+
+
 def local_singlefile(url: str):
     """Run the single-file executable to create an HTML file archive."""
-    single_file_path = pathlib.Path('/usr/bin/single-file')
-    if not single_file_path.is_file():
-        single_file_path = pathlib.Path('/usr/local/bin/single-file')
-    if not single_file_path.is_file():
-        raise FileNotFoundError(f'single-file not found at {single_file_path}')
+    if not SINGLE_FILE_PATH.is_file():
+        raise FileNotFoundError(f'single-file not found')
 
-    cmd = (str(single_file_path),
+    cmd = (str(SINGLE_FILE_PATH),
            url,
            '--browser-executable-path', '/usr/bin/chromium-browser',
            '--browser-args', '["--no-sandbox"]',
@@ -169,7 +169,7 @@ def local_singlefile(url: str):
 
 
 def local_screenshot(url: str) -> bytes:
-    """Take a screenshot of the URL using selenium."""
+    """Take a screenshot of the URL using chromedriver."""
     logger.info(f'Screenshot: {url}')
 
     # Set Chromium to headless.  Use a wide window size so that screenshot will be the "desktop" version of the page.
@@ -188,16 +188,19 @@ def local_screenshot(url: str) -> bytes:
     return png
 
 
+READABILITY_PATH = which('readability-extractor',
+                         '/usr/bin/readability-extractor',  # rpi ubuntu
+                         '/usr/local/bin/readability-extractor',  # debian
+                         warn=True)
+
+
 def local_extract_readability(path: str, url: str) -> dict:
     """Extract the readability from an HTML file, typically from single-file."""
     logger.info(f'readability for {url}')
-    readability_path = pathlib.Path('/usr/bin/readability-extractor')
-    if not readability_path.is_file():
-        readability_path = pathlib.Path('/usr/local/bin/readability-extractor')
-    if not readability_path.is_file():
-        raise FileNotFoundError(f'Readability extractor not found at {readability_path}')
+    if not READABILITY_PATH.is_file():
+        raise FileNotFoundError(f'Readability extractor not found')
 
-    cmd = (readability_path, path, url)
+    cmd = (READABILITY_PATH, path, url)
     logger.debug(f'readability cmd: {cmd}')
     output = subprocess.check_output(cmd, timeout=60 * 3)
     output = json.loads(output)

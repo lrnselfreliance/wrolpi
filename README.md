@@ -45,7 +45,7 @@ You can try out WROLPi by running the docker containers.
 1. [Install docker-ce](https://docs.docker.com/install/linux/docker-ce/debian/) and
    [docker-compose](https://docs.docker.com/compose/install/)
 2. Copy the latest WROLPi code
-    * `git clone git@github.com:lrnselfreliance/wrolpi.git`
+    * `git clone https://github.com/lrnselfreliance/wrolpi.git`
 3. Change directory into the code base
     * `cd wrolpi`
 4. Build the containers
@@ -61,6 +61,22 @@ You can try out WROLPi by running the docker containers.
     * `docker-compose up`
 9. Browse to WROLPi
     * http://0.0.0.0:8080
+
+# Debian 11 Install
+
+Install WROLPi onto a fresh Debian 11 system.
+
+**Warning: this will clobber anything else on the system!  Do not run this installation script elsewhere!**
+
+1. Install [Debian 11](https://www.debian.org/) onto a laptop or other computer.
+2. Login to the new system.
+3. Get the WROLPi installation script
+    * `wget https://raw.githubusercontent.com/lrnselfreliance/wrolpi/release/install.sh -O /tmp/install.sh`
+4. Run the installation script
+    * `sudo /bin/bash /tmp/install.sh`
+5. Start WROLPi
+    * `sudo systemctl start wrolpi.target`
+6. Browse to the IP address of your WROLPi!
 
 # RaspberryPi Install
 

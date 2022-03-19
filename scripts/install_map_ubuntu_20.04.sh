@@ -26,7 +26,7 @@ sudo -u postgres psql -d gis -c "ALTER TABLE geometry_columns OWNER TO wrolpi;"
 sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO wrolpi;"
 
 # Install Ubuntu 20.04 compatible mod_tile.
-git clone -b switch2osm git://github.com/lrnselfreliance/mod_tile.git /tmp/mod_tile || :
+git clone -b switch2osm https://github.com/lrnselfreliance/mod_tile.git /tmp/mod_tile || :
 if [ ! -f /usr/lib/apache2/modules/mod_tile.so ]; then
   (cd /tmp/mod_tile && ./autogen.sh && ./configure && make -j4 && make install && make install-mod_tile && ldconfig)
 fi
@@ -40,7 +40,7 @@ chmod +x /etc/init.d/renderd
 chown wrolpi /var/lib/mod_tile
 
 # Initialize gis database.
-git clone git://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto || :
+git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto || :
 chown -R wrolpi:wrolpi /opt/openstreetmap-carto
 cd /opt/openstreetmap-carto
 if [[ ! -f /opt/openstreetmap-carto/mapnik.xml || ! -s /opt/openstreetmap-carto/mapnik.xml ]]; then

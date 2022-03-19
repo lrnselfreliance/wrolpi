@@ -54,7 +54,7 @@ chown wrolpi:wrolpi /media/wrolpi
 # Install the systemd services
 cp /opt/wrolpi/etc/ubuntu20.04/wrolpi-api.service /etc/systemd/system/
 cp /opt/wrolpi/etc/debian11/wrolpi-app.service /etc/systemd/system/
-cp /opt/wrolpi/systemd/wrolpi.target /etc/systemd/system/
+cp /opt/wrolpi/etc/ubuntu20.04/wrolpi.target /etc/systemd/system/
 /usr/bin/systemctl daemon-reload
 systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service

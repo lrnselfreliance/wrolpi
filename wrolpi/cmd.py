@@ -13,21 +13,22 @@ def is_executable(path: Path) -> bool:
     return path.is_file() and os.access(path, os.X_OK)
 
 
-def which(name: str, *possible_paths: str, warn: bool = False) -> Path:
+def which(*possible_paths: str, warn: bool = False) -> Path:
     """
     Find an executable in the system $PATH.  If the executable cannot be found in $PATH, then return the first
     executable found in possible_paths.
 
     Returns None if no executable can be found.
     """
-    path = shutil.which(name)
-    if path:
-        return Path(path).absolute()
-
     possible_paths = map(Path, possible_paths)
     for path in possible_paths:
         if is_executable(path):
+            # `path` was an absolute file which is executable.
             return path.absolute()
+        path = shutil.which(path)
+        if path and (path := Path(path).absolute()) and is_executable(path):
+            # `path` was a name or relative path.
+            return path
 
     if warn and not PYTEST and not DOCKERIZED:
-        logger.warning(f'Cannot find executable {name}')
+        logger.warning(f'Cannot find executable {possible_paths[0]}')

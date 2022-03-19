@@ -150,7 +150,7 @@ SINGLE_FILE_PATH = which('single-file',
                          '/usr/bin/single-file',  # rpi ubuntu
                          '/usr/local/bin/single-file',  # debian
                          warn=True)
-CHROMIUM = which('chromium-browser',
+CHROMIUM = which('chromium-browser', 'chromium',
                  '/usr/bin/chromium-browser',  # rpi ubuntu
                  '/usr/bin/chromium',  # debian
                  warn=True

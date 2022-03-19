@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 from wrolpi import cmd
+from wrolpi.test.common import skip_circleci
 
 
 def test_which(test_directory):
@@ -20,3 +21,9 @@ def test_which(test_directory):
     assert cmd.which('asdf', str(foo)) is None
     os.chmod(foo, 0o777)
     assert cmd.which('asdf', str(foo)) == foo
+
+
+@skip_circleci
+def test_which_chromium():
+    # Multiple names can be tried.
+    assert cmd.which('chromium-browser', 'chromium') == Path('/usr/bin/chromium')

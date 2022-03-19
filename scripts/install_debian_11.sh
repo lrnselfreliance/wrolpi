@@ -52,9 +52,8 @@ visudo -c -f /etc/sudoers.d/90-wrolpi
 chown wrolpi:wrolpi /media/wrolpi
 
 # Install the systemd services
-cp /opt/wrolpi/systemd/wrolpi-api.service /etc/systemd/system/
-cp /opt/wrolpi/systemd/wrolpi-app.service /etc/systemd/system/
-sed -i -e 's/^ExecStart=.*/ExecStart=\/usr\/local\/bin\/serve/' /etc/systemd/system/wrolpi-app.service
+cp /opt/wrolpi/etc/ubuntu20.04/wrolpi-api.service /etc/systemd/system/
+cp /opt/wrolpi/etc/debian11/wrolpi-app.service /etc/systemd/system/
 cp /opt/wrolpi/systemd/wrolpi.target /etc/systemd/system/
 /usr/bin/systemctl daemon-reload
 systemctl enable wrolpi-api.service

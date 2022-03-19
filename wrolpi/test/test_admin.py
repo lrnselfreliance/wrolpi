@@ -19,7 +19,8 @@ def test_hotspot_status():
 def test_enable_hotspot_disconnected():
     """Enable hotspot with wifi on."""
     with mock.patch('wrolpi.admin.hotspot_status') as mock_hotspot_status, \
-            mock.patch('wrolpi.admin.subprocess') as mock_subprocess:
+            mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
+            mock.patch('wrolpi.admin.NMCLI', PosixPath('/usr/bin/nmcli')):
         mock_hotspot_status.return_value = HotspotStatus.disconnected
         mock_subprocess.check_output.return_value = 0
         assert admin.enable_hotspot() is True
@@ -31,7 +32,8 @@ def test_enable_hotspot_disconnected():
 def test_enable_hotspot_unavailable():
     """Enable hotspot with wifi off."""
     with mock.patch('wrolpi.admin.hotspot_status') as mock_hotspot_status, \
-            mock.patch('wrolpi.admin.subprocess') as mock_subprocess:
+            mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
+            mock.patch('wrolpi.admin.NMCLI', PosixPath('/usr/bin/nmcli')):
         mock_hotspot_status.side_effect = [HotspotStatus.unavailable, HotspotStatus.disconnected]
         mock_subprocess.check_output.return_value = 0
         assert admin.enable_hotspot() is True
@@ -46,7 +48,8 @@ def test_enable_hotspot_unavailable():
 def test_enable_hotspot_connected():
     """Enable hotspot with the hotspot alaready enabled."""
     with mock.patch('wrolpi.admin.hotspot_status') as mock_hotspot_status, \
-            mock.patch('wrolpi.admin.subprocess') as mock_subprocess:
+            mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
+            mock.patch('wrolpi.admin.NMCLI', PosixPath('/usr/bin/nmcli')):
         mock_hotspot_status.side_effect = [
             HotspotStatus.connected,
             HotspotStatus.unavailable,

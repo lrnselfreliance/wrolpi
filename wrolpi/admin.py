@@ -1,28 +1,16 @@
 import enum
-import pathlib
 import subprocess
 
+from wrolpi.cmd import which
 from wrolpi.common import logger
-from wrolpi.vars import PYTEST, DEFAULT_CPU_FREQUENCY, DOCKERIZED
+from wrolpi.vars import DEFAULT_CPU_FREQUENCY, DOCKERIZED
 
 logger = logger.getChild(__name__)
 
-# Location on an RPi
-SUDO_BIN = pathlib.Path('/usr/bin/sudo')
-if not SUDO_BIN.is_file() and not PYTEST and not DOCKERIZED:
-    logger.error('COULD NOT FIND sudo!!!')
-
-NMCLI_BIN = pathlib.Path('/usr/bin/nmcli')
-if not NMCLI_BIN.is_file() and not PYTEST and not DOCKERIZED:
-    logger.error('COULD NOT FIND nmcli!!!')
-
-CPUFREQ_INFO_BIN = pathlib.Path('/usr/bin/cpufreq-info')
-if not CPUFREQ_INFO_BIN.is_file() and not PYTEST and not DOCKERIZED:
-    logger.error('COULD NOT FIND cpufreq-info!!!')
-
-CPUFREQ_SET_BIN = pathlib.Path('/usr/bin/cpufreq-set')
-if not CPUFREQ_SET_BIN.is_file() and not PYTEST and not DOCKERIZED:
-    logger.error('COULD NOT FIND cpufreq-set!!!')
+SUDO = which('sudo', '/usr/bin/sudo')
+NMCLI = which('nmcli', '/usr/bin/nmcli')
+CPUFREQ_INFO = which('cpufreq-info', '/usr/bin/cpufreq-info')
+CPUFREQ_SET = which('cpufreq-set', '/usr/bin/cpufreq-set')
 
 POWER_SAVE_FREQ = 'powersave'  # noqa
 
@@ -35,7 +23,7 @@ class HotspotStatus(enum.Enum):
 
 
 def hotspot_status() -> HotspotStatus:
-    cmd = (NMCLI_BIN,)
+    cmd = (NMCLI,)
     try:
         output = subprocess.check_output(cmd).decode().strip()
     except FileNotFoundError as e:
@@ -67,13 +55,13 @@ def enable_hotspot():
         return enable_hotspot()
     elif status == HotspotStatus.disconnected:
         # Radio is on, but not connected.  Good, turn it into a hotspot.
-        cmd = (SUDO_BIN, NMCLI_BIN, 'device', 'wifi', 'hotspot', 'ifname', 'wlan0',
+        cmd = (SUDO, NMCLI, 'device', 'wifi', 'hotspot', 'ifname', 'wlan0',
                'ssid', 'WROLPi', 'password', 'wrolpi hotspot')
         subprocess.check_call(cmd)
         return True
     elif status == HotspotStatus.unavailable:
         # Radio is not on, turn it on.
-        cmd = (SUDO_BIN, NMCLI_BIN, 'radio', 'wifi', 'on')
+        cmd = (SUDO, NMCLI, 'radio', 'wifi', 'on')
         subprocess.check_call(cmd)
         return enable_hotspot()
     elif status == HotspotStatus.unknown:
@@ -82,7 +70,7 @@ def enable_hotspot():
 
 def disable_hotspot():
     """Turn off the wlan0 interface."""
-    cmd = (SUDO_BIN, NMCLI_BIN, 'radio', 'wifi', 'off')
+    cmd = (SUDO, NMCLI, 'radio', 'wifi', 'off')
     try:
         subprocess.check_call(cmd)
         return True
@@ -109,7 +97,7 @@ GOVERNOR_MAP = {
 
 
 def throttle_status() -> GovernorStatus:
-    cmd = (CPUFREQ_INFO_BIN,)
+    cmd = (CPUFREQ_INFO,)
     try:
         output = subprocess.check_output(cmd)
     except FileNotFoundError as e:
@@ -129,7 +117,7 @@ def throttle_status() -> GovernorStatus:
 def throttle_cpu_on() -> bool:
     """Call cpufreq-set to throttle CPU."""
     try:
-        cmd = (SUDO_BIN, CPUFREQ_SET_BIN, '-g', POWER_SAVE_FREQ)
+        cmd = (SUDO, CPUFREQ_SET, '-g', POWER_SAVE_FREQ)
         subprocess.check_call(cmd)
         return True
     except FileNotFoundError:
@@ -140,7 +128,7 @@ def throttle_cpu_on() -> bool:
 def throttle_cpu_off() -> bool:
     """Call cpufreq-set to un-throttle CPU."""
     try:
-        cmd = (SUDO_BIN, CPUFREQ_SET_BIN, '-g', DEFAULT_CPU_FREQUENCY)
+        cmd = (SUDO, CPUFREQ_SET, '-g', DEFAULT_CPU_FREQUENCY)
         subprocess.check_call(cmd)
         return True
     except FileNotFoundError:

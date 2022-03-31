@@ -55,9 +55,7 @@ def utc_now() -> datetime:
 
 
 def now(tz: pytz.timezone = None) -> datetime:
-    """
-    Get the current DateTime in the provided timezone.  Timezone aware.
-    """
+    """Get the current DateTime in the provided timezone.  Timezone aware."""
     if TEST_DATETIME:
         return TEST_DATETIME
     tz = tz or DEFAULT_TIMEZONE

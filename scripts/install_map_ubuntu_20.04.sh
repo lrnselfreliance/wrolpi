@@ -85,7 +85,7 @@ fi
 
 set -e
 
-cp /opt/wrolpi/etc/ubuntu20.04/rendred.conf /usr/local/etc/renderd.conf
+cp /opt/wrolpi/etc/ubuntu20.04/renderd.conf /usr/local/etc/renderd.conf
 # Enable mod_tile.
 cp /opt/wrolpi/etc/ubuntu20.04/mod_tile.conf /etc/apache2/conf-available/mod_tile.conf
 

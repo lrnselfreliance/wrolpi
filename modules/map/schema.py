@@ -4,4 +4,4 @@ from typing import List
 
 @dataclass
 class ImportPost:
-    pbfs: List[str]
+    files: List[str]

@@ -513,12 +513,12 @@ export async function setThrottle(on) {
 }
 
 export async function getMapImportStatus() {
-    let response = await apiGet(`${API_URI}/map/pbf`);
+    let response = await apiGet(`${API_URI}/map/files`);
     return await response.json();
 }
 
-export async function importPbfs(pbfs) {
-    let body = {'pbfs': pbfs};
+export async function importMapFiles(paths) {
+    let body = {'files': paths};
     let response = await apiPost(`${API_URI}/map/import`, body);
     if (response.status === 204) {
         return null;

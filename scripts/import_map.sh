@@ -11,15 +11,24 @@ if [ ! -f /opt/openstreetmap-carto/openstreetmap-carto.style ]; then
 fi
 
 if [ "${1}" == "" ]; then
-  echo "Missing PBF file argument."
+  echo "Missing file argument."
   exit 3
 fi
 
 if [ ! -f "${1}" ]; then
-  echo "PBF file does not exist! ${1}"
+  echo "File does not exist! ${1}"
   exit 4
 fi
 
-osm2pgsql -d gis --append --slim -G --hstore --tag-transform-script \
-  /opt/openstreetmap-carto/openstreetmap-carto.lua -C 2000 --number-processes 4 \
-  -S /opt/openstreetmap-carto/openstreetmap-carto.style "${1}"
+if [[ ${1} == *.osm.pbf ]]; then
+  # Import a PBF file.
+  osm2pgsql -d gis --append --slim -G --hstore --tag-transform-script \
+    /opt/openstreetmap-carto/openstreetmap-carto.lua -C 2000 --number-processes 4 \
+    -S /opt/openstreetmap-carto/openstreetmap-carto.style "${1}"
+elif [[ ${1} == *.dump ]]; then
+  # Import a Postgresql dump.
+  pg_restore -j4 --no-owner -d gis "${1}"
+else
+  echo "Cannot import unknown map file"
+  exit 5
+fi

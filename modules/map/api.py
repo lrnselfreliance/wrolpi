@@ -17,36 +17,37 @@ bp = get_blueprint('Map', '/api/map')
 
 @bp.post('/import')
 @openapi.definition(
-    summary='Import PBF map files',
+    summary='Import PBF/dump map files',
     body=schema.ImportPost,
 )
 @validate(schema.ImportPost)
 @wrol_mode_check
-async def import_pbfs(request: Request, body: schema.ImportPost):
+async def import_pbfs(_: Request, body: schema.ImportPost):
     if lib.IMPORT_EVENT.is_set():
         return response.json({'error': 'Map import already running'}, HTTPStatus.CONFLICT)
 
-    pbfs = [i for i in body.pbfs if i]
-    if not pbfs:
-        raise ValidationError('No PBF files were provided')
+    paths = [i for i in body.files if i]
+    if not paths:
+        raise ValidationError('No PBF or dump files were provided')
 
+    coro = lib.import_files(paths)
     if PYTEST:
-        await lib.import_pbfs(pbfs)
+        await coro
     else:
-        asyncio.create_task(lib.import_pbfs(pbfs))
+        asyncio.create_task(coro)
     return response.empty()
 
 
-@bp.get('/pbf')
-@openapi.description('Find any PBF map files, get their import status')
-def pbf(request: Request):
-    pbfs = lib.get_pbf_import_status()
-    pbfs = sorted(pbfs, key=lambda i: str(i.path))
-    importing = lib.IMPORTING.get('pbf')
+@bp.get('/files')
+@openapi.description('Find any map files, get their import status')
+def pbf(_: Request):
+    paths = lib.get_import_status()
+    paths = sorted(paths, key=lambda i: str(i.path))
+    importing = lib.IMPORTING.get('path')
     if importing:
         importing = Path(importing).relative_to(get_media_directory())
     body = dict(
-        pbfs=pbfs,
+        files=paths,
         importing=importing,
         import_running=lib.IMPORT_EVENT.is_set(),
         dockerized=DOCKERIZED,

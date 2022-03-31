@@ -1,7 +1,7 @@
 import React from "react";
 import {HelpPopup, humanFileSize, minutesToTimestamp, PageContainer, TabLinks, WROLModeMessage} from "./Common";
 import {Route} from "react-router-dom";
-import {getMapImportStatus, importPbfs} from "../api";
+import {getMapImportStatus, importMapFiles} from "../api";
 import Table from "semantic-ui-react/dist/commonjs/collections/Table";
 import {Button, Checkbox, Icon, Loader, Placeholder} from "semantic-ui-react";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
@@ -10,7 +10,7 @@ class ManageMap extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            pbfs: null,
+            files: null,
             importing: null,
             import_running: false,
             selectedPaths: [],
@@ -30,7 +30,7 @@ class ManageMap extends React.Component {
     fetchImportStatus = async () => {
         const importStatus = await getMapImportStatus();
         this.setState({
-            pbfs: importStatus['pbfs'],
+            files: importStatus['files'],
             importing: importStatus['importing'],
             import_running: importStatus['import_running'],
             dockerized: importStatus['dockerized'],
@@ -41,16 +41,16 @@ class ManageMap extends React.Component {
         e.preventDefault();
 
         this.setState({'ready': false});
-        const {pbfs, selectedPaths} = this.state;
+        const {files, selectedPaths} = this.state;
         if (!selectedPaths || selectedPaths.length === 0) {
-            // No PBFs are selected, import all.
+            // No files are selected, import all.
             let paths = [];
-            for (let i = 0; i < pbfs.length; i++) {
-                paths = paths.concat([pbfs[i].path]);
+            for (let i = 0; i < files.length; i++) {
+                paths = paths.concat([files[i].path]);
             }
-            await importPbfs(paths);
+            await importMapFiles(paths);
         } else {
-            await importPbfs(selectedPaths);
+            await importMapFiles(selectedPaths);
         }
         await this.fetchImportStatus();
     }
@@ -97,7 +97,7 @@ class ManageMap extends React.Component {
     }
 
     render() {
-        const {pbfs, selectedPaths, import_running, importing, dockerized} = this.state;
+        const {files, selectedPaths, import_running, importing, dockerized} = this.state;
 
         let dockerWarning;
         if (dockerized === true) {
@@ -154,7 +154,7 @@ class ManageMap extends React.Component {
             <Loader size='large' active={import_running} inline='centered'>Importing: {importing}</Loader>
         );
 
-        let disabled = dockerized || !pbfs || pbfs.length === 0 || import_running;
+        let disabled = dockerized || !files || files.length === 0 || import_running;
         let importButton = <Button
             primary
             disabled={disabled}
@@ -164,7 +164,7 @@ class ManageMap extends React.Component {
         </Button>;
 
         let rows;
-        if (!pbfs) {
+        if (!files) {
             // Fetch request is not complete.
             rows = <Table.Row>
                 <Table.Cell/>
@@ -175,12 +175,12 @@ class ManageMap extends React.Component {
                     </Placeholder>
                 </Table.Cell>
             </Table.Row>;
-        } else if (pbfs.length === 0) {
+        } else if (files.length === 0) {
             rows = <Table.Row>
                 <Table.Cell/><Table.Cell colSpan={5}>No PBF map files were found in <b>map/pbf</b></Table.Cell>
             </Table.Row>;
         } else {
-            rows = pbfs.map(i => this.tableRow(i, disabled));
+            rows = files.map(i => this.tableRow(i, disabled));
         }
 
         let spaceHelpPopup = <HelpPopup

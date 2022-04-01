@@ -531,3 +531,17 @@ export async function importMapFiles(paths) {
         });
     }
 }
+
+export async function clearDownloads() {
+    let response = await apiPost(`${API_URI}/download/clear_completed`);
+    if (response.status === 204) {
+        return null
+    } else {
+        toast({
+            type: 'error',
+            title: 'Error!',
+            description: 'Could not clear downloads!  See server logs.',
+            time: 5000,
+        });
+    }
+}

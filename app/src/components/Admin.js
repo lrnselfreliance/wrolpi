@@ -11,7 +11,7 @@ import {
     Placeholder,
     Table
 } from "semantic-ui-react";
-import {getDownloads, getSettings, killDownload, postDownload, saveSettings} from "../api";
+import {clearDownloads, getDownloads, getSettings, killDownload, postDownload, saveSettings} from "../api";
 import TimezoneSelect from 'react-timezone-select';
 import {
     DisableDownloadsToggle,
@@ -196,6 +196,24 @@ class WROLMode extends React.Component {
             </Container>
         )
     }
+}
+
+function ClearCompleteDownloads() {
+    const [disabled, setDisabled] = React.useState(false);
+
+    async function localClearDownloads() {
+        setDisabled(true);
+        await clearDownloads();
+        setDisabled(false);
+    }
+
+    return <>
+        <Button
+            onClick={localClearDownloads}
+            disabled={disabled}
+            color='yellow'
+        >Clear Completed</Button>
+    </>
 }
 
 class DownloadRow extends React.Component {
@@ -387,14 +405,18 @@ class Downloads extends React.Component {
         if (this.state.once_downloads !== null && this.state.once_downloads.length === 0) {
             onceTable = <p>No downloads are scheduled to be downloaded.</p>
         } else if (this.state.once_downloads !== null) {
-            onceTable = (<Table>
-                {stoppableHeader}
-                <Table.Body>
-                    {this.state.once_downloads.map((i) =>
-                        <StoppableRow {...i} fetchDownloads={this.fetchDownloads} key={i.id}/>
-                    )}
-                </Table.Body>
-            </Table>);
+            onceTable = (
+                <>
+                    <ClearCompleteDownloads/>
+                    <Table>
+                        {stoppableHeader}
+                        <Table.Body>
+                            {this.state.once_downloads.map((i) =>
+                                <StoppableRow {...i} fetchDownloads={this.fetchDownloads} key={i.id}/>
+                            )}
+                        </Table.Body>
+                    </Table>
+                </>);
         }
 
         let recurringTable = tablePlaceholder;

@@ -23,6 +23,9 @@ class HotspotStatus(enum.Enum):
 
 
 def hotspot_status() -> HotspotStatus:
+    if NMCLI is None:
+        return HotspotStatus.unknown
+
     cmd = (NMCLI,)
     try:
         output = subprocess.check_output(cmd).decode().strip()
@@ -97,6 +100,9 @@ GOVERNOR_MAP = {
 
 
 def throttle_status() -> GovernorStatus:
+    if not CPUFREQ_INFO:
+        return GovernorStatus.unknown
+
     cmd = (CPUFREQ_INFO,)
     try:
         output = subprocess.check_output(cmd)

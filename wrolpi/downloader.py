@@ -687,6 +687,12 @@ class DownloadManager:
         next_download = local_timezone(next_download)
         return next_download
 
+    @optional_session
+    def delete_completed(self, session: Session):
+        """Delete any completed download records."""
+        session.query(Download).filter(Download.status == 'complete').delete()
+        session.commit()
+
 
 # The global DownloadManager.  This should be used everywhere!
 download_manager = DownloadManager()

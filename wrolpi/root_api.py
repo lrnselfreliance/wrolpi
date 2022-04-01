@@ -228,6 +228,13 @@ async def enable_downloads(_: Request):
     return response.empty()
 
 
+@root_api.post('/download/clear_completed')
+@openapi.description('Clear completed downloads')
+async def clear_completed(_: Request):
+    download_manager.delete_completed()
+    return response.empty()
+
+
 @root_api.delete('/download/<download_id:integer>')
 @openapi.description('Delete a download')
 @wrol_mode_check

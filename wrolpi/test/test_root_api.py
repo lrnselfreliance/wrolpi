@@ -202,7 +202,8 @@ def test_hotspot_settings(test_session, test_client, test_config):
 
 
 def test_throttle_toggle(test_session, test_client, test_config):
-    with mock.patch('wrolpi.admin.subprocess') as mock_subprocess:
+    with mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
+            mock.patch('wrolpi.admin.CPUFREQ_INFO', "this value isn't even used"):
         mock_subprocess.check_output.side_effect = [
             b'wlan0: unavailable',
             b'The governor "ondemand" may decide ',
@@ -221,7 +222,8 @@ def test_clear_downloads(test_session, test_client, test_config):
         d2 = Download(url='https://example.com/2', status='pending')
         d3 = Download(url='https://example.com/3', status='deferred')
         d4 = Download(url='https://example.com/4', status='new')
-        session.add_all([d1, d2, d3, d4])
+        d5 = Download(url='https://example.com/5', status='failed')
+        session.add_all([d1, d2, d3, d4, d5])
 
     def check_download(download_, expected_):
         assert download_['url'] == expected_['url']
@@ -230,6 +232,7 @@ def test_clear_downloads(test_session, test_client, test_config):
     request, response = api_app.test_client.get('/api/download')
     expected = [
         {'url': 'https://example.com/2', 'status': 'pending'},
+        {'url': 'https://example.com/5', 'status': 'failed'},
         {'url': 'https://example.com/4', 'status': 'new'},
         {'url': 'https://example.com/3', 'status': 'deferred'},
         {'url': 'https://example.com/1', 'status': 'complete'},
@@ -238,6 +241,19 @@ def test_clear_downloads(test_session, test_client, test_config):
         check_download(download, expected)
 
     request, response = api_app.test_client.post('/api/download/clear_completed')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    request, response = api_app.test_client.get('/api/download')
+    expected = [
+        {'url': 'https://example.com/2', 'status': 'pending'},
+        {'url': 'https://example.com/5', 'status': 'failed'},
+        {'url': 'https://example.com/4', 'status': 'new'},
+        {'url': 'https://example.com/3', 'status': 'deferred'},
+    ]
+    for download, expected in zip_longest(response.json['once_downloads'], expected):
+        check_download(download, expected)
+
+    request, response = api_app.test_client.post('/api/download/clear_failed')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     request, response = api_app.test_client.get('/api/download')

@@ -11,7 +11,15 @@ import {
     Placeholder,
     Table
 } from "semantic-ui-react";
-import {clearDownloads, getDownloads, getSettings, killDownload, postDownload, saveSettings} from "../api";
+import {
+    clearCompletedDownloads,
+    clearFailedDownloads,
+    getDownloads,
+    getSettings,
+    killDownload,
+    postDownload,
+    saveSettings
+} from "../api";
 import TimezoneSelect from 'react-timezone-select';
 import {
     DisableDownloadsToggle,
@@ -203,8 +211,11 @@ function ClearCompleteDownloads() {
 
     async function localClearDownloads() {
         setDisabled(true);
-        await clearDownloads();
-        setDisabled(false);
+        try {
+            await clearCompletedDownloads();
+        } finally {
+            setDisabled(false);
+        }
     }
 
     return <>
@@ -213,6 +224,36 @@ function ClearCompleteDownloads() {
             disabled={disabled}
             color='yellow'
         >Clear Completed</Button>
+    </>
+}
+
+function ClearFailedDownloads() {
+    const [open, setOpen] = React.useState(false);
+    const [disabled, setDisabled] = React.useState(false);
+
+    async function localDeleteFailed() {
+        setDisabled(true);
+        try {
+            await clearFailedDownloads();
+        } finally {
+            setDisabled(false);
+            setOpen(false);
+        }
+    }
+
+    return <>
+        <Button
+            onClick={() => setOpen(true)}
+            disabled={disabled}
+            color='red'
+        >Clear Failed</Button>
+        <Confirm
+            open={open}
+            content='Are you sure you want to delete failed downloads?  They will not be retried.'
+            confirmButton='Delete'
+            onCancel={() => setOpen(false)}
+            onConfirm={localDeleteFailed}
+        />
     </>
 }
 
@@ -408,6 +449,7 @@ class Downloads extends React.Component {
             onceTable = (
                 <>
                     <ClearCompleteDownloads/>
+                    <ClearFailedDownloads/>
                     <Table>
                         {stoppableHeader}
                         <Table.Body>

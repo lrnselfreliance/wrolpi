@@ -235,6 +235,13 @@ async def clear_completed(_: Request):
     return response.empty()
 
 
+@root_api.post('/download/clear_failed')
+@openapi.description('Clear failed downloads')
+async def clear_failed(_: Request):
+    download_manager.delete_failed()
+    return response.empty()
+
+
 @root_api.delete('/download/<download_id:integer>')
 @openapi.description('Delete a download')
 @wrol_mode_check

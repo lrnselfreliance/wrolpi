@@ -532,7 +532,7 @@ export async function importMapFiles(paths) {
     }
 }
 
-export async function clearDownloads() {
+export async function clearCompletedDownloads() {
     let response = await apiPost(`${API_URI}/download/clear_completed`);
     if (response.status === 204) {
         return null
@@ -540,7 +540,21 @@ export async function clearDownloads() {
         toast({
             type: 'error',
             title: 'Error!',
-            description: 'Could not clear downloads!  See server logs.',
+            description: 'Could not clear completed downloads!  See server logs.',
+            time: 5000,
+        });
+    }
+}
+
+export async function clearFailedDownloads() {
+    let response = await apiPost(`${API_URI}/download/clear_failed`);
+    if (response.status === 204) {
+        return null
+    } else {
+        toast({
+            type: 'error',
+            title: 'Error!',
+            description: 'Could not clear failed downloads!  See server logs.',
             time: 5000,
         });
     }

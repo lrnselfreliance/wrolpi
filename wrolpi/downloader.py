@@ -693,6 +693,12 @@ class DownloadManager:
         session.query(Download).filter(Download.status == 'complete').delete()
         session.commit()
 
+    @optional_session
+    def delete_failed(self, session: Session):
+        """Delete any failed download records."""
+        session.query(Download).filter(Download.status == 'failed').delete()
+        session.commit()
+
 
 # The global DownloadManager.  This should be used everywhere!
 download_manager = DownloadManager()

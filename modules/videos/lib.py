@@ -2,13 +2,13 @@ import html
 import pathlib
 import re
 from collections import defaultdict
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 from uuid import uuid1
 
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Session
 
-from wrolpi.common import logger, chunks, ConfigFile, WROLPiConfig
+from wrolpi.common import logger, chunks, ConfigFile
 from wrolpi.dates import from_timestamp, Seconds
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.media_path import MediaPath
@@ -340,13 +340,12 @@ def set_test_channels_config(enable: bool):
         TEST_CHANNELS_CONFIG = None
 
 
-class DownloaderConfig(ConfigFile):
-    file_name = 'downloader.yaml'
+class VideoDownloaderConfig(ConfigFile):
+    file_name = 'videos_downloader.yaml'
     default_config = dict(
         continue_dl=True,
         dateafter='19900101',
         file_name_format='%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s',
-        format='22 / 135 / 18 / 43',
         nooverwrites=True,
         quiet=False,
         writeautomaticsub=True,
@@ -379,14 +378,6 @@ class DownloaderConfig(ConfigFile):
     @file_name_format.setter
     def file_name_format(self, value: str):
         self.update({'file_name_format': value})
-
-    @property
-    def format(self) -> str:
-        return self._config['format']
-
-    @format.setter
-    def format(self, value: str):
-        self.update({'format': value})
 
     @property
     def nooverwrites(self) -> bool:
@@ -445,25 +436,25 @@ class DownloaderConfig(ConfigFile):
         self.update({'youtube_include_dash_manifest': value})
 
 
-DOWNLOADER_CONFIG: DownloaderConfig = DownloaderConfig(global_=True)
-TEST_DOWNLOADER_CONFIG: DownloaderConfig = None
+VIDEO_DOWNLOADER_CONFIG: VideoDownloaderConfig = VideoDownloaderConfig(global_=True)
+TEST_VIDEO_DOWNLOADER_CONFIG: VideoDownloaderConfig = None
 
 
 def get_downloader_config():
-    global TEST_DOWNLOADER_CONFIG
-    if isinstance(TEST_DOWNLOADER_CONFIG, DownloaderConfig):
-        return TEST_DOWNLOADER_CONFIG
+    global TEST_VIDEO_DOWNLOADER_CONFIG
+    if isinstance(TEST_VIDEO_DOWNLOADER_CONFIG, VideoDownloaderConfig):
+        return TEST_VIDEO_DOWNLOADER_CONFIG
 
-    global DOWNLOADER_CONFIG
-    return DOWNLOADER_CONFIG
+    global VIDEO_DOWNLOADER_CONFIG
+    return VIDEO_DOWNLOADER_CONFIG
 
 
 def set_test_downloader_config(enabled: bool):
-    global TEST_DOWNLOADER_CONFIG
+    global TEST_VIDEO_DOWNLOADER_CONFIG
     if enabled:
-        TEST_DOWNLOADER_CONFIG = DownloaderConfig()
+        TEST_VIDEO_DOWNLOADER_CONFIG = VideoDownloaderConfig()
     else:
-        TEST_DOWNLOADER_CONFIG = None
+        TEST_VIDEO_DOWNLOADER_CONFIG = None
 
 
 def get_channels_config_from_db(session: Session) -> dict:

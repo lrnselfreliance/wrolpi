@@ -13,7 +13,7 @@ from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
-from wrolpi.common import Base, ModelHelper, logger, iterify, wrol_mode_check, zig_zag
+from wrolpi.common import Base, ModelHelper, logger, iterify, wrol_mode_check, zig_zag, ConfigFile
 from wrolpi.dates import TZDateTime, now, Seconds, local_timezone, recursive_replace_tz
 from wrolpi.db import get_db_session, get_db_curs, get_db_context, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
@@ -276,18 +276,14 @@ class DownloadManager:
 
     def create_download(self, url: str, session, downloader: str = None, skip_download: bool = False,
                         reset_attempts: bool = False) -> Download:
-        """
-        Schedule a URL for download.  If the URL failed previously, it may be retried.
-        """
+        """Schedule a URL for download.  If the URL failed previously, it may be retried."""
         downloads = self.create_downloads([url], session, downloader, skip_download=skip_download,
                                           reset_attempts=reset_attempts)
         return downloads[0]
 
     def create_downloads(self, urls: List[str], session: Session = None, downloader: str = None,
                          skip_download: bool = False, reset_attempts: bool = False) -> List[Download]:
-        """
-        Schedule all URLs for download.  If one cannot be downloaded, none will be added.
-        """
+        """Schedule all URLs for download.  If one cannot be downloaded, none will be added."""
         if not session:
             _, session = get_db_context()
 
@@ -326,11 +322,8 @@ class DownloadManager:
 
     @wrol_mode_check
     @optional_session
-    def _do_downloads(self, session=None):
-        """
-        This method calls the Downloader's do_download method.
-        """
-        # This is a long-running function, lets get a session that can be used for a long time.
+    def _do_downloads(self, session: Session = None):
+        """This method calls the Downloader's do_download method."""
         if self.disabled.is_set():
             raise InvalidDownload('DownloadManager is disabled')
 
@@ -346,6 +339,12 @@ class DownloadManager:
                 download_id = download.id
                 url = download.url
 
+                if url in DOWNLOAD_MANAGER_CONFIG.skip_urls:
+                    logger.info(f'Skipping download in skip_urls list: {url}')
+                    session.query(Download).filter_by(id=download.id).delete()
+                    session.commit()
+                    continue
+
                 downloader = self.get_downloader_by_name(download.downloader)
                 if not downloader:
                     downloader, info_json = self.get_downloader(download.url)
@@ -357,12 +356,12 @@ class DownloadManager:
                 session.commit()
 
                 success = True
-                failure = None
+                failure = False
                 try:
                     success = downloader.do_download(download)
                 except UnrecoverableDownloadError as e:
                     # Download failed and should not be retried.
-                    logger.warning(f'UnrecoverableDownloadError for {download.url}', exc_info=e)
+                    logger.warning(f'UnrecoverableDownloadError for {url}', exc_info=e)
                     failure = True
                 except Exception as e:
                     logger.warning(f'Failed to download {url}.  Will be tried again later.', exc_info=e)
@@ -399,9 +398,7 @@ class DownloadManager:
         return self.do_downloads_sync()
 
     def start_downloads(self):
-        """
-        Start an async task to do downloads.  This does nothing when testing!
-        """
+        """Start an async task to do downloads.  This does nothing when testing!"""
         if not PYTEST:
             asyncio.create_task(self.do_downloads())
 
@@ -498,9 +495,7 @@ class DownloadManager:
         return downloads
 
     def get_download(self, session: Session, url: str = None, id_: int = None) -> Optional[Download]:
-        """
-        Attempt to find a Download by its URL or by its id.
-        """
+        """Attempt to find a Download by its URL or by its id."""
         query = session.query(Download)
         if url:
             download = query.filter_by(url=url).one_or_none()
@@ -514,9 +509,7 @@ class DownloadManager:
 
     @optional_session
     def delete_download(self, download_id: int, session: Session = None):
-        """
-        Delete a Download.  Returns True if a Download was deleted, otherwise return False.
-        """
+        """Delete a Download.  Returns True if a Download was deleted, otherwise return False."""
         download = self.get_download(session, id_=download_id)
         if download:
             session.delete(download)
@@ -526,7 +519,7 @@ class DownloadManager:
 
     def kill_download(self, download_id: int):
         """
-        Fail a Download, if it is pending, kill the Downloader so the download stops.
+        Fail a Download. If it is pending, kill the Downloader so the download stops.
         """
         with get_db_session(commit=True) as session:
             download = self.get_download(session, id_=download_id)
@@ -552,9 +545,7 @@ class DownloadManager:
             logger.critical(f'Failed to kill downloads!', exc_info=e)
 
     def enable(self):
-        """
-        Enable downloading.  Start downloading.
-        """
+        """Enable downloading.  Start downloading."""
         self.disabled.clear()
         self.start_downloads()
 
@@ -673,7 +664,7 @@ class DownloadManager:
 
         # Download was successful.  Spread the same-frequency downloads out over their iteration.
         start_date = local_timezone(datetime(2000, 1, 1))
-        # Weeks/months/etc since start_date.
+        # Weeks/months/etc. since start_date.
         iterations = ((now() - start_date) // freq).total_seconds()
         # Download slots start the next nearest iteration since 2000-01-01.
         # For example, if a weekly download was performed on 2000-01-01 it will get the same slot within
@@ -696,9 +687,38 @@ class DownloadManager:
     @optional_session
     def delete_failed(self, session: Session):
         """Delete any failed download records."""
-        session.query(Download).filter(Download.status == 'failed').delete()
+        failed_downloads = session.query(Download).filter(
+            Download.status == 'failed',
+            Download.frequency == None,
+        ).all()
+
+        # Add all downloads to permanent skip list.
+        ids = [i.id for i in failed_downloads]
+        urls = list(set(DOWNLOAD_MANAGER_CONFIG.skip_urls) | {i.url for i in failed_downloads})
+        DOWNLOAD_MANAGER_CONFIG.skip_urls = urls
+
+        # Delete all failed once-downloads.
+        session.execute('DELETE FROM download WHERE id = ANY(:ids)', {'ids': ids})
         session.commit()
 
 
 # The global DownloadManager.  This should be used everywhere!
 download_manager = DownloadManager()
+
+
+class DownloadMangerConfig(ConfigFile):
+    file_name = 'download_manager.yaml'
+    default_config = dict(
+        skip_urls=[],
+    )
+
+    @property
+    def skip_urls(self) -> List[str]:
+        return self._config['skip_urls']
+
+    @skip_urls.setter
+    def skip_urls(self, value: List[str]):
+        self.update({'skip_urls': value})
+
+
+DOWNLOAD_MANAGER_CONFIG: DownloadMangerConfig = DownloadMangerConfig()

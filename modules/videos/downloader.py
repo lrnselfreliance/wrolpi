@@ -11,10 +11,11 @@ from yt_dlp import YoutubeDL
 from yt_dlp.extractor import YoutubeTabIE
 from yt_dlp.utils import UnsupportedError, DownloadError
 
+from wrolpi.cmd import which
 from wrolpi.common import logger, sanitize_link, extract_domain
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs
-from wrolpi.downloader import Downloader, Download
+from wrolpi.downloader import Downloader, Download, DOWNLOAD_MANAGER_CONFIG
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
@@ -78,6 +79,9 @@ class ChannelDownloader(Downloader, ABC):
         with get_db_session(commit=True) as session:
             for video_id, source_id, missing_video in missing_videos:
                 url = video_url_resolver(domain, missing_video)
+                if url in DOWNLOAD_MANAGER_CONFIG.skip_urls:
+                    # Don't try to download skipped videos.
+                    continue
                 # Schedule any missing videos for download.
                 download = self.manager.get_or_create_download(url, session)
                 download.downloader = 'video'
@@ -90,11 +94,12 @@ class ChannelDownloader(Downloader, ABC):
         return True
 
 
-YT_DLP_BIN = pathlib.Path('/usr/local/bin/yt-dlp')  # Location in docker container
-if not YT_DLP_BIN.is_file():
-    YT_DLP_BIN = pathlib.Path('/opt/wrolpi/venv/bin/yt-dlp')  # Use virtual environment location
-if not YT_DLP_BIN.is_file() and not PYTEST:
-    logger.error('COULD NOT FIND YT-DLP!!!')
+YT_DLP_BIN = which(
+    'yt-dlp',
+    '/usr/local/bin/yt-dlp',  # Location in docker container
+    '/opt/wrolpi/venv/bin/yt-dlp',  # Use virtual environment location
+    warn=True,
+)
 
 
 class VideoDownloader(Downloader, ABC):
@@ -221,8 +226,6 @@ class VideoDownloader(Downloader, ABC):
         options = get_downloader_config().dict()
         options['outtmpl'] = f'{out_dir}/{options["file_name_format"]}'
         options['merge_output_format'] = PREFERRED_VIDEO_EXTENSION
-        # We don't need "format" when getting the filename.
-        del options['format']
 
         logger.debug(f'Downloading {url} to {out_dir}')
 

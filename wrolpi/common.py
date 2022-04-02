@@ -177,12 +177,14 @@ class ConfigFile:
     default_config: dict = None
 
     def __init__(self, global_: bool = False):
-        if PYTEST and global_:
+        self.file_lock = Lock()
+
+        if PYTEST:
             # Do not load a global config on import while testing.  A global instance will never be used for testing.
+            self._config = self.default_config.copy()
             return
 
         config_file = self.get_file()
-        self.file_lock = Lock()
         self._config = Manager().dict()
         # Use the default settings to initialize the config.
         self._config.update(deepcopy(self.default_config))
@@ -322,10 +324,7 @@ def get_config() -> WROLPiConfig:
 
 def set_test_config(enable: bool):
     global TEST_WROLPI_CONFIG
-    if enable:
-        TEST_WROLPI_CONFIG = WROLPiConfig()
-    else:
-        TEST_WROLPI_CONFIG = None
+    TEST_WROLPI_CONFIG = WROLPiConfig() if enable else None
 
 
 def wrol_mode_enabled() -> bool:

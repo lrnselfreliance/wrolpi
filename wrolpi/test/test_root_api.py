@@ -217,50 +217,66 @@ def test_throttle_toggle(test_session, test_client, test_config):
 
 
 def test_clear_downloads(test_session, test_client, test_config):
+    from wrolpi.downloader import DOWNLOAD_MANAGER_CONFIG
+
     with get_db_session(commit=True) as session:
         d1 = Download(url='https://example.com/1', status='complete')
         d2 = Download(url='https://example.com/2', status='pending')
         d3 = Download(url='https://example.com/3', status='deferred')
         d4 = Download(url='https://example.com/4', status='new')
         d5 = Download(url='https://example.com/5', status='failed')
-        session.add_all([d1, d2, d3, d4, d5])
+        d6 = Download(url='https://example.com/6', status='failed', frequency=60)
+        session.add_all([d1, d2, d3, d4, d5, d6])
 
-    def check_download(download_, expected_):
-        assert download_['url'] == expected_['url']
-        assert download_['status'] == expected_['status']
+    def check_downloads(response_, once_downloads_, recurring_downloads_, status_code=None):
+        if status_code:
+            assert response_.status_code == status_code
 
+        for download, once_download in zip_longest(response_.json['once_downloads'], once_downloads_):
+            assert download
+            assert once_download
+            assert download['url'] == once_download['url']
+            assert download['status'] == once_download['status']
+        for download, recurring_download in zip_longest(response_.json['recurring_downloads'], recurring_downloads_):
+            assert download
+            assert recurring_download
+            assert download['url'] == recurring_download['url']
+            assert download['status'] == recurring_download['status']
+
+    # All created downloads are present.
     request, response = api_app.test_client.get('/api/download')
-    expected = [
+    once_downloads = [
         {'url': 'https://example.com/2', 'status': 'pending'},
         {'url': 'https://example.com/5', 'status': 'failed'},
         {'url': 'https://example.com/4', 'status': 'new'},
         {'url': 'https://example.com/3', 'status': 'deferred'},
         {'url': 'https://example.com/1', 'status': 'complete'},
     ]
-    for download, expected in zip_longest(response.json['once_downloads'], expected):
-        check_download(download, expected)
+    recurring_downloads = [{'url': 'https://example.com/6', 'status': 'failed'}]
+    check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
 
+    # "complete" download is removed.
     request, response = api_app.test_client.post('/api/download/clear_completed')
     assert response.status_code == HTTPStatus.NO_CONTENT
-
     request, response = api_app.test_client.get('/api/download')
-    expected = [
+    once_downloads = [
         {'url': 'https://example.com/2', 'status': 'pending'},
         {'url': 'https://example.com/5', 'status': 'failed'},
         {'url': 'https://example.com/4', 'status': 'new'},
         {'url': 'https://example.com/3', 'status': 'deferred'},
     ]
-    for download, expected in zip_longest(response.json['once_downloads'], expected):
-        check_download(download, expected)
+    check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
 
+    # Failed "once" download is removed, recurring failed is not removed.
     request, response = api_app.test_client.post('/api/download/clear_failed')
     assert response.status_code == HTTPStatus.NO_CONTENT
-
     request, response = api_app.test_client.get('/api/download')
-    expected = [
+    once_downloads = [
         {'url': 'https://example.com/2', 'status': 'pending'},
         {'url': 'https://example.com/4', 'status': 'new'},
         {'url': 'https://example.com/3', 'status': 'deferred'},
     ]
-    for download, expected in zip_longest(response.json['once_downloads'], expected):
-        check_download(download, expected)
+    check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
+
+    # Failed once-downloads will not be downloaded again.
+    assert 'https://example.com/5' in DOWNLOAD_MANAGER_CONFIG.skip_urls

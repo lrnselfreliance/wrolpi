@@ -266,6 +266,9 @@ class DownloadManager:
         """
         Get a Download by its URL, if it cannot be found create one.
         """
+        if not url:
+            raise ValueError('Download must have a URL')
+
         download = self.get_download(session, url=url)
         if not download:
             download = Download(url=url, status='new')

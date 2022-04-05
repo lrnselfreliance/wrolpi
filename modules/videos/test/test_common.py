@@ -370,11 +370,12 @@ def test_import_favorites(test_session, simple_channel, video_factory, test_chan
 
 
 def test_import_channel_downloads(test_session, channel_factory, test_channels_config):
-    """Importing the channels' config should create any missing download records"""
+    """Importing the Channels' config should create any missing download records"""
     channel1 = channel_factory()
     channel2 = channel_factory()
     channel1.source_id = 'foo'
     channel2.source_id = 'bar'
+    channel2.url = None
     assert channel1.download_frequency is None
     assert len(test_session.query(Channel).all()) == 2
     assert test_session.query(Download).all() == []

@@ -298,6 +298,8 @@ class DownloadManager:
 
         with session.transaction:
             for url in urls:
+                if not url:
+                    raise ValueError('Download must have a URL')
                 info_json = None
                 downloader = forced_downloader
                 if not forced_downloader:

@@ -375,7 +375,10 @@ def test_import_channel_downloads(test_session, channel_factory, test_channels_c
     channel2 = channel_factory()
     channel1.source_id = 'foo'
     channel2.source_id = 'bar'
+    # channel2 has no url, but has a frequency.  Import should not create a download record.
     channel2.url = None
+    channel2.download_frequency = DownloadFrequency.biweekly
+    test_session.commit()
     assert channel1.download_frequency is None
     assert len(test_session.query(Channel).all()) == 2
     assert test_session.query(Download).all() == []
@@ -407,3 +410,4 @@ def test_import_channel_downloads(test_session, channel_factory, test_channels_c
     assert len(test_session.query(Channel).all()) == 2
     assert download.url == channel1.url
     assert download.frequency == channel1.download_frequency
+    assert download.downloader == 'video_channel'

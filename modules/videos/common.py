@@ -69,6 +69,7 @@ def import_videos_config():
     logger.info('Importing videos config')
     try:
         from .lib import get_channels_config
+        from .downloader import ChannelDownloader
         config = get_channels_config()
         config, favorites = config.channels, config.favorites
 
@@ -100,9 +101,10 @@ def import_videos_config():
                     # If we can download from a channel, we must have its source_id.
                     channel.source_id = get_channel_source_id(channel.url)
 
-                if channel.download_frequency:
+                if channel.download_frequency and channel.url:
                     download = download_manager.get_or_create_download(channel.url, session=session)
                     download.frequency = channel.download_frequency
+                    download.downloader = ChannelDownloader.name
 
                 session.add(channel)
 

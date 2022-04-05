@@ -14,6 +14,7 @@ from modules.videos.test.common import create_channel_structure
 from wrolpi.common import get_absolute_media_path
 from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_session
+from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.test.common import build_test_directories, wrap_test_db, TestAPI
 from wrolpi.vars import PROJECT_DIR
 from ..common import get_matching_directories, convert_image, remove_duplicate_video_paths, \
@@ -366,3 +367,42 @@ def test_import_favorites(test_session, simple_channel, video_factory, test_chan
     config = get_channels_config()
     assert config.favorites == {'NO CHANNEL': {vid2.video_path.path.name: {'favorite': favorite}}}
     import_and_verify([vid2.id])
+
+
+def test_import_channel_downloads(test_session, channel_factory, test_channels_config):
+    """Importing the channels' config should create any missing download records"""
+    channel1 = channel_factory()
+    channel2 = channel_factory()
+    channel1.source_id = 'foo'
+    channel2.source_id = 'bar'
+    assert channel1.download_frequency is None
+    assert len(test_session.query(Channel).all()) == 2
+    assert test_session.query(Download).all() == []
+
+    # Config has no channels with a download_frequency.
+    save_channels_config()
+    import_videos_config()
+    assert channel1.download_frequency is None
+    assert len(test_session.query(Channel).all()) == 2
+    assert test_session.query(Download).all() == []
+
+    # Add a frequency to the Channel.
+    channels_config = get_channels_config()
+    channels_config.channels[channel1.link]['download_frequency'] = DownloadFrequency.biweekly
+    channels_config.save()
+
+    # Download record is created on import.
+    import_videos_config()
+    assert channel1.download_frequency is not None
+    assert len(test_session.query(Channel).all()) == 2
+    download: Download = test_session.query(Download).one()
+    assert download.url == channel1.url
+    assert download.frequency == channel1.download_frequency
+
+    # Download frequency is adjusted when config file changes.
+    channels_config.channels[channel1.link]['download_frequency'] = DownloadFrequency.weekly
+    channels_config.save()
+    import_videos_config()
+    assert len(test_session.query(Channel).all()) == 2
+    assert download.url == channel1.url
+    assert download.frequency == channel1.download_frequency

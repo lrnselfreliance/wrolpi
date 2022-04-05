@@ -1,5 +1,4 @@
 import json
-import json
 import os
 import pathlib
 import subprocess
@@ -17,6 +16,7 @@ from wrolpi import before_startup
 from wrolpi.common import logger, iterify, get_media_directory, \
     minimize_dict, api_param_limiter
 from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.downloader import download_manager
 from wrolpi.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict, ChannelSourceIdConflict
 from wrolpi.media_path import MediaPath
@@ -99,6 +99,10 @@ def import_videos_config():
                 if not channel.source_id and channel.url:
                     # If we can download from a channel, we must have its source_id.
                     channel.source_id = get_channel_source_id(channel.url)
+
+                if channel.download_frequency:
+                    download = download_manager.get_or_create_download(channel.url, session=session)
+                    download.frequency = channel.download_frequency
 
                 session.add(channel)
 

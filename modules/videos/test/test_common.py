@@ -411,3 +411,9 @@ def test_import_channel_downloads(test_session, channel_factory, test_channels_c
     assert download.url == channel1.url
     assert download.frequency == channel1.download_frequency
     assert download.downloader == 'video_channel'
+    assert download.next_download
+
+    next_download = str(download.next_download)
+    import_videos_config()
+    download: Download = test_session.query(Download).one()
+    assert next_download == str(download.next_download)

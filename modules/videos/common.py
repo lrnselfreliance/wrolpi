@@ -105,6 +105,8 @@ def import_videos_config():
                     download = download_manager.get_or_create_download(channel.url, session=session)
                     download.frequency = channel.download_frequency
                     download.downloader = ChannelDownloader.name
+                    download.next_download = download.next_download or \
+                                             download_manager.get_next_download(download, session=session)
 
                 session.add(channel)
 

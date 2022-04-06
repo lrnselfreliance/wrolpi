@@ -686,7 +686,10 @@ class DownloadManager:
     @optional_session
     def delete_completed(self, session: Session):
         """Delete any completed download records."""
-        session.query(Download).filter(Download.status == 'complete').delete()
+        session.query(Download).filter(
+            Download.status == 'complete',
+            Download.frequency == None,  # noqa
+        ).delete()
         session.commit()
 
     @optional_session
@@ -694,7 +697,7 @@ class DownloadManager:
         """Delete any failed download records."""
         failed_downloads = session.query(Download).filter(
             Download.status == 'failed',
-            Download.frequency == None,
+            Download.frequency == None,  # noqa
         ).all()
 
         # Add all downloads to permanent skip list.

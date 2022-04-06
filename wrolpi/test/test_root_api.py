@@ -226,7 +226,8 @@ def test_clear_downloads(test_session, test_client, test_config):
         d4 = Download(url='https://example.com/4', status='new')
         d5 = Download(url='https://example.com/5', status='failed')
         d6 = Download(url='https://example.com/6', status='failed', frequency=60)
-        session.add_all([d1, d2, d3, d4, d5, d6])
+        d7 = Download(url='https://example.com/7', status='complete', frequency=60)
+        session.add_all([d1, d2, d3, d4, d5, d6, d7])
 
     def check_downloads(response_, once_downloads_, recurring_downloads_, status_code=None):
         if status_code:
@@ -252,10 +253,13 @@ def test_clear_downloads(test_session, test_client, test_config):
         {'url': 'https://example.com/3', 'status': 'deferred'},
         {'url': 'https://example.com/1', 'status': 'complete'},
     ]
-    recurring_downloads = [{'url': 'https://example.com/6', 'status': 'failed'}]
+    recurring_downloads = [
+        {'url': 'https://example.com/6', 'status': 'failed'},
+        {'url': 'https://example.com/7', 'status': 'complete'},
+    ]
     check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
 
-    # "complete" download is removed.
+    # Once "complete" download is removed.
     request, response = api_app.test_client.post('/api/download/clear_completed')
     assert response.status_code == HTTPStatus.NO_CONTENT
     request, response = api_app.test_client.get('/api/download')

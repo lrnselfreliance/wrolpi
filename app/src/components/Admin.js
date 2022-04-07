@@ -206,7 +206,7 @@ class WROLMode extends React.Component {
     }
 }
 
-function ClearCompleteDownloads() {
+function ClearCompleteDownloads({callback}) {
     const [disabled, setDisabled] = React.useState(false);
 
     async function localClearDownloads() {
@@ -215,6 +215,9 @@ function ClearCompleteDownloads() {
             await clearCompletedDownloads();
         } finally {
             setDisabled(false);
+            if (callback) {
+                callback()
+            }
         }
     }
 
@@ -227,7 +230,7 @@ function ClearCompleteDownloads() {
     </>
 }
 
-function ClearFailedDownloads() {
+function ClearFailedDownloads({callback}) {
     const [open, setOpen] = React.useState(false);
     const [disabled, setDisabled] = React.useState(false);
 
@@ -238,6 +241,9 @@ function ClearFailedDownloads() {
         } finally {
             setDisabled(false);
             setOpen(false);
+            if (callback) {
+                callback()
+            }
         }
     }
 
@@ -448,8 +454,8 @@ class Downloads extends React.Component {
         } else if (this.state.once_downloads !== null) {
             onceTable = (
                 <>
-                    <ClearCompleteDownloads/>
-                    <ClearFailedDownloads/>
+                    <ClearCompleteDownloads callback={() => this.fetchDownloads()}/>
+                    <ClearFailedDownloads callback={() => this.fetchDownloads()}/>
                     <Table>
                         {stoppableHeader}
                         <Table.Body>

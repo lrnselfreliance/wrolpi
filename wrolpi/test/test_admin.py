@@ -4,8 +4,10 @@ from unittest.mock import call
 
 from wrolpi import admin
 from wrolpi.admin import HotspotStatus
+from wrolpi.test.common import skip_circleci
 
 
+@skip_circleci
 def test_hotspot_status():
     with mock.patch('wrolpi.admin.subprocess') as mock_subprocess:
         mock_subprocess.check_output.return_value = b'wlan0: unavailable'

@@ -9,7 +9,7 @@ from wrolpi.dates import strptime
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Download
 from wrolpi.root_api import api_app
-from wrolpi.test.common import TestAPI, wrap_test_db
+from wrolpi.test.common import TestAPI, wrap_test_db, skip_circleci
 
 
 class TestRootAPI(TestAPI):
@@ -201,6 +201,7 @@ def test_hotspot_settings(test_session, test_client, test_config):
         assert config.hotspot_on_startup is True
 
 
+@skip_circleci
 def test_throttle_toggle(test_session, test_client, test_config):
     with mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
             mock.patch('wrolpi.admin.CPUFREQ_INFO', "this value isn't even used"):
@@ -226,7 +227,8 @@ def test_clear_downloads(test_session, test_client, test_config):
         d4 = Download(url='https://example.com/4', status='new')
         d5 = Download(url='https://example.com/5', status='failed')
         d6 = Download(url='https://example.com/6', status='failed', frequency=60)
-        session.add_all([d1, d2, d3, d4, d5, d6])
+        d7 = Download(url='https://example.com/7', status='complete', frequency=60)
+        session.add_all([d1, d2, d3, d4, d5, d6, d7])
 
     def check_downloads(response_, once_downloads_, recurring_downloads_, status_code=None):
         if status_code:
@@ -252,10 +254,13 @@ def test_clear_downloads(test_session, test_client, test_config):
         {'url': 'https://example.com/3', 'status': 'deferred'},
         {'url': 'https://example.com/1', 'status': 'complete'},
     ]
-    recurring_downloads = [{'url': 'https://example.com/6', 'status': 'failed'}]
+    recurring_downloads = [
+        {'url': 'https://example.com/6', 'status': 'failed'},
+        {'url': 'https://example.com/7', 'status': 'complete'},
+    ]
     check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
 
-    # "complete" download is removed.
+    # Once "complete" download is removed.
     request, response = api_app.test_client.post('/api/download/clear_completed')
     assert response.status_code == HTTPStatus.NO_CONTENT
     request, response = api_app.test_client.get('/api/download')

@@ -1,5 +1,4 @@
 import json
-import json
 import os
 import pathlib
 import subprocess
@@ -17,6 +16,7 @@ from wrolpi import before_startup
 from wrolpi.common import logger, iterify, get_media_directory, \
     minimize_dict, api_param_limiter
 from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.downloader import download_manager
 from wrolpi.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
     ChannelLinkConflict, ChannelDirectoryConflict, ChannelSourceIdConflict
 from wrolpi.media_path import MediaPath
@@ -69,6 +69,7 @@ def import_videos_config():
     logger.info('Importing videos config')
     try:
         from .lib import get_channels_config
+        from .downloader import ChannelDownloader
         config = get_channels_config()
         config, favorites = config.channels, config.favorites
 
@@ -99,6 +100,13 @@ def import_videos_config():
                 if not channel.source_id and channel.url:
                     # If we can download from a channel, we must have its source_id.
                     channel.source_id = get_channel_source_id(channel.url)
+
+                if channel.download_frequency and channel.url:
+                    download = download_manager.get_or_create_download(channel.url, session=session)
+                    download.frequency = channel.download_frequency
+                    download.downloader = ChannelDownloader.name
+                    download.next_download = download.next_download or \
+                                             download_manager.get_next_download(download, session=session)
 
                 session.add(channel)
 
@@ -407,9 +415,9 @@ def get_video_duration(video_path: Path) -> int:
 
 
 def apply_info_json(channel_id: int):
-    """
-    Update view_count for all Videos in a channel using its info_json file.  Mark any videos not in the info_json as
-    "censored".
+    """Update view_count for all Videos in a channel using its info_json file.
+
+    Mark any videos not in the info_json as "censored".
     """
     with get_db_session() as session:
         channel = session.query(Channel).filter_by(id=channel_id).one()

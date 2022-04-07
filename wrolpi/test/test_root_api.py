@@ -9,7 +9,7 @@ from wrolpi.dates import strptime
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Download
 from wrolpi.root_api import api_app
-from wrolpi.test.common import TestAPI, wrap_test_db
+from wrolpi.test.common import TestAPI, wrap_test_db, skip_circleci
 
 
 class TestRootAPI(TestAPI):
@@ -201,6 +201,7 @@ def test_hotspot_settings(test_session, test_client, test_config):
         assert config.hotspot_on_startup is True
 
 
+@skip_circleci
 def test_throttle_toggle(test_session, test_client, test_config):
     with mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
             mock.patch('wrolpi.admin.CPUFREQ_INFO', "this value isn't even used"):

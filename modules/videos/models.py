@@ -253,6 +253,7 @@ class Video(ModelHelper, Base):
             title=self.title,
             upload_date=self.upload_date,
             url=self.url,
+            validated=self.validated,
             video_path=self.video_path,
             view_count=self.view_count,
             viewed=self.viewed,

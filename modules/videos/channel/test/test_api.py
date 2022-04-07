@@ -1,18 +1,15 @@
 import json
 import os
 import pathlib
+import shutil
 import tempfile
 from datetime import timedelta
 from http import HTTPStatus
-from queue import Empty
 
 import mock
-import pytest
 
-from modules.videos.api import refresh_queue
 from modules.videos.channel.lib import delete_channel
 from modules.videos.common import get_no_channel_directory
-from modules.videos.lib import upsert_video
 from modules.videos.models import Channel, Video
 from modules.videos.test.common import create_channel_structure
 from wrolpi.dates import now
@@ -21,6 +18,7 @@ from wrolpi.downloader import download_manager, Download
 from wrolpi.errors import UnknownFile
 from wrolpi.root_api import api_app
 from wrolpi.test.common import wrap_test_db, TestAPI
+from wrolpi.vars import PROJECT_DIR
 
 
 class TestVideoAPI(TestAPI):
@@ -154,95 +152,6 @@ class TestVideoAPI(TestAPI):
 
             videos = session.query(Video).order_by(Video.title).all()
             self.assertEqual(len(videos), 4)
-
-    @wrap_test_db
-    def test_refresh_videos(self):
-        # There should be no messages until a refresh is called.
-        pytest.raises(Empty, refresh_queue.get_nowait)
-
-        # Setup a fake channel directory.
-        with get_db_session() as session:
-            channel_path = pathlib.Path(self.tmp_dir.name)
-
-            # Files in subdirectories should be found and handled properly.
-            subdir = channel_path / 'subdir'
-            subdir.mkdir()
-
-            # These are the types of files that will be found first.
-            vid1 = subdir / 'channel name_20000101_abcdefghijk_title.mp4'
-            vid1.touch()
-            vid2 = channel_path / 'channel name_20000102_bcdefghijkl_title.webm'
-            vid2.touch()
-
-            # This video is named the same as vid1, except for the file extension.  Its possible that this was
-            # downloaded later, or maybe the old video format has fallen out of favor.  WROLPi should ignore this
-            # duplicate file.
-            vid1_alt = subdir / 'channel name_20000101_abcdefghijk_title.webm'
-            vid1_alt.touch()
-
-            # These files are associated with the video files above, and should be found "near" them.
-            poster1 = subdir / 'channel name_20000101_abcdefghijk_title.jpg'
-            poster1.touch()
-            poster2 = channel_path / 'channel name_20000102_bcdefghijkl_title.jpg'
-            poster2.touch()
-
-            # Create a channel, associate videos with it.
-            channel = Channel(directory=channel_path, link='foo', name='foo')
-            session.add(channel)
-            session.flush()
-            session.refresh(channel)
-            video1 = upsert_video(session, vid1, channel)
-            video2 = upsert_video(session, vid2, channel)
-            session.commit()
-            self.assertEqual({str(i.video_path.path) for i in channel.videos},
-                             {f'{channel_path}/subdir/{vid1.name}', f'{channel_path}/{vid2.name}'})
-
-            # Poster files were found.
-            self.assertEqual(video1.poster_path.path, subdir / poster1.name)
-            self.assertEqual(video2.poster_path.path, channel_path / poster2.name)
-
-            # Add a bogus file, this should be removed during the refresh
-            self.assertNotIn('foo', {i.video_path.path for i in channel.videos})
-            session.add(Video(video_path='foo', channel_id=channel.id))
-            session.flush()
-            session.refresh(channel)
-            self.assertIn(f'{self.tmp_dir.name}/foo', {str(i.video_path.path) for i in channel.videos})
-            self.assertEqual(len(channel.videos), 3)
-
-            # Add a video that isn't in the DB, it should be found and any meta files associated with it
-            vid3 = pathlib.Path(channel_path / 'channel name_20000103_cdefghijklm_title.flv')
-            vid3.touch()
-            description3 = pathlib.Path(channel_path / 'channel name_20000103_cdefghijklm_title.description')
-            description3.touch()
-
-            # An orphan meta-file should be ignored.  This shouldn't show up anywhere.  But, it shouldn't be deleted.
-            poster3 = pathlib.Path(channel_path / 'channel name_20000104_defghijklmn_title.jpg')
-            poster3.touch()
-
-            # Finally, call the refresh.  Again, it should remove the "foo" video, then discover this 3rd video
-            # file and it's description.
-            api_app.test_client.post('/api/videos/refresh')
-
-            # Bogus file was removed
-            self.assertNotIn(f'{self.tmp_dir.name}/foo', {i.video_path.path for i in channel.videos})
-
-            # Final channel video list we built
-            expected = {
-                ('subdir/' + vid1.name, 'subdir/' + poster1.name, None),  # in a subdirectory, no description
-                (vid2.name, poster2.name, None),  # no description
-                (vid3.name, None, description3.name),  # no poster
-            }
-
-            def str_or_none(i):
-                return str(i.__json__()) if i else None
-
-            self.assertEqual(
-                {(str_or_none(i.video_path), str_or_none(i.poster_path), str_or_none(i.description_path))
-                 for i in channel.videos},
-                expected
-            )
-
-            assert poster3.is_file(), 'Orphan jpg file was deleted!'
 
     @wrap_test_db
     def test_get_channel_videos(self):
@@ -632,3 +541,53 @@ def test_channel_post_directory(test_session, test_client, test_directory):
     assert (test_directory / 'bar') == directory
     assert directory.is_dir()
     assert directory.is_absolute()
+
+
+def test_refresh_videos(test_client, test_session, test_directory, simple_channel, video_factory):
+    print()
+    subdir = test_directory / 'subdir'
+    subdir.mkdir()
+
+    # video1 is in a subdirectory.
+    video1 = video_factory(simple_channel.id, True, True, 'jpg')
+    test_session.commit()
+    shutil.move(video1.video_path.path, subdir / video1.video_path.path.name)
+    shutil.move(video1.poster_path.path, subdir / video1.poster_path.path.name)
+    video1.video_path = subdir / video1.video_path.path.name
+    video1.poster_path = None
+    # video2 is in the test directory.
+    video2 = video_factory(simple_channel.id, True, True, 'jpg')
+    video2.poster_path = video1.poster_path = None
+    test_session.commit()
+
+    assert not video1.size, 'video1 should not have size during creation'
+
+    # Create a video not in the DB.
+    vid3 = test_directory / 'vid3.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', vid3)
+
+    # Orphan poster should be ignored.
+    orphan_poster = pathlib.Path(test_directory / 'channel name_20000104_defghijklmn_title.jpg')
+    orphan_poster.touch()
+
+    # Create a bogus video in the channel.
+    bogus = Video(video_path='foo', channel_id=simple_channel.id)
+    test_session.add(bogus)
+
+    test_client.post('/api/videos/refresh')
+
+    # Posters were found during refresh.
+    assert video1.poster_path
+    assert 'subdir' in str(video1.poster_path.path)
+    assert video2.poster_path
+    # Missing video3 was found
+    video3: Video = test_session.query(Video).filter_by(id=4).one()
+    assert video3.video_path.path == vid3
+    assert video3.video_path != video1.video_path
+    assert video3.video_path != video2.video_path
+    # Bogus video was removed.
+    assert not any('foo' in str(i.video_path.path) for i in test_session.query(Video).all())
+    # Orphan file was not deleted.
+    assert orphan_poster.is_file(), 'Orphan poster was removed!'
+
+    assert video1.size, 'video1 size was not found'

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 
 from wrolpi import before_startup
+from wrolpi.cmd import which
 from wrolpi.common import logger, iterify, get_media_directory, \
     minimize_dict, api_param_limiter
 from wrolpi.db import get_db_session, get_db_curs
@@ -391,16 +392,17 @@ def is_valid_poster(poster_path: Path) -> bool:
     return False
 
 
-def get_video_duration(video_path: Path) -> int:
-    """
-    Get the duration of a video in seconds.  Do this using ffprobe.
-    """
+FFPROBE_BIN = which('ffprobe', '/usr/bin/ffprobe', warn=True)
+
+
+def get_video_duration(video_path: Path) -> Optional[int]:
+    """Get the duration of a video in seconds.  Do this using ffprobe."""
     if not isinstance(video_path, Path):
         video_path = Path(video_path)
     if not video_path.is_file():
         raise FileNotFoundError(f'{video_path} does not exist!')
 
-    cmd = ['/usr/bin/ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of',
+    cmd = [FFPROBE_BIN, '-v', 'error', '-show_entries', 'format=duration', '-of',
            'default=noprint_wrappers=1:nokey=1', str(video_path)]
 
     try:

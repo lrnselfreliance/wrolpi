@@ -101,9 +101,7 @@ def video_file(test_directory) -> pathlib.Path:
 
 @pytest.fixture
 def video_factory(test_session, test_directory):
-    """
-    Creates Videos for testing.
-    """
+    """Creates Videos for testing."""
 
     def _(channel_id: int = None, with_video_file: bool = False, with_info_json: dict = None,
           with_poster_ext: str = None):

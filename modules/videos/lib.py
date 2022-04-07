@@ -283,7 +283,8 @@ def refresh_videos(channel_links: list = None):
     # Fill in any missing data for all videos.
     if not PYTEST:
         import_videos_config()
-        validate_videos()
+
+    validate_videos()
 
     logger.info('Refresh of video files complete')
 

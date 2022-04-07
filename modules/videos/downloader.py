@@ -294,7 +294,7 @@ def update_channel(channel: Channel):
     # Resolve all entries to dictionaries.
     entries = info['entries'] = list(info['entries'])
 
-    # Youtube-DL may hand back a list of URLs, lets use the "Uploads" URL, if available.
+    # yt-dlp may hand back a list of URLs, lets use the "Uploads" URL, if available.
     try:
         entries[0]['id']
     except Exception:
@@ -349,9 +349,9 @@ def update_channel(channel: Channel):
 
 
 def _find_all_missing_videos(link: str = None) -> List[Tuple]:
-    """
-    Get all Video entries which don't have the required media files (i.e. hasn't been downloaded).  Restrict to a
-    single channel if "link" is provided.
+    """Get all Video entries which don't have the required media files (i.e. hasn't been downloaded).
+
+    Restrict to a single channel if "link" is provided.
     """
     with get_db_curs() as curs:
         # Get all channels by default.

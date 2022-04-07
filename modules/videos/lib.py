@@ -27,7 +27,7 @@ def refresh_channel_videos(channel: Channel):
     """
     Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
     """
-    # Set the idempotency key so we can remove any videos not touched during this search
+    # Set the idempotency key, we can remove any videos not touched during this search.
     with get_db_curs(commit=True) as curs:
         curs.execute('UPDATE video SET idempotency=NULL WHERE channel_id=%s', (channel.id,))
 

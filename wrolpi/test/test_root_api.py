@@ -284,4 +284,4 @@ def test_clear_downloads(test_session, test_client, test_config):
     check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
 
     # Failed once-downloads will not be downloaded again.
-    assert 'https://example.com/5' in DOWNLOAD_MANAGER_CONFIG.skip_urls
+    assert DOWNLOAD_MANAGER_CONFIG.skip_urls == ['https://example.com/5',]

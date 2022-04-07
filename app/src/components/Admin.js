@@ -450,7 +450,7 @@ class Downloads extends React.Component {
 
         let onceTable = tablePlaceholder;
         if (this.state.once_downloads !== null && this.state.once_downloads.length === 0) {
-            onceTable = <p>No downloads are scheduled to be downloaded.</p>
+            onceTable = <p>No downloads are scheduled.</p>
         } else if (this.state.once_downloads !== null) {
             onceTable = (
                 <>
@@ -469,7 +469,7 @@ class Downloads extends React.Component {
 
         let recurringTable = tablePlaceholder;
         if (this.state.recurring_downloads !== null && this.state.recurring_downloads.length === 0) {
-            recurringTable = <p>No downloads are scheduled to be downloaded.</p>
+            recurringTable = <p>No recurring downloads are scheduled.</p>
         } else if (this.state.recurring_downloads !== null) {
             recurringTable = (<Table>
                 {nonStoppableHeader}

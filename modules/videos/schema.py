@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import List, Optional
 
-from modules.videos.lib import DEFAULT_DOWNLOAD_FREQUENCY
 from modules.videos.video.lib import DEFAULT_VIDEO_ORDER, VIDEO_QUERY_LIMIT
 
 
@@ -11,24 +10,36 @@ class ChannelPostRequest:
     name: str
     directory: str
     calculate_duration: Optional[bool] = None
-    download_frequency: Optional[int] = DEFAULT_DOWNLOAD_FREQUENCY
+    download_frequency: Optional[int] = None
     generate_posters: Optional[bool] = None
     match_regex: Optional[str] = None
     mkdir: Optional[bool] = None
     url: Optional[str] = None
+    source_id: Optional[str] = None
+
+    def __post_init__(self):
+        self.name = self.name.strip() or None
+        self.directory = self.directory.strip() or None
+        self.url = self.url.strip() if self.url else None
+        self.source_id = self.source_id.strip() if self.source_id else None
 
 
 @dataclass
 class ChannelPutRequest:
     calculate_duration: Optional[bool] = None
     directory: Optional[str] = None
-    download_frequency: Optional[int] = DEFAULT_DOWNLOAD_FREQUENCY
+    download_frequency: Optional[int] = None
     generate_posters: Optional[bool] = None
-    link: Optional[str] = None
     match_regex: Optional[str] = None
     mkdir: Optional[bool] = None
     name: Optional[str] = None
     url: Optional[str] = None
+
+    def __post_init__(self):
+        self.name = self.name.strip() or None
+        self.directory = self.directory.strip() or None
+        self.url = self.url.strip() if self.url else None
+        self.match_regex = None if self.match_regex in ('None', '') else self.match_regex
 
 
 @dataclass
@@ -42,7 +53,6 @@ class ChannelModel:
     url: str
     name: str
     match_regex: str
-    link: str
     directory: str
 
 
@@ -60,7 +70,6 @@ class ChannelPostResponse:
 class ChannelsChannelModel:
     id: int
     name: str
-    link: str
 
 
 @dataclass
@@ -132,7 +141,7 @@ class VideoSearchRequest:
     offset: Optional[int] = None
     limit: Optional[int] = VIDEO_QUERY_LIMIT
     order_by: Optional[str] = DEFAULT_VIDEO_ORDER
-    channel_link: Optional[str] = None
+    channel_id: Optional[int] = None
 
 
 @dataclass

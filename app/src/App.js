@@ -82,7 +82,7 @@ export default function App() {
             <>
                 <Switch>
                     <Route path='/videos/video/:video_id' exact component={VideoWrapper}/>
-                    <Route path='/videos/channel/:channel_link/video/:video_id' exact component={VideoWrapper}/>
+                    <Route path='/videos/channel/:channel_id/video/:video_id' exact component={VideoWrapper}/>
                     <Route path="/" exact={true} component={Welcome}/>
                     <Route path="/videos" component={VideosRoute}/>
                     <Route path="/admin" component={Admin}/>

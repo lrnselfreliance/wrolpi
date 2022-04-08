@@ -20,7 +20,7 @@ def which(*possible_paths: str, warn: bool = False) -> Path:
 
     Returns None if no executable can be found.
     """
-    possible_paths = map(Path, possible_paths)
+    possible_paths = list(map(Path, possible_paths))
     for path in possible_paths:
         if is_executable(path):
             # `path` was an absolute file which is executable.

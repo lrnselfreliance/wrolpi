@@ -135,8 +135,8 @@ export function VideoCard({video}) {
     let channel = video.channel ? video.channel : null;
     let channel_url = null;
     if (channel) {
-        channel_url = `/videos/channel/${channel.link}/video`;
-        video_url = `/videos/channel/${channel.link}/video/${video.id}`;
+        channel_url = `/videos/channel/${channel.id}/video`;
+        video_url = `/videos/channel/${channel.id}/video/${video.id}`;
     }
     let poster_url = video.poster_path ? `/media/${encodeURIComponent(video.poster_path)}` : null;
 

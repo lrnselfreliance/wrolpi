@@ -18,10 +18,10 @@ class MediaPath:
         self._path = path.absolute()
 
     def __repr__(self):
-        return f'<MediaPath path={self.path.relative_to(get_media_directory())}>'
+        return f'<MediaPath path={self.relative}>'
 
     def __str__(self):
-        return str(self.path.relative_to(get_media_directory()))
+        return str(self.relative)
 
     @classmethod
     def _validate_path(cls, path: PATH_TYPE):
@@ -40,7 +40,7 @@ class MediaPath:
 
     def __json__(self):
         # Always return a relative path to frontend.
-        return str(self.path.relative_to(get_media_directory()))
+        return str(self.relative)
 
     @property
     def path(self) -> pathlib.Path:
@@ -59,6 +59,11 @@ class MediaPath:
 
     def startswith(self, other):
         return str(self._path).startswith(other)
+
+    @property
+    def relative(self):
+        """Get the path relative to the media directory."""
+        return self._path.relative_to(get_media_directory())
 
 
 class MediaPathType(types.TypeDecorator):  # noqa

@@ -4,23 +4,19 @@ import tempfile
 from datetime import datetime
 from typing import List
 from unittest import mock
-from unittest.mock import MagicMock
 
 import pytest
 from PIL import Image
 
 from modules.videos.models import Channel, Video
-from modules.videos.test.common import create_channel_structure
-from wrolpi.common import get_absolute_media_path
-from wrolpi.dates import local_timezone
-from wrolpi.db import get_db_session
+from wrolpi.common import get_absolute_media_path, sanitize_link
+from wrolpi.dates import local_timezone, now
 from wrolpi.downloader import Download, DownloadFrequency
-from wrolpi.test.common import build_test_directories, wrap_test_db, TestAPI
+from wrolpi.test.common import build_test_directories, TestAPI
 from wrolpi.vars import PROJECT_DIR
 from ..common import get_matching_directories, convert_image, remove_duplicate_video_paths, \
-    apply_info_json, get_video_duration, generate_video_poster, replace_extension, is_valid_poster, \
-    import_videos_config
-from ..lib import save_channels_config, get_channels_config
+    apply_info_json, get_video_duration, generate_video_poster, is_valid_poster
+from ..lib import save_channels_config, get_channels_config, import_channels_config
 
 
 class TestCommon(TestAPI):
@@ -134,113 +130,50 @@ def test_is_valid_poster(ext, expected, test_directory):
     assert is_valid_poster(image_path) == expected, f'is_valid_poster({image_path}) should be {expected}'
 
 
-@pytest.mark.parametrize(
-    '_structure,paths',
-    (
-            (
-                    {'channel1': ['vid1.mp4']},
-                    [
-                        'channel1/vid1.mp4',
-                    ],
-            ),
-            (
-                    {'channel1': ['vid1.mp4'], 'channel2': ['vid1.mp4']},
-                    [
-                        'channel1/vid1.mp4',
-                        'channel2/vid1.mp4',
-                    ],
-            ),
-            (
-                    {'channel1': ['vid1.mp4'], 'channel2': ['vid1.mp4', 'vid2.mp4', 'vid2.en.vtt']},
-                    [
-                        'channel1/vid1.mp4',
-                        'channel2/vid1.mp4',
-                        'channel2/vid2.mp4',
-                        'channel2/vid2.en.vtt',
-                    ],
-            ),
-    )
-)
-def test_create_db_structure(_structure, paths):
-    @create_channel_structure(_structure)
-    def test_func(_, tempdir):
-        assert isinstance(tempdir, pathlib.Path)
-        for path in paths:
-            path = (tempdir / path)
-            assert path.exists()
-            assert path.is_file()
-
-        with get_db_session() as session:
-            for channel_name in _structure:
-                channel = session.query(Channel).filter_by(name=channel_name).one()
-                assert (tempdir / channel_name).is_dir()
-                assert channel
-                assert channel.directory == tempdir / channel_name
-                assert len(channel.videos) == len([i for i in _structure[channel_name] if i.endswith('mp4')])
-
-    with tempfile.TemporaryDirectory() as tmp_dir, \
-            mock.patch('wrolpi.media_path.get_media_directory') as mock_get_directory:
-        mock_get_directory.return_value = pathlib.Path(tmp_dir)
-        test_ = MagicMock()
-        test_.tmp_dir.name = tmp_dir
-        test_func(test_)
-
-
-@wrap_test_db
-@create_channel_structure(
-    {
-        'channel1': ['vid1.mp4', 'vid1.jpg'],
-        'channel2': ['vid2.mp4'],
-        'channel3': ['vid3.mp4', 'vid4.mp4'],
-    }
-)
-def test_update_view_count(tempdir: pathlib.Path):
+def test_update_view_count(test_session, channel_factory, video_factory):
     def check_view_counts(view_counts):
-        with get_db_session() as session_:
-            for source_id, view_count in view_counts.items():
-                vid = session_.query(Video).filter_by(source_id=source_id).one()
-                assert vid.view_count == view_count
+        for source_id, view_count in view_counts.items():
+            video = test_session.query(Video).filter_by(source_id=source_id).one()
+            assert video.view_count == view_count
 
-    with get_db_session(commit=True) as session:
-        channel1, channel2, channel3 = session.query(Channel).order_by(Channel.id).all()
-        channel1.info_json = {'entries': [{'id': 'vid1.mp4', 'view_count': 10}]}
-        channel2.info_json = {'entries': [{'id': 'vid2.mp4', 'view_count': 11}, {'id': 'bad_id', 'view_count': 12}]}
-        channel3.info_json = {'entries': [{'id': 'vid3.mp4', 'view_count': 13}, {'id': 'vid4.mp4', 'view_count': 14}]}
-
-        # Use the video file name as a unique source_id
-        for v in session.query(Video).all():
-            v.source_id = str(v.video_path.path).split('/')[-1]
+    channel1, channel2, channel3 = channel_factory(), channel_factory(), channel_factory()
+    video_factory(channel_id=channel1.id, with_poster_ext='jpg', title='vid1')
+    video_factory(channel_id=channel2.id, title='vid2')
+    video_factory(channel_id=channel3.id, with_poster_ext='jpg', title='vid3')
+    video_factory(channel_id=channel3.id, title='vid4')
+    channel1.info_json = {'entries': [{'id': 'vid1', 'view_count': 10}]}
+    channel2.info_json = {'entries': [{'id': 'vid2', 'view_count': 11}, {'id': 'bad_id', 'view_count': 12}]}
+    channel3.info_json = {'entries': [{'id': 'vid3', 'view_count': 13}, {'id': 'vid4', 'view_count': 14}]}
+    test_session.commit()
 
     # Check all videos are empty.
-    check_view_counts({'vid1.mp4': None, 'vid2.mp4': None, 'vid3.mp4': None, 'vid4.mp4': None})
+    check_view_counts({'vid1': None, 'vid2': None, 'vid3': None, 'vid4': None})
 
     # Channel 1 is updated, the other channels are left alone.
     apply_info_json(channel1.id)
-    check_view_counts({'vid1.mp4': 10, 'vid2.mp4': None, 'vid3.mp4': None, 'vid4.mp4': None})
+    check_view_counts({'vid1': 10, 'vid2': None, 'vid3': None, 'vid4': None})
 
     # Channel 2 is updated, the other channels are left alone.  The 'bad_id' video is ignored.
     apply_info_json(channel2.id)
-    check_view_counts({'vid1.mp4': 10, 'vid2.mp4': 11, 'vid3.mp4': None, 'vid4.mp4': None})
+    check_view_counts({'vid1': 10, 'vid2': 11, 'vid3': None, 'vid4': None})
 
     # All videos are updated.
     apply_info_json(channel3.id)
-    check_view_counts({'vid1.mp4': 10, 'vid2.mp4': 11, 'vid3.mp4': 13, 'vid4.mp4': 14})
+    check_view_counts({'vid1': 10, 'vid2': 11, 'vid3': 13, 'vid4': 14})
 
     # An outdated view count will be overwritten.
-    with get_db_session(commit=True) as session:
-        vid = session.query(Video).filter_by(id=1).one()
-        vid.view_count = 8
-    check_view_counts({'vid1.mp4': 8, 'vid2.mp4': 11, 'vid3.mp4': 13, 'vid4.mp4': 14})
+    vid = test_session.query(Video).filter_by(id=1).one()
+    vid.view_count = 8
+    check_view_counts({'vid1': 8, 'vid2': 11, 'vid3': 13, 'vid4': 14})
     apply_info_json(channel1.id)
-    check_view_counts({'vid1.mp4': 10, 'vid2.mp4': 11, 'vid3.mp4': 13, 'vid4.mp4': 14})
+    check_view_counts({'vid1': 10, 'vid2': 11, 'vid3': 13, 'vid4': 14})
 
 
 def test_generate_video_poster(video_file):
     """
     A poster can be generated from a video file.
     """
-    poster_path = replace_extension(video_file, '.jpg')
-    assert not poster_path.is_file(), f'{poster_path} already exists!'
+    poster_path = video_file.with_suffix('.jpg')
     generate_video_poster(video_file)
     assert poster_path.is_file(), f'{poster_path} was not created!'
     assert poster_path.stat().st_size > 0
@@ -326,7 +259,7 @@ def test_import_favorites(test_session, simple_channel, video_factory, test_chan
     vid2_video_path = vid2.video_path.path
 
     favorites = {
-        simple_channel.link: {vid3.video_path.path.name: {'favorite': favorite}},
+        str(simple_channel.directory.relative): {vid3.video_path.path.name: {'favorite': favorite}},
         'NO CHANNEL': {vid2.video_path.path.name: {'favorite': favorite}},
     }
 
@@ -336,8 +269,8 @@ def test_import_favorites(test_session, simple_channel, video_factory, test_chan
     assert config.favorites == favorites
 
     def import_and_verify(favorited_ids: List[int]):
-        with mock.patch('modules.videos.common.get_channel_source_id', lambda i: 'foo'):
-            import_videos_config()
+        with mock.patch('modules.videos.lib.get_channel_source_id', lambda i: 'foo'):
+            import_channels_config()
             for video in test_session.query(Video).all():
                 if video.id in favorited_ids:
                     assert video.favorite
@@ -371,10 +304,8 @@ def test_import_favorites(test_session, simple_channel, video_factory, test_chan
 
 def test_import_channel_downloads(test_session, channel_factory, test_channels_config):
     """Importing the Channels' config should create any missing download records"""
-    channel1 = channel_factory()
-    channel2 = channel_factory()
-    channel1.source_id = 'foo'
-    channel2.source_id = 'bar'
+    channel1 = channel_factory(source_id='foo')
+    channel2 = channel_factory(source_id='bar')
     # channel2 has no url, but has a frequency.  Import should not create a download record.
     channel2.url = None
     channel2.download_frequency = DownloadFrequency.biweekly
@@ -383,20 +314,25 @@ def test_import_channel_downloads(test_session, channel_factory, test_channels_c
     assert len(test_session.query(Channel).all()) == 2
     assert test_session.query(Download).all() == []
 
+    def update_channel_config(conf, source_id, d):
+        for c in conf.channels:
+            if c['source_id'] == source_id:
+                c.update(d)
+        conf.save()
+
     # Config has no channels with a download_frequency.
     save_channels_config()
-    import_videos_config()
+    import_channels_config()
     assert channel1.download_frequency is None
     assert len(test_session.query(Channel).all()) == 2
     assert test_session.query(Download).all() == []
 
     # Add a frequency to the Channel.
     channels_config = get_channels_config()
-    channels_config.channels[channel1.link]['download_frequency'] = DownloadFrequency.biweekly
-    channels_config.save()
+    update_channel_config(channels_config, 'foo', {'download_frequency': DownloadFrequency.biweekly})
 
     # Download record is created on import.
-    import_videos_config()
+    import_channels_config()
     assert channel1.download_frequency is not None
     assert len(test_session.query(Channel).all()) == 2
     download: Download = test_session.query(Download).one()
@@ -404,9 +340,8 @@ def test_import_channel_downloads(test_session, channel_factory, test_channels_c
     assert download.frequency == channel1.download_frequency
 
     # Download frequency is adjusted when config file changes.
-    channels_config.channels[channel1.link]['download_frequency'] = DownloadFrequency.weekly
-    channels_config.save()
-    import_videos_config()
+    update_channel_config(channels_config, 'foo', {'download_frequency': DownloadFrequency.weekly})
+    import_channels_config()
     assert len(test_session.query(Channel).all()) == 2
     assert download.url == channel1.url
     assert download.frequency == channel1.download_frequency
@@ -414,6 +349,67 @@ def test_import_channel_downloads(test_session, channel_factory, test_channels_c
     assert download.next_download
 
     next_download = str(download.next_download)
-    import_videos_config()
+    import_channels_config()
     download: Download = test_session.query(Download).one()
     assert next_download == str(download.next_download)
+
+
+def test_import_channels_config_outdated(test_session, test_directory, channel_factory, test_channels_config,
+                                         video_factory):
+    """The Channels' config used to use a "link" to differentiate channels, test that old configs can be imported."""
+    channel1 = channel_factory(name='Channel1', download_frequency=DownloadFrequency.weekly)
+    channel2 = channel_factory(name='Channel2', download_frequency=DownloadFrequency.weekly)
+    test_session.commit()
+
+    vid1 = video_factory(title='vid1', channel_id=channel1.id)
+    vid2 = video_factory(title='vid2', channel_id=channel2.id)
+    vid3 = video_factory(title='vid3')
+    vid4 = video_factory(title='vid4')
+    test_session.commit()
+
+    channel1_name, channel_1_directory = channel1.name, channel1.directory.path
+    channel2_name, channel_2_directory = channel2.name, channel2.directory.path
+
+    assert channel1.directory.path.exists() and channel1.directory.path.is_absolute()
+    assert channel2.directory.path.exists() and channel2.directory.path.is_absolute()
+
+    # Channel's used to have a relative directory in the DB.
+    test_session.execute('UPDATE channel SET directory=:directory WHERE id=2',
+                         dict(directory=str(channel_2_directory.relative_to(test_directory))),
+                         )
+
+    save_channels_config()
+
+    # The config has a list of Channels, use the old method of a "dict" with the sanitized name as the key.
+    channels_config = get_channels_config()
+    channels_config.channels = {sanitize_link(i['name']): i for i in channels_config.channels}
+    # Change frequency to verify that the channels are updated.
+    for link, channel in channels_config.channels.items():
+        channel['download_frequency'] = DownloadFrequency.biweekly
+    # Change the favorites to the old "link" method as well.
+    channels_config.favorites = {
+        sanitize_link(channel1.name): {str(vid1.video_path.path): {'favorite': now()}},
+        sanitize_link(channel2.name): {str(vid2.video_path.path): {'favorite': now()}},
+        'NO CHANNEL': {str(vid3.video_path.path): {'favorite': now()}},
+    }
+    channels_config.save()
+
+    assert not vid1.favorite and not vid2.favorite and not vid3.favorite and not vid3.favorite
+
+    assert test_session.query(Channel).count() == 2
+
+    with mock.patch('modules.videos.lib.get_channel_source_id') as mock_get_channel_source_id:
+        mock_get_channel_source_id.return_value = 'some source id'
+        import_channels_config()
+
+    # No new channels were created.  Existing channels were updated.
+    assert test_session.query(Channel).count() == 2
+    channel1, channel2 = test_session.query(Channel).order_by(Channel.id)
+    assert channel1.name == channel1_name and str(channel1.directory.path) == str(channel_1_directory)
+    # Channel2's directory is now absolute.
+    assert channel2.name == channel2_name and str(channel2.directory.path) == str(channel_2_directory)
+    assert channel1.download_frequency == DownloadFrequency.biweekly
+    assert channel2.download_frequency == DownloadFrequency.biweekly
+    # Videos were favorited by their channel "link".
+    assert vid1.favorite and vid2.favorite and vid3.favorite
+    assert not vid4.favorite

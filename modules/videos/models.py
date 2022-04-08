@@ -1,5 +1,4 @@
 import json
-import pathlib
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Generator
@@ -12,7 +11,7 @@ from wrolpi.common import Base, tsvector, ModelHelper, logger, get_media_directo
 from wrolpi.dates import now, TZDateTime
 from wrolpi.db import get_db_curs
 from wrolpi.downloader import Download, download_manager
-from wrolpi.errors import UnknownVideo, UnknownFile, UnknownDirectory, InvalidDownload
+from wrolpi.errors import UnknownVideo, UnknownFile, UnknownDirectory
 from wrolpi.media_path import MediaPathType, MediaPath
 
 logger = logger.getChild(__name__)
@@ -116,9 +115,7 @@ class Video(ModelHelper, Base):
             save_channels_config(preserve_favorites=False)
 
     def add_to_skip_list(self):
-        """
-        Add this video to it's Channel's skip list.
-        """
+        """Add this video to it's Channel's skip list."""
         if self.channel and self.source_id:
             self.channel.add_video_to_skip_list(self.source_id)
 
@@ -130,18 +127,16 @@ class Video(ModelHelper, Base):
         self.viewed = now()
 
     def get_info_json(self) -> Optional[JSON]:
-        """
-        If this Video has an info_json file, return it's contents.  Otherwise, return None.
-        """
+        """If this Video has an info_json file, return it's contents.  Otherwise, return None."""
+        if not self.info_json_path:
+            return
+
         try:
-            if isinstance(self.info_json_path, pathlib.Path):
-                with open(self.info_json_path, 'rb') as fh:
-                    contents = json.load(fh)
-                    return contents
-            elif self.info_json_path:
-                with open(self.info_json_path.path, 'rb') as fh:
-                    contents = json.load(fh)
-                    return contents
+            info_json_path = self.info_json_path.path if \
+                isinstance(self.info_json_path, MediaPath) else self.info_json_path
+            with open(info_json_path, 'rb') as fh:
+                contents = json.load(fh)
+                return contents
         except UnknownFile:
             pass
         except UnknownDirectory:
@@ -265,9 +260,8 @@ class Channel(ModelHelper, Base):
     __tablename__ = 'channel'
     id = Column(Integer, primary_key=True)
     name = Column(String)
-    link = Column(String, nullable=False)
     idempotency = Column(String)
-    url = Column(String)
+    url = Column(String, unique=True)
     match_regex = Column(String)
     directory: MediaPath = Column(MediaPathType)
     skip_download_videos = Column(ARRAY(String))
@@ -307,18 +301,28 @@ class Channel(ModelHelper, Base):
 
     def update(self, data: dict):
         """
-        Update the values of this Channel.  Will also update the Channel's Download, if it has one.
+        Update the attributes of this Channel.  Will also update the Channel's Download, if it has one.
         """
+        # Get the download before we change the URL.
+        download = self.get_download()
+
         for key, value in data.items():
             setattr(self, key, value)
 
-        if not self.url:
-            return
-        download = self.get_download()
-        if download:
-            session = Session.object_session(self)
+        # All channels with a URL and download_frequency should have a download.
+        session = Session.object_session(self)
+        if download and not self.download_frequency:
+            download_manager.delete_download(download.id, session)
+        elif download and self.download_frequency:
             download.frequency = self.download_frequency
+            download.url = self.url
             download.next_download = download_manager.get_next_download(download, session)
+        elif not download and self.download_frequency and self.url:
+            download = Download(frequency=self.download_frequency, url=self.url, downloader='video_channel')
+            session.add(download)
+            session.flush()
+            download.next_download = download_manager.get_next_download(download, session)
+        session.flush()
 
     def config_view(self) -> dict:
         """
@@ -349,7 +353,7 @@ class Channel(ModelHelper, Base):
         Get the Download row for this Channel.  If there isn't a Download, return None.
         """
         if not self.url:
-            raise InvalidDownload(f'Channel {self.name} does not have a URL to download!')
+            return None
 
         session = Session.object_session(self)
         download = session.query(Download).filter_by(url=self.url).one_or_none()
@@ -361,8 +365,13 @@ class Channel(ModelHelper, Base):
             name=self.name,
             directory=self.directory,
             url=self.url,
-            link=self.link,
         )
+        return d
+
+    def dict(self, with_statistics: bool = False):
+        d = super(Channel, self).dict()
+        if with_statistics:
+            d['statistics'] = self.get_statistics()
         return d
 
     def get_statistics(self):

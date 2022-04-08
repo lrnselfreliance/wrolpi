@@ -2,20 +2,23 @@ import html
 import pathlib
 import re
 from collections import defaultdict
-from typing import Tuple, Optional, List
+from typing import Tuple, Optional, List, Union
 from uuid import uuid1
 
+from sqlalchemy import or_
 from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Session
+from yt_dlp import YoutubeDL
 
-from wrolpi.common import logger, chunks, ConfigFile
+from wrolpi import before_startup
+from wrolpi.common import chunks, ConfigFile, get_media_directory, sanitize_link
 from wrolpi.dates import from_timestamp, Seconds
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.media_path import MediaPath
 from wrolpi.vars import PYTEST
 from .captions import get_captions
-from .common import generate_video_paths, remove_duplicate_video_paths, apply_info_json, import_videos_config, \
-    get_video_duration, is_valid_poster, convert_image, generate_video_poster
+from .common import generate_video_paths, remove_duplicate_video_paths, apply_info_json, get_video_duration, \
+    is_valid_poster, convert_image, generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError
 from .models import Channel, Video
 
 logger = logger.getChild(__name__)
@@ -66,8 +69,9 @@ def refresh_channel_videos(channel: Channel):
 
     logger.info(f'{channel.name}: {len(new_videos)} new videos, {len(existing_paths)} already existed. ')
 
-    channel.refreshed = True
-    Session.object_session(channel).commit()
+    with get_db_session(commit=True) as session:
+        channel = session.query(Channel).filter_by(id=channel.id).one()
+        channel.refreshed = True
 
     apply_info_json(channel.id)
 
@@ -155,7 +159,7 @@ def validate_videos():
                     video.validated = True
                 except Exception as e:
                     # This video failed to validate, continue validation for the rest of the videos.
-                    logger.warning(f'Failed to validate {video=}', exc_info=e)
+                    logger.warning(f'Failed to validate {video}', exc_info=e)
 
 
 def validate_video(video: Video, channel_generate_poster: bool):
@@ -246,7 +250,7 @@ def convert_or_generate_poster(video: Video) -> Optional[pathlib.Path]:
             logger.error(f'Failed to generate poster for {video}', exc_info=e)
 
 
-def refresh_videos(channel_links: list = None):
+def refresh_videos(channel_ids: List[int] = None):
     """
     Find any videos in the channel directories and add them to the DB.  Delete DB records of any videos not in the
     file system.
@@ -257,15 +261,15 @@ def refresh_videos(channel_links: list = None):
     """
     logger.info('Refreshing video files')
     with get_db_session() as session:
-        if channel_links:
-            channels = session.query(Channel).filter(Channel.link.in_(channel_links))
+        if channel_ids:
+            channels = session.query(Channel).filter(Channel.id.in_(channel_ids))
         else:
             channels = session.query(Channel).all()
 
         channels = list(channels)
 
-    if not channels and channel_links:
-        raise Exception(f'No channels match links(s): {channel_links}')
+    if not channels and channel_ids:
+        raise Exception(f'No channels match id(s): {channel_ids}')
     elif not channels:
         raise Exception(f'No channels in DB.  Have you created any?')
 
@@ -276,13 +280,13 @@ def refresh_videos(channel_links: list = None):
             logger.fatal(f'Failed to refresh videos for channel {channel.name}!', exc_info=e)
             pass
 
-    if not channel_links:
+    if not channel_ids:
         # Refresh NO CHANNEL videos when not refreshing a specific channel.
         refresh_no_channel_videos()
 
     # Fill in any missing data for all videos.
     if not PYTEST:
-        import_videos_config()
+        import_channels_config()
 
     validate_videos()
 
@@ -460,8 +464,8 @@ def set_test_downloader_config(enabled: bool):
 
 def get_channels_config_from_db(session: Session) -> dict:
     """Create a dictionary that contains all the Channels from the DB."""
-    channels = session.query(Channel).order_by(Channel.link).all()
-    channels = {i.link: i.config_view() for i in channels}
+    channels = session.query(Channel).order_by(Channel.directory).all()
+    channels = sorted((i.config_view() for i in channels), key=lambda i: i['directory'])
 
     # Get all Videos that are favorites.  Store them in their own config section, so they can be preserved if a channel
     # is deleted or the DB is wiped.
@@ -469,7 +473,7 @@ def get_channels_config_from_db(session: Session) -> dict:
     favorites = defaultdict(lambda: {})
     for video in favorite_videos:
         if video.channel:
-            favorites[video.channel.link][video.video_path.path.name] = dict(favorite=video.favorite)
+            favorites[str(video.channel.directory.relative)][video.video_path.path.name] = dict(favorite=video.favorite)
         else:
             favorites['NO CHANNEL'][video.video_path.path.name] = dict(favorite=video.favorite)
     favorites = dict(favorites)
@@ -477,16 +481,126 @@ def get_channels_config_from_db(session: Session) -> dict:
     return dict(channels=channels, favorites=favorites)
 
 
+def _detect_old_favorites(config: Union[ChannelsConfig, dict]) -> bool:
+    # TODO remove these old favorites after beta.
+    media_directory = get_media_directory()
+    favorites = config.favorites if hasattr(config, 'favorites') else config['favorites']
+    for channel, favorites in favorites.items():
+        if channel == 'NO CHANNEL':
+            continue
+        if not (media_directory / channel).is_dir():
+            return True
+    return False
+
+
 @optional_session()
 def save_channels_config(session=None, preserve_favorites: bool = True):
-    """
-    Pull the Channel information from the DB, save it to the config.
-    """
+    """Get the Channel information from the DB, save it to the config."""
     config = get_channels_config_from_db(session)
     channels_config = get_channels_config()
+    # TODO remove these old favorites after beta.
+    old_favorites = _detect_old_favorites(channels_config)
+    if old_favorites and config['favorites']:
+        # There are favorites in the database, remove the old favorites.
+        channels_config.favorites = {}
     if preserve_favorites:
         config['favorites'].update(channels_config.favorites or {})
     channels_config.update(config)
+
+
+@before_startup
+def import_channels_config():
+    """Import channel settings to the DB.  Existing channels will be updated."""
+    logger.info('Importing videos config')
+    try:
+        from .downloader import ChannelDownloader
+        config = get_channels_config()
+        channels, favorites = config.channels, config.favorites
+
+        with get_db_session(commit=True) as session:
+            for data in channels:
+                if isinstance(data, str):
+                    # Outdated style config.
+                    # TODO remove this after beta.
+                    data = channels[data]
+                # A Channel's directory is saved (in config) relative to the media directory.
+                directory = get_media_directory() / data['directory']
+                for option in (i for i in REQUIRED_OPTIONS if i not in data):
+                    raise ConfigError(f'Channel "{directory}" is required to have "{option}"')
+
+                channel = session.query(Channel).filter(
+                    or_(
+                        Channel.directory == str(directory),
+                        Channel.directory == str(data['directory']),
+                        Channel.directory == str(directory.relative_to(get_media_directory())),
+                    ),
+                ).one_or_none()
+                if not channel:
+                    # Channel not yet in the DB, add it.
+                    channel = Channel(directory=directory)
+                    session.add(channel)
+
+                # Only name and directory are required
+                channel.name = data['name']
+                channel.directory = directory
+
+                # Copy existing channel data, update all values from the config.  This is necessary to clear out
+                # values not in the config.
+                full_data = channel.dict()
+                full_data.update(data)
+                print(f'{full_data=}')
+                full_data['skip_download_videos'] = list(set(data.get('skip_download_videos', {})))
+                channel.update(full_data)
+
+                if not channel.source_id and channel.url:
+                    # If we can download from a channel, we must have its source_id.
+                    channel.source_id = get_channel_source_id(channel.url)
+
+        with get_db_session(commit=True) as session:
+            channels_by_link = {sanitize_link(i.name): i for i in session.query(Channel)}
+            for directory_, favorites in favorites.items():
+                if directory_ != 'NO CHANNEL':
+                    # A Channel's directory is saved (in the config) relative to the media directory.
+                    directory = get_media_directory() / directory_
+                    channel: Channel = session.query(Channel).filter_by(directory=directory).one_or_none()
+                    if not channel:
+                        # Directory may be the outdated "link".
+                        # TODO remove these old favorites after beta.
+                        channel = channels_by_link.get(directory_)
+                    if not channel:
+                        logger.warning(f'Cannot find channel {directory=} for favorites!')
+                        continue
+                    channel_dir = channel.directory.path
+                else:
+                    from .downloader import get_no_channel_directory
+                    channel_dir = get_no_channel_directory()
+
+                # Set favorite Videos of this Channel.
+                for video_path, data in favorites.items():
+                    # Favorite in the config is the name of the video_path.  Add the channel directory onto this
+                    # video_path, so we can match the complete path for the Video.
+                    video_path = channel_dir / video_path
+                    video = session.query(Video).filter_by(video_path=video_path).one_or_none()
+                    # If no Video is found, it may be that we need to refresh.
+                    if video:
+                        video.favorite = data['favorite']
+                    else:
+                        logger.warning(f'Cannot find video to favorite: {video_path}')
+    except Exception as e:
+        logger.warning('Failed to load channels config!', exc_info=e)
+        if PYTEST:
+            # Do not interrupt startup, only raise during testing.
+            raise
+
+
+YDL = YoutubeDL()
+YDL.params['logger'] = logger.getChild('youtube-dl')
+YDL.add_default_info_extractors()
+
+
+def get_channel_source_id(url: str) -> str:
+    channel_info = YDL.extract_info(url, download=False, process=False)
+    return channel_info.get('uploader_id') or channel_info['id']
 
 
 async def get_statistics():
@@ -608,7 +722,6 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
     video.info_json_path = info_json_path
     video.poster_path = poster_path
     video.video_path = video_path
-
     if channel and not str(video_path).startswith(str(channel.directory.path)):
         raise ValueError(f'Video path is not within its channel {video_path=} not in {channel.directory=}')
 

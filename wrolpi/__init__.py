@@ -1,5 +1,6 @@
 import inspect
 import multiprocessing
+from functools import wraps
 
 BEFORE_STARTUP_FUNCTIONS = []
 
@@ -29,6 +30,7 @@ def limit_concurrent(limit: int):
 
     def wrapper(func: callable):
         if inspect.iscoroutinefunction(func):
+            @wraps(func)
             async def wrapped(*a, **kw):
                 acquired = sema.acquire(block=False)
                 if not acquired:
@@ -37,6 +39,7 @@ def limit_concurrent(limit: int):
 
             return wrapped
         else:
+            @wraps(func)
             def wrapped(*a, **kw):
                 acquired = sema.acquire(block=False)
                 if not acquired:

@@ -17,6 +17,7 @@ from wrolpi.vars import PYTEST
 
 try:
     import magic
+
     have_magic = True
 except ImportError:
     logger.error('Could not import magic.  Is libmagic installed?')

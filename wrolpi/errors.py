@@ -158,7 +158,7 @@ API_ERRORS = {
     },
     UnknownChannel: {
         'code': next(error_codes),
-        'message': 'The channel could not be found by its link.',
+        'message': 'The channel could not be found.',
         'status': HTTPStatus.NOT_FOUND,
     },
     UnknownDirectory: {

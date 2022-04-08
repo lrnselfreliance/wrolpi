@@ -1,6 +1,7 @@
 import asyncio
 from functools import wraps
 from http import HTTPStatus
+from typing import List
 
 from sanic import Blueprint, response
 from sanic.request import Request
@@ -32,12 +33,12 @@ refresh_queue, refresh_event = create_websocket_feed('refresh', '/feeds/refresh'
 
 
 @content_bp.post('/refresh')
-@content_bp.post('/refresh/<link:str>')
+@content_bp.post('/refresh/<channel_id:str>')
 @openapi.description('Search for videos that have previously been downloaded and stored.')
 @openapi.response(HTTPStatus.OK, schema.StreamResponse)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @wrol_mode_check
-async def refresh(_, link: str = None):
+async def refresh(_, channel_id: int = None):
     refresh_logger = logger.getChild('refresh')
     stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/refresh')
 
@@ -51,8 +52,8 @@ async def refresh(_, link: str = None):
         try:
             refresh_logger.info('refresh started')
 
-            channel_links = [link] if link else None
-            await refresh_videos(channel_links)
+            channel_ids = [channel_id] if channel_id else None
+            await refresh_videos(channel_ids)
 
             refresh_logger.info('refresh complete')
         except Exception:
@@ -66,34 +67,19 @@ async def refresh(_, link: str = None):
     return response.json({'code': 'stream-started', 'stream_url': stream_url})
 
 
-download_queue, download_event = create_websocket_feed('download', '/feeds/download', content_bp)
-
-
-@content_bp.post('/download')
-@content_bp.post('/download/<link:str>')
-@openapi.description('Update channel catalogs, download any missing videos')
+@content_bp.post('/download/<channel_id:int>')
+@openapi.description('Update a channel catalog, download any missing videos')
 @openapi.response(HTTPStatus.OK, schema.StreamResponse)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
 @wrol_mode_check
-def download(_, link: str = None):
-    download_logger = logger.getChild('download')
-
-    stream_url = get_sanic_url(scheme='ws', path='/api/videos/feeds/download')
-    # Only one download can run at a time
-    if download_event.is_set():
-        return response.json({'error': 'download already running', 'stream_url': stream_url}, HTTPStatus.CONFLICT)
-    if refresh_event.is_set():
-        return response.json({'error': 'Refresh is running.  Cannot download.'})
-
-    channel_lib.download_channel(link)
-
-    download_logger.debug('do_download scheduled')
-    return response.json({'code': 'stream-started', 'stream_url': stream_url})
+def download(_, channel_id: int = None):
+    channel_lib.download_channel(channel_id)
+    return response.empty()
 
 
 @wraps(lib.refresh_videos)
-async def refresh_videos(channel_links: list = None):
-    return lib.refresh_videos(channel_links=channel_links)
+async def refresh_videos(channel_ids: List[int] = None):
+    return lib.refresh_videos(channel_ids=channel_ids)
 
 
 @content_bp.post('/favorite')

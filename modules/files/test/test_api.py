@@ -6,7 +6,7 @@ from unittest import mock
 import pytest
 
 from wrolpi.errors import API_ERRORS, WROLModeEnabled
-from wrolpi.test.common import assert_dict_contains, skip_circleci
+from wrolpi.test.common import assert_dict_contains
 from wrolpi.vars import PROJECT_DIR
 
 
@@ -128,8 +128,6 @@ def do_search(test_client, search_str, total, expected):
         assert file['path'] == file['key']
 
 
-# TODO this fails on CircleCI.  The order is wrong.  Why?
-@skip_circleci
 def test_files_search(test_session, test_client, make_files_structure):
     # You can search an empty directory.
     do_search(test_client, 'nothing', 0, [])
@@ -154,8 +152,8 @@ def test_files_search(test_session, test_client, make_files_structure):
     do_search(test_client, 'foo', 1, [dict(path='foo_is_the_name.txt', mimetype='text/plain', size=12)])
     do_search(test_client, 'bar', 1, [dict(path='archives/bar.txt', mimetype='text/plain', size=16)])
     do_search(test_client, 'baz', 2, [
-        dict(path='baz baz two.mp4', mimetype='video/mp4', size=1055736),
         dict(path='baz.mp4', mimetype='video/mp4', size=1055736),
+        dict(path='baz baz two.mp4', mimetype='video/mp4', size=1055736),
     ])
     do_search(test_client, 'two', 1, [dict(path='baz baz two.mp4', mimetype='video/mp4', size=1055736)])
     do_search(test_client, 'nothing', 0, [])

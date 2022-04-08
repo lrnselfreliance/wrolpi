@@ -44,7 +44,7 @@ async def search(_: Request, body: schema.VideoSearchRequest):
         body.search_str,
         body.offset,
         body.limit,
-        body.channel_link,
+        body.channel_id,
         body.order_by,
         body.filters,
     )

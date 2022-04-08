@@ -1,15 +1,18 @@
 from collections import defaultdict
 from datetime import timedelta
+from pathlib import Path
 from typing import List, Dict, Union, Generator
 
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
-from wrolpi.common import sanitize_link, run_after, get_relative_to_media_directory, make_media_directory, logger
+from wrolpi.common import run_after, logger, \
+    get_media_directory
 from wrolpi.dates import today
-from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.db import get_db_curs, optional_session
 from wrolpi.downloader import download_manager
 from wrolpi.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError, InvalidDownload
+from .. import schema
 from ..common import check_for_channel_conflicts
 from ..lib import save_channels_config
 from ..models import Channel
@@ -25,7 +28,7 @@ async def get_minimal_channels() -> List[dict]:
         # Get all channels, even if they don't have videos.
         stmt = '''
             SELECT
-                c.id, name, link, directory, url, download_frequency, info_date,
+                c.id, name, directory, url, download_frequency, info_date,
                 (select next_download from download d where d.url=c.url) AS next_download
             FROM
                 channel AS c
@@ -72,31 +75,39 @@ async def get_channels_video_count() -> Dict[int, int]:
 COD = Union[dict, Channel]
 
 
-def get_channel(source_id: str = None, link: str = None, url: str = None, return_dict: bool = True) -> COD:
+@optional_session
+def get_channel(session: Session, *, channel_id: int = None, source_id: str = None, url: str = None,
+                directory: str = None, name: str = None, return_dict: bool = True) -> COD:
     """
     Attempt to find a Channel using the provided params.  The params are in order of reliability.
 
     Raises UnknownChannel if no channel is found.
     """
-    with get_db_session() as session:
-        channel: COD = None  # noqa
-        # Try by source_id first.
-        if source_id:
-            channel = session.query(Channel).filter_by(source_id=source_id).one_or_none()
-        if not channel and link:
-            channel = session.query(Channel).filter_by(link=link).one_or_none()
-        if not channel and url:
-            channel = session.query(Channel).filter_by(url=url).one_or_none()
+    channel: COD = None  # noqa
+    # Try to find the channel by the most reliable methods first.
+    if channel_id:
+        channel = session.query(Channel).filter_by(id=channel_id).one_or_none()
+    if not channel and source_id:
+        channel = session.query(Channel).filter_by(source_id=source_id).one_or_none()
+    if not channel and url:
+        channel = session.query(Channel).filter_by(url=url).one_or_none()
+    if not channel and directory:
+        directory = Path(directory)
+        if not directory.is_absolute():
+            directory = get_media_directory() / directory
+        channel = session.query(Channel).filter_by(directory=directory).one_or_none()
+    if not channel and name:
+        channel = session.query(Channel).filter_by(name=name).one_or_none()
 
-        if not channel:
-            raise UnknownChannel(f'No channel matches {link=} {source_id=} {url=}')
+    if not channel:
+        raise UnknownChannel(f'No channel matches {channel_id=} {source_id=} {url=} {directory=}')
 
-        logger.debug(f'Found {channel=} using {source_id=} {link=} {url=}')
-        if return_dict:
-            statistics = channel.get_statistics()
-            channel = channel.dict()
-            channel['statistics'] = statistics
-        return channel
+    logger.debug(f'Found {channel=} using {channel_id=} {source_id=} {url=} {directory=}')
+    if return_dict:
+        statistics = channel.get_statistics()
+        channel = channel.dict()
+        channel['statistics'] = statistics
+    return channel
 
 
 def _spread_by_frequency(channels: List[Channel]) -> Generator[Dict, None, None]:
@@ -117,103 +128,90 @@ def _spread_by_frequency(channels: List[Channel]) -> Generator[Dict, None, None]
 
 
 @run_after(save_channels_config)
-def update_channel(data: dict, link: str) -> Channel:
+@optional_session
+def update_channel(session: Session, *, data: schema.ChannelPutRequest, channel_id: int) -> Channel:
     """Update a Channel's DB record"""
-    with get_db_session(commit=True) as session:
-        try:
-            channel: Channel = session.query(Channel).filter_by(link=link).one()
-        except NoResultFound:
-            raise UnknownChannel()
+    try:
+        channel: Channel = session.query(Channel).filter_by(id=channel_id).one()
+    except NoResultFound:
+        raise UnknownChannel()
 
-        # Only update directory if it was empty
-        if data.get('directory') and not channel.directory:
-            try:
-                data['directory'] = get_relative_to_media_directory(data['directory'])
-            except UnknownDirectory:
-                if data['mkdir']:
-                    make_media_directory(data['directory'])
-                    data['directory'] = get_relative_to_media_directory(data['directory'])
-                else:
-                    raise
+    # Only update directory if it was empty
+    if data.directory and not channel.directory:
+        data.directory = get_media_directory() / data.directory
+        if not data.directory.is_dir():
+            if data.mkdir:
+                data.directory.mkdir()
+            else:
+                raise UnknownDirectory()
 
-        if 'directory' in data:
-            data['directory'] = str(data['directory'])
+    # Verify that the URL/Name/directory aren't taken
+    check_for_channel_conflicts(
+        session,
+        id_=channel.id,
+        url=data.url,
+        name=data.name,
+        directory=data.directory,
+    )
 
-        if data.get('match_regex') in ('None', 'null'):
-            data['match_regex'] = None
+    # Apply the changes now that we've OK'd them
+    channel.update(data.__dict__)
 
-        data['link'] = data.get('link') or link
-
-        # Verify that the URL/Name/Link aren't taken
-        check_for_channel_conflicts(
-            session,
-            id_=channel.id,
-            url=data.get('url'),
-            name=data.get('name'),
-            link=data['link'],
-            directory=data.get('directory'),
-        )
-
-        # Apply the changes now that we've OK'd them
-        channel.update(data)
+    session.commit()
 
     return channel
 
 
 @run_after(save_channels_config)
-def create_channel(data: dict, return_dict: bool = True) -> Union[Channel, dict]:
+@optional_session
+def create_channel(session: Session, data: schema.ChannelPostRequest, return_dict: bool = True) -> Union[Channel, dict]:
     """
     Create a new Channel.  Check for conflicts with existing Channels.
     """
-    with get_db_session(commit=True) as session:
-        link = sanitize_link(data['name'])
-        try:
-            # Verify that the URL/Name/Link aren't taken
-            check_for_channel_conflicts(
-                session,
-                url=data.get('url'),
-                name=data['name'],
-                link=link,
-                directory=str(data['directory']),
-                source_id=data.get('source_id'),
-            )
-        except APIError as e:
-            raise ValidationError() from e
-
-        channel = Channel(
-            name=data['name'],
-            url=data.get('url'),
-            match_regex=data.get('match_regex'),
-            link=link,
-            directory=str(data['directory']),
-            download_frequency=data.get('download_frequency'),
-            source_id=data.get('source_id'),
+    try:
+        # Verify that the URL/Name/directory aren't taken
+        check_for_channel_conflicts(
+            session,
+            url=data.url,
+            name=data.name,
+            directory=data.directory,
+            source_id=data.source_id,
         )
-        session.add(channel)
-        session.commit()
-        session.flush()
-        session.refresh(channel)
+    except APIError as e:
+        raise ValidationError() from e
 
-        if return_dict:
-            return channel.dict()
-        else:
-            return channel
+    channel = Channel(
+        name=data.name,
+        url=data.url,
+        match_regex=data.match_regex,
+        directory=data.directory,  # noqa
+        download_frequency=data.download_frequency,
+        source_id=data.source_id,
+    )
+    session.add(channel)
+    session.commit()
+    session.flush()
+    session.refresh(channel)
+
+    return channel.dict() if return_dict else channel
 
 
 @run_after(save_channels_config)
-def delete_channel(link):
-    with get_db_session(commit=True) as session:
-        try:
-            channel = session.query(Channel).filter_by(link=link).one()
-        except NoResultFound:
-            raise UnknownChannel()
+@optional_session
+def delete_channel(session: Session, *, channel_id: int):
+    try:
+        channel = session.query(Channel).filter_by(id=channel_id).one()
+    except NoResultFound:
+        raise UnknownChannel()
 
-        channel.delete_with_videos()
+    channel.delete_with_videos()
+
+    session.commit()
 
 
-def download_channel(link: str):
+def download_channel(id_: int):
     """Create a Download record for a Channel's entire catalog.  Start downloading."""
-    channel = get_channel(link=link, return_dict=False)
+    channel = get_channel(channel_id=id_, return_dict=False)
     session = Session.object_session(channel)
     download = channel.get_download()
     if not download:

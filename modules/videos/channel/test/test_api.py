@@ -544,7 +544,6 @@ def test_channel_post_directory(test_session, test_client, test_directory):
 
 
 def test_refresh_videos(test_client, test_session, test_directory, simple_channel, video_factory):
-    print()
     subdir = test_directory / 'subdir'
     subdir.mkdir()
 

@@ -579,11 +579,14 @@ def search(search_str: str, domain: str, limit: int, offset: int) -> Tuple[List[
         columns = 'id, COUNT(*) OVER() AS total'
         params = dict(offset=offset, limit=limit)
         wheres = ''
+        order_by = '1 DESC'
 
         if search_str:
             columns = 'id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
             params['search_str'] = search_str
             wheres += '\nAND textsearch @@ websearch_to_tsquery(%(search_str)s)'
+            # highest rank, then most recent
+            order_by = '2 DESC, archive_datetime DESC'
 
         if domain:
             curs.execute('SELECT id FROM domains WHERE domain=%s', (domain,))
@@ -602,10 +605,11 @@ def search(search_str: str, domain: str, limit: int, offset: int) -> Tuple[List[
             WHERE
                 singlefile_path IS NOT NULL AND singlefile_path != ''
                 {wheres}
-            ORDER BY 2 DESC, archive_datetime DESC  -- highest rank, then most recent
+            ORDER BY {order_by}
             OFFSET %(offset)s
             LIMIT %(limit)s
         '''
+        print(stmt, offset, limit)
         curs.execute(stmt, params)
         results = [dict(i) for i in curs.fetchall()]
         total = results[0]['total'] if results else 0

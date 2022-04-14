@@ -41,7 +41,6 @@ async def fetch_domains(_: Request):
 
 
 archive_limit_limiter = api_param_limiter(100)
-archive_offset_limiter = api_param_limiter(100, 0)
 
 
 @bp.post('/search')
@@ -56,7 +55,7 @@ async def search_archives(_: Request, body: schema.ArchiveSearchRequest):
     search_str = body.search_str
     domain = body.domain
     limit = archive_limit_limiter(body.limit)
-    offset = archive_offset_limiter(body.offset)
+    offset = body.offset or 0
 
     archives, total = lib.search(search_str, domain, limit, offset)
     ret = dict(archives=archives, totals=dict(archives=total))

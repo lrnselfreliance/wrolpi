@@ -46,7 +46,7 @@ class Settings extends React.Component {
             disabled: false,
             hotspot_encryption: 'WPA',
             qrCodeValue: '',
-            qrHidden: true,
+            qrOpen: false,
             ready: false,
 
             download_on_startup: null,
@@ -113,7 +113,7 @@ class Settings extends React.Component {
         if (e !== undefined) {
             e.preventDefault();
         }
-        this.setState({qrHidden: !this.state.qrHidden});
+        this.setState({qrOpen: !this.state.qrOpen});
     }
 
     render() {
@@ -203,7 +203,7 @@ class Settings extends React.Component {
                             <Modal closeIcon
                                    onClose={this.toggleQRCode}
                                    onOpen={this.toggleQRCode}
-                                   open={!this.state.qrHidden}
+                                   open={this.state.qrOpen}
                                    trigger={<Button icon><Icon name='qrcode' size='big'/></Button>}
                                    >
                                 <Modal.Header>

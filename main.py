@@ -93,9 +93,10 @@ async def main(loop):
         tz = pytz.timezone(config.timezone)
         set_timezone(tz)
 
-    if config.hotspot_on_startup:
+    # Hotspot/throttle are not supported in Docker containers.
+    if not DOCKERIZED and config.hotspot_on_startup:
         admin.enable_hotspot()
-    if config.throttle_on_startup:
+    if not DOCKERIZED and config.throttle_on_startup:
         admin.throttle_cpu_on()
 
     check_media_directory()

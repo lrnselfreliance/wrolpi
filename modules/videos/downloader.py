@@ -20,7 +20,7 @@ from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
 from .common import apply_info_json, get_no_channel_directory, \
     get_videos_directory
-from .lib import upsert_video, refresh_channel_videos, get_downloader_config, get_channel_source_id
+from .lib import upsert_video, refresh_channel_videos, get_downloader_config, get_channel_source_id, validate_video
 from .models import Video, Channel
 from .schema import ChannelPostRequest
 from .video_url_resolver import video_url_resolver
@@ -196,8 +196,8 @@ class VideoDownloader(Downloader, ABC):
                                    f'attempt to download it again.')
 
                     with get_db_session(commit=True) as session:
-                        channel = session.query(Channel).filter_by(id=channel.id).one()
-                        channel.add_video_to_skip_list(source_id)
+                        c = session.query(Channel).filter_by(id=channel.id).one()
+                        c.add_video_to_skip_list(source_id)
                 except Exception:
                     # Could not skip this video, it may not have a channel.
                     logger.warning(f'Could not skip video {url}')

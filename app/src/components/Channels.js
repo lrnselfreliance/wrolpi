@@ -154,8 +154,8 @@ class ChannelPage extends APIForm {
 
     async componentDidMount() {
         if (!this.props.create) {
-            let channel_link = this.props.match.params.channel_link;
-            let channel = await getChannel(channel_link);
+            let channel_id = this.props.match.params.channel_id;
+            let channel = await getChannel(channel_id);
             let statistics = channel.statistics;
             if (statistics) {
                 this.setState({statistics: statistics || null});
@@ -173,7 +173,7 @@ class ChannelPage extends APIForm {
 
     handleConfirm = async () => {
         this.setState({deleteOpen: false});
-        let response = await deleteChannel(this.props.match.params.channel_link);
+        let response = await deleteChannel(this.props.match.params.channel_id);
         if (response.status === 204) {
             this.props.history.push({
                 pathname: '/videos/channel'
@@ -194,7 +194,7 @@ class ChannelPage extends APIForm {
             if (this.props.create) {
                 response = await createChannel(inputs);
             } else {
-                response = await updateChannel(this.props.match.params.channel_link, inputs);
+                response = await updateChannel(this.props.match.params.channel_id, inputs);
             }
 
         } finally {
@@ -215,7 +215,7 @@ class ChannelPage extends APIForm {
                 this.setSuccess(
                     'Channel created',
                     <span>
-                        Your channel was created.  View it <Link to={`/videos/channel/${channel.link}/edit`}>here</Link>
+                        Your channel was created.  View it <Link to={`/videos/channel/${channel.id}/edit`}>here</Link>
                     </span>
                 );
             } else {
@@ -262,12 +262,12 @@ class ChannelPage extends APIForm {
 
     downloadChannel = async (e) => {
         e.preventDefault();
-        return await downloadChannel(this.props.match.params.channel_link);
+        return await downloadChannel(this.props.match.params.channel_id);
     }
 
     refreshChannel = async (e) => {
         e.preventDefault();
-        return await refreshChannel(this.props.match.params.channel_link);
+        return await refreshChannel(this.props.match.params.channel_id);
     }
 
     handleDeleteButton = (e) => {
@@ -470,8 +470,8 @@ export function NewChannel(props) {
 class ChannelRow extends React.Component {
     constructor(props) {
         super(props);
-        this.editTo = `/videos/channel/${props.channel.link}/edit`;
-        this.videosTo = `/videos/channel/${props.channel.link}/video`;
+        this.editTo = `/videos/channel/${props.channel.id}/edit`;
+        this.videosTo = `/videos/channel/${props.channel.id}/video`;
     }
 
     render() {
@@ -646,7 +646,7 @@ export class Channels extends React.Component {
                         <Table striped basic size='large'>
                             {tableHeader}
                             <Table.Body>
-                                {this.state.results.map((channel) => <ChannelRow key={channel.link}
+                                {this.state.results.map((channel) => <ChannelRow key={channel.id}
                                                                                  channel={channel}/>)}
                             </Table.Body>
                         </Table>
@@ -655,7 +655,7 @@ export class Channels extends React.Component {
                         <Table striped basic unstackable size='small'>
                             <Table.Body>
                                 {this.state.results.map((channel) =>
-                                    <MobileChannelRow key={channel.link} channel={channel}/>)}
+                                    <MobileChannelRow key={channel.id} channel={channel}/>)}
                             </Table.Body>
                         </Table>
                     </Responsive>

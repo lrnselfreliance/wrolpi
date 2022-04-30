@@ -1,7 +1,5 @@
 import json
-import os
 import pathlib
-import shutil
 import tempfile
 from datetime import timedelta
 from http import HTTPStatus
@@ -11,301 +9,116 @@ import mock
 from modules.videos.channel.lib import delete_channel
 from modules.videos.common import get_no_channel_directory
 from modules.videos.models import Channel, Video
-from modules.videos.test.common import create_channel_structure
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.downloader import download_manager, Download
-from wrolpi.errors import UnknownFile
-from wrolpi.root_api import api_app
-from wrolpi.test.common import wrap_test_db, TestAPI
-from wrolpi.vars import PROJECT_DIR
+from wrolpi.test.common import assert_dict_contains
 
 
-class TestVideoAPI(TestAPI):
+def test_get_channels(test_directory, channel_factory, test_client):
+    channel_factory()
+    channel_factory()
+    channel_factory()
+    request, response = test_client.get('/api/videos/channels')
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.json['channels']) == 3
 
-    @wrap_test_db
-    @create_channel_structure(
-        {
-            'Foo': ['vid1.mp4'],
-            'Bar': ['vid2.mp4'],
-            'Baz': [],
-        }
+
+def test_refresh_no_channel(test_session, test_client, test_directory, simple_channel):
+    # A regular user-defined channel
+    vid1 = simple_channel.directory / 'MyChannelName_20000101_abcdefghijk_title1.mp4'
+    vid1.touch()
+    vid2 = simple_channel.directory / 'MyChannelName_20000101_abcdefghijk_title2.mp4'
+    vid2.touch()
+
+    # The special NO CHANNEL directory.
+    no_channel_path = get_no_channel_directory()
+    vid3 = no_channel_path / 'some video.mp4'
+    vid3.touch()
+    no_channel_subdir = no_channel_path / 'subdir'
+    no_channel_subdir.mkdir()
+    vid4 = no_channel_subdir / 'other video.mp4'
+    vid4.touch()
+
+    test_client.post('/api/videos/refresh')
+
+    videos = test_session.query(Video).order_by(Video.title).all()
+    assert len(videos) == 4
+
+    # Add some fake videos, they should be removed.
+    test_session.add(Video(title='vid5'))
+    test_session.add(Video(title='vid6', channel_id=simple_channel.id))
+    test_session.commit()
+
+    videos = test_session.query(Video).order_by(Video.title).all()
+    assert len(videos) == 6
+
+    test_client.post('/api/videos/refresh')
+
+    videos = test_session.query(Video).order_by(Video.title).all()
+    assert len(videos) == 4
+
+
+def test_get_video(test_client, test_session, simple_channel, video_factory):
+    """
+    Test that you get can information about a video.  Test that video file can be gotten.
+    """
+    now_ = now()
+    video1 = video_factory(channel_id=simple_channel.id)
+    video1.upload_date, video1.title = now_, 'vid1'
+    video2 = video_factory(channel_id=simple_channel.id)
+    video2.upload_date, video2.title = now_ + timedelta(seconds=1), 'vid2'
+    test_session.commit()
+
+    # Test that a 404 is returned when no video exists
+    _, response = test_client.get('/api/videos/video/10')
+    assert response.status_code == HTTPStatus.NOT_FOUND, response.json
+    assert response.json == {'code': 1, 'api_error': 'The video could not be found.', 'message': ''}
+
+    # Get the video info we inserted
+    _, response = test_client.get('/api/videos/video/1')
+    assert response.status_code == HTTPStatus.OK, response.json
+    assert_dict_contains(response.json['video'], {'title': 'vid1'})
+
+    # The next video is included.
+    assert response.json['prev'] is None
+    assert_dict_contains(response.json['next'], {'title': 'vid2'})
+
+
+def test_channel_no_download_frequency(test_client, test_session, test_directory, simple_channel):
+    """A channel does not require a download frequency."""
+    # No downloads are scheduled.
+    assert len(download_manager.get_downloads(test_session)) == 0
+
+    # Get the Channel
+    request, response = test_client.get('/api/videos/channels/1')
+    channel = response.json['channel']
+    assert channel['download_frequency'] is None
+
+    # Update the Channel with a frequency.
+    new_channel = dict(
+        directory=channel['directory'],
+        name=channel['name'],
+        url=channel['url'],
+        download_frequency=10,
     )
-    def test_get_channels(self, tempdir):
-        request, response = api_app.test_client.get('/api/videos/channels')
-        assert response.status_code == HTTPStatus.OK
-        # Channels are sorted by name
-        self.assertDictContains(response.json['channels'][0], {'id': 2, 'name': 'Bar', 'video_count': 1})
-        self.assertDictContains(response.json['channels'][1], {'id': 3, 'name': 'Baz', 'video_count': 0})
-        self.assertDictContains(response.json['channels'][2], {'id': 1, 'name': 'Foo', 'video_count': 1})
+    request, response = test_client.put(f'/api/videos/channels/{simple_channel.id}',
+                                        content=json.dumps(new_channel))
+    assert response.status_code == HTTPStatus.NO_CONTENT, response.json
 
-    @wrap_test_db
-    def test_channel(self):
-        channel_directory = tempfile.TemporaryDirectory(dir=self.tmp_dir.name).name
-        channel_directory_name = channel_directory.split('/')[-1]
-        pathlib.Path(channel_directory).mkdir()
+    # Download is scheduled.
+    assert len(download_manager.get_downloads(test_session)) == 1
 
-        new_channel = dict(
-            directory=channel_directory,
-            match_regex='asdf',
-            name='   Example Channel 1  ',
-            url='https://example.com/channel1',
-        )
-
-        # Channel doesn't exist
-        request, response = api_app.test_client.get('/api/videos/channels/examplechannel1')
-        assert response.status_code == HTTPStatus.NOT_FOUND, f'Channel exists: {response.json}'
-
-        # Create it
-        request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.CREATED, response.json
-        location = response.headers['Location']
-        request, response = api_app.test_client.get(location)
-        created = response.json['channel']
-        self.assertIsNotNone(created)
-        self.assertIsNotNone(created['id'])
-
-        # Channel name leading/trailing whitespace should be stripped
-        assert created['name'] == 'Example Channel 1'
-
-        # Channel directory should be relative to the media directory
-        assert not pathlib.Path(created['directory']).is_absolute(), \
-            f'Channel directory is absolute: {created["directory"]}'
-
-        # Get the link that was computed
-        new_channel['link'] = response.json['channel']['link']
-        assert new_channel['link']
-
-        # Can't create it again
-        request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.BAD_REQUEST
-
-        # Update it
-        new_channel['name'] = 'Example Channel 2'
-        new_channel['directory'] = str(new_channel['directory'])
-        request, response = api_app.test_client.put(location, content=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
-        request, response = api_app.test_client.get(location)
-        assert response.status_code == HTTPStatus.OK
-        self.assertDictContains(response.json['channel'], {
-            'id': 1,
-            'name': 'Example Channel 2',
-            'directory': channel_directory_name,
-            'match_regex': 'asdf',
-            'url': 'https://example.com/channel1',
-        })
-
-        # Can't update channel that doesn't exist
-        request, response = api_app.test_client.put('/api/videos/channels/doesnt_exist',
-                                                    content=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.NOT_FOUND
-
-        # Delete the new channel
-        request, response = api_app.test_client.delete(location)
-        assert response.status_code == HTTPStatus.NO_CONTENT
-
-        # Cant delete it again
-        request, response = api_app.test_client.delete(location)
-        assert response.status_code == HTTPStatus.NOT_FOUND
-
-    @wrap_test_db
-    def test_refresh_no_channel(self):
-        with get_db_session() as session:
-            videos_path = pathlib.Path(self.tmp_dir.name) / 'videos'
-            videos_path.mkdir()
-
-            # A regular user-defined channel
-            channel1_path = videos_path / 'channel1'
-            channel1_path.mkdir()
-            vid1 = channel1_path / 'MyChannelName_20000101_abcdefghijk_title1.mp4'
-            vid1.touch()
-            vid2 = channel1_path / 'MyChannelName_20000101_abcdefghijk_title2.mp4'
-            vid2.touch()
-
-            channel1 = Channel(name='channel1', link='channel1', directory=channel1_path)
-            session.add(channel1)
-            session.commit()
-
-            # The special NO CHANNEL directory.
-            no_channel_path = get_no_channel_directory()
-            vid3 = no_channel_path / 'some video.mp4'
-            vid3.touch()
-            no_channel_subdir = no_channel_path / 'subdir'
-            no_channel_subdir.mkdir()
-            vid4 = no_channel_subdir / 'other video.mp4'
-            vid4.touch()
-
-            api_app.test_client.post('/api/videos/refresh')
-
-            videos = session.query(Video).order_by(Video.title).all()
-            self.assertEqual(len(videos), 4)
-
-            # Add some fake videos, they should be removed.
-            session.add(Video(title='vid5'))
-            session.add(Video(title='vid6', channel_id=channel1.id))
-            session.commit()
-
-            videos = session.query(Video).order_by(Video.title).all()
-            self.assertEqual(len(videos), 6)
-
-            api_app.test_client.post('/api/videos/refresh')
-
-            videos = session.query(Video).order_by(Video.title).all()
-            self.assertEqual(len(videos), 4)
-
-    @wrap_test_db
-    def test_get_channel_videos(self):
-        with get_db_session(commit=True) as session:
-            channel1 = Channel(name='Foo', link='foo')
-            channel2 = Channel(name='Bar', link='bar')
-            session.add(channel1)
-            session.add(channel2)
-            session.flush()
-            session.refresh(channel1)
-            session.refresh(channel2)
-
-        # Channels don't have videos yet
-        d = dict(channel_link=channel1.link)
-        request, response = api_app.test_client.post(f'/api/videos/search', content=json.dumps(d))
-        assert response.status_code == HTTPStatus.OK
-        assert len(response.json['videos']) == 0
-
-        with get_db_session(commit=True) as session:
-            vid1 = Video(title='vid1', channel_id=channel2.id, video_path='foo')
-            vid2 = Video(title='vid2', channel_id=channel1.id, video_path='foo')
-            session.add(vid1)
-            session.add(vid2)
-
-        # Videos are gotten by their respective channels
-        request, response = api_app.test_client.post(f'/api/videos/search', content=json.dumps(d))
-        assert response.status_code == HTTPStatus.OK
-        assert len(response.json['videos']) == 1
-        assert response.json['totals']['videos'] == 1
-        self.assertDictContains(response.json['videos'][0], dict(id=2, title='vid2', channel_id=channel1.id))
-
-        d = dict(channel_link=channel2.link)
-        request, response = api_app.test_client.post(f'/api/videos/search', content=json.dumps(d))
-        assert response.status_code == HTTPStatus.OK
-        assert len(response.json['videos']) == 1
-        self.assertDictContains(response.json['videos'][0], dict(id=1, title='vid1', channel_id=channel2.id))
-
-    @wrap_test_db
-    def test_get_video(self):
-        """
-        Test that you get can information about a video.  Test that video file can be gotten.
-        """
-
-        def raise_unknown_file(_):
-            raise UnknownFile()
-
-        with get_db_session(commit=True) as session, \
-                mock.patch('modules.videos.common.get_absolute_video_info_json', raise_unknown_file):
-            channel = Channel(name='Foo', link='foo')
-            session.add(channel)
-            session.flush()
-            session.refresh(channel)
-            now_ = now()
-            session.add(Video(title='vid1', channel_id=channel.id, upload_date=now_))
-            session.add(Video(title='vid2', channel_id=channel.id, upload_date=now_ + timedelta(seconds=1)))
-
-        # Test that a 404 is returned when no video exists
-        _, response = api_app.test_client.get('/api/videos/video/10')
-        assert response.status_code == HTTPStatus.NOT_FOUND, response.json
-        assert response.json == {'code': 1, 'api_error': 'The video could not be found.', 'message': ''}
-
-        # Get the video info we inserted
-        _, response = api_app.test_client.get('/api/videos/video/1')
-        assert response.status_code == HTTPStatus.OK, response.json
-        self.assertDictContains(response.json['video'], {'title': 'vid1'})
-
-        # The next video is included.
-        self.assertIsNone(response.json['prev'])
-        self.assertDictContains(response.json['next'], {'title': 'vid2'})
-
-    @wrap_test_db
-    def test_get_channel_videos_pagination(self):
-        with get_db_session(commit=True) as session:
-            channel1 = Channel(name='Foo', link='foo')
-            session.add(channel1)
-            session.flush()
-            session.refresh(channel1)
-
-            for i in range(50):
-                session.add(Video(title=f'Foo.Video{i}', channel_id=channel1.id, video_path='foo'))
-
-            channel2 = Channel(name='Bar', link='bar')
-            session.add(channel2)
-            session.flush()
-            session.refresh(channel2)
-            session.add(Video(title='vid2', channel_id=channel2.id, video_path='foo'))
-
-        # Get first, second, third, and empty pages of videos.
-        tests = [
-            # (offset, video_count)
-            (0, 20),
-            (20, 20),
-            (40, 10),
-            (50, 0),
-        ]
-        last_ids = []
-        for offset, video_count in tests:
-            d = dict(channel_link=channel1.link, order_by='id', offset=offset)
-            _, response = api_app.test_client.post(f'/api/videos/search', content=json.dumps(d))
-            assert response.status_code == HTTPStatus.OK
-            assert len(response.json['videos']) == video_count
-            current_ids = [i['id'] for i in response.json['videos']]
-            assert current_ids != last_ids, f'IDs are unchanged current_ids={current_ids}'
-            last_ids = current_ids
-
-    @wrap_test_db
-    def test_channel_no_download_frequency(self):
-        """A channel does not require a download frequency."""
-        channel_directory = tempfile.TemporaryDirectory(dir=self.tmp_dir.name).name
-        os.mkdir(channel_directory)
-
-        new_channel = dict(
-            directory=channel_directory,
-            name='Example Channel 1',
-            url='https://example.com/channel1',
-            download_frequency=None,
-        )
-
-        # Create the Channel
-        request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
-        assert response.status_code == HTTPStatus.CREATED
-        location = response.headers['Location']
-
-        # No downloads are scheduled.
-        with get_db_session() as session:
-            downloads = list(download_manager.get_new_downloads(session))
-            self.assertEqual(len(downloads), 0)
-
-        # Get the Channel
-        request, response = api_app.test_client.get(location)
-        channel = response.json['channel']
-        self.assertEqual(channel['download_frequency'], None)
-
-        # Update the Channel with a frequency.
-        new_channel = dict(
-            directory=channel['directory'],
-            name=channel['name'],
-            url=channel['url'],
-            download_frequency=10,
-        )
-        request, response = api_app.test_client.put(f'/api/videos/channels/{channel["link"]}',
-                                                    content=json.dumps(new_channel))
-        self.assertEqual(response.status_code, 204, response.json)
-
-        # Remove the frequency.
-        new_channel = dict(
-            directory=channel['directory'],
-            name=channel['name'],
-            url=channel['url'],
-            download_frequency=None,
-        )
-        request, response = api_app.test_client.put(f'/api/videos/channels/{channel["link"]}',
-                                                    content=json.dumps(new_channel))
-        self.assertEqual(response.status_code, 204, response.json)
+    # Remove the frequency.
+    new_channel = dict(
+        directory=channel['directory'],
+        name=channel['name'],
+        url=channel['url'],
+        download_frequency=None,
+    )
+    request, response = test_client.put(f'/api/videos/channels/{simple_channel.id}',
+                                        content=json.dumps(new_channel))
+    assert response.status_code == HTTPStatus.NO_CONTENT, response.json
 
 
 def test_channel_frequency_update(download_channel, test_client, test_session):
@@ -321,7 +134,7 @@ def test_channel_frequency_update(download_channel, test_client, test_session):
         url=download_channel.url,
         download_frequency=100,
     )
-    request, response = test_client.put(f'/api/videos/channels/{download_channel.link}', json=data)
+    request, response = test_client.put(f'/api/videos/channels/{download_channel.id}', json=data)
     assert response.status_code == HTTPStatus.NO_CONTENT, response.json
 
     download = download_channel.get_download()
@@ -332,20 +145,59 @@ def test_channel_frequency_update(download_channel, test_client, test_session):
     assert len(list(downloads)) == 1
 
 
-def test_delete_channel_delete_download(download_channel, test_session):
-    """
-    Deleting a Channel deletes it's Download.
-    """
-    downloads = test_session.query(Download).all()
-    assert all(i.url == download_channel.url for i in downloads)
+def test_channel_download_crud(test_session, simple_channel):
+    """Modifying a Channel modifies it's Download."""
+    assert simple_channel.url
+    assert simple_channel.download_frequency is None
 
-    delete_channel(download_channel.link)
+    simple_channel.update({'download_frequency': 1000})
+    test_session.commit()
+
+    download: Download = test_session.query(Download).one()
+    assert simple_channel.get_download() == download
+    assert simple_channel.url == download.url
+    assert simple_channel.download_frequency == download.frequency
+
+    # Increase the frequency to 1 second.
+    simple_channel.update({'download_frequency': 1})
+    test_session.commit()
+    assert simple_channel.url == download.url
+    assert simple_channel.download_frequency == download.frequency == 1
+    assert test_session.query(Download).count() == 1
+
+    # Changing the Channel's URL changes the download's URL.
+    simple_channel.update({'url': 'https://example.com/new url'})
+    test_session.commit()
+    assert simple_channel.url == 'https://example.com/new url'
+    assert simple_channel.download_frequency == download.frequency == 1
+    assert test_session.query(Download).count() == 1
+
+    # Removing the Channel's frequency removes the download.
+    simple_channel.update({'download_frequency': None})
+    test_session.commit()
+    assert test_session.query(Download).count() == 0
+
+    # Removing the URL is supported.
+    simple_channel.update({'url': None})
+    test_session.commit()
+
+    # Adding a URL is supported.
+    simple_channel.update({'url': 'https://example.com'})
+    test_session.commit()
+
+
+def test_delete_channel_delete_download(download_channel, test_session):
+    """Deleting a Channel deletes it's Download."""
+    downloads = test_session.query(Download).all()
+    assert downloads and all(i.url == download_channel.url for i in downloads)
+
+    delete_channel(channel_id=download_channel.id)
 
     downloads = test_session.query(Download).all()
     assert not list(downloads)
 
 
-def test_video_search(test_session):
+def test_video_search(test_client, test_session):
     """
     Test that videos can be searched and that their order is by their textsearch rank.
     """
@@ -363,7 +215,7 @@ def test_video_search(test_session):
 
     def do_search(search_str, limit=20):
         d = json.dumps({'search_str': search_str, 'limit': limit})
-        _, resp = api_app.test_client.post('/api/videos/search', content=d)
+        _, resp = test_client.post('/api/videos/search', content=d)
         return resp
 
     def search_is_as_expected(resp, expected):
@@ -414,7 +266,7 @@ def test_video_file_name(test_session, simple_video, test_client):
     assert resp.json['video'].get('stem') == 'simple_video'
 
 
-def test_channel_conflicts(test_session, test_directory):
+def test_channel_conflicts(test_client, test_session, test_directory):
     channel_directory = tempfile.TemporaryDirectory(dir=test_directory).name
     pathlib.Path(channel_directory).mkdir()
     new_channel = dict(
@@ -425,7 +277,7 @@ def test_channel_conflicts(test_session, test_directory):
     )
 
     def _post_channel(channel):
-        return api_app.test_client.post('/api/videos/channels', content=json.dumps(channel))
+        return test_client.post('/api/videos/channels', content=json.dumps(channel))
 
     # Create it
     request, response = _post_channel(new_channel)
@@ -442,18 +294,6 @@ def test_channel_conflicts(test_session, test_directory):
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
                              'cause': {'error': 'The channel name is already taken.', 'code': 5}}
-
-    # Name matches when converted to link
-    channel_directory2 = tempfile.TemporaryDirectory(dir=test_directory).name
-    pathlib.Path(channel_directory2).mkdir()
-    new_channel = dict(
-        directory=channel_directory2,
-        name='Example channel 1',
-    )
-    request, response = _post_channel(new_channel)
-    assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert response.json == {'error': 'Could not validate the contents of the request', 'code': 10,
-                             'cause': {'code': 11, 'error': 'Channel link already used by another channel'}}
 
     # Directory was already used
     new_channel = dict(
@@ -479,7 +319,7 @@ def test_channel_conflicts(test_session, test_directory):
                              'cause': {'code': 6, 'error': 'The URL is already used by another channel.'}}
 
 
-def test_channel_empty_url_doesnt_conflict(test_session, test_directory):
+def test_channel_empty_url_doesnt_conflict(test_client, test_session, test_directory):
     """Two channels with empty URLs shouldn't conflict"""
     channel_directory = tempfile.TemporaryDirectory(dir=test_directory).name
     pathlib.Path(channel_directory).mkdir()
@@ -488,7 +328,7 @@ def test_channel_empty_url_doesnt_conflict(test_session, test_directory):
         'name': 'Fooz',
         'directory': channel_directory,
     }
-    request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
+    request, response = test_client.post('/api/videos/channels', content=json.dumps(new_channel))
     assert response.status_code == HTTPStatus.CREATED, response.json
     location = response.headers['Location']
 
@@ -498,7 +338,7 @@ def test_channel_empty_url_doesnt_conflict(test_session, test_directory):
         'name': 'Barz',
         'directory': channel_directory2,
     }
-    request, response = api_app.test_client.post('/api/videos/channels', content=json.dumps(new_channel))
+    request, response = test_client.post('/api/videos/channels', content=json.dumps(new_channel))
     assert response.status_code == HTTPStatus.CREATED, response.json
     assert location != response.headers['Location']
 
@@ -524,11 +364,11 @@ def test_download_channel_no_refresh(test_session, download_channel, video_downl
 
 def test_channel_post_directory(test_session, test_client, test_directory):
     """A Channel can be created with or without an existing directory."""
-    # Channel can be created with a missing directory.
+    # Channel can be created with a directory which is not on disk.
     data = dict(name='foo', directory='foo')
     request, response = test_client.post('/api/videos/channels', content=json.dumps(data))
     assert response.status_code == HTTPStatus.CREATED
-    directory = test_session.query(Channel).filter_by(link='foo').one().directory.path
+    directory = test_session.query(Channel).filter_by(id=1).one().directory.path
     assert (test_directory / 'foo') == directory
     assert not directory.is_dir()
     assert directory.is_absolute()
@@ -537,56 +377,147 @@ def test_channel_post_directory(test_session, test_client, test_directory):
     data = dict(name='bar', directory='bar', mkdir=True)
     request, response = test_client.post('/api/videos/channels', content=json.dumps(data))
     assert response.status_code == HTTPStatus.CREATED
-    directory = test_session.query(Channel).filter_by(link='bar').one().directory.path
+    directory = test_session.query(Channel).filter_by(id=2).one().directory.path
     assert (test_directory / 'bar') == directory
     assert directory.is_dir()
     assert directory.is_absolute()
 
 
-def test_refresh_videos(test_client, test_session, test_directory, simple_channel, video_factory):
-    subdir = test_directory / 'subdir'
-    subdir.mkdir()
+def test_channel_by_id(test_session, test_client, simple_channel, simple_video):
+    request, response = test_client.get(f'/api/videos/channels/{simple_channel.id}')
+    assert response.status_code == HTTPStatus.OK
 
-    # video1 is in a subdirectory.
-    video1 = video_factory(simple_channel.id, True, True, 'jpg')
+
+def test_channel_crud(test_session, test_client, test_directory):
+    channel_directory = test_directory / 'channel directory'
+    channel_directory.mkdir()
+
+    new_channel = dict(
+        directory=str(channel_directory),
+        match_regex='asdf',
+        name='   Example Channel 1  ',
+        url='https://example.com/channel1',
+    )
+
+    # Channel doesn't exist
+    request, response = test_client.get('/api/videos/channels/examplechannel1')
+    assert response.status_code == HTTPStatus.NOT_FOUND, f'Channel exists: {response.json}'
+
+    # Create it
+    request, response = test_client.post('/api/videos/channels', content=json.dumps(new_channel))
+    assert response.status_code == HTTPStatus.CREATED, response.json
+    location = response.headers['Location']
+
+    request, response = test_client.get(location)
+    assert response.status_code == HTTPStatus.OK, response.json
+    created = response.json['channel']
+    assert created
+    assert created['id']
+    # No frequency was provided.  No download exists.
+    assert not created['download_frequency']
+    assert test_session.query(Download).count() == 0
+
+    # Channel name leading/trailing whitespace should be stripped
+    assert created['name'] == 'Example Channel 1'
+
+    # Channel directory should be relative to the media directory
+    assert not pathlib.Path(created['directory']).is_absolute(), \
+        f'Channel directory is absolute: {created["directory"]}'
+
+    # Can't create it again
+    request, response = test_client.post('/api/videos/channels', content=json.dumps(new_channel))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    # Update it
+    new_channel['name'] = 'Example Channel 2'
+    new_channel['directory'] = str(new_channel['directory'])  # noqa
+    request, response = test_client.put(location, content=json.dumps(new_channel))
+    assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
+    request, response = test_client.get(location)
+    assert response.status_code == HTTPStatus.OK
+    channel = response.json['channel']
+    assert channel['id'] == 1
+    assert channel['name'] == 'Example Channel 2'
+    assert channel['directory'] == channel_directory.name
+    assert channel['match_regex'] == 'asdf'
+    assert channel['url'] == 'https://example.com/channel1'
+
+    # Can't update channel that doesn't exist
+    request, response = test_client.put('/api/videos/channels/doesnt_exist',
+                                        content=json.dumps(new_channel))
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+    # Delete the new channel
+    request, response = test_client.delete(location)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Cant delete it again
+    request, response = test_client.delete(location)
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+
+def test_search_channel_videos(test_client, test_session):
+    with get_db_session(commit=True) as session:
+        channel1 = Channel(name='Foo')
+        channel2 = Channel(name='Bar')
+        session.add(channel1)
+        session.add(channel2)
+        session.flush()
+        session.refresh(channel1)
+        session.refresh(channel2)
+
+    # Channels don't have videos yet
+    d = dict(channel_id=channel1.id)
+    request, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.json['videos']) == 0
+
+    with get_db_session(commit=True) as session:
+        vid1 = Video(title='vid1', channel_id=channel2.id, video_path='foo')
+        vid2 = Video(title='vid2', channel_id=channel1.id, video_path='foo')
+        session.add(vid1)
+        session.add(vid2)
+
+    # Videos are gotten by their respective channels
+    request, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.json['videos']) == 1
+    assert response.json['totals']['videos'] == 1
+    assert_dict_contains(response.json['videos'][0], dict(id=2, title='vid2', channel_id=channel1.id))
+
+    d = dict(channel_id=channel2.id)
+    request, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.json['videos']) == 1
+    assert_dict_contains(response.json['videos'][0], dict(id=1, title='vid1', channel_id=channel2.id))
+
+
+def test_get_channel_videos_pagination(test_client, test_session, simple_channel, video_factory):
+    for i in range(50):
+        video_factory(channel_id=simple_channel.id)
+
+    channel2 = Channel(name='Bar')
+    test_session.add(channel2)
+    test_session.flush()
+    test_session.refresh(channel2)
+    video_factory(channel_id=channel2.id)
+    test_session.add(Video(title='vid2', channel_id=channel2.id, video_path='foo'))
     test_session.commit()
-    shutil.move(video1.video_path.path, subdir / video1.video_path.path.name)
-    shutil.move(video1.poster_path.path, subdir / video1.poster_path.path.name)
-    video1.video_path = subdir / video1.video_path.path.name
-    video1.poster_path = None
-    # video2 is in the test directory.
-    video2 = video_factory(simple_channel.id, True, True, 'jpg')
-    video2.poster_path = video1.poster_path = None
-    test_session.commit()
 
-    assert not video1.size, 'video1 should not have size during creation'
-
-    # Create a video not in the DB.
-    vid3 = test_directory / 'vid3.mp4'
-    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', vid3)
-
-    # Orphan poster should be ignored.
-    orphan_poster = pathlib.Path(test_directory / 'channel name_20000104_defghijklmn_title.jpg')
-    orphan_poster.touch()
-
-    # Create a bogus video in the channel.
-    bogus = Video(video_path='foo', channel_id=simple_channel.id)
-    test_session.add(bogus)
-
-    test_client.post('/api/videos/refresh')
-
-    # Posters were found during refresh.
-    assert video1.poster_path
-    assert 'subdir' in str(video1.poster_path.path)
-    assert video2.poster_path
-    # Missing video3 was found
-    video3: Video = test_session.query(Video).filter_by(id=4).one()
-    assert video3.video_path.path == vid3
-    assert video3.video_path != video1.video_path
-    assert video3.video_path != video2.video_path
-    # Bogus video was removed.
-    assert not any('foo' in str(i.video_path.path) for i in test_session.query(Video).all())
-    # Orphan file was not deleted.
-    assert orphan_poster.is_file(), 'Orphan poster was removed!'
-
-    assert video1.size, 'video1 size was not found'
+    # Get first, second, third, and empty pages of videos.
+    tests = [
+        # (offset, video_count)
+        (0, 20),
+        (20, 20),
+        (40, 10),
+        (50, 0),
+    ]
+    last_ids = []
+    for offset, video_count in tests:
+        d = dict(channel_id=simple_channel.id, order_by='id', offset=offset)
+        _, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
+        assert response.status_code == HTTPStatus.OK
+        assert len(response.json['videos']) == video_count
+        current_ids = [i['id'] for i in response.json['videos']]
+        assert current_ids != last_ids, f'IDs are unchanged current_ids={current_ids}'
+        last_ids = current_ids

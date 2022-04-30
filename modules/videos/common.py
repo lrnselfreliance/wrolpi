@@ -10,16 +10,13 @@ from typing import Union, Tuple, List, Set, Iterable, Optional
 import PIL
 from PIL import Image
 from sqlalchemy.orm import Session
-from yt_dlp import YoutubeDL
 
-from wrolpi import before_startup
 from wrolpi.cmd import which
 from wrolpi.common import logger, iterify, get_media_directory, \
-    minimize_dict, api_param_limiter
+    minimize_dict, any_extensions
 from wrolpi.db import get_db_session, get_db_curs
-from wrolpi.downloader import download_manager
-from wrolpi.errors import UnknownFile, UnknownDirectory, ChannelNameConflict, ChannelURLConflict, \
-    ChannelLinkConflict, ChannelDirectoryConflict, ChannelSourceIdConflict
+from wrolpi.errors import UnknownFile, ChannelNameConflict, ChannelURLConflict, \
+    ChannelDirectoryConflict, ChannelSourceIdConflict
 from wrolpi.media_path import MediaPath
 from wrolpi.vars import DEFAULT_FILE_PERMISSIONS
 from .models import Channel, Video
@@ -27,17 +24,13 @@ from .models import Channel, Video
 logger = logger.getChild(__name__)
 
 REQUIRED_OPTIONS = ['name', 'directory']
-MINIMUM_CHANNEL_KEYS = {'id', 'name', 'directory', 'url', 'video_count', 'link'}
+MINIMUM_CHANNEL_KEYS = {'id', 'name', 'directory', 'url', 'video_count'}
 MINIMUM_INFO_JSON_KEYS = {'description', 'view_count', 'webpage_url'}
 MINIMUM_VIDEO_KEYS = {'id', 'title', 'upload_date', 'duration', 'channel', 'channel_id', 'favorite', 'size',
                       'poster_path', 'caption_path', 'video_path', 'info_json', 'channel', 'viewed', 'source_id',
                       'view_count'}
-VIDEO_QUERY_LIMIT = 20
-VIDEO_QUERY_MAX_LIMIT = 100
 # These are the supported video formats.  These are in order of their preference.
 VIDEO_EXTENSIONS = ('mp4', 'ogg', 'webm', 'flv')
-
-video_limiter = api_param_limiter(100)
 
 
 class ConfigError(Exception):
@@ -45,9 +38,7 @@ class ConfigError(Exception):
 
 
 def get_videos_directory() -> pathlib.Path:
-    """
-    Get the "videos" directory in the media directory.  Make it if it does not exist.
-    """
+    """Get the "videos" directory in the media directory.  Make it if it does not exist."""
     directory = get_media_directory() / 'videos'
     if not directory.is_dir():
         directory.mkdir(parents=True)
@@ -55,87 +46,11 @@ def get_videos_directory() -> pathlib.Path:
 
 
 def get_no_channel_directory() -> pathlib.Path:
-    """
-    Get the "NO CHANNEL" directory in the videos directory.  Make it if it does not exist.
-    """
+    """Get the "NO CHANNEL" directory in the videos directory.  Make it if it does not exist."""
     directory = get_videos_directory() / 'NO CHANNEL'
     if not directory.is_dir():
         directory.mkdir(parents=True)
     return directory
-
-
-@before_startup
-def import_videos_config():
-    """Import channel settings to the DB.  Existing channels will be updated."""
-    logger.info('Importing videos config')
-    try:
-        from .lib import get_channels_config
-        from .downloader import ChannelDownloader
-        config = get_channels_config()
-        config, favorites = config.channels, config.favorites
-
-        with get_db_session(commit=True) as session:
-            for link in config:
-                for option in (i for i in REQUIRED_OPTIONS if i not in config[link]):
-                    raise ConfigError(f'Channel "{link}" is required to have "{option}"')
-
-                name, directory = config[link]['name'], config[link]['directory']
-
-                channel = session.query(Channel).filter(Channel.link == link).one_or_none()
-                if not channel:
-                    # Channel not yet in the DB, add it.
-                    channel = Channel(link=link)
-
-                # Only name and directory are required
-                channel.name = name
-                channel.directory = str(directory)
-
-                channel.calculate_duration = config[link].get('calculate_duration') or channel.calculate_duration
-                channel.download_frequency = config[link].get('download_frequency') or channel.download_frequency
-                channel.generate_posters = config[link].get('generate_posters') or channel.generate_posters
-                channel.match_regex = config[link].get('match_regex') or channel.match_regex
-                channel.skip_download_videos = list(set(config[link].get('skip_download_videos', {})))
-                channel.source_id = config[link].get('source_id') or channel.source_id
-                channel.url = config[link].get('url') or channel.url
-
-                if not channel.source_id and channel.url:
-                    # If we can download from a channel, we must have its source_id.
-                    channel.source_id = get_channel_source_id(channel.url)
-
-                if channel.download_frequency and channel.url:
-                    download = download_manager.get_or_create_download(channel.url, session=session)
-                    download.frequency = channel.download_frequency
-                    download.downloader = ChannelDownloader.name
-                    download.next_download = download.next_download or \
-                                             download_manager.get_next_download(download, session=session)
-
-                session.add(channel)
-
-        with get_db_session(commit=True) as session:
-            for link, favorites in favorites.items():
-                if link != 'NO CHANNEL':
-                    channel: Channel = session.query(Channel).filter_by(link=link).one_or_none()
-                    if not channel:
-                        logger.warning(f'Cannot find channel {link=} for favorites!')
-                        continue
-                    channel_dir = channel.directory.path
-                else:
-                    from .downloader import get_no_channel_directory
-                    channel_dir = get_no_channel_directory()
-
-                # Set favorite Videos of this Channel.
-                for video_path, data in favorites.items():
-                    # Favorite in the config is the name of the video_path.  Add the channel directory onto this
-                    # video_path, so we can match the complete path for the Video.
-                    video_path = channel_dir / video_path
-                    video = session.query(Video).filter_by(video_path=video_path).one_or_none()
-                    # If no Video is found, it may be that we need to refresh.
-                    if video:
-                        video.favorite = data['favorite']
-                    else:
-                        logger.warning(f'Cannot find video to favorite: {video_path}')
-    except Exception as e:
-        logger.warning('Failed to load channels config!', exc_info=e)
 
 
 VALID_VIDEO_KINDS = {'video', 'caption', 'poster', 'description', 'info_json'}
@@ -150,66 +65,11 @@ def get_absolute_video_path(video: Video, kind: str = 'video') -> MediaPath:
     raise UnknownFile()
 
 
-get_absolute_video_caption = partial(get_absolute_video_path, kind='caption')
-get_absolute_video_poster = partial(get_absolute_video_path, kind='poster')
-get_absolute_video_description = partial(get_absolute_video_path, kind='description')
-get_absolute_video_info_json = partial(get_absolute_video_path, kind='info_json')
-
-
-def get_absolute_video_files(video: Video) -> List[MediaPath]:
-    """
-    Get all video files that exist.
-    """
-    getters = [
-        get_absolute_video_description,
-        get_absolute_video_caption,
-        get_absolute_video_poster,
-        get_absolute_video_info_json,
-        get_absolute_video_path,
-    ]
-
-    def _get():
-        for getter in getters:
-            try:
-                yield getter(video)
-            except UnknownFile:
-                pass
-
-    return list(_get())
-
-
-def get_video_info_json(video) -> Optional[dict]:
-    """Get the info_json object from a video's meta-file.  Return an empty dict if not possible."""
-    if not video.channel or not video.channel.directory:
-        return
-
-    try:
-        path = get_absolute_video_info_json(video)
-        if path.exists():
-            with open(str(path), 'rb') as fh:
-                contents = json.load(fh)
-                return contents
-    except UnknownFile:
-        return
-    except UnknownDirectory:
-        return
-
-
-def any_extensions(filename: str, extensions: Iterable = ()):
-    """
-    Return True only if the file name ends with any of the possible extensions.
-    Matches lower or upper case of the extension.
-    """
-    return any(filename.lower().endswith(ext) for ext in extensions)
-
-
 match_video_extensions = partial(any_extensions, extensions=VIDEO_EXTENSIONS)
 
 
 def generate_video_paths(directory: Union[str, pathlib.Path]) -> Tuple[str, pathlib.Path]:
-    """
-    Generate a list of video paths in the provided directory.
-    """
+    """Generate a list of video paths in the provided directory."""
     directory = pathlib.Path(directory)
 
     for child in directory.iterdir():
@@ -223,9 +83,11 @@ def generate_video_paths(directory: Union[str, pathlib.Path]) -> Tuple[str, path
 @iterify(set)
 def remove_duplicate_video_paths(paths: Iterable[Path]) -> Set[Path]:
     """
-    Remove any duplicate paths from a given list.  Duplicate is defined as any file that shares the EXACT same
-    name as another file, but with a different extension.  If a duplicate is found, only yield one of the paths.  The
-    path that will be yielded will be whichever is first in the VIDEO_EXTESIONS tuple.
+    Remove any duplicate paths from a given list.
+
+    Duplicate is defined as any file that shares the EXACT same name as another file, but with a different extension.
+    If a duplicate is found, only yield one of the paths.  The path that will be yielded will be whichever is first in
+    the VIDEO_EXTESIONS tuple.
 
     i.e.
     >>> remove_duplicate_video_paths([Path('one.mp4'), Path('two.mp4'), Path('one.ogg')])
@@ -262,15 +124,15 @@ def remove_duplicate_video_paths(paths: Iterable[Path]) -> Set[Path]:
                 yield sorted(paths)[0]
 
 
-def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None, link=None, directory=None,
+def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None, directory=None,
                                 source_id=None):
     """
     Search for any channels that conflict with the provided args, raise a relevant exception if any conflicts are found.
     """
-    if not any([id_, url, name, link, directory]):
+    if not any([id_, url, name, directory]):
         raise Exception('Cannot search for channel with no arguments')
 
-    logger.debug(f'Checking for channel conflicts: id={id_} url={url} name={name} link={link} directory={directory}')
+    logger.debug(f'Checking for channel conflicts: id={id_} url={url} name={name} directory={directory}')
 
     # A channel can't conflict with itself
     if id_:
@@ -286,10 +148,6 @@ def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None,
         conflicts = base_where.filter(Channel.name == name)
         if list(conflicts):
             raise ChannelNameConflict()
-    if link:
-        conflicts = base_where.filter(Channel.link == link)
-        if list(conflicts):
-            raise ChannelLinkConflict()
     if directory:
         conflicts = base_where.filter(Channel.directory == directory)
         if list(conflicts):
@@ -329,29 +187,13 @@ def get_matching_directories(path: Union[str, Path]) -> List[str]:
     return paths
 
 
-def replace_extension(path: pathlib.Path, new_ext) -> pathlib.Path:
-    """Swap the extension of a file's path.
-
-    Example:
-        >>> foo = pathlib.Path('foo.bar')
-        >>> replace_extension(foo, 'baz')
-        'foo.baz'
-    """
-    parent = path.parent
-    existing_ext = path.suffix
-    path = str(path)
-    name, _, _ = path.rpartition(existing_ext)
-    path = pathlib.Path(str(parent / name) + new_ext)
-    return path
-
-
 def generate_video_poster(video_path: Path) -> Path:
     """
     Create a poster (aka thumbnail) next to the provided video_path.
     """
-    poster_path = replace_extension(video_path, '.jpg')
-    cmd = ['/usr/bin/ffmpeg', '-n', '-i', str(video_path), '-f', 'mjpeg', '-vframes', '1', '-ss', '00:00:05.000',
-           str(poster_path)]
+    poster_path = video_path.with_suffix('.jpg')
+    cmd = ('/usr/bin/ffmpeg', '-n', '-i', str(video_path), '-f', 'mjpeg', '-vframes', '1', '-ss', '00:00:05.000',
+           str(poster_path))
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         logger.info(f'Generated poster at {poster_path}')
@@ -474,13 +316,3 @@ def minimize_video(video: dict) -> dict:
         video['info_json'] = minimize_video_info_json(video['info_json'])
 
     return video
-
-
-YDL = YoutubeDL()
-YDL.params['logger'] = logger.getChild('youtube-dl')
-YDL.add_default_info_extractors()
-
-
-def get_channel_source_id(url: str) -> str:
-    channel_info = YDL.extract_info(url, download=False, process=False)
-    return channel_info.get('uploader_id') or channel_info['id']

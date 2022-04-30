@@ -95,9 +95,9 @@ let apiPatch = async (url, body) => {
     return await apiCall(url, 'PATCH', body)
 };
 
-export async function updateChannel(link, channel) {
+export async function updateChannel(id, channel) {
     channel = emptyToNull(channel);
-    return await apiPut(`${VIDEOS_API}/channels/${link}`, channel);
+    return await apiPut(`${VIDEOS_API}/channels/${id}`, channel);
 }
 
 export async function createChannel(channel) {
@@ -105,8 +105,8 @@ export async function createChannel(channel) {
     return await apiPost(`${VIDEOS_API}/channels`, channel);
 }
 
-export async function deleteChannel(channel_link) {
-    return apiDelete(`${VIDEOS_API}/channels/${channel_link}`);
+export async function deleteChannel(id) {
+    return apiDelete(`${VIDEOS_API}/channels/${id}`);
 }
 
 export async function getChannels() {
@@ -114,12 +114,12 @@ export async function getChannels() {
     return (await response.json())['channels'];
 }
 
-export async function getChannel(link) {
-    let response = await apiGet(`${VIDEOS_API}/channels/${link}`);
+export async function getChannel(id) {
+    let response = await apiGet(`${VIDEOS_API}/channels/${id}`);
     return (await response.json())['channel'];
 }
 
-export async function searchVideos(offset, limit, channel_link, searchStr, order_by, filters) {
+export async function searchVideos(offset, limit, channel_id, searchStr, order_by, filters) {
     // Build a search query to retrieve a list of videos from the API
     offset = offset || 0;
     limit = limit || DEFAULT_LIMIT;
@@ -128,8 +128,8 @@ export async function searchVideos(offset, limit, channel_link, searchStr, order
     if (searchStr) {
         body.search_str = searchStr;
     }
-    if (channel_link) {
-        body.channel_link = channel_link;
+    if (channel_id) {
+        body.channel_id = channel_id;
     }
     body.order_by = order_by ? order_by : 'rank'
 
@@ -211,8 +211,8 @@ export async function download() {
     return await response.json();
 }
 
-export async function downloadChannel(link) {
-    let url = `${VIDEOS_API}/download/${link}`;
+export async function downloadChannel(id) {
+    let url = `${VIDEOS_API}/download/${id}`;
     let response = await apiPost(url);
     let json = await response.json();
     if (response.status === 400 && json['code'] === 30) {
@@ -225,8 +225,8 @@ export async function downloadChannel(link) {
     }
 }
 
-export async function refreshChannel(link) {
-    let url = `${VIDEOS_API}/refresh/${link}`;
+export async function refreshChannel(id) {
+    let url = `${VIDEOS_API}/refresh/${id}`;
     await fetch(url, {method: 'POST'});
 }
 

@@ -80,16 +80,16 @@ def video_search(
         search_str: str = None,
         offset: int = None,
         limit: int = VIDEO_QUERY_LIMIT,
-        channel_link: str = None,
+        channel_id: int = None,
         order_by: str = None,
         filters: List[str] = None,
 ) -> Tuple[List[dict], int]:
     with get_db_curs() as curs:
         params = dict(search_str=search_str, offset=offset)
         channel_where = ''
-        if channel_link:
-            channel_where = 'AND channel_id = (select id from channel where link=%(channel_link)s)'
-            params['channel_link'] = channel_link
+        if channel_id:
+            channel_where = 'AND channel_id = %(channel_id)s'
+            params['channel_id'] = channel_id
 
         # Filter for/against favorites, if it was provided
         favorites_where = ''

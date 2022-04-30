@@ -44,7 +44,7 @@ Base = declarative_base()
 
 class ModelHelper:
 
-    def dict(self) -> dict:
+    def dict(self, *_, **__) -> dict:
         d = {i.name: getattr(self, i.name) for i in self.__table__.columns}  # noqa
         return d
 
@@ -732,11 +732,6 @@ def native_only(func: callable):
     return wrapped
 
 
-def read_yaml(path: Path):
-    with path.open('rt') as fh:
-        return yaml.load(fh, Loader=yaml.Loader)
-
-
 def recursive_map(obj: Any, func: callable):
     """
     Apply `func` to all values of any dictionaries; or items in any list/set/tuple.
@@ -755,3 +750,11 @@ def recursive_map(obj: Any, func: callable):
         type_ = type(obj)
         return type_(map(lambda i: recursive_map(i, func), obj))
     return func(obj)
+
+
+def any_extensions(filename: str, extensions: Iterable = ()):
+    """Return True only if the file name ends with any of the possible extensions.
+
+    Matches lower or upper case of the extension.
+    """
+    return any(filename.lower().endswith(ext) for ext in extensions)

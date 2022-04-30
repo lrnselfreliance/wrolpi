@@ -76,8 +76,8 @@ function VideoPage(props) {
         </Tab.Pane>
     };
 
-    let statisticsPane = {
-        menuItem: 'Statistics', render: () => <Tab.Pane>
+    let aboutPane = {
+        menuItem: 'About', render: () => <Tab.Pane>
             <h3>Size</h3>
             <p>{video.size ? humanFileSize(video.size) : '???'}</p>
 
@@ -104,7 +104,7 @@ function VideoPage(props) {
         </Tab.Pane>
     };
 
-    let tabPanes = [descriptionPane, statisticsPane, captionsPane];
+    let tabPanes = [descriptionPane, aboutPane, captionsPane];
 
     return (
         <>
@@ -135,7 +135,7 @@ function VideoPage(props) {
                     <h2>{video.title || video.video_path}</h2>
                     {video.upload_date && <h3>{uploadDate(video.upload_date)}</h3>}
                     <h3>
-                        {channel && <Link to={`/videos/channel/${channel.link}/video`}>
+                        {channel && <Link to={`/videos/channel/${channel.id}/video`}>
                             {channel.name}
                         </Link>}
                     </h3>

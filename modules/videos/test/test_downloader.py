@@ -1,4 +1,5 @@
 import pathlib
+import shutil
 from copy import copy
 from unittest import mock
 
@@ -9,12 +10,12 @@ from modules.videos.channel.lib import download_channel
 from modules.videos.downloader import find_all_missing_videos, VideoDownloader, \
     ChannelDownloader, get_or_create_channel
 from modules.videos.models import Channel, Video
-from modules.videos.test.common import create_channel_structure
-from wrolpi.db import get_db_session, get_db_context
+from wrolpi.db import get_db_context
 from wrolpi.downloader import DownloadManager, Download
 from wrolpi.errors import InvalidDownload
 from wrolpi.test.common import wrap_test_db, TestAPI
 from wrolpi.test.test_downloader import HTTPDownloader
+from wrolpi.vars import PROJECT_DIR
 
 
 class FakeYDL:
@@ -28,37 +29,32 @@ class FakeYDL:
         }
 
 
-class TestDownloader(TestAPI):
-    @wrap_test_db
-    @create_channel_structure(
-        {
-            'channel1': ['vid1.mp4'],
-            'channel2': ['vid2.mp4']
-        }
-    )
-    def test_find_all_missing_videos(self, tempdir):
-        with get_db_session(commit=True) as session:
-            channel1, channel2 = session.query(Channel).order_by(Channel.id).all()
-            channel1.url = channel2.url = 'some url'
-            channel1.info_json = {'entries': [{'id': 'foo'}]}
+def test_find_all_missing_videos(test_session, channel_factory, video_factory):
+    channel1, channel2 = channel_factory(url='some url'), channel_factory(url='some other url')
+    channel1.info_json = {'entries': [{'id': 'foo', 'view_count': 0}]}
+    test_session.commit()
 
-        # No missing videos
-        self.assertEqual([], list(find_all_missing_videos()))
+    # Two videos are already downloaded.
+    video_factory()
+    video_factory()
 
-        # Create a video that has no video file.
-        with get_db_session(commit=True) as session:
-            video = Video(title='needs to be downloaded', channel_id=channel1.id, source_id='foo')
-            session.add(video)
+    # No missing videos
+    assert [] == list(find_all_missing_videos())
 
-        missing = list(find_all_missing_videos())
-        self.assertEqual(len(missing), 1)
+    # Create a video that has no video file.
+    video = Video(title='needs to be downloaded', channel_id=channel1.id, source_id='foo')
+    test_session.add(video)
+    test_session.commit()
 
-        # The video returned is the one we faked.
-        id_, source_id, entry = missing[0]
-        # Two videos were created for this test already.
-        self.assertEqual(id_, 3)
-        # The fake entry we added is regurgitated back.
-        self.assertEqual(entry, channel1.info_json['entries'][0])
+    missing = list(find_all_missing_videos())
+    assert len(missing) == 1
+
+    # The video returned is the one we faked.
+    id_, source_id, entry = missing[0]
+    # Two videos were created for this test already.
+    assert id_ == 3
+    # The fake entry we added is regurgitated back.
+    assert entry == channel1.info_json['entries'][0]
 
 
 example_video_json = {
@@ -172,43 +168,6 @@ class TestVideosDownloaders(TestAPI):
         return video_path, poster_path, description_path, info_json_path
 
     @wrap_test_db
-    def test_video_download(self):
-        channel_dir = self.videos_dir / 'channel name'
-        channel_dir.mkdir(parents=True)
-
-        # Video paths
-        video_path, poster_path, description_path, info_json_path = self._make_video_files(channel_dir)
-
-        with get_db_session() as session:
-            url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
-            with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info, \
-                    mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename, \
-                    mock.patch('modules.videos.downloader.VideoDownloader.process_runner') as mock_process_runner:
-                mock_extract_info.return_value = example_video_json
-                mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
-                mock_process_runner.return_value = 0
-
-                self.mgr.create_download(url, session)
-
-                mock_process_runner.assert_called_once()
-                video_url, _, out_dir = mock_process_runner.call_args[0]
-
-            download: Download = session.query(Download).one()
-            self.assertEqual(video_url, download.url)
-            channel: Channel = session.query(Channel).one()
-            self.assertEqual(channel.directory, channel_dir)
-
-            video: Video = session.query(Video).one()
-            self.assertEqual(video.video_path, video_path)
-            self.assertEqual(video.description_path, description_path)
-            self.assertEqual(video.poster_path, poster_path)
-            self.assertEqual(video.info_json_path, info_json_path)
-            self.assertTrue(video.video_path.path.is_absolute())
-            self.assertTrue(video.poster_path.path.is_absolute())
-            self.assertTrue(video.description_path.path.is_absolute())
-            self.assertTrue(video.info_json_path.path.is_absolute())
-
-    @wrap_test_db
     def test_video_download_no_channel(self):
         _, session = get_db_context()
 
@@ -239,73 +198,65 @@ class TestVideosDownloaders(TestAPI):
         video: Video = session.query(Video).one()
         self.assertEqual(str(video.video_path.path), f'{channel_dir}/video.mp4')
 
-    @wrap_test_db
-    def test_channel_download(self):
-        _, session = get_db_context()
 
-        url = 'https://www.youtube.com/c/LearningSelfReliance/videos'
-        session.add(Channel(url=url, link='foo'))
+def test_channel_download(test_session, simple_channel, video_download_manager, video_file):
+    url = 'https://www.youtube.com/c/LearningSelfReliance/videos'
 
-        channel_dir = self.videos_dir / 'NO CHANNEL'
-        channel_dir.mkdir(parents=True)
-        video_path, _, _, _ = self._make_video_files(channel_dir)
+    with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info, \
+            mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename, \
+            mock.patch('modules.videos.downloader.VideoDownloader.process_runner') as mock_process_runner:
+        mock_extract_info.return_value = example_channel_json
+        mock_prepare_filename.return_value = (video_file, {'id': 'foo'})
+        mock_process_runner.return_value = 0
+        video_download_manager.create_download(url, test_session)
 
-        with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info, \
-                mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename, \
-                mock.patch('modules.videos.downloader.VideoDownloader.process_runner') as mock_process_runner:
-            mock_extract_info.return_value = example_channel_json
-            mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
-            mock_process_runner.return_value = 0
-            self.mgr.create_download(url, session)
+    # Two videos are in the example channel.
+    downloads = video_download_manager.get_new_downloads(test_session)
+    expected = ['https://youtube.com/watch?v=HQ_62YwcA80', 'https://youtube.com/watch?v=4gSz6W4Gv-o']
+    for download, expected in zip(downloads, expected):
+        assert download.url == expected
+        # Download is skipped for test.
+        assert download.status == 'new'
 
-        # Two videos are in the example channel.
-        downloads = self.mgr.get_new_downloads(session)
-        expected = ['https://youtube.com/watch?v=HQ_62YwcA80', 'https://youtube.com/watch?v=4gSz6W4Gv-o']
-        for download, expected in zip(downloads, expected):
-            self.assertEqual(download.url, expected)
-            # Download is skipped for test.
-            self.assertEqual(download.status, 'new')
 
-    @wrap_test_db
-    def test_get_or_create_channel(self):
-        """
-        A Channel may need to be created for an arbitrary download.  Attempt to use an existing Channel if we can
-        match it.
-        """
-        with get_db_session(commit=True) as session:
-            c1 = Channel(name='foo', link='foo', source_id='foo', url='foo')
-            c2 = Channel(name='bar', link='bar', source_id='bar')
-            c3 = Channel(name='baz', link='baz', source_id='baz', url='baz')
-            c4 = Channel(name='qux', link='qux')
-            session.add_all([c1, c2, c3, c4])
+def test_get_or_create_channel(test_session):
+    """
+    A Channel may need to be created for an arbitrary download.  Attempt to use an existing Channel if we can
+    match it.
+    """
+    c1 = Channel(name='foo', source_id='foo', url='foo')
+    c2 = Channel(name='bar', source_id='bar')
+    c3 = Channel(name='baz', source_id='baz', url='baz')
+    c4 = Channel(name='qux')
+    test_session.add_all([c1, c2, c3, c4])
+    test_session.commit()
 
-        # All existing channels should be used.
-        tests = [
-            (dict(source_id='foo'), c1),
-            (dict(link='foo'), c1),
-            (dict(url='foo'), c1),
-            (dict(url='foo', source_id='bar'), c2),  # source_id is preferred.
-            (dict(name='foo', source_id='bar'), c2),
-            (dict(source_id='bar'), c2),
-            (dict(source_id='baz'), c3),
-            (dict(name='qux'), c4),
-            (dict(link='qux'), c4),
-        ]
-        for kwargs, expected in tests:
+    # All existing channels should be used.
+    tests = [
+        (dict(source_id='foo'), c1),
+        (dict(url='foo'), c1),
+        (dict(url='foo', source_id='bar'), c2),  # source_id has priority.
+        (dict(name='foo', source_id='bar'), c2),
+        (dict(source_id='bar'), c2),
+        (dict(source_id='baz'), c3),
+        (dict(name='qux'), c4),
+    ]
+    for kwargs, expected in tests:
+        try:
             channel = get_or_create_channel(**kwargs)
-            self.assertEqual(expected.id, channel.id, f'Expected {expected} got {channel}')
+        except Exception as e:
+            raise Exception(f'get_or_create_channel failed with {kwargs=}') from e
+        assert expected.id == channel.id, f'Expected {expected} for {kwargs} but got {channel}'
 
-        # A new channel is created.  It will not be automatically downloaded.
-        channel = get_or_create_channel(source_id='quux', name='quux', url='quux')
-        self.assertEqual(channel.id, 5)
-        self.assertEqual(channel.source_id, 'quux')
-        self.assertEqual(channel.name, 'quux')
-        self.assertEqual(channel.link, 'quux')
-        self.assertEqual(channel.url, 'quux')
-        self.assertIsNone(channel.download_frequency)
+    # A new channel is created.  It will not be automatically downloaded.
+    channel = get_or_create_channel(source_id='quux', name='quux', url='quux')
+    assert channel.id == 5
+    assert channel.source_id == 'quux'
+    assert channel.name == 'quux'
+    assert channel.url == 'quux'
 
-        # New channel can be retrieved.
-        self.assertEqual(get_or_create_channel(source_id='quux'), channel)
+    # New channel can be retrieved.
+    assert get_or_create_channel(source_id='quux') == channel
 
 
 def test_download_info_save(test_session, video_download_manager):
@@ -397,7 +348,7 @@ def test_channel_download_no_download(test_session, video_download_manager, simp
     assert video_download_manager.get_downloads(test_session) == []
 
     with pytest.raises(InvalidDownload):
-        download_channel(simple_channel.link)
+        download_channel(simple_channel.id)
 
 
 def test_invalid_download_url(test_session, test_download_manager, test_downloader_config):
@@ -413,3 +364,32 @@ def test_invalid_download_url(test_session, test_download_manager, test_download
 
     download = test_download_manager.get_downloads(test_session)[0]
     assert download.status == 'failed'
+
+
+def test_video_download_1(test_session, test_directory, simple_channel, video_download_manager):
+    simple_channel.source_id = example_video_json['channel_id']
+    simple_channel.directory = test_directory / 'videos/channel name'
+    simple_channel.directory.mkdir(parents=True)
+
+    video_file = simple_channel.directory / 'a video.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_file)
+
+    url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
+    with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info, \
+            mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename, \
+            mock.patch('modules.videos.downloader.VideoDownloader.process_runner') as mock_process_runner:
+        mock_extract_info.return_value = example_video_json
+        mock_prepare_filename.return_value = (video_file, {'id': 'foo'})
+        mock_process_runner.return_value = 0
+
+        video_download_manager.create_download(url, test_session)
+
+        mock_process_runner.assert_called_once()
+        video_url, _, out_dir = mock_process_runner.call_args[0]
+
+    download: Download = test_session.query(Download).one()
+    assert video_url == download.url
+    assert test_session.query(Channel).one()
+
+    video: Video = test_session.query(Video).one()
+    assert video.video_path.path.is_absolute()

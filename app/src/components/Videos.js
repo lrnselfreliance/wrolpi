@@ -103,8 +103,8 @@ export class VideoWrapper extends React.Component {
     async fetchVideo() {
         // Get and display the Video specified in the Router match
         let [video, prev, next] = await getVideo(this.props.match.params.video_id);
-        let channel_link = this.props.match.params.channel_link;
-        let channel = channel_link ? await getChannel(channel_link) : null;
+        let channel_id = this.props.match.params.channel_id;
+        let channel = channel_id ? await getChannel(channel_id) : null;
         let no_channel = false;
         if (!channel) {
             no_channel = true;
@@ -222,7 +222,7 @@ class Videos extends React.Component {
     }
 
     async componentDidMount() {
-        if (this.props.match.params.channel_link) {
+        if (this.props.match.params.channel_id) {
             await this.fetchChannel();
         } else {
             await this.fetchVideos();
@@ -233,7 +233,7 @@ class Videos extends React.Component {
     async componentDidUpdate(prevProps, prevState, snapshot) {
         let params = this.props.match.params;
 
-        let channelChanged = params.channel_link !== prevProps.match.params.channel_link;
+        let channelChanged = params.channel_id !== prevProps.match.params.channel_id;
         let pageChanged = (
             prevState.activePage !== this.state.activePage ||
             prevState.searchOrder !== this.state.searchOrder ||
@@ -269,10 +269,10 @@ class Videos extends React.Component {
 
     async fetchChannel() {
         // Get and display the channel specified in the Router match
-        let channel_link = this.props.match.params.channel_link;
+        let channel_id = this.props.match.params.channel_id;
         let channel = null;
-        if (channel_link) {
-            channel = await getChannel(channel_link);
+        if (channel_id) {
+            channel = await getChannel(channel_id);
         }
         this.setState({
                 channel,
@@ -300,13 +300,13 @@ class Videos extends React.Component {
     async fetchVideos() {
         this.setState({videos: null});
         let offset = this.state.limit * this.state.activePage - this.state.limit;
-        let channel_link = this.state.channel ? this.state.channel.link : null;
+        let channel_id = this.state.channel ? this.state.channel.id : null;
         let {queryStr, searchOrder, limit} = this.state;
 
         // Pass any enabled filters to the search.
         let filtersArr = this.enabledFilters();
 
-        let [videos, total] = await searchVideos(offset, limit, channel_link, queryStr, searchOrder, filtersArr);
+        let [videos, total] = await searchVideos(offset, limit, channel_id, queryStr, searchOrder, filtersArr);
 
         let totalPages = Math.round(total / this.state.limit) || 1;
         this.setState({videos, totalPages});
@@ -428,7 +428,7 @@ class Videos extends React.Component {
                                 <>
                                     &nbsp;
                                     &nbsp;
-                                    <Link to={`/videos/channel/${channel.link}/edit`}>
+                                    <Link to={`/videos/channel/${channel.id}/edit`}>
                                         <Icon name="edit"/>
                                     </Link>
                                 </>
@@ -527,7 +527,7 @@ export function VideosRoute(props) {
             <Route path='/videos/channel' exact component={Channels}/>
             <Route path='/videos/manage' exact component={ManageTab}/>
             <Route path='/videos/channel/new' exact component={NewChannel}/>
-            <Route path='/videos/channel/:channel_link/edit' exact
+            <Route path='/videos/channel/:channel_id/edit' exact
                    component={(i) =>
                        <EditChannel
                            match={i.match}
@@ -535,7 +535,7 @@ export function VideosRoute(props) {
                        />
                    }
             />
-            <Route path='/videos/channel/:channel_link/video' exact component={Videos}/>
+            <Route path='/videos/channel/:channel_id/video' exact component={Videos}/>
         </PageContainer>
     )
 }

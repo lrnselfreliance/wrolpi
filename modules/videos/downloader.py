@@ -6,23 +6,23 @@ from abc import ABC
 from typing import Tuple, List, Optional
 
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.exc import NoResultFound
 from yt_dlp import YoutubeDL
 from yt_dlp.extractor import YoutubeTabIE
 from yt_dlp.utils import UnsupportedError, DownloadError
 
 from wrolpi.cmd import which
-from wrolpi.common import logger, sanitize_link, extract_domain
+from wrolpi.common import logger, extract_domain, get_media_directory
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.downloader import Downloader, Download, DOWNLOAD_MANAGER_CONFIG
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
-from .common import apply_info_json, get_channel_source_id, get_no_channel_directory, \
+from .common import apply_info_json, get_no_channel_directory, \
     get_videos_directory
-from .lib import upsert_video, refresh_channel_videos, get_downloader_config
+from .lib import upsert_video, refresh_channel_videos, get_downloader_config, get_channel_source_id
 from .models import Video, Channel
+from .schema import ChannelPostRequest
 from .video_url_resolver import video_url_resolver
 
 logger = logger.getChild(__name__)
@@ -70,12 +70,12 @@ class ChannelDownloader(Downloader, ABC):
             if not channel:
                 # Couldn't get channel by URL, this is probably a playlist.  Find the channel for the playlist.
                 channel_source_id = get_channel_source_id(download.url)
-                channel = get_channel(channel_source_id, return_dict=False)
+                channel = get_channel(source_id=channel_source_id, return_dict=False)
 
         update_channel(channel)
 
         domain = extract_domain(download.url)
-        missing_videos = find_all_missing_videos(channel.link)
+        missing_videos = find_all_missing_videos(channel.id)
         with get_db_session(commit=True) as session:
             for video_id, source_id, missing_video in missing_videos:
                 url = video_url_resolver(domain, missing_video)
@@ -152,7 +152,7 @@ class VideoDownloader(Downloader, ABC):
         channel = None
         if channel_name or channel_id:
             channel_url = info.get('channel_url')
-            channel = get_or_create_channel(channel_id, None, channel_url, channel_name)
+            channel = get_or_create_channel(source_id=channel_id, url=channel_url, name=channel_name)
 
         # Use the default directory if this video has no channel.
         out_dir = get_no_channel_directory()
@@ -245,34 +245,32 @@ channel_downloader = ChannelDownloader()
 video_downloader = VideoDownloader(40)
 
 
-def get_or_create_channel(source_id: str = None, link: str = None, url: str = None, name: str = None) -> Channel:
+def get_or_create_channel(source_id: str = None, url: str = None, name: str = None) -> Channel:
     """
     Attempt to find a Channel using the provided params.  The params are in order of reliability.
 
     Creates a new Channel if one cannot be found.
     """
-    if not link and name:
-        link = sanitize_link(name)
-
     try:
-        channel = get_channel(link=link, source_id=source_id, url=url, return_dict=False)
+        channel = get_channel(source_id=source_id, url=url, name=name, return_dict=False)
         return channel
     except UnknownChannel:
         pass
+
+    if not name:
+        raise ValueError(f'Cannot create channel without a name')
 
     # Channel does not exist.  Create one in the video directory.
     channel_directory = get_videos_directory() / name
     if not channel_directory.is_dir():
         channel_directory.mkdir(parents=True)
-    data = dict(
+    data = ChannelPostRequest(
+        source_id=source_id,
         name=name,
         url=url,
-        link=link,
-        domain=extract_domain(url),
-        directory=str(channel_directory),
-        source_id=source_id,
+        directory=str(channel_directory.relative_to(get_media_directory())),
     )
-    channel = create_channel(data, return_dict=False)
+    channel = create_channel(data=data, return_dict=False)
     # Create the directory now that the channel is approved.
     channel_directory.mkdir(exist_ok=True)
 
@@ -348,21 +346,17 @@ def update_channel(channel: Channel):
     apply_info_json(channel_id)
 
 
-def _find_all_missing_videos(link: str = None) -> List[Tuple]:
+def _find_all_missing_videos(channel_id: id = None) -> List[Tuple]:
     """Get all Video entries which don't have the required media files (i.e. hasn't been downloaded).
 
-    Restrict to a single channel if "link" is provided.
+    Restrict to a single channel if `channel_id` is provided.
     """
     with get_db_curs() as curs:
         # Get all channels by default.
         where = ''
         params = ()
 
-        if link:
-            # Restrict by channel when link is provided.
-            query = 'SELECT id FROM channel WHERE link = %s'
-            curs.execute(query, (link,))
-            channel_id = curs.fetchall()[0][0]
+        if channel_id:
             where = 'AND channel_id = %s'
             params = (channel_id,)
 
@@ -386,18 +380,15 @@ def _find_all_missing_videos(link: str = None) -> List[Tuple]:
         return missing_videos
 
 
-def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
+def find_all_missing_videos(channel_id: str = None) -> Tuple[dict, dict]:
     """
     Find all videos that don't have a video file, but are found in the DB (taken from the channel's info_json).
 
     Yields a Channel Dict object, our Video id, and the "entry" of the video from the channel's info_json['entries'].
     """
     with get_db_session() as session:
-        if link:
-            try:
-                channel = session.query(Channel).filter_by(link=link).one()
-            except NoResultFound:
-                raise UnknownChannel(f'No channel with link: {link}')
+        if channel_id:
+            channel = get_channel(channel_id=channel_id, return_dict=False)
             if not channel.url:
                 raise ChannelURLEmpty('No URL for this channel')
             channels = [channel, ]
@@ -420,12 +411,12 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
     # Convert the channel video entries into a form that allows them to be quickly retrieved without searching through
     # the entire entries list.
     channels_entries = {}
-    for id_, channel in channels.items():
-        channels_entries[id_] = {i['id']: i for i in channel.info_json['entries']}
+    for channel_id_, channel in channels.items():
+        channels_entries[channel_id_] = {i['id']: i for i in channel.info_json['entries']}
 
-    missing_videos = _find_all_missing_videos(link)
+    missing_videos = _find_all_missing_videos(channel_id)
 
-    for id_, source_id, channel_id in missing_videos:
+    for video_id, source_id, channel_id in missing_videos:
         channel = channels[channel_id]
 
         if channel.skip_download_videos and source_id in channel.skip_download_videos:
@@ -435,13 +426,13 @@ def find_all_missing_videos(link: str = None) -> Tuple[dict, dict]:
         try:
             missing_video = channels_entries[channel_id][source_id]
         except KeyError:
-            logger.warning(f'Video {id_} / {source_id} is not in {channel.name} info_json')
+            logger.warning(f'Video {channel.name} / {source_id} is not in {channel.name} info_json')
             continue
 
         match_regex: re.compile = match_regexen.get(channel_id)
         if not match_regex or (match_regex and missing_video['title'] and match_regex.match(missing_video['title'])):
             # No title match regex, or the title matches the regex.
-            yield id_, source_id, missing_video
+            yield video_id, source_id, missing_video
 
 
 UNRECOVERABLE_ERRORS = {

@@ -1,4 +1,4 @@
-__version__ = '0.4.3-beta'
+__version__ = '0.4.4-beta'
 
 import subprocess
 
@@ -25,7 +25,5 @@ def git_branch():
 
 
 def get_version_string():
-    """
-    Return a string containing the WROLPi version, git branch and git revision hash.
-    """
+    """Return a string containing the WROLPi version, git branch and git revision hash."""
     return f'{__version__} (git: {git_branch()} {git_revision()})'

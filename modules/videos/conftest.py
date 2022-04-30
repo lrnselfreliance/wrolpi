@@ -10,22 +10,18 @@ from PIL import Image
 from modules.videos.downloader import VideoDownloader, ChannelDownloader
 from modules.videos.lib import set_test_channels_config, set_test_downloader_config
 from modules.videos.models import Channel, Video
-from wrolpi.common import sanitize_link
 from wrolpi.downloader import DownloadFrequency, DownloadManager, Download
 from wrolpi.vars import PROJECT_DIR
 
 
 @pytest.fixture
 def simple_channel(test_session, test_directory) -> Channel:
-    """
-    Get a Channel with the minimum properties.  This Channel has no download!
-    """
+    """Get a Channel with the minimum properties.  This Channel has no download!"""
     channel = Channel(
         directory=test_directory,
         name='Simple Channel',
         url='https://example.com/channel1',
         download_frequency=None,  # noqa
-        link='simplechannel',
     )
     test_session.add(channel)
     test_session.commit()
@@ -34,20 +30,18 @@ def simple_channel(test_session, test_directory) -> Channel:
 
 @pytest.fixture
 def channel_factory(test_session, test_directory):
-    """
-    Create a random Channel with a directory, but no frequency.
-    """
+    """Create a random Channel with a directory, but no frequency."""
 
-    def _():
-        name = str(uuid4())
+    def _(source_id: str = None, download_frequency: DownloadFrequency = None, url: str = None, name: str = None):
+        name = name or str(uuid4())
         directory = test_directory / name
         directory.mkdir()
         channel = Channel(
             directory=directory,  # noqa
             name=name,
-            url=f'https://example.com/{name}',
-            download_frequency=None,  # noqa
-            link=sanitize_link(name),
+            url=url or f'https://example.com/{name}',
+            download_frequency=download_frequency,
+            source_id=source_id,
         )
         test_session.add(channel)
         test_session.commit()
@@ -67,7 +61,6 @@ def download_channel(test_session, test_directory, video_download_manager) -> Ch
         name='Download Channel',
         url='https://example.com/channel1',
         download_frequency=DownloadFrequency.weekly,
-        link='downloadchannel',
     )
     download = Download(url=channel.url, downloader='video_channel', frequency=channel.download_frequency)
     test_session.add_all([channel, download])
@@ -77,9 +70,7 @@ def download_channel(test_session, test_directory, video_download_manager) -> Ch
 
 @pytest.fixture
 def simple_video(test_session, test_directory, simple_channel) -> Video:
-    """
-    A Video with a video file whose channel is the Simple Channel.
-    """
+    """A Video with an empty video file whose channel is the Simple Channel."""
     video_path = test_directory / 'simple_video.mp4'
     video_path.touch()
     video = Video(video_path=video_path, channel_id=simple_channel.id)
@@ -103,9 +94,9 @@ def video_file(test_directory) -> pathlib.Path:
 def video_factory(test_session, test_directory):
     """Creates Videos for testing."""
 
-    def _(channel_id: int = None, with_video_file: bool = False, with_info_json: dict = None,
-          with_poster_ext: str = None):
-        title = str(uuid4())
+    def factory(channel_id: int = None, title: str = None, upload_date=None, with_video_file: bool = False,
+                with_info_json: dict = None, with_poster_ext: str = None, with_caption_file: bool = False):
+        title = title or str(uuid4())
         if channel_id:
             path = test_directory / f'{title}.mp4'
         else:
@@ -129,12 +120,18 @@ def video_factory(test_session, test_directory):
             poster_path = path.with_suffix(f'.{with_poster_ext}')
             Image.new('RGB', (25, 25)).save(poster_path)
 
+        caption_path = None
+        if with_caption_file:
+            caption_path = path.with_suffix('.en.vtt')
+            caption_path.touch()
+
         video = Video(video_path=str(path), title=title, channel_id=channel_id, source_id=title,
-                      info_json_path=info_json_path, poster_path=poster_path)
+                      info_json_path=info_json_path, poster_path=poster_path, caption_path=caption_path,
+                      upload_date=upload_date)
         test_session.add(video)
         return video
 
-    return _
+    return factory
 
 
 @pytest.fixture

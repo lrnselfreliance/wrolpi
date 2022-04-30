@@ -609,7 +609,6 @@ def search(search_str: str, domain: str, limit: int, offset: int) -> Tuple[List[
             OFFSET %(offset)s
             LIMIT %(limit)s
         '''
-        print(stmt, offset, limit)
         curs.execute(stmt, params)
         results = [dict(i) for i in curs.fetchall()]
         total = results[0]['total'] if results else 0

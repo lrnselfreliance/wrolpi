@@ -733,10 +733,10 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
         validate_video(video, channel.generate_posters if channel else False)
         # All data about the Video has been found, we should not attempt to validate it again.
         video.validated = True
-    except Exception:
+    except Exception as e:
         # Could not validate, this could be an issue with a file.  This should not prevent the video from being
         # inserted.
-        pass
+        logger.warning(f'Failed to validate {video}', exc_info=e)
 
     try:
         session.add(video)

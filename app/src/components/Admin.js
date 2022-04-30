@@ -7,6 +7,8 @@ import {
     Divider,
     Form,
     Header,
+    Icon,
+    Input,
     Loader,
     Placeholder,
     Table
@@ -33,6 +35,7 @@ import {
     WROLModeMessage
 } from "./Common";
 import {Route} from "react-router-dom";
+import QRCode from "react-qr-code";
 
 class Settings extends React.Component {
 
@@ -40,10 +43,15 @@ class Settings extends React.Component {
         super(props);
         this.state = {
             disabled: false,
+            hotspot_encryption: 'WPA',
+            qrCodeValue: '',
+            qrHidden: true,
             ready: false,
 
             download_on_startup: null,
             hotspot_on_startup: null,
+            hotspot_password: null,
+            hotspot_ssid: null,
             hotspot_status: null,
             throttle_on_startup: null,
             throttle_status: null,
@@ -51,6 +59,8 @@ class Settings extends React.Component {
         }
 
         this.handleSubmit = this.handleSubmit.bind(this);
+        this.toggleQRCode = this.toggleQRCode.bind(this);
+        this.handleHotspotPasswordChange = this.handleHotspotPasswordChange.bind(this);
     }
 
     async componentDidMount() {
@@ -60,11 +70,13 @@ class Settings extends React.Component {
             disabled: settings.wrol_mode,
             download_on_startup: settings.download_on_startup,
             hotspot_on_startup: settings.hotspot_on_startup,
+            hotspot_password: settings.hotspot_password,
+            hotspot_ssid: settings.hotspot_ssid,
             hotspot_status: settings.hotspot_status,
             throttle_on_startup: settings.throttle_on_startup,
             throttle_status: settings.throttle_status,
             timezone: {value: settings.timezone, label: settings.timezone},
-        });
+        }, this.handleHotspotPasswordChange);
     }
 
     async handleSubmit(e) {
@@ -72,6 +84,8 @@ class Settings extends React.Component {
         let settings = {
             download_on_startup: this.state.download_on_startup,
             hotspot_on_startup: this.state.hotspot_on_startup,
+            hotspot_password: this.state.hotspot_password,
+            hotspot_ssid: this.state.hotspot_ssid,
             throttle_on_startup: this.state.throttle_on_startup,
             timezone: this.state.timezone.value,
         }
@@ -82,9 +96,23 @@ class Settings extends React.Component {
         this.setState({timezone: timezone});
     }
 
-    handleInputChange = async (e, name, checked) => {
+    handleInputChange = async (e, name, value) => {
         e.preventDefault();
-        this.setState({[name]: checked});
+        this.setState({[name]: value});
+    }
+
+    handleHotspotPasswordChange = async () => {
+        let {hotspot_ssid, hotspot_encryption, hotspot_password} = this.state;
+        // Special string which allows a mobile device to connect to a specific Wi-Fi.
+        let qrCodeValue = `WIFI:S:${hotspot_ssid};T:${hotspot_encryption};P:${hotspot_password};;`;
+        this.setState({qrCodeValue});
+    }
+
+    toggleQRCode(e) {
+        if (e !== undefined) {
+            e.preventDefault();
+        }
+        this.setState({qrHidden: !this.state.qrHidden});
     }
 
     render() {
@@ -92,7 +120,16 @@ class Settings extends React.Component {
             return <Loader active inline='centered'/>
         }
 
-        let {disabled, download_on_startup, hotspot_on_startup, throttle_on_startup, timezone} = this.state;
+        let {
+            disabled,
+            download_on_startup,
+            hotspot_on_startup,
+            hotspot_password,
+            hotspot_ssid,
+            qrCodeValue,
+            throttle_on_startup,
+            timezone,
+        } = this.state;
 
         return (
             <Container fluid>
@@ -137,6 +174,45 @@ class Settings extends React.Component {
                               checked={throttle_on_startup === true}
                               onChange={(e, d) => this.handleInputChange(e, 'throttle_on_startup', d.checked)}
                     />
+
+                    <Form.Group inline>
+                        <Form.Field>
+                            <label>Hotspot SSID</label>
+                            <br/>
+                            <Input
+                                id='hotspot_ssid'
+                                value={hotspot_ssid}
+                                disabled={disabled || hotspot_ssid === null}
+                                onChange={(e, d) =>
+                                    this.setState({hotspot_ssid: d.value}, this.handleHotspotPasswordChange)}
+                            />
+                        </Form.Field>
+                        <Form.Field>
+                            <label>Hotspot Password</label>
+                            <br/>
+                            <Input
+                                id='hotspot_password'
+                                disabled={disabled || hotspot_password === null}
+                                value={hotspot_password}
+                                onChange={(e, d) =>
+                                    this.setState({hotspot_password: d.value}, this.handleHotspotPasswordChange)}
+                            />
+                        </Form.Field>
+                        <Form.Field>
+                            <div hidden={!this.state.qrHidden}>
+                                <Button icon onClick={(e) => this.toggleQRCode(e)}>
+                                    <Icon name='qrcode' size='big'/>
+                                </Button>
+                            </div>
+                            <div hidden={this.state.qrHidden}>
+                                <h3>Scan this QR Code to join hotspot</h3>
+                                <br/>
+                                <a onClick={this.toggleQRCode}>
+                                    <QRCode value={qrCodeValue} size={300}/>
+                                </a>
+                            </div>
+                        </Form.Field>
+                    </Form.Group>
 
                     <Form.Field>
                         <label>Timezone</label>

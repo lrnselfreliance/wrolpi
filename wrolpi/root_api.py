@@ -119,6 +119,8 @@ def get_settings(_: Request):
     settings = {
         'download_on_startup': config.download_on_startup,
         'hotspot_on_startup': config.hotspot_on_startup,
+        'hotspot_password': config.hotspot_password,
+        'hotspot_ssid': config.hotspot_ssid,
         'hotspot_status': admin.hotspot_status().name,
         'media_directory': get_media_directory(),
         'throttle_on_startup': config.throttle_on_startup,

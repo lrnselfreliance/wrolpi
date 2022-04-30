@@ -2,7 +2,7 @@ import enum
 import subprocess
 
 from wrolpi.cmd import which
-from wrolpi.common import logger
+from wrolpi.common import logger, WROLPI_CONFIG
 from wrolpi.vars import DEFAULT_CPU_FREQUENCY, DOCKERIZED
 
 logger = logger.getChild(__name__)
@@ -59,7 +59,7 @@ def enable_hotspot():
     elif status == HotspotStatus.disconnected:
         # Radio is on, but not connected.  Good, turn it into a hotspot.
         cmd = (SUDO, NMCLI, 'device', 'wifi', 'hotspot', 'ifname', 'wlan0',
-               'ssid', 'WROLPi', 'password', 'wrolpi hotspot')
+               'ssid', WROLPI_CONFIG.hotspot_ssid, 'password', WROLPI_CONFIG.hotspot_password)
         subprocess.check_call(cmd)
         return True
     elif status == HotspotStatus.unavailable:

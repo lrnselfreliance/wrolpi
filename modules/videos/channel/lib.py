@@ -1,14 +1,11 @@
-from collections import defaultdict
-from datetime import timedelta
 from pathlib import Path
-from typing import List, Dict, Union, Generator
+from typing import List, Dict, Union
 
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
 from wrolpi.common import run_after, logger, \
     get_media_directory
-from wrolpi.dates import today
 from wrolpi.db import get_db_curs, optional_session
 from wrolpi.downloader import download_manager
 from wrolpi.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError, InvalidDownload
@@ -108,23 +105,6 @@ def get_channel(session: Session, *, channel_id: int = None, source_id: str = No
         channel = channel.dict()
         channel['statistics'] = statistics
     return channel
-
-
-def _spread_by_frequency(channels: List[Channel]) -> Generator[Dict, None, None]:
-    channels_by_frequency = defaultdict(lambda: [])
-    for channel in channels:
-        channels_by_frequency[channel.download_frequency].append(channel)
-
-    for frequency, channels in channels_by_frequency.items():
-        # The seconds between each download.
-        chunk = frequency // len(channels)
-        for channel in channels:
-            # My position in the channel group.
-            index = channels.index(channel)
-            # My next download will be distributed by my frequency and my position.
-            position = chunk * index
-            next_download = today() + timedelta(seconds=frequency + position)
-            yield dict(url=channel.url, frequency=frequency, next_download=next_download)
 
 
 @run_after(save_channels_config)

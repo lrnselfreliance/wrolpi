@@ -10,6 +10,7 @@ import {
     Icon,
     Input,
     Loader,
+    Modal,
     Placeholder,
     Table
 } from "semantic-ui-react";
@@ -199,18 +200,19 @@ class Settings extends React.Component {
                             />
                         </Form.Field>
                         <Form.Field>
-                            <div hidden={!this.state.qrHidden}>
-                                <Button icon onClick={(e) => this.toggleQRCode(e)}>
-                                    <Icon name='qrcode' size='big'/>
-                                </Button>
-                            </div>
-                            <div hidden={this.state.qrHidden}>
-                                <h3>Scan this QR Code to join hotspot</h3>
-                                <br/>
-                                <a onClick={this.toggleQRCode}>
+                            <Modal closeIcon
+                                   onClose={this.toggleQRCode}
+                                   onOpen={this.toggleQRCode}
+                                   open={!this.state.qrHidden}
+                                   trigger={<Button icon><Icon name='qrcode' size='big'/></Button>}
+                                   >
+                                <Modal.Header>
+                                    Scan this code to join the hotspot
+                                </Modal.Header>
+                                <Modal.Content>
                                     <QRCode value={qrCodeValue} size={300}/>
-                                </a>
-                            </div>
+                                </Modal.Content>
+                            </Modal>
                         </Form.Field>
                     </Form.Group>
 

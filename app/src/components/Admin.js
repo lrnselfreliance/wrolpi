@@ -8,7 +8,6 @@ import {
     Form,
     Header,
     Icon,
-    Input,
     Loader,
     Modal,
     Placeholder,
@@ -60,8 +59,7 @@ class Settings extends React.Component {
         }
 
         this.handleSubmit = this.handleSubmit.bind(this);
-        this.toggleQRCode = this.toggleQRCode.bind(this);
-        this.handleHotspotPasswordChange = this.handleHotspotPasswordChange.bind(this);
+        this.handleHotspotChange = this.handleHotspotChange.bind(this);
     }
 
     async componentDidMount() {
@@ -77,7 +75,7 @@ class Settings extends React.Component {
             throttle_on_startup: settings.throttle_on_startup,
             throttle_status: settings.throttle_status,
             timezone: {value: settings.timezone, label: settings.timezone},
-        }, this.handleHotspotPasswordChange);
+        }, this.handleHotspotChange);
     }
 
     async handleSubmit(e) {
@@ -93,27 +91,16 @@ class Settings extends React.Component {
         await saveSettings(settings);
     }
 
-    handleTimezoneChange = async (timezone) => {
-        this.setState({timezone: timezone});
-    }
-
     handleInputChange = async (e, name, value) => {
-        e.preventDefault();
+        if (e) {e.preventDefault()}
         this.setState({[name]: value});
     }
 
-    handleHotspotPasswordChange = async () => {
+    handleHotspotChange = async () => {
         let {hotspot_ssid, hotspot_encryption, hotspot_password} = this.state;
         // Special string which allows a mobile device to connect to a specific Wi-Fi.
         let qrCodeValue = `WIFI:S:${hotspot_ssid};T:${hotspot_encryption};P:${hotspot_password};;`;
         this.setState({qrCodeValue});
-    }
-
-    toggleQRCode(e) {
-        if (e !== undefined) {
-            e.preventDefault();
-        }
-        this.setState({qrOpen: !this.state.qrOpen});
     }
 
     render() {
@@ -177,50 +164,40 @@ class Settings extends React.Component {
                     />
 
                     <Form.Group inline>
-                        <Form.Field>
-                            <label>Hotspot SSID</label>
-                            <br/>
-                            <Input
-                                id='hotspot_ssid'
-                                value={hotspot_ssid}
-                                disabled={disabled || hotspot_ssid === null}
-                                onChange={(e, d) =>
-                                    this.setState({hotspot_ssid: d.value}, this.handleHotspotPasswordChange)}
-                            />
-                        </Form.Field>
-                        <Form.Field>
-                            <label>Hotspot Password</label>
-                            <br/>
-                            <Input
-                                id='hotspot_password'
-                                disabled={disabled || hotspot_password === null}
-                                value={hotspot_password}
-                                onChange={(e, d) =>
-                                    this.setState({hotspot_password: d.value}, this.handleHotspotPasswordChange)}
-                            />
-                        </Form.Field>
-                        <Form.Field>
-                            <Modal closeIcon
-                                   onClose={this.toggleQRCode}
-                                   onOpen={this.toggleQRCode}
-                                   open={this.state.qrOpen}
-                                   trigger={<Button icon><Icon name='qrcode' size='big'/></Button>}
-                                   >
-                                <Modal.Header>
-                                    Scan this code to join the hotspot
-                                </Modal.Header>
-                                <Modal.Content>
-                                    <QRCode value={qrCodeValue} size={300}/>
-                                </Modal.Content>
-                            </Modal>
-                        </Form.Field>
+                        <Form.Input
+                            label='Hotspot SSID'
+                            value={hotspot_ssid}
+                            disabled={disabled || hotspot_ssid === null}
+                            onChange={(e, d) =>
+                                this.setState({hotspot_ssid: d.value}, this.handleHotspotChange)}
+                        />
+                        <Form.Input
+                            label='Hotspot Password'
+                            disabled={disabled || hotspot_password === null}
+                            value={hotspot_password}
+                            onChange={(e, d) =>
+                                this.setState({hotspot_password: d.value}, this.handleHotspotChange)}
+                        />
+                        <Modal closeIcon
+                               onClose={() => this.setState({qrOpen: false})}
+                               onOpen={() => this.setState({qrOpen: true})}
+                               open={this.state.qrOpen}
+                               trigger={<Button icon><Icon name='qrcode' size='big'/></Button>}
+                        >
+                            <Modal.Header>
+                                Scan this code to join the hotspot
+                            </Modal.Header>
+                            <Modal.Content>
+                                <QRCode value={qrCodeValue} size={300}/>
+                            </Modal.Content>
+                        </Modal>
                     </Form.Group>
 
                     <Form.Field>
                         <label>Timezone</label>
                         <TimezoneSelect
                             value={timezone}
-                            onChange={this.handleTimezoneChange}
+                            onChange={(v) => this.handleInputChange(null, 'timezone', v)}
                         />
                     </Form.Field>
 

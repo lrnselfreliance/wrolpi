@@ -16,6 +16,8 @@ class SettingsResponse:
 class SettingsRequest:
     download_on_startup: Optional[bool] = None
     hotspot_on_startup: Optional[bool] = None
+    hotspot_password: Optional[str] = None
+    hotspot_ssid: Optional[str] = None
     hotspot_status: Optional[bool] = None
     media_directory: Optional[str] = None
     throttle_on: Optional[bool] = None

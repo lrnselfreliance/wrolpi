@@ -200,6 +200,14 @@ def test_hotspot_settings(test_session, test_client, test_config):
         config = get_config()
         assert config.hotspot_on_startup is True
 
+        # Hotspot password can be changed.
+        mock_admin.disable_hotspot.return_value = True
+        content = {'hotspot_password': 'new password', 'hotspot_ssid': 'new ssid'}
+        request, response = test_client.patch('/api/settings', content=json.dumps(content))
+        assert response.status_code == HTTPStatus.NO_CONTENT
+        assert config.hotspot_password == 'new password'
+        assert config.hotspot_ssid == 'new ssid'
+
 
 @skip_circleci
 def test_throttle_toggle(test_session, test_client, test_config):

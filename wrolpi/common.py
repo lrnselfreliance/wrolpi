@@ -262,6 +262,8 @@ class WROLPiConfig(ConfigFile):
     default_config = dict(
         download_on_startup=True,
         hotspot_on_startup=True,
+        hotspot_password='wrolpi hotspot',
+        hotspot_ssid='WROLPi',
         throttle_on_startup=False,
         timezone=str(DEFAULT_TIMEZONE),
         wrol_mode=False,
@@ -282,6 +284,22 @@ class WROLPiConfig(ConfigFile):
     @hotspot_on_startup.setter
     def hotspot_on_startup(self, value: bool):
         self.update({'hotspot_on_startup': value})
+
+    @property
+    def hotspot_password(self) -> str:
+        return self._config['hotspot_password']
+
+    @hotspot_password.setter
+    def hotspot_password(self, value: str):
+        self.update({'hotspot_password': value})
+
+    @property
+    def hotspot_ssid(self) -> str:
+        return self._config['hotspot_ssid']
+
+    @hotspot_ssid.setter
+    def hotspot_ssid(self, value: str):
+        self.update({'hotspot_ssid': value})
 
     @property
     def throttle_on_startup(self) -> bool:

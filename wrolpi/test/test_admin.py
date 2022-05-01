@@ -4,6 +4,7 @@ from unittest.mock import call
 
 from wrolpi import admin
 from wrolpi.admin import HotspotStatus
+from wrolpi.common import WROLPI_CONFIG
 from wrolpi.test.common import skip_circleci
 
 
@@ -66,6 +67,31 @@ def test_enable_hotspot_connected():
                 call((PosixPath('/usr/bin/sudo'), PosixPath('/usr/bin/nmcli'), 'device', 'wifi', 'hotspot', 'ifname',
                       'wlan0', 'ssid', 'WROLPi', 'password', 'wrolpi hotspot'))]
         )
+
+
+def test_change_hotspot(test_config):
+    """The hotspot can be configured."""
+    with mock.patch('wrolpi.admin.hotspot_status') as mock_hotspot_status, \
+            mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
+            mock.patch('wrolpi.admin.NMCLI', PosixPath('/usr/bin/nmcli')):
+        mock_subprocess.check_output.return_value = 0
+        mock_hotspot_status.return_value = HotspotStatus.disconnected
+        assert admin.enable_hotspot() is True
+        mock_subprocess.check_call.assert_called_once_with(
+            (PosixPath('/usr/bin/sudo'), PosixPath('/usr/bin/nmcli'), 'device', 'wifi', 'hotspot', 'ifname', 'wlan0',
+             'ssid', 'WROLPi', 'password', 'wrolpi hotspot'))
+
+    WROLPI_CONFIG.hotspot_ssid = 'New SSID'
+    WROLPI_CONFIG.hotspot_password = '$uper Secure *#'
+    with mock.patch('wrolpi.admin.hotspot_status') as mock_hotspot_status, \
+            mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
+            mock.patch('wrolpi.admin.NMCLI', PosixPath('/usr/bin/nmcli')):
+        mock_subprocess.check_output.return_value = 0
+        mock_hotspot_status.return_value = HotspotStatus.disconnected
+        assert admin.enable_hotspot() is True
+        mock_subprocess.check_call.assert_called_once_with(
+            (PosixPath('/usr/bin/sudo'), PosixPath('/usr/bin/nmcli'), 'device', 'wifi', 'hotspot', 'ifname', 'wlan0',
+             'ssid', 'New SSID', 'password', '$uper Secure *#'))
 
 
 def test_throttle_on():

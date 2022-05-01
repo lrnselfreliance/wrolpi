@@ -83,7 +83,7 @@ def test_directory() -> pathlib.Path:
 
 
 @pytest.fixture(autouse=True)
-def test_config(test_directory):
+def test_config(test_directory) -> pathlib.Path:
     """
     Create a test config based off the example config.
     """

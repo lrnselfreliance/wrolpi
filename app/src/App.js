@@ -14,12 +14,13 @@ import {ArchiveRoute, ArchivesList} from "./components/Archive";
 import {Saver} from "./components/Upload";
 import {MoreButton, PageContainer, SearchInput} from "./components/Common";
 import {FilesRoute} from "./components/Files";
-import {useSearch, useVersion} from "./hooks/customHooks";
+import {useSearch, useUp, useVersion} from "./hooks/customHooks";
 import {MapRoute} from "./components/Map";
 
 function Welcome() {
     const {searchStr, setSearchStr, archives, videos} = useSearch();
     const history = useHistory();
+    useUp();
 
     let body = (
         <>

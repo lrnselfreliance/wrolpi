@@ -570,8 +570,14 @@ export const useWROLMode = () => {
     const [enabled, setEnabled] = useState(false);
 
     const fetchStatus = async () => {
-        let settings = await getSettings();
-        setEnabled(settings.wrol_mode);
+        try {
+            const settings = await getSettings();
+            if (settings) {
+                setEnabled(settings.wrol_mode);
+            }
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     useEffect(() => {

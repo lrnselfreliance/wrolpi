@@ -18,7 +18,8 @@ import {
     downloadChannel,
     getChannel,
     getChannels,
-    getDirectories, getSettings,
+    getDirectories,
+    getSettings,
     refreshChannel,
     updateChannel,
     validateRegex
@@ -565,8 +566,14 @@ export class Channels extends React.Component {
     }
 
     async componentDidMount() {
-        let channels = await getChannels();
-        this.setState({channels, results: channels});
+        try {
+            let channels = await getChannels();
+            if (channels) {
+                this.setState({channels, results: channels});
+            }
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     handleSearchChange = async (e, {value}) => {

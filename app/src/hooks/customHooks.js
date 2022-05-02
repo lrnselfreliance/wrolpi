@@ -2,6 +2,7 @@ import {useEffect, useState} from "react";
 import {
     fetchDomains,
     filesSearch,
+    getAPIStatus,
     getDownloaders,
     getFiles,
     getHotspotStatus,
@@ -15,6 +16,7 @@ import {
     startDownloads
 } from "../api";
 import {useHistory} from "react-router-dom";
+import {toast} from "react-semantic-toasts";
 
 export const useSearchParam = (key, defaultValue = null) => {
     // Get a window.location.search param.
@@ -43,14 +45,24 @@ export const useSearch = () => {
 
     const localSearchArchives = async (term) => {
         setArchives(null);
-        const [archives] = await searchArchives(0, 6, null, term);
-        setArchives(archives);
+        try {
+            const [archives] = await searchArchives(0, 6, null, term);
+            setArchives(archives);
+        } catch (e) {
+            console.error(e);
+            setArchives([]);
+        }
     }
 
     const localSearchVideos = async (term) => {
         setVideos(null);
-        const [videos] = await searchVideos(0, 6, null, term);
-        setVideos(videos);
+        try {
+            const [videos] = await searchVideos(0, 6, null, term);
+            setVideos(videos);
+        } catch (e) {
+            console.error(e);
+            setVideos([]);
+        }
     }
 
     useEffect(() => {
@@ -70,9 +82,14 @@ export const useDomains = () => {
     const _fetchDomains = async () => {
         setDomains(null);
         setTotal(0);
-        let [domains, total] = await fetchDomains();
-        setDomains(domains);
-        setTotal(total);
+        try {
+            let [domains, total] = await fetchDomains();
+            setDomains(domains);
+            setTotal(total);
+        } catch (e) {
+            setDomains([]);
+            setTotal(0);
+        }
     }
 
     useEffect(() => {
@@ -94,9 +111,15 @@ export const useArchives = ({defaultLimit = 20}) => {
 
     const search = async () => {
         setArchives(null);
-        const [archives, total] = await searchArchives(offset, limit, domain, searchStr);
-        setTotalPages(Math.floor(total / limit) + 1);
-        setArchives(archives);
+        try {
+            const [archives, total] = await searchArchives(offset, limit, domain, searchStr);
+            setTotalPages(Math.floor(total / limit) + 1);
+            setArchives(archives);
+        } catch (e) {
+            console.error(e);
+            setTotalPages(0);
+            setArchives([]);
+        }
     }
 
     useEffect(() => {
@@ -133,8 +156,12 @@ export const useVersion = () => {
     const [version, setVersion] = useState('');
 
     const fetchVersion = async () => {
-        let version = await getVersion();
-        setVersion(version);
+        try {
+            let version = await getVersion();
+            setVersion(version);
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     useEffect(() => {
@@ -157,9 +184,19 @@ export const useSearchFiles = ({defaultLimit = 50}) => {
         setSearchFiles([]);
         setTotalPages(0);
         if (searchStr) {
-            let [files, total] = await filesSearch(offset, limit, searchStr);
-            setSearchFiles(files);
-            setTotalPages(Math.floor(total / limit) + 1);
+            try {
+                let [files, total] = await filesSearch(offset, limit, searchStr);
+                setSearchFiles(files);
+                setTotalPages(Math.floor(total / limit) + 1);
+            } catch (e) {
+                console.error(e);
+                toast({
+                    type: 'error',
+                    title: 'Unexpected server response',
+                    description: 'Could not get files',
+                    time: 5000,
+                });
+            }
         }
     }
 
@@ -182,8 +219,13 @@ export const useBrowseFiles = () => {
     const [openFolders, setOpenFolders] = useState([]);
 
     const fetchFiles = async () => {
-        const files = await getFiles(openFolders);
-        setBrowseFiles(files);
+        try {
+            const files = await getFiles(openFolders);
+            setBrowseFiles(files);
+        } catch (e) {
+            console.log(e);
+            setBrowseFiles([]);
+        }
     }
 
     useEffect(() => {
@@ -197,7 +239,12 @@ export const useHotspot = () => {
     const [on, setOn] = useState(null);
 
     const fetchHotspotStatus = async () => {
-        const status = await getHotspotStatus();
+        let status;
+        try {
+            status = await getHotspotStatus();
+        } catch (e) {
+            console.error(e);
+        }
         if (status === 'connected') {
             // Hotspot is on.
             setOn(true);
@@ -228,9 +275,13 @@ export const useDownloaders = () => {
     const [downloaders, setDownloaders] = useState(null);
 
     const fetchDownloaders = async () => {
-        let data = await getDownloaders();
-        setDownloaders(data['downloaders']);
-        setOn(!data['manager_disabled']);
+        try {
+            let data = await getDownloaders();
+            setDownloaders(data['downloaders']);
+            setOn(!data['manager_disabled']);
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     useEffect(() => {
@@ -254,7 +305,12 @@ export const useThrottle = () => {
     const [on, setOn] = useState(null);
 
     const fetchThrottleStatus = async () => {
-        const status = await getThrottleStatus();
+        let status;
+        try {
+            status = await getThrottleStatus();
+        } catch (e) {
+            console.error(e);
+        }
         if (status === 'powersave') {
             setOn(true);
         } else if (status === 'ondemand') {
@@ -275,4 +331,23 @@ export const useThrottle = () => {
     }
 
     return {on, setOn, setThrottle: localSetThrottle};
+}
+
+export const useUp = () => {
+    // Checks that the API is up.
+    const fetchAPIStatus = async () => {
+        let status = await getAPIStatus();
+        if (status === false) {
+            toast({
+                type: 'error',
+                title: 'Error!',
+                description: `API did not respond.  Check the server's status.`,
+                time: 5000,
+            });
+        }
+    }
+
+    useEffect(() => {
+        fetchAPIStatus();
+    }, []);
 }

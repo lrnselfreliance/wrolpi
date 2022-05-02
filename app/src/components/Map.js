@@ -1,5 +1,5 @@
 import React from "react";
-import {HelpPopup, humanFileSize, minutesToTimestamp, PageContainer, TabLinks, WROLModeMessage} from "./Common";
+import {HelpPopup, humanFileSize, PageContainer, TabLinks, WROLModeMessage} from "./Common";
 import {Route} from "react-router-dom";
 import {getMapImportStatus, importMapFiles} from "../api";
 import Table from "semantic-ui-react/dist/commonjs/collections/Table";
@@ -28,13 +28,17 @@ class ManageMap extends React.Component {
     }
 
     fetchImportStatus = async () => {
-        const importStatus = await getMapImportStatus();
-        this.setState({
-            files: importStatus['files'],
-            importing: importStatus['importing'],
-            import_running: importStatus['import_running'],
-            dockerized: importStatus['dockerized'],
-        });
+        try {
+            const importStatus = await getMapImportStatus();
+            this.setState({
+                files: importStatus['files'],
+                importing: importStatus['importing'],
+                import_running: importStatus['import_running'],
+                dockerized: importStatus['dockerized'],
+            });
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     import = async (e) => {

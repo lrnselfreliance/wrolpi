@@ -37,11 +37,15 @@ class InventorySummary extends React.Component {
 
     fetchInventory = async () => {
         if (this.state.inventory) {
-            let {by_category, by_subcategory, by_name} = await getInventory(this.state.inventory.id);
-            by_category = enumerate(by_category);
-            by_subcategory = enumerate(by_subcategory);
-            by_name = enumerate(by_name);
-            this.setState({by_category, by_subcategory, by_name});
+            try {
+                let {by_category, by_subcategory, by_name} = await getInventory(this.state.inventory.id);
+                by_category = enumerate(by_category);
+                by_subcategory = enumerate(by_subcategory);
+                by_name = enumerate(by_name);
+                this.setState({by_category, by_subcategory, by_name});
+            } catch (e) {
+                console.error(e);
+            }
         }
     }
 
@@ -611,20 +615,24 @@ class InventorySelector extends React.Component {
     }
 
     async fetchInventories() {
-        let inventories = await getInventories();
-        let options = [];
-        for (let i = 0; i < inventories.length; i++) {
-            let inventory = inventories[i];
-            options = options.concat([{
-                key: inventory.id,
-                text: inventory.name,
-                value: inventory.id,
-                id: inventory.id,
-            }])
+        try {
+            let inventories = await getInventories();
+            let options = [];
+            for (let i = 0; i < inventories.length; i++) {
+                let inventory = inventories[i];
+                options = options.concat([{
+                    key: inventory.id,
+                    text: inventory.name,
+                    value: inventory.id,
+                    id: inventory.id,
+                }])
+            }
+            let selected = this.state.selected || inventories[0];
+            this.setState({inventories, options, selected},
+                () => this.props.setInventory(selected));
+        } catch (e) {
+            console.error(e);
         }
-        let selected = this.state.selected || inventories[0];
-        this.setState({inventories, options, selected},
-            () => this.props.setInventory(selected));
     }
 
     setInventory = (e, {value}) => {
@@ -748,15 +756,19 @@ class CategoryInputs extends React.Component {
     }
 
     fetchCategories = async () => {
-        let categories = await getCategories();
-        categories = enumerate(categories);
-        let newCategories = [];
-        for (let i = 0; i < categories.length; i++) {
-            let [key, sc] = categories[i];
-            let [subcategory, category] = sc;
-            newCategories = newCategories.concat([[key, subcategory, `${subcategory}/${category}`]]);
+        try {
+            let categories = await getCategories();
+            categories = enumerate(categories);
+            let newCategories = [];
+            for (let i = 0; i < categories.length; i++) {
+                let [key, sc] = categories[i];
+                let [subcategory, category] = sc;
+                newCategories = newCategories.concat([[key, subcategory, `${subcategory}/${category}`]]);
+            }
+            this.setState({categories: newCategories});
+        } catch (e) {
+            console.error(e);
         }
-        this.setState({categories: newCategories});
     }
 
     clearInputs = () => {
@@ -858,14 +870,18 @@ class BrandInput extends React.Component {
     }
 
     fetchBrands = async () => {
-        let brands = await getBrands();
-        brands = enumerate(brands);
-        let newBrands = [];
-        for (let i = 0; i < brands.length; i++) {
-            let [key, brand] = brands[i];
-            newBrands = newBrands.concat([[key, brand, brand]]);
+        try {
+            let brands = await getBrands();
+            brands = enumerate(brands);
+            let newBrands = [];
+            for (let i = 0; i < brands.length; i++) {
+                let [key, brand] = brands[i];
+                newBrands = newBrands.concat([[key, brand, brand]]);
+            }
+            this.setState({options: newBrands});
+        } catch (e) {
+            console.error(e);
         }
-        this.setState({options: newBrands});
     }
 
     handleInputChange = (e, {name, value}) => {

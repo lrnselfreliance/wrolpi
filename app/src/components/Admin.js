@@ -63,19 +63,23 @@ class Settings extends React.Component {
     }
 
     async componentDidMount() {
-        const settings = await getSettings();
-        this.setState({
-            ready: true,
-            disabled: settings.wrol_mode,
-            download_on_startup: settings.download_on_startup,
-            hotspot_on_startup: settings.hotspot_on_startup,
-            hotspot_password: settings.hotspot_password,
-            hotspot_ssid: settings.hotspot_ssid,
-            hotspot_status: settings.hotspot_status,
-            throttle_on_startup: settings.throttle_on_startup,
-            throttle_status: settings.throttle_status,
-            timezone: {value: settings.timezone, label: settings.timezone},
-        }, this.handleHotspotChange);
+        try {
+            const settings = await getSettings();
+            this.setState({
+                ready: true,
+                disabled: settings.wrol_mode,
+                download_on_startup: settings.download_on_startup,
+                hotspot_on_startup: settings.hotspot_on_startup,
+                hotspot_password: settings.hotspot_password,
+                hotspot_ssid: settings.hotspot_ssid,
+                hotspot_status: settings.hotspot_status,
+                throttle_on_startup: settings.throttle_on_startup,
+                throttle_status: settings.throttle_status,
+                timezone: {value: settings.timezone, label: settings.timezone},
+            }, this.handleHotspotChange);
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     async handleSubmit(e) {
@@ -92,7 +96,9 @@ class Settings extends React.Component {
     }
 
     handleInputChange = async (e, name, value) => {
-        if (e) {e.preventDefault()}
+        if (e) {
+            e.preventDefault()
+        }
         this.setState({[name]: value});
     }
 
@@ -221,8 +227,12 @@ class WROLMode extends React.Component {
     }
 
     async componentDidMount() {
-        let settings = await getSettings();
-        this.setState({ready: true, WROLMode: settings.wrol_mode});
+        try {
+            let settings = await getSettings();
+            this.setState({ready: true, WROLMode: settings.wrol_mode});
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     toggleWROLMode = async () => {
@@ -464,12 +474,16 @@ class Downloads extends React.Component {
     }
 
     fetchDownloads = async () => {
-        let data = await getDownloads();
-        this.setState({
-            once_downloads: data.once_downloads,
-            recurring_downloads: data.recurring_downloads,
-            pending_downloads: data.pending_downloads,
-        });
+        try {
+            let data = await getDownloads();
+            this.setState({
+                once_downloads: data.once_downloads,
+                recurring_downloads: data.recurring_downloads,
+                pending_downloads: data.pending_downloads,
+            });
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     render() {

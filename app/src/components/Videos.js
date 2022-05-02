@@ -306,10 +306,13 @@ class Videos extends React.Component {
         // Pass any enabled filters to the search.
         let filtersArr = this.enabledFilters();
 
-        let [videos, total] = await searchVideos(offset, limit, channel_id, queryStr, searchOrder, filtersArr);
-
-        let totalPages = Math.round(total / this.state.limit) || 1;
-        this.setState({videos, totalPages});
+        try {
+            let [videos, total] = await searchVideos(offset, limit, channel_id, queryStr, searchOrder, filtersArr);
+            let totalPages = Math.round(total / this.state.limit) || 1;
+            this.setState({videos, totalPages});
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     changePage = async (activePage) => {
@@ -573,12 +576,16 @@ class Statistics extends React.Component {
     }
 
     async fetchStatistics() {
-        let stats = await getStatistics();
-        stats.videos.sum_duration = secondsToString(stats.videos.sum_duration);
-        stats.videos.sum_size = humanFileSize(stats.videos.sum_size, true);
-        stats.videos.max_size = humanFileSize(stats.videos.max_size, true);
-        stats.historical.average_size = humanFileSize(stats.historical.average_size, true);
-        this.setState({...stats});
+        try {
+            let stats = await getStatistics();
+            stats.videos.sum_duration = secondsToString(stats.videos.sum_duration);
+            stats.videos.sum_size = humanFileSize(stats.videos.sum_size, true);
+            stats.videos.max_size = humanFileSize(stats.videos.max_size, true);
+            stats.historical.average_size = humanFileSize(stats.historical.average_size, true);
+            this.setState({...stats});
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     buildSegment(title, names, stats) {

@@ -1,12 +1,4 @@
-import {
-    API_URI,
-    ARCHIVES_API,
-    DEFAULT_LIMIT,
-    emptyToNull,
-    OTP_API,
-    secondsToDateTime,
-    VIDEOS_API
-} from "./components/Common";
+import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, emptyToNull, OTP_API, VIDEOS_API} from "./components/Common";
 import {toast} from 'react-semantic-toasts';
 
 function timeoutPromise(ms, promise) {
@@ -111,7 +103,16 @@ export async function deleteChannel(id) {
 
 export async function getChannels() {
     let response = await apiGet(`${VIDEOS_API}/channels`);
-    return (await response.json())['channels'];
+    if (response.status === 200) {
+        return (await response.json())['channels'];
+    } else {
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: 'Failed to get channels.  See server logs.',
+            time: 5000,
+        });
+    }
 }
 
 export async function getChannel(id) {
@@ -138,7 +139,12 @@ export async function searchVideos(offset, limit, channel_id, searchStr, order_b
         let data = await response.json();
         return [data['videos'], data['totals']['videos']];
     } else {
-        throw Error(`Unable to search videos`);
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: 'Failed to search videos.  See server logs.',
+            time: 5000,
+        });
     }
 }
 
@@ -171,7 +177,16 @@ export async function getDirectories(search_str) {
 
 export async function getSettings() {
     let response = await apiGet(`${API_URI}/settings`);
-    return await response.json();
+    if (response.status === 200) {
+        return await response.json();
+    } else {
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: 'Could not get settings',
+            time: 5000,
+        });
+    }
 }
 
 export async function saveSettings(settings) {
@@ -180,8 +195,16 @@ export async function saveSettings(settings) {
 
 export async function getDownloads() {
     let response = await apiGet(`${API_URI}/download`);
-    let data = await response.json();
-    return data;
+    if (response.status === 200) {
+        return await response.json();
+    } else {
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: 'Could not get downloads',
+            time: 5000,
+        });
+    }
 }
 
 
@@ -198,7 +221,16 @@ export async function favoriteVideo(video_id, favorite) {
 
 export async function getStatistics() {
     let response = await apiGet(`${VIDEOS_API}/statistics`);
-    return (await response.json())['statistics'];
+    if (response.status === 200) {
+        return (await response.json())['statistics'];
+    } else {
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: 'Could not get statistics',
+            time: 5000,
+        });
+    }
 }
 
 export async function refresh() {
@@ -233,51 +265,87 @@ export async function refreshChannel(id) {
 export async function encryptOTP(otp, plaintext) {
     let body = {otp, plaintext};
     let response = await apiPost(`${OTP_API}/encrypt_otp`, body);
-    if (response.status !== 200) {
+    if (response.status === 200) {
+        return await response.json();
+    } else {
         toast({
             type: 'error',
             title: 'Error!',
             description: 'Failed to encrypt OTP',
             time: 5000,
         });
-        return;
     }
-    return await response.json();
 }
 
 export async function decryptOTP(otp, ciphertext) {
     let body = {otp, ciphertext};
     let response = await apiPost(`${OTP_API}/decrypt_otp`, body);
-    if (response.status !== 200) {
+    if (response.status === 200) {
+        return await response.json();
+    } else {
         toast({
             type: 'error',
             title: 'Error!',
             description: 'Failed to decrypt OTP',
             time: 5000,
         });
-        return;
     }
-    return await response.json();
 }
 
 export async function getCategories() {
     let response = await apiGet(`${API_URI}/inventory/categories`);
-    return (await response.json())['categories'];
+    if (response.status === 200) {
+        return (await response.json())['categories'];
+    } else {
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: 'Could not get categories',
+            time: 5000,
+        });
+    }
 }
 
 export async function getBrands() {
     let response = await apiGet(`${API_URI}/inventory/brands`);
-    return (await response.json())['brands'];
+    if (response.status === 200) {
+        return (await response.json())['brands'];
+    } else {
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: 'Could not get brands',
+            time: 5000,
+        });
+    }
 }
 
 export async function getInventories() {
     let response = await apiGet(`${API_URI}/inventory`);
-    return (await response.json())['inventories'];
+    if (response.status === 200) {
+        return (await response.json())['inventories'];
+    } else {
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: 'Could not get inventories',
+            time: 5000,
+        });
+    }
 }
 
 export async function getInventory(inventoryId) {
     let response = await apiGet(`${API_URI}/inventory/${inventoryId}`);
-    return await response.json();
+    if (response.status === 200) {
+        return await response.json();
+    } else {
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: 'Could not get inventory',
+            time: 5000,
+        });
+    }
 }
 
 export async function saveInventory(inventory) {
@@ -388,7 +456,7 @@ export async function getDownloaders() {
         let response = await apiGet(`${API_URI}/downloaders`);
         return await response.json();
     } catch (e) {
-        return {};
+        return {downloaders: []};
     }
 }
 
@@ -396,7 +464,7 @@ const replaceFileDatetimes = (files) => {
     for (let i = 0; i < files.length; i++) {
         let file = files[i];
         if (file['modified']) {
-            files[i]['modified'] = secondsToDateTime(file['modified']);
+            files[i]['modified'] = file['modified'] * 1000;
         }
     }
     return files;
@@ -440,8 +508,10 @@ export async function deleteFile(file) {
 
 export async function getVersion() {
     let response = await apiGet(`${API_URI}/settings`);
-    let data = await response.json();
-    return data['version'];
+    if (response.status === 200) {
+        let data = await response.json();
+        return data['version'];
+    }
 }
 
 export async function getHotspotStatus() {
@@ -514,7 +584,16 @@ export async function setThrottle(on) {
 
 export async function getMapImportStatus() {
     let response = await apiGet(`${API_URI}/map/files`);
-    return await response.json();
+    if (response.status === 200) {
+        return await response.json();
+    } else {
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: 'Could not get import status',
+            time: 5000,
+        });
+    }
 }
 
 export async function importMapFiles(paths) {
@@ -558,4 +637,9 @@ export async function clearFailedDownloads() {
             time: 5000,
         });
     }
+}
+
+export async function getAPIStatus() {
+    let response = await apiGet(`${API_URI}/echo`);
+    return response.status === 200;
 }

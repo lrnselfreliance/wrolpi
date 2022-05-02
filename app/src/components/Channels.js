@@ -18,7 +18,8 @@ import {
     downloadChannel,
     getChannel,
     getChannels,
-    getDirectories, getSettings,
+    getDirectories,
+    getSettings,
     refreshChannel,
     updateChannel,
     validateRegex
@@ -442,7 +443,7 @@ class ChannelPage extends APIForm {
                                 <Button color='blue' onClick={this.downloadChannel}>
                                     Download
                                 </Button>
-                                <Button color='inverted blue' onClick={this.refreshChannel}>
+                                <Button inverted color='blue' onClick={this.refreshChannel}>
                                     Refresh
                                 </Button>
                             </>
@@ -565,8 +566,14 @@ export class Channels extends React.Component {
     }
 
     async componentDidMount() {
-        let channels = await getChannels();
-        this.setState({channels, results: channels});
+        try {
+            let channels = await getChannels();
+            if (channels) {
+                this.setState({channels, results: channels});
+            }
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     handleSearchChange = async (e, {value}) => {

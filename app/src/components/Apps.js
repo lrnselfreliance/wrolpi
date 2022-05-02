@@ -17,8 +17,12 @@ class Encrypt extends React.Component {
 
     handleSubmit = async (e) => {
         e.preventDefault();
-        let {otp, plaintext, ciphertext} = await encryptOTP(this.state.otp, this.state.plaintext);
-        this.setState({otp, plaintext, ciphertext});
+        try {
+            let {otp, plaintext, ciphertext} = await encryptOTP(this.state.otp, this.state.plaintext);
+            this.setState({otp, plaintext, ciphertext});
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     handleInputChange = async (event, {name, value}) => {
@@ -74,8 +78,12 @@ class Decrypt extends React.Component {
 
     handleSubmit = async (e) => {
         e.preventDefault();
-        let {otp, plaintext, ciphertext} = await decryptOTP(this.state.otp, this.state.ciphertext);
-        this.setState({otp, plaintext, ciphertext});
+        try {
+            let {otp, plaintext, ciphertext} = await decryptOTP(this.state.otp, this.state.ciphertext);
+            this.setState({otp, plaintext, ciphertext});
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     handleInputChange = async (event, {name, value}) => {

@@ -443,7 +443,7 @@ class ChannelPage extends APIForm {
                                 <Button color='blue' onClick={this.downloadChannel}>
                                     Download
                                 </Button>
-                                <Button color='inverted blue' onClick={this.refreshChannel}>
+                                <Button inverted color='blue' onClick={this.refreshChannel}>
                                     Refresh
                                 </Button>
                             </>

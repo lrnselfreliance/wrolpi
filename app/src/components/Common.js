@@ -142,7 +142,7 @@ export function VideoCard({video}) {
 
     let imageLabel = null;
     if (video.favorite) {
-        imageLabel = {as: 'a', corner: 'left', icon: 'heart', color: 'green'};
+        imageLabel = {corner: 'left', icon: 'heart', color: 'green'};
     }
 
     return (

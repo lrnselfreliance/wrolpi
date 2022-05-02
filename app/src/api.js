@@ -1,12 +1,4 @@
-import {
-    API_URI,
-    ARCHIVES_API,
-    DEFAULT_LIMIT,
-    emptyToNull,
-    OTP_API,
-    secondsToDateTime,
-    VIDEOS_API
-} from "./components/Common";
+import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, emptyToNull, OTP_API, VIDEOS_API} from "./components/Common";
 import {toast} from 'react-semantic-toasts';
 
 function timeoutPromise(ms, promise) {
@@ -472,7 +464,7 @@ const replaceFileDatetimes = (files) => {
     for (let i = 0; i < files.length; i++) {
         let file = files[i];
         if (file['modified']) {
-            files[i]['modified'] = secondsToDateTime(file['modified']);
+            files[i]['modified'] = file['modified'] * 1000;
         }
     }
     return files;

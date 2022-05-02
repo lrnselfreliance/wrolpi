@@ -111,7 +111,7 @@ export async function deleteChannel(id) {
 
 export async function getChannels() {
     let response = await apiGet(`${VIDEOS_API}/channels`);
-    if (response.stack === 200) {
+    if (response.status === 200) {
         return (await response.json())['channels'];
     } else {
         toast({
@@ -185,7 +185,7 @@ export async function getDirectories(search_str) {
 
 export async function getSettings() {
     let response = await apiGet(`${API_URI}/settings`);
-    if (response === 200) {
+    if (response.status === 200) {
         return await response.json();
     } else {
         toast({

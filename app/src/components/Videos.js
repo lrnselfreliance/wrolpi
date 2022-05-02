@@ -306,15 +306,13 @@ class Videos extends React.Component {
         // Pass any enabled filters to the search.
         let filtersArr = this.enabledFilters();
 
-        let videos = [];
-        let total = 0;
         try {
             let [videos, total] = await searchVideos(offset, limit, channel_id, queryStr, searchOrder, filtersArr);
+            let totalPages = Math.round(total / this.state.limit) || 1;
+            this.setState({videos, totalPages});
         } catch (e) {
             console.error(e);
         }
-        let totalPages = Math.round(total / this.state.limit) || 1;
-        this.setState({videos, totalPages});
     }
 
     changePage = async (activePage) => {

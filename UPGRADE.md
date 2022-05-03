@@ -1,5 +1,10 @@
 # Upgrading WROLPi
 
+# Table of Contents
+
+* [Upgrading Docker containers](#upgrading-docker-containers)
+* [Upgrading Raspberry Pi or Debian 11 Installation](#upgrading-raspberry-pi-or-debian-11-installation)
+
 ## Upgrading Docker containers
 
 1. Pull the latest master
@@ -14,3 +19,12 @@
     * `docker-compose run --rm api db upgrade`
 6. Start all docker containers
     * `docker-compose up -d`
+
+## Upgrading Raspberry Pi or Debian 11 Installation
+
+1. Get the latest release install script
+    * `wget https://raw.githubusercontent.com/lrnselfreliance/wrolpi/release/install.sh -O /tmp/install.sh`
+2. Run the installation script
+    * `sudo /bin/bash /tmp/install.sh`
+3. Start WROLPi
+    * `sudo systemctl start wrolpi.target`

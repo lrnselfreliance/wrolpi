@@ -39,9 +39,7 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 
 <a href="https://www.youtube.com/watch?v=g0Do_mlQcBU"> ![YouTube Demo Video](https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/demo_link.jpg)</a>
 
-
-Table of Contents
-=================
+# Table of Contents
 
 * [Try WROLPi](#try-wrolpi)
 * [Debian 11 Install](#debian-11-install)

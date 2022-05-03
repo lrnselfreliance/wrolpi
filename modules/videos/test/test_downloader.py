@@ -1,6 +1,7 @@
 import pathlib
 import shutil
 from copy import copy
+from itertools import zip_longest
 from unittest import mock
 
 import pytest
@@ -13,20 +14,9 @@ from modules.videos.models import Channel, Video
 from wrolpi.db import get_db_context
 from wrolpi.downloader import DownloadManager, Download
 from wrolpi.errors import InvalidDownload
-from wrolpi.test.common import wrap_test_db, TestAPI
+from wrolpi.test.common import TestAPI
 from wrolpi.test.test_downloader import HTTPDownloader
 from wrolpi.vars import PROJECT_DIR
-
-
-class FakeYDL:
-
-    @staticmethod
-    def extract_info(*a, **kw):
-        return {
-            'entries': [
-                {'id': 1},
-            ],
-        }
 
 
 def test_find_all_missing_videos(test_session, channel_factory, video_factory):
@@ -155,68 +145,52 @@ class TestVideosDownloaders(TestAPI):
         self.assertEqual(self.mgr.get_downloader('https://www.youtube.com/c/LearningSelfReliance')[0], self.cd)
         self.assertEqual(self.mgr.get_downloader('https://www.youtube.com/watch?v=31jPEBiAC3c')[0], self.vd)
 
-    @staticmethod
-    def _make_video_files(channel_dir):
-        video_path = channel_dir / 'video.mp4'
-        poster_path = channel_dir / 'video.jpg'
-        description_path = channel_dir / 'video.description'
-        info_json_path = channel_dir / 'video.info.json'
-        video_path.touch()
-        poster_path.touch()
-        description_path.touch()
-        info_json_path.touch()
-        return video_path, poster_path, description_path, info_json_path
 
-    @wrap_test_db
-    def test_video_download_no_channel(self):
-        _, session = get_db_context()
+def test_video_download_no_channel(test_session, video_download_manager, video_factory, test_directory,
+                                   mock_video_extract_info, mock_video_process_runner):
+    """A video can be downloaded even if it does not have a Channel."""
+    channel_dir = test_directory / 'NO CHANNEL'
+    channel_dir.mkdir(parents=True)
+    video_path = channel_dir / 'video.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
 
-        channel_dir = self.videos_dir / 'NO CHANNEL'
-        channel_dir.mkdir(parents=True)
+    # Video has no channel
+    info_json = copy(example_video_json)
+    del info_json['channel']
+    del info_json['channel_id']
+    del info_json['channel_url']
 
-        # Video paths
-        video_path, _, _, _ = self._make_video_files(channel_dir)
+    url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
+    mock_video_extract_info.return_value = info_json
+    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
+        video_download_manager.create_download(url, test_session)
 
-        # Video has no channel
-        info_json = copy(example_video_json)
-        del info_json['channel']
-        del info_json['channel_id']
-        del info_json['channel_url']
+    mock_video_process_runner.assert_called_once()
 
-        url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
-        with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info, \
-                mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename, \
-                mock.patch('modules.videos.downloader.VideoDownloader.process_runner') as mock_process_runner:
-            mock_extract_info.return_value = info_json
-            mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
-            mock_process_runner.return_value = 0
-
-            self.mgr.create_download(url, session)
-
-            mock_process_runner.assert_called_once()
-
-        video: Video = session.query(Video).one()
-        self.assertEqual(str(video.video_path.path), f'{channel_dir}/video.mp4')
+    video: Video = test_session.query(Video).one()
+    assert str(video.video_path.path) == f'{channel_dir}/video.mp4'
 
 
-def test_channel_download(test_session, simple_channel, video_download_manager, video_file):
+def test_download_channel(test_session, simple_channel, video_download_manager, video_file,
+                          mock_video_extract_info, mock_video_prepare_filename, mock_video_process_runner):
+    """Downloading (updating the catalog of) a Channel creates download records for all of it's missing videos."""
     url = 'https://www.youtube.com/c/LearningSelfReliance/videos'
 
-    with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info, \
-            mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename, \
-            mock.patch('modules.videos.downloader.VideoDownloader.process_runner') as mock_process_runner:
-        mock_extract_info.return_value = example_channel_json
-        mock_prepare_filename.return_value = (video_file, {'id': 'foo'})
-        mock_process_runner.return_value = 0
+    mock_video_prepare_filename.return_value = video_file
+    mock_video_extract_info.return_value = example_channel_json
+    with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
+        mock_get_channel.return_value = simple_channel
         video_download_manager.create_download(url, test_session)
 
     # Two videos are in the example channel.
-    downloads = video_download_manager.get_new_downloads(test_session)
-    expected = ['https://youtube.com/watch?v=HQ_62YwcA80', 'https://youtube.com/watch?v=4gSz6W4Gv-o']
-    for download, expected in zip(downloads, expected):
+    downloads = video_download_manager.get_once_downloads(test_session)
+    downloads = filter(lambda i: 'watch' in i.url, downloads)
+    expected = ['https://youtube.com/watch?v=video_2_url', 'https://youtube.com/watch?v=video_1_url']
+    for download, expected in zip_longest(downloads, expected):
         assert download.url == expected
-        # Download is skipped for test.
-        assert download.status == 'new'
+        # Download is run only for test.
+        assert download.status == 'complete'
 
 
 def test_get_or_create_channel(test_session):
@@ -259,23 +233,25 @@ def test_get_or_create_channel(test_session):
     assert get_or_create_channel(source_id='quux') == channel
 
 
-def test_download_info_save(test_session, video_download_manager):
+def test_download_info_save(test_session, video_download_manager, mock_video_extract_info, mock_video_prepare_filename,
+                            mock_video_process_runner):
     """
     An info dict from Downloader.valid_url is saved to the Downloader and can be used by the Downloader later.
     """
-    with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
-        mock_extract_info.return_value = {'some': 'info'}
-        video_download_manager.create_download('https://www.youtube.com/watch?v=HQ_62YwcA80', test_session)
-        mock_extract_info.assert_called_once()
+    mock_video_extract_info.return_value = {'some': 'info'}
+    mock_video_prepare_filename.return_value = 'some path'
+    video_download_manager.create_download('https://www.youtube.com/watch?v=HQ_62YwcA80', test_session)
+    assert mock_video_extract_info.call_count == 2  # Only called twice.  The "info" gathering call was skipped.
 
 
-def test_selected_downloader(test_session, video_download_manager):
+def test_selected_downloader(test_session, video_download_manager, successful_download):
     """
     A user can specify which Downloader to use, no other should ever be used (even if the Download fails).
     """
     # The test HTTP Downloader will claim to be able to handle any HTTP URL; will pretend to have downloaded anything.
     http_downloader = HTTPDownloader()
     mock_do_download = http_downloader.do_download = mock.MagicMock()
+    mock_do_download.return_value = successful_download
     mock_http_valid_url = http_downloader.valid_url = mock.MagicMock()
     mock_http_valid_url.return_value = (True, None)
     video_download_manager.register_downloader(http_downloader)
@@ -286,7 +262,7 @@ def test_selected_downloader(test_session, video_download_manager):
     # DownloadManager will attempt to choose the Downloader.
     with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
         mock_extract_info.side_effect = UnsupportedError('not this one')
-        video_download_manager.create_downloads(['https://example.com'], test_session)
+        video_download_manager.create_download('https://example.com', test_session)
         mock_http_valid_url.assert_called_once()
         mock_extract_info.assert_called_once()
         mock_do_download.assert_called_once()
@@ -298,7 +274,7 @@ def test_selected_downloader(test_session, video_download_manager):
 
     # DownloadManager will only use the HTTPDownloader.
     with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
-        video_download_manager.create_downloads(['https://example.com'], test_session, downloader='http')
+        video_download_manager.create_download('https://example.com', test_session, downloader='http')
         # DownloadManager does not try to find the Download, it trusts the "downloader" param.
         mock_extract_info.assert_not_called()
         mock_http_valid_url.assert_not_called()
@@ -313,7 +289,7 @@ def test_selected_downloader(test_session, video_download_manager):
     # DownloadManager will only use the HTTPDownloader, even if the download fails.
     with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
         mock_do_download.side_effect = Exception('oh no!')
-        video_download_manager.create_downloads(['https://example.com'], test_session, downloader='http')
+        video_download_manager.create_download('https://example.com', test_session, downloader='http')
         # DownloadManager does not try to find the Download, it trusts the "downloader" param.
         mock_extract_info.assert_not_called()
         mock_http_valid_url.assert_not_called()
@@ -351,22 +327,22 @@ def test_channel_download_no_download(test_session, video_download_manager, simp
         download_channel(simple_channel.id)
 
 
-def test_invalid_download_url(test_session, test_download_manager, test_downloader_config):
+def test_invalid_download_url(test_session, test_download_manager, mock_video_extract_info):
     """An invalid url should not be attempted again."""
     _, session = get_db_context()
     with mock.patch('modules.videos.downloader.VideoDownloader.valid_url') as mock_valid_url, \
-            mock.patch('wrolpi.downloader.DownloadManager.get_downloader') as mock_get_downloader, \
-            mock.patch('modules.videos.downloader.YDL') as mock_ydl:
-        mock_get_downloader.return_value = (VideoDownloader(), {'channel': 'foo', 'id': 'some id'})
-        mock_valid_url.return_value = (True, None)
-        mock_ydl.extract_info.side_effect = UnsupportedError('oops')
-        test_download_manager.create_download('url', session)
+            mock.patch('wrolpi.downloader.DownloadManager.get_downloader') as mock_get_downloader:
+        mock_get_downloader.return_value = (VideoDownloader(), None)
+        mock_valid_url.return_value = (True, {})  # url is valid, but is not a video URL.
+        mock_video_extract_info.side_effect = UnsupportedError('oops')
+        test_download_manager.create_download('invalid url', session)
 
-    download = test_download_manager.get_downloads(test_session)[0]
+    download = session.query(Download).one()
     assert download.status == 'failed'
 
 
-def test_video_download_1(test_session, test_directory, simple_channel, video_download_manager):
+def test_video_download_1(test_session, test_directory, simple_channel, video_download_manager,
+                          mock_video_process_runner):
     simple_channel.source_id = example_video_json['channel_id']
     simple_channel.directory = test_directory / 'videos/channel name'
     simple_channel.directory.mkdir(parents=True)
@@ -376,16 +352,14 @@ def test_video_download_1(test_session, test_directory, simple_channel, video_do
 
     url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
     with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info, \
-            mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename, \
-            mock.patch('modules.videos.downloader.VideoDownloader.process_runner') as mock_process_runner:
+            mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
         mock_extract_info.return_value = example_video_json
         mock_prepare_filename.return_value = (video_file, {'id': 'foo'})
-        mock_process_runner.return_value = 0
 
         video_download_manager.create_download(url, test_session)
 
-        mock_process_runner.assert_called_once()
-        video_url, _, out_dir = mock_process_runner.call_args[0]
+        mock_video_process_runner.assert_called_once()
+        video_url, _, out_dir = mock_video_process_runner.call_args[0]
 
     download: Download = test_session.query(Download).one()
     assert video_url == download.url
@@ -393,3 +367,21 @@ def test_video_download_1(test_session, test_directory, simple_channel, video_do
 
     video: Video = test_session.query(Video).one()
     assert video.video_path.path.is_absolute()
+
+
+def test_download_result(test_session, test_directory, video_download_manager, mock_video_process_runner,
+                         mock_video_extract_info):
+    """VideoDownloader returns a DownloadResult when complete."""
+    channel_directory = test_directory / 'videos/channel name'
+    channel_directory.mkdir(parents=True)
+    video_file = channel_directory / 'the video.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_file)
+
+    mock_video_extract_info.return_value = example_video_json
+    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+        mock_prepare_filename.return_value = [video_file, {'id': 'foo'}]
+        video_download_manager.create_download('https://example.com', test_session)
+
+    download: Download = test_session.query(Download).one()
+    assert download.url == 'https://example.com'
+    assert download.location == '/videos/channel/1/video/1'

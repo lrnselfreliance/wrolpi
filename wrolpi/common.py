@@ -555,9 +555,7 @@ def get_relative_to_media_directory(path: Union[str, Path]) -> Path:
 
 
 def minimize_dict(d: dict, keys: Iterable) -> Optional[dict]:
-    """
-    Return a new dictionary that contains only the keys provided.
-    """
+    """Return a new dictionary that contains only the keys provided."""
     if d is None:
         return
     return {k: d[k] for k in set(keys) & d.keys()}

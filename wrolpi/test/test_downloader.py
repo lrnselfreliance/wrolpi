@@ -9,7 +9,7 @@ import pytest
 from wrolpi import downloader
 from wrolpi.dates import local_timezone, Seconds
 from wrolpi.db import get_db_context
-from wrolpi.downloader import Downloader, Download, DownloadFrequency
+from wrolpi.downloader import Downloader, Download, DownloadFrequency, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError, InvalidDownload, WROLModeEnabled
 from wrolpi.test.common import wrap_test_db, TestAPI
 
@@ -72,7 +72,7 @@ class TestDownloader(TestAPI):
         self.assertEqual(len(self.mgr.get_downloads(session)), 0)
 
         http_downloader = HTTPDownloader()
-        http_downloader.do_download.return_value = False
+        http_downloader.do_download.return_value = DownloadResult(success=True)
         self.mgr.register_downloader(http_downloader)
 
         self.mgr.create_download('https://example.com', session)
@@ -88,11 +88,11 @@ class TestDownloader(TestAPI):
         _, session = get_db_context()
 
         http_downloader = HTTPDownloader()
-        http_downloader.do_download.return_value = True
+        http_downloader.do_download.return_value = DownloadResult(success=True)
         self.mgr.register_downloader(http_downloader)
 
         permissive_downloader = PermissiveDownloader(priority=100)
-        permissive_downloader.do_download.return_value = False  # returns a failure
+        permissive_downloader.do_download.return_value = DownloadResult(success=False)
         self.mgr.register_downloader(permissive_downloader)
 
         # https is handled by the HTTP Downloader.
@@ -117,7 +117,7 @@ class TestDownloader(TestAPI):
         self.assertEqual(download.attempts, 2)
 
         # finally success
-        permissive_downloader.do_download.return_value = True
+        permissive_downloader.do_download.return_value = DownloadResult(success=True)
         self.mgr.create_download('foo', session)
         self.mgr._do_downloads(session)
         download = self.mgr.get_download(session, 'foo')
@@ -125,32 +125,6 @@ class TestDownloader(TestAPI):
 
         # No downloads left.
         self.assertEqual(list(self.mgr.get_new_downloads(session)), [])
-
-    @wrap_test_db
-    def test_max_attempts(self):
-        """
-        A Download will only be attempted so many times, it will eventually be deleted.
-        """
-        _, session = get_db_context()
-
-        http_downloader = HTTPDownloader()
-        http_downloader.do_download.return_value = False
-        self.mgr.register_downloader(http_downloader)
-
-        self.mgr.create_download('https://example.com', session)
-        download = session.query(Download).one()
-        self.assertEqual(download.attempts, 1)
-
-        self.mgr.create_download('https://example.com', session)
-        download = session.query(Download).one()
-        self.assertEqual(download.attempts, 2)
-
-        # There are no further attempts.
-        http_downloader.do_download.side_effect = UnrecoverableDownloadError()
-        self.mgr.create_download('https://example.com', session)
-        download = session.query(Download).one()
-        self.assertEqual(download.attempts, 3)
-        self.assertEqual(download.status, 'failed')
 
     @wrap_test_db
     @mock.patch('wrolpi.downloader.now', lambda: local_timezone(datetime(2020, 6, 5, 0, 0)))
@@ -186,12 +160,12 @@ class TestDownloader(TestAPI):
         self.mgr.delete_old_once_downloads()
 
         # Two old downloads are deleted.
-        downloads = self.mgr._downloads_sorter(session.query(Download).all())
+        downloads = session.query(Download).order_by(Download.id).all()
         expected = [
-            dict(url='https://example.com/2', frequency=1, attempts=1, status='pending'),
-            dict(url='https://example.com/6', attempts=1, status='pending'),
             dict(url='https://example.com/1', frequency=1, attempts=0, status='new'),
+            dict(url='https://example.com/2', frequency=1, attempts=1, status='pending'),
             dict(url='https://example.com/5', attempts=0, status='new'),
+            dict(url='https://example.com/6', attempts=1, status='pending'),
         ]
         for download, expected in zip_longest(downloads, expected):
             self.assertDictContains(download.dict(), expected)
@@ -298,7 +272,7 @@ def test_recurring_downloads(test_session, test_download_manager, fake_now):
 
     http_downloader = HTTPDownloader()
     http_downloader.do_download = MagicMock()
-    http_downloader.do_download.return_value = True
+    http_downloader.do_download.return_value = DownloadResult(success=True)
     test_download_manager.register_downloader(http_downloader)
 
     # Download every hour.
@@ -337,7 +311,7 @@ def test_recurring_downloads(test_session, test_download_manager, fake_now):
 
     # Try the download, but it fails.
     http_downloader.do_download.reset_mock()
-    http_downloader.do_download.return_value = False
+    http_downloader.do_download.return_value = DownloadResult(success=False)
     test_download_manager.do_downloads_sync()
     http_downloader.do_download.assert_called_once()
     download = session.query(Download).one()
@@ -345,13 +319,13 @@ def test_recurring_downloads(test_session, test_download_manager, fake_now):
     assert download.status == 'deferred'
     assert download.last_successful_download == now
     # Download should be retried after the DEFAULT_RETRY_FREQUENCY.
-    expected = local_timezone(datetime(2020, 1, 1, 3, 0, 1))
+    expected = local_timezone(datetime(2020, 1, 1, 3, 0, 0, 997200))
     assert download.next_download == expected
 
     # Try the download again, it finally succeeds.
     http_downloader.do_download.reset_mock()
     now = fake_now(datetime(2020, 1, 1, 4, 0, 1))
-    http_downloader.do_download.return_value = True
+    http_downloader.do_download.return_value = DownloadResult(success=True)
     test_download_manager.renew_recurring_downloads(session)
     test_download_manager.do_downloads_sync()
     http_downloader.do_download.assert_called_once()
@@ -360,3 +334,28 @@ def test_recurring_downloads(test_session, test_download_manager, fake_now):
     assert download.last_successful_download == now
     # Floats cause slightly wrong date.
     assert download.next_download == local_timezone(datetime(2020, 1, 1, 5, 0, 0, 997200))
+
+
+def test_max_attempts(test_session, test_download_manager):
+    """A Download will only be attempted so many times, it will eventually be deleted."""
+    _, session = get_db_context()
+
+    http_downloader = HTTPDownloader()
+    http_downloader.do_download = MagicMock()
+    http_downloader.do_download.return_value = DownloadResult(success=True)
+    test_download_manager.register_downloader(http_downloader)
+
+    test_download_manager.create_download('https://example.com', session)
+    download = session.query(Download).one()
+    assert download.attempts == 1
+
+    test_download_manager.create_download('https://example.com', session)
+    download = session.query(Download).one()
+    assert download.attempts == 2
+
+    # There are no further attempts.
+    http_downloader.do_download.side_effect = UnrecoverableDownloadError()
+    test_download_manager.create_download('https://example.com', session)
+    download = session.query(Download).one()
+    assert download.attempts == 3
+    assert download.status == 'failed'

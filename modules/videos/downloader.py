@@ -2,9 +2,11 @@
 import json
 import pathlib
 import re
+import traceback
 from abc import ABC
 from typing import Tuple, List, Optional
 
+import yt_dlp.utils
 from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 from yt_dlp.extractor import YoutubeTabIE
@@ -14,13 +16,13 @@ from wrolpi.cmd import which
 from wrolpi.common import logger, extract_domain, get_media_directory
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs
-from wrolpi.downloader import Downloader, Download, DOWNLOAD_MANAGER_CONFIG
+from wrolpi.downloader import Downloader, Download, DOWNLOAD_MANAGER_CONFIG, DownloadResult
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
 from .common import apply_info_json, get_no_channel_directory, \
     get_videos_directory
-from .lib import upsert_video, refresh_channel_videos, get_downloader_config, get_channel_source_id, validate_video
+from .lib import upsert_video, refresh_channel_videos, get_downloader_config, get_channel_source_id
 from .models import Video, Channel
 from .schema import ChannelPostRequest
 from .video_url_resolver import video_url_resolver
@@ -41,16 +43,24 @@ PREFERRED_VIDEO_EXTENSION = 'mp4'
 PREFERRED_VIDEO_FORMAT = 'best[height=720],22,720p,mp4-480p,mp4-360p,mp4-240p,18,bestvideo+bestaudio'
 
 
+def extract_info(url: str, ydl: YoutubeDL = YDL) -> dict:
+    """Get info about a video.  Separated for testing."""
+    return ydl.extract_info(url, download=False, process=False)
+
+
+def prepare_filename(entry: dict, ydl: YoutubeDL = YDL) -> str:
+    """Get filename from YoutubeDL.  Separated for testing."""
+    return ydl.prepare_filename(entry)
+
+
 class ChannelDownloader(Downloader, ABC):
-    """
-    Handling downloading of all Videos in a Channel.
-    """
+    """Handles downloading of all Videos in a Channel."""
     name = 'video_channel'
     pretty_name = 'Video Channel'
     listable = False
 
     def __repr__(self):
-        return f'<ChannelDownloader name={self.name}>'
+        return f'<ChannelDownloader>'
 
     @classmethod
     def valid_url(cls, url) -> Tuple[bool, None]:
@@ -60,10 +70,8 @@ class ChannelDownloader(Downloader, ABC):
         logger.debug(f'{cls.__name__} not suitable for {url}')
         return False, None
 
-    def do_download(self, download: Download):
-        """
-        Update a Channel's catalog, then schedule downloads of every missing video.
-        """
+    def do_download(self, download: Download) -> DownloadResult:
+        """Update a Channel's catalog, then schedule downloads of every missing video."""
         with get_db_session() as session:
             channel = session.query(Channel).filter_by(url=download.url).one_or_none()
 
@@ -71,6 +79,7 @@ class ChannelDownloader(Downloader, ABC):
                 # Couldn't get channel by URL, this is probably a playlist.  Find the channel for the playlist.
                 channel_source_id = get_channel_source_id(download.url)
                 channel = get_channel(source_id=channel_source_id, return_dict=False)
+            channel_id = channel.id
 
         update_channel(channel)
 
@@ -91,7 +100,7 @@ class ChannelDownloader(Downloader, ABC):
         else:
             self.manager.start_downloads()
 
-        return True
+        return DownloadResult(success=True, location=f'/videos/channel/{channel_id}/video')
 
 
 YT_DLP_BIN = which(
@@ -110,7 +119,7 @@ class VideoDownloader(Downloader, ABC):
     pretty_name = 'Videos'
 
     def __repr__(self):
-        return f'<VideoDownloader name={self.name}>'
+        return f'<VideoDownloader>'
 
     @classmethod
     def valid_url(cls, url) -> Tuple[bool, Optional[dict]]:
@@ -120,7 +129,7 @@ class VideoDownloader(Downloader, ABC):
         for ie in YDL._ies.values():
             if ie.suitable(url) and not ChannelDownloader.valid_url(url)[0]:
                 try:
-                    info = YDL.extract_info(url, download=False, process=False)
+                    info = extract_info(url)
                     return True, info
                 except UnsupportedError:
                     logger.debug(f'Video downloader extract_info failed for {url}')
@@ -131,7 +140,7 @@ class VideoDownloader(Downloader, ABC):
         logger.debug(f'{cls.__name__} not suitable for {url}')
         return False, None
 
-    def do_download(self, download: Download):
+    def do_download(self, download: Download) -> DownloadResult:
         if download.attempts >= 10:
             raise UnrecoverableDownloadError('Max download attempts reached')
 
@@ -160,6 +169,7 @@ class VideoDownloader(Downloader, ABC):
             out_dir = channel.directory.path
         out_dir.mkdir(exist_ok=True, parents=True)
 
+        logs = None  # noqa
         try:
             video_path, entry = self.prepare_filename(url, out_dir)
             # Do the real download.
@@ -177,15 +187,24 @@ class VideoDownloader(Downloader, ABC):
                 '-o', file_name_format,
                 url,
             ]
-            return_code = self.process_runner(url, cmd, out_dir)
+            return_code, logs = self.process_runner(url, cmd, out_dir)
 
             if return_code != 0:
                 raise ValueError(f'video downloader process exited with {return_code}')
 
             if not video_path.is_file():
                 raise ValueError(f'Video file could not be found!  {video_path}')
+
+            with get_db_session(commit=True) as session:
+                # If the video is from a channel, it will already be in the database.
+                source_id = entry['id']
+                existing_video = session.query(Video).filter_by(source_id=source_id).one_or_none()
+                video = upsert_video(session, video_path, channel, id_=existing_video.id if existing_video else None)
+                video_id = video.id
         except UnrecoverableDownloadError:
             raise
+        except yt_dlp.utils.UnsupportedError as e:
+            raise UnrecoverableDownloadError('URL is not supported by yt-dlp') from e
         except Exception as e:
             logger.warning(f'VideoDownloader failed to download: {download.url}', exc_info=e)
             if _skip_download(e):
@@ -204,18 +223,22 @@ class VideoDownloader(Downloader, ABC):
 
                 # Skipped downloads should not be tried again.
                 raise UnrecoverableDownloadError() from e
-            return
+            # Download did not succeed, try again later.
+            if logs and (stderr := logs.get('stderr')):
+                error = f'{stderr}\n\n{traceback.format_exc()}'
+            else:
+                error = str(traceback.format_exc())
+            return DownloadResult(success=False, error=error)
 
-        with get_db_session(commit=True) as session:
-            # If the video is from a channel, it will already be in the database.
-            source_id = entry['id']
-            existing_video = session.query(Video).filter_by(source_id=source_id).one_or_none()
-            id_ = existing_video.id if existing_video else None
-
-            upsert_video(session, video_path, channel, id_=id_)
-
-        # Successful download.
-        return True
+        if channel:
+            location = f'/videos/channel/{channel.id}/video/{video_id}'
+        else:
+            location = f'/videos/video/{video_id}'
+        result = DownloadResult(
+            success=True,
+            location=location,
+        )
+        return result
 
     @staticmethod
     def prepare_filename(url: str, out_dir: pathlib.Path) -> Tuple[pathlib.Path, dict]:
@@ -234,9 +257,13 @@ class VideoDownloader(Downloader, ABC):
         ydl.params['logger'] = ydl_logger
         ydl.add_default_info_extractors()
 
-        # Perform the real download.  This saves multiple files.
-        entry = ydl.extract_info(url, download=False, process=True)
-        final_filename = pathlib.Path(ydl.prepare_filename(entry))
+        # Get the path where the video will be saved.
+        entry = extract_info(url, ydl=ydl)
+        final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
+        if final_filename.suffix == '.NA':
+            # yt-dlp has odd behavior sometimes and ignores our preferred video extension.
+            final_filename = final_filename.with_suffix('.mp4')
+            logger.warning(f'Had to replace video extension: {final_filename}')
         return final_filename, entry
 
 
@@ -284,10 +311,10 @@ def update_channel(channel: Channel):
     It is expected that any missing videos will be downloaded later.
     """
     logger.info(f'Downloading video list for {channel.name} at {channel.url}  This may take several minutes.')
-    info = YDL.extract_info(channel.url, download=False, process=False)
+    info = extract_info(channel.url)
     if 'url' in info:
         url = info['url']
-        info = YDL.extract_info(url, download=False, process=False)
+        info = extract_info(url)
 
     # Resolve all entries to dictionaries.
     entries = info['entries'] = list(info['entries'])
@@ -299,7 +326,7 @@ def update_channel(channel: Channel):
         for entry in entries:
             if entry['title'] == 'Uploads':
                 logger.info('Youtube-DL gave back a list of URLs, found the "Uploads" URL and using it.')
-                info = YDL.extract_info(entry['url'], download=False, process=False)
+                info = extract_info(entry['url'])
                 entries = info['entries'] = list(info['entries'])
                 break
 
@@ -359,7 +386,6 @@ def _find_all_missing_videos(channel_id: id = None) -> List[Tuple]:
         if channel_id:
             where = 'AND channel_id = %s'
             params = (channel_id,)
-
         query = f'''
             SELECT
                 video.id, video.source_id, video.channel_id
@@ -380,7 +406,7 @@ def _find_all_missing_videos(channel_id: id = None) -> List[Tuple]:
         return missing_videos
 
 
-def find_all_missing_videos(channel_id: str = None) -> Tuple[dict, dict]:
+def find_all_missing_videos(channel_id: int = None) -> Tuple[dict, dict]:
     """
     Find all videos that don't have a video file, but are found in the DB (taken from the channel's info_json).
 

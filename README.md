@@ -20,6 +20,17 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 - WROLPi is in Beta!
 - Expect things to change!
 
+# Table of Contents
+
+* [Features](#features)
+* [Demo](#demo)
+* [Try WROLPi](#try-wrolpi)
+* [Debian 11 Install](#debian-11-install)
+* [Raspberry Pi Install](#raspberrypi-install)
+* [Charter](#charter)
+* [Upgrading WROLPi](UPGRADE.md)
+* [Join](#charter)
+
 # Features
 
 - [x] Video player & downloader
@@ -38,15 +49,6 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 # Demo
 
 <a href="https://www.youtube.com/watch?v=g0Do_mlQcBU"> ![YouTube Demo Video](https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/demo_link.jpg)</a>
-
-# Table of Contents
-
-* [Try WROLPi](#try-wrolpi)
-* [Debian 11 Install](#debian-11-install)
-* [Raspberry Pi Install](#raspberrypi-install)
-* [Charter](#charter)
-* [Upgrading WROLPi](UPGRADE.md)
-* [Join](#charter)
 
 # Try WROLPi!
 

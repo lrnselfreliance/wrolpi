@@ -13,11 +13,14 @@
     * `docker-compose stop`
 3. Build all docker containers
     * `docker-compose build --parallel`
-4. Turn on the database
+4. Create the map volumes
+   * `docker volume create --name=openstreetmap-data`
+   * `docker volume create --name=openstreetmap-rendered-tiles`
+5. Turn on the database
     * `docker-compose up -d db`
-5. Upgrade the database
+6. Upgrade the database
     * `docker-compose run --rm api db upgrade`
-6. Start all docker containers
+7. Start all docker containers
     * `docker-compose up -d`
 
 ## Upgrading Raspberry Pi or Debian 11 Installation

@@ -36,7 +36,19 @@ network so that any person with a laptop/tablet/phone can connect and use the da
 - [ ] Podcast player & downloader
 
 # Demo
+
 <a href="https://www.youtube.com/watch?v=g0Do_mlQcBU"> ![YouTube Demo Video](https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/demo_link.jpg)</a>
+
+
+Table of Contents
+=================
+
+* [Try WROLPi](#try-wrolpi)
+* [Debian 11 Install](#debian-11-install)
+* [Raspberry Pi Install](#raspberrypi-install)
+* [Charter](#charter)
+* [Upgrading WROLPi](UPGRADE.md)
+* [Join](#charter)
 
 # Try WROLPi!
 
@@ -49,10 +61,10 @@ You can try out WROLPi by running the docker containers.
 3. Change directory into the code base
     * `cd wrolpi`
 4. Build the containers
-   * `docker-compose build --parallel`
+    * `docker-compose build --parallel`
 5. Create volumes
-   * `docker volume create --name=openstreetmap-data`
-   * `docker volume create --name=openstreetmap-rendered-tiles`
+    * `docker volume create --name=openstreetmap-data`
+    * `docker volume create --name=openstreetmap-rendered-tiles`
 6. Start the database.
     * `docker-compose up -d db`
 7. Initialize the database

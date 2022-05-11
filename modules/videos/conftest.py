@@ -1,6 +1,8 @@
 import json
 import pathlib
 import shutil
+from itertools import zip_longest
+from typing import List
 from uuid import uuid4
 
 import mock
@@ -32,7 +34,7 @@ def simple_channel(test_session, test_directory) -> Channel:
 def channel_factory(test_session, test_directory):
     """Create a random Channel with a directory, but no frequency."""
 
-    def _(source_id: str = None, download_frequency: DownloadFrequency = None, url: str = None, name: str = None):
+    def factory(source_id: str = None, download_frequency: DownloadFrequency = None, url: str = None, name: str = None):
         name = name or str(uuid4())
         directory = test_directory / name
         directory.mkdir()
@@ -47,7 +49,7 @@ def channel_factory(test_session, test_directory):
         test_session.commit()
         return channel
 
-    return _
+    return factory
 
 
 @pytest.fixture
@@ -98,7 +100,8 @@ def video_factory(test_session, test_directory):
                 with_info_json: dict = None, with_poster_ext: str = None, with_caption_file: bool = False):
         title = title or str(uuid4())
         if channel_id:
-            path = test_directory / f'{title}.mp4'
+            channel = test_session.query(Channel).filter_by(id=channel_id).one()
+            path = (channel.directory or test_directory) / f'{title}.mp4'
         else:
             (test_directory / 'videos/NO CHANNEL').mkdir(parents=True, exist_ok=True)
             path = test_directory / f'videos/NO CHANNEL/{title}.mp4'
@@ -186,3 +189,15 @@ def mock_video_process_runner():
     with mock.patch('modules.videos.downloader.VideoDownloader.process_runner') as mock_process_runner:
         mock_process_runner.return_value = (0, {})
         yield mock_process_runner
+
+
+@pytest.fixture
+def assert_video_ids(test_session):
+    """Check that only the expected Videos are in the DB."""
+
+    def checker(expected_video_ids: List[int]):
+        video_ids = [i.id for i in test_session.query(Video).order_by(Video.id)]
+        for id_, expected in zip_longest(video_ids, expected_video_ids):
+            assert id_ == expected, f'Video ids were not as expected: {expected_video_ids=} != {video_ids=}'
+
+    return checker

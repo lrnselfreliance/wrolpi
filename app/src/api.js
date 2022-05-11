@@ -251,7 +251,7 @@ export async function downloadChannel(id) {
         toast({
             type: 'error',
             title: 'Cannot Download!',
-            description: 'This channel does not have a download record.  Create one!',
+            description: 'This channel does not have a download record.  Modify the frequency.',
             time: 5000,
         });
     }

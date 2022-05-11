@@ -715,9 +715,15 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
         raise ValueError(f'Video path is not absolute: {video_path}')
 
     # This function can update or insert a Video.
+    video = None
     if id_:
         video = session.query(Video).filter_by(id=id_).one()
-    else:
+    if not video:
+        # The video may already be in the database, match the source_id to any existing video.
+        _, _, source_id, _ = parse_video_file_name(video_path)
+        if source_id:
+            video = session.query(Video).filter_by(source_id=source_id).one_or_none()
+    if not video:
         video = Video()
         session.add(video)
 

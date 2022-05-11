@@ -7,6 +7,7 @@ from unittest import mock
 import pytest
 import sqlalchemy
 
+from modules.videos import lib
 from modules.videos.common import apply_info_json
 from modules.videos.lib import validate_videos, parse_video_file_name, upsert_video
 from modules.videos.models import Video
@@ -218,3 +219,34 @@ def test_video_modification_datetime(test_session, simple_channel, video_file):
         video = upsert_video(test_session, video_file, simple_channel)
     test_session.commit()
     assert video.modification_datetime == expected
+
+
+def test_refresh_channel_videos(test_session, channel_factory, video_factory, video_file, assert_video_ids):
+    assert_video_ids([])
+
+    # Simulate a channel's catalog being updated.
+    channel1 = channel_factory(name='channel1')
+    test_session.add(Video(source_id='source1', channel_id=channel1.id))
+    test_session.add(Video(source_id='source2', channel_id=channel1.id))
+
+    # Add some real files to be found.
+    destination = channel1.directory / f'channel1_20220510_source1_the title.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', destination)
+    destination = channel1.directory / f'channel1_20220511_source2_the title.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', destination)
+
+    lib.refresh_channel_videos(channel1)
+    assert_video_ids([1, 2])
+
+    # These video files were deleted.
+    test_session.add(Video(source_id='this should be removed', channel_id=channel1.id, video_path='foo'))
+    test_session.add(Video(source_id='this should also be removed', video_path='bar'))
+    test_session.commit()
+
+    assert_video_ids([1, 2, 3, 4])
+
+    lib.refresh_channel_videos(channel1)
+    assert_video_ids([1, 2, 4])
+
+    lib.refresh_videos()
+    assert_video_ids([1, 2])

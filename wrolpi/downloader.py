@@ -574,7 +574,8 @@ class DownloadManager:
                     last_successful_download,
                     next_download,
                     status,
-                    url
+                    url,
+                    location
                 FROM download
                 WHERE frequency IS NOT NULL
                 ORDER BY

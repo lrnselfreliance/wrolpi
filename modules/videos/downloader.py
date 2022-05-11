@@ -81,26 +81,31 @@ class ChannelDownloader(Downloader, ABC):
                 channel = get_channel(source_id=channel_source_id, return_dict=False)
             channel_id = channel.id
 
-        update_channel(channel)
+        try:
+            update_channel(channel)
 
-        domain = extract_domain(download.url)
-        missing_videos = find_all_missing_videos(channel.id)
-        with get_db_session(commit=True) as session:
-            for video_id, source_id, missing_video in missing_videos:
-                url = video_url_resolver(domain, missing_video)
-                if url in DOWNLOAD_MANAGER_CONFIG.skip_urls:
-                    # Don't try to download skipped videos.
-                    continue
-                # Schedule any missing videos for download.
-                download = self.manager.get_or_create_download(url, session)
-                download.downloader = 'video'
+            domain = extract_domain(download.url)
+            missing_videos = find_all_missing_videos(channel.id)
+            with get_db_session(commit=True) as session:
+                for video_id, source_id, missing_video in missing_videos:
+                    url = video_url_resolver(domain, missing_video)
+                    if url in DOWNLOAD_MANAGER_CONFIG.skip_urls:
+                        # Don't try to download skipped videos.
+                        continue
+                    # Schedule any missing videos for download.
+                    download = self.manager.get_or_create_download(url, session)
+                    download.downloader = 'video'
 
-        if PYTEST:
-            self.manager.do_downloads_sync()
-        else:
-            self.manager.start_downloads()
+            if PYTEST:
+                self.manager.do_downloads_sync()
+            else:
+                self.manager.start_downloads()
 
-        return DownloadResult(success=True, location=f'/videos/channel/{channel_id}/video')
+            return DownloadResult(success=True, location=f'/videos/channel/{channel_id}/video')
+        except Exception:
+            logger.warning(f'Failed to update catalog of channel {download.url}')
+            location = f'/videos/channel/{channel_id}/video' if channel_id else None
+            return DownloadResult(success=False, location=location, error=str(traceback.format_exc()))
 
 
 YT_DLP_BIN = which(

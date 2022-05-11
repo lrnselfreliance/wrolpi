@@ -256,7 +256,6 @@ async def delete_download(_: Request, download_id: int):
 @openapi.description('List all Downloaders that can be specified by the user.')
 async def get_downloaders(_: Request):
     downloaders = download_manager.list_downloaders()
-    downloaders.insert(0, dict(name='auto', pretty_name='Automatic'))
     disabled = download_manager.disabled.is_set()
     ret = dict(downloaders=downloaders, manager_disabled=disabled)
     return json_response(ret)

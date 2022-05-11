@@ -2,6 +2,7 @@ import React from "react";
 import {Button, Dropdown, Form, Header, Segment, TextArea} from "semantic-ui-react";
 import {getDownloaders, postDownload} from "../api";
 import {WROLModeMessage} from "./Common";
+import {Link} from "react-router-dom";
 
 const validUrl = /^(http|https):\/\/[^ "]+$/;
 
@@ -64,7 +65,7 @@ class Downloader extends React.Component {
 
     render() {
         let textareaPlaceholder = 'Enter one URL per line';
-        let disabled = !this.state.urls || !this.state.valid || this.state.pending;
+        let disabled = !this.state.urls || !this.state.valid || this.state.pending || !this.state.downloader;
 
         return (
             <Form onSubmit={this.submitDownload}>
@@ -80,15 +81,15 @@ class Downloader extends React.Component {
                     />
                 </Form.Field>
                 <Form.Field>
-                    <Dropdown
-                        selection
-                        name='downloader'
-                        options={this.state.downloaders}
-                        placeholder='Automatic'
-                        onChange={this.handleInputChange}
+                    <Dropdown selection
+                              name='downloader'
+                              options={this.state.downloaders}
+                              placeholder='Select a downloader'
+                              onChange={this.handleInputChange}
                     />
                 </Form.Field>
                 <Button primary style={{marginTop: '1em'}} disabled={disabled}>Download</Button>
+                <Link to={'/admin'}>View Downloads</Link>
             </Form>
         )
     }

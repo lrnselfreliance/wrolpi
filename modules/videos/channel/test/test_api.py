@@ -24,7 +24,8 @@ def test_get_channels(test_directory, channel_factory, test_client):
     assert len(response.json['channels']) == 3
 
 
-def test_refresh_no_channel(test_session, test_client, test_directory, simple_channel):
+@mock.patch('modules.videos.lib.validate_video')
+def test_refresh_no_channel(_, test_session, test_client, test_directory, simple_channel):
     # A regular user-defined channel
     vid1 = simple_channel.directory / 'MyChannelName_20000101_abcdefghijk_title1.mp4'
     vid1.touch()
@@ -41,22 +42,7 @@ def test_refresh_no_channel(test_session, test_client, test_directory, simple_ch
     vid4.touch()
 
     test_client.post('/api/videos/refresh')
-
-    videos = test_session.query(Video).order_by(Video.title).all()
-    assert len(videos) == 4
-
-    # Add some fake videos, they should be removed.
-    test_session.add(Video(title='vid5'))
-    test_session.add(Video(title='vid6', channel_id=simple_channel.id))
-    test_session.commit()
-
-    videos = test_session.query(Video).order_by(Video.title).all()
-    assert len(videos) == 6
-
-    test_client.post('/api/videos/refresh')
-
-    videos = test_session.query(Video).order_by(Video.title).all()
-    assert len(videos) == 4
+    assert test_session.query(Video).count() == 4
 
 
 def test_get_video(test_client, test_session, simple_channel, video_factory):

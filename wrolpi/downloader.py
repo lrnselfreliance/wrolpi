@@ -2,7 +2,8 @@ import asyncio
 import multiprocessing
 import pathlib
 import subprocess
-from collections import defaultdict
+import traceback
+from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 from enum import Enum
 from functools import partial
@@ -13,7 +14,7 @@ from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
-from wrolpi.common import Base, ModelHelper, logger, iterify, wrol_mode_check, zig_zag, ConfigFile
+from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile
 from wrolpi.dates import TZDateTime, now, Seconds, local_timezone, recursive_replace_tz
 from wrolpi.db import get_db_session, get_db_curs, get_db_context, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
@@ -34,6 +35,15 @@ class DownloadFrequency(int, Enum):
     days90 = 7776000
 
 
+@dataclass
+class DownloadResult:
+    downloads: List[str] = field(default_factory=list)
+    error: str = None
+    info_json: dict = field(default_factory=dict)
+    location: str = None
+    success: bool = False
+
+
 class Download(ModelHelper, Base):
     """
     Model that is used to schedule downloads.
@@ -49,6 +59,8 @@ class Download(ModelHelper, Base):
     status = Column(String, default='new')
     info_json = Column(JSONB)
     downloader = Column(Text)
+    location = Column(Text)
+    error = Column(Text)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -67,6 +79,7 @@ class Download(ModelHelper, Base):
             frequency=self.frequency,
             id=self.id,
             last_successful_download=self.last_successful_download,
+            location=self.location,
             next_download=self.next_download,
             status=self.status,
             url=self.url,
@@ -74,39 +87,30 @@ class Download(ModelHelper, Base):
         return d
 
     def renew(self, reset_attempts: bool = False):
-        """
-        Mark this Download as "new" so it will be retried.
-        """
+        """Mark this Download as "new" so it will be retried."""
         self.status = 'new'
         if reset_attempts:
             self.attempts = 0
 
     def defer(self):
-        """
-        Download should be tried again after a time.
-        """
+        """Download should be tried again after a time."""
         self.status = 'deferred'
 
     def fail(self):
-        """
-        Download should not be attempted again.  A recurring Download will raise an error.
-        """
+        """Download should not be attempted again.  A recurring Download will raise an error."""
         if self.frequency:
             raise ValueError('Recurring download should not be failed.')
         self.status = 'failed'
 
     def started(self):
-        """
-        Mark this Download as in progress.
-        """
+        """Mark this Download as in progress."""
         self.attempts += 1
         self.status = 'pending'
 
     def complete(self):
-        """
-        Mark this Download as successfully downloaded.
-        """
+        """Mark this Download as successfully downloaded."""
         self.status = 'complete'
+        self.error = None  # clear any old errors
         self.last_successful_download = now()
 
     def get_downloader(self):
@@ -147,7 +151,7 @@ class Downloader:
     def valid_url(cls, url) -> Tuple[bool, Optional[dict]]:
         raise NotImplementedError()
 
-    def do_download(self, download: Download):
+    def do_download(self, download: Download) -> DownloadResult:
         raise NotImplementedError()
 
     @property
@@ -174,7 +178,7 @@ class Downloader:
         if self._kill.is_set():
             self._kill.clear()
 
-    def process_runner(self, url: str, cmd: List[str], cwd: pathlib.Path, **kwargs) -> int:
+    def process_runner(self, url: str, cmd: List[str], cwd: pathlib.Path, **kwargs) -> Tuple[int, dict]:
         """
         Run a subprocess using the provided arguments.  This process can be killed by the Download Manager.
         """
@@ -202,13 +206,10 @@ class Downloader:
             # Output all logs from the process.
             # TODO is there a way to stream this output while the process is running?
             logger.debug(f'Download exited with {proc.returncode}')
-            outs, errs = proc.communicate()
-            for line in outs.decode().splitlines():  # noqa
-                logger.debug(line)
-            for line in errs.decode().splitlines():  # noqa
-                logger.error(line)
+            stdout, stderr = proc.communicate()
+            logs = {'stdout': stdout, 'stderr': stderr}
 
-        return proc.returncode
+        return proc.returncode, logs
 
 
 class DownloadManager:
@@ -233,15 +234,14 @@ class DownloadManager:
 
     def get_downloader(self, url: str) -> Tuple[Downloader, Dict]:
         for i in self.instances:
-            result = i.valid_url(url)
-            valid, info = result
+            valid, info = i.valid_url(url)
             if valid:
                 return i, info
         raise InvalidDownload(f'Invalid URL {url=}')
 
     def get_downloader_by_name(self, name: str) -> Downloader:
         """
-        Attempts to find a registered Downloader by its name.  Returns None if it cannot be found.
+        Tries to find a registered Downloader by its name.  Returns None if it cannot be found.
         """
         return self._instances.get(name)
 
@@ -263,9 +263,7 @@ class DownloadManager:
             yield download
 
     def get_or_create_download(self, url: str, session: Session) -> Download:
-        """
-        Get a Download by its URL, if it cannot be found create one.
-        """
+        """Get a Download by its URL, if it cannot be found create one."""
         if not url:
             raise ValueError('Download must have a URL')
 
@@ -360,29 +358,34 @@ class DownloadManager:
                 download.started()
                 session.commit()
 
-                success = True
-                failure = False
+                try_again = True
                 try:
-                    success = downloader.do_download(download)
+                    result = downloader.do_download(download)
                 except UnrecoverableDownloadError as e:
                     # Download failed and should not be retried.
                     logger.warning(f'UnrecoverableDownloadError for {url}', exc_info=e)
-                    failure = True
+                    result = DownloadResult(success=False, error=str(traceback.format_exc()))
+                    try_again = False
                 except Exception as e:
                     logger.warning(f'Failed to download {url}.  Will be tried again later.', exc_info=e)
+                    result = DownloadResult(success=False, error=str(traceback.format_exc()))
 
                 # Long-running, get the download again.
                 with get_db_session(commit=True) as session_:
                     download = self.get_download(session_, id_=download_id)
-                    if failure:
+                    # Use a new location if provided, keep the old location if no new location is provided, otherwise
+                    # clear out an outdated location.
+                    download.location = result.location or download.location or None
+                    # Clear any old errors if the download succeeded.
+                    download.error = result.error if download.error else None
+                    download.next_download = self.get_next_download(download, session)
+
+                    if try_again is False:
                         download.fail()
-                    elif success:
+                    elif result.success:
                         download.complete()
-                        download.next_download = self.get_next_download(download, session)
                     else:
                         download.defer()
-                        download.next_download = self.get_next_download(download, session)
-                    session_.commit()
 
             if download_count:
                 logger.info(f'Done doing {download_count} downloads.')
@@ -409,9 +412,7 @@ class DownloadManager:
 
     @staticmethod
     def reset_downloads():
-        """
-        Set any incomplete Downloads to `new` so they will be retried.
-        """
+        """Set any incomplete Downloads to `new` so they will be retried."""
         with get_db_curs(commit=True) as curs:
             curs.execute("UPDATE download SET status='new' WHERE status='pending' OR status='deferred'")
 
@@ -430,20 +431,6 @@ class DownloadManager:
 
     DOWNLOAD_SORT = ('pending', 'failed', 'new', 'deferred', 'complete')
 
-    @classmethod
-    @iterify(list)
-    def _downloads_sorter(cls, downloads: List[Download]):
-        """
-        Downloads should be displayed to the user by status.
-        """
-        grouped_by_statuses = defaultdict(lambda: [])
-        for download in downloads:
-            grouped_by_statuses[download.status].append(download)
-
-        # Yield the downloads in the order defined above.
-        for sort in cls.DOWNLOAD_SORT:
-            yield from grouped_by_statuses[sort]  # converted to a list by iterify()
-
     @optional_session
     def get_recurring_downloads(self, session: Session = None, limit: int = None):
         """Get all Downloads that will be downloaded in the future."""
@@ -456,7 +443,6 @@ class DownloadManager:
         if limit:
             query = query.limit(limit)
         downloads = query.all()
-        downloads = self._downloads_sorter(downloads)
         return downloads
 
     @optional_session
@@ -471,14 +457,11 @@ class DownloadManager:
         if limit:
             query = query.limit(limit)
         downloads = query.all()
-        downloads = self._downloads_sorter(downloads)
         return downloads
 
     @optional_session
     def renew_recurring_downloads(self, session: Session = None):
-        """
-        Mark any recurring downloads that are due for download as "new".  Start a download.
-        """
+        """Mark any recurring downloads that are due for download as "new".  Start a download."""
         now_ = now()
 
         recurring = self.get_recurring_downloads(session)
@@ -523,9 +506,7 @@ class DownloadManager:
         return False
 
     def kill_download(self, download_id: int):
-        """
-        Fail a Download. If it is pending, kill the Downloader so the download stops.
-        """
+        """Fail a Download. If it is pending, kill the Downloader so the download stops."""
         with get_db_session(commit=True) as session:
             download = self.get_download(session, id_=download_id)
             downloader = download.get_downloader()
@@ -535,9 +516,7 @@ class DownloadManager:
             download.fail()
 
     def kill(self):
-        """
-        Kill all downloads.
-        """
+        """Kill all downloads.  Do not start new downloads."""
         self.disabled.set()
         try:
             with get_db_session(commit=True) as session:
@@ -610,9 +589,11 @@ class DownloadManager:
             stmt = f'''
                 SELECT
                     downloader,
+                    error,
                     frequency,
                     id,
                     last_successful_download,
+                    location,
                     next_download,
                     status,
                     url

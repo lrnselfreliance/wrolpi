@@ -100,7 +100,8 @@ def video_factory(test_session, test_directory):
         if channel_id:
             path = test_directory / f'{title}.mp4'
         else:
-            path = test_directory / 'videos' / 'NO CHANNEL' / f'{title}.mp4'
+            (test_directory / 'videos/NO CHANNEL').mkdir(parents=True, exist_ok=True)
+            path = test_directory / f'videos/NO CHANNEL/{title}.mp4'
 
         if with_video_file:
             shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', path)
@@ -166,3 +167,22 @@ def test_downloader_config(test_directory):
     set_test_downloader_config(True)
     yield config_path
     set_test_downloader_config(False)
+
+
+@pytest.fixture
+def mock_video_extract_info():
+    with mock.patch('modules.videos.downloader.extract_info') as mock_extract_info:
+        yield mock_extract_info
+
+
+@pytest.fixture
+def mock_video_prepare_filename():
+    with mock.patch('modules.videos.downloader.prepare_filename') as mock_prepare_filename:
+        yield mock_prepare_filename
+
+
+@pytest.fixture
+def mock_video_process_runner():
+    with mock.patch('modules.videos.downloader.VideoDownloader.process_runner') as mock_process_runner:
+        mock_process_runner.return_value = (0, {})
+        yield mock_process_runner

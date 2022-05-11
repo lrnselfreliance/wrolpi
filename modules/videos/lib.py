@@ -6,7 +6,6 @@ from typing import Tuple, Optional, List, Union
 from uuid import uuid1
 
 from sqlalchemy import or_
-from sqlalchemy.exc import InvalidRequestError
 from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 
@@ -18,7 +17,8 @@ from wrolpi.media_path import MediaPath
 from wrolpi.vars import PYTEST
 from .captions import get_captions
 from .common import generate_video_paths, remove_duplicate_video_paths, apply_info_json, get_video_duration, \
-    is_valid_poster, convert_image, generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError
+    is_valid_poster, convert_image, generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
+    get_no_channel_directory
 from .models import Channel, Video
 
 logger = logger.getChild(__name__)
@@ -60,7 +60,8 @@ def refresh_channel_videos(channel: Channel):
                 logger.debug(f'{channel.name}: Added {video_path.name}')
 
     with get_db_curs(commit=True) as curs:
-        curs.execute('DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL RETURNING id', (channel.id,))
+        stmt = 'DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL AND video_path IS NOT NULL RETURNING id'
+        curs.execute(stmt, (channel.id,))
         deleted_count = len(curs.fetchall())
 
     if deleted_count:
@@ -544,6 +545,9 @@ def import_channels_config():
                 channel.name = data['name']
                 channel.directory = directory
 
+                # A URL should not be an empty string
+                data['url'] = data['url'] or None
+
                 # Copy existing channel data, update all values from the config.  This is necessary to clear out
                 # values not in the config.
                 full_data = channel.dict()
@@ -571,7 +575,6 @@ def import_channels_config():
                         continue
                     channel_dir = channel.directory.path
                 else:
-                    from .downloader import get_no_channel_directory
                     channel_dir = get_no_channel_directory()
 
                 # Set favorite Videos of this Channel.
@@ -712,7 +715,11 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
         raise ValueError(f'Video path is not absolute: {video_path}')
 
     # This function can update or insert a Video.
-    video = session.query(Video).filter_by(id=id_).one() if id_ else Video()
+    if id_:
+        video = session.query(Video).filter_by(id=id_).one()
+    else:
+        video = Video()
+        session.add(video)
 
     # Set the file values, all other things can be found using these files.
     poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path)
@@ -728,6 +735,9 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
         video.channel_id = channel.id
     video.idempotency = idempotency
 
+    session.flush()
+    session.refresh(video)
+
     try:
         # Fill in any missing data.  Generate poster if enabled and necessary.
         validate_video(video, channel.generate_posters if channel else False)
@@ -738,11 +748,6 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
         # inserted.
         logger.warning(f'Failed to validate {video}', exc_info=e)
 
-    try:
-        session.add(video)
-    except InvalidRequestError:
-        # Video is already in a session.
-        pass
     session.flush()
 
     return video

@@ -1,6 +1,9 @@
 import pytest
 
+from modules.videos import schema
 from modules.videos.channel import lib
+from modules.videos.lib import save_channels_config, import_channels_config
+from modules.videos.models import Channel
 from wrolpi.errors import UnknownChannel
 
 
@@ -57,3 +60,32 @@ def test_get_channel(test_session, test_directory, channel_factory):
     for p in params:
         assert lib.get_channel(**p, return_dict=False) == channel_id_channel
         assert lib.get_channel(**p)
+
+
+def test_channels_no_url(test_session, test_directory):
+    """Test that a Channel's URL is coerced to None if it is empty."""
+    channel1_directory = test_directory / 'channel1'
+    channel1_directory.mkdir()
+    channel2_directory = test_directory / 'channel2'
+    channel2_directory.mkdir()
+
+    channel1 = schema.ChannelPostRequest(
+        name='foo',
+        directory=str(channel1_directory),
+    )
+    channel1.url = ''
+    lib.create_channel(test_session, data=channel1)
+
+    channel2 = schema.ChannelPostRequest(
+        name='bar',
+        directory=str(channel2_directory),
+        url=''
+    )
+    lib.create_channel(test_session, data=channel2)
+
+    channels = list(test_session.query(Channel))
+    assert len(channels) == 2
+    assert all(i.url is None for i in channels), [(i.name, i.url) for i in channels]
+
+    save_channels_config()
+    import_channels_config()

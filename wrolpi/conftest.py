@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.dates import set_test_now
 from wrolpi.db import postgres_engine, get_db_args
-from wrolpi.downloader import DownloadManager
+from wrolpi.downloader import DownloadManager, DownloadResult
 from wrolpi.root_api import BLUEPRINTS, api_app
 
 
@@ -124,3 +124,13 @@ def fake_now():
     finally:
         # reset now() to its original functionality.
         set_test_now(None)  # noqa
+
+
+@pytest.fixture
+def successful_download():
+    return DownloadResult(success=True)
+
+
+@pytest.fixture
+def failed_download():
+    return DownloadResult(error='pytest.fixture failed_download error', success=False)

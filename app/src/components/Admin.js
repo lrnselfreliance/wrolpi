@@ -331,7 +331,7 @@ function ClearFailedDownloads({callback}) {
 class DownloadRow extends React.Component {
 
     render() {
-        let {url, frequency, last_successful_download, status, next_download} = this.props;
+        let {url, frequency, last_successful_download, status, location, next_download} = this.props;
         let positive = false;
         if (status === 'pending') {
             positive = true;
@@ -342,7 +342,7 @@ class DownloadRow extends React.Component {
                 <Table.Cell>{secondsToFrequency(frequency)}</Table.Cell>
                 <Table.Cell>{last_successful_download ? secondsToDate(last_successful_download) : null}</Table.Cell>
                 <Table.Cell>{secondsToDate(next_download)}</Table.Cell>
-                <Table.Cell>{status}</Table.Cell>
+                <Table.Cell>{location && <a href={location}>View</a>}</Table.Cell>
             </Table.Row>
         );
     }
@@ -354,6 +354,7 @@ class StoppableRow extends React.Component {
         this.state = {
             stopOpen: false,
             startOpen: false,
+            errorModalOpen: false,
         };
     }
 
@@ -389,9 +390,10 @@ class StoppableRow extends React.Component {
     };
 
     render() {
-        let {url, last_successful_download, status} = this.props;
-        let {stopOpen, startOpen} = this.state;
+        let {url, last_successful_download, status, location, error} = this.props;
+        let {stopOpen, startOpen, errorModalOpen} = this.state;
 
+        let completedAtCell = last_successful_download ? secondsToDate(last_successful_download) : null;
         let buttonCell = <Table.Cell/>;
         let positive = false;
         let negative = false;
@@ -419,9 +421,20 @@ class StoppableRow extends React.Component {
             buttonCell = (
                 <Table.Cell>
                     <Button
+                        onClick={this.openStop}
+                        color='red'
+                    >Stop</Button>
+                    <Confirm
+                        open={stopOpen}
+                        content='Are you sure you want to stop this download?  It will not be retried.'
+                        confirmButton='Stop'
+                        onCancel={this.closeStop}
+                        onConfirm={this.handleStop}
+                    />
+                    <Button
                         onClick={this.openStart}
                         color='green'
-                    >Start</Button>
+                    >Retry</Button>
                     <Confirm
                         open={startOpen}
                         content='Are you sure you want to restart this download?'
@@ -431,13 +444,38 @@ class StoppableRow extends React.Component {
                     />
                 </Table.Cell>
             );
+        } else if (status === 'complete' && location) {
+            buttonCell = (
+                <Table.Cell>
+                    <a href={location}>View</a>
+                </Table.Cell>
+            );
+        }
+        if (error) {
+            completedAtCell = (
+                <Modal
+                    closeIcon
+                    onClose={() => this.setState({errorModalOpen: false})}
+                    onOpen={() => this.setState({errorModalOpen: true})}
+                    open={errorModalOpen}
+                    trigger={<Button icon='exclamation circle' color='red'/>}
+                >
+                    <Modal.Header>Error</Modal.Header>
+                    <Modal.Content>
+                        <pre>{error}</pre>
+                    </Modal.Content>
+                    <Modal.Actions>
+                        <Button onClick={() => this.setState({errorModalOpen: false})}>Close</Button>
+                    </Modal.Actions>
+                </Modal>
+            )
         }
 
         return (
             <Table.Row positive={positive} negative={negative} warning={warning}>
                 <Table.Cell><a href={url} target='_blank'>{textEllipsis(url, 50)}</a></Table.Cell>
-                <Table.Cell>{last_successful_download ? secondsToDate(last_successful_download) : null}</Table.Cell>
                 <Table.Cell>{status}</Table.Cell>
+                <Table.Cell>{completedAtCell}</Table.Cell>
                 {buttonCell}
             </Table.Row>
         );
@@ -498,8 +536,8 @@ class Downloads extends React.Component {
             <Table.Header>
                 <Table.Row>
                     <Table.HeaderCell>URL</Table.HeaderCell>
-                    <Table.HeaderCell>Completed At</Table.HeaderCell>
                     <Table.HeaderCell>Status</Table.HeaderCell>
+                    <Table.HeaderCell>Completed At</Table.HeaderCell>
                     <Table.HeaderCell>Control</Table.HeaderCell>
                 </Table.Row>
             </Table.Header>
@@ -512,7 +550,7 @@ class Downloads extends React.Component {
                     <Table.HeaderCell>Download Frequency</Table.HeaderCell>
                     <Table.HeaderCell>Last Successful Download</Table.HeaderCell>
                     <Table.HeaderCell>Next Download</Table.HeaderCell>
-                    <Table.HeaderCell>Status</Table.HeaderCell>
+                    <Table.HeaderCell>View</Table.HeaderCell>
                 </Table.Row>
             </Table.Header>
         );

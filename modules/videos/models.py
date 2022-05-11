@@ -338,7 +338,7 @@ class Channel(ModelHelper, Base):
             name=self.name,
             skip_download_videos=self.skip_download_videos or [],
             source_id=self.source_id,
-            url=self.url or '',
+            url=self.url or None,
         )
         return config
 

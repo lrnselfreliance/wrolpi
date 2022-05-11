@@ -152,7 +152,7 @@ def create_channel(session: Session, data: schema.ChannelPostRequest, return_dic
         # Verify that the URL/Name/directory aren't taken
         check_for_channel_conflicts(
             session,
-            url=data.url,
+            url=data.url or None,
             name=data.name,
             directory=data.directory,
             source_id=data.source_id,
@@ -162,7 +162,7 @@ def create_channel(session: Session, data: schema.ChannelPostRequest, return_dic
 
     channel = Channel(
         name=data.name,
-        url=data.url,
+        url=data.url or None,
         match_regex=data.match_regex,
         directory=data.directory,  # noqa
         download_frequency=data.download_frequency,

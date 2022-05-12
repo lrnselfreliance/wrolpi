@@ -94,8 +94,10 @@ function ArchivePage(props) {
             <Button icon='arrow left' content='Back' onClick={() => history.goBack()}/>
 
             <Segment>
-                {screenshot}
-                <Header as='h2'>{textEllipsis(archive.title || archive.url, 100)}</Header>
+                <a href={singlefileUrl} target='_blank' className='no-link-underscore card-link'>
+                    {screenshot}
+                    <Header as='h2'>{textEllipsis(archive.title || archive.url, 100)}</Header>
+                </a>
                 <Header as='h3'>{uploadDate(archive.archive_datetime)}</Header>
                 <p><a href={archive.url} target='_blank'>{textEllipsis(archive.url, 100)}</a></p>
 

@@ -316,7 +316,8 @@ class Channel(ModelHelper, Base):
         elif download and self.download_frequency:
             download.frequency = self.download_frequency
             download.url = self.url
-            download.next_download = download_manager.get_next_download(download, session)
+            # Keep next_download if available.
+            download.next_download = download.next_download or download_manager.get_next_download(download, session)
         elif not download and self.download_frequency and self.url:
             download = Download(frequency=self.download_frequency, url=self.url, downloader='video_channel')
             session.add(download)

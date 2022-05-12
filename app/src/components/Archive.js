@@ -147,7 +147,7 @@ function ArchiveCard({archive, setDomain}) {
                 </Card.Meta>
                 <Card.Description>
                     <Link to={`/archive/${archive.id}`}>
-                        <Button icon='file alternate' color='blue' content='Details'
+                        <Button icon='file alternate' content='Details'
                                 labelPosition='left'/>
                     </Link>
                     <Button icon='external' href={archive.url} target='_blank' rel='noopener noreferrer'/>

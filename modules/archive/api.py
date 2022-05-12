@@ -23,7 +23,8 @@ logger = logger.getChild(__name__)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 async def get_archive(_: Request, archive_id: int):
     archive = lib.get_archive(archive_id=archive_id)
-    return json_response({'archive': archive})
+    alternatives = archive.alternatives
+    return json_response({'archive': archive, 'alternatives': alternatives})
 
 
 @bp.delete('/<archive_id:int>')

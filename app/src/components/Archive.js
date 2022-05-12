@@ -1,5 +1,5 @@
 import React, {useState} from "react";
-import {Card, Confirm, Container, Divider, Header, Image, Loader, Placeholder, Segment} from "semantic-ui-react";
+import {Card, Confirm, Container, Header, Image, Loader, Placeholder, Segment} from "semantic-ui-react";
 import {
     CardGroupCentered,
     ClearButton,
@@ -13,7 +13,7 @@ import {
 } from "./Common";
 import {deleteArchive, postDownload, refreshArchives} from "../api";
 import Button from "semantic-ui-react/dist/commonjs/elements/Button";
-import {Link, Route, useHistory} from "react-router-dom";
+import {Link, Route, Switch, useHistory} from "react-router-dom";
 import {ArchivePlaceholder} from "./Placeholder";
 import Table from "semantic-ui-react/dist/commonjs/collections/Table";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
@@ -25,7 +25,7 @@ function ArchivePage(props) {
 
     const history = useHistory();
     const archiveId = props.match.params.archive_id;
-    const archive = useArchive(archiveId);
+    const [archive, alternatives] = useArchive(archiveId);
     if (archive === null) {
         return <Segment><Loader active/></Segment>;
     }
@@ -37,11 +37,18 @@ function ArchivePage(props) {
     }
 
     const singlefileUrl = archive.singlefile_path ? `/media/${encodeURIComponent(archive.singlefile_path)}` : null;
+    const screenshotUrl = archive.screenshot_path ? `/media/${encodeURIComponent(archive.screenshot_path)}` : null;
     const readabilityUrl = archive.readability_path ? `/media/${encodeURIComponent(archive.readability_path)}` : null;
 
     const readabilityLink = readabilityUrl ?
-        <a href={readabilityUrl}><Button icon='book' color='violet' content='Article' labelPosition='left'/></a> :
-        <Button disabled color='violet' content='Article' labelPosition='left'/>;
+        <a href={readabilityUrl} target='_blank'>
+            <Button icon='book' color='violet' content='Article' labelPosition='left'/>
+        </a> :
+        <Button icon='book' disabled color='violet' content='Article' labelPosition='left'/>;
+
+    const screenshot = screenshotUrl ?
+        <Image src={screenshotUrl} size='large' style={{marginTop: '1em', marginBottom: '1em'}}/> :
+        null;
 
     const localDeleteArchive = async () => {
         setDeleteOpen(false);
@@ -52,34 +59,58 @@ function ArchivePage(props) {
         await postDownload(archive.url, 'archive');
     }
 
+    const syncButton = (<>
+        <Button icon='sync' color='yellow' onClick={() => setSyncOpen(true)}
+                content='Sync' labelPosition='left'/>
+        <Confirm
+            open={syncOpen}
+            content='Download the latest version of this URL?'
+            confirmButton='Sync'
+            onCancel={() => setSyncOpen(false)}
+            onConfirm={localSyncArchive}
+        />
+    </>);
+    const deleteButton = (<>
+        <Button icon='trash' color='red' onClick={() => setDeleteOpen(true)}
+                content='Delete' labelPosition='left' aria-label='Delete'/>
+        <Confirm
+            open={deleteOpen}
+            content='Are you sure you want to delete this archive? All files will be deleted'
+            confirmButton='Delete'
+            onCancel={() => setDeleteOpen(false)}
+            onConfirm={localDeleteArchive}
+        />
+    </>);
+
+    let alternativesList = <Loader active/>;
+    if (alternatives && alternatives.length > 0) {
+        alternativesList = <ArchivesList archives={alternatives}/>;
+    } else if (alternatives && alternatives.length === 0) {
+        alternativesList = <p>No alternatives available</p>;
+    }
+
     return (
         <>
             <Button icon='arrow left' content='Back' onClick={() => history.goBack()}/>
-            <Header as='h1'>{textEllipsis(archive.title || archive.url, 100)}</Header>
-            <p>{uploadDate(archive.archive_datetime)}</p>
-            <a href={singlefileUrl}><Button color='blue' icon='eye' content='View' labelPosition='left'/></a>
-            {readabilityLink}
-            <Button icon='sync' color='yellow' onClick={() => setSyncOpen(true)}
-                    content='Sync' labelPosition='left'/>
-            <Confirm
-                open={syncOpen}
-                content='Download the latest version of this URL?'
-                confirmButton='Sync'
-                onCancel={() => setSyncOpen(false)}
-                onConfirm={localSyncArchive}
-            />
-            <Button icon='trash' color='red' onClick={() => setDeleteOpen(true)}
-                    content='Delete' labelPosition='left'/>
-            <Confirm
-                open={deleteOpen}
-                content='Are you sure you want to delete this archive? All files will be deleted'
-                confirmButton='Delete'
-                onCancel={() => setDeleteOpen(false)}
-                onConfirm={localDeleteArchive}
-            />
 
-            <Divider/>
+            <Segment>
+                {screenshot}
+                <Header as='h2'>{textEllipsis(archive.title || archive.url, 100)}</Header>
+                <Header as='h3'>{uploadDate(archive.archive_datetime)}</Header>
+                <p><a href={archive.url} target='_blank'>{textEllipsis(archive.url, 100)}</a></p>
 
+                <a href={singlefileUrl} target='_blank'>
+                    <Button icon='eye' content='View' labelPosition='left'/>
+                </a>
+                {readabilityLink}
+                {syncButton}
+                {deleteButton}
+            </Segment>
+
+            <Segment>
+                <Header as='h2'>Alternatives</Header>
+                {alternativesList}
+            </Segment>
         </>
     )
 }
@@ -104,9 +135,11 @@ function ArchiveCard({archive, setDomain}) {
                         </a>
                     </Container>
                 </Card.Header>
-                <a onClick={() => setDomain(domain)} className="no-link-underscore card-link">
-                    {textEllipsis(domain, 40)}
-                </a>
+                {setDomain &&
+                    <a onClick={() => setDomain(domain)} className="no-link-underscore card-link">
+                        {textEllipsis(domain, 40)}
+                    </a>
+                }
                 <Card.Meta>
                     <p>
                         {uploadDate(archive.archive_datetime)}
@@ -124,15 +157,13 @@ function ArchiveCard({archive, setDomain}) {
     )
 }
 
-function ArchiveCards({archives, syncArchive, deleteArchive, setDomain}) {
+function ArchiveCards({archives, setDomain}) {
     return (
         <CardGroupCentered>
             {archives.map((i) => {
                 return <ArchiveCard
                     key={i['id']}
                     archive={i}
-                    syncArchive={syncArchive}
-                    deleteArchive={deleteArchive}
                     setDomain={setDomain}
                 />
             })}
@@ -140,7 +171,7 @@ function ArchiveCards({archives, syncArchive, deleteArchive, setDomain}) {
     )
 }
 
-export function ArchivesList({archives, searchStr, syncArchive, localDeleteArchive, setDomain}) {
+export function ArchivesList({archives, searchStr, setDomain}) {
     if (archives === null || archives === undefined) {
         // Fetching archives.
         return <ArchivePlaceholder/>;
@@ -157,8 +188,6 @@ export function ArchivesList({archives, searchStr, syncArchive, localDeleteArchi
         // Archives fetched successfully!
         return <ArchiveCards
             archives={archives}
-            syncArchive={syncArchive}
-            deleteArchive={localDeleteArchive}
             setDomain={setDomain}
         />;
     }
@@ -167,16 +196,6 @@ export function ArchivesList({archives, searchStr, syncArchive, localDeleteArchi
 export function Archives() {
     const {archives, setPage, totalPages, searchStr, activePage, setSearchStr, domain, setDomain, search} =
         useArchives(20);
-
-    const syncArchive = async (url) => {
-        await postDownload(url, 'archive');
-        await search();
-    }
-
-    const localDeleteArchive = async (archive_id) => {
-        await deleteArchive(archive_id);
-        await search();
-    }
 
     let domainClearButton = null;
     if (domain) {
@@ -194,8 +213,6 @@ export function Archives() {
             <ArchivesList
                 archives={archives}
                 searchStr={searchStr}
-                syncArchive={syncArchive}
-                localDeleteArchive={localDeleteArchive}
                 setDomain={setDomain}
             />
             <div style={{marginTop: '3em', textAlign: 'center'}}>
@@ -287,9 +304,11 @@ export function ArchiveRoute(props) {
     ];
     return <PageContainer>
         <TabLinks links={links}/>
-        <Route path='/archive/:archive_id' exact component={ArchivePage}/>
-        <Route path='/archive' exact component={Archives}/>
-        <Route path='/archive/domains' component={Domains}/>
-        <Route path='/archive/manage' component={ManageArchives}/>
+        <Switch>
+            <Route path='/archive/domains' exact component={Domains}/>
+            <Route path='/archive/manage' exact component={ManageArchives}/>
+            <Route path='/archive/:archive_id' exact component={ArchivePage}/>
+            <Route path='/archive' exact component={Archives}/>
+        </Switch>
     </PageContainer>
 }

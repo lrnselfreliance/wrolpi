@@ -332,16 +332,15 @@ def get_domain(session, domain: str) -> Domain:
 
 @optional_session
 def get_archive(session, archive_id: int) -> Archive:
+    """Get an Archive."""
     archive = session.query(Archive).filter_by(id=archive_id).one_or_none()
     if not archive:
-        raise InvalidDomain(f'Invalid archive id: {archive_id}')
+        raise InvalidArchive(f'Invalid archive id: {archive_id}')
     return archive
 
 
 def delete_archive(archive_id: int):
-    """
-    Delete an Archive and all of it's files.
-    """
+    """Delete an Archive and all of it's files."""
     with get_db_session(commit=True) as session:
         archive: Archive = session.query(Archive).filter_by(id=archive_id).one_or_none()
         if not archive:

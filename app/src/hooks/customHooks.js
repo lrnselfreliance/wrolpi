@@ -155,10 +155,13 @@ export const useArchives = ({defaultLimit = 20}) => {
 
 export const useArchive = (archiveId) => {
     const [archive, setArchive] = useState(null);
+    const [alternatives, setAlternatives] = useState(null);
 
     const fetchArchive = async () => {
         try {
-            setArchive(await getArchive(archiveId))
+            const [a, alt] = await getArchive(archiveId);
+            setArchive(a);
+            setAlternatives(alt);
         } catch (e) {
             console.error(e);
             setArchive(undefined);
@@ -167,9 +170,9 @@ export const useArchive = (archiveId) => {
 
     useEffect(() => {
         fetchArchive();
-    }, []);
+    }, [archiveId]);
 
-    return archive;
+    return [archive, alternatives];
 }
 
 export const useVersion = () => {

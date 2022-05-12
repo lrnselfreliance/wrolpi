@@ -89,7 +89,6 @@ export default function App() {
                     <Route path="/admin" component={Admin}/>
                     <Route path="/apps" component={AppsRoute}/>
                     <Route path="/inventory" component={InventoryRoute}/>
-                    <Route path='/archive/:archive_id' component={ArchiveRoute}/>
                     <Route path='/archive' component={ArchiveRoute}/>
                     <Route path='/map' component={MapRoute}/>
                     <Route path='/files' component={FilesRoute}/>

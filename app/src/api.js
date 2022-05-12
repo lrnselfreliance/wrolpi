@@ -434,7 +434,7 @@ export async function getArchive(archiveId) {
     const response = await apiGet(`${ARCHIVES_API}/${archiveId}`);
     if (response.status === 200) {
         const data = await response.json();
-        return data['archive'];
+        return [data['archive'], data['alternatives']];
     } else {
         toast({
             type: 'error',

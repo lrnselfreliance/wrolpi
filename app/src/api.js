@@ -430,6 +430,21 @@ export async function fetchDomains() {
     }
 }
 
+export async function getArchive(archiveId) {
+    const response = await apiGet(`${ARCHIVES_API}/${archiveId}`);
+    if (response.status === 200) {
+        const data = await response.json();
+        return data['archive'];
+    } else {
+        toast({
+            type: 'error',
+            title: 'Archive Error',
+            description: 'Unable to get Archive.  See server logs.',
+            time: 5000,
+        });
+    }
+}
+
 export async function postDownload(urls, downloader) {
     let body = {urls: urls, downloader: downloader};
     let response = await apiPost(`${API_URI}/download`, body);

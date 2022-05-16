@@ -2,3 +2,27 @@ textarea.otp {
     width: 100%;
     color: #333;
 }
+
+.inline-header h1 {
+    display: inline-block;
+}
+
+.inline-header h2 {
+    display: inline-block;
+}
+
+.inline-header h3 {
+    display: inline-block;
+}
+
+.inline-header h4 {
+    display: inline-block;
+}
+
+.inline-header h5 {
+    display: inline-block;
+}
+
+.inline-header span {
+    margin-left: 1em;
+}

@@ -3,6 +3,7 @@ import {Card, Confirm, Container, Header, Image, Loader, Placeholder, Segment} f
 import {
     CardGroupCentered,
     ClearButton,
+    HelpHeader,
     PageContainer,
     Paginator,
     SearchInput,
@@ -22,10 +23,10 @@ import {useArchive, useArchives, useDomains} from "../hooks/customHooks";
 function ArchivePage(props) {
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [syncOpen, setSyncOpen] = useState(false);
-
     const history = useHistory();
     const archiveId = props.match.params.archive_id;
     const [archive, alternatives] = useArchive(archiveId);
+
     if (archive === null) {
         return <Segment><Loader active/></Segment>;
     }
@@ -40,11 +41,13 @@ function ArchivePage(props) {
     const screenshotUrl = archive.screenshot_path ? `/media/${encodeURIComponent(archive.screenshot_path)}` : null;
     const readabilityUrl = archive.readability_path ? `/media/${encodeURIComponent(archive.readability_path)}` : null;
 
+    const singlefileButton = <a href={singlefileUrl} target='_blank'>
+        <Button content='View' color='blue'/>
+    </a>;
+
     const readabilityLink = readabilityUrl ?
-        <a href={readabilityUrl} target='_blank'>
-            <Button icon='book' color='violet' content='Article' labelPosition='left'/>
-        </a> :
-        <Button icon='book' disabled color='violet' content='Article' labelPosition='left'/>;
+        <a href={readabilityUrl} target='_blank'><Button content='Article'/></a> :
+        <Button disabled content='Article'/>;
 
     const screenshot = screenshotUrl ?
         <Image src={screenshotUrl} size='large' style={{marginTop: '1em', marginBottom: '1em'}}/> :
@@ -60,8 +63,7 @@ function ArchivePage(props) {
     }
 
     const syncButton = (<>
-        <Button icon='sync' color='yellow' onClick={() => setSyncOpen(true)}
-                content='Sync' labelPosition='left'/>
+        <Button color='yellow' onClick={() => setSyncOpen(true)} content='Sync'/>
         <Confirm
             open={syncOpen}
             content='Download the latest version of this URL?'
@@ -71,8 +73,7 @@ function ArchivePage(props) {
         />
     </>);
     const deleteButton = (<>
-        <Button icon='trash' color='red' onClick={() => setDeleteOpen(true)}
-                content='Delete' labelPosition='left' aria-label='Delete'/>
+        <Button color='red' onClick={() => setDeleteOpen(true)} content='Delete' aria-label='Delete'/>
         <Confirm
             open={deleteOpen}
             content='Are you sure you want to delete this archive? All files will be deleted'
@@ -94,23 +95,24 @@ function ArchivePage(props) {
             <Button icon='arrow left' content='Back' onClick={() => history.goBack()}/>
 
             <Segment>
+                {screenshot}
                 <a href={singlefileUrl} target='_blank' className='no-link-underscore card-link'>
-                    {screenshot}
                     <Header as='h2'>{textEllipsis(archive.title || archive.url, 100)}</Header>
                 </a>
                 <Header as='h3'>{uploadDate(archive.archive_datetime)}</Header>
                 <p><a href={archive.url} target='_blank'>{textEllipsis(archive.url, 100)}</a></p>
 
-                <a href={singlefileUrl} target='_blank'>
-                    <Button icon='eye' content='View' labelPosition='left'/>
-                </a>
+                {singlefileButton}
                 {readabilityLink}
                 {syncButton}
                 {deleteButton}
             </Segment>
 
             <Segment>
-                <Header as='h2'>Alternatives</Header>
+                <HelpHeader
+                    headerContent='Alternatives'
+                    popupContent='Alternative archives are archives that have the same URL.'
+                />
                 {alternativesList}
             </Segment>
         </>

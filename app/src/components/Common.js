@@ -4,6 +4,7 @@ import {
     Checkbox,
     Container,
     Form,
+    Header,
     Icon,
     Image,
     Input,
@@ -712,6 +713,17 @@ export function HelpPopup({icon, size, content, position}) {
                   style={{marginLeft: '0.25em', marginRight: '0.25em'}}
             />}
     />
+}
+
+export function HelpHeader({icon, headerSize, iconSize, headerContent, popupContent}) {
+    return (
+        <div className='inline-header'>
+            <Header as={headerSize || 'h2'}>{headerContent}</Header>
+            <span>
+                <HelpPopup content={popupContent} size={iconSize} icon={icon}/>
+            </span>
+        </div>
+    )
 }
 
 export function minutesToTimestamp(minutes) {

@@ -460,7 +460,7 @@ class StoppableRow extends React.Component {
                     open={errorModalOpen}
                     trigger={<Button icon='exclamation circle' color='red'/>}
                 >
-                    <Modal.Header>Error</Modal.Header>
+                    <Modal.Header>Download Error</Modal.Header>
                     <Modal.Content>
                         <pre>{error}</pre>
                     </Modal.Content>

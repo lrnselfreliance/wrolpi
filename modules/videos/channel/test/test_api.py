@@ -1,6 +1,7 @@
 import json
 import pathlib
 import tempfile
+import time
 from datetime import timedelta
 from http import HTTPStatus
 
@@ -171,16 +172,22 @@ def test_channel_download_crud(test_session, simple_channel):
     simple_channel.update({'url': 'https://example.com'})
     test_session.commit()
 
+    # Adding a frequency adds a Download.
+    simple_channel.update({'download_frequency': 1})
+    test_session.commit()
+    assert test_session.query(Download).count() == 1
+    next_download = simple_channel.get_download().next_download
+    assert next_download
 
-def test_delete_channel_delete_download(download_channel, test_session):
-    """Deleting a Channel deletes it's Download."""
-    downloads = test_session.query(Download).all()
-    assert downloads and all(i.url == download_channel.url for i in downloads)
+    # Next download isn't overwritten.
+    time.sleep(1)
+    simple_channel.update({'name': 'new name'})
+    test_session.commit()
+    assert simple_channel.get_download().next_download == next_download
 
-    delete_channel(channel_id=download_channel.id)
-
-    downloads = test_session.query(Download).all()
-    assert not list(downloads)
+    # Deleting a Channel deletes it's Download.
+    delete_channel(channel_id=simple_channel.id)
+    assert test_session.query(Download).count() == 0
 
 
 def test_video_search(test_client, test_session):

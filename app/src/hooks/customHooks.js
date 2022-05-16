@@ -3,6 +3,7 @@ import {
     fetchDomains,
     filesSearch,
     getAPIStatus,
+    getArchive,
     getDownloaders,
     getFiles,
     getHotspotStatus,
@@ -150,6 +151,28 @@ export const useArchives = ({defaultLimit = 20}) => {
         setActivePage,
         search,
     };
+}
+
+export const useArchive = (archiveId) => {
+    const [archive, setArchive] = useState(null);
+    const [alternatives, setAlternatives] = useState(null);
+
+    const fetchArchive = async () => {
+        try {
+            const [a, alt] = await getArchive(archiveId);
+            setArchive(a);
+            setAlternatives(alt);
+        } catch (e) {
+            console.error(e);
+            setArchive(undefined);
+        }
+    }
+
+    useEffect(() => {
+        fetchArchive();
+    }, [archiveId]);
+
+    return [archive, alternatives];
 }
 
 export const useVersion = () => {

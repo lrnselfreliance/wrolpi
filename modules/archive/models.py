@@ -90,6 +90,18 @@ class Archive(Base, ModelHelper):
             if not domain_archives:
                 self.domain.delete()
 
+    @property
+    def alternatives(self):
+        """
+        Get a list of Archives that share my URL.
+        """
+        session = Session.object_session(self)
+        i = list(session.query(Archive).filter(
+            Archive.id != self.id,
+            Archive.url == self.url,
+        ).order_by(Archive.archive_datetime))
+        return i
+
 
 class Domain(Base, ModelHelper):
     __tablename__ = 'domains'  # plural to avoid conflict

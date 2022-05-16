@@ -30,8 +30,8 @@ class ArchiveDownloader(Downloader, ABC):
         if download.attempts > 3:
             raise UnrecoverableDownloadError(f'Max download attempts reached for {download.url}')
 
-        lib.do_archive(download.url)
-        return DownloadResult(success=True)
+        archive = lib.do_archive(download.url)
+        return DownloadResult(success=True, location=f'/archive/{archive.id}')
 
 
 # Archive downloader is the last downloader which should be used.

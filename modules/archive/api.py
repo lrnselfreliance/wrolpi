@@ -18,6 +18,15 @@ bp = get_blueprint('Archive', '/api/archive')
 logger = logger.getChild(__name__)
 
 
+@bp.get('/<archive_id:int>')
+@openapi.description('Get an archive')
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+async def get_archive(_: Request, archive_id: int):
+    archive = lib.get_archive(archive_id=archive_id)
+    alternatives = archive.alternatives
+    return json_response({'archive': archive, 'alternatives': alternatives})
+
+
 @bp.delete('/<archive_id:int>')
 @openapi.description('Delete an individual archive')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)

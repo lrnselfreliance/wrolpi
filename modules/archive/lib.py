@@ -19,7 +19,7 @@ from modules.archive.models import Domain, Archive
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, logger, chunks, extract_domain, chdir, escape_file_name, walk
 from wrolpi.dates import now, Seconds, local_timezone
-from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
+from wrolpi.db import get_db_session, get_db_curs, get_ranked_models, optional_session
 from wrolpi.errors import InvalidDomain, UnknownURL, InvalidArchive
 from wrolpi.vars import DOCKERIZED, PYTEST
 
@@ -330,10 +330,17 @@ def get_domain(session, domain: str) -> Domain:
     return domain_
 
 
+@optional_session
+def get_archive(session, archive_id: int) -> Archive:
+    """Get an Archive."""
+    archive = session.query(Archive).filter_by(id=archive_id).one_or_none()
+    if not archive:
+        raise InvalidArchive(f'Invalid archive id: {archive_id}')
+    return archive
+
+
 def delete_archive(archive_id: int):
-    """
-    Delete an Archive and all of it's files.
-    """
+    """Delete an Archive and all of it's files."""
     with get_db_session(commit=True) as session:
         archive: Archive = session.query(Archive).filter_by(id=archive_id).one_or_none()
         if not archive:

@@ -96,7 +96,7 @@ Install WROLPi onto a fresh Raspberry Pi.
 
 **Warning: this will clobber anything else on the Raspberry Pi!  Do not run this installation script elsewhere!**
 
-1. Install [Ubuntu Server 20.04](https://ubuntu.com/download/raspberry-pi) onto a RaspberryPi.
+1. Install [Ubuntu Server 20.04](https://cdimage.ubuntu.com/releases/20.04/release/) onto a RaspberryPi.
 2. Login to the new RaspberryPi.
 3. Get the WROLPi installation script
     * `wget https://raw.githubusercontent.com/lrnselfreliance/wrolpi/release/install.sh -O /tmp/install.sh`

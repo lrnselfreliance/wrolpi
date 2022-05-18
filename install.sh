@@ -49,6 +49,9 @@ set -e
 # Check that WROLPi directory exists, and contains wrolpi.
 [ -d /opt/wrolpi ] && [ ! -d /opt/wrolpi/wrolpi ] && echo "/opt/wrolpi exists but does not contain wrolpi!" && exit 3
 
+# Add the WROLPi directory as a global safe directory so root can fetch.
+[ -d /opt/wrolpi ] && git config --global --add safe.directory /opt/wrolpi
+
 # Get the latest WROLPi code.  Use the branch requested.
 apt install -y git
 git --version

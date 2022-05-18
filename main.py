@@ -43,6 +43,30 @@ def db_main(args):
     return 0
 
 
+INTERACTIVE_BANNER = '''
+This is the interactive WROLPi shell.  Use this to interact with the WROLPi API library.
+
+Example (get the duration of every video file):
+from modules.videos.models import Video
+from modules.videos.common import get_video_duration
+videos = session.query(Video).filter(Video.video_path != None).all()
+videos = list(videos)
+for video in videos:
+    get_video_duration(video.video_path.path)
+
+'''
+
+
+def launch_interactive_shell():
+    """Launches an interactive shell with a DB session."""
+    import code
+    from wrolpi.db import get_db_session
+
+    modules = import_modules()
+    with get_db_session() as session:
+        code.interact(banner=INTERACTIVE_BANNER, local=locals())
+
+
 async def main(loop):
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='count')
@@ -50,6 +74,8 @@ async def main(loop):
     parser.add_argument('-c', '--check-media', action='store_true', default=False,
                         help='Check that the media directory is mounted and has the correct permissions.'
                         )
+    parser.add_argument('-i', '--interactive', action='store_true', default=False,
+                        help='Enter an interactive shell with some WROLPi tools')
 
     sub_commands = parser.add_subparsers(title='sub-commands', dest='sub_commands')
 
@@ -62,6 +88,10 @@ async def main(loop):
     db_parser.add_argument('command', help='Supported commands: upgrade, downgrade')
 
     args = parser.parse_args()
+
+    if args.interactive:
+        launch_interactive_shell()
+        return 0
 
     if args.version:
         # Print out the relevant version information, then exit.

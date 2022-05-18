@@ -3,6 +3,7 @@ import os
 import pathlib
 import subprocess
 import tempfile
+from decimal import Decimal
 from functools import partial
 from pathlib import Path
 from typing import Union, Tuple, List, Set, Iterable, Optional
@@ -254,8 +255,36 @@ def get_video_duration(video_path: Path) -> Optional[int]:
         logger.warning(f'FFPROBE failed to get duration with stderr: {e.stderr.decode()}')
         raise
     stdout = proc.stdout.decode()
-    duration = int(float(stdout.strip()))
+    duration = int(Decimal(stdout.strip()))
     return duration
+
+
+def check_for_video_corruption(video_path: Path) -> bool:
+    """Uses ffprobe to check for specific ways a video file can be corrupt."""
+    if not isinstance(video_path, Path):
+        video_path = Path(video_path)
+    if not video_path.is_file():
+        raise FileNotFoundError(f'{video_path} does not exist!')
+
+    cmd = [FFPROBE_BIN, str(video_path)]
+    try:
+        proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        logger.warning(f'FFPROBE failed to check for corruption with stdout: {e.stdout.decode()}')
+        logger.warning(f'FFPROBE failed to check for corruption with stderr: {e.stderr.decode()}')
+        return True  # video is corrupt.
+
+    messages = (
+        'Invalid NAL unit size',
+        'Error splitting the input into NAL units',
+    )
+    stderr = proc.stderr.decode()
+    corrupt = False
+    for error in messages:
+        if error in stderr:
+            logger.warning(f'Possible video corruption ({error}): {video_path}')
+            corrupt = True
+    return corrupt
 
 
 def apply_info_json(channel_id: int):

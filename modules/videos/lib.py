@@ -18,7 +18,7 @@ from wrolpi.vars import PYTEST
 from .captions import get_captions
 from .common import generate_video_paths, remove_duplicate_video_paths, apply_info_json, get_video_duration, \
     is_valid_poster, convert_image, generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
-    get_no_channel_directory
+    get_no_channel_directory, check_for_video_corruption
 from .models import Channel, Video
 
 logger = logger.getChild(__name__)
@@ -180,6 +180,9 @@ def validate_video(video: Video, channel_generate_poster: bool):
         video.view_count = video.view_count or view_count
 
     video_path = video.video_path.path if isinstance(video.video_path, MediaPath) else video.video_path
+
+    # Check for corruption, but don't throw away the video even if it is corrupt.  Errors will be logged in this call.
+    check_for_video_corruption(video_path)
 
     if not video.title or not video.upload_date or not video.source_id:
         # Video is missing things that can be extracted from the video file name.

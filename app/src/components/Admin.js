@@ -462,7 +462,7 @@ class StoppableRow extends React.Component {
                 >
                     <Modal.Header>Download Error</Modal.Header>
                     <Modal.Content>
-                        <pre>{error}</pre>
+                        <pre style={{overflowX: 'scroll'}}>{error}</pre>
                     </Modal.Content>
                     <Modal.Actions>
                         <Button onClick={() => this.setState({errorModalOpen: false})}>Close</Button>

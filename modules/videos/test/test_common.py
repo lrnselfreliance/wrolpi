@@ -14,6 +14,7 @@ from wrolpi.dates import local_timezone, now
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.test.common import build_test_directories, TestAPI
 from wrolpi.vars import PROJECT_DIR
+from .. import common
 from ..common import get_matching_directories, convert_image, remove_duplicate_video_paths, \
     apply_info_json, get_video_duration, generate_video_poster, is_valid_poster
 from ..lib import save_channels_config, get_channels_config, import_channels_config
@@ -414,3 +415,29 @@ def test_import_channels_config_outdated(test_session, test_directory, channel_f
     # Videos were favorited by their channel "link".
     assert vid1.favorite and vid2.favorite and vid3.favorite
     assert not vid4.favorite
+
+
+def test_check_for_video_corruption(video_file, test_directory):
+    # The test video is not corrupt.
+    assert common.check_for_video_corruption(video_file) is False
+
+    # An empty file is corrupt.
+    empty_file = test_directory / 'empty file.mp4'
+    empty_file.touch()
+    assert common.check_for_video_corruption(empty_file) is True
+
+    # A video file must be complete.
+    truncated_video = test_directory / 'truncated_video.mp4'
+    with truncated_video.open('wb') as fh:
+        fh.write(video_file.read_bytes()[:10000])
+    assert common.check_for_video_corruption(truncated_video) is True
+
+    # Check for specific ffprobe errors.
+    with mock.patch('modules.videos.common.subprocess') as mock_subprocess:
+        # `video_file` is ignored for these calls.
+        mock_subprocess.run().stderr.decode.return_value = 'Something\nInvalid NAL unit size'
+        assert common.check_for_video_corruption(video_file) is True
+        mock_subprocess.run().stderr.decode.return_value = 'Something\nError splitting the input into NAL units'
+        assert common.check_for_video_corruption(video_file) is True
+        mock_subprocess.run().stderr.decode.return_value = 'Some stderr is fine'
+        assert common.check_for_video_corruption(video_file) is False

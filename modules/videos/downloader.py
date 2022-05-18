@@ -45,7 +45,7 @@ PREFERRED_VIDEO_FORMAT = 'best[height=720],22,720p,mp4-480p,mp4-360p,mp4-240p,18
 
 def extract_info(url: str, ydl: YoutubeDL = YDL) -> dict:
     """Get info about a video.  Separated for testing."""
-    return ydl.extract_info(url, download=False, process=False)
+    return ydl.extract_info(url, download=False, process=True)
 
 
 def prepare_filename(entry: dict, ydl: YoutubeDL = YDL) -> str:
@@ -254,6 +254,7 @@ class VideoDownloader(Downloader, ABC):
         options = get_downloader_config().dict()
         options['outtmpl'] = f'{out_dir}/{options["file_name_format"]}'
         options['merge_output_format'] = PREFERRED_VIDEO_EXTENSION
+        logger.debug(f'Download video with options: {options}')
 
         logger.debug(f'Downloading {url} to {out_dir}')
 
@@ -265,10 +266,8 @@ class VideoDownloader(Downloader, ABC):
         # Get the path where the video will be saved.
         entry = extract_info(url, ydl=ydl)
         final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
-        if final_filename.suffix == '.NA':
-            # yt-dlp has odd behavior sometimes and ignores our preferred video extension.
-            final_filename = final_filename.with_suffix('.mp4')
-            logger.warning(f'Had to replace video extension: {final_filename}')
+        if final_filename.suffix.lower() != f'.{PREFERRED_VIDEO_EXTENSION}':
+            raise DownloadError(f'Cannot download video {url} because yt-dlp filename is invalid.')
         return final_filename, entry
 
 

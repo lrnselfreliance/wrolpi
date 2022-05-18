@@ -54,6 +54,7 @@ def enable_hotspot():
     logger.warning(f'Hotspot status: {status}')
 
     if status == HotspotStatus.connected:
+        logger.info('Hotspot already connected.  Restarting hotspot.')
         disable_hotspot()
         return enable_hotspot()
     elif status == HotspotStatus.disconnected:
@@ -61,11 +62,13 @@ def enable_hotspot():
         cmd = (SUDO, NMCLI, 'device', 'wifi', 'hotspot', 'ifname', 'wlan0',
                'ssid', WROLPI_CONFIG.hotspot_ssid, 'password', WROLPI_CONFIG.hotspot_password)
         subprocess.check_call(cmd)
+        logger.info('Enabling hotspot successful')
         return True
     elif status == HotspotStatus.unavailable:
         # Radio is not on, turn it on.
         cmd = (SUDO, NMCLI, 'radio', 'wifi', 'on')
         subprocess.check_call(cmd)
+        logger.info('Turned on hotspot radio.')
         return enable_hotspot()
     elif status == HotspotStatus.unknown:
         logger.error('Cannot enable hotspot with unknown status!')
@@ -76,6 +79,7 @@ def disable_hotspot():
     cmd = (SUDO, NMCLI, 'radio', 'wifi', 'off')
     try:
         subprocess.check_call(cmd)
+        logger.info('Disabling hotspot successful')
         return True
     except Exception as e:
         logger.error('Failed to disable hotspot', exc_info=e)

@@ -17,6 +17,7 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi import admin
+from wrolpi.admin import HotspotStatus
 from wrolpi.common import set_sanic_url_parts, logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
     wrol_mode_check, native_only, set_wrol_mode
 from wrolpi.dates import set_timezone
@@ -158,12 +159,16 @@ def update_settings(_: Request, body: SettingsRequest):
     # Remove any keys with None values, then save the config.
     config = {k: v for k, v in body.__dict__.items() if v is not None}
     wrolpi_config = get_config()
+    old_password = wrolpi_config.hotspot_password
     wrolpi_config.update(config)
 
     if body.wrol_mode:
         download_manager.kill()
 
-    if body.hotspot_status is True:
+    # If the password was changed, we need to restart the hotspot.
+    password_changed = (new_password := config.get('hotspot_password')) and old_password != new_password
+
+    if body.hotspot_status is True or (password_changed and admin.hotspot_status() == HotspotStatus.connected):
         # Turn on Hotspot
         if admin.enable_hotspot() is False:
             raise HotspotError('Could not turn on hotspot')

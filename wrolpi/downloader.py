@@ -182,6 +182,7 @@ class Downloader:
         """
         Run a subprocess using the provided arguments.  This process can be killed by the Download Manager.
         """
+        logger.debug(f'{self} launching download process with args: {" ".join(cmd)}')
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, **kwargs)
         pid = proc.pid
         logger.debug(f'{self} launched download process {pid=} for {url}')
@@ -370,6 +371,9 @@ class DownloadManager:
                     logger.warning(f'Failed to download {url}.  Will be tried again later.', exc_info=e)
                     result = DownloadResult(success=False, error=str(traceback.format_exc()))
 
+                error_len = len(result.error) if result.error else 0
+                logger.debug(f'Got {result.success=} from {downloader} with {error_len=}')
+
                 # Long-running, get the download again.
                 with get_db_session(commit=True) as session_:
                     download = self.get_download(session_, id_=download_id)
@@ -377,7 +381,7 @@ class DownloadManager:
                     # clear out an outdated location.
                     download.location = result.location or download.location or None
                     # Clear any old errors if the download succeeded.
-                    download.error = result.error if download.error else None
+                    download.error = result.error if result.error else None
                     download.next_download = self.get_next_download(download, session)
 
                     if try_again is False:

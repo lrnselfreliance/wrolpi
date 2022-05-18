@@ -4,6 +4,7 @@ from itertools import zip_longest
 
 from mock import mock
 
+from wrolpi.admin import HotspotStatus
 from wrolpi.common import get_config
 from wrolpi.dates import strptime
 from wrolpi.db import get_db_session
@@ -197,8 +198,9 @@ def test_hotspot_settings(test_session, test_client, test_config):
         assert response.json['code'] == 35
         mock_admin.disable_hotspot.assert_called_once()
 
-        config = get_config()
-        assert config.hotspot_on_startup is True
+        mock_admin.enable_hotspot.reset_mock()
+        mock_admin.enable_hotspot.return_value = True
+        mock_admin.hotspot_status.return_value = HotspotStatus.connected
 
         # Hotspot password can be changed.
         mock_admin.disable_hotspot.return_value = True
@@ -207,6 +209,8 @@ def test_hotspot_settings(test_session, test_client, test_config):
         assert response.status_code == HTTPStatus.NO_CONTENT
         assert config.hotspot_password == 'new password'
         assert config.hotspot_ssid == 'new ssid'
+        # Changing the password restarts the hotspot.
+        mock_admin.enable_hotspot.assert_called_once()
 
 
 @skip_circleci

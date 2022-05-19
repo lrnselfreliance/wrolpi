@@ -43,9 +43,9 @@ PREFERRED_VIDEO_EXTENSION = 'mp4'
 PREFERRED_VIDEO_FORMAT = 'best[height=720],22,720p,mp4-480p,mp4-360p,mp4-240p,18,bestvideo+bestaudio'
 
 
-def extract_info(url: str, ydl: YoutubeDL = YDL) -> dict:
+def extract_info(url: str, ydl: YoutubeDL = YDL, process=False) -> dict:
     """Get info about a video.  Separated for testing."""
-    return ydl.extract_info(url, download=False, process=True)
+    return ydl.extract_info(url, download=False, process=process)
 
 
 def prepare_filename(entry: dict, ydl: YoutubeDL = YDL) -> str:
@@ -264,7 +264,7 @@ class VideoDownloader(Downloader, ABC):
         ydl.add_default_info_extractors()
 
         # Get the path where the video will be saved.
-        entry = extract_info(url, ydl=ydl)
+        entry = extract_info(url, ydl=ydl, process=True)
         final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
         if final_filename.suffix.lower() != f'.{PREFERRED_VIDEO_EXTENSION}':
             raise DownloadError(f'Cannot download video {url} because yt-dlp filename is invalid.')

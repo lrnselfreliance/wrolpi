@@ -3,7 +3,7 @@ import {
     Button,
     Checkbox,
     Confirm,
-    Container,
+    Container, Dimmer,
     Divider,
     Form,
     Header,
@@ -44,6 +44,7 @@ class Settings extends React.Component {
         this.state = {
             disabled: false,
             hotspot_encryption: 'WPA',
+            pending: false,
             qrCodeValue: '',
             qrOpen: false,
             ready: false,
@@ -84,6 +85,7 @@ class Settings extends React.Component {
 
     async handleSubmit(e) {
         e.preventDefault();
+        this.setState({disabled: true, pending: true});
         let settings = {
             download_on_startup: this.state.download_on_startup,
             hotspot_on_startup: this.state.hotspot_on_startup,
@@ -93,6 +95,7 @@ class Settings extends React.Component {
             timezone: this.state.timezone.value,
         }
         await saveSettings(settings);
+        this.setState({disabled: false, pending: false});
     }
 
     handleInputChange = async (e, name, value) => {
@@ -120,6 +123,7 @@ class Settings extends React.Component {
             hotspot_on_startup,
             hotspot_password,
             hotspot_ssid,
+            pending,
             qrCodeValue,
             throttle_on_startup,
             timezone,
@@ -210,6 +214,10 @@ class Settings extends React.Component {
                     <Button color="blue" type="submit" disabled={disabled}>
                         Save
                     </Button>
+
+                    <Dimmer active={pending} inverted>
+                        <Loader active={pending} size='large'/>
+                    </Dimmer>
 
                 </Form>
             </Container>

@@ -662,47 +662,6 @@ export function CardGroupCentered(props) {
     )
 }
 
-export function HotspotToggle(props) {
-    let {on, setHotspot} = useHotspot();
-    return <Checkbox toggle {...props}
-                     label='WiFi Hotspot'
-                     disabled={on === null}
-                     checked={on === true}
-                     onChange={(e, data) => setHotspot(data.checked)}
-    />;
-}
-
-export function ThrottleToggle(props) {
-    let {on, setThrottle} = useThrottle();
-    return <Checkbox toggle {...props}
-                     label='CPU Power-save'
-                     disabled={on === null}
-                     checked={on === true}
-                     onChange={(e, data) => setThrottle(data.checked)}
-    />;
-}
-
-export function DisableDownloadsToggle() {
-    let {on, setDownloads} = useDownloaders();
-    return <Checkbox toggle
-                     label={on ? 'Downloading Enabled' : 'Downloading Disabled'}
-                     disabled={on === null}
-                     checked={on === true}
-                     onChange={(e, data) => setDownloads(data.checked)}
-    />;
-}
-
-export function emptyToNull(obj) {
-    const keys = Object.keys(obj);
-    for (let i = 0; i < keys.length; i++) {
-        const key = keys[i];
-        if (obj[key] === '') {
-            obj[key] = null;
-        }
-    }
-    return obj;
-}
-
 export function HelpPopup({icon, size, content, position}) {
     return <Popup
         content={content}
@@ -724,6 +683,59 @@ export function HelpHeader({icon, headerSize, iconSize, headerContent, popupCont
             </span>
         </div>
     )
+}
+
+export function HotspotToggle(props) {
+    let {on, setHotspot} = useHotspot();
+    const disabled = on === null;
+    return (
+        <>
+            <Checkbox toggle {...props}
+                      label='WiFi Hotspot'
+                      disabled={disabled}
+                      checked={on === true}
+                      onChange={(e, data) => setHotspot(data.checked)}
+            />
+            {disabled && <HelpPopup content='Hotspot is not supported on this server'/>}
+        </>
+    );
+}
+
+export function ThrottleToggle(props) {
+    let {on, setThrottle} = useThrottle();
+    const disabled = on === null;
+    return (
+        <>
+            <Checkbox toggle {...props}
+                      label='CPU Power-save'
+                      disabled={disabled}
+                      checked={on === true}
+                      onChange={(e, data) => setThrottle(data.checked)}
+            />
+            {disabled && <HelpPopup content='CPU Power-save is not supported on this server'/>}
+        </>
+    );
+}
+
+export function DisableDownloadsToggle() {
+    let {on, setDownloads} = useDownloaders();
+    return <Checkbox toggle
+                     label={on ? 'Downloading Enabled' : 'Downloading Disabled'}
+                     disabled={on === null}
+                     checked={on === true}
+                     onChange={(e, data) => setDownloads(data.checked)}
+    />;
+}
+
+export function emptyToNull(obj) {
+    const keys = Object.keys(obj);
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        if (obj[key] === '') {
+            obj[key] = null;
+        }
+    }
+    return obj;
 }
 
 export function minutesToTimestamp(minutes) {

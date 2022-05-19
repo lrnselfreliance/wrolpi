@@ -54,6 +54,9 @@ videos = list(videos)
 for video in videos:
     get_video_duration(video.video_path.path)
 
+Check local variables:
+locals().keys()
+
 '''
 
 

@@ -435,9 +435,9 @@ def test_check_for_video_corruption(video_file, test_directory):
     # Check for specific ffprobe errors.
     with mock.patch('modules.videos.common.subprocess') as mock_subprocess:
         # `video_file` is ignored for these calls.
-        mock_subprocess.run().stderr.decode.return_value = 'Something\nInvalid NAL unit size'
+        mock_subprocess.run().stderr = b'Something\nInvalid NAL unit size'
         assert common.check_for_video_corruption(video_file) is True
-        mock_subprocess.run().stderr.decode.return_value = 'Something\nError splitting the input into NAL units'
+        mock_subprocess.run().stderr = b'Something\nError splitting the input into NAL units'
         assert common.check_for_video_corruption(video_file) is True
-        mock_subprocess.run().stderr.decode.return_value = 'Some stderr is fine'
+        mock_subprocess.run().stderr = b'Some stderr is fine'
         assert common.check_for_video_corruption(video_file) is False

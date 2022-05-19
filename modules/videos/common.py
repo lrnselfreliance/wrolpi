@@ -275,14 +275,13 @@ def check_for_video_corruption(video_path: Path) -> bool:
         return True  # video is corrupt.
 
     messages = (
-        'Invalid NAL unit size',
-        'Error splitting the input into NAL units',
+        b'Invalid NAL unit size',
+        b'Error splitting the input into NAL units',
     )
-    stderr = proc.stderr.decode()
     corrupt = False
     for error in messages:
-        if error in stderr:
-            logger.warning(f'Possible video corruption ({error}): {video_path}')
+        if error in proc.stderr:
+            logger.warning(f'Possible video corruption ({error.decode()}): {video_path}')
             corrupt = True
     return corrupt
 

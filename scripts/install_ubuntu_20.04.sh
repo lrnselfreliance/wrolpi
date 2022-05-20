@@ -91,7 +91,9 @@ echo "
 
 WROLPi has successfully been installed!
 
-Mount your external hard drive to /media/wrolpi if you have one.
+Mount your external hard drive to /media/wrolpi if you have one.  Change the
+file permissions if necessary:
+ # chown -R wrolpi:wrolpi /media/wrolpi
 
 Start the WROLPi services using:
  # sudo systemctl start wrolpi.target

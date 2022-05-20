@@ -240,17 +240,13 @@ class ConfigFile:
         return CONFIG_DIR / self.file_name
 
     def update(self, config: dict):
-        """
-        Update any values of this config.  Save the config to its file.
-        """
+        """Update any values of this config.  Save the config to its file."""
         config = {k: v for k, v in config.items() if k in self._config}
         self._config.update(config)
         self.save()
 
     def dict(self):
-        """
-        Get a deepcopy of this config.
-        """
+        """Get a deepcopy of this config."""
         if not hasattr(self, '_config'):
             raise NotImplementedError('You cannot use a global config while testing!')
 

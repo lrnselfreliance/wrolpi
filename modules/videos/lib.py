@@ -449,7 +449,7 @@ VIDEO_DOWNLOADER_CONFIG: VideoDownloaderConfig = VideoDownloaderConfig(global_=T
 TEST_VIDEO_DOWNLOADER_CONFIG: VideoDownloaderConfig = None
 
 
-def get_downloader_config():
+def get_downloader_config() -> VideoDownloaderConfig:
     global TEST_VIDEO_DOWNLOADER_CONFIG
     if isinstance(TEST_VIDEO_DOWNLOADER_CONFIG, VideoDownloaderConfig):
         return TEST_VIDEO_DOWNLOADER_CONFIG

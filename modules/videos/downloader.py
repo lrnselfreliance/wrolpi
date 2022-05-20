@@ -20,8 +20,7 @@ from wrolpi.downloader import Downloader, Download, DOWNLOAD_MANAGER_CONFIG, Dow
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
-from .common import apply_info_json, get_no_channel_directory, \
-    get_videos_directory
+from .common import apply_info_json, get_no_channel_directory, get_videos_directory
 from .lib import upsert_video, refresh_channel_videos, get_downloader_config, get_channel_source_id
 from .models import Video, Channel
 from .schema import ChannelPostRequest

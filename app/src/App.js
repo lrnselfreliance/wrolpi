@@ -11,7 +11,7 @@ import 'react-semantic-toasts/styles/react-semantic-alert.css';
 import {AppsRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/Inventory";
 import {ArchiveRoute, ArchivesList} from "./components/Archive";
-import {Saver} from "./components/Upload";
+import {Downloads, Saver} from "./components/Upload";
 import {MoreButton, PageContainer, SearchInput} from "./components/Common";
 import {FilesRoute} from "./components/Files";
 import {useSearch, useUp, useVersion} from "./hooks/customHooks";
@@ -23,10 +23,7 @@ function Welcome() {
     useUp();
 
     let body = (
-        <>
-            <Header as='h2'>Save your media</Header>
-            <Saver/>
-        </>
+        <Downloads/>
     );
 
     if (searchStr) {

@@ -3,13 +3,17 @@ import multiprocessing
 import pathlib
 import subprocess
 import traceback
+from abc import ABC
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 from enum import Enum
 from functools import partial
 from operator import attrgetter
-from typing import List, Optional, Tuple, Dict
+from typing import List, Dict
+from typing import Tuple, Optional
 
+import feedparser
+from feedparser import FeedParserDict
 from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
@@ -28,11 +32,13 @@ DEFAULT_RETRY_FREQUENCY = timedelta(hours=1)
 
 class DownloadFrequency(int, Enum):
     hourly = 3600
-    daily = 86400
-    weekly = 604800
-    biweekly = 1209600
-    days30 = 2592000
-    days90 = 7776000
+    hours3 = hourly * 3
+    hours12 = hourly * 12
+    daily = hourly * 24
+    weekly = daily * 7
+    biweekly = weekly * 2
+    days30 = daily * 30
+    days90 = daily * 90
 
 
 @dataclass
@@ -45,22 +51,21 @@ class DownloadResult:
 
 
 class Download(ModelHelper, Base):
-    """
-    Model that is used to schedule downloads.
-    """
+    """Model that is used to schedule downloads."""
     __tablename__ = 'download'
     id = Column(Integer, primary_key=True)
     url = Column(String, nullable=False)
 
     attempts = Column(Integer, default=0)
+    downloader = Column(Text)
+    error = Column(Text)
     frequency = Column(Integer)
+    info_json = Column(JSONB)
     last_successful_download = Column(TZDateTime)
+    location = Column(Text)
     next_download = Column(TZDateTime)
     status = Column(String, default='new')
-    info_json = Column(JSONB)
-    downloader = Column(Text)
-    location = Column(Text)
-    error = Column(Text)
+    sub_downloader = Column(Text)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -70,8 +75,10 @@ class Download(ModelHelper, Base):
     def __repr__(self):
         if self.next_download or self.frequency:
             return f'<Download id={self.id} status={self.status} url={repr(self.url)} ' \
-                   f'next_download={self.next_download} frequency={self.frequency} attempts={self.attempts}>'
-        return f'<Download id={self.id} status={self.status} url={repr(self.url)} attempts={self.attempts}>'
+                   f'next_download={self.next_download} frequency={self.frequency} attempts={self.attempts} ' \
+                   f'error={self.error}>'
+        return f'<Download id={self.id} status={self.status} url={repr(self.url)} attempts={self.attempts} ' \
+               f'error={self.error}>'
 
     def __json__(self):
         d = dict(
@@ -148,10 +155,14 @@ class Downloader:
         return dict(name=self.name, pretty_name=self.pretty_name)
 
     @classmethod
-    def valid_url(cls, url) -> Tuple[bool, Optional[dict]]:
+    def valid_url(cls, url: str) -> Tuple[bool, Optional[dict]]:
         raise NotImplementedError()
 
     def do_download(self, download: Download) -> DownloadResult:
+        raise NotImplementedError()
+
+    @optional_session
+    def already_downloaded(self, url: str, session: Session = None):
         raise NotImplementedError()
 
     @property
@@ -200,7 +211,7 @@ class Downloader:
                     logger.warning(f'Killing download {pid=}')
                     proc.kill()
                     proc.poll()
-                    raise UnrecoverableDownloadError(f'Download {pid=} was killed!')
+                    raise ChildProcessError(f'Download {pid=} was killed!')
         finally:
             self._kill.clear()
 
@@ -217,9 +228,10 @@ class DownloadManager:
     priority_sorter = partial(sorted, key=attrgetter('priority'))
 
     def __init__(self):
-        self.instances = tuple()
+        self.instances: Tuple[Downloader] = tuple()
         self._instances = dict()
         self.disabled = multiprocessing.Event()
+        self.stopped: bool = False
 
     def register_downloader(self, instance: Downloader):
         if not isinstance(instance, Downloader):
@@ -270,6 +282,9 @@ class DownloadManager:
 
         download = self.get_download(session, url=url)
         if not download:
+            if url in DOWNLOAD_MANAGER_CONFIG.skip_urls:
+                raise InvalidDownload(
+                    f'Refusing to download {url} because it is in the download_manager.yaml skip list')
             download = Download(url=url, status='new')
             session.add(download)
             session.flush()
@@ -277,39 +292,45 @@ class DownloadManager:
         return download
 
     def create_download(self, url: str, session, downloader: str = None, skip_download: bool = False,
-                        reset_attempts: bool = False) -> Download:
+                        reset_attempts: bool = False, sub_downloader: str = None) -> Download:
         """Schedule a URL for download.  If the URL failed previously, it may be retried."""
         downloads = self.create_downloads([url], session, downloader, skip_download=skip_download,
-                                          reset_attempts=reset_attempts)
+                                          reset_attempts=reset_attempts, sub_downloader=sub_downloader)
         return downloads[0]
 
-    def create_downloads(self, urls: List[str], session: Session = None, downloader: str = None,
-                         skip_download: bool = False, reset_attempts: bool = False) -> List[Download]:
+    def create_downloads(self, urls: List[str], session: Session = None, downloader_name: str = None,
+                         skip_download: bool = False, reset_attempts: bool = False, sub_downloader: str = None) \
+            -> List[Download]:
         """Schedule all URLs for download.  If one cannot be downloaded, none will be added."""
         if not session:
             _, session = get_db_context()
 
         downloads = []
-        forced_downloader = self.get_downloader_by_name(downloader) if downloader else None
-        if downloader and not forced_downloader:
+        downloader = self.get_downloader_by_name(downloader_name) if downloader_name else None
+        if downloader_name and not downloader:
             # Could not find the downloader
-            raise InvalidDownload(f'Unknown downloader {downloader}')
+            raise InvalidDownload(f'Unknown downloader {downloader_name}')
 
         with session.transaction:
             for url in urls:
                 if not url:
                     raise ValueError('Download must have a URL')
+                if url in DOWNLOAD_MANAGER_CONFIG.skip_urls:
+                    logger.warning(f'Skipping {url} because it is in download_manager.yaml skip list.')
+                    continue
                 info_json = None
-                downloader = forced_downloader
-                if not forced_downloader:
+                if not downloader:
                     # User has requested automatic downloader selection, try and find it.
-                    downloader, info_json = self.get_downloader(url)
+                    downloader_, info_json = self.get_downloader(url)
+                else:
+                    downloader_ = downloader
 
                 download = self.get_or_create_download(url, session)
                 # Download may have failed, try again.
                 download.renew(reset_attempts=reset_attempts)
-                download.downloader = downloader.name
-                download.info_json = info_json
+                download.downloader = downloader_.name
+                download.info_json = info_json or download.info_json
+                download.sub_downloader = sub_downloader
                 downloads.append(download)
 
         if skip_download is True:
@@ -338,6 +359,8 @@ class DownloadManager:
             for download in downloads:
                 if self.disabled.is_set():
                     raise InvalidDownload('DownloadManager is disabled')
+                if self.stopped:
+                    return
 
                 download_count += 1
                 download_id = download.id
@@ -382,7 +405,11 @@ class DownloadManager:
                     download.location = result.location or download.location or None
                     # Clear any old errors if the download succeeded.
                     download.error = result.error if result.error else None
-                    download.next_download = self.get_next_download(download, session)
+                    download.next_download = self.calculate_next_download(download, session)
+
+                    if result.downloads:
+                        logger.info(f'Adding {len(result.downloads)} downloads from result of {download.url}')
+                        self.create_downloads(result.downloads, session_, downloader_name=download.sub_downloader)
 
                     if try_again is False:
                         download.fail()
@@ -420,10 +447,12 @@ class DownloadManager:
         with get_db_curs(commit=True) as curs:
             curs.execute("UPDATE download SET status='new' WHERE status='pending' OR status='deferred'")
 
-    def recurring_download(self, url: str, frequency: int, skip_download: bool = False) -> Download:
+    def recurring_download(self, url: str, frequency: int, skip_download: bool = False, downloader: str = None,
+                           sub_downloader: str = None, reset_attempts: bool = False) -> Download:
         """Schedule a recurring download."""
         with get_db_session(commit=True) as session:
-            download = self.create_download(url, session=session, skip_download=True)
+            download = self.create_download(url, session=session, skip_download=True, downloader=downloader,
+                                            sub_downloader=sub_downloader, reset_attempts=reset_attempts)
             download.frequency = frequency
 
         if skip_download is False and PYTEST:
@@ -476,12 +505,14 @@ class DownloadManager:
                 renewed = True
 
         if renewed:
+            logger.debug('Renewed recurring downloads')
             session.commit()
             self.start_downloads()
+        else:
+            logger.debug('No recurring downloads to renew')
 
     def get_downloads(self, session: Session) -> List[Download]:
-        downloads = session.query(Download).all()
-        downloads = list(downloads)
+        downloads = list(session.query(Download).all())
         for download in downloads:
             download.manager = self
         return downloads
@@ -519,16 +550,19 @@ class DownloadManager:
                 downloader.kill()
             download.fail()
 
+    def stop(self):
+        """Stop all Downloaders, defer all pending downloads."""
+        self.stopped = True
+        for downloader in self.instances:
+            downloader.kill()
+        for download in self.get_pending_downloads():
+            download.defer()
+
     def kill(self):
         """Kill all downloads.  Do not start new downloads."""
         self.disabled.set()
         try:
-            with get_db_session(commit=True) as session:
-                downloads = self.get_pending_downloads(session)
-                for download in downloads:
-                    downloader = download.get_downloader()
-                    downloader.kill()
-                    download.defer()
+            self.stop()
         except Exception as e:
             logger.critical(f'Failed to kill downloads!', exc_info=e)
 
@@ -552,10 +586,8 @@ class DownloadManager:
                     session.delete(download)
 
     def list_downloaders(self) -> List[Downloader]:
-        """
-        Return a list of the Downloaders available on this Download Manager.
-        """
-        return list(filter(lambda i: i.listable, self.instances))
+        """Return a list of the Downloaders available on this Download Manager."""
+        return [i for i in self.instances if i.listable]
 
     # Downloads should be sorted by their status in a particular order.
     _status_order = '''CASE
@@ -579,7 +611,8 @@ class DownloadManager:
                     next_download,
                     status,
                     url,
-                    location
+                    location,
+                    error
                 FROM download
                 WHERE frequency IS NOT NULL
                 ORDER BY
@@ -622,10 +655,13 @@ class DownloadManager:
 
     @optional_session
     def get_pending_downloads(self, session: Session) -> List[Download]:
-        return session.query(Download).filter_by(status='pending').all()
+        downloads = session.query(Download).filter_by(status='pending').all()
+        for download in downloads:
+            download.manager = self
+        return downloads
 
     @optional_session
-    def get_next_download(self, download: Download, session: Session) -> Optional[datetime]:
+    def calculate_next_download(self, download: Download, session: Session) -> Optional[datetime]:
         """
         If the download is "deferred", download soon.  But, slowly increase the time between attempts.
 
@@ -716,3 +752,72 @@ class DownloadMangerConfig(ConfigFile):
 
 
 DOWNLOAD_MANAGER_CONFIG: DownloadMangerConfig = DownloadMangerConfig()
+
+
+def set_test_download_manager_config(enabled: bool):
+    global DOWNLOAD_MANAGER_CONFIG
+    DOWNLOAD_MANAGER_CONFIG = None
+    if enabled:
+        DOWNLOAD_MANAGER_CONFIG = DownloadMangerConfig()
+
+
+def parse_feed(url: str) -> FeedParserDict:
+    """Calls `feedparser.parse`, used for testing."""
+    return feedparser.parse(url)
+
+
+class RSSDownloader(Downloader, ABC):
+    """Downloads an RSS feed and creates new downloads for every unique link in the feed."""
+    name = 'rss'
+    pretty_name = 'RSS'
+    listable = False
+
+    @classmethod
+    def valid_url(cls, url: str) -> Tuple[bool, Optional[dict]]:
+        """Attempts to parse an RSS Feed.  If it succeeds, it returns a FeedParserDict as a dictionary."""
+        feed = parse_feed(url)
+        feed = dict(feed)
+        if feed['bozo']:
+            # Feed did not parse.
+            return False, {}
+        return True, dict(feed=feed)
+
+    def do_download(self, download: Download) -> DownloadResult:
+        if isinstance(download.info_json, dict) and download.info_json.get('feed'):
+            feed = download.info_json['feed']
+        else:
+            # self.valid_url was not called by the manager, do it here.
+            feed: FeedParserDict = parse_feed(download.url)
+            if feed['bozo'] and not self.acceptable_bozo_errors(feed):
+                # Feed did not parse
+                return DownloadResult(success=False, error='Failed to parse RSS feed')
+
+        if not isinstance(feed, dict) or not feed.get('entries'):
+            # RSS parsed but does not have entries.
+            return DownloadResult(success=False, error='RSS feed did not have any entries')
+
+        # Only download URLs that have not yet been downloaded.
+        urls = []
+        sub_downloader = self.manager.get_downloader_by_name(download.sub_downloader)
+        for idx, entry in enumerate(feed['entries']):
+            if url := entry.get('link'):
+                if not sub_downloader.already_downloaded(url):
+                    urls.append(url)
+            else:
+                logger.warning(f'RSS entry {idx} did not have a link!')
+
+        session = Session.object_session(download)
+        self.manager.create_downloads(urls, session=session, downloader_name=download.sub_downloader)
+        return DownloadResult(success=True)
+
+    @staticmethod
+    def acceptable_bozo_errors(feed):
+        """
+        Feedparser can report some errors, some we can ignore.
+        """
+        if 'CharacterEncodingOverride' in str(feed['bozo_exception']):
+            return True
+        return False
+
+
+rss_downloader = RSSDownloader(30)

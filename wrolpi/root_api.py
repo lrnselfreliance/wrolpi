@@ -13,6 +13,7 @@ from sanic import Sanic, response, Blueprint, __version__ as sanic_version
 from sanic.blueprint_group import BlueprintGroup
 from sanic.request import Request
 from sanic.response import HTTPResponse
+from sanic.signals import Event
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
@@ -25,7 +26,7 @@ from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, InvalidTimezone, API_ERRORS, APIError, ValidationError, HotspotError
 from wrolpi.media_path import MediaPath
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, DownloadRequest, EchoResponse
-from wrolpi.vars import DOCKERIZED
+from wrolpi.vars import DOCKERIZED, PYTEST
 from wrolpi.version import __version__
 
 logger = logger.getChild(__name__)
@@ -203,7 +204,12 @@ async def post_download(_: Request, body: DownloadRequest):
     downloader = body.downloader
     if not downloader or downloader in ('auto', 'None', 'null'):
         downloader = None
-    download_manager.create_downloads(urls, downloader=downloader, reset_attempts=True)
+    if body.frequency:
+        download_manager.recurring_download(urls[0], body.frequency, downloader=downloader,
+                                            sub_downloader=body.sub_downloader, reset_attempts=True)
+    else:
+        download_manager.create_downloads(urls, downloader_name=downloader, sub_downloader=body.sub_downloader,
+                                          reset_attempts=True)
     return response.empty()
 
 
@@ -358,3 +364,10 @@ def json_error_handler(request, exception: Exception):
 
 
 api_app.error_handler.add(APIError, json_error_handler)
+
+
+@api_app.signal(Event.SERVER_SHUTDOWN_BEFORE)
+def handle_server_shutdown(*args, **kwargs):
+    """Stop downloads when server is shutting down."""
+    if not PYTEST:
+        download_manager.stop()

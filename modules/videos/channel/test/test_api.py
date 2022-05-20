@@ -349,7 +349,8 @@ def test_download_channel_no_refresh(test_session, download_channel, video_downl
     test_session.commit()
 
     with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
-        mock_extract_info.return_value = {'entries': [], 'url': 'foo'}
+        mock_extract_info.return_value = {'entries': [], 'url': 'foo', 'uploader': 'some uploader',
+                                          'channel_id': 'the id', 'id': 'the id'}
         video_download_manager.do_downloads_sync()
 
     check_refreshed(True)

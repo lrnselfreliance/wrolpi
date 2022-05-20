@@ -100,6 +100,7 @@ def get_channel(session: Session, *, channel_id: int = None, source_id: str = No
         raise UnknownChannel(f'No channel matches {channel_id=} {source_id=} {url=} {directory=}')
 
     logger.debug(f'Found {channel=} using {channel_id=} {source_id=} {url=} {directory=}')
+    session.refresh(channel)
     if return_dict:
         statistics = channel.get_statistics()
         channel = channel.dict()

@@ -1,6 +1,7 @@
 alembic==1.7.5
 beautifulsoup4==4.10.0
 cachetools==5.0.0
+feedparser==6.0.9
 mock==4.0.3
 Pillow==9.0.1
 Pint==0.18

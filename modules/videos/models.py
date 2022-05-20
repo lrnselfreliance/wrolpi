@@ -55,8 +55,8 @@ class Video(ModelHelper, Base):
         video_path = self.video_path
         if self.video_path and isinstance(self.video_path, MediaPath):
             video_path = self.video_path.path.relative_to(get_media_directory())
-        return f'<Video id={self.id} title={self.title} path={video_path} channel={self.channel_id} ' \
-               f'source_id={self.source_id}>'
+        return f'<Video id={self.id} title={repr(self.title)} path={video_path} channel={self.channel_id} ' \
+               f'source_id={repr(self.source_id)}>'
 
     def dict(self) -> dict:
         d = super().dict()
@@ -255,6 +255,29 @@ class Video(ModelHelper, Base):
         )
         return d
 
+    def validate(self):
+        """Perform a validation of this video and it's files.  Mark this video as validated if no errors occur."""
+        if not self.video_path:
+            # Can't validate if there is no video file.
+            return False
+
+        from .lib import validate_video
+        try:
+            validate_video(self, self.channel.generate_posters if self.channel else False)
+            self.validated = True
+        except Exception as e:
+            logger.warning(f'Failed to validate video {self}', exc_info=e)
+
+        return self.validated
+
+    def check_for_corruption(self):
+        """Uses ffprobe to check if this video is corrupt."""
+        if not self.video_path:
+            return
+
+        from .lib import check_for_video_corruption
+        return check_for_video_corruption(self.video_path.path)
+
 
 class Channel(ModelHelper, Base):
     __tablename__ = 'channel'
@@ -278,6 +301,11 @@ class Channel(ModelHelper, Base):
 
     def __repr__(self):
         return f'<Channel id={self.id}, name={repr(self.name)}>'
+
+    def __eq__(self, other):
+        if isinstance(other, Channel):
+            return self.id == other.id
+        return False
 
     def add_video_to_skip_list(self, source_id: str):
         if not source_id:
@@ -317,12 +345,13 @@ class Channel(ModelHelper, Base):
             download.frequency = self.download_frequency
             download.url = self.url
             # Keep next_download if available.
-            download.next_download = download.next_download or download_manager.get_next_download(download, session)
+            download.next_download = download.next_download or download_manager.calculate_next_download(download,
+                                                                                                        session)
         elif not download and self.download_frequency and self.url:
             download = Download(frequency=self.download_frequency, url=self.url, downloader='video_channel')
             session.add(download)
             session.flush()
-            download.next_download = download_manager.get_next_download(download, session)
+            download.next_download = download_manager.calculate_next_download(download, session)
         session.flush()
 
     def config_view(self) -> dict:

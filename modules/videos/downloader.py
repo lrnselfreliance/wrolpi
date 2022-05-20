@@ -16,12 +16,13 @@ from wrolpi.cmd import which
 from wrolpi.common import logger, extract_domain, get_media_directory
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.db import optional_session
 from wrolpi.downloader import Downloader, Download, DOWNLOAD_MANAGER_CONFIG, DownloadResult
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
 from .common import apply_info_json, get_no_channel_directory, get_videos_directory
-from .lib import upsert_video, refresh_channel_videos, get_downloader_config, get_channel_source_id
+from .lib import upsert_video, refresh_channel_videos, get_downloader_config
 from .models import Video, Channel
 from .schema import ChannelPostRequest
 from .video_url_resolver import video_url_resolver
@@ -39,7 +40,13 @@ ChannelIEs = {
 }
 
 PREFERRED_VIDEO_EXTENSION = 'mp4'
-PREFERRED_VIDEO_FORMAT = 'best[height=720],22,720p,mp4-480p,mp4-360p,mp4-240p,18,bestvideo+bestaudio'
+PREFERRED_VIDEO_FORMAT = ','.join([
+    'res:720',  # Use the best 720p available first
+    '136+140',  # 130=720p video-only, 140= high quality audio only
+    '22',  # 720p video with audio
+    '18',  # 360p video with audio
+    'bestvideo+bestaudio',  # Download the highest resolution as a last resort (1080p is quite large).
+])
 
 
 def extract_info(url: str, ydl: YoutubeDL = YDL, process=False) -> dict:
@@ -53,7 +60,7 @@ def prepare_filename(entry: dict, ydl: YoutubeDL = YDL) -> str:
 
 
 class ChannelDownloader(Downloader, ABC):
-    """Handles downloading of all Videos in a Channel."""
+    """Handles downloading of videos in a Channel or Playlist."""
     name = 'video_channel'
     pretty_name = 'Video Channel'
     listable = False
@@ -69,41 +76,84 @@ class ChannelDownloader(Downloader, ABC):
         logger.debug(f'{cls.__name__} not suitable for {url}')
         return False, None
 
+    @staticmethod
+    def is_a_playlist(info: dict):
+        # A playlist will have an id different from its channel.
+        return info['id'] != info['channel_id']
+
     def do_download(self, download: Download) -> DownloadResult:
         """Update a Channel's catalog, then schedule downloads of every missing video."""
-        with get_db_session() as session:
-            channel = session.query(Channel).filter_by(url=download.url).one_or_none()
+        info = extract_info(download.url, process=False)
 
-            if not channel:
-                # Couldn't get channel by URL, this is probably a playlist.  Find the channel for the playlist.
-                channel_source_id = get_channel_source_id(download.url)
-                channel = get_channel(source_id=channel_source_id, return_dict=False)
-            channel_id = channel.id
+        name = info['uploader']
+        channel_source_id = info['channel_id']
+        channel = get_or_create_channel(channel_source_id, download.url, name)
+        channel.dict()  # get all attributes while we have the session.
+        # Resolve all entries.
+        info['entries'] = list(info['entries'])
 
+        if self.is_a_playlist(info):
+            result = self.upsert_playlist_videos(download, channel)
+        else:
+            result = self.upsert_channel_videos(download, info, channel)
+
+        if PYTEST:
+            self.manager.do_downloads_sync()
+        else:
+            self.manager.start_downloads()
+
+        return result
+
+    @staticmethod
+    def upsert_channel_videos(download: Download, info: dict, channel: Channel) -> DownloadResult:
+        """Get a list of all videos in a Channel, schedule downloads for any missing videos."""
         try:
-            update_channel(channel)
+            update_channel_catalog(channel, info)
 
             domain = extract_domain(download.url)
             missing_videos = find_all_missing_videos(channel.id)
-            with get_db_session(commit=True) as session:
-                for video_id, source_id, missing_video in missing_videos:
-                    url = video_url_resolver(domain, missing_video)
-                    if url in DOWNLOAD_MANAGER_CONFIG.skip_urls:
-                        # Don't try to download skipped videos.
-                        continue
-                    # Schedule any missing videos for download.
-                    download = self.manager.get_or_create_download(url, session)
-                    download.downloader = 'video'
-
-            if PYTEST:
-                self.manager.do_downloads_sync()
-            else:
-                self.manager.start_downloads()
-
-            return DownloadResult(success=True, location=f'/videos/channel/{channel_id}/video')
+            downloads = []
+            for video_id, source_id, missing_video in missing_videos:
+                url = missing_video.get('webpage_url') or video_url_resolver(domain, missing_video)
+                downloads.append(url)
+            return DownloadResult(success=True, location=f'/videos/channel/{channel.id}/video', downloads=downloads)
         except Exception:
             logger.warning(f'Failed to update catalog of channel {download.url}')
-            location = f'/videos/channel/{channel_id}/video' if channel_id else None
+            location = f'/videos/channel/{channel.id}/video' if channel.id else None
+            return DownloadResult(success=False, location=location, error=str(traceback.format_exc()))
+
+    @staticmethod
+    def upsert_playlist_videos(download: Download, channel: Channel) -> DownloadResult:
+        """Get a list of all videos in a playlist, schedule downloads for any missing videos."""
+        try:
+            # Playlists require more information to download.
+            info = extract_info(download.url, process=True)
+
+            # Get all Video.source_id of this Channel.
+            with get_db_session() as session:
+                existing_ids = [i for (i,) in session.query(Video.source_id).filter(Video.channel_id == channel.id)]
+
+            # 'id' is our 'source_id'
+            if any(i['id'] not in existing_ids for i in info['entries']):
+                # At least one video in the playlist is not in the Channel catalog, update the catalog.
+                channel_info = extract_info(channel.url, process=True)
+                update_channel_catalog(channel, channel_info)
+
+            with get_db_session() as session:
+                channel_video_urls = [i for (i,) in session.query(Video.url).filter(Video.channel_id == channel.id,
+                                                                                    Video.url != None)]
+
+            skip_urls = set(DOWNLOAD_MANAGER_CONFIG.skip_urls)
+            # All videos in the channel catalog that have not been downloaded (most will not be in the playlist).
+            missing_source_ids = {source_id for _, source_id, _ in _find_all_missing_videos(channel.id)}
+            downloads = [i['webpage_url'] for i in info['entries'] if
+                         i['id'] in missing_source_ids and i['webpage_url'] not in skip_urls]
+            # A video may be in a playlist, but not published in the channel catalog.
+            downloads.extend(i['webpage_url'] for i in info['entries'] if i['webpage_url'] not in channel_video_urls)
+            return DownloadResult(success=True, location=f'/videos/channel/{channel.id}/video', downloads=downloads)
+        except Exception:
+            logger.warning(f'Failed to update catalog of playlist {download.url}')
+            location = f'/videos/channel/{channel.id}/video' if channel.id else None
             return DownloadResult(success=False, location=location, error=str(traceback.format_exc()))
 
 
@@ -125,11 +175,14 @@ class VideoDownloader(Downloader, ABC):
     def __repr__(self):
         return f'<VideoDownloader>'
 
+    @optional_session
+    def already_downloaded(self, url: str, session: Session = None) -> Optional[Video]:
+        video = session.query(Video).filter_by(url=url).one_or_none()
+        return video
+
     @classmethod
     def valid_url(cls, url) -> Tuple[bool, Optional[dict]]:
-        """
-        Match against all Youtube-DL Info Extractors, except those that match a Channel.
-        """
+        """Match against all Youtube-DL Info Extractors, except those that match a Channel."""
         for ie in YDL._ies.values():
             if ie.suitable(url) and not ChannelDownloader.valid_url(url)[0]:
                 try:
@@ -307,25 +360,22 @@ def get_or_create_channel(source_id: str = None, url: str = None, name: str = No
     return channel
 
 
-def update_channel(channel: Channel):
+def update_channel_catalog(channel: Channel, info: dict):
     """
     Connect to the Channel's host website and pull a catalog of all videos.  Insert any new videos into the DB.
 
     It is expected that any missing videos will be downloaded later.
     """
     logger.info(f'Downloading video list for {channel.name} at {channel.url}  This may take several minutes.')
-    info = extract_info(channel.url)
-    if 'url' in info:
-        url = info['url']
-        info = extract_info(url)
 
     # Resolve all entries to dictionaries.
-    entries = info['entries'] = list(info['entries'])
+    entries = info['entries']
 
     # yt-dlp may hand back a list of URLs, lets use the "Uploads" URL, if available.
     try:
         entries[0]['id']
     except Exception:
+        logger.warning('yt-dlp did not return a list of URLs')
         for entry in entries:
             if entry['title'] == 'Uploads':
                 logger.info('Youtube-DL gave back a list of URLs, found the "Uploads" URL and using it.')
@@ -376,19 +426,9 @@ def update_channel(channel: Channel):
     apply_info_json(channel_id)
 
 
-def _find_all_missing_videos(channel_id: id = None) -> List[Tuple]:
-    """Get all Video entries which don't have the required media files (i.e. hasn't been downloaded).
-
-    Restrict to a single channel if `channel_id` is provided.
-    """
+def _find_all_missing_videos(channel_id: id) -> List[Tuple]:
+    """Get all Video entries which don't have the required media files (i.e. hasn't been downloaded)."""
     with get_db_curs() as curs:
-        # Get all channels by default.
-        where = ''
-        params = ()
-
-        if channel_id:
-            where = 'AND channel_id = %s'
-            params = (channel_id,)
         query = f'''
             SELECT
                 video.id, video.source_id, video.channel_id
@@ -399,11 +439,11 @@ def _find_all_missing_videos(channel_id: id = None) -> List[Tuple]:
                 channel.url IS NOT NULL
                 AND channel.url != ''
                 AND video.source_id IS NOT NULL
-                {where}
+                AND channel_id = %s
                 AND video.channel_id IS NOT NULL
                 AND (video_path IS NULL OR video_path = '' OR poster_path IS NULL OR poster_path = '')
         '''
-        logger.debug(query)
+        params = (channel_id,)
         curs.execute(query, params)
         missing_videos = list(curs.fetchall())
         return missing_videos
@@ -415,50 +455,33 @@ def find_all_missing_videos(channel_id: int = None) -> Tuple[dict, dict]:
 
     Yields a Channel Dict object, our Video id, and the "entry" of the video from the channel's info_json['entries'].
     """
-    with get_db_session() as session:
-        if channel_id:
-            channel = get_channel(channel_id=channel_id, return_dict=False)
-            if not channel.url:
-                raise ChannelURLEmpty('No URL for this channel')
-            channels = [channel, ]
-        else:
-            channels = session.query(Channel).filter(Channel.info_json != None).all()  # noqa
+    channel: Channel = get_channel(channel_id=channel_id, return_dict=False)
+    if not channel.url:
+        raise ChannelURLEmpty('No URL for this channel')
 
-        # Get all channels while in the db context.
-        channels = list(channels)
+    # Check that the channel has some videos.  We can't be sure what is missing if we don't know what we have.
+    if channel.refreshed is False:
+        # Refresh this channel's videos.
+        refresh_channel_videos(channel)
 
-    # Check that each channel has some videos.  We can't be sure what is missing if we don't know what we have.
-    for channel in channels:
-        if channel.refreshed is False:
-            # Refresh this channel's videos.
-            refresh_channel_videos(channel)
-
-    channels = {i.id: i for i in channels}
-
-    match_regexen = {i: re.compile(j.match_regex) for i, j in channels.items() if j.match_regex}
+    match_regex = re.compile(channel.match_regex) if channel.match_regex else None
 
     # Convert the channel video entries into a form that allows them to be quickly retrieved without searching through
     # the entire entries list.
-    channels_entries = {}
-    for channel_id_, channel in channels.items():
-        channels_entries[channel_id_] = {i['id']: i for i in channel.info_json['entries']}
-
+    channel_entries = {i['id']: i for i in channel.info_json['entries']}
+    # Yield all videos not skipped.
     missing_videos = _find_all_missing_videos(channel_id)
-
     for video_id, source_id, channel_id in missing_videos:
-        channel = channels[channel_id]
-
         if channel.skip_download_videos and source_id in channel.skip_download_videos:
             # This video has been marked to skip.
             continue
 
         try:
-            missing_video = channels_entries[channel_id][source_id]
+            missing_video = channel_entries[source_id]
         except KeyError:
             logger.warning(f'Video {channel.name} / {source_id} is not in {channel.name} info_json')
             continue
 
-        match_regex: re.compile = match_regexen.get(channel_id)
         if not match_regex or (match_regex and missing_video['title'] and match_regex.match(missing_video['title'])):
             # No title match regex, or the title matches the regex.
             yield video_id, source_id, missing_video

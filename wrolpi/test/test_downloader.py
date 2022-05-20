@@ -172,9 +172,7 @@ class TestDownloader(TestAPI):
 
     @wrap_test_db
     def test_create_downloads(self):
-        """
-        Multiple downloads can be scheduled using DownloadManager.create_downloads.
-        """
+        """Multiple downloads can be scheduled using DownloadManager.create_downloads."""
         http_downloader = HTTPDownloader(priority=0)
         self.mgr.register_downloader(http_downloader)
 
@@ -232,7 +230,7 @@ def test_download_get_downloader(test_session, test_download_manager):
     assert download2.get_downloader() is None
 
 
-def test_get_next_download(test_session, test_download_manager, fake_now):
+def test_calculate_next_download(test_session, test_download_manager, fake_now):
     fake_now(datetime(2000, 1, 1))
     download = Download()
     download.frequency = DownloadFrequency.weekly
@@ -250,7 +248,7 @@ def test_get_next_download(test_session, test_download_manager, fake_now):
     ]
     for attempts, expected in attempts_expected:
         download.attempts = attempts
-        result = test_download_manager.get_next_download(download)
+        result = test_download_manager.calculate_next_download(download)
         assert result == expected, f'{attempts} != {result}'
 
     d1 = Download(url='https://example.com/1', frequency=DownloadFrequency.weekly)
@@ -259,9 +257,9 @@ def test_get_next_download(test_session, test_download_manager, fake_now):
     test_session.add_all([d1, d2, d3])
     test_session.commit()
     # Downloads are spread out over the next week.
-    assert test_download_manager.get_next_download(d1) == local_timezone(datetime(2000, 1, 8))
-    assert test_download_manager.get_next_download(d2) == local_timezone(datetime(2000, 1, 11, 12))
-    assert test_download_manager.get_next_download(d3) == local_timezone(datetime(2000, 1, 9, 18))
+    assert test_download_manager.calculate_next_download(d1) == local_timezone(datetime(2000, 1, 8))
+    assert test_download_manager.calculate_next_download(d2) == local_timezone(datetime(2000, 1, 11, 12))
+    assert test_download_manager.calculate_next_download(d3) == local_timezone(datetime(2000, 1, 9, 18))
 
 
 def test_recurring_downloads(test_session, test_download_manager, fake_now):
@@ -359,3 +357,23 @@ def test_max_attempts(test_session, test_download_manager):
     download = session.query(Download).one()
     assert download.attempts == 3
     assert download.status == 'failed'
+
+
+def test_skip_urls(test_session, test_download_manager, test_download_manager_config):
+    """The DownloadManager will not create downloads for URLs in it's skip list."""
+    _, session = get_db_context()
+    from wrolpi.downloader import DOWNLOAD_MANAGER_CONFIG
+    DOWNLOAD_MANAGER_CONFIG.skip_urls = ['https://example.com/skipme']
+
+    http_downloader = HTTPDownloader()
+    http_downloader.do_download = MagicMock()
+    http_downloader.do_download.return_value = DownloadResult(success=True)
+    test_download_manager.register_downloader(http_downloader)
+
+    test_download_manager.create_downloads([
+        'https://example.com/1',
+        'https://example.com/skipme',
+        'https://example.com/2',
+    ], downloader_name=HTTPDownloader.name)
+    downloads = test_download_manager.get_downloads(test_session)
+    assert {i.url for i in downloads} == {'https://example.com/1', 'https://example.com/2'}

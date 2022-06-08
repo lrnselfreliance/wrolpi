@@ -3,7 +3,8 @@ import {
     Button,
     Checkbox,
     Confirm,
-    Container, Dimmer,
+    Container,
+    Dimmer,
     Divider,
     Form,
     Header,
@@ -337,20 +338,46 @@ function ClearFailedDownloads({callback}) {
 }
 
 class DownloadRow extends React.Component {
+    constructor(props) {
+        super(props);
+        this.state = {
+            errorModalOpen: false,
+        }
+    }
+
 
     render() {
-        let {url, frequency, last_successful_download, status, location, next_download} = this.props;
+        let {url, frequency, last_successful_download, status, location, next_download, error} = this.props;
+        const {errorModalOpen} = this.state;
+
         let positive = false;
         if (status === 'pending') {
             positive = true;
         }
+
+        const errorModal = <Modal
+            closeIcon
+            onClose={() => this.setState({errorModalOpen: false})}
+            onOpen={() => this.setState({errorModalOpen: true})}
+            open={errorModalOpen}
+            trigger={<Button icon='exclamation circle' color='red'/>}
+        >
+            <Modal.Header>Download Error</Modal.Header>
+            <Modal.Content>
+                <pre style={{overflowX: 'scroll'}}>{error}</pre>
+            </Modal.Content>
+            <Modal.Actions>
+                <Button onClick={() => this.setState({errorModalOpen: false})}>Close</Button>
+            </Modal.Actions>
+        </Modal>;
+
         return (
             <Table.Row positive={positive}>
                 <Table.Cell><a href={url} target='_blank'>{textEllipsis(url, 50)}</a></Table.Cell>
                 <Table.Cell>{secondsToFrequency(frequency)}</Table.Cell>
                 <Table.Cell>{last_successful_download ? secondsToDate(last_successful_download) : null}</Table.Cell>
                 <Table.Cell>{secondsToDate(next_download)}</Table.Cell>
-                <Table.Cell>{location && <a href={location}>View</a>}</Table.Cell>
+                <Table.Cell>{error && errorModal}{location && <a href={location}>View</a>}</Table.Cell>
             </Table.Row>
         );
     }

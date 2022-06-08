@@ -9,10 +9,10 @@ from yt_dlp.utils import UnsupportedError
 
 from modules.videos.channel.lib import download_channel
 from modules.videos.downloader import find_all_missing_videos, VideoDownloader, \
-    ChannelDownloader, get_or_create_channel
+    ChannelDownloader, get_or_create_channel, channel_downloader
 from modules.videos.models import Channel, Video
 from wrolpi.db import get_db_context
-from wrolpi.downloader import DownloadManager, Download
+from wrolpi.downloader import DownloadManager, Download, DownloadResult
 from wrolpi.errors import InvalidDownload
 from wrolpi.test.common import TestAPI
 from wrolpi.test.test_downloader import HTTPDownloader
@@ -20,7 +20,7 @@ from wrolpi.vars import PROJECT_DIR
 
 
 def test_find_all_missing_videos(test_session, channel_factory, video_factory):
-    channel1, channel2 = channel_factory(url='some url'), channel_factory(url='some other url')
+    channel1 = channel_factory(url='some url')
     channel1.info_json = {'entries': [{'id': 'foo', 'view_count': 0}]}
     test_session.commit()
 
@@ -29,14 +29,14 @@ def test_find_all_missing_videos(test_session, channel_factory, video_factory):
     video_factory()
 
     # No missing videos
-    assert [] == list(find_all_missing_videos())
+    assert [] == list(find_all_missing_videos(channel1.id))
 
     # Create a video that has no video file.
     video = Video(title='needs to be downloaded', channel_id=channel1.id, source_id='foo')
     test_session.add(video)
     test_session.commit()
 
-    missing = list(find_all_missing_videos())
+    missing = list(find_all_missing_videos(channel1.id))
     assert len(missing) == 1
 
     # The video returned is the one we faked.
@@ -73,6 +73,7 @@ example_video_json = {
 
 example_channel_json = {
     '_type': 'playlist',
+    'channel_id': 'some id',
     'entries': [
         {'_type': 'url',
          'description': None,
@@ -82,7 +83,8 @@ example_channel_json = {
          'title': 'video 1 title',
          'uploader': None,
          'url': 'video_1_url',
-         'view_count': 58504},
+         'view_count': 58504,
+         'webpage_url': 'https://youtube.com/watch?v=video_1_url'},
         {'_type': 'url',
          'description': None,
          'duration': None,
@@ -91,12 +93,14 @@ example_channel_json = {
          'title': 'video 2 title',
          'uploader': None,
          'url': 'video_2_url',
-         'view_count': 1413},
+         'view_count': 1413,
+         'webpage_url': 'https://youtube.com/watch?v=video_2_url'},
     ],
     'extractor': 'youtube:tab',
     'extractor_key': 'YoutubeTab',
     'id': 'some id',
     'title': 'channel title',
+    'uploader': 'the uploader',
     'webpage_url': 'channel url',
     'webpage_url_basename': 'videos',
 }
@@ -173,7 +177,8 @@ def test_video_download_no_channel(test_session, video_download_manager, video_f
 
 
 def test_download_channel(test_session, simple_channel, video_download_manager, video_file,
-                          mock_video_extract_info, mock_video_prepare_filename, mock_video_process_runner):
+                          mock_video_extract_info, mock_video_prepare_filename,
+                          mock_video_process_runner):
     """Downloading (updating the catalog of) a Channel creates download records for all of it's missing videos."""
     url = 'https://www.youtube.com/c/LearningSelfReliance/videos'
 
@@ -385,3 +390,93 @@ def test_download_result(test_session, test_directory, video_download_manager, m
     download: Download = test_session.query(Download).one()
     assert download.url == 'https://example.com'
     assert download.location == '/videos/channel/1/video/1'
+
+
+example_playlist_json = {
+    '_type': 'playlist',
+    'availability': None,
+    'channel': 'the channel name',
+    'channel_follower_count': None,
+    'channel_id': 'the channel id',
+    'channel_url': 'channel url',
+    'description': '',
+    'entries': [
+        {'_type': 'url',
+         'description': None,
+         'duration': None,
+         'id': 'video 2 id',
+         'ie_key': 'Youtube',
+         'title': 'video 2 title',
+         'uploader': None,
+         'url': 'video_2_url',
+         'view_count': 1413,
+         'webpage_url': 'https://youtube.com/watch?v=video_2_url'},
+        {'_type': 'url',
+         'description': None,
+         'duration': None,
+         'id': 'video 1 id',
+         'ie_key': 'Youtube',
+         'title': 'video 1 title',
+         'uploader': None,
+         'url': 'video_1_url',
+         'view_count': 58504,
+         'webpage_url': 'https://youtube.com/watch?v=video_1_url'},
+        {'_type': 'url',
+         'description': None,
+         'duration': None,
+         'id': 'video 3 id',
+         'ie_key': 'Youtube',
+         'title': 'video 3 title',
+         'uploader': None,
+         'url': 'video_3_url',
+         'view_count': 58504,
+         'webpage_url': 'https://youtube.com/watch?v=video_3_url'},
+    ],
+    'extractor': 'youtube:tab',
+    'extractor_key': 'YoutubeTab',
+    'id': 'the playlist id',
+    'modified_date': '20220426',
+    'original_url': 'original url',
+    'playlist_count': 10,
+    'requested_entries': None,
+    'tags': [],
+    'title': 'some title',
+    'uploader': 'Playlist Uploader',
+    'uploader_id': 'uploader id',
+    'uploader_url': 'uploader url',
+    'view_count': 22298,
+    'webpage_url': 'webpage url',
+    'webpage_url_basename': 'playlist',
+    'webpage_url_domain': 'youtube.com',
+}
+
+
+def test_download_playlist(test_session, test_directory, mock_video_extract_info, video_download_manager):
+    """
+    All videos in a playlist can be downloaded for it's Channel.
+    """
+    download = Download(url='playlist url')
+    test_session.add(download)
+    channel = get_or_create_channel(example_playlist_json['channel_id'], download.url, example_channel_json['uploader'])
+    test_session.add(Video(url='https://youtube.com/watch?v=video_1_url',
+                           source_id='video 1 id', channel_id=channel.id, video_path='video exists',
+                           poster_path='poster exists'))
+    test_session.commit()
+
+    mock_video_extract_info.side_effect = [
+        example_playlist_json,  # Playlist info is fetched first.
+        example_playlist_json,  # Playlist info is fetched again for more details.
+        example_channel_json,  # Video 3 causes channel catalog to be fetched.
+        example_video_json,
+        example_video_json,
+        example_video_json,
+    ]
+
+    with mock.patch('modules.videos.downloader.VideoDownloader.do_download') as mock_video_do_download:
+        mock_video_do_download.return_value = DownloadResult(success=True)  # Don't download the videos.
+        result = channel_downloader.do_download(download)
+    assert result.success is True, 'Download was not successful'
+    assert set(result.downloads) == {
+        'https://youtube.com/watch?v=video_2_url',
+        'https://youtube.com/watch?v=video_3_url',
+    }

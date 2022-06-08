@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.dates import set_test_now
 from wrolpi.db import postgres_engine, get_db_args
-from wrolpi.downloader import DownloadManager, DownloadResult
+from wrolpi.downloader import DownloadManager, DownloadResult, set_test_download_manager_config
 from wrolpi.root_api import BLUEPRINTS, api_app
 
 
@@ -112,7 +112,16 @@ def test_client() -> SanicTestClient:
 
 
 @pytest.fixture
-def test_download_manager():
+def test_download_manager_config(test_directory):
+    (test_directory / 'config').mkdir(exist_ok=True)
+    config_path = test_directory / 'config/download_manager.yaml'
+    set_test_download_manager_config(True)
+    yield config_path
+    set_test_download_manager_config(False)
+
+
+@pytest.fixture
+def test_download_manager(test_download_manager_config):
     manager = DownloadManager()
     return manager
 

@@ -445,8 +445,11 @@ export async function getArchive(archiveId) {
     }
 }
 
-export async function postDownload(urls, downloader) {
-    let body = {urls: urls, downloader: downloader};
+export async function postDownload(urls, downloader, frequency, sub_downloader) {
+    let body = {urls: urls, downloader: downloader, frequency: frequency || null};
+    if (sub_downloader) {
+        body['sub_downloader'] = sub_downloader;
+    }
     let response = await apiPost(`${API_URI}/download`, body);
     return response;
 }

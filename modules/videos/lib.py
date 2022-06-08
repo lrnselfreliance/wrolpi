@@ -153,14 +153,7 @@ def validate_videos():
         with get_db_session(commit=True) as session:
             videos = session.query(Video).filter(Video.id.in_(chunk)).all()
             for video in videos:
-                try:
-                    channel_generate_poster = channel_generate_posters.get(video.channel_id)
-                    validate_video(video, channel_generate_poster)
-                    # All data about the Video has been found, we should not attempt to validate it again.
-                    video.validated = True
-                except Exception as e:
-                    # This video failed to validate, continue validation for the rest of the videos.
-                    logger.warning(f'Failed to validate {video}', exc_info=e)
+                video.validate()
 
 
 def validate_video(video: Video, channel_generate_poster: bool):
@@ -605,7 +598,7 @@ YDL.add_default_info_extractors()
 
 def get_channel_source_id(url: str) -> str:
     channel_info = YDL.extract_info(url, download=False, process=False)
-    return channel_info.get('uploader_id') or channel_info['id']
+    return channel_info.get('uploader_id') or channel_info['channel_id']
 
 
 async def get_statistics():
@@ -747,15 +740,7 @@ def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = 
     session.flush()
     session.refresh(video)
 
-    try:
-        # Fill in any missing data.  Generate poster if enabled and necessary.
-        validate_video(video, channel.generate_posters if channel else False)
-        # All data about the Video has been found, we should not attempt to validate it again.
-        video.validated = True
-    except Exception as e:
-        # Could not validate, this could be an issue with a file.  This should not prevent the video from being
-        # inserted.
-        logger.warning(f'Failed to validate {video}', exc_info=e)
+    video.validate()
 
     session.flush()
 

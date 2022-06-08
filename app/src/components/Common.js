@@ -221,9 +221,21 @@ export const frequencyOptions = [
     {key: '90days', text: '90 Days', value: 7776000},
 ];
 
+export const rssFrequencyOptions = [
+    {key: 'once', text: 'Once', value: 0},
+    {key: 'hourly', text: 'Hourly', value: 3600},
+    {key: '3hours', text: '3 hours', value: 10800},
+    {key: '12hours', text: '12 hours', value: 43200},
+    {key: 'daily', text: 'Daily', value: 86400},
+    {key: 'weekly', text: 'Weekly', value: 604800},
+    {key: 'biweekly', text: 'Biweekly', value: 1209600},
+    {key: '30days', text: '30 Days', value: 2592000},
+    {key: '90days', text: '90 Days', value: 7776000},
+];
+
 export function secondsToFrequency(seconds) {
-    for (let i = 0; i < Object.keys(frequencyOptions).length; i++) {
-        let d = frequencyOptions[i];
+    for (let i = 0; i < Object.keys(rssFrequencyOptions).length; i++) {
+        let d = rssFrequencyOptions[i];
         if (d.value === seconds) {
             return d.text;
         }

@@ -49,6 +49,8 @@ class EchoResponse:
 class DownloadRequest:
     urls: str
     downloader: Optional[str] = None
+    frequency: Optional[int] = None
+    sub_downloader: Optional[str] = None
 
 
 @dataclass

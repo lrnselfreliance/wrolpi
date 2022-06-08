@@ -229,7 +229,7 @@ def test_throttle_toggle(test_session, test_client, test_config):
     assert response.json['throttle_status'] == 'ondemand'
 
 
-def test_clear_downloads(test_session, test_client, test_config):
+def test_clear_downloads(test_session, test_client, test_config, test_download_manager_config):
     from wrolpi.downloader import DOWNLOAD_MANAGER_CONFIG
 
     with get_db_session(commit=True) as session:

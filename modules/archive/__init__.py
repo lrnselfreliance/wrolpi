@@ -1,11 +1,15 @@
 from abc import ABC
-from typing import Tuple
+from typing import Tuple, Optional
+
+from sqlalchemy.orm import Session
 
 from wrolpi.common import logger
+from wrolpi.db import optional_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
 from . import lib
 from .api import bp  # noqa
+from .models import Archive
 
 PRETTY_NAME = 'Archive'
 
@@ -32,6 +36,11 @@ class ArchiveDownloader(Downloader, ABC):
 
         archive = lib.do_archive(download.url)
         return DownloadResult(success=True, location=f'/archive/{archive.id}')
+
+    @optional_session
+    def already_downloaded(self, url: str, session: Session = None) -> Optional[Archive]:
+        archive = session.query(Archive).filter_by(url=url).one_or_none()
+        return archive
 
 
 # Archive downloader is the last downloader which should be used.

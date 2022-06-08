@@ -112,7 +112,16 @@ def test_client() -> SanicTestClient:
 
 
 @pytest.fixture
-def test_download_manager():
+def test_download_manager_config(test_directory):
+    (test_directory / 'config').mkdir(exist_ok=True)
+    config_path = test_directory / 'config/download_manager.yaml'
+    set_test_download_manager_config(True)
+    yield config_path
+    set_test_download_manager_config(False)
+
+
+@pytest.fixture
+def test_download_manager(test_download_manager_config):
     manager = DownloadManager()
     return manager
 
@@ -134,12 +143,3 @@ def successful_download():
 @pytest.fixture
 def failed_download():
     return DownloadResult(error='pytest.fixture failed_download error', success=False)
-
-
-@pytest.fixture
-def test_download_manager_config(test_directory):
-    (test_directory / 'config').mkdir(exist_ok=True)
-    config_path = test_directory / 'config/download_manager.yaml'
-    set_test_download_manager_config(True)
-    yield config_path
-    set_test_download_manager_config(False)

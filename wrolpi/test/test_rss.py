@@ -26,7 +26,7 @@ def test_rss_download_invalid(test_session, test_download_manager):
     test_download_manager.register_downloader(rss_downloader)
 
 
-def test_rss_download(test_session, test_download_manager, test_download_manager_config):
+def test_rss_download(test_session, test_download_manager):
     """An RSS Downloader will create new Downloads for every link in the feed."""
     rss_downloader = RSSDownloader()
     test_download_manager.register_downloader(rss_downloader)
@@ -80,7 +80,7 @@ def test_rss_download(test_session, test_download_manager, test_download_manager
     ])
 
 
-def test_post_rss_download(test_session, test_client, test_download_manager, test_download_manager_config):
+def test_post_rss_download(test_session, test_client, test_download_manager):
     """An RSS can be downloaded in the UI"""
     rss_downloader = RSSDownloader()
     test_download_manager.register_downloader(rss_downloader)
@@ -101,7 +101,7 @@ def test_post_rss_download(test_session, test_client, test_download_manager, tes
     assert download.attempts == 1
 
 
-def test_rss_no_entries(test_session, test_download_manager, test_download_manager_config):
+def test_rss_no_entries(test_session, test_download_manager):
     """An RSS feed with no entries is handled."""
     rss_downloader = RSSDownloader()
     test_download_manager.register_downloader(rss_downloader)

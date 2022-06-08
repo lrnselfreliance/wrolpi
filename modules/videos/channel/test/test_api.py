@@ -337,9 +337,7 @@ def test_channel_empty_url_doesnt_conflict(test_client, test_session, test_direc
 
 
 def test_download_channel_no_refresh(test_session, download_channel, video_download_manager):
-    """
-    A Channel cannot be downloaded until it has been refreshed.
-    """
+    """A Channel cannot be downloaded until it has been refreshed."""
 
     def check_refreshed(expected: bool):
         channel = test_session.query(Channel).one()

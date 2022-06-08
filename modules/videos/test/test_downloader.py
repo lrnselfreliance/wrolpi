@@ -177,7 +177,8 @@ def test_video_download_no_channel(test_session, video_download_manager, video_f
 
 
 def test_download_channel(test_session, simple_channel, video_download_manager, video_file,
-                          mock_video_extract_info, mock_video_prepare_filename, mock_video_process_runner):
+                          mock_video_extract_info, mock_video_prepare_filename,
+                          mock_video_process_runner):
     """Downloading (updating the catalog of) a Channel creates download records for all of it's missing videos."""
     url = 'https://www.youtube.com/c/LearningSelfReliance/videos'
 

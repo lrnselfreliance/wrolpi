@@ -772,6 +772,9 @@ class RSSDownloader(Downloader, ABC):
     pretty_name = 'RSS'
     listable = False
 
+    def __repr__(self):
+        return '<RSSDownloader>'
+
     @classmethod
     def valid_url(cls, url: str) -> Tuple[bool, Optional[dict]]:
         """Attempts to parse an RSS Feed.  If it succeeds, it returns a FeedParserDict as a dictionary."""
@@ -815,7 +818,8 @@ class RSSDownloader(Downloader, ABC):
         """
         Feedparser can report some errors, some we can ignore.
         """
-        if 'CharacterEncodingOverride' in str(feed['bozo_exception']):
+        if 'document declared as' in str(feed['bozo_exception']):
+            # Feed's encoding does not match what is declared, this is fine.
             return True
         return False
 

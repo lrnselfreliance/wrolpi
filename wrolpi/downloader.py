@@ -18,7 +18,7 @@ from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
-from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile
+from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, WROLPI_CONFIG
 from wrolpi.dates import TZDateTime, now, Seconds, local_timezone, recursive_replace_tz
 from wrolpi.db import get_db_session, get_db_curs, get_db_context, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
@@ -128,11 +128,12 @@ class Download(ModelHelper, Base):
 
 
 class Downloader:
-    name = None
-    pretty_name = None
-    listable = True
+    name: str = None
+    pretty_name: str = None
+    listable: bool = True
+    timeout: int = None
 
-    def __init__(self, priority: int = 50, name: str = None):
+    def __init__(self, priority: int = 50, name: str = None, timeout: int = None):
         """
         Lower `priority` means the downloader will be checked first.  Valid priority: 0-100
 
@@ -143,8 +144,9 @@ class Downloader:
         if not 0 <= priority <= 100:
             raise ValueError(f'Priority of {priority} of {self} is invalid!')
 
-        self.name = self.name or name
-        self.priority = priority
+        self.name: str = self.name or name
+        self.priority: int = priority
+        self.timeout: int = timeout or self.timeout
         self._kill = multiprocessing.Event()
 
         self._manager: DownloadManager = None  # noqa
@@ -176,27 +178,34 @@ class Downloader:
         self._manager = value
 
     def kill(self):
-        """
-        Kill the running download for this Downloader.
-        """
+        """Kill the running download for this Downloader."""
         if not self._kill.is_set():
             self._kill.set()
 
     def clear(self):
-        """
-        Clear any "kill" request for this Downloader.
-        """
+        """Clear any "kill" request for this Downloader."""
         if self._kill.is_set():
             self._kill.clear()
 
-    def process_runner(self, url: str, cmd: List[str], cwd: pathlib.Path, **kwargs) -> Tuple[int, dict]:
+    def process_runner(self, url: str, cmd: Tuple[str, ...], cwd: pathlib.Path, timeout: int = None,
+                       **kwargs) -> Tuple[int, dict]:
         """
         Run a subprocess using the provided arguments.  This process can be killed by the Download Manager.
+
+        Global timeout takes precedence over the timeout argument, unless it is 0.  (Smaller global timeout wins)
         """
         logger.debug(f'{self} launching download process with args: {" ".join(cmd)}')
+        start = now()
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, **kwargs)
         pid = proc.pid
         logger.debug(f'{self} launched download process {pid=} for {url}')
+
+        # Timeout can be any positive integer.  Global download timeout takes precedence, unless it is 0.
+        # A timeout of 0 means the download will never be killed.
+        if timeout is None:
+            timeout = self.timeout
+        if WROLPI_CONFIG.download_timeout and timeout > WROLPI_CONFIG.download_timeout:
+            timeout = WROLPI_CONFIG.download_timeout
 
         try:
             while True:
@@ -207,13 +216,17 @@ class Downloader:
                 except subprocess.TimeoutExpired:
                     pass
 
+                if timeout and (elapsed := now() - start).total_seconds() > timeout:
+                    logger.warning(f'Download has exceeded its timeout {elapsed=}')
+                    self.kill()
+
                 if self._kill.is_set():
                     logger.warning(f'Killing download {pid=}')
                     proc.kill()
                     proc.poll()
-                    raise ChildProcessError(f'Download {pid=} was killed!')
+                    break
         finally:
-            self._kill.clear()
+            self.clear()
 
             # Output all logs from the process.
             # TODO is there a way to stream this output while the process is running?

@@ -15,6 +15,7 @@ class SettingsResponse:
 @dataclass
 class SettingsRequest:
     download_on_startup: Optional[bool] = None
+    download_timeout: Optional[int] = None
     hotspot_on_startup: Optional[bool] = None
     hotspot_password: Optional[str] = None
     hotspot_ssid: Optional[str] = None

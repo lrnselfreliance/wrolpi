@@ -231,7 +231,7 @@ class VideoDownloader(Downloader, ABC):
             video_path, entry = self.prepare_filename(url, out_dir)
             # Do the real download.
             file_name_format = '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s'
-            cmd = [
+            cmd = (
                 str(YT_DLP_BIN),
                 '-cw',  # Continue downloads, do not clobber existing files.
                 '-f', PREFERRED_VIDEO_FORMAT,
@@ -243,7 +243,7 @@ class VideoDownloader(Downloader, ABC):
                 '--merge-output-format', PREFERRED_VIDEO_EXTENSION,
                 '-o', file_name_format,
                 url,
-            ]
+            )
             return_code, logs = self.process_runner(url, cmd, out_dir)
 
             if return_code != 0:

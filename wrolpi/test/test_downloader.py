@@ -200,7 +200,7 @@ async def test_download_wrol_mode(test_session, test_download_manager):
         await test_download_manager.do_downloads_sync()
 
 
-def test_download_get_downloader(test_session, test_download_manager,):
+def test_download_get_downloader(test_session, test_download_manager, ):
     """
     A Download can find it's Downloader.
     """
@@ -364,3 +364,37 @@ def test_skip_urls(test_session, test_download_manager):
     ], downloader_name=HTTPDownloader.name)
     downloads = test_download_manager.get_downloads(test_session)
     assert {i.url for i in downloads} == {'https://example.com/1', 'https://example.com/2'}
+
+
+def test_process_runner_timeout(test_directory):
+    """A Downloader can cancel it's download using a timeout."""
+    # Default timeout of 3 seconds.
+    downloader = Downloader(0, 'downloader', timeout=3)
+
+    # Default timeout is obeyed.
+    start = datetime.now()
+    downloader.process_runner('https://example.com', ('sleep', '8'), test_directory)
+    elapsed = datetime.now() - start
+    assert 3 < elapsed.total_seconds() < 4
+
+    # One-off timeout is obeyed.
+    start = datetime.now()
+    downloader.process_runner('https://example.com', ('sleep', '8'), test_directory, timeout=1)
+    elapsed = datetime.now() - start
+    assert 1 < elapsed.total_seconds() < 2
+
+    # Zero timeout means no timeout.
+    start = datetime.now()
+    downloader.process_runner('https://example.com', ('sleep', '8'), test_directory, timeout=0)
+    elapsed = datetime.now() - start
+    assert 7 < elapsed.total_seconds() < 10
+
+    # This Downloader's timeout is ignored in favor of the global timeout.
+    from wrolpi.common import WROLPI_CONFIG
+    WROLPI_CONFIG.download_timeout = 3
+
+    # Global timeout is obeyed.
+    start = datetime.now()
+    downloader.process_runner('https://example.com', ('sleep', '8'), test_directory)
+    elapsed = datetime.now() - start
+    assert 2 < elapsed.total_seconds() < 4

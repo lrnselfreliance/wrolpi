@@ -26,6 +26,7 @@ import {
 import TimezoneSelect from 'react-timezone-select';
 import {
     DisableDownloadsToggle,
+    HelpPopup,
     HotspotToggle,
     PageContainer,
     secondsToDate,
@@ -51,6 +52,7 @@ class Settings extends React.Component {
             ready: false,
 
             download_on_startup: null,
+            download_timeout: null,
             hotspot_on_startup: null,
             hotspot_password: null,
             hotspot_ssid: null,
@@ -71,6 +73,7 @@ class Settings extends React.Component {
                 ready: true,
                 disabled: settings.wrol_mode,
                 download_on_startup: settings.download_on_startup,
+                download_timeout: settings.download_timeout || '',
                 hotspot_on_startup: settings.hotspot_on_startup,
                 hotspot_password: settings.hotspot_password,
                 hotspot_ssid: settings.hotspot_ssid,
@@ -89,6 +92,7 @@ class Settings extends React.Component {
         this.setState({disabled: true, pending: true});
         let settings = {
             download_on_startup: this.state.download_on_startup,
+            download_timeout: this.state.download_timeout ? parseInt(this.state.download_timeout) : 0,
             hotspot_on_startup: this.state.hotspot_on_startup,
             hotspot_password: this.state.hotspot_password,
             hotspot_ssid: this.state.hotspot_ssid,
@@ -113,6 +117,15 @@ class Settings extends React.Component {
         this.setState({qrCodeValue});
     }
 
+    handleTimeoutChange = async (e, name, value) => {
+        if (e) {
+            e.preventDefault()
+        }
+        // Restrict timeout to numbers.
+        value = value.replace(/[^\d]/,'');
+        this.setState({[name]: value});
+    }
+
     render() {
         if (this.state.ready === false) {
             return <Loader active inline='centered'/>
@@ -121,6 +134,7 @@ class Settings extends React.Component {
         let {
             disabled,
             download_on_startup,
+            download_timeout,
             hotspot_on_startup,
             hotspot_password,
             hotspot_ssid,
@@ -173,6 +187,19 @@ class Settings extends React.Component {
                               checked={throttle_on_startup === true}
                               onChange={(e, d) => this.handleInputChange(e, 'throttle_on_startup', d.checked)}
                     />
+
+                    <Form.Group inline>
+                        <Form.Input
+                            label={<>
+                                <b>Download Timeout</b>
+                                <HelpPopup content='Downloads will be stopped after this many seconds have elapsed.
+                                Downloads will never timeout if this is empty.'/>
+                            </>}
+                            value={download_timeout}
+                            disabled={disabled || download_timeout === null}
+                            onChange={(e, d) => this.handleTimeoutChange(e, 'download_timeout', d.value)}
+                        />
+                    </Form.Group>
 
                     <Form.Group inline>
                         <Form.Input

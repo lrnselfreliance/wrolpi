@@ -204,7 +204,7 @@ class Downloader:
         # A timeout of 0 means the download will never be killed.
         if timeout is None:
             timeout = self.timeout
-        if WROLPI_CONFIG.download_timeout and timeout > WROLPI_CONFIG.download_timeout:
+        if WROLPI_CONFIG.download_timeout and timeout and timeout > WROLPI_CONFIG.download_timeout:
             timeout = WROLPI_CONFIG.download_timeout
 
         try:

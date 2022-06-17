@@ -34,21 +34,22 @@ def hotspot_status() -> HotspotStatus:
             logger.debug(f'Could not get hotspot status', exc_info=e)
         return HotspotStatus.unknown
 
+    device = WROLPI_CONFIG.hotspot_device
     for line in output.splitlines():
-        if line.startswith('wlan0: connected'):
+        if line.startswith(f'{device}: connected'):
             return HotspotStatus.connected
-        elif line.startswith('wlan0: disconnected'):
+        elif line.startswith(f'{device}: disconnected'):
             return HotspotStatus.disconnected
-        elif line.startswith('wlan0: unavailable'):
+        elif line.startswith(f'{device}: unavailable'):
             return HotspotStatus.unavailable
 
     return HotspotStatus.unknown
 
 
 def enable_hotspot():
-    """Turn the wlan0 interface into a hotspot.
+    """Turn the wifi interface into a hotspot.
 
-    If wlan0 is already running, replace that with a hotspot.
+    If wifi is already running, replace that with a hotspot.
     """
     status = hotspot_status()
     logger.warning(f'Hotspot status: {status}')
@@ -59,7 +60,7 @@ def enable_hotspot():
         return enable_hotspot()
     elif status == HotspotStatus.disconnected:
         # Radio is on, but not connected.  Good, turn it into a hotspot.
-        cmd = (SUDO, NMCLI, 'device', 'wifi', 'hotspot', 'ifname', 'wlan0',
+        cmd = (SUDO, NMCLI, 'device', 'wifi', 'hotspot', 'ifname', WROLPI_CONFIG.hotspot_device,
                'ssid', WROLPI_CONFIG.hotspot_ssid, 'password', WROLPI_CONFIG.hotspot_password)
         subprocess.check_call(cmd)
         logger.info('Enabling hotspot successful')
@@ -75,7 +76,7 @@ def enable_hotspot():
 
 
 def disable_hotspot():
-    """Turn off the wlan0 interface."""
+    """Turn off the wifi interface."""
     cmd = (SUDO, NMCLI, 'radio', 'wifi', 'off')
     try:
         subprocess.check_call(cmd)

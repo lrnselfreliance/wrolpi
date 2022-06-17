@@ -121,6 +121,7 @@ def get_settings(_: Request):
     settings = {
         'download_on_startup': config.download_on_startup,
         'download_timeout': config.download_timeout,
+        'hotspot_device': config.hotspot_device,
         'hotspot_on_startup': config.hotspot_on_startup,
         'hotspot_password': config.hotspot_password,
         'hotspot_ssid': config.hotspot_ssid,

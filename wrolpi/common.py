@@ -258,6 +258,7 @@ class WROLPiConfig(ConfigFile):
     default_config = dict(
         download_on_startup=True,
         download_timeout=0,
+        hotspot_device='wlan0',
         hotspot_on_startup=True,
         hotspot_password='wrolpi hotspot',
         hotspot_ssid='WROLPi',
@@ -281,6 +282,14 @@ class WROLPiConfig(ConfigFile):
     @download_timeout.setter
     def download_timeout(self, value: int):
         self.update({'download_timeout': value})
+
+    @property
+    def hotspot_device(self) -> str:
+        return self._config['hotspot_device']
+
+    @hotspot_device.setter
+    def hotspot_device(self, value: str):
+        self.update({'hotspot_device': value})
 
     @property
     def hotspot_on_startup(self) -> bool:

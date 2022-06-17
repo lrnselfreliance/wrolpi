@@ -110,3 +110,14 @@ def test_throttle_off():
         mock_subprocess.check_call.assert_called_once_with(
             (PosixPath('/usr/bin/sudo'), PosixPath('/usr/bin/cpufreq-set'), '-g', 'ondemand')
         )
+
+
+@skip_circleci
+def test_hotspot_device():
+    """Changing the hotspot device changes what device is turned on."""
+    from wrolpi.common import WROLPI_CONFIG
+    WROLPI_CONFIG.hotspot_device = 'wlp2s0'
+
+    with mock.patch('wrolpi.admin.subprocess') as mock_subprocess:
+        mock_subprocess.check_output.return_value = b'wlp2s0: connected'
+        assert admin.hotspot_status() == HotspotStatus.connected

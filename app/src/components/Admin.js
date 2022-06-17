@@ -53,6 +53,7 @@ class Settings extends React.Component {
 
             download_on_startup: null,
             download_timeout: null,
+            hotspot_device: null,
             hotspot_on_startup: null,
             hotspot_password: null,
             hotspot_ssid: null,
@@ -74,6 +75,7 @@ class Settings extends React.Component {
                 disabled: settings.wrol_mode,
                 download_on_startup: settings.download_on_startup,
                 download_timeout: settings.download_timeout || '',
+                hotspot_device: settings.hotspot_device,
                 hotspot_on_startup: settings.hotspot_on_startup,
                 hotspot_password: settings.hotspot_password,
                 hotspot_ssid: settings.hotspot_ssid,
@@ -93,6 +95,7 @@ class Settings extends React.Component {
         let settings = {
             download_on_startup: this.state.download_on_startup,
             download_timeout: this.state.download_timeout ? parseInt(this.state.download_timeout) : 0,
+            hotspot_device: this.state.hotspot_device,
             hotspot_on_startup: this.state.hotspot_on_startup,
             hotspot_password: this.state.hotspot_password,
             hotspot_ssid: this.state.hotspot_ssid,
@@ -122,7 +125,7 @@ class Settings extends React.Component {
             e.preventDefault()
         }
         // Restrict timeout to numbers.
-        value = value.replace(/[^\d]/,'');
+        value = value.replace(/[^\d]/, '');
         this.setState({[name]: value});
     }
 
@@ -135,6 +138,7 @@ class Settings extends React.Component {
             disabled,
             download_on_startup,
             download_timeout,
+            hotspot_device,
             hotspot_on_startup,
             hotspot_password,
             hotspot_ssid,
@@ -143,6 +147,8 @@ class Settings extends React.Component {
             throttle_on_startup,
             timezone,
         } = this.state;
+
+        const qrButton = <Button icon style={{marginBottom: '1em'}}><Icon name='qrcode' size='big'/></Button>;
 
         return (
             <Container fluid>
@@ -216,20 +222,27 @@ class Settings extends React.Component {
                             onChange={(e, d) =>
                                 this.setState({hotspot_password: d.value}, this.handleHotspotChange)}
                         />
-                        <Modal closeIcon
-                               onClose={() => this.setState({qrOpen: false})}
-                               onOpen={() => this.setState({qrOpen: true})}
-                               open={this.state.qrOpen}
-                               trigger={<Button icon><Icon name='qrcode' size='big'/></Button>}
-                        >
-                            <Modal.Header>
-                                Scan this code to join the hotspot
-                            </Modal.Header>
-                            <Modal.Content>
-                                <QRCode value={qrCodeValue} size={300}/>
-                            </Modal.Content>
-                        </Modal>
+                        <Form.Input
+                            label='Hotspot Device'
+                            disabled={disabled || hotspot_password === null}
+                            value={hotspot_device}
+                            onChange={(e, d) => this.handleInputChange(e,'hotspot_device', d.value)}
+                        />
                     </Form.Group>
+
+                    <Modal closeIcon
+                           onClose={() => this.setState({qrOpen: false})}
+                           onOpen={() => this.setState({qrOpen: true})}
+                           open={this.state.qrOpen}
+                           trigger={qrButton}
+                    >
+                        <Modal.Header>
+                            Scan this code to join the hotspot
+                        </Modal.Header>
+                        <Modal.Content>
+                            <QRCode value={qrCodeValue} size={300}/>
+                        </Modal.Content>
+                    </Modal>
 
                     <Form.Field>
                         <label>Timezone</label>

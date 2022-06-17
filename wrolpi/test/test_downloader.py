@@ -346,7 +346,7 @@ def test_max_attempts(test_session, test_download_manager):
     assert download.status == 'failed'
 
 
-def test_skip_urls(test_session, test_download_manager):
+def test_skip_urls(test_session, test_download_manager, test_client, assert_download_urls):
     """The DownloadManager will not create downloads for URLs in it's skip list."""
     _, session = get_db_context()
     from wrolpi.downloader import DOWNLOAD_MANAGER_CONFIG
@@ -362,8 +362,15 @@ def test_skip_urls(test_session, test_download_manager):
         'https://example.com/skipme',
         'https://example.com/2',
     ], downloader_name=HTTPDownloader.name)
-    downloads = test_download_manager.get_downloads(test_session)
-    assert {i.url for i in downloads} == {'https://example.com/1', 'https://example.com/2'}
+    assert_download_urls({'https://example.com/1', 'https://example.com/2'})
+    assert DOWNLOAD_MANAGER_CONFIG.skip_urls == ['https://example.com/skipme']
+
+    test_download_manager.delete_completed()
+
+    # The user can start a download even if the URL is in the skip list.
+    test_download_manager.create_download('https://example.com/skipme', session=test_session, reset_attempts=True)
+    assert_download_urls({'https://example.com/skipme'})
+    assert DOWNLOAD_MANAGER_CONFIG.skip_urls == []
 
 
 def test_process_runner_timeout(test_directory):

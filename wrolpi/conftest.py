@@ -3,7 +3,7 @@ Fixtures for Pytest tests.
 """
 import pathlib
 import tempfile
-from typing import Tuple
+from typing import Tuple, Set
 from unittest import mock
 from uuid import uuid1
 
@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.dates import set_test_now
 from wrolpi.db import postgres_engine, get_db_args
-from wrolpi.downloader import DownloadManager, DownloadResult, set_test_download_manager_config
+from wrolpi.downloader import DownloadManager, DownloadResult, set_test_download_manager_config, Download
 from wrolpi.root_api import BLUEPRINTS, api_app
 
 
@@ -143,3 +143,12 @@ def successful_download():
 @pytest.fixture
 def failed_download():
     return DownloadResult(error='pytest.fixture failed_download error', success=False)
+
+
+@pytest.fixture
+def assert_download_urls(test_session):
+    def asserter(urls: Set[str]):
+        downloads = test_session.query(Download).all()
+        assert {i.url for i in downloads} == set(urls)
+
+    return asserter

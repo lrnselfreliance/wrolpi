@@ -328,8 +328,12 @@ class DownloadManager:
             for url in urls:
                 if not url:
                     raise ValueError('Download must have a URL')
-                if url in DOWNLOAD_MANAGER_CONFIG.skip_urls:
-                    logger.warning(f'Skipping {url} because it is in download_manager.yaml skip list.')
+                if url in DOWNLOAD_MANAGER_CONFIG.skip_urls and reset_attempts:
+                    # User manually entered this download, remove it from the skip list.
+                    DOWNLOAD_MANAGER_CONFIG.skip_urls = [i for i in DOWNLOAD_MANAGER_CONFIG.skip_urls if i != url]
+                    DOWNLOAD_MANAGER_CONFIG.save()
+                elif url in DOWNLOAD_MANAGER_CONFIG.skip_urls:
+                    logger.warning(f'Skipping {url} because it is in the download_manager.yaml skip list.')
                     continue
                 info_json = None
                 if not downloader:

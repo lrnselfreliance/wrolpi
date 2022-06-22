@@ -120,7 +120,7 @@ def _refresh_files():
     logger.info('Refreshing Files')
     # Mark all files as unverified.  Any records that are unverified after refresh will be deleted.
     with get_db_curs(commit=True) as curs:
-        curs.execute('UPDATE file SET idempotency=null')
+        curs.execute('UPDATE file SET idempotency=null')  # noqa
 
     paths = filter(lambda i: i.is_file(), walk(get_media_directory()))
     idempotency = str(uuid4())

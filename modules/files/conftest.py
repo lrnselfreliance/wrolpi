@@ -1,11 +1,11 @@
 import pathlib
-from typing import List
+from typing import List, Callable
 
 import pytest
 
 
 @pytest.fixture
-def make_files_structure(test_directory):
+def make_files_structure(test_directory) -> Callable[[List[str]], List[pathlib.Path]]:
     def create_files(paths: List[str]) -> List[pathlib.Path]:
         files = []
         for name in paths:

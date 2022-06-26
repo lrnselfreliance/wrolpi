@@ -1,5 +1,6 @@
 import asyncio
 import re
+import subprocess
 from functools import wraps
 from pathlib import Path
 from typing import List
@@ -9,23 +10,16 @@ import psycopg2
 from sqlalchemy.orm import Session
 
 from modules.files.models import File
+from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, walk, chunks, logger
 from wrolpi.dates import from_timestamp
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidFile
 from wrolpi.vars import PYTEST
 
-try:
-    import magic
-
-    have_magic = True
-except ImportError:
-    logger.error('Could not import magic.  Is libmagic installed?')
-    have_magic = False
-
 logger = logger.getChild(__name__)
 
-__all__ = ['list_files', 'delete_file', 'split_file_name', 'upsert_file', 'refresh_files', 'search']
+__all__ = ['list_files', 'delete_file', 'split_file_name', 'upsert_file', 'refresh_files', 'search', 'get_mimetype']
 
 
 def filter_parent_directories(directories: List[Path]) -> List[Path]:
@@ -97,14 +91,26 @@ def split_file_name(path: Path) -> List[str]:
     return words
 
 
+FILE_PATH = which('file', '/usr/bin/file')
+
+
+def get_mimetype(path: Path) -> str:
+    """Get the mimetype using the builtin `file` command."""
+    cmd = (FILE_PATH, '--mime-type', str(path.absolute()))
+    output = subprocess.check_output(cmd)
+    output = output.decode()
+    mimetype = output.split(' ')[-1].strip()
+    return mimetype
+
+
 def upsert_file(path: Path, session: Session) -> File:
     """Update/insert a File in the DB.  Gather metadata about it."""
     file = session.query(File).filter_by(path=path).one_or_none()
     if not file:
         file = File(path=path)
         session.add(file)
-    if not file.mimetype and have_magic:
-        file.mimetype = magic.from_file(str(path), mime=True)
+    if not file.mimetype:
+        file.mimetype = get_mimetype(path)
     if not file.title:
         file.title = split_file_name(path)
     if not file.size or not file.modification_datetime:

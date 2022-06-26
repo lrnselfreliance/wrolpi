@@ -21,4 +21,4 @@ SQLAlchemy==1.3.22
 srt==3.5.1
 websockets==10.1
 webvtt-py==0.4.6
-yt-dlp==2022.5.18
+yt-dlp==2022.6.22.1

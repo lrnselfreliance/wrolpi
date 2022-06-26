@@ -89,7 +89,7 @@ class ChannelDownloader(Downloader, ABC):
         channel_source_id = info['channel_id']
         channel = get_or_create_channel(channel_source_id, download.url, name)
         channel.dict()  # get all attributes while we have the session.
-        # Resolve all entries.
+        # Resolve the entries generator.
         info['entries'] = list(info['entries'])
 
         if self.is_a_playlist(info):
@@ -128,6 +128,8 @@ class ChannelDownloader(Downloader, ABC):
         try:
             # Playlists require more information to download.
             info = extract_info(download.url, process=True)
+            # Resolve the entries generator.
+            info['entries'] = list(info['entries'])
 
             # Get all Video.source_id of this Channel.
             with get_db_session() as session:
@@ -246,11 +248,23 @@ class VideoDownloader(Downloader, ABC):
             )
             return_code, logs = self.process_runner(url, cmd, out_dir)
 
+            stdout = logs['stdout'].decode() if hasattr(logs['stdout'], 'decode') else logs['stdout']
+            stderr = logs['stderr'].decode() if hasattr(logs['stderr'], 'decode') else logs['stderr']
+
             if return_code != 0:
-                raise ValueError(f'video downloader process exited with {return_code}')
+                error = f'{stdout}\n\n\n{stderr}\n\nvideo downloader process exited with {return_code}'
+                return DownloadResult(
+                    success=False,
+                    error=error,
+                )
 
             if not video_path.is_file():
-                raise ValueError(f'Video file could not be found!  {video_path}')
+                error = f'{stdout}\n\n\n{stderr}\n\n' \
+                        f'Video file could not be found!  {video_path}'
+                return DownloadResult(
+                    success=False,
+                    error=error,
+                )
 
             with get_db_session(commit=True) as session:
                 # If the video is from a channel, it will already be in the database.
@@ -369,7 +383,7 @@ def update_channel_catalog(channel: Channel, info: dict):
     logger.info(f'Downloading video list for {channel.name} at {channel.url}  This may take several minutes.')
 
     # Resolve all entries to dictionaries.
-    entries = info['entries']
+    entries = info['entries'] = list(info['entries'])
 
     # yt-dlp may hand back a list of URLs, lets use the "Uploads" URL, if available.
     try:

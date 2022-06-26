@@ -96,8 +96,6 @@ def test_format_message(message, expected):
     assert result == expected
 
 
-def test_latex_pdf():
-    """
-    Generate a OTP PDF.
-    """
-    assert lib.generate_pdf()
+def test_get_new_otp_html():
+    """Generate a OTP HTML page."""
+    assert lib.generate_html()

@@ -1,7 +1,3 @@
-import random
-from http import HTTPStatus
-from string import ascii_letters
-
 from sanic import response
 from sanic.request import Request
 from sanic_ext import validate
@@ -35,13 +31,7 @@ async def post_decrypt_otp(_: Request, body: schema.DecryptOTPRequest):
     return response.json(data)
 
 
-@bp.get('/pdf')
-async def get_new_otp_pdf(_: Request):
-    random_name = ''.join(random.choice(ascii_letters) for _ in range(8))
-    filename = f'one-time-pad-{random_name}.pdf'
-    headers = {
-        'Content-type': 'application/pdf',
-        'Content-Disposition': f'attachment;filename={filename}'
-    }
-    contents = lib.generate_pdf()
-    return response.raw(contents, HTTPStatus.OK, headers)
+@bp.get('/html')
+async def get_new_otp_html(_: Request):
+    body = lib.generate_html()
+    return response.html(body)

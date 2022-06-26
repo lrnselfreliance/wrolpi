@@ -24,6 +24,6 @@ def test_decrypt(test_client):
     )
 
 
-def test_get_pdf(test_client):
-    request, response = test_client.get('/api/otp/pdf')
+def test_get_html(test_client):
+    request, response = test_client.get('/api/otp/html')
     assert response.status_code == HTTPStatus.OK

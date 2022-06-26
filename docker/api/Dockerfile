@@ -4,9 +4,8 @@ WORKDIR /opt/wrolpi
 
 # Update dependencies for the services install.
 RUN apt update
-# ffmpeg for Videos and Latex for OTP PDF.  osm2pgsql to import map files.
-RUN apt-get install -y ffmpeg texlive-latex-base texlive-latex-extra
-RUN pdflatex --version
+# ffmpeg for Videos
+RUN apt-get install -y ffmpeg
 RUN ffmpeg -version
 
 # Install WROLPi

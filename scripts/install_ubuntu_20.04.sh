@@ -11,8 +11,7 @@ curl -fsSL https://deb.nodesource.com/setup_14.x | bash -
 # Install dependencies
 apt install -y apt-transport-https ca-certificates curl gnupg-agent gcc libpq-dev software-properties-common \
   postgresql-12 nginx-full nginx-doc python3.8-minimal python3.8-dev python3.8-doc python3.8-venv \
-  ffmpeg hostapd nodejs texlive-latex-base texlive-latex-extra chromium-browser chromium-chromedriver \
-  cpufrequtils network-manager
+  ffmpeg hostapd nodejs chromium-browser chromium-chromedriver cpufrequtils network-manager
 
 # Install Archiving tools.
 npm install -g 'git+https://github.com/gildas-lormeau/SingleFile'

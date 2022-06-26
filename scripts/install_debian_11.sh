@@ -8,7 +8,7 @@ set -e
 # Install dependencies
 apt install -y apt-transport-https ca-certificates curl gnupg-agent gcc libpq-dev software-properties-common \
   postgresql-13 nginx-full nginx-doc python3-full python3-dev python3-doc python3-venv htop vim ffmpeg hostapd \
-  texlive-latex-base texlive-latex-extra chromium chromium-driver cpufrequtils network-manager npm
+  chromium chromium-driver cpufrequtils network-manager npm
 
 # Install Archiving tools.
 npm install -g 'git+https://github.com/gildas-lormeau/SingleFile'

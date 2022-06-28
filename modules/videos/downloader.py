@@ -87,7 +87,6 @@ class ChannelDownloader(Downloader, ABC):
         # Resolve the entries generator.
         info['entries'] = list(info['entries'])
         download.info_json = info
-        download.sub_downloader = video_downloader.name
         if session := Session.object_session(download):
             # May not have a session during testing.
             session.commit()
@@ -97,49 +96,41 @@ class ChannelDownloader(Downloader, ABC):
         channel = get_or_create_channel(channel_source_id, download.url, name)
         channel.dict()  # get all attributes while we have the session.
 
-        if self.is_a_playlist(info):
-            result = self.upsert_playlist_videos(download, channel)
-        else:
-            result = self.upsert_channel_videos(download, info, channel)
+        location = f'/videos/channel/{channel.id}/video' if channel and channel.id else None
 
-        if PYTEST:
-            self.manager.do_downloads_sync()
-        else:
-            self.manager.start_downloads()
-
-        return result
+        is_a_playlist = self.is_a_playlist(info)
+        try:
+            if is_a_playlist:
+                downloads = self.get_playlist_downloads(download)
+            else:
+                downloads = self.get_channel_downloads(download, info, channel)
+            return DownloadResult(success=True, location=location, downloads=downloads)
+        except Exception:
+            name = 'playlist' if is_a_playlist else 'channel'
+            logger.warning(f'Failed to update catalog of {name} {download.url}')
+            return DownloadResult(success=False, location=location, error=str(traceback.format_exc()))
 
     @staticmethod
-    def upsert_channel_videos(download: Download, info: dict, channel: Channel) -> DownloadResult:
+    def get_channel_downloads(download: Download, info: dict, channel: Channel) -> List[str]:
         """Get a list of all videos in a Channel, schedule downloads for any missing videos."""
-        try:
-            update_channel_catalog(channel, info)
+        update_channel_catalog(channel, info)
 
-            domain = extract_domain(download.url)
-            missing_videos = find_all_missing_videos(channel.id)
-            downloads = []
-            for video_id, source_id, missing_video in missing_videos:
-                url = missing_video.get('webpage_url') or video_url_resolver(domain, missing_video)
-                downloads.append(url)
-            return DownloadResult(success=True, location=f'/videos/channel/{channel.id}/video', downloads=downloads)
-        except Exception:
-            logger.warning(f'Failed to update catalog of channel {download.url}')
-            location = f'/videos/channel/{channel.id}/video' if channel.id else None
-            return DownloadResult(success=False, location=location, error=str(traceback.format_exc()))
+        domain = extract_domain(download.url)
+        missing_videos = find_all_missing_videos(channel.id)
+        downloads = []
+        for _, _, missing_video in missing_videos:
+            url = missing_video.get('webpage_url') or video_url_resolver(domain, missing_video)
+            downloads.append(url)
+        return downloads
 
     @staticmethod
-    def upsert_playlist_videos(download: Download, channel: Channel) -> DownloadResult:
+    def get_playlist_downloads(download: Download) -> List[str]:
         """Get a list of all videos in a playlist, schedule downloads for any missing videos."""
-        try:
-            # Get all videos in the playlist
-            downloads = [i['url'] for i in download.info_json['entries']]
-            # Only download those that have not yet been downloaded.
-            downloads = [i for i in downloads if not video_downloader.already_downloaded(i)]
-            return DownloadResult(success=True, location=f'/videos/channel/{channel.id}/video', downloads=downloads)
-        except Exception:
-            logger.warning(f'Failed to update catalog of playlist {download.url}')
-            location = f'/videos/channel/{channel.id}/video' if channel.id else None
-            return DownloadResult(success=False, location=location, error=str(traceback.format_exc()))
+        # Get all videos in the playlist
+        downloads = [i['url'] for i in download.info_json['entries']]
+        # Only download those that have not yet been downloaded.
+        downloads = [i for i in downloads if not video_downloader.already_downloaded(i)]
+        return downloads
 
 
 YT_DLP_BIN = which(

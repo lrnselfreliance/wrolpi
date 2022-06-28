@@ -408,7 +408,7 @@ example_playlist_json = {
          'ie_key': 'Youtube',
          'title': 'video 2 title',
          'uploader': None,
-         'url': 'video_2_url',
+         'url': 'https://youtube.com/watch?v=video_2_url',
          'view_count': 1413,
          'webpage_url': 'https://youtube.com/watch?v=video_2_url'},
         {'_type': 'url',
@@ -418,7 +418,7 @@ example_playlist_json = {
          'ie_key': 'Youtube',
          'title': 'video 1 title',
          'uploader': None,
-         'url': 'video_1_url',
+         'url': 'https://youtube.com/watch?v=video_1_url',
          'view_count': 58504,
          'webpage_url': 'https://youtube.com/watch?v=video_1_url'},
         {'_type': 'url',
@@ -428,7 +428,7 @@ example_playlist_json = {
          'ie_key': 'Youtube',
          'title': 'video 3 title',
          'uploader': None,
-         'url': 'video_3_url',
+         'url': 'https://youtube.com/watch?v=video_3_url',
          'view_count': 58504,
          'webpage_url': 'https://youtube.com/watch?v=video_3_url'},
     ],
@@ -463,14 +463,7 @@ def test_download_playlist(test_session, test_directory, mock_video_extract_info
                            poster_path='poster exists'))
     test_session.commit()
 
-    mock_video_extract_info.side_effect = [
-        example_playlist_json,  # Playlist info is fetched first.
-        example_playlist_json,  # Playlist info is fetched again for more details.
-        example_channel_json,  # Video 3 causes channel catalog to be fetched.
-        example_video_json,
-        example_video_json,
-        example_video_json,
-    ]
+    mock_video_extract_info.return_value = example_playlist_json  # Playlist info is fetched first.
 
     with mock.patch('modules.videos.downloader.VideoDownloader.do_download') as mock_video_do_download:
         mock_video_do_download.return_value = DownloadResult(success=True)  # Don't download the videos.

@@ -9,7 +9,7 @@ from typing import Tuple, List, Optional
 import yt_dlp.utils
 from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
-from yt_dlp.extractor import YoutubeTabIE
+from yt_dlp.extractor import YoutubeTabIE  # noqa
 from yt_dlp.utils import UnsupportedError, DownloadError
 
 from wrolpi.cmd import which
@@ -17,7 +17,7 @@ from wrolpi.common import logger, extract_domain, get_media_directory
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.db import optional_session
-from wrolpi.downloader import Downloader, Download, DOWNLOAD_MANAGER_CONFIG, DownloadResult
+from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
@@ -84,13 +84,18 @@ class ChannelDownloader(Downloader, ABC):
     def do_download(self, download: Download) -> DownloadResult:
         """Update a Channel's catalog, then schedule downloads of every missing video."""
         info = extract_info(download.url, process=False)
+        # Resolve the entries generator.
+        info['entries'] = list(info['entries'])
+        download.info_json = info
+        download.sub_downloader = video_downloader.name
+        if session := Session.object_session(download):
+            # May not have a session during testing.
+            session.commit()
 
         name = info['uploader']
         channel_source_id = info['channel_id']
         channel = get_or_create_channel(channel_source_id, download.url, name)
         channel.dict()  # get all attributes while we have the session.
-        # Resolve the entries generator.
-        info['entries'] = list(info['entries'])
 
         if self.is_a_playlist(info):
             result = self.upsert_playlist_videos(download, channel)
@@ -126,32 +131,10 @@ class ChannelDownloader(Downloader, ABC):
     def upsert_playlist_videos(download: Download, channel: Channel) -> DownloadResult:
         """Get a list of all videos in a playlist, schedule downloads for any missing videos."""
         try:
-            # Playlists require more information to download.
-            info = extract_info(download.url, process=True)
-            # Resolve the entries generator.
-            info['entries'] = list(info['entries'])
-
-            # Get all Video.source_id of this Channel.
-            with get_db_session() as session:
-                existing_ids = [i for (i,) in session.query(Video.source_id).filter(Video.channel_id == channel.id)]
-
-            # 'id' is our 'source_id'
-            if any(i['id'] not in existing_ids for i in info['entries']):
-                # At least one video in the playlist is not in the Channel catalog, update the catalog.
-                channel_info = extract_info(channel.url, process=True)
-                update_channel_catalog(channel, channel_info)
-
-            with get_db_session() as session:
-                channel_video_urls = [i for (i,) in session.query(Video.url).filter(Video.channel_id == channel.id,
-                                                                                    Video.url != None)]
-
-            skip_urls = set(DOWNLOAD_MANAGER_CONFIG.skip_urls)
-            # All videos in the channel catalog that have not been downloaded (most will not be in the playlist).
-            missing_source_ids = {source_id for _, source_id, _ in _find_all_missing_videos(channel.id)}
-            downloads = [i['webpage_url'] for i in info['entries'] if
-                         i['id'] in missing_source_ids and i['webpage_url'] not in skip_urls]
-            # A video may be in a playlist, but not published in the channel catalog.
-            downloads.extend(i['webpage_url'] for i in info['entries'] if i['webpage_url'] not in channel_video_urls)
+            # Get all videos in the playlist
+            downloads = [i['url'] for i in download.info_json['entries']]
+            # Only download those that have not yet been downloaded.
+            downloads = [i for i in downloads if not video_downloader.already_downloaded(i)]
             return DownloadResult(success=True, location=f'/videos/channel/{channel.id}/video', downloads=downloads)
         except Exception:
             logger.warning(f'Failed to update catalog of playlist {download.url}')
@@ -179,7 +162,11 @@ class VideoDownloader(Downloader, ABC):
 
     @optional_session
     def already_downloaded(self, url: str, session: Session = None) -> Optional[Video]:
-        video = session.query(Video).filter_by(url=url).one_or_none()
+        # We only consider a video record with a video file as "downloaded".
+        video = session.query(Video).filter(
+            Video.url == url,
+            Video.video_path != None,
+        ).one_or_none()
         return video
 
     @classmethod
@@ -244,6 +231,7 @@ class VideoDownloader(Downloader, ABC):
                 '--write-info-json',
                 '--merge-output-format', PREFERRED_VIDEO_EXTENSION,
                 '-o', file_name_format,
+                '--no-cache-dir',
                 url,
             )
             return_code, logs = self.process_runner(url, cmd, out_dir)

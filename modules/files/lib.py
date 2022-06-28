@@ -91,12 +91,12 @@ def split_file_name(path: Path) -> List[str]:
     return words
 
 
-FILE_PATH = which('file', '/usr/bin/file')
+FILE_BIN = which('file', '/usr/bin/file')
 
 
 def get_mimetype(path: Path) -> str:
     """Get the mimetype using the builtin `file` command."""
-    cmd = (FILE_PATH, '--mime-type', str(path.absolute()))
+    cmd = (FILE_BIN, '--mime-type', str(path.absolute()))
     output = subprocess.check_output(cmd)
     output = output.decode()
     mimetype = output.split(' ')[-1].strip()

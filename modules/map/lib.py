@@ -125,7 +125,7 @@ async def import_files(files: List[str]):
         IMPORT_EVENT.clear()
 
 
-BASH = which('bash', '/bin/bash', warn=True)
+BASH_BIN = which('bash', '/bin/bash', warn=True)
 
 
 async def import_file(path: Path):
@@ -143,7 +143,7 @@ async def import_file(path: Path):
     else:
         raise ValueError(f'Cannot import unknown file! {path}')
 
-    cmd = f'{BASH} {PROJECT_DIR}/scripts/import_map.sh {path.absolute()}'
+    cmd = f'{BASH_BIN} {PROJECT_DIR}/scripts/import_map.sh {path.absolute()}'
     logger.debug(f'Running import script: {cmd}')
     start = now()
     proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)

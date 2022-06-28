@@ -62,8 +62,8 @@ class TestRootAPI(TestAPI):
         assert json.loads(response.body) == {'valid': False, 'regex': '.*(missing parenthesis.*'}
 
     def test_get_settings(self):
-        with mock.patch('wrolpi.admin.CPUFREQ_INFO', '/usr/bin/cpufreq-info'), \
-                mock.patch('wrolpi.admin.NMCLI', '/usr/bin/nmcli'):
+        with mock.patch('wrolpi.admin.CPUFREQ_INFO_BIN', '/usr/bin/cpufreq-info'), \
+                mock.patch('wrolpi.admin.NMCLI_BIN', '/usr/bin/nmcli'):
             request, response = api_app.test_client.get('/api/settings')
             self.assertOK(response)
 
@@ -216,7 +216,7 @@ def test_hotspot_settings(test_session, test_client, test_config):
 @skip_circleci
 def test_throttle_toggle(test_session, test_client, test_config):
     with mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
-            mock.patch('wrolpi.admin.CPUFREQ_INFO', "this value isn't even used"):
+            mock.patch('wrolpi.admin.CPUFREQ_INFO_BIN', "this value isn't even used"):
         mock_subprocess.check_output.side_effect = [
             b'wlan0: unavailable',
             b'The governor "ondemand" may decide ',

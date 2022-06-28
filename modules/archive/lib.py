@@ -146,10 +146,10 @@ def request_archive(url: str):
     return singlefile, readability, screenshot
 
 
-SINGLE_FILE_PATH = which('single-file',
+SINGLE_FILE_BIN = which('single-file',
                          '/usr/bin/single-file',  # rpi ubuntu
                          '/usr/local/bin/single-file',  # debian
-                         warn=True)
+                        warn=True)
 CHROMIUM = which('chromium-browser', 'chromium',
                  '/usr/bin/chromium-browser',  # rpi ubuntu
                  '/usr/bin/chromium',  # debian
@@ -159,10 +159,10 @@ CHROMIUM = which('chromium-browser', 'chromium',
 
 def local_singlefile(url: str):
     """Run the single-file executable to create an HTML file archive."""
-    if not SINGLE_FILE_PATH.is_file():
+    if not SINGLE_FILE_BIN.is_file():
         raise FileNotFoundError(f'single-file not found')
 
-    cmd = (str(SINGLE_FILE_PATH),
+    cmd = (str(SINGLE_FILE_BIN),
            url,
            '--browser-executable-path', CHROMIUM,
            '--browser-args', '["--no-sandbox"]',
@@ -193,19 +193,19 @@ def local_screenshot(url: str) -> bytes:
     return png
 
 
-READABILITY_PATH = which('readability-extractor',
+READABILITY_BIN = which('readability-extractor',
                          '/usr/bin/readability-extractor',  # rpi ubuntu
                          '/usr/local/bin/readability-extractor',  # debian
-                         warn=True)
+                        warn=True)
 
 
 def local_extract_readability(path: str, url: str) -> dict:
     """Extract the readability from an HTML file, typically from single-file."""
     logger.info(f'readability for {url}')
-    if not READABILITY_PATH.is_file():
+    if not READABILITY_BIN.is_file():
         raise FileNotFoundError(f'Readability extractor not found')
 
-    cmd = (READABILITY_PATH, path, url)
+    cmd = (READABILITY_BIN, path, url)
     logger.debug(f'readability cmd: {cmd}')
     output = subprocess.check_output(cmd, timeout=60 * 3)
     output = json.loads(output)

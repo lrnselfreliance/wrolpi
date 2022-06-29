@@ -244,6 +244,8 @@ def get_video_duration(video_path: Path) -> Optional[int]:
         video_path = Path(video_path)
     if not video_path.is_file():
         raise FileNotFoundError(f'{video_path} does not exist!')
+    if not FFPROBE_BIN:
+        raise SystemError('ffprobe is not installed!')
 
     cmd = [FFPROBE_BIN, '-v', 'error', '-show_entries', 'format=duration', '-of',
            'default=noprint_wrappers=1:nokey=1', str(video_path)]
@@ -265,6 +267,8 @@ def check_for_video_corruption(video_path: Path) -> bool:
         video_path = Path(video_path)
     if not video_path.is_file():
         raise FileNotFoundError(f'{video_path} does not exist!')
+    if not FFPROBE_BIN:
+        raise SystemError('ffprobe is not installed!')
 
     cmd = [FFPROBE_BIN, str(video_path)]
     try:

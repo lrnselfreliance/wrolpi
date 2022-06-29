@@ -601,11 +601,10 @@ def extract_domain(url):
 
 
 def import_modules():
-    """
-    Import all WROLPi Modules in the modules directory.  Raise an ImportError if there are no modules.
-    """
+    """Import all WROLPi Modules in the modules directory.  Raise an ImportError if there are no modules."""
     try:
-        modules = [i.name for i in MODULES_DIR.iterdir() if i.is_dir() and not i.name.startswith('_')]
+        modules = [i.name for i in MODULES_DIR.iterdir() if
+                   i.is_dir() and not (i.name.startswith('_') or i.name.startswith('.'))]
         for module in modules:
             module = f'modules.{module}.api'
             logger.debug(f'Importing {module}')
@@ -617,8 +616,7 @@ def import_modules():
 
 
 def api_param_limiter(maximum: int, default: int = 20) -> callable:
-    """
-    Create a function which restricts the maximum number that can be returned.
+    """Create a function which restricts the maximum number that can be returned.
     Useful for restricting API limit params.
 
     >>> limiter = api_param_limiter(100)

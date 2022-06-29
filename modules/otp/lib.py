@@ -37,7 +37,7 @@ def generate_message():
     Create a OTP message.  Format it for ease of use.
     """
     # Use 20 messages per line because this page will be printed.
-    return format_message(''.join(generate_char() for _ in range(400)), 16)
+    return format_message(''.join(generate_char() for _ in range(320)), 16)
 
 
 PAGE_HTML = '''
@@ -57,10 +57,6 @@ person must have their OWN copy of this "One Time Pad" to encrypt and decrypt me
 <br>
 <b>Use each message ONLY ONCE.</b>  Cut off and burn each message from this paper as it is used.
 <br>
-If you want more One Time Pads, simply <a href=".">go here to refresh the page:
-https://learningselfreliance.com/one_time_pad</a>.  The server will generate a unique page just for you. This page
-is not stored on the server, and cannot be retrieved once you close this window!
-<br>
 To learn how to use this page, please visit: <a href="https://lrnsr.co/H7Za">https://lrnsr.co/H7Za</a>
 </body>
 </html>
@@ -71,7 +67,7 @@ def generate_html() -> str:
     """
     Create an HTML One-Time Pad page.   This page will have instructions on how to use the OTP.
     """
-    messages = [generate_message() for _ in range(9)]
+    messages = [generate_message() for _ in range(8)]
     messages = '\n\n'.join(f'<pre>MESSAGE {i}</pre><pre>{j}</pre>' for i, j in enumerate(messages, 1))
     return PAGE_HTML.format(messages=messages)
 

@@ -33,6 +33,8 @@ MINIMUM_VIDEO_KEYS = {'id', 'title', 'upload_date', 'duration', 'channel', 'chan
 # These are the supported video formats.  These are in order of their preference.
 VIDEO_EXTENSIONS = ('mp4', 'ogg', 'webm', 'flv')
 
+FFMPEG_BIN = which('ffmpeg', '/usr/bin/ffmpeg', warn=True)
+
 
 class ConfigError(Exception):
     pass
@@ -189,11 +191,9 @@ def get_matching_directories(path: Union[str, Path]) -> List[str]:
 
 
 def generate_video_poster(video_path: Path) -> Path:
-    """
-    Create a poster (aka thumbnail) next to the provided video_path.
-    """
+    """Create a poster (aka thumbnail) next to the provided video_path."""
     poster_path = video_path.with_suffix('.jpg')
-    cmd = ('/usr/bin/ffmpeg', '-n', '-i', str(video_path), '-f', 'mjpeg', '-vframes', '1', '-ss', '00:00:05.000',
+    cmd = (FFMPEG_BIN, '-n', '-i', str(video_path), '-f', 'mjpeg', '-vframes', '1', '-ss', '00:00:05.000',
            str(poster_path))
     try:
         subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -209,9 +209,8 @@ def generate_video_poster(video_path: Path) -> Path:
 
 
 def convert_image(existing_path: Path, destination_path: Path, ext: str = 'jpeg'):
-    """
-    Convert an image from one format to another.  Remove the existing image file.  This will safely overwrite an image
-    if the existing path is the same as the destination path.
+    """Convert an image from one format to another.  Remove the existing image file.  This will safely overwrite an
+    image if the existing path is the same as the destination path.
     """
     with tempfile.NamedTemporaryFile(dir=destination_path.parent, delete=False) as fh:
         img = Image.open(existing_path).convert('RGB')

@@ -20,6 +20,7 @@ async def test_get_cpu_info():
     """Minimum CPU info testing because this will fail in docker, etc."""
     info = await status.get_cpu_info()
     assert isinstance(info, status.CPUInfo)
+    assert isinstance(info.percent, int)
 
 
 @pytest.mark.asyncio

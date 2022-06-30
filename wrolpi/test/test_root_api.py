@@ -297,3 +297,12 @@ def test_clear_downloads(test_session, test_client, test_config, test_download_m
 
     # Failed once-downloads will not be downloaded again.
     assert DOWNLOAD_MANAGER_CONFIG.skip_urls == ['https://example.com/5', ]
+
+
+def test_get_status(test_client):
+    """Get the server status information."""
+    request, response = test_client.get('/api/status')
+    assert response.status_code == HTTPStatus.OK
+    assert 'cpu_info' in response.json and isinstance(response.json['cpu_info'], dict)
+    assert 'load' in response.json and isinstance(response.json['load'], dict)
+    assert 'drives' in response.json and isinstance(response.json['drives'], list)

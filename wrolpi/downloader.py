@@ -198,14 +198,11 @@ class Downloader:
         start = now()
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd, **kwargs)
         pid = proc.pid
-        logger.debug(f'{self} launched download process {pid=} for {url}')
 
         # Timeout can be any positive integer.  Global download timeout takes precedence, unless it is 0.
         # A timeout of 0 means the download will never be killed.
-        if timeout is None:
-            timeout = self.timeout
-        if WROLPI_CONFIG.download_timeout and timeout and timeout > WROLPI_CONFIG.download_timeout:
-            timeout = WROLPI_CONFIG.download_timeout
+        timeout = WROLPI_CONFIG.download_timeout or timeout or self.timeout
+        logger.debug(f'{self} launched download process {pid=} {timeout=} for {url}')
 
         try:
             while True:
@@ -412,7 +409,7 @@ class DownloadManager:
                     result = DownloadResult(success=False, error=str(traceback.format_exc()))
 
                 error_len = len(result.error) if result.error else 0
-                logger.debug(f'Got {result.success=} from {downloader} with {error_len=}')
+                logger.debug(f'Got success={result.success} from {downloader} with {error_len=}')
 
                 # Long-running, get the download again.
                 with get_db_session(commit=True) as session_:

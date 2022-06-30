@@ -175,6 +175,20 @@ export async function getDirectories(search_str) {
     return [];
 }
 
+export async function getStatus() {
+    let response = await apiGet(`${API_URI}/status`);
+    if (response.status === 200) {
+        return await response.json();
+    } else {
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: 'Could not get server status',
+            time: 5000,
+        });
+    }
+}
+
 export async function getSettings() {
     let response = await apiGet(`${API_URI}/settings`);
     if (response.status === 200) {

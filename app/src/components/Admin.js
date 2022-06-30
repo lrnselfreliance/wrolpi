@@ -11,14 +11,14 @@ import {
     Icon,
     Loader,
     Modal,
-    Placeholder,
+    Placeholder, Progress, Statistic,
     Table
 } from "semantic-ui-react";
 import {
     clearCompletedDownloads,
     clearFailedDownloads,
     getDownloads,
-    getSettings,
+    getSettings, getStatus,
     killDownload,
     postDownload,
     saveSettings
@@ -27,7 +27,7 @@ import TimezoneSelect from 'react-timezone-select';
 import {
     DisableDownloadsToggle,
     HelpPopup,
-    HotspotToggle,
+    HotspotToggle, humanFileSize,
     PageContainer,
     secondsToDate,
     secondsToFrequency,
@@ -226,7 +226,7 @@ class Settings extends React.Component {
                             label='Hotspot Device'
                             disabled={disabled || hotspot_password === null}
                             value={hotspot_device}
-                            onChange={(e, d) => this.handleInputChange(e,'hotspot_device', d.value)}
+                            onChange={(e, d) => this.handleInputChange(e, 'hotspot_device', d.value)}
                         />
                     </Form.Group>
 
@@ -315,6 +315,124 @@ class WROLMode extends React.Component {
                           label={this.state.WROLMode ? 'WROL Mode Enabled' : 'WROL Mode Disabled'}
                 />
 
+            </Container>
+        )
+    }
+}
+
+function LoadStatistic({label, value, cores}) {
+    let color;
+    const quarter = cores / 4;
+    if (cores && value >= (quarter * 3)) {
+        color = 'red';
+    } else if (cores && value >= (quarter * 2)) {
+        color = 'yellow';
+    }
+    return <Statistic label={label} value={parseFloat(value).toFixed(1)} color={color}/>;
+}
+
+function DriveInfo({used, size, percent, mount}) {
+    let color;
+    if (percent >= 90) {
+        color = 'red';
+    } else if (percent >= 80) {
+        color = 'orange';
+    }
+    return <Progress progress
+                     percent={percent}
+                     label={`${mount} ${humanFileSize(used)} of ${humanFileSize(size)}`}
+                     color={color}
+                     key={mount}
+    />
+}
+
+function CPUTemperatureStatistic({value}) {
+    if (!value) {
+        return <Statistic label='Temp C°' value='?'/>
+    }
+    let color;
+    if (value >= 75) {
+        color = 'red';
+    } else if (value >= 50) {
+        color = 'yellow';
+    }
+    return <Statistic label='Temp C°' value={value} color={color}/>
+}
+
+function CPUUsageProgress({value, label}) {
+    if (value === null) {
+        return <Progress progress={0} color='grey' label='Average CPU Usage ERROR' disabled/>
+    }
+
+    let color = 'grey';
+    if (value >= 90) {
+        color = 'red';
+    } else if (value >= 70) {
+        color = 'orange';
+    } else if (value >= 50) {
+        color = 'yellow';
+    } else if (value >= 30) {
+        color = 'olive';
+    }
+    return <Progress percent={value} progress color={color} label={label}/>
+}
+
+class Status extends React.Component {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            status: null,
+        }
+        this.fetchStatus = this.fetchStatus.bind(this);
+    }
+
+    async componentDidMount() {
+        await this.fetchStatus();
+        this.intervalId = setInterval(this.fetchStatus, 1000 * 5);
+    }
+
+    componentWillUnmount() {
+        clearInterval(this.intervalId);
+    }
+
+    fetchStatus = async () => {
+        try {
+            let status = await getStatus();
+            this.setState({status: status});
+        } catch (e) {
+            console.error(e);
+            this.setState({status: null});
+        }
+    }
+
+    render() {
+        let body = <Loader active inline='centered'>Loading system status</Loader>;
+
+        if (this.state.status) {
+            const {cpu_info, load, drives} = this.state.status;
+            const {minute_1, minute_5, minute_15} = load;
+            const {percent, cores, temperature} = cpu_info;
+
+            body = (<>
+                <CPUUsageProgress value={percent} label='CPU Usage'/>
+
+                <CPUTemperatureStatistic value={temperature}/>
+                <Statistic label='Cores' value={cores || '?'}/>
+                <Statistic.Group>
+                    <LoadStatistic label='1 Minute Load' value={minute_1} cores={cores}/>
+                    <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
+                    <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
+                </Statistic.Group>
+
+                <Header as='h2'>Drive Usage</Header>
+                {drives.map(DriveInfo)}
+            </>);
+        }
+
+        return (
+            <Container fluid style={{marginBottom: '5em'}}>
+                {body}
             </Container>
         )
     }
@@ -680,6 +798,7 @@ export default function Admin(props) {
     const links = [
         {text: 'Downloads', to: '/admin', exact: true, key: 'admin'},
         {text: 'Settings', to: '/admin/settings', key: 'settings'},
+        {text: 'Status', to: '/admin/status', key: 'status'},
         {text: 'WROL Mode', to: '/admin/wrol', key: 'wrol'},
     ];
 
@@ -688,6 +807,7 @@ export default function Admin(props) {
             <TabLinks links={links}/>
             <Route path='/admin' exact component={Downloads}/>
             <Route path='/admin/settings' exact component={Settings}/>
+            <Route path='/admin/status' exact component={Status}/>
             <Route path='/admin/wrol' exact component={WROLMode}/>
         </PageContainer>
     )

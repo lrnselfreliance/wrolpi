@@ -17,7 +17,7 @@ from sanic.signals import Event
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi import admin
+from wrolpi import admin, status
 from wrolpi.admin import HotspotStatus
 from wrolpi.common import set_sanic_url_parts, logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
     wrol_mode_check, native_only, set_wrol_mode
@@ -312,6 +312,16 @@ async def throttle_off(_: Request):
     if result:
         return response.empty()
     return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
+
+
+@root_api.get('/status')
+@openapi.description('Get the status of CPU/load/etc.')
+async def get_status(_: Request):
+    cpu_info = await status.get_cpu_info()
+    load = await status.get_load()
+    drives = await status.get_drives_info()
+    ret = dict(cpu_info=cpu_info, load=load, drives=drives)
+    return json_response(ret)
 
 
 class CustomJSONEncoder(json.JSONEncoder):

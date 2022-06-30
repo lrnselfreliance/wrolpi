@@ -390,12 +390,6 @@ def test_process_runner_timeout(test_directory):
     elapsed = datetime.now() - start
     assert 1 < elapsed.total_seconds() < 2
 
-    # Zero timeout means no timeout.
-    start = datetime.now()
-    downloader.process_runner('https://example.com', ('sleep', '8'), test_directory, timeout=0)
-    elapsed = datetime.now() - start
-    assert 7 < elapsed.total_seconds() < 10
-
     # This Downloader's timeout is ignored in favor of the global timeout.
     from wrolpi.common import WROLPI_CONFIG
     WROLPI_CONFIG.download_timeout = 3

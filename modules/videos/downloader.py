@@ -223,6 +223,7 @@ class VideoDownloader(Downloader, ABC):
                 '--merge-output-format', PREFERRED_VIDEO_EXTENSION,
                 '-o', file_name_format,
                 '--no-cache-dir',
+                '--compat-options', 'no-live-chat',
                 url,
             )
             return_code, logs = self.process_runner(url, cmd, out_dir)

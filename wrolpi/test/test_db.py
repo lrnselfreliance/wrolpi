@@ -35,13 +35,3 @@ def test_optional_session(test_session):
     func(session=test_session)
     func(test_session)
 
-
-def test_test_session_is_required():
-    """
-    fixture `test_session` must be used in all tests to avoid using the real database.
-    """
-    try:
-        with get_db_session() as session:
-            raise Exception('test engine was not used!!')
-    except ValueError as e:
-        assert 'test database' in str(e)

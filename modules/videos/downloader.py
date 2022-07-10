@@ -81,7 +81,7 @@ class ChannelDownloader(Downloader, ABC):
         # A playlist will have an id different from its channel.
         return info['id'] != info['channel_id']
 
-    def do_download(self, download: Download) -> DownloadResult:
+    async def do_download(self, download: Download) -> DownloadResult:
         """Update a Channel's catalog, then schedule downloads of every missing video."""
         info = extract_info(download.url, process=False)
         # Resolve the entries generator.
@@ -142,8 +142,9 @@ YT_DLP_BIN = which(
 
 
 class VideoDownloader(Downloader, ABC):
-    """
-    Download a single video.  Store the video in its channel's directory, otherwise store it in `videos/NO CHANNEL`.
+    """Downloads a single video.
+
+    Store the video in its channel's directory, otherwise store it in `videos/NO CHANNEL`.
     """
     name = 'video'
     pretty_name = 'Videos'
@@ -152,13 +153,9 @@ class VideoDownloader(Downloader, ABC):
         return f'<VideoDownloader>'
 
     @optional_session
-    def already_downloaded(self, url: str, session: Session = None) -> Optional[Video]:
+    def already_downloaded(self, url: str, session: Session = None) -> bool:
         # We only consider a video record with a video file as "downloaded".
-        video = session.query(Video).filter(
-            Video.url == url,
-            Video.video_path != None,
-        ).one_or_none()
-        return video
+        return bool(session.query(Video).filter(Video.url == url, Video.video_path != None, ).count())  # noqa
 
     @classmethod
     def valid_url(cls, url) -> Tuple[bool, Optional[dict]]:
@@ -177,7 +174,7 @@ class VideoDownloader(Downloader, ABC):
         logger.debug(f'{cls.__name__} not suitable for {url}')
         return False, None
 
-    def do_download(self, download: Download) -> DownloadResult:
+    async def do_download(self, download: Download) -> DownloadResult:
         if download.attempts >= 10:
             raise UnrecoverableDownloadError('Max download attempts reached')
 
@@ -226,7 +223,7 @@ class VideoDownloader(Downloader, ABC):
                 '--compat-options', 'no-live-chat',
                 url,
             )
-            return_code, logs = self.process_runner(url, cmd, out_dir)
+            return_code, logs = await self.process_runner(url, cmd, out_dir)
 
             stdout = logs['stdout'].decode() if hasattr(logs['stdout'], 'decode') else logs['stdout']
             stderr = logs['stderr'].decode() if hasattr(logs['stderr'], 'decode') else logs['stderr']
@@ -293,6 +290,7 @@ class VideoDownloader(Downloader, ABC):
 
     @staticmethod
     def prepare_filename(url: str, out_dir: pathlib.Path) -> Tuple[pathlib.Path, dict]:
+        """Get the full path of a video file from its URL."""
         if not out_dir.is_dir():
             raise ValueError(f'Output directory does not exist! {out_dir=}')
 
@@ -300,7 +298,6 @@ class VideoDownloader(Downloader, ABC):
         options = get_downloader_config().dict()
         options['outtmpl'] = f'{out_dir}/{options["file_name_format"]}'
         options['merge_output_format'] = PREFERRED_VIDEO_EXTENSION
-        logger.debug(f'Download video with options: {options}')
 
         logger.debug(f'Downloading {url} to {out_dir}')
 

@@ -150,8 +150,9 @@ class TestVideosDownloaders(TestAPI):
         self.assertEqual(self.mgr.get_downloader('https://www.youtube.com/watch?v=31jPEBiAC3c')[0], self.vd)
 
 
-def test_video_download_no_channel(test_session, video_download_manager, video_factory, test_directory,
-                                   mock_video_extract_info, mock_video_process_runner):
+@pytest.mark.asyncio
+async def test_video_download_no_channel(test_session, video_download_manager, video_factory, test_directory,
+                                         mock_video_extract_info, mock_video_process_runner):
     """A video can be downloaded even if it does not have a Channel."""
     channel_dir = test_directory / 'NO CHANNEL'
     channel_dir.mkdir(parents=True)
@@ -168,7 +169,8 @@ def test_video_download_no_channel(test_session, video_download_manager, video_f
     mock_video_extract_info.return_value = info_json
     with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
         mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
-        video_download_manager.create_download(url, test_session)
+        video_download_manager.create_download(url)
+        await video_download_manager.wait_for_all_downloads()
 
     mock_video_process_runner.assert_called_once()
 
@@ -176,9 +178,10 @@ def test_video_download_no_channel(test_session, video_download_manager, video_f
     assert str(video.video_path.path) == f'{channel_dir}/video.mp4'
 
 
-def test_download_channel(test_session, simple_channel, video_download_manager, video_file,
-                          mock_video_extract_info, mock_video_prepare_filename,
-                          mock_video_process_runner):
+@pytest.mark.asyncio
+async def test_download_channel(test_session, simple_channel, video_download_manager, video_file,
+                                mock_video_extract_info, mock_video_prepare_filename,
+                                mock_video_process_runner):
     """Downloading (updating the catalog of) a Channel creates download records for all of it's missing videos."""
     url = 'https://www.youtube.com/c/LearningSelfReliance/videos'
 
@@ -186,7 +189,8 @@ def test_download_channel(test_session, simple_channel, video_download_manager, 
     mock_video_extract_info.return_value = example_channel_json
     with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
         mock_get_channel.return_value = simple_channel
-        video_download_manager.create_download(url, test_session)
+        video_download_manager.create_download(url)
+        await video_download_manager.wait_for_all_downloads()
 
     # Two videos are in the example channel.
     downloads = video_download_manager.get_once_downloads(test_session)
@@ -238,18 +242,22 @@ def test_get_or_create_channel(test_session):
     assert get_or_create_channel(source_id='quux') == channel
 
 
-def test_download_info_save(test_session, video_download_manager, mock_video_extract_info, mock_video_prepare_filename,
-                            mock_video_process_runner):
+@pytest.mark.asyncio
+async def test_download_info_save(test_session, video_download_manager, mock_video_extract_info,
+                                  mock_video_prepare_filename,
+                                  mock_video_process_runner):
     """
     An info dict from Downloader.valid_url is saved to the Downloader and can be used by the Downloader later.
     """
     mock_video_extract_info.return_value = {'some': 'info'}
     mock_video_prepare_filename.return_value = 'some path'
-    video_download_manager.create_download('https://www.youtube.com/watch?v=HQ_62YwcA80', test_session)
+    video_download_manager.create_download('https://www.youtube.com/watch?v=HQ_62YwcA80')
+    await video_download_manager.wait_for_all_downloads()
     assert mock_video_extract_info.call_count == 2  # Only called twice.  The "info" gathering call was skipped.
 
 
-def test_selected_downloader(test_session, video_download_manager, successful_download):
+@pytest.mark.asyncio
+async def test_selected_downloader(test_session, video_download_manager, successful_download):
     """
     A user can specify which Downloader to use, no other should ever be used (even if the Download fails).
     """
@@ -267,7 +275,8 @@ def test_selected_downloader(test_session, video_download_manager, successful_do
     # DownloadManager will attempt to choose the Downloader.
     with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
         mock_extract_info.side_effect = UnsupportedError('not this one')
-        video_download_manager.create_download('https://example.com', test_session)
+        video_download_manager.create_download('https://example.com')
+        await video_download_manager.wait_for_all_downloads()
         mock_http_valid_url.assert_called_once()
         mock_extract_info.assert_called_once()
         mock_do_download.assert_called_once()
@@ -279,7 +288,8 @@ def test_selected_downloader(test_session, video_download_manager, successful_do
 
     # DownloadManager will only use the HTTPDownloader.
     with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
-        video_download_manager.create_download('https://example.com', test_session, downloader='http')
+        video_download_manager.create_download('https://example.com', downloader='http')
+        await video_download_manager.wait_for_all_downloads()
         # DownloadManager does not try to find the Download, it trusts the "downloader" param.
         mock_extract_info.assert_not_called()
         mock_http_valid_url.assert_not_called()
@@ -294,7 +304,8 @@ def test_selected_downloader(test_session, video_download_manager, successful_do
     # DownloadManager will only use the HTTPDownloader, even if the download fails.
     with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
         mock_do_download.side_effect = Exception('oh no!')
-        video_download_manager.create_download('https://example.com', test_session, downloader='http')
+        video_download_manager.create_download('https://example.com', downloader='http')
+        await video_download_manager.wait_for_all_downloads()
         # DownloadManager does not try to find the Download, it trusts the "downloader" param.
         mock_extract_info.assert_not_called()
         mock_http_valid_url.assert_not_called()
@@ -312,12 +323,13 @@ def test_channel_downloader_hidden(video_download_manager):
     assert [i.__json__() for i in downloaders] == [(dict(name='video', pretty_name='Videos')), ]
 
 
+@pytest.mark.asyncio
 def test_bad_downloader(test_session, video_download_manager):
     """
     Attempting to use an unknown downloader should raise an error.
     """
     with pytest.raises(InvalidDownload):
-        video_download_manager.create_download('https://example.com', test_session, 'bad downloader')
+        video_download_manager.create_download('https://example.com', downloader='bad downloader')
 
 
 def test_channel_download_no_download(test_session, video_download_manager, simple_channel):
@@ -332,22 +344,27 @@ def test_channel_download_no_download(test_session, video_download_manager, simp
         download_channel(simple_channel.id)
 
 
-def test_invalid_download_url(test_session, test_download_manager, mock_video_extract_info):
+@pytest.mark.asyncio
+async def test_invalid_download_url(test_session, test_download_manager, mock_video_extract_info):
     """An invalid url should not be attempted again."""
     _, session = get_db_context()
     with mock.patch('modules.videos.downloader.VideoDownloader.valid_url') as mock_valid_url, \
             mock.patch('wrolpi.downloader.DownloadManager.get_downloader') as mock_get_downloader:
-        mock_get_downloader.return_value = (VideoDownloader(), None)
+        video_downloader = VideoDownloader()
+        test_download_manager.register_downloader(video_downloader)
+        mock_get_downloader.return_value = (video_downloader, None)
         mock_valid_url.return_value = (True, {})  # url is valid, but is not a video URL.
         mock_video_extract_info.side_effect = UnsupportedError('oops')
-        test_download_manager.create_download('invalid url', session)
+        test_download_manager.create_download('invalid url', downloader=VideoDownloader.name)
+        await test_download_manager.wait_for_all_downloads()
 
     download = session.query(Download).one()
     assert download.status == 'failed'
 
 
-def test_video_download_1(test_session, test_directory, simple_channel, video_download_manager,
-                          mock_video_process_runner):
+@pytest.mark.asyncio
+async def test_video_download_1(test_session, test_directory, simple_channel, video_download_manager,
+                                mock_video_process_runner):
     simple_channel.source_id = example_video_json['channel_id']
     simple_channel.directory = test_directory / 'videos/channel name'
     simple_channel.directory.mkdir(parents=True)
@@ -361,7 +378,8 @@ def test_video_download_1(test_session, test_directory, simple_channel, video_do
         mock_extract_info.return_value = example_video_json
         mock_prepare_filename.return_value = (video_file, {'id': 'foo'})
 
-        video_download_manager.create_download(url, test_session)
+        video_download_manager.create_download(url)
+        await video_download_manager.wait_for_all_downloads()
 
         mock_video_process_runner.assert_called_once()
         video_url, _, out_dir = mock_video_process_runner.call_args[0]
@@ -374,8 +392,9 @@ def test_video_download_1(test_session, test_directory, simple_channel, video_do
     assert video.video_path.path.is_absolute()
 
 
-def test_download_result(test_session, test_directory, video_download_manager, mock_video_process_runner,
-                         mock_video_extract_info):
+@pytest.mark.asyncio
+async def test_download_result(test_session, test_directory, video_download_manager, mock_video_process_runner,
+                               mock_video_extract_info):
     """VideoDownloader returns a DownloadResult when complete."""
     channel_directory = test_directory / 'videos/channel name'
     channel_directory.mkdir(parents=True)
@@ -385,7 +404,8 @@ def test_download_result(test_session, test_directory, video_download_manager, m
     mock_video_extract_info.return_value = example_video_json
     with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
         mock_prepare_filename.return_value = [video_file, {'id': 'foo'}]
-        video_download_manager.create_download('https://example.com', test_session)
+        video_download_manager.create_download('https://example.com')
+        await video_download_manager.wait_for_all_downloads()
 
     download: Download = test_session.query(Download).one()
     assert download.url == 'https://example.com'
@@ -451,7 +471,8 @@ example_playlist_json = {
 }
 
 
-def test_download_playlist(test_session, test_directory, mock_video_extract_info, video_download_manager):
+@pytest.mark.asyncio
+async def test_download_playlist(test_session, test_directory, mock_video_extract_info, video_download_manager):
     """
     All videos in a playlist can be downloaded for it's Channel.
     """
@@ -467,7 +488,7 @@ def test_download_playlist(test_session, test_directory, mock_video_extract_info
 
     with mock.patch('modules.videos.downloader.VideoDownloader.do_download') as mock_video_do_download:
         mock_video_do_download.return_value = DownloadResult(success=True)  # Don't download the videos.
-        result = channel_downloader.do_download(download)
+        result = await channel_downloader.do_download(download)
     assert result.success is True, 'Download was not successful'
     assert set(result.downloads) == {
         'https://youtube.com/watch?v=video_2_url',

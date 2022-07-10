@@ -1,8 +1,7 @@
 import asyncio
 from http import HTTPStatus
 
-from requests import Request
-from sanic import response
+from sanic import response, Request
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 

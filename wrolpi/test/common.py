@@ -10,7 +10,6 @@ from typing import List
 
 import mock
 import pytest
-from requests import Response
 
 from wrolpi.common import set_test_media_directory, get_media_directory
 from wrolpi.conftest import ROUTES_ATTACHED, test_db, test_client  # noqa
@@ -128,7 +127,7 @@ class TestAPI(ExtendedTestCase):
     def tearDown(self) -> None:
         set_test_media_directory(None)
 
-    def assertHTTPStatus(self, response: Response, status: int):
+    def assertHTTPStatus(self, response, status: int):
         self.assertEqual(response.status_code, status)
 
     assertOK = partialmethod(assertHTTPStatus, status=HTTPStatus.OK)

@@ -199,4 +199,3 @@ def download_channel(id_: int):
         raise InvalidDownload(f'Channel {channel.name} does not have a download!')
     download.renew(reset_attempts=True)
     session.commit()
-    download_manager.start_downloads()

@@ -6,6 +6,7 @@ from datetime import timedelta
 from http import HTTPStatus
 
 import mock
+import pytest
 
 from modules.videos.channel.lib import delete_channel
 from modules.videos.common import get_no_channel_directory
@@ -108,7 +109,8 @@ def test_channel_no_download_frequency(test_client, test_session, test_directory
     assert response.status_code == HTTPStatus.NO_CONTENT, response.json
 
 
-def test_channel_frequency_update(download_channel, test_client, test_session):
+@pytest.mark.asyncio
+def test_channel_frequency_update(download_channel, test_client, test_session, test_download_manager):
     """
     A Channel's Download record is updated when the Channel's frequency is updated.
     """
@@ -336,8 +338,12 @@ def test_channel_empty_url_doesnt_conflict(test_client, test_session, test_direc
     assert location != response.headers['Location']
 
 
-def test_download_channel_no_refresh(test_session, download_channel, video_download_manager):
+@pytest.mark.asyncio
+async def test_download_channel_no_refresh(test_session, download_channel, video_download_manager):
     """A Channel cannot be downloaded until it has been refreshed."""
+    d = download_channel.get_download()
+    d.next_download = video_download_manager.calculate_next_download(d)
+    test_session.commit()
 
     def check_refreshed(expected: bool):
         channel = test_session.query(Channel).one()
@@ -349,7 +355,8 @@ def test_download_channel_no_refresh(test_session, download_channel, video_downl
     with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
         mock_extract_info.return_value = {'entries': [], 'url': 'foo', 'uploader': 'some uploader',
                                           'channel_id': 'the id', 'id': 'the id'}
-        video_download_manager.do_downloads_sync()
+        await video_download_manager.do_downloads()
+        await video_download_manager.wait_for_all_downloads()
 
     check_refreshed(True)
 

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any
 from urllib.parse import urlunsplit, urlparse
 
+import aiohttp
 import yaml
 from sanic import Blueprint
 from sanic.request import Request
@@ -370,9 +371,7 @@ def set_wrol_mode(enable: bool):
 
 
 def wrol_mode_check(func):
-    """
-    Wraps a function so that it cannot be called when WROL Mode is enabled.
-    """
+    """Wraps a function so that it cannot be called when WROL Mode is enabled."""
 
     @wraps(func)
     def check(*a, **kw):
@@ -786,3 +785,11 @@ def any_extensions(filename: str, extensions: Iterable = ()):
     Matches lower or upper case of the extension.
     """
     return any(filename.lower().endswith(ext) for ext in extensions)
+
+
+async def aiohttp_post(url: str, json_, timeout: int = None) -> Tuple[Dict, int]:
+    """Perform an async aiohttp post request.  Return the json contents."""
+    timeout = aiohttp.ClientTimeout(total=timeout) if timeout else None
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        async with session.post(url, json=json_) as response:
+            return await response.json(), response.status

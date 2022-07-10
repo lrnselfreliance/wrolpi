@@ -14,11 +14,11 @@ from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_session
 from wrolpi.media_path import MediaPath
 from wrolpi.root_api import CustomJSONEncoder
-from wrolpi.test.common import TestAPI, wrap_test_db, skip_circleci
+from wrolpi.test.common import skip_circleci
 
 
 def make_fake_request_archive(readability=True, screenshot=True, title=True):
-    def fake_request_archive(_):
+    async def fake_request_archive(_):
         singlefile = '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>'
         r = dict(
             content=f'<html>test readability content</html>',
@@ -31,63 +31,61 @@ def make_fake_request_archive(readability=True, screenshot=True, title=True):
     return fake_request_archive
 
 
-class TestArchive(TestAPI):
+@pytest.mark.asyncio
+async def test_no_screenshot(test_session):
+    with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(screenshot=False)):
+        archive = await do_archive('https://example.com')
+        assert isinstance(archive.singlefile_path, MediaPath)
+        assert isinstance(archive.readability_path, MediaPath)
+        # Screenshot was empty
+        assert archive.screenshot_path is None
 
-    def setUp(self) -> None:
-        super().setUp()
-        (pathlib.Path(self.tmp_dir.name) / 'archive').mkdir(exist_ok=True)
 
-    @wrap_test_db
-    def test_no_screenshot(self):
-        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(screenshot=False)):
-            archive = do_archive('https://example.com')
-            self.assertIsInstance(archive.singlefile_path, MediaPath)
-            self.assertIsInstance(archive.readability_path, MediaPath)
-            # Screenshot was empty
-            self.assertIsNone(archive.screenshot_path)
+@pytest.mark.asyncio
+async def test_no_readability(test_session):
+    with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(readability=False)):
+        archive = await do_archive('https://example.com')
+        assert isinstance(archive.singlefile_path, MediaPath)
+        assert isinstance(archive.screenshot_path, MediaPath)
+        # Readability empty
+        assert archive.readability_path is None
+        assert archive.readability_txt_path is None
 
-    @wrap_test_db
-    def test_no_readability(self):
-        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(readability=False)):
-            archive = do_archive('https://example.com')
-            self.assertIsInstance(archive.singlefile_path, MediaPath)
-            self.assertIsInstance(archive.screenshot_path, MediaPath)
-            # Readability empty
-            self.assertIsNone(archive.readability_path)
-            self.assertIsNone(archive.readability_txt_path)
 
-    @wrap_test_db
-    def test_dict(self):
-        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-            d = do_archive('https://example.com').dict()
-            self.assertIsInstance(d, dict)
-            json.dumps(d, cls=CustomJSONEncoder)
+@pytest.mark.asyncio
+async def test_dict(test_session):
+    with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
+        d = (await do_archive('https://example.com')).dict()
+        assert isinstance(d, dict)
+        json.dumps(d, cls=CustomJSONEncoder)
 
-    @wrap_test_db
-    def test_relationships(self):
-        with get_db_session(commit=True) as session:
-            url = 'https://wrolpi.org:443'
-            domain = get_or_create_domain(session, url)
-            archive = Archive(
-                singlefile_path=f'{self.tmp_dir.name}/wrolpi.org:443/foo',
-                title='bar',
-                url=url,
-                domain_id=domain.id,
-            )
-            session.add(archive)
-            session.flush()
 
-        self.assertEqual(archive.domain, domain)
+@pytest.mark.asyncio
+async def test_relationships(test_session, test_directory):
+    with get_db_session(commit=True) as session:
+        url = 'https://wrolpi.org:443'
+        domain = get_or_create_domain(session, url)
+        archive = Archive(
+            singlefile_path=f'{test_directory.name}/wrolpi.org:443/foo',
+            title='bar',
+            url=url,
+            domain_id=domain.id,
+        )
+        session.add(archive)
+        session.flush()
 
-    @wrap_test_db
-    def test_validate_paths(self):
-        with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-            archive = do_archive('https://example.com')
-            try:
-                with get_db_session(commit=True):
-                    archive.singlefile_path = 'asdf'
-            except ValueError as e:
-                self.assertIn('relative', str(e), f'Relative path error was not raised')
+    assert archive.domain == domain
+
+
+@pytest.mark.asyncio
+async def test_validate_paths(test_session):
+    with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
+        archive = await do_archive('https://example.com')
+        try:
+            with get_db_session(commit=True):
+                archive.singlefile_path = 'asdf'
+        except ValueError as e:
+            assert 'relative' in str(e), f'Relative path error was not raised'
 
 
 def test_archive_refresh_deleted_archive(test_session, archive_directory, archive_factory):
@@ -225,10 +223,11 @@ def test_get_domains(test_session, archive_factory):
     assert [i['domain'] for i in get_domains()] == []
 
 
-def test_new_archive(test_session, fake_now):
+@pytest.mark.asycio
+async def test_new_archive(test_session, fake_now):
     with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
         fake_now(datetime(2000, 1, 1))
-        archive1 = do_archive('https://example.com')
+        archive1 = await do_archive('https://example.com')
         # Everything is filled out.
         assert isinstance(archive1, Archive)
         assert archive1.archive_datetime is not None
@@ -251,18 +250,19 @@ def test_new_archive(test_session, fake_now):
             assert json.load(fh) == {'title': 'ジにてこちら', 'url': 'https://example.com'}
 
         fake_now(datetime(2000, 1, 2))
-        archive2 = do_archive('https://example.com')
+        archive2 = await do_archive('https://example.com')
         # Domain is reused.
         assert archive1.domain == archive2.domain
 
 
-def test_get_title_from_html(test_session, fake_now):
+@pytest.mark.asyncio
+async def test_get_title_from_html(test_session, fake_now):
     fake_now(datetime(2000, 1, 1))
     with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-        archive = do_archive('example.com')
+        archive = await do_archive('example.com')
         assert archive.title == 'ジにてこちら'
 
-    def fake_request_archive(_):
+    async def fake_request_archive(_):
         singlefile = '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>'
         r = dict(
             content=f'<html>test readability content</html>',
@@ -273,10 +273,10 @@ def test_get_title_from_html(test_session, fake_now):
 
     fake_now(datetime(2000, 1, 2))
     with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
-        archive = do_archive('example.com')
+        archive = await do_archive('example.com')
         assert archive.title == 'some title'
 
-    def fake_request_archive(_):
+    async def fake_request_archive(_):
         singlefile = '<html></html>'
         r = dict(
             content=f'<html>missing a title</html>',
@@ -287,7 +287,7 @@ def test_get_title_from_html(test_session, fake_now):
 
     fake_now(datetime(2000, 1, 3))
     with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
-        archive = do_archive('example.com')
+        archive = await do_archive('example.com')
         assert archive.title is None
 
 
@@ -313,14 +313,15 @@ def test_get_new_archive_files(fake_now):
 
 
 @skip_circleci
-def test_title_in_filename(test_session, fake_now, test_directory):
+@pytest.mark.asyncio
+async def test_title_in_filename(test_session, fake_now, test_directory):
     """
     The Archive files have the title in the path.
     """
     fake_now(datetime(2000, 1, 1))
 
     with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-        archive1 = do_archive('example.com')
+        archive1 = await do_archive('example.com')
 
     assert archive1.title == 'ジにてこちら'
 
@@ -335,7 +336,7 @@ def test_title_in_filename(test_session, fake_now, test_directory):
     assert str(archive1.screenshot_path.path.relative_to(test_directory)) == \
            'archive/2000-01-01-00-00-00_ジにてこちら.png'
 
-    def fake_request_archive(_):
+    async def fake_request_archive(_):
         singlefile = '<html>\ntest single-file\nジにてこちら\n</html>'  # no title in HTML
         r = dict(
             # No Title from Readability.
@@ -346,7 +347,7 @@ def test_title_in_filename(test_session, fake_now, test_directory):
         return singlefile, r, s
 
     with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
-        archive2 = do_archive('example.com')
+        archive2 = await do_archive('example.com')
 
     assert str(archive2.singlefile_path.path.relative_to(test_directory)) == \
            'archive/2000-01-01-00-00-00_NA.html'
@@ -359,7 +360,7 @@ def test_title_in_filename(test_session, fake_now, test_directory):
     assert str(archive2.screenshot_path.path.relative_to(test_directory)) == \
            'archive/2000-01-01-00-00-00_NA.png'
 
-    def fake_request_archive(_):
+    async def fake_request_archive(_):
         singlefile = '<html>\ntest single-file\nジにてこちら\n<title>dangerous ;\\//_title</html></html>'
         r = dict(
             # No Title from Readability.
@@ -370,7 +371,7 @@ def test_title_in_filename(test_session, fake_now, test_directory):
         return singlefile, r, s
 
     with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
-        archive3 = do_archive('example.com')
+        archive3 = await do_archive('example.com')
 
     assert str(archive3.singlefile_path.path.relative_to(test_directory)) == \
            'archive/2000-01-01-00-00-00_dangerous ;_title.html'

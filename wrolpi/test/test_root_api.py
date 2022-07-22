@@ -15,6 +15,7 @@ from wrolpi.test.common import TestAPI, wrap_test_db, skip_circleci
 
 class TestRootAPI(TestAPI):
 
+    @wrap_test_db
     def test_index(self):
         """
         Index should have some details in an HTML response
@@ -61,6 +62,7 @@ class TestRootAPI(TestAPI):
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert json.loads(response.body) == {'valid': False, 'regex': '.*(missing parenthesis.*'}
 
+    @wrap_test_db
     def test_get_settings(self):
         with mock.patch('wrolpi.admin.CPUFREQ_INFO_BIN', '/usr/bin/cpufreq-info'), \
                 mock.patch('wrolpi.admin.NMCLI_BIN', '/usr/bin/nmcli'):

@@ -140,9 +140,7 @@ def video_factory(test_session, test_directory):
 
 @pytest.fixture
 def video_download_manager(test_download_manager) -> DownloadManager:
-    """
-    Get a DownloadManager ready to download Videos and Channels.
-    """
+    """Get a DownloadManager ready to download Videos and Channels."""
     channel_downloader = ChannelDownloader()
     video_downloader = VideoDownloader(priority=40)
 

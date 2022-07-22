@@ -1,6 +1,7 @@
 """
 Fixtures for Pytest tests.
 """
+import asyncio
 import pathlib
 import tempfile
 from typing import Tuple, Set
@@ -121,9 +122,20 @@ def test_download_manager_config(test_directory):
 
 
 @pytest.fixture
-def test_download_manager(test_download_manager_config):
+async def test_download_manager(
+        test_session,  # session is required because downloads can start without the test DB in place.
+        test_download_manager_config,
+):
     manager = DownloadManager()
-    return manager
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.get_event_loop()
+    manager.start_workers(loop=loop)
+
+    yield manager
+
+    manager.cancel_workers()
 
 
 @pytest.fixture

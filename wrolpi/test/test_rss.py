@@ -4,6 +4,7 @@ from itertools import zip_longest
 from typing import List
 
 import mock
+import pytest
 
 from wrolpi.db import optional_session
 from wrolpi.downloader import Download, DownloadResult, RSSDownloader
@@ -20,13 +21,8 @@ class RSSHTTPDownloader(HTTPDownloader):
         return download
 
 
-def test_rss_download_invalid(test_session, test_download_manager):
-    """Feeds are not downloaded when FeedParser reports an issue."""
-    rss_downloader = RSSDownloader()
-    test_download_manager.register_downloader(rss_downloader)
-
-
-def test_rss_download(test_session, test_download_manager):
+@pytest.mark.asyncio
+async def test_rss_download(test_session, test_download_manager):
     """An RSS Downloader will create new Downloads for every link in the feed."""
     rss_downloader = RSSDownloader()
     test_download_manager.register_downloader(rss_downloader)
@@ -50,7 +46,8 @@ def test_rss_download(test_session, test_download_manager):
                 dict(link='https://example.com/c'),
             ]
         )
-        test_download_manager.create_download('https://example.com/feed', test_session, sub_downloader='http')
+        test_download_manager.create_download('https://example.com/feed', sub_downloader='http')
+        await test_download_manager.wait_for_all_downloads()
 
     # Feed download is complete.
     check_downloads([
@@ -68,7 +65,8 @@ def test_rss_download(test_session, test_download_manager):
                 dict(link='https://example.com/d'),
             ]
         )
-        test_download_manager.create_download('https://example.com/feed', test_session, sub_downloader='http')
+        test_download_manager.create_download('https://example.com/feed', sub_downloader='http')
+        await test_download_manager.wait_for_all_downloads()
 
     # Only the new URLs are Archived.
     check_downloads([
@@ -80,28 +78,8 @@ def test_rss_download(test_session, test_download_manager):
     ])
 
 
-def test_post_rss_download(test_session, test_client, test_download_manager):
-    """An RSS can be downloaded in the UI"""
-    rss_downloader = RSSDownloader()
-    test_download_manager.register_downloader(rss_downloader)
-    http_downloader = RSSHTTPDownloader()
-    test_download_manager.register_downloader(http_downloader)
-
-    with mock.patch('wrolpi.downloader.parse_feed') as mock_parse_feed:
-        mock_parse_feed.return_value = dict(bozo=0, entries=[])
-        content = dict(urls='https://example.com/feed', downloader='rss', frequency=100)
-        request, response = test_client.post('/api/download', content=json.dumps(content))
-        assert response.status == HTTPStatus.NO_CONTENT
-
-    # Download was attempted.
-    (download,) = test_download_manager.get_downloads(test_session)
-    assert download.url == 'https://example.com/feed'
-    assert download.frequency == 100
-    assert download.downloader == 'rss'
-    assert download.attempts == 1
-
-
-def test_rss_no_entries(test_session, test_download_manager):
+@pytest.mark.asyncio
+async def test_rss_no_entries(test_session, test_download_manager):
     """An RSS feed with no entries is handled."""
     rss_downloader = RSSDownloader()
     test_download_manager.register_downloader(rss_downloader)
@@ -109,6 +87,7 @@ def test_rss_no_entries(test_session, test_download_manager):
     with mock.patch('wrolpi.downloader.parse_feed') as mock_parse_feed:
         mock_parse_feed.return_value = dict(bozo=0, )  # missing `entries`
         test_download_manager.create_download('https://example.com/feed', test_session, sub_downloader='http')
+        await test_download_manager.wait_for_all_downloads()
 
     (download,) = test_download_manager.get_downloads(test_session)
     assert 'entries' in download.error

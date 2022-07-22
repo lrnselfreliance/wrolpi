@@ -30,17 +30,16 @@ class ArchiveDownloader(Downloader, ABC):
         """
         return True, None
 
-    def do_download(self, download: Download) -> DownloadResult:
+    async def do_download(self, download: Download) -> DownloadResult:
         if download.attempts > 3:
             raise UnrecoverableDownloadError(f'Max download attempts reached for {download.url}')
 
-        archive = lib.do_archive(download.url)
+        archive = await lib.do_archive(download.url)
         return DownloadResult(success=True, location=f'/archive/{archive.id}')
 
     @optional_session
-    def already_downloaded(self, url: str, session: Session = None) -> Optional[Archive]:
-        archive = session.query(Archive).filter_by(url=url).one_or_none()
-        return archive
+    def already_downloaded(self, url: str, session: Session = None) -> bool:
+        return bool(session.query(Archive).filter_by(url=url).count())
 
 
 # Archive downloader is the last downloader which should be used.

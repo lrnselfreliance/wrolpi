@@ -7,12 +7,13 @@ import sys
 
 import pytz
 from sanic import Sanic
+from sanic.signals import Event
 
 from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, after_startup, limit_concurrent, admin
 from wrolpi.common import logger, get_config, import_modules, check_media_directory
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
-from wrolpi.vars import PROJECT_DIR, DOCKERIZED
+from wrolpi.vars import PROJECT_DIR, DOCKERIZED, PYTEST
 from wrolpi.version import get_version_string
 
 logger = logger.getChild('wrolpi-main')
@@ -191,14 +192,19 @@ def periodic_downloads(app: Sanic, loop):
     logger.info('Starting download manager.')
 
     async def _periodic_download():
-        download_manager.renew_recurring_downloads()
-        download_manager.delete_old_once_downloads()
+        download_manager.start_workers()
         await download_manager.do_downloads()
-        seconds = 60
-        await asyncio.sleep(seconds)
-        app.add_task(_periodic_download())
+        await asyncio.sleep(60)
+        app.add_task(_periodic_download())  # noqa
 
     app.add_task(_periodic_download())
+
+
+@root_api.api_app.signal(Event.SERVER_SHUTDOWN_BEFORE)
+def handle_server_shutdown(*args, **kwargs):
+    """Stop downloads when server is shutting down."""
+    if not PYTEST:
+        download_manager.stop()
 
 
 if __name__ == '__main__':

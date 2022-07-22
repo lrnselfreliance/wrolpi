@@ -10,14 +10,15 @@ from datetime import datetime
 from itertools import groupby
 from typing import Iterator, Optional, Tuple, List
 
-import requests
+import aiohttp
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from sqlalchemy.orm import Session
 
 from modules.archive.models import Domain, Archive
 from wrolpi.cmd import which
-from wrolpi.common import get_media_directory, logger, chunks, extract_domain, chdir, escape_file_name, walk
+from wrolpi.common import get_media_directory, logger, chunks, extract_domain, chdir, escape_file_name, walk, \
+    aiohttp_post
 from wrolpi.dates import now, Seconds, local_timezone
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models, optional_session
 from wrolpi.errors import InvalidDomain, UnknownURL, InvalidArchive
@@ -102,7 +103,7 @@ def get_new_archive_files(url: str, title: Optional[str]) -> ArchiveFiles:
 ARCHIVE_TIMEOUT = Seconds.minute * 10  # Wait at most 10 minutes for response.
 
 
-def request_archive(url: str):
+async def request_archive(url: str):
     """
     Send a request to the archive service to archive the URL.
     """
@@ -110,17 +111,16 @@ def request_archive(url: str):
 
     data = {'url': url}
     try:
-        resp = requests.post(f'{ARCHIVE_SERVICE}/json', json=data, timeout=ARCHIVE_TIMEOUT)
+        contents, status = await aiohttp_post(f'{ARCHIVE_SERVICE}/json', json_=data, timeout=ARCHIVE_TIMEOUT)
+        readability = contents['readability']
+        # Compressed base64
+        singlefile = contents['singlefile']
+        screenshot = contents['screenshot']
+
+        logger.debug(f'archive request status code {status}')
     except Exception as e:
         logger.error('Error when requesting archive', exc_info=e)
         raise
-
-    logger.debug(f'archive request status {resp.status_code=}')
-
-    readability = resp.json()['readability']
-    # Compressed base64
-    singlefile = resp.json()['singlefile']
-    screenshot = resp.json()['screenshot']
 
     if not (screenshot or singlefile or readability):
         raise Exception('singlefile response was empty!')
@@ -147,8 +147,8 @@ def request_archive(url: str):
 
 
 SINGLE_FILE_BIN = which('single-file',
-                         '/usr/bin/single-file',  # rpi ubuntu
-                         '/usr/local/bin/single-file',  # debian
+                        '/usr/bin/single-file',  # rpi ubuntu
+                        '/usr/local/bin/single-file',  # debian
                         warn=True)
 CHROMIUM = which('chromium-browser', 'chromium',
                  '/usr/bin/chromium-browser',  # rpi ubuntu
@@ -194,8 +194,8 @@ def local_screenshot(url: str) -> bytes:
 
 
 READABILITY_BIN = which('readability-extractor',
-                         '/usr/bin/readability-extractor',  # rpi ubuntu
-                         '/usr/local/bin/readability-extractor',  # debian
+                        '/usr/bin/readability-extractor',  # rpi ubuntu
+                        '/usr/local/bin/readability-extractor',  # debian
                         warn=True)
 
 
@@ -227,7 +227,7 @@ def local_archive(url: str):
         return singlefile, readability, screenshot
 
 
-def do_archive(url: str) -> Archive:
+async def do_archive(url: str) -> Archive:
     """
     Perform the real archive request to the archiving service.  Store the resulting data into files.  Create an Archive
     record in the DB.  Create Domain/URL if missing.
@@ -236,7 +236,7 @@ def do_archive(url: str) -> Archive:
 
     if DOCKERIZED or PYTEST:
         # Perform the archive in the Archive docker container.  (Typically in the development environment).
-        singlefile, readability, screenshot = request_archive(url)
+        singlefile, readability, screenshot = await request_archive(url)
     else:
         # Perform the archive using locally installed executables.
         singlefile, readability, screenshot = local_archive(url)

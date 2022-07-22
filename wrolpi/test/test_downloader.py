@@ -1,12 +1,14 @@
+import asyncio
 from abc import ABC
 from datetime import datetime
 from itertools import zip_longest
+from typing import Tuple, Optional
 from unittest import mock
 from unittest.mock import MagicMock
 
 import pytest
 
-from wrolpi.dates import local_timezone, Seconds
+from wrolpi.dates import local_timezone, Seconds, now
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download, DownloadFrequency, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError, InvalidDownload, WROLModeEnabled
@@ -35,6 +37,7 @@ class HTTPDownloader(Downloader):
         return url.startswith('https://') or url.startswith('http://'), None
 
 
+@pytest.mark.asyncio
 def test_register_downloader(test_session, test_download_manager):
     """Downloaders can be registered and have specific priorities."""
     assert test_download_manager.instances == tuple()
@@ -54,84 +57,39 @@ def test_register_downloader(test_session, test_download_manager):
         test_download_manager.register_downloader(permissive_downloader)
 
 
-def test_do_downloads(test_session, test_download_manager):
-    _, session = get_db_context()
-
-    http_downloader = HTTPDownloader()
-    http_downloader.do_download = MagicMock()
-    http_downloader.do_download.return_value = DownloadResult(success=True)
-    test_download_manager.register_downloader(http_downloader)
-
-    permissive_downloader = PermissiveDownloader(priority=100)
-    permissive_downloader.do_download = MagicMock()
-    permissive_downloader.do_download.return_value = DownloadResult(success=False)
-    test_download_manager.register_downloader(permissive_downloader)
-
-    # https is handled by the HTTP Downloader.
-    test_download_manager.create_download('https://example.com', session)
-    http_downloader.do_download.assert_called_once()
-    permissive_downloader.do_download.assert_not_called()
-    assert test_download_manager.get_download(session, 'https://example.com') is not None
-
-    http_downloader.do_download.reset_mock()
-
-    # try the permissive download, which returns a failure.
-    test_download_manager.create_download('foo', session)
-    http_downloader.do_download.assert_not_called()
-    permissive_downloader.do_download.assert_called_once()
-    download = test_download_manager.get_download(session, 'foo')
-    assert download.attempts == 1
-
-    # try again
-    test_download_manager.create_download('foo', session)
-    test_download_manager._do_downloads(session)
-    download = test_download_manager.get_download(session, 'foo')
-    assert download.attempts == 2
-
-    # finally success
-    permissive_downloader.do_download.return_value = DownloadResult(success=True)
-    test_download_manager.create_download('foo', session)
-    test_download_manager._do_downloads(session)
-    download = test_download_manager.get_download(session, 'foo')
-    assert download.status == 'complete'
-
-    # No downloads left.
-    assert list(test_download_manager.get_new_downloads(session)) == []
-
-
-def test_delete_old_once_downloads(test_session, test_download_manager):
+@pytest.mark.asyncio
+async def test_delete_old_once_downloads(test_session, test_download_manager):
     """Once-downloads over a month old should be deleted."""
     with mock.patch('wrolpi.downloader.now') as mock_now:
         mock_now.return_value = local_timezone(datetime(2020, 6, 5, 0, 0))
         permissive_downloader = PermissiveDownloader(priority=0)
         test_download_manager.register_downloader(permissive_downloader)
 
-        _, session = get_db_context()
         # Recurring downloads should not be deleted.
-        d1 = test_download_manager.create_download('https://example.com/1', session, skip_download=True)
-        d2 = test_download_manager.create_download('https://example.com/2', session, skip_download=True)
+        d1 = test_download_manager.create_download('https://example.com/1')
+        d2 = test_download_manager.create_download('https://example.com/2')
         d1.frequency = 1
         d2.frequency = 1
         d2.started()
         # Should be deleted.
-        d3 = test_download_manager.create_download('https://example.com/3', session, skip_download=True)
-        d4 = test_download_manager.create_download('https://example.com/4', session, skip_download=True)
+        d3 = test_download_manager.create_download('https://example.com/3')
+        d4 = test_download_manager.create_download('https://example.com/4')
         d3.complete()
         d4.complete()
         d3.last_successful_download = local_timezone(datetime(2020, 1, 1, 0, 0, 0))
         d4.last_successful_download = local_timezone(datetime(2020, 5, 1, 0, 0, 0))
         # Not a month old.
-        d5 = test_download_manager.create_download('https://example.com/5', session, skip_download=True)
+        d5 = test_download_manager.create_download('https://example.com/5')
         d5.last_successful_download = local_timezone(datetime(2020, 6, 1, 0, 0, 0))
         # An old, but pending download should not be deleted.
-        d6 = test_download_manager.create_download('https://example.com/6', session, skip_download=True)
+        d6 = test_download_manager.create_download('https://example.com/6')
         d6.last_successful_download = local_timezone(datetime(2020, 4, 1, 0, 0, 0))
         d6.started()
 
         test_download_manager.delete_old_once_downloads()
 
         # Two old downloads are deleted.
-        downloads = session.query(Download).order_by(Download.id).all()
+        downloads = test_session.query(Download).order_by(Download.id).all()
         expected = [
             dict(url='https://example.com/1', frequency=1, attempts=0, status='new'),
             dict(url='https://example.com/2', frequency=1, attempts=1, status='pending'),
@@ -142,7 +100,8 @@ def test_delete_old_once_downloads(test_session, test_download_manager):
             assert_dict_contains(download.dict(), expected)
 
 
-def test_ensure_download(test_session, test_download_manager):
+@pytest.mark.asyncio
+async def test_ensure_download(test_session, test_download_manager):
     assert len(test_download_manager.get_downloads(test_session)) == 0
 
     http_downloader = HTTPDownloader()
@@ -150,7 +109,7 @@ def test_ensure_download(test_session, test_download_manager):
     http_downloader.do_download.return_value = DownloadResult(success=True)
     test_download_manager.register_downloader(http_downloader)
 
-    test_download_manager.create_download('https://example.com', test_session)
+    test_download_manager.create_download('https://example.com')
     download = test_download_manager.get_download(test_session, 'https://example.com')
     assert download.url == 'https://example.com'
 
@@ -159,19 +118,20 @@ def test_ensure_download(test_session, test_download_manager):
     assert test_download_manager.get_download(test_session, 'https://example.com/not downloading') is None
 
 
-def test_create_downloads(test_session, test_download_manager):
+@pytest.mark.asyncio
+async def test_create_downloads(test_session, test_download_manager):
     """Multiple downloads can be scheduled using DownloadManager.create_downloads."""
     http_downloader = HTTPDownloader(priority=0)
     test_download_manager.register_downloader(http_downloader)
 
     # Both URLs are valid and are scheduled.
-    test_download_manager.create_downloads(['https://example.com/1', 'https://example.com/2'], skip_download=True)
+    test_download_manager.create_downloads(['https://example.com/1', 'https://example.com/2'])
     downloads = test_download_manager.get_downloads(test_session)
     assert {i.url for i in downloads} == {'https://example.com/1', 'https://example.com/2'}
 
     # One URL is bad, neither should be scheduled.
     with pytest.raises(InvalidDownload):
-        test_download_manager.create_downloads(['https://example.com/3', 'bad url should fail'], skip_download=True)
+        test_download_manager.create_downloads(['https://example.com/3', 'bad url should fail'])
 
     downloads = test_download_manager.get_downloads(test_session)
     assert {i.url for i in downloads} == {'https://example.com/1', 'https://example.com/2'}
@@ -195,12 +155,13 @@ def test_downloader_must_have_name():
 @pytest.mark.asyncio
 async def test_download_wrol_mode(test_session, test_download_manager):
     with pytest.raises(WROLModeEnabled):
-        test_download_manager.do_downloads_sync()
+        await test_download_manager.do_downloads()
     with pytest.raises(WROLModeEnabled):
-        await test_download_manager.do_downloads_sync()
+        await test_download_manager.do_downloads()
 
 
-def test_download_get_downloader(test_session, test_download_manager, ):
+@pytest.mark.asyncio
+async def test_download_get_downloader(test_session, test_download_manager):
     """
     A Download can find it's Downloader.
     """
@@ -209,14 +170,15 @@ def test_download_get_downloader(test_session, test_download_manager, ):
     test_download_manager.register_downloader(permissive_downloader)
     test_download_manager.register_downloader(http_downloader)
 
-    download1 = test_download_manager.create_download('https://example.com', test_session, skip_download=True)
+    download1 = test_download_manager.create_download('https://example.com')
     assert download1.get_downloader() == permissive_downloader
 
-    download2 = test_download_manager.create_download('https://example.com', test_session, skip_download=True)
+    download2 = test_download_manager.create_download('https://example.com')
     download2.downloader = 'bad downloader'
     assert download2.get_downloader() is None
 
 
+@pytest.mark.asyncio
 def test_calculate_next_download(test_session, test_download_manager, fake_now):
     fake_now(datetime(2000, 1, 1))
     download = Download()
@@ -249,79 +211,78 @@ def test_calculate_next_download(test_session, test_download_manager, fake_now):
     assert test_download_manager.calculate_next_download(d3) == local_timezone(datetime(2000, 1, 9, 18))
 
 
-def test_recurring_downloads(test_session, test_download_manager, fake_now):
-    """
-    A recurring Download should be downloaded repeatedly forever.
-    """
-    _, session = get_db_context()
-
+@pytest.mark.asyncio
+async def test_recurring_downloads(test_session, test_download_manager, fake_now):
+    """A recurring Download should be downloaded forever."""
     http_downloader = HTTPDownloader()
     http_downloader.do_download = MagicMock()
     http_downloader.do_download.return_value = DownloadResult(success=True)
     test_download_manager.register_downloader(http_downloader)
 
     # Download every hour.
-    test_download_manager.recurring_download('https://example.com', Seconds.hour, skip_download=True)
+    test_download_manager.recurring_download('https://example.com', Seconds.hour)
 
     # One download is scheduled.
-    downloads = test_download_manager.get_new_downloads(session)
+    downloads = test_download_manager.get_new_downloads(test_session)
     assert [(i.url, i.frequency) for i in downloads] == [('https://example.com', Seconds.hour)]
 
-    now = fake_now(datetime(2020, 1, 1, 0, 0, 0))
+    now_ = fake_now(datetime(2020, 1, 1, 0, 0, 0))
 
     # Download is processed and successful, no longer "new".
-    test_download_manager.do_downloads_sync()
+    await test_download_manager.wait_for_all_downloads()
     http_downloader.do_download.assert_called_once()
-    assert list(test_download_manager.get_new_downloads(session)) == []
-    downloads = list(test_download_manager.get_recurring_downloads(session))
+    assert list(test_download_manager.get_new_downloads(test_session)) == []
+    downloads = list(test_download_manager.get_recurring_downloads(test_session))
     assert len(downloads) == 1
     download = downloads[0]
     expected = local_timezone(datetime(2020, 1, 1, 1, 0, 0))
     assert download.next_download == expected
-    assert download.last_successful_download == now
+    assert download.last_successful_download == now_
 
     # Download is not due for an hour.
-    test_download_manager.renew_recurring_downloads(session)
-    assert list(test_download_manager.get_new_downloads(session)) == []
-    assert download.last_successful_download == now
+    test_download_manager.renew_recurring_downloads(test_session)
+    await test_download_manager.wait_for_all_downloads()
+    assert list(test_download_manager.get_new_downloads(test_session)) == []
+    assert download.last_successful_download == now_
 
     # Download is due an hour later.
     fake_now(datetime(2020, 1, 1, 2, 0, 1))
-    test_download_manager.renew_recurring_downloads(session)
-    (download,) = list(test_download_manager.get_new_downloads(session))
+    test_download_manager.renew_recurring_downloads(test_session)
+    (download,) = list(test_download_manager.get_new_downloads(test_session))
     # Download is "new" but has not been downloaded a second time.
     assert download.next_download == expected
-    assert download.last_successful_download == now
+    assert download.last_successful_download == now_
     assert download.status == 'new'
 
     # Try the download, but it fails.
     http_downloader.do_download.reset_mock()
     http_downloader.do_download.return_value = DownloadResult(success=False)
-    test_download_manager.do_downloads_sync()
+    await test_download_manager.wait_for_all_downloads()
     http_downloader.do_download.assert_called_once()
-    download = session.query(Download).one()
+    download = test_session.query(Download).one()
     # Download is deferred, last successful download remains the same.
     assert download.status == 'deferred'
-    assert download.last_successful_download == now
+    assert download.last_successful_download == now_
     # Download should be retried after the DEFAULT_RETRY_FREQUENCY.
     expected = local_timezone(datetime(2020, 1, 1, 3, 0, 0, 997200))
     assert download.next_download == expected
 
     # Try the download again, it finally succeeds.
     http_downloader.do_download.reset_mock()
-    now = fake_now(datetime(2020, 1, 1, 4, 0, 1))
+    now_ = fake_now(datetime(2020, 1, 1, 4, 0, 1))
     http_downloader.do_download.return_value = DownloadResult(success=True)
-    test_download_manager.renew_recurring_downloads(session)
-    test_download_manager.do_downloads_sync()
+    test_download_manager.renew_recurring_downloads(test_session)
+    await test_download_manager.wait_for_all_downloads()
     http_downloader.do_download.assert_called_once()
-    download = session.query(Download).one()
+    download = test_session.query(Download).one()
     assert download.status == 'complete'
-    assert download.last_successful_download == now
+    assert download.last_successful_download == now_
     # Floats cause slightly wrong date.
     assert download.next_download == local_timezone(datetime(2020, 1, 1, 5, 0, 0, 997200))
 
 
-def test_max_attempts(test_session, test_download_manager):
+@pytest.mark.asyncio
+async def test_max_attempts(test_session, test_download_manager):
     """A Download will only be attempted so many times, it will eventually be deleted."""
     _, session = get_db_context()
 
@@ -330,23 +291,27 @@ def test_max_attempts(test_session, test_download_manager):
     http_downloader.do_download.return_value = DownloadResult(success=True)
     test_download_manager.register_downloader(http_downloader)
 
-    test_download_manager.create_download('https://example.com', session)
+    test_download_manager.create_download('https://example.com')
+    await test_download_manager.wait_for_all_downloads()
     download = session.query(Download).one()
     assert download.attempts == 1
 
-    test_download_manager.create_download('https://example.com', session)
+    test_download_manager.create_download('https://example.com')
+    await test_download_manager.wait_for_all_downloads()
     download = session.query(Download).one()
     assert download.attempts == 2
 
     # There are no further attempts.
     http_downloader.do_download.side_effect = UnrecoverableDownloadError()
-    test_download_manager.create_download('https://example.com', session)
+    test_download_manager.create_download('https://example.com')
+    await test_download_manager.wait_for_all_downloads()
     download = session.query(Download).one()
     assert download.attempts == 3
     assert download.status == 'failed'
 
 
-def test_skip_urls(test_session, test_download_manager, test_client, assert_download_urls):
+@pytest.mark.asyncio
+async def test_skip_urls(test_session, test_download_manager, test_client, assert_download_urls):
     """The DownloadManager will not create downloads for URLs in it's skip list."""
     _, session = get_db_context()
     from wrolpi.downloader import DOWNLOAD_MANAGER_CONFIG
@@ -361,41 +326,79 @@ def test_skip_urls(test_session, test_download_manager, test_client, assert_down
         'https://example.com/1',
         'https://example.com/skipme',
         'https://example.com/2',
-    ], downloader_name=HTTPDownloader.name)
+    ], downloader=HTTPDownloader.name)
+    await test_download_manager.wait_for_all_downloads()
     assert_download_urls({'https://example.com/1', 'https://example.com/2'})
     assert DOWNLOAD_MANAGER_CONFIG.skip_urls == ['https://example.com/skipme']
 
     test_download_manager.delete_completed()
 
     # The user can start a download even if the URL is in the skip list.
-    test_download_manager.create_download('https://example.com/skipme', session=test_session, reset_attempts=True)
+    test_download_manager.create_download('https://example.com/skipme', reset_attempts=True)
     assert_download_urls({'https://example.com/skipme'})
     assert DOWNLOAD_MANAGER_CONFIG.skip_urls == []
 
 
-def test_process_runner_timeout(test_directory):
+@pytest.mark.asyncio
+async def test_process_runner_timeout(test_directory):
     """A Downloader can cancel it's download using a timeout."""
     # Default timeout of 3 seconds.
     downloader = Downloader(0, 'downloader', timeout=3)
 
     # Default timeout is obeyed.
     start = datetime.now()
-    downloader.process_runner('https://example.com', ('sleep', '8'), test_directory)
+    await downloader.process_runner('https://example.com', ('sleep', '8'), test_directory)
     elapsed = datetime.now() - start
     assert 3 < elapsed.total_seconds() < 4
 
     # One-off timeout is obeyed.
     start = datetime.now()
-    downloader.process_runner('https://example.com', ('sleep', '8'), test_directory, timeout=1)
+    await downloader.process_runner('https://example.com', ('sleep', '8'), test_directory, timeout=1)
     elapsed = datetime.now() - start
     assert 1 < elapsed.total_seconds() < 2
 
-    # This Downloader's timeout is ignored in favor of the global timeout.
+    # Global timeout is obeyed.
     from wrolpi.common import WROLPI_CONFIG
     WROLPI_CONFIG.download_timeout = 3
-
-    # Global timeout is obeyed.
     start = datetime.now()
-    downloader.process_runner('https://example.com', ('sleep', '8'), test_directory)
+    await downloader.process_runner('https://example.com', ('sleep', '8'), test_directory)
     elapsed = datetime.now() - start
     assert 2 < elapsed.total_seconds() < 4
+
+
+@pytest.mark.asyncio
+async def test_multi_domain_download(test_session, test_directory, test_download_manager):
+    class TestDownloader(Downloader, ABC):
+        name = 'test_downloader'
+
+        @classmethod
+        def valid_url(cls, url: str) -> Tuple[bool, Optional[dict]]:
+            return True, {}
+
+        async def do_download(self, download: Download) -> DownloadResult:
+            await asyncio.sleep(1)
+            return DownloadResult(success=True)
+
+    async def wait_and_assert(urls_, max_seconds):
+        downloads = test_download_manager.create_downloads(urls_, downloader=test_downloader.name)
+        assert downloads and all(isinstance(i, Download) for i in downloads), 'Did not get Downloads'
+        start = now()
+        await test_download_manager.wait_for_all_downloads()
+        assert (elapsed := now() - start).total_seconds() < max_seconds, \
+            f'Downloads took {elapsed} seconds.  Were they in parallel?'
+        downloads = test_download_manager.get_downloads(test_session)
+        incomplete = [i.url for i in downloads if i.status != 'complete']
+        assert not incomplete, f'Some downloads did not complete: {incomplete}'
+
+    test_downloader = TestDownloader()
+    test_download_manager.register_downloader(test_downloader)
+
+    # Each domain's downloads will be processed one at a time.
+    # example.com and example.org will both download in parallel.
+    urls = ['https://example.com/1', 'https://example.com/2', 'https://example.com/3', 'https://example.org/1',
+            'https://example.org/2']
+    await wait_and_assert(urls, 4)
+
+    # Downloading more domains that workers is possible.
+    urls = [f'https://example.{i}' for i in range(test_download_manager.worker_count + 2)]
+    await wait_and_assert(urls, 3)

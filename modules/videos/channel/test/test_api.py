@@ -342,7 +342,6 @@ def test_channel_empty_url_doesnt_conflict(test_client, test_session, test_direc
 async def test_download_channel_no_refresh(test_session, download_channel, video_download_manager):
     """A Channel cannot be downloaded until it has been refreshed."""
     d = download_channel.get_download()
-    d.next_download = video_download_manager.calculate_next_download(d)
     test_session.commit()
 
     def check_refreshed(expected: bool):
@@ -359,6 +358,7 @@ async def test_download_channel_no_refresh(test_session, download_channel, video
         await video_download_manager.wait_for_all_downloads()
 
     check_refreshed(True)
+    assert d.next_download
 
 
 def test_channel_post_directory(test_session, test_client, test_directory):

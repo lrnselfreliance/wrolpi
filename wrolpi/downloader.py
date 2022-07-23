@@ -551,8 +551,17 @@ class DownloadManager:
         """
         if self.disabled.is_set():
             return
-        self.renew_recurring_downloads()
-        self.delete_old_once_downloads()
+
+        try:
+            self.renew_recurring_downloads()
+        except Exception as e:
+            logger.error(f'Unable to renew downloads!', exc_info=e)
+
+        try:
+            self.delete_old_once_downloads()
+        except Exception as e:
+            logger.error(f'Unable to delete old downloads!', exc_info=e)
+
         await self.queue_downloads()
 
     async def wait_for_all_downloads(self):
@@ -641,6 +650,8 @@ class DownloadManager:
         recurring = self.get_recurring_downloads(session)
         renewed = False
         for download in recurring:
+            # A new download may not have a `next_download`, create it if necessary.
+            download.next_download = download.next_download or self.calculate_next_download(download, session=session)
             if download.next_download < now_:
                 download.renew()
                 renewed = True

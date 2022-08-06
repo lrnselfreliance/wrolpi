@@ -3,21 +3,26 @@ Fixtures for Pytest tests.
 """
 import asyncio
 import pathlib
+import shutil
 import tempfile
+from typing import List, Callable, Union, Dict
 from typing import Tuple, Set
 from unittest import mock
-from uuid import uuid1
+from uuid import uuid1, uuid4
 
 import pytest
+from PIL import Image
 from sanic_testing.testing import SanicTestClient
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from wrolpi.common import iterify
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.dates import set_test_now
 from wrolpi.db import postgres_engine, get_db_args
 from wrolpi.downloader import DownloadManager, DownloadResult, set_test_download_manager_config, Download
 from wrolpi.root_api import BLUEPRINTS, api_app
+from wrolpi.vars import PROJECT_DIR
 
 
 def get_test_db_engine():
@@ -131,11 +136,11 @@ async def test_download_manager(
         loop = asyncio.get_running_loop()
     except RuntimeError:
         loop = asyncio.get_event_loop()
-    manager.start_workers(loop=loop)
+    manager.enable(loop)
 
     yield manager
 
-    manager.cancel_workers()
+    manager.stop()
 
 
 @pytest.fixture
@@ -164,3 +169,80 @@ def assert_download_urls(test_session):
         assert {i.url for i in downloads} == set(urls)
 
     return asserter
+
+
+@pytest.fixture
+def video_file(test_directory) -> pathlib.Path:
+    """Return a copy of the example Big Buck Bunny video in the `test_directory`."""
+    destination = test_directory / f'{uuid4()}.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', destination)
+
+    yield destination
+
+
+@pytest.fixture
+def image_file(test_directory) -> pathlib.Path:
+    """Create a small image file in the `test_directory`."""
+    destination = test_directory / f'{uuid4()}.jpeg'
+    Image.new('RGB', (25, 25), color='grey').save(destination)
+    yield destination
+
+
+@pytest.fixture
+def vtt_file1(test_directory) -> pathlib.Path:
+    """Return a copy of the example1 VTT file in the `test_directory`."""
+    destination = test_directory / f'{uuid4()}.jpeg'
+    shutil.copy(PROJECT_DIR / 'test/example1.en.vtt', destination)
+    yield destination
+
+
+@pytest.fixture
+def vtt_file2(test_directory) -> pathlib.Path:
+    """Return a copy of the example2 VTT file in the `test_directory`."""
+    destination = test_directory / f'{uuid4()}.jpeg'
+    shutil.copy(PROJECT_DIR / 'test/example2.en.vtt', destination)
+    yield destination
+
+
+@pytest.fixture
+def make_files_structure(test_directory) -> Callable[[Union[List, Dict]], List[pathlib.Path]]:
+    def create_files(paths: List) -> List[pathlib.Path]:
+        files = []
+
+        @iterify(list)
+        def touch_paths(paths_):
+            for name in paths_:
+                path = test_directory / name
+                if name.endswith('/'):
+                    path.mkdir()
+                else:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.touch()
+                yield path
+
+        if isinstance(paths, list):
+            files = touch_paths(paths)
+        elif isinstance(paths, Dict):
+            files = touch_paths(paths.keys())
+            for path, content in paths.items():
+                path = test_directory / path
+                if isinstance(content, str):
+                    path.write_text(content)
+                elif isinstance(content, bytes):
+                    path.write_bytes(content)
+        return files
+
+    return create_files
+
+
+@pytest.fixture
+def wrol_mode_fixture(test_config, test_download_manager):
+    from wrolpi.common import enable_wrol_mode, disable_wrol_mode
+
+    def set_wrol_mode(enabled: bool):
+        if enabled:
+            enable_wrol_mode(test_download_manager)
+        else:
+            disable_wrol_mode(test_download_manager)
+
+    return set_wrol_mode

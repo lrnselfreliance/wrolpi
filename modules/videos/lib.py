@@ -1,24 +1,23 @@
+import functools
 import html
 import pathlib
 import re
 from collections import defaultdict
-from typing import Tuple, Optional, List, Union
-from uuid import uuid1
+from typing import Tuple, Optional, Union
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 
 from wrolpi import before_startup
-from wrolpi.common import chunks, ConfigFile, get_media_directory, sanitize_link
+from wrolpi.common import ConfigFile, get_media_directory, sanitize_link
 from wrolpi.dates import from_timestamp, Seconds
 from wrolpi.db import get_db_curs, get_db_session, optional_session
-from wrolpi.media_path import MediaPath
+from wrolpi.files.models import File
 from wrolpi.vars import PYTEST
-from .captions import get_captions
-from .common import generate_video_paths, remove_duplicate_video_paths, apply_info_json, get_video_duration, \
-    is_valid_poster, convert_image, generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
-    get_no_channel_directory, check_for_video_corruption
+from .common import is_valid_poster, convert_image, \
+    generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
+    get_no_channel_directory, get_video_duration
 from .models import Channel, Video
 
 logger = logger.getChild(__name__)
@@ -26,156 +25,66 @@ logger = logger.getChild(__name__)
 DEFAULT_DOWNLOAD_FREQUENCY = Seconds.week
 
 
-def refresh_channel_videos(channel: Channel):
-    """
-    Find all video files in a channel's directory.  Add any videos not in the DB to the DB.
-    """
-    # Set the idempotency key, we can remove any videos not touched during this search.
-    with get_db_curs(commit=True) as curs:
-        curs.execute('UPDATE video SET idempotency=NULL WHERE channel_id=%s', (channel.id,))
-
-    idempotency = str(uuid1())
-    directory = channel.directory.path
-
-    # A set of absolute paths that exist in the file system
-    possible_new_paths = generate_video_paths(directory)
-    possible_new_paths = remove_duplicate_video_paths(possible_new_paths)
-
-    # Update all videos that match the current video paths
-    new_paths = [str(i) for i in possible_new_paths]
-    with get_db_curs(commit=True) as curs:
-        query = 'UPDATE video SET idempotency = %s WHERE channel_id = %s AND video_path = ANY(%s) RETURNING video_path'
-        curs.execute(query, (idempotency, channel.id, new_paths))
-        existing_paths = {i for (i,) in curs.fetchall()}
-
-    # Get the paths for any video not yet in the DB
-    # (paths in DB are relative, but we need to pass an absolute path)
-    new_videos = {i for i in possible_new_paths if str(i) not in existing_paths}
-
-    for chunk in chunks(new_videos, 20):
-        with get_db_session(commit=True) as session:
-            for video_path in chunk:
-                video_path = pathlib.Path(video_path)
-                upsert_video(session, video_path, channel, idempotency=idempotency)
-                logger.debug(f'{channel.name}: Added {video_path.name}')
-
-    with get_db_curs(commit=True) as curs:
-        stmt = 'DELETE FROM video WHERE channel_id=%s AND idempotency IS NULL AND video_path IS NOT NULL RETURNING id'
-        curs.execute(stmt, (channel.id,))
-        deleted_count = len(curs.fetchall())
-
-    if deleted_count:
-        deleted_status = f'Deleted {deleted_count} video records from channel {channel.name}'
-        logger.info(deleted_status)
-
-    logger.info(f'{channel.name}: {len(new_videos)} new videos, {len(existing_paths)} already existed. ')
-
-    with get_db_session(commit=True) as session:
-        channel = session.query(Channel).filter_by(id=channel.id).one()
-        channel.refreshed = True
-
-    apply_info_json(channel.id)
+class VideoInfoJSON(object):
+    channel_source_id = None
+    title = None
+    duration = None
+    view_count = None
+    url = None
 
 
-def refresh_no_channel_videos():
-    """
-    Refresh the Videos in the NO CHANNEL directory.
-    """
-    from modules.videos.downloader import get_no_channel_directory
-    directory = get_no_channel_directory()
-    if not directory.is_dir():
-        return
-
-    logger.info('Refreshing NO CHANNEL videos')
-
-    idempotency = str(uuid1())
-
-    # Get all WROLPi compatible videos, remove any duplicates (different formats).
-    possible_new_paths = generate_video_paths(directory)
-    possible_new_paths = remove_duplicate_video_paths(possible_new_paths)
-
-    new_paths = [str(i) for i in possible_new_paths]
-    with get_db_curs(commit=True) as curs:
-        query = 'UPDATE video SET idempotency = %s WHERE video_path = ANY(%s) RETURNING video_path'
-        curs.execute(query, (idempotency, new_paths))
-        existing_paths = {i for (i,) in curs.fetchall()}
-
-    new_videos = {i for i in possible_new_paths if str(i) not in existing_paths}
-
-    for chunk in chunks(new_videos, 20):
-        with get_db_session(commit=True) as session:
-            for video_path in chunk:
-                upsert_video(session, pathlib.Path(video_path), idempotency=idempotency)
-                logger.debug(f'Added NO CHANNEL video {video_path}')
-
-    with get_db_curs(commit=True) as curs:
-        curs.execute('DELETE FROM video WHERE channel_id IS NULL AND idempotency IS NULL RETURNING id')
-        deleted_count = len(curs.fetchall())
-
-    if deleted_count:
-        deleted_status = f'Deleted {deleted_count} video records in NO CHANNEL.'
-        logger.info(deleted_status)
-
-
-def process_video_info_json(video: Video):
+def process_video_info_json(video: Video) -> VideoInfoJSON:
     """
     Parse the Video's info json file, return the relevant data.
     """
-    title = duration = view_count = url = None
+    video_info_json = VideoInfoJSON()
     if info_json := video.get_info_json():
         title = info_json.get('fulltitle') or info_json.get('title')
-        title = html.unescape(title) if title else None
+        video_info_json.title = html.unescape(title) if title else None
 
-        duration = info_json.get('duration')
-        view_count = info_json.get('view_count')
-        url = info_json.get('webpage_url') or info_json.get('url')
+        video_info_json.duration = info_json.get('duration')
+        video_info_json.view_count = info_json.get('view_count')
+        video_info_json.url = info_json.get('webpage_url') or info_json.get('url')
+        video_info_json.channel_source_id = info_json.get('channel_id')
 
-    return title, duration, view_count, url
+    return video_info_json
 
 
-def validate_videos():
+@optional_session
+@functools.lru_cache
+def get_channel_id_by_source_id(session: Session, source_id: str) -> Optional[int]:
+    """Return the id of the Channel which matches the provided `source_id`.
+
+    These are cached results."""
+    channel = session.query(Channel).filter_by(source_id=source_id).one_or_none()
+    return channel.id if channel else None
+
+
+def validate_video(video: Video, channel_generate_poster: bool, session: Session):
     """
-    Validate all Videos not yet validated.  A Video is validated when we have attempted to find its: title, duration,
-    view_count, url, caption, size.  A Video is also valid when it has a JPEG poster, if any.  If no poster can be
-    found, it will be generated from the video file.
+    Validate a single video.
 
-    This function marks the Video as validated, even if no data can be found so a Video will not be validated multiple
-    times.
-    """
-    with get_db_curs() as curs:
-        curs.execute('SELECT id FROM video WHERE video_path IS NOT NULL AND validated IS FALSE')
-        video_ids = [i['id'] for i in curs.fetchall()]
-        curs.execute('SELECT id, generate_posters FROM channel')
-        channel_generate_posters = {i['id']: i['generate_posters'] for i in curs.fetchall()}
+    A Video is validated when we have attempted to find its: title, duration, view_count, url, caption, size, and
+    channel.
 
-    logger.info(f'Validating {len(video_ids)} videos.')
-    for chunk in chunks(video_ids, 20):
-        with get_db_session(commit=True) as session:
-            videos = session.query(Video).filter(Video.id.in_(chunk)).all()
-            for video in videos:
-                video.validate()
-
-
-def validate_video(video: Video, channel_generate_poster: bool):
-    """
-    Validate a single video.  A Video is validated when we have attempted to find its: title, duration,
-    view_count, url, caption, size.  A Video is also valid when it has a JPEG poster, if any.  If no poster can be
+    A Video is also valid when it has a JPEG poster, if any.  If no poster can be
     found, it will be generated from the video file.
     """
-    if not video.title or not video.duration or not video.view_count or not video.url:
+    info_json_path = video.info_json_file.path if video.info_json_file else video.info_json_path
+    if info_json_path and (not video.title or not video.duration or not video.view_count or not video.url):
         # These properties can be found in the info json.
-        title, duration, view_count, url = process_video_info_json(video)
-        video.title = title
-        video.duration = duration
-        video.url = url
+        video_info_json = process_video_info_json(video)
+        video.title = video_info_json.title
+        video.duration = video_info_json.duration
+        video.url = video_info_json.url
         # View count will probably be overwritten by more recent data when this Video's Channel is
         # updated.
-        video.view_count = video.view_count or view_count
+        video.view_count = video.view_count or video_info_json.view_count
 
-    video_path = video.video_path.path if isinstance(video.video_path, MediaPath) else video.video_path
+        if video_info_json.channel_source_id:
+            video.channel_id = get_channel_id_by_source_id(source_id=video_info_json.channel_source_id)
 
-    # Check for corruption, but don't throw away the video even if it is corrupt.  Errors will be logged in this call.
-    check_for_video_corruption(video_path)
+    video_path = video.video_path
 
     if not video.title or not video.upload_date or not video.source_id:
         # Video is missing things that can be extracted from the video file name.
@@ -184,41 +93,41 @@ def validate_video(video: Video, channel_generate_poster: bool):
         video.title = video.title or html.unescape(title)
         video.upload_date = video.upload_date or upload_date
         video.source_id = video.source_id or source_id
-    if not video.duration:
-        # Video duration was not in the info json, use ffprobe.
-        video.duration = get_video_duration(video_path)
-    if not video.caption and video.caption_path:
-        video.caption = get_captions(video.caption_path.path)
 
     if not video.size or not video.modification_datetime:
         stat = video_path.stat()
         video.size = video.size or stat.st_size
         video.modification_datetime = video.modification_datetime or from_timestamp(stat.st_mtime)
 
-    if not video.poster_path:
-        # Video poster is not found, lets check near the video file.
-        for ext in ('.jpg', '.jpeg', '.webp', '.png'):
-            if (poster_path := video_path.with_suffix(ext)).is_file():
-                video.poster_path = poster_path
-                break
     if channel_generate_poster:
         # Try to convert/generate, but keep the old poster if those fail.
-        video.poster_path = convert_or_generate_poster(video) or video.poster_path
+        new_poster_path, duration = convert_or_generate_poster(video) or video.poster_path
+        if new_poster_path:
+            # Poster was created/updated.
+            poster_file = File.upsert(new_poster_path, session)
+            session.flush([poster_file])
+            video.poster_file = poster_file
+            video.poster_path = new_poster_path
+        if duration:
+            video.duration = duration
+
+    if not video.duration:
+        # Duration was not retrieved during poster generation.
+        video.duration = get_video_duration(video_path)
 
 
-def convert_or_generate_poster(video: Video) -> Optional[pathlib.Path]:
+def convert_or_generate_poster(video: Video) -> Tuple[Optional[pathlib.Path], Optional[int]]:
     """
     If a Video has a poster, but the poster is invalid, convert it.  If a Video has no poster, generate one from the
     video file.
 
     Returns None if the poster was not converted, and not generated.
     """
-    video_path = video.video_path.path
+    video_path = video.video_path
     # Modification/generation of poster is enabled for this channel.
-    if video.poster_path:
+    if video.poster_path or video.poster_file:
         # Check that the poster is a more universally supported JPEG.
-        old: pathlib.Path = video.poster_path.path if \
-            isinstance(video.poster_path, MediaPath) else video.poster_path
+        old: pathlib.Path = video.poster_path if video.poster_path else video.poster_file.path
         new = old.with_suffix('.jpg')
 
         if old != new and new.exists():
@@ -231,63 +140,22 @@ def convert_or_generate_poster(video: Video) -> Optional[pathlib.Path]:
             try:
                 convert_image(old, new)
                 old.unlink(missing_ok=True)
-                logger.info(f'Converted invalid poster {old} to {new}')
-                return new
+                logger.info(f'Converted invalid poster {repr(str(old))} to {repr(str(new))}')
+                return new, None
             except Exception as e:
                 logger.error(f'Failed to convert invalid poster {old} to {new}', exc_info=e)
-                return
+                return None, None
 
-    if not video.poster_path:
+    if not video.poster_path or not video.poster_file:
         # Video poster was not discovered, or converted.  Let's generate it.
         try:
-            poster_path = generate_video_poster(video_path)
+            poster_path, duration = generate_video_poster(video_path)
             logger.debug(f'Generated poster for {video}')
-            return poster_path
+            return poster_path, duration
         except Exception as e:
             logger.error(f'Failed to generate poster for {video}', exc_info=e)
 
-
-def refresh_videos(channel_ids: List[int] = None):
-    """
-    Find any videos in the channel directories and add them to the DB.  Delete DB records of any videos not in the
-    file system.
-
-    Yields status updates to be passed to the UI.
-
-    :return:
-    """
-    logger.info('Refreshing video files')
-    with get_db_session() as session:
-        if channel_ids:
-            channels = session.query(Channel).filter(Channel.id.in_(channel_ids))
-        else:
-            channels = session.query(Channel).all()
-
-        channels = list(channels)
-
-    if not channels and channel_ids:
-        raise Exception(f'No channels match id(s): {channel_ids}')
-    elif not channels:
-        raise Exception(f'No channels in DB.  Have you created any?')
-
-    for channel in channels:
-        try:
-            refresh_channel_videos(channel)
-        except Exception as e:
-            logger.fatal(f'Failed to refresh videos for channel {channel.name}!', exc_info=e)
-            pass
-
-    if not channel_ids:
-        # Refresh NO CHANNEL videos when not refreshing a specific channel.
-        refresh_no_channel_videos()
-
-    # Fill in any missing data for all videos.
-    if not PYTEST:
-        import_channels_config()
-
-    validate_videos()
-
-    logger.info('Refresh of video files complete')
+    return None, None
 
 
 class ChannelsConfig(ConfigFile):
@@ -470,9 +338,10 @@ def get_channels_config_from_db(session: Session) -> dict:
     favorites = defaultdict(lambda: {})
     for video in favorite_videos:
         if video.channel:
-            favorites[str(video.channel.directory.relative)][video.video_path.path.name] = dict(favorite=video.favorite)
+            directory = video.channel.directory.relative_to(get_media_directory())
+            favorites[str(directory)][video.video_path.name] = dict(favorite=video.favorite)
         else:
-            favorites['NO CHANNEL'][video.video_path.path.name] = dict(favorite=video.favorite)
+            favorites['NO CHANNEL'][video.video_path.name] = dict(favorite=video.favorite)
     favorites = dict(favorites)
 
     return dict(channels=channels, favorites=favorites)
@@ -510,7 +379,6 @@ def import_channels_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
     logger.info('Importing videos config')
     try:
-        from .downloader import ChannelDownloader
         config = get_channels_config()
         channels, favorites = config.channels, config.favorites
 
@@ -569,7 +437,7 @@ def import_channels_config():
                     if not channel:
                         logger.warning(f'Cannot find channel {directory=} for favorites!')
                         continue
-                    channel_dir = channel.directory.path
+                    channel_dir = channel.directory
                 else:
                     channel_dir = get_no_channel_directory()
 
@@ -698,74 +566,3 @@ def parse_video_file_name(video_path: pathlib.Path) -> \
     # Return the stem as a last resort
     title = pathlib.Path(video_path).stem.strip()
     return None, None, None, title
-
-
-def upsert_video(session: Session, video_path: pathlib.Path, channel: Channel = None, idempotency: str = None,
-                 id_: str = None) -> Video:
-    """
-    Insert a video into the DB.  Also, find any meta-files near the video file and store them on the video row.
-
-    If id_ is provided, update that entry.
-    """
-    if not video_path.is_absolute():
-        raise ValueError(f'Video path is not absolute: {video_path}')
-
-    # This function can update or insert a Video.
-    video = None
-    if id_:
-        video = session.query(Video).filter_by(id=id_).one()
-    if not video:
-        # The video may already be in the database, match the source_id to any existing video.
-        _, _, source_id, _ = parse_video_file_name(video_path)
-        if source_id:
-            video = session.query(Video).filter_by(source_id=source_id).one_or_none()
-    if not video:
-        video = Video()
-        session.add(video)
-
-    # Set the file values, all other things can be found using these files.
-    poster_path, description_path, caption_path, info_json_path = find_meta_files(video_path)
-    video.caption_path = caption_path
-    video.description_path = description_path
-    video.info_json_path = info_json_path
-    video.poster_path = poster_path
-    video.video_path = video_path
-    if channel and not str(video_path).startswith(str(channel.directory.path)):
-        raise ValueError(f'Video path is not within its channel {video_path=} not in {channel.directory=}')
-
-    if channel:
-        video.channel_id = channel.id
-    video.idempotency = idempotency
-
-    session.flush()
-    session.refresh(video)
-
-    video.validate()
-
-    session.flush()
-
-    return video
-
-
-def find_meta_files(path: pathlib.Path) -> Tuple[pathlib.Path, pathlib.Path, pathlib.Path, pathlib.Path]:
-    """
-    Find all files that share a file's full path, except their extensions.  It is assumed that file with the
-    same name, but different extension is related to that file.  A None will be yielded if the meta file doesn't exist.
-
-    Example:
-        >>> foo = pathlib.Path('foo.bar')
-        >>> find_meta_files(foo)
-        (pathlib.Path('foo.jpg'), pathlib.Path('foo.description'),
-        pathlib.Path('foo.en.vtt'), pathlib.Path('foo.info.json'))
-    """
-    suffix = path.suffix
-    name, suffix, _ = str(path.name).rpartition(suffix)
-    meta_file_exts = (('.jpg', '.webp', '.png'), ('.description',), ('.en.vtt', '.en.srt'), ('.info.json',))
-    for meta_exts in meta_file_exts:
-        for meta_ext in meta_exts:
-            meta_path = path.with_suffix(meta_ext)
-            if meta_path.exists():
-                yield meta_path
-                break
-        else:
-            yield None

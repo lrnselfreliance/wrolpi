@@ -20,4 +20,5 @@ selenium==4.1.0
 srt==3.5.1
 websockets==10.1
 webvtt-py==0.4.6
-yt-dlp==2022.7.18
+yt-dlp==2022.9.1
+python-magic~=0.4.27

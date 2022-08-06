@@ -1,25 +1,20 @@
-import json
 import pathlib
-import shutil
-from datetime import datetime
-from unittest import mock
 
 import pytest
 import sqlalchemy
 
-from modules.videos import lib
 from modules.videos.common import apply_info_json
-from modules.videos.lib import validate_videos, parse_video_file_name, upsert_video
+from modules.videos.lib import parse_video_file_name, validate_video, get_statistics
 from modules.videos.models import Video
 from modules.videos.video.lib import video_search
-from wrolpi.dates import local_timezone
-from wrolpi.vars import PROJECT_DIR
+from wrolpi.files import lib as files_lib
+from wrolpi.files.models import File
 
 
-def test_search_censored_videos(test_session, simple_channel):
+def test_search_censored_videos(test_session, simple_channel, video_factory):
     for i in map(str, range(50)):
-        test_session.add(Video(source_id=i, channel=simple_channel, video_path='foo'))
-    vid = Video(source_id='51', video_path='bar')  # this should never be modified because it has no channel
+        video_factory(channel_id=simple_channel.id, source_id=i)
+    vid = video_factory(source_id=51)  # this should never be modified because it has no channel
     test_session.add(vid)
     test_session.commit()
 
@@ -32,133 +27,21 @@ def test_search_censored_videos(test_session, simple_channel):
 
     # All source_ids are in the entries.
     set_entries(map(str, range(50)))
-    videos, total = video_search(filters=['censored'], order_by='id')
-    assert [i['source_id'] for i in videos] == []
+    videos, total = video_search(filters=['censored'], order_by='id', limit=20)
+    assert [i['video']['source_id'] for i in videos] == []
     assert total == 0
 
     # First 5 are censored.
     set_entries(map(str, range(5, 50)))
-    videos, total = video_search(filters=['censored'], order_by='id')
-    assert [i['source_id'] for i in videos] == [str(i) for i in range(5)]
+    videos, total = video_search(filters=['censored'], order_by='id', limit=20)
+    assert [i['video']['source_id'] for i in videos] == [str(i) for i in range(5)]
     assert total == 5
 
     # First 25 are censored.
     set_entries(map(str, range(25, 50)))
-    videos, total = video_search(filters=['censored'], order_by='id')
-    assert [i['source_id'] for i in videos] == [str(i) for i in range(20)]
+    videos, total = video_search(filters=['censored'], order_by='id', limit=20)
+    assert [i['video']['source_id'] for i in videos] == [str(i) for i in range(20)]
     assert total == 25
-
-
-def test_validate_videos(test_session, simple_channel, video_factory):
-    """
-    Videos that aren't validated should have their data filled in while being validated.
-    """
-    simple_channel.generate_posters = True
-
-    vid1_json = {'title': 'info&apos;s title'}
-    vid3_json = {'duration': 100}
-    vid5_json = {'view_count': 42}
-    vid6_json = {'webpage_url': 'https://example.com/webpage', 'url': 'https://example.com/url'}
-
-    vid1 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg', with_info_json=vid1_json)
-    vid2 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg', with_info_json=True)
-    vid3 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg', with_info_json=vid3_json)
-    vid4 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg', with_info_json=True)
-    vid5 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg', with_info_json=vid5_json)
-    vid6 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg', with_info_json=vid6_json)
-    vid7 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='jpg')
-    vid8 = video_factory(simple_channel.id, with_video_file=True, with_poster_ext='webp')
-    vid9 = video_factory(simple_channel.id, with_video_file=True)
-
-    # These videos are missing this data, and a refresh should fill them in.
-    vid1.title = None
-    vid2.caption = None
-    vid2.title = None
-    vid3.duration = None
-    vid4.size = None
-    vid5.view_count = None
-    vid6.url = None
-    vid7.poster_path = None
-    test_session.commit()
-
-    # Write the associated files.  This data should be processed.
-    vid2.caption_path = vid2.video_path.path.with_suffix('.en.vtt')
-    shutil.copy(PROJECT_DIR / 'test/example1.en.vtt', vid2.caption_path)
-    test_session.commit()
-
-    # All Videos are validated, all data is filled out.  The info json data is trusted first.
-    validate_videos()
-    assert all([i.validated for i in test_session.query(Video)])
-    assert vid1.title == "info's title"
-    assert vid2.caption.startswith('okay welcome')
-    assert 'mp4' not in vid2.title
-    assert vid3.duration == 100
-    assert vid4.size == 1055736
-    assert vid5.view_count == 42
-    assert vid6.url == 'https://example.com/webpage'
-    assert str(vid7.poster_path).endswith('.jpg')
-    assert str(vid8.poster_path).endswith('.jpg')
-    assert str(vid9.poster_path).endswith('.jpg')  # this was generated from the video file.
-
-    vid1.title = None
-    vid3.duration = None
-    vid5.view_count = None
-    vid6.url = None
-    vid9.poster_path = None
-    test_session.commit()
-
-    # Validation does not happen because all are still validated.
-    validate_videos()
-
-    # All videos need to be validated again.
-    for i in test_session.query(Video):
-        i.validated = False
-    # Use backup methods to fetch data.
-    vid1.info_json_path = None
-    vid3.info_json_path = None
-    vid5.info_json_path = None
-    vid6.info_json_path.path.write_text(json.dumps({'url': 'https://example.com/url'}))
-    test_session.commit()
-
-    validate_videos()
-    assert all([i.validated for i in test_session.query(Video)])
-    assert vid1.title != "info's title"  # file name is used.
-    assert vid3.duration == 5  # video file duration is used.
-    assert vid5.view_count is None
-    assert vid6.url == 'https://example.com/url'  # url is used as backup url.
-    # Posters are both JPEG format.  Webp file is removed.
-    assert vid7.poster_path.path.is_file()
-    assert vid8.poster_path.path.is_file()
-    assert not vid8.poster_path.path.with_suffix('.webp').is_file()
-    assert str(vid9.poster_path).endswith('.jpg')  # the generated file was rediscovered.
-
-
-def test_validate_video_exception(test_session, simple_channel, video_factory):
-    """
-    Test that even if a Video cannot be validated, the other Videos will still be validated.
-    """
-    vid1 = video_factory(simple_channel.id, with_video_file=True)
-    vid2 = video_factory(simple_channel.id, with_video_file=True)
-    # The validator should not even check this Video because it does not have a video file.
-    vid3 = video_factory(simple_channel.id)
-    vid3.video_path = None
-    assert not all([i.validated for i in test_session.query(Video)])
-    test_session.commit()
-
-    with mock.patch('modules.videos.lib.process_video_info_json') as mock_process_video_info_json:
-        mock_process_video_info_json.side_effect = [
-            Exception('skip this video'),
-            (None, None, None, None),
-            ('should not be set to video 3', None, None, None),  # This should not be called!
-        ]
-        validate_videos()
-        # Only first two videos are validated.
-        assert mock_process_video_info_json.call_count == 2, mock_process_video_info_json.call_count
-    test_session.commit()
-
-    assert not vid1.validated
-    assert vid2.validated
-    assert not vid3.validated
 
 
 @pytest.mark.parametrize('file_name,expected', [
@@ -186,67 +69,120 @@ def test_parse_video_file_name(file_name, expected):
     assert parse_video_file_name(video_path) == expected, f'{file_name} != {expected}'
 
 
-def test_validate_does_not_generate_when_disabled(test_session, channel_factory, video_factory):
+@pytest.mark.asyncio
+async def test_associated_files(test_session, test_directory, video_file, image_file, vtt_file1):
+    """A Video file has files related to it.  They should be attached to the Video record."""
+    caption_file = video_file.with_suffix('.en.vtt')
+    vtt_file1.rename(caption_file)
+    poster_file = video_file.with_suffix('.jpeg')
+    image_file.rename(poster_file)
+
+    await files_lib._refresh_all_files()
+    test_session.commit()
+
+    # All files were found.
+    file_paths = {i.path for i in test_session.query(File)}
+    assert len(file_paths) == 3
+
+    video: Video = test_session.query(Video).one()
+    video_id = video.id
+    assert video.video_file == video_file
+    assert video.poster_file == poster_file
+    assert video.caption_file == caption_file
+    assert video.video_file.modification_datetime
+    assert video.video_file.size
+    assert video.video_file.indexed
+
+    await files_lib._refresh_all_files()
+    test_session.commit()
+
+    # No new files were added.
+    assert {i.path for i in test_session.query(File)} == file_paths
+    # Same video exists.
+    video: Video = test_session.query(Video).one()
+    assert video.id == video_id, 'Video id changed.  Was the video recreated?'
+
+
+@pytest.mark.asyncio
+async def test_unassociated_video(test_session, test_directory, video_file):
+    """A Video file without associated files is still a Video."""
+    # Move the video file into a new subdirectory.  The video file should still be found.
+    sub_dir = test_directory / 'subdir'
+    sub_dir.mkdir()
+    new_video_file_path = sub_dir / video_file.name
+    video_file.rename(new_video_file_path)
+    video_file = new_video_file_path
+
+    await files_lib._refresh_all_files()
+    test_session.commit()
+
+    video: Video = test_session.query(Video).one()
+    assert video.video_file == video_file
+
+
+@pytest.mark.asyncio
+async def test_video_factory(test_session, video_factory, channel_factory):
     """
-    A poster should not be generated if the Video's Channel forbids it.
+    The `video_factory` pytest fixture is used in many video tests.  Test all it's functionality.
     """
-    channel1 = channel_factory()  # posters should not be generated by default.
+    channel = channel_factory()
+    video = video_factory(
+        channel_id=channel.id,
+        with_video_file=True,
+        with_info_json={'description': 'hello'},
+        with_caption_file=True,
+        with_poster_ext='png',
+        source_id='some id',
+    )
+    test_session.commit()
+
+    assert video.video_path and video.video_file and video.video_path.is_file()
+    assert video.caption_path and video.caption_file and video.caption_path.is_file()
+    assert video.poster_path and video.poster_file and video.poster_path.is_file()
+    assert video.info_json_path and video.info_json_file and video.info_json_path.is_file()
+
+    assert video.video_file.a_text  # title
+    assert video.video_file.b_text is None
+    assert video.video_file.c_text and 'hello' in video.video_file.c_text  # description
+    assert video.video_file.d_text  # captions
+    assert video.source_id == 'some id'
+
+
+def test_validate_video(test_session, test_directory, video_factory):
+    """A video poster will be generated only if the channel permits."""
+    vid1 = video_factory(with_video_file=True)
+    assert not vid1.poster_path
+
+    validate_video(vid1, True, test_session)
+    assert vid1.poster_path, 'Poster was not created'
+    assert vid1.poster_path.is_file(), 'Poster path does not exist'
+    assert vid1.video_path.stem == vid1.poster_path.stem
+    assert vid1.poster_path.suffix == '.jpg'
+
+    # A PNG is replaced.
+    vid2 = video_factory(with_video_file=True, with_poster_ext='.png')
+    vid2.poster_path.with_suffix('.jpg').touch()  # New poster exists, replace it.
+    assert vid2.poster_path and vid2.poster_path.is_file() and vid2.poster_path.suffix == '.png', \
+        'Poster was not initialized'
+    validate_video(vid2, True, test_session)
+    assert vid2.poster_path.is_file(), 'New poster was not generated'
+    assert vid2.poster_path.suffix == '.jpg'
+
+
+@pytest.mark.asyncio
+async def test_get_statistics(test_session, video_factory, channel_factory):
+    # Can get statistics in empty DB.
+    await get_statistics()
+
+    channel1 = channel_factory()
     channel2 = channel_factory()
-    channel2.generate_posters = True
-    vid1 = video_factory(channel1.id, with_video_file=True)
-    vid2 = video_factory(channel2.id, with_video_file=True)
-    # webp will not be converted unless generate_posters is enabled.
-    vid3 = video_factory(channel1.id, with_video_file=True, with_poster_ext='webp')
-    test_session.commit()
-    assert not vid1.poster_path
-    assert not vid2.poster_path
-    assert str(vid3.poster_path).endswith('webp')
+    video_factory(channel_id=channel1.id)
+    video_factory(channel_id=channel1.id)
+    video_factory(channel_id=channel2.id)
+    video_factory()
 
-    validate_videos()
-
-    assert not vid1.poster_path
-    assert vid2.poster_path
-    assert str(vid3.poster_path).endswith('webp')
-
-
-def test_video_modification_datetime(test_session, simple_channel, video_file):
-    """
-    A Video has a modification_datetime which represents the video file's mtime.
-    """
-    expected = local_timezone(datetime(2000, 1, 1, 0, 0, 0))
-    with mock.patch('modules.videos.lib.from_timestamp') as mock_from_timestamp:
-        mock_from_timestamp.return_value = expected
-        video = upsert_video(test_session, video_file, simple_channel)
-    test_session.commit()
-    assert video.modification_datetime == expected
-
-
-def test_refresh_channel_videos(test_session, channel_factory, video_factory, video_file, assert_video_ids):
-    assert_video_ids([])
-
-    # Simulate a channel's catalog being updated.
-    channel1 = channel_factory(name='channel1')
-    test_session.add(Video(source_id='source1', channel_id=channel1.id))
-    test_session.add(Video(source_id='source2', channel_id=channel1.id))
-
-    # Add some real files to be found.
-    destination = channel1.directory / f'channel1_20220510_source1_the title.mp4'
-    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', destination)
-    destination = channel1.directory / f'channel1_20220511_source2_the title.mp4'
-    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', destination)
-
-    lib.refresh_channel_videos(channel1)
-    assert_video_ids([1, 2])
-
-    # These video files were deleted.
-    test_session.add(Video(source_id='this should be removed', channel_id=channel1.id, video_path='foo'))
-    test_session.add(Video(source_id='this should also be removed', video_path='bar'))
-    test_session.commit()
-
-    assert_video_ids([1, 2, 3, 4])
-
-    lib.refresh_channel_videos(channel1)
-    assert_video_ids([1, 2, 4])
-
-    lib.refresh_videos()
-    assert_video_ids([1, 2])
+    result = await get_statistics()
+    assert 'statistics' in result
+    assert 'videos' in result['statistics']
+    assert 'channels' in result['statistics']
+    assert 'historical' in result['statistics']

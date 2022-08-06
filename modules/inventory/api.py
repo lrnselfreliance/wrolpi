@@ -8,7 +8,7 @@ from sanic_ext.extensions.openapi import openapi
 from wrolpi.common import run_after, recursive_map
 from wrolpi.errors import ValidationError
 from wrolpi.root_api import get_blueprint, json_response
-from . import common, inventory, schema
+from modules.inventory import common, inventory, schema
 
 NAME = 'inventory'
 
@@ -16,25 +16,25 @@ bp = get_blueprint('Inventory', '/api/inventory')
 
 
 @bp.get('/categories')
-def _get_categories(_: Request):
+def get_categories(_: Request):
     categories = inventory.get_categories()
     return json_response(dict(categories=categories))
 
 
 @bp.get('/brands')
-def _get_brands(_: Request):
+def get_brands(_: Request):
     brands = inventory.get_brands()
     return json_response(dict(brands=brands))
 
 
 @bp.get('/')
-def inventories_get(_: Request):
+def get_inventories(_: Request):
     inventories = inventory.get_inventories()
     return json_response(dict(inventories=inventories))
 
 
 @bp.get('/<inventory_id:int>')
-def inventory_get(_: Request, inventory_id: int):
+def get_inventory(_: Request, inventory_id: int):
     by_category = common.get_inventory_by_category(inventory_id)
     by_subcategory = common.get_inventory_by_subcategory(inventory_id)
     by_name = common.get_inventory_by_name(inventory_id)

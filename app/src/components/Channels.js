@@ -1,546 +1,534 @@
-import React from "react";
+import React, {useState} from "react";
 import {
-    Accordion,
-    Button,
-    Checkbox,
-    Form,
+    AccordionContent,
+    AccordionTitle,
     Grid,
-    Header,
     Input,
-    Loader,
     Responsive,
-    Segment,
-    Statistic
+    StatisticLabel,
+    StatisticValue,
+    TableBody,
+    TableCell,
+    TableHeader,
+    TableHeaderCell,
+    TableRow,
 } from "semantic-ui-react";
-import {
-    createChannel,
-    deleteChannel,
-    downloadChannel,
-    getChannel,
-    getChannels,
-    getDirectories,
-    getSettings,
-    refreshChannel,
-    updateChannel,
-    validateRegex
-} from "../api";
-import _ from "lodash";
+import {createChannel, deleteChannel, downloadChannel, refreshChannel, updateChannel, validateRegex} from "../api";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {
-    APIForm,
     frequencyOptions,
     humanFileSize,
     RequiredAsterisk,
     secondsToDate,
     secondsToFrequency,
+    Toggle,
     WROLModeMessage
 } from "./Common";
-import {Link} from "react-router-dom";
+import {Link, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
-import Table from "semantic-ui-react/dist/commonjs/collections/Table";
 import {ChannelPlaceholder} from "./Placeholder";
-import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
+import {useChannel, useChannels, useDirectories, useSettings} from "../hooks/customHooks";
+import {toast} from "react-semantic-toasts";
+import _ from "lodash";
+import {
+    Accordion,
+    Button,
+    Form,
+    FormField,
+    FormGroup,
+    FormInput,
+    Header,
+    Loader,
+    Segment,
+    Statistic,
+    Table
+} from "./Theme";
+import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
 
 
-class DirectoryInput extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            directories: [],
-            mediaDirectory: null,
-            directory: '',
-        }
+function DirectoryInput({disabled, error, placeholder, setInput, value, required}) {
+    const {directory, directories, setDirectory} = useDirectories(value);
+    const {settings} = useSettings();
 
-        this.handleChange = this.handleChange.bind(this);
+    if (!directories || !settings) {
+        return <></>;
     }
 
-    async componentDidMount() {
-        let settings = await getSettings();
-        let directories = await getDirectories(this.state.directory);
-        this.setState({
-            directories,
-            mediaDirectory: settings.media_directory,
-            directory: this.props.value,
-        });
+    const localSetInput = (e, {value}) => {
+        setInput(value);
+        setDirectory(value);
     }
 
-    async componentDidUpdate(prevProps, prevState, snapshot) {
-        if (prevState.directory !== this.state.directory) {
-            let directories = await getDirectories(this.state.directory);
-            this.setState({directories});
-        }
-    }
+    const {media_directory} = settings;
 
-    async handleChange(e, {name, value}) {
-        e.preventDefault();
-        this.setState({[name]: value}, () => this.props.setInput(e, {name, value}));
-    }
-
-    render() {
-        let {directories, mediaDirectory, directory} = this.state;
-
-        return (
-            <div>
-                <Input
-                    disabled={this.props.disabled}
-                    name='directory'
-                    list='directories'
-                    error={this.props.error}
-                    label={mediaDirectory}
-                    value={directory}
-                    onChange={this.handleChange}
-                    placeholder='videos/channel directory'
-                />
-                <datalist id='directories'>
-                    {directories.map((i) => <option key={i} value={i}>{i}</option>)}
-                </datalist>
-            </div>
-        );
-    }
+    return (
+        <div>
+            <Input
+                required={required}
+                disabled={disabled}
+                name='directory'
+                list='directories'
+                error={error}
+                label={media_directory}
+                value={directory}
+                onChange={localSetInput}
+                placeholder={placeholder}
+            />
+            <datalist id='directories'>
+                {directories.map(i => <option key={i} value={i}>{i}</option>)}
+            </datalist>
+        </div>
+    );
 }
 
-function ChannelStatistics(props) {
-    if (!props.statistics) {
+function ChannelStatistics({statistics}) {
+    if (!statistics) {
         return <></>
     }
-    let stats = props.statistics;
 
     return (
         <>
             <Header as='h1'>Statistics</Header>
             <Statistic>
-                <Statistic.Value>{stats.video_count}</Statistic.Value>
-                <Statistic.Label>Videos</Statistic.Label>
+                <StatisticValue>{statistics.video_count}</StatisticValue>
+                <StatisticLabel>Videos</StatisticLabel>
             </Statistic>
             <Statistic>
-                <Statistic.Value>{humanFileSize(stats.size, true)}</Statistic.Value>
-                <Statistic.Label>Total Size</Statistic.Label>
+                <StatisticValue>{humanFileSize(statistics.size, true)}</StatisticValue>
+                <StatisticLabel>Total Size</StatisticLabel>
             </Statistic>
             <Statistic>
-                <Statistic.Value>{humanFileSize(stats.largest_video, true)}</Statistic.Value>
-                <Statistic.Label>Largest Video</Statistic.Label>
+                <StatisticValue>{humanFileSize(statistics.largest_video, true)}</StatisticValue>
+                <StatisticLabel>Largest Video</StatisticLabel>
             </Statistic>
         </>
     )
 }
 
 
-class ChannelPage extends APIForm {
+function ChannelPage({create, header}) {
+    const [loading, setLoading] = useState(false);
+    const [disabled, setDisabled] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [validRegex, setValidRegex] = useState(true);
+    const [activeIndex, setActiveIndex] = useState(-1);
+    const [errors, setErrors] = useState({});
+    const [error, setError] = useState(false);
+    const [success, setSuccess] = useState(false);
+    const [messageHeader, setMessageHeader] = useState();
+    const [messageContent, setMessageContent] = useState();
 
-    constructor(props) {
-        super(props);
+    const navigate = useNavigate();
+    const {channelId} = useParams();
+    const {channel, changeValue, fetchChannel} = useChannel(channelId);
 
-        this.state = {
-            ...this.state,
-            deleteOpen: false,
-            validRegex: true,
-            original: {},
-            activeIndex: -1,
-            inputs: {
-                name: '',
-                directory: '',
-                mkdir: false,
-                url: '',
-                match_regex: '',
-                download_frequency: null,
-            },
-            statistics: null,
-            errors: {},
-        };
-
-        this.mkdir = React.createRef();
+    if (!channel) {
+        return <Loader active/>;
     }
 
-    async componentDidMount() {
-        if (!this.props.create) {
-            let channel_id = this.props.match.params.channel_id;
-            let channel = await getChannel(channel_id);
-            let statistics = channel.statistics;
-            if (statistics) {
-                this.setState({statistics: statistics || null});
-            }
-            this.initFormValues(channel);
+    const checkRegex = async (e, {value}) => {
+        changeValue('match_regex', value);
+        const valid = await validateRegex(value);
+        setValidRegex(valid);
+    }
+
+    const handleCheckbox = (e, {name, checked}) => {
+        if (e) {
+            e.preventDefault();
         }
+        changeValue(name, checked);
     }
 
-    checkRegex = async (event, {name, value}) => {
-        event.persist();
-        await this.handleInputChange(event, {name, value});
-        let valid = await validateRegex(value);
-        this.setState({validRegex: valid});
-    }
-
-    handleConfirm = async () => {
-        this.setState({deleteOpen: false});
-        let response = await deleteChannel(this.props.match.params.channel_id);
-        if (response.status === 204) {
-            this.props.history.push({
-                pathname: '/videos/channel'
-            });
-        } else {
-            this.setError('Failed to delete', 'Failed to delete this channel, check logs.');
+    const handleInputChange = (e, {name, value}) => {
+        if (e) {
+            e.preventDefault();
         }
+        changeValue(name, value);
     }
 
-    handleSubmit = async (e) => {
+    const setErrorMessage = (header, message) => {
+        setError(true);
+        setSuccess(false);
+        setMessageHeader(header);
+        setMessageContent(message);
+    }
+
+    const setSuccessMessage = (header, message) => {
+        setError(false);
+        setSuccess(true);
+        setMessageHeader(header);
+        setMessageContent(message);
+    }
+
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        let {inputs} = this.state;
-        inputs['mkdir'] = inputs['mkdir'] || false;
+        const body = {
+            name: channel.name,
+            directory: channel.directory,
+            mkdir: channel.mkdir,
+            url: channel.url,
+            download_frequency: channel.download_frequency,
+            match_regex: channel.match_regex,
+        };
         let response = null;
         try {
-            this.setLoading();
+            setLoading(true);
 
-            if (this.props.create) {
-                response = await createChannel(inputs);
+            if (create !== undefined) {
+                response = await createChannel(body);
             } else {
-                response = await updateChannel(this.props.match.params.channel_id, inputs);
+                response = await updateChannel(channelId, body);
             }
-
+        } catch (e) {
+            console.error(e);
+            toast({
+                type: 'error',
+                title: 'Unexpected server response',
+                description: 'Could not save channel',
+                time: 5000,
+            });
         } finally {
-            this.clearLoading();
+            setLoading(false);
         }
 
-        if (response === null) {
-            throw Error('Response was null');
-        }
-
-        if (response.status >= 200 && response.status < 300) {
+        if (response && response.status >= 200 && response.status < 300) {
             let location = response.headers.get('Location');
             let channelResponse = await fetch(location);
             let data = await channelResponse.json();
             let channel = data['channel'];
 
             if (response.status === 201) {
-                this.setSuccess(
+                setSuccessMessage(
                     'Channel created',
                     <span>
                         Your channel was created.  View it <Link to={`/videos/channel/${channel.id}/edit`}>here</Link>
                     </span>
                 );
             } else {
-                this.initFormValues(channel);
-                this.setSuccess('Channel updated', 'Your channel was updated');
-                this.checkDirty();
+                await fetchChannel();
+                setSuccessMessage('Channel updated', 'Your channel was updated');
             }
 
-        } else {
+        } else if (response) {
             // Some error occurred.
             let error = await response.json();
             let cause = error.cause;
             if (error.code === 3 || (cause && cause.code === 3)) {
-                this.setError(
+                setErrorMessage(
                     'Invalid directory',
                     'This directory does not exist.',
                     'directory',
                 );
             } else if (cause && cause.code === 7) {
-                this.setError(
+                setErrorMessage(
                     'Invalid directory',
                     'This directory is already used by another channel',
                     'directory',
                 );
             } else if (cause && cause.code === 5) {
-                this.setError(
+                setErrorMessage(
                     'Invalid name',
                     'This channel name is already taken',
                     'name',
                 );
             } else {
-                this.setError('Invalid channel', 'Unable to save channel.  See logs.');
+                setErrorMessage('Invalid channel', 'Unable to save channel.  See logs.');
             }
+        } else {
+            console.error('Did not get a response for channel!');
         }
     }
 
-    handleAdvancedClick = (e, titleProps) => {
-        const {index} = titleProps
-        const {activeIndex} = this.state
-        const newIndex = activeIndex === index ? -1 : index
-
-        this.setState({activeIndex: newIndex})
+    const handleAdvancedClick = (e, {index}) => {
+        setActiveIndex(activeIndex === index ? -1 : index);
     }
 
-    downloadChannel = async (e) => {
+    const handleDownloadChannel = async (e) => {
         e.preventDefault();
-        return await downloadChannel(this.props.match.params.channel_id);
+        return await downloadChannel(channelId);
     }
 
-    refreshChannel = async (e) => {
+    const handleRefreshChannel = async (e) => {
         e.preventDefault();
-        return await refreshChannel(this.props.match.params.channel_id);
+        return await refreshChannel(channelId);
     }
 
-    handleDeleteButton = (e) => {
+    const handleDeleteConfirm = async () => {
+        setDeleteOpen(false);
+        let response = await deleteChannel(channelId);
+        if (response.status === 204) {
+            navigate('/videos/channel');
+        } else {
+            setSuccessMessage('Failed to delete', 'Failed to delete this channel, check logs.');
+        }
+    }
+
+    const handleDeleteButton = (e) => {
         e.preventDefault();
-        this.setState({deleteOpen: true});
+        setDeleteOpen(true);
     }
 
-    handleCancel = (e) => {
+    const handleCancel = (e) => {
         e.preventDefault();
-        this.props.history.goBack();
+        navigate(-1);
     }
 
-    render() {
-        return (
-            <Container fluid>
-                <Header as="h1">{this.props.header}</Header>
-                <WROLModeMessage content='Channel page is disabled while WROL Mode is enabled.'/>
-                <Form
-                    id="editChannel"
-                    onSubmit={this.handleSubmit}
-                    error={this.state.error}
-                    success={this.state.success}
-                    autoComplete="off"
+    return <Container fluid>
+        <Header as="h1">{header}</Header>
+        <WROLModeMessage content='Channel page is disabled while WROL Mode is enabled.'/>
+        <Form
+            id="editChannel"
+            onSubmit={handleSubmit}
+            error={error}
+            success={success}
+            autoComplete="off"
+        >
+            <FormGroup>
+                <FormField width={8}>
+                    <FormInput required
+                               label="Channel Name"
+                               name="name"
+                               type="text"
+                               placeholder="Short Channel Name"
+                               disabled={disabled}
+                               error={errors.name}
+                               value={channel.name}
+                               onChange={(e, {value}) => changeValue('name', value)}
+                    />
+                </FormField>
+                <FormField width={8}>
+                    <label>
+                        Directory <RequiredAsterisk/>
+                    </label>
+                    <DirectoryInput required
+                                    disabled={create === undefined}
+                                    value={channel.directory}
+                                    setInput={value => changeValue('directory', value)}
+                                    placeholder='videos/channel directory'
+                    />
+                </FormField>
+            </FormGroup>
+            {
+                create !== undefined &&
+                <FormGroup>
+                    <FormField width={8}/>{/* Empty field*/}
+                    <FormField width={8}>
+                        <FormField>
+                            <Toggle
+                                toggle
+                                label="Create this directory, if it doesn't exist."
+                                name="mkdir"
+                                disabled={disabled}
+                                error={errors.mkdir}
+                                checked={channel.mkdir}
+                                onChange={i => {
+                                    handleCheckbox(null, {name: 'mkdir', checked: i})
+                                }}
+                            />
+                        </FormField>
+                    </FormField>
+                </FormGroup>
+            }
+            <FormGroup>
+                <FormField width={16}>
+                    <FormInput
+                        label="URL"
+                        name="url"
+                        type="url"
+                        disabled={disabled}
+                        placeholder='https://example.com/channel/videos'
+                        error={errors.url}
+                        value={channel.url}
+                        onChange={handleInputChange}
+                    />
+                </FormField>
+            </FormGroup>
+
+            <FormGroup>
+                <FormField>
+                    <label>Download Frequency</label>
+                    <Dropdown selection
+                              name='download_frequency'
+                              placeholder='Frequency'
+                              error={errors.download_frequency}
+                              value={channel.download_frequency}
+                              disabled={disabled || !channel.url}
+                              options={frequencyOptions}
+                              onChange={handleInputChange}
+                    />
+                </FormField>
+            </FormGroup>
+
+            <Accordion style={{marginBottom: '1em'}}>
+                <AccordionTitle
+                    onClick={handleAdvancedClick}
+                    index={0}
+                    active={activeIndex === 0}
                 >
-
-                    <Form.Group>
-                        <Form.Field width={8}>
-                            <Form.Input
-                                required
-                                label="Channel Name"
-                                name="name"
+                    <Icon name='dropdown'/>
+                    Advanced Settings
+                </AccordionTitle>
+                <AccordionContent active={activeIndex === 0}>
+                    <Segment secondary>
+                        <Header as="h4">
+                            The following settings are encouraged by default, modify them at your own risk.
+                        </Header>
+                        <FormField>
+                            <FormInput
+                                label="Title Match Regex"
+                                name="match_regex"
                                 type="text"
-                                placeholder="Short Channel Name"
-                                disabled={this.state.disabled}
-                                error={this.state.errors.name}
-                                value={this.state.inputs.name}
-                                onChange={this.handleInputChange}
+                                disabled={disabled}
+                                error={!validRegex}
+                                placeholder='.*([Nn]ame Matching).*'
+                                value={channel.match_regex}
+                                onChange={checkRegex}
                             />
-                        </Form.Field>
-                        <Form.Field width={8}>
-                            <label>
-                                Directory <RequiredAsterisk/>
-                            </label>
-                            <DirectoryInput
-                                disabled={!this.props.create}
-                                value={this.state.inputs.directory}
-                                setInput={this.handleInputChange}
-                            />
-                        </Form.Field>
-                    </Form.Group>
-                    {
-                        this.props.create &&
-                        <Form.Group>
-                            <Form.Field width={8}/>
-                            <Form.Field width={8}>
-                                <Form.Field>
-                                    <Checkbox
-                                        toggle
-                                        label="Create this directory, if it doesn't exist."
-                                        name="mkdir"
-                                        ref={this.mkdir}
-                                        disabled={this.state.disabled}
-                                        error={this.state.errors.mkdir}
-                                        checked={this.state.inputs.mkdir}
-                                        onClick={() => this.handleCheckbox(this.mkdir)}
-                                    />
-                                </Form.Field>
-                            </Form.Field>
-                        </Form.Group>
-                    }
-                    <Form.Group>
-                        <Form.Field width={16}>
-                            <Form.Input
-                                label="URL"
-                                name="url"
-                                type="url"
-                                disabled={this.state.disabled}
-                                placeholder='https://example.com/channel/videos'
-                                error={this.state.errors.url}
-                                value={this.state.inputs.url}
-                                onChange={this.handleInputChange}
-                            />
-                        </Form.Field>
-                    </Form.Group>
+                        </FormField>
+                    </Segment>
+                </AccordionContent>
+            </Accordion>
 
-                    <Form.Group>
-                        <Form.Field>
-                            <label>Download Frequency</label>
-                            <Dropdown selection clearable
-                                      name='download_frequency'
-                                      disabled={this.state.disabled}
-                                      placeholder='Frequency'
-                                      error={this.state.errors.download_frequency}
-                                      value={this.state.inputs.download_frequency}
-                                      options={frequencyOptions}
-                                      onChange={this.handleInputChange}
-                            />
-                        </Form.Field>
-                    </Form.Group>
+            <Container>
+                <Message error
+                         header={messageHeader}
+                         content={messageContent}
+                />
+                <Message success
+                         header={messageHeader}
+                         content={messageContent}
+                />
 
-                    <Accordion>
-                        <Accordion.Title
-                            onClick={this.handleAdvancedClick}
-                            index={0}
-                            active={this.state.activeIndex === 0}
-                        >
-                            <Icon name='dropdown'/>
-                            Advanced Settings
-                        </Accordion.Title>
-                        <Accordion.Content
-                            active={this.state.activeIndex === 0}
-                        >
-                            <Segment secondary>
-                                <Header as="h4">
-                                    The following settings are encouraged by default, modify them at your own risk.
-                                </Header>
-                                <Form.Field>
-                                    <Form.Input
-                                        label="Title Match Regex"
-                                        name="match_regex"
-                                        type="text"
-                                        disabled={this.state.disabled}
-                                        error={!this.state.validRegex}
-                                        placeholder='.*([Nn]ame Matching).*'
-                                        value={this.state.inputs.match_regex}
-                                        onChange={this.checkRegex}
-                                    />
-                                </Form.Field>
-                            </Segment>
-                        </Accordion.Content>
-                    </Accordion>
+                <Button
+                    color="green"
+                    type="submit"
+                    floated='right'
+                >
+                    {disabled ? <Loader active inline/> : 'Save'}
+                </Button>
 
-                    <Container>
-                        <Message error
-                                 header={this.state.message_header}
-                                 content={this.state.message_content}
-                        />
-                        <Message success
-                                 header={this.state.message_header}
-                                 content={this.state.message_content}
-                        />
+                <Button
+                    secondary
+                    floated='right'
+                    onClick={handleCancel}
+                >
+                    Cancel
+                </Button>
 
-                        <Button
-                            color="green"
-                            type="submit"
-                            disabled={this.state.disabled || !this.state.dirty}
-                            floated='right'
-                        >
-                            {this.state.disabled ? <Loader active inline/> : 'Save'}
+                {!create &&
+                    <>
+                        <Button color='red' onClick={handleDeleteButton}>
+                            Delete
                         </Button>
-
+                        <Confirm
+                            open={deleteOpen}
+                            content='Are you sure you want to delete this channel?  No video files will be deleted.'
+                            confirmButton='Delete'
+                            onCancel={() => setDeleteOpen(false)}
+                            onConfirm={handleDeleteConfirm}
+                        />
                         <Button
-                            secondary
-                            floated='right'
-                            onClick={this.handleCancel}
+                            color='blue'
+                            onClick={handleDownloadChannel}
+                            disabled={!channel.url || !channel.download_frequency}
                         >
-                            Cancel
+                            Download
                         </Button>
-
-                        {!this.props.create &&
-                            <>
-                                <Button color='red' onClick={this.handleDeleteButton}>
-                                    Delete
-                                </Button>
-                                <Confirm
-                                    open={this.state.deleteOpen}
-                                    content='Are you sure you want to delete this channel?  No video files will be deleted.'
-                                    confirmButton='Delete'
-                                    onCancel={() => this.setState({deleteOpen: false})}
-                                    onConfirm={this.handleConfirm}
-                                />
-                                <Button color='blue' onClick={this.downloadChannel}>
-                                    Download
-                                </Button>
-                                <Button inverted color='blue' onClick={this.refreshChannel}>
-                                    Refresh
-                                </Button>
-                            </>
-                        }
-                    </Container>
-                </Form>
-                {<ChannelStatistics statistics={this.state.statistics}/>}
+                        <Button color='blue' onClick={handleRefreshChannel}>
+                            Refresh
+                        </Button>
+                        <Button onClick={() => navigate(`/videos/channel/${channel.id}/video`)}>
+                            Videos
+                        </Button>
+                    </>
+                }
             </Container>
-        )
-    }
+        </Form>
+        {channel.statistics && <ChannelStatistics statistics={channel.statistics}/>}
+    </Container>
 }
 
 export function EditChannel(props) {
-    return (
-        <ChannelPage header="Edit Channel" {...props}/>
-    )
+    return <ChannelPage header="Edit Channel" {...props}/>;
 }
 
 export function NewChannel(props) {
-    return (
-        <ChannelPage header='New Channel' {...props} create/>
-    )
+    return <ChannelPage header='New Channel' {...props} create/>
 }
 
-class ChannelRow extends React.Component {
-    constructor(props) {
-        super(props);
-        this.editTo = `/videos/channel/${props.channel.id}/edit`;
-        this.videosTo = `/videos/channel/${props.channel.id}/video`;
-    }
+function ChannelRow({channel}) {
+    const navigate = useNavigate();
 
-    render() {
-        let channel = this.props.channel;
-        return (
-            <Table.Row>
-                <Table.Cell>
-                    <Link to={this.videosTo}>{channel.name}</Link>
-                </Table.Cell>
-                <Table.Cell>
-                    {channel.video_count}
-                </Table.Cell>
-                <Table.Cell>
-                    {channel.url && channel.info_date ? secondsToDate(channel.info_date) : null}
-                </Table.Cell>
-                <Table.Cell>
-                    {channel.url && channel.next_download ? secondsToDate(channel.next_download) : null}
-                </Table.Cell>
-                <Table.Cell>
-                    {channel.url && channel.download_frequency ? secondsToFrequency(channel.download_frequency) : null}
-                </Table.Cell>
-                <Table.Cell textAlign='right'>
-                    <Link className="ui button secondary" to={this.editTo}>Edit</Link>
-                </Table.Cell>
-            </Table.Row>
-        )
-    }
+    const editTo = `/videos/channel/${channel.id}/edit`;
+    const videosTo = `/videos/channel/${channel.id}/video`;
+
+    return <TableRow>
+        <TableCell>
+            <Link to={videosTo}>{channel.name}</Link>
+        </TableCell>
+        <TableCell>
+            {channel.video_count}
+        </TableCell>
+        <TableCell>
+            {channel.url && channel.info_date ? secondsToDate(channel.info_date) : null}
+        </TableCell>
+        <TableCell>
+            {channel.url && channel.download_frequency ? secondsToFrequency(channel.download_frequency) : null}
+        </TableCell>
+        <TableCell textAlign='right'>
+            <Button secondary onClick={() => navigate(editTo)}>Edit</Button>
+        </TableCell>
+    </TableRow>;
 }
 
-class MobileChannelRow extends ChannelRow {
-
-    render() {
-        let channel = this.props.channel;
-
-        return <Table.Row verticalAlign='top'>
-            <Table.Cell width={10} colSpan={2}>
-                <p>
-                    <Link as='h3' to={this.videosTo}>
-                        <h3>
-                            {channel.name}
-                        </h3>
-                    </Link>
-                </p>
-                <p>
-                    Last Update: {channel.url && channel.info_date ? secondsToDate(channel.info_date) : null}
-                </p>
-                <p>
-                    Next Update: {channel.url && channel.next_download ? secondsToDate(channel.next_download) : null}
-                </p>
-                <p>
-                    Videos: {channel.video_count}
-                </p>
-                <p>
-                    Frequency: {channel.url && channel.download_frequency ?
-                    secondsToFrequency(channel.download_frequency) : null}
-                </p>
-            </Table.Cell>
-            <Table.Cell width={6} colSpan={2} textAlign='right'>
-                <p>
-                    <Link className="ui button secondary" to={this.editTo}>Edit</Link>
-                </p>
-            </Table.Cell>
-        </Table.Row>;
-    }
+function MobileChannelRow({channel}) {
+    const editTo = `/videos/channel/${channel.id}/edit`;
+    const videosTo = `/videos/channel/${channel.id}/video`;
+    return <TableRow verticalAlign='top'>
+        <TableCell width={10} colSpan={2}>
+            <Link as='h3' to={videosTo}>
+                <h3>
+                    {channel.name}
+                </h3>
+            </Link>
+            <p>
+                Videos: {channel.video_count}
+            </p>
+        </TableCell>
+        <TableCell width={6} colSpan={2} textAlign='right'>
+            <p>
+                <Link className="ui button secondary" to={editTo}>Edit</Link>
+            </p>
+        </TableCell>
+    </TableRow>;
 }
 
-function NewChannelButton() {
-    return (
+
+export function Channels() {
+
+    const {channels} = useChannels();
+    const [searchStr, setSearchStr] = useState('');
+
+    const handleInputChange = (e, {value}) => {
+        e.preventDefault();
+        setSearchStr(value);
+    }
+
+    let header = <Grid columns={2} style={{marginBottom: '1em'}}>
+        <Grid.Column>
+            <Header as='h1'>Channels</Header>
+        </Grid.Column>
+        <Grid.Column textAlign='right'>
+            <Input
+                icon='search'
+                placeholder='Name filter...'
+                size="large"
+                name="filterStr"
+                value={searchStr}
+                onChange={handleInputChange}/>
+        </Grid.Column>
         <Grid.Row>
             <Grid.Column/>
             <Grid.Column textAlign='right'>
@@ -548,133 +536,67 @@ function NewChannelButton() {
                     <Button secondary>New Channel</Button>
                 </Link>
             </Grid.Column>
-        </Grid.Row>
-    );
-}
+        </Grid.Row>;
+    </Grid>;
 
-export class Channels extends React.Component {
+    let tableHeader = <TableHeader>
+        <TableRow>
+            <TableHeaderCell width={8}>Name</TableHeaderCell>
+            <TableHeaderCell width={2}>Videos</TableHeaderCell>
+            <TableHeaderCell width={2}>Last Update</TableHeaderCell>
+            <TableHeaderCell width={2}>Frequency</TableHeaderCell>
+            <TableHeaderCell width={2} colSpan={3} textAlign='center'>Manage</TableHeaderCell>
+        </TableRow>
+    </TableHeader>;
 
-    initialState = {
-        channels: null,
-        value: '',
-        results: [],
-    };
-
-    constructor(props) {
-        super(props);
-        this.state = this.initialState;
-    }
-
-    async componentDidMount() {
-        try {
-            let channels = await getChannels();
-            if (channels) {
-                this.setState({channels, results: channels});
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    handleSearchChange = async (e, {value}) => {
-        this.setState({value});
-
-        setTimeout(() => {
-            if (this.state.value.length < 1) {
-                return this.setState({value, results: this.state.channels});
-            }
-
-            const re = new RegExp(_.escapeRegExp(this.state.value), 'i');
-            const isMatch = (result) => re.test(result.name);
-
-            this.setState({
-                results: _.filter(this.state.channels, isMatch),
-            });
-        }, 300);
-    };
-
-    render() {
-        let header = (
-            <Grid columns={2} style={{marginBottom: '1em'}}>
-                <Grid.Column>
-                    <Header as='h1'>Channels</Header>
-                </Grid.Column>
-                <Grid.Column textAlign='right'>
-                    <Form onSubmit={this.handleSearch}>
-                        <Input
-                            icon='search'
-                            placeholder='Name filter...'
-                            size="large"
-                            name="filterStr"
-                            value={this.state.value}
-                            onChange={this.handleSearchChange}/>
-                    </Form>
-                </Grid.Column>
-                <NewChannelButton/>
-            </Grid>
-        );
-
-        let tableHeader = (
-            <Table.Header>
-                <Table.Row>
-                    <Table.HeaderCell width={8}>Name</Table.HeaderCell>
-                    <Table.HeaderCell width={2}>Videos</Table.HeaderCell>
-                    <Table.HeaderCell width={2}>Last Update</Table.HeaderCell>
-                    <Table.HeaderCell width={2}>Next Update</Table.HeaderCell>
-                    <Table.HeaderCell width={2}>Frequency</Table.HeaderCell>
-                    <Table.HeaderCell width={2} colSpan={3} textAlign='center'>Manage</Table.HeaderCell>
-                </Table.Row>
-            </Table.Header>
-        );
-
-        let body;
-        if (this.state.channels === null) {
-            // Placeholders while fetching
-            body = <Table striped basic size='large'>
+    if (channels === null) {
+        // Placeholders while fetching
+        return <>
+            {header}
+            <Table compact striped basic size='large'>
                 {tableHeader}
-                <Table.Body>
-                    <Table.Row>
-                        <Table.Cell><ChannelPlaceholder/></Table.Cell>
-                        <Table.Cell/>
-                        <Table.Cell/>
-                        <Table.Cell/>
-                    </Table.Row>
-                </Table.Body>
+                <TableBody>
+                    <TableRow>
+                        <TableCell><ChannelPlaceholder/></TableCell>
+                        <TableCell/>
+                        <TableCell/>
+                        <TableCell/>
+                    </TableRow>
+                </TableBody>
             </Table>
-        } else if (this.state.channels.length === 0) {
-            body = <Message>
+        </>
+    } else if (channels.length === 0) {
+        return <>
+            {header}
+            <Message>
                 <Message.Header>No channels exist yet!</Message.Header>
                 <Message.Content><Link to='/videos/channel/new'>Create one.</Link></Message.Content>
             </Message>
-        } else {
-            body = (
-                <>
-                    <Responsive minWidth={770}>
-                        <Table striped basic size='large'>
-                            {tableHeader}
-                            <Table.Body>
-                                {this.state.results.map((channel) => <ChannelRow key={channel.id}
-                                                                                 channel={channel}/>)}
-                            </Table.Body>
-                        </Table>
-                    </Responsive>
-                    <Responsive maxWidth={769}>
-                        <Table striped basic unstackable size='small'>
-                            <Table.Body>
-                                {this.state.results.map((channel) =>
-                                    <MobileChannelRow key={channel.id} channel={channel}/>)}
-                            </Table.Body>
-                        </Table>
-                    </Responsive>
-                </>
-            )
-        }
-
-        return (
-            <>
-                {header}
-                {body}
-            </>
-        )
+        </>
     }
+
+    let filteredChannels = channels;
+    if (searchStr) {
+        const re = new RegExp(_.escapeRegExp(searchStr), 'i');
+        filteredChannels = channels.filter(i => re.test(i['name']));
+    }
+
+    return <>
+        {header}
+        <Responsive minWidth={770}>
+            <Table compact striped size='large'>
+                {tableHeader}
+                <TableBody>
+                    {filteredChannels.map(channel => <ChannelRow key={channel.id} channel={channel}/>)}
+                </TableBody>
+            </Table>
+        </Responsive>
+        <Responsive maxWidth={769}>
+            <Table striped unstackable size='small'>
+                <TableBody>
+                    {filteredChannels.map(channel => <MobileChannelRow key={channel.id} channel={channel}/>)}
+                </TableBody>
+            </Table>
+        </Responsive>
+    </>
 }

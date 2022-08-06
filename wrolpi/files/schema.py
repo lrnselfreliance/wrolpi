@@ -14,6 +14,13 @@ class DeleteRequest:
 
 @dataclass
 class FilesSearchRequest:
-    search_str: str
+    search_str: Optional[str] = None
     limit: Optional[int] = 20
     offset: Optional[int] = 0
+    mimetype: Optional[str] = None
+    model: Optional[str] = None
+
+
+@dataclass
+class DirectoryRefreshRequest:
+    directory: str = None

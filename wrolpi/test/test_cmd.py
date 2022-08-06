@@ -2,7 +2,6 @@ import os
 from pathlib import Path
 
 from wrolpi import cmd
-from wrolpi.test.common import skip_circleci
 
 
 def test_which(test_directory):

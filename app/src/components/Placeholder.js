@@ -1,21 +1,29 @@
-import {Card, Placeholder} from "semantic-ui-react";
-import React from "react";
+import {Card, PlaceholderImage, PlaceholderLine} from "semantic-ui-react";
+import React, {useContext} from "react";
+import {ThemeContext} from "../contexts/contexts";
+import {Placeholder} from "./Theme";
+
+export function CardPlacholder() {
+    const {s} = useContext(ThemeContext);
+
+    return <Card>
+        <Placeholder>
+            <PlaceholderImage rectangular/>
+        </Placeholder>
+        <Card.Content {...s}>
+            <Placeholder>
+                <PlaceholderLine/>
+                <PlaceholderLine/>
+                <PlaceholderLine/>
+            </Placeholder>
+        </Card.Content>
+    </Card>
+}
 
 export function VideoPlaceholder() {
     return (
         <Card.Group doubling stackable>
-            <Card>
-                <Placeholder>
-                    <Placeholder.Image rectangular/>
-                </Placeholder>
-                <Card.Content>
-                    <Placeholder>
-                        <Placeholder.Line/>
-                        <Placeholder.Line/>
-                        <Placeholder.Line/>
-                    </Placeholder>
-                </Card.Content>
-            </Card>
+            <CardPlacholder/>
         </Card.Group>
     )
 }
@@ -23,29 +31,8 @@ export function VideoPlaceholder() {
 export function ChannelPlaceholder() {
     return (
         <Placeholder>
-            <Placeholder.Line length='long'/>
-            <Placeholder.Line length='short'/>
+            <PlaceholderLine length='long'/>
+            <PlaceholderLine length='short'/>
         </Placeholder>
-    )
-}
-
-export function ArchivePlaceholder() {
-    return (
-        <Card.Group doubling stackable>
-            <Card>
-                <Placeholder>
-                    <Placeholder.Image rectangular/>
-                </Placeholder>
-                <Card.Content>
-                    <Placeholder>
-                        <Placeholder.Line/>
-                        <Placeholder.Line/>
-                    </Placeholder>
-                    <Placeholder style={{height: 40, width: 40}}>
-                        <Placeholder.Image rectangular/>
-                    </Placeholder>
-                </Card.Content>
-            </Card>
-        </Card.Group>
     )
 }

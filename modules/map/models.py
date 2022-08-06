@@ -35,5 +35,5 @@ class MapFile(Base, ModelHelper):
             'path': self.path,
             'imported': self.imported,
             'size': self.size,
-            'time_to_import': dates.seconds_to_timestamp(seconds_to_import(self.path.path, self.size)),
+            'time_to_import': dates.seconds_to_timestamp(seconds_to_import(self.path, self.size)),
         }

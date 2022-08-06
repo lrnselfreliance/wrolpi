@@ -1,6 +1,4 @@
-import inspect
-import multiprocessing
-from functools import wraps
+import wrolpi.files.api  # noqa  Import from files so the blueprint is attached.
 
 BEFORE_STARTUP_FUNCTIONS = []
 
@@ -20,32 +18,3 @@ def after_startup(func: callable):
     from .root_api import api_app
     api_app.after_server_start(func)
     return func
-
-
-def limit_concurrent(limit: int):
-    """
-    Wrapper that limits the amount of concurrently running functions.
-    """
-    sema = multiprocessing.Semaphore(value=limit)
-
-    def wrapper(func: callable):
-        if inspect.iscoroutinefunction(func):
-            @wraps(func)
-            async def wrapped(*a, **kw):
-                acquired = sema.acquire(block=False)
-                if not acquired:
-                    return
-                return await func(*a, **kw)
-
-            return wrapped
-        else:
-            @wraps(func)
-            def wrapped(*a, **kw):
-                acquired = sema.acquire(block=False)
-                if not acquired:
-                    return
-                return func(*a, **kw)
-
-            return wrapped
-
-    return wrapper

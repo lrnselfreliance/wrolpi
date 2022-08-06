@@ -7,21 +7,22 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime
+from functools import partial
 from itertools import groupby
 from typing import Iterator, Optional, Tuple, List
 
-import aiohttp
 from bs4 import BeautifulSoup
 from selenium import webdriver
-from sqlalchemy.orm import Session
 
 from modules.archive.models import Domain, Archive
 from wrolpi.cmd import which
-from wrolpi.common import get_media_directory, logger, chunks, extract_domain, chdir, escape_file_name, walk, \
-    aiohttp_post
+from wrolpi.common import get_media_directory, logger, extract_domain, chdir, escape_file_name, walk, \
+    aiohttp_post, match_paths_to_suffixes, iterify
 from wrolpi.dates import now, Seconds, local_timezone
-from wrolpi.db import get_db_session, get_db_curs, get_ranked_models, optional_session
-from wrolpi.errors import InvalidDomain, UnknownURL, InvalidArchive
+from wrolpi.db import get_db_session, get_db_curs, optional_session
+from wrolpi.errors import UnknownArchive, InvalidOrderBy
+from wrolpi.files.lib import handle_search_results
+from wrolpi.files.models import File
 from wrolpi.vars import DOCKERIZED, PYTEST
 
 logger = logger.getChild(__name__)
@@ -284,12 +285,11 @@ async def do_archive(url: str) -> Archive:
         archive = Archive(
             title=title,
             archive_datetime=now(),
-            singlefile_path=archive_files.singlefile,
-            readability_path=archive_files.readability,
-            readability_json_path=archive_files.readability_json,
-            readability_txt_path=archive_files.readability_txt,
-            screenshot_path=archive_files.screenshot,
-            contents=readability_txt,
+            singlefile_file=File(path=archive_files.singlefile, model='archive'),
+            readability_file=File(path=archive_files.readability) if archive_files.readability else None,
+            readability_json_file=File(path=archive_files.readability_json) if archive_files.readability_json else None,
+            readability_txt_file=File(path=archive_files.readability_txt) if archive_files.readability_txt else None,
+            screenshot_file=File(path=archive_files.screenshot) if archive_files.screenshot else None,
             url=url,
             domain_id=domain.id,
         )
@@ -323,19 +323,12 @@ def get_title_from_html(html: str, url: str = None) -> str:
         logger.info(f'Unable to extract title {url}')
 
 
-def get_domain(session, domain: str) -> Domain:
-    domain_ = session.query(Domain).filter_by(domain=domain).one_or_none()
-    if not domain_:
-        raise InvalidDomain(f'Invalid domain: {domain}')
-    return domain_
-
-
 @optional_session
 def get_archive(session, archive_id: int) -> Archive:
     """Get an Archive."""
     archive = session.query(Archive).filter_by(id=archive_id).one_or_none()
     if not archive:
-        raise InvalidArchive(f'Invalid archive id: {archive_id}')
+        raise UnknownArchive(f'Could not find archive with id: {archive_id}')
     return archive
 
 
@@ -344,7 +337,7 @@ def delete_archive(archive_id: int):
     with get_db_session(commit=True) as session:
         archive: Archive = session.query(Archive).filter_by(id=archive_id).one_or_none()
         if not archive:
-            raise UnknownURL(f'Unknown Archive with id: {archive_id}')
+            raise UnknownArchive(f'Unknown Archive with id: {archive_id}')
 
         # Delete any files associated with this URL.
         archive.delete()
@@ -476,95 +469,13 @@ def is_archive_file(path: pathlib.Path) -> bool:
     return path.is_file() and path.suffix.lower() in ARCHIVE_SUFFIXES and bool(ARCHIVE_MATCHER.match(path.name))
 
 
-def _refresh_archives():
+def is_singlefile_file(path: pathlib.Path) -> bool:
     """
-    Search the Archives directory for archive files, update the database if new files are found.  Remove any orphan
-    URLs or Domains.
+    Archive singlefile files are expected to start with the following: %Y-%m-%d-%H-%M-%S
+    they must end with .html, but never with .readability.html.
     """
-    archive_directory = get_archive_directory()
-
-    # TODO remove this later when everyone has migrated their files.
-    migrate_archive_files()
-
-    singlefile_paths = set()
-    for domain_directory in filter(lambda i: i.is_dir(), archive_directory.iterdir()):
-        logger.debug(f'Refreshing directory: {domain_directory}')
-        all_archives_files = filter(is_archive_file, walk(domain_directory))
-        archive_groups = group_archive_files(all_archives_files)
-        archive_groups = list(archive_groups)
-        archive_count = 0
-        for chunk in chunks(archive_groups, 20):
-            with get_db_session(commit=True) as session:
-                for dt, archive_files in chunk:
-                    archive_count += 1
-                    singlefile_paths.add(str(archive_files.singlefile))
-                    upsert_archive(dt, archive_files, session)
-
-        if archive_count:
-            logger.info(f'Inserted/updated {archive_count} archives in {domain_directory}')
-
-    singlefile_paths = list(singlefile_paths)
-    with get_db_curs(commit=True) as curs:
-        curs.execute('DELETE FROM archive WHERE singlefile_path != ALL(%s)', (singlefile_paths,))
-
-    with get_db_curs(commit=True) as curs:
-        stmt = '''
-            DELETE FROM domains WHERE
-                id NOT IN (select distinct domain_id from archive)
-            RETURNING domains.id
-        '''
-        curs.execute(stmt)
-        domains = list(map(dict, curs.fetchall()))
-        logger.info(f'Deleted {len(domains)} Domains')
-
-    with get_db_session(commit=True) as session:
-        # Get all archives that have no text contents, but have txt files.
-        archives = session.query(Archive).filter(
-            Archive.contents == None,  # noqa
-            Archive.readability_txt_path != None,
-        ).all()
-        for archive in archives:
-            with archive.readability_txt_path.path.open('rt') as fh:
-                archive.contents = fh.read()
-
-
-async def refresh_archives():
-    _refresh_archives()
-
-
-def upsert_archive(dt: str, archive_files: ArchiveFiles, session: Session):
-    """Get or create an Archive, and it's URL/Domain.  If it already exists, update it with these new files."""
-    # Extract the URL from the JSON.  Fail if this is not possible.
-    try:
-        with archive_files.readability_json.open() as fh:
-            json_contents = json.load(fh)
-            url = json_contents['url']
-            title = json_contents.get('title')
-    except Exception as e:
-        raise InvalidArchive() from e
-
-    domain = get_or_create_domain(session, url)
-    # Get the existing Archive, or create a new one.
-    archive = session.query(Archive).filter_by(singlefile_path=archive_files.singlefile).one_or_none()
-    if not archive:
-        # No archive matches this singlefile_path, create a new one.
-        archive = Archive(url=url, domain_id=domain.id)
-        session.add(archive)
-        session.flush()
-
-    if not archive.title and title:
-        archive.title = title
-    if not archive.title and archive_files.singlefile:
-        # As a last resort, get the title from the HTML.
-        archive.title = get_title_from_html(archive_files.singlefile.read_text(), url)
-
-    # Update the archive with the files that we have.
-    archive.archive_datetime = dt
-    archive.singlefile_path = archive_files.singlefile
-    archive.readability_path = archive_files.readability
-    archive.readability_txt_path = archive_files.readability_txt
-    archive.readability_json_path = archive_files.readability_json
-    archive.screenshot_path = archive_files.screenshot
+    return path.is_file() and path.suffix.lower() == '.html' and not path.name.endswith('.readability.html') \
+           and bool(ARCHIVE_MATCHER.match(path.name))
 
 
 def get_domains():
@@ -581,46 +492,69 @@ def get_domains():
         return domains
 
 
-def search(search_str: str, domain: str, limit: int, offset: int) -> Tuple[List[Archive], int]:
-    with get_db_curs() as curs:
-        columns = 'id, COUNT(*) OVER() AS total'
-        params = dict(offset=offset, limit=limit)
-        wheres = ''
-        order_by = '1 DESC'
+ARCHIVE_ORDERS = {
+    'date': 'a.archive_datetime ASC, LOWER(a.singlefile_path) ASC',
+    '-date': 'a.archive_datetime DESC NULLS LAST, LOWER(a.singlefile_path) DESC',
+    'rank': '2 DESC, a.archive_datetime DESC',
+    '-rank': '2 ASC, a.archive_datetime ASC',
+}
 
-        if search_str:
-            columns = 'id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
-            params['search_str'] = search_str
-            wheres += '\nAND textsearch @@ websearch_to_tsquery(%(search_str)s)'
-            # highest rank, then most recent
-            order_by = '2 DESC, archive_datetime DESC'
 
-        if domain:
-            curs.execute('SELECT id FROM domains WHERE domain=%s', (domain,))
-            try:
-                domain_id = curs.fetchone()[0]
-            except TypeError:
-                # No domains match the provided domain.
-                return [], 0
-            params['domain_id'] = domain_id
-            wheres += '\nAND domain_id = %(domain_id)s'
+def archive_search(search_str: str, domain: str, limit: int, offset: int, order_by: str) -> Tuple[List[Archive], int]:
+    wheres = []
+    params = dict(offset=offset, limit=limit)
+    order = '1 DESC'
 
-        # TODO handle different Archive search orders.
-        stmt = f'''
-            SELECT {columns}
-            FROM archive
-            WHERE
-                singlefile_path IS NOT NULL AND singlefile_path != ''
-                {wheres}
-            ORDER BY {order_by}
-            OFFSET %(offset)s
-            LIMIT %(limit)s
-        '''
-        curs.execute(stmt, params)
-        results = [dict(i) for i in curs.fetchall()]
-        total = results[0]['total'] if results else 0
-        ranked_ids = [i['id'] for i in results]
+    if search_str:
+        columns = 'f.path, ts_rank(f.textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
+        params['search_str'] = search_str
+        wheres.append('\nAND textsearch @@ websearch_to_tsquery(%(search_str)s)')
+        # highest rank, then most recent
+        if not order_by:
+            order = ARCHIVE_ORDERS['rank']
+    else:
+        # No search_str provided, get path and total only.
+        columns = 'f.path, COUNT(*) OVER() AS total'
 
-    results = get_ranked_models(ranked_ids, Archive)
+    if order_by:
+        try:
+            order = ARCHIVE_ORDERS[order_by]
+        except KeyError:
+            raise InvalidOrderBy(f'Invalid order by: {order_by}')
 
+    if domain:
+        params['domain'] = domain
+        wheres.append('AND domain_id = (select id from domains where domains.domain = %(domain)s)')
+
+    wheres = '\n'.join(wheres)
+    stmt = f'''
+        SELECT {columns}
+        FROM archive a
+            LEFT JOIN file f on f.path = a.singlefile_path
+        WHERE
+            a.singlefile_path != ''
+            {wheres}
+        ORDER BY {order}
+        OFFSET %(offset)s
+        LIMIT %(limit)s
+    '''
+    logger.warning(stmt, params)
+
+    results, total = handle_search_results(stmt, params)
     return results, total
+
+
+match_archive_paths = partial(match_paths_to_suffixes, suffix_groups=(
+    ('.readability.html',),
+    ('.html',),
+    ('.readability.json',),
+    ('.readability.txt',),
+    ('.jpg', '.jpeg', '.webp', '.png'),
+))
+
+
+@iterify(tuple)
+def match_archive_files(files: List[File]) -> Tuple[File, File, File, File, File]:
+    archive_paths = match_archive_paths([i.path for i in files])
+    for path in archive_paths:
+        yield next((i for i in files if i.path == path), None)

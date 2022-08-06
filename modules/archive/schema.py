@@ -29,6 +29,7 @@ class ArchiveSearchRequest:
     domain: Optional[str] = None
     offset: Optional[int] = None
     limit: Optional[int] = None
+    order_by: Optional[str] = None
 
 
 @dataclass

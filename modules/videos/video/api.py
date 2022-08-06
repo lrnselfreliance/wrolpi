@@ -25,7 +25,7 @@ logger = logger.getChild(__name__)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 def video_get(_: Request, video_id: int):
     video, previous_video, next_video = lib.get_video_for_app(video_id)
-    return json_response({'video': video, 'prev': previous_video, 'next': next_video})
+    return json_response({'file': video, 'prev': previous_video, 'next': next_video})
 
 
 @video_bp.post('/search')
@@ -40,7 +40,7 @@ async def search(_: Request, body: schema.VideoSearchRequest):
     if body.order_by not in lib.VIDEO_ORDERS:
         raise InvalidOrderBy('Invalid order by')
 
-    videos, videos_total = lib.video_search(
+    files, videos_total = lib.video_search(
         body.search_str,
         body.offset,
         body.limit,
@@ -49,7 +49,7 @@ async def search(_: Request, body: schema.VideoSearchRequest):
         body.filters,
     )
 
-    ret = {'videos': list(videos), 'totals': {'videos': videos_total}}
+    ret = {'files': list(files), 'totals': {'files': videos_total}}
     return json_response(ret)
 
 

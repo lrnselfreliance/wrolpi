@@ -29,9 +29,9 @@ services:
     ports:
       - ${REACT_APP_API-127.0.0.1:8081}:8081
     command: '-vv api --host 0.0.0.0'
-    healthcheck:
-      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8081/api/echo' ]
     user: '${UID-1000}:${GID-1000}'
+#    healthcheck:
+#      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8081/api/echo' ]
 
   archive:
     build:

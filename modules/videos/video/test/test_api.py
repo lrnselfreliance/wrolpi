@@ -1,7 +1,6 @@
 from datetime import timedelta
 from http import HTTPStatus
 from json import dumps
-from unittest import mock
 
 from modules.videos.models import Video
 from modules.videos.video.lib import get_video_for_app
@@ -71,7 +70,7 @@ def test_get_video_prev_next(test_session, channel_factory, video_factory):
 
 def test_get_video_for_app(test_session, simple_channel, simple_video):
     vid, prev, next_ = get_video_for_app(simple_video.id)
-    assert vid['id'] == simple_video.id
+    assert vid['video']['id'] == simple_video.id
 
 
 def test_video_delete(test_session, test_directory, channel_factory, video_factory):
@@ -81,8 +80,8 @@ def test_video_delete(test_session, test_directory, channel_factory, video_facto
     vid2 = video_factory(channel_id=channel2.id, with_video_file=True, with_info_json=True)
     test_session.commit()
 
-    vid1_video_path, vid1_caption_path = vid1.video_path.path, vid1.caption_path.path
-    vid2_video_path, vid2_info_json_path = vid2.video_path.path, vid2.info_json_path.path
+    vid1_video_path, vid1_caption_path = vid1.video_path, vid1.caption_path
+    vid2_video_path, vid2_info_json_path = vid2.video_path, vid2.info_json_path
 
     # No videos have been deleted yet.
     assert vid1_video_path.is_file() and vid1_caption_path.is_file()
@@ -106,36 +105,42 @@ def test_video_delete(test_session, test_directory, channel_factory, video_facto
     assert vid2_video_path.is_file() is False and vid2_info_json_path.is_file() is False
 
 
-def test_wrol_mode(test_directory, simple_channel, simple_video):
+def test_wrol_mode(test_directory, simple_channel, simple_video, wrol_mode_fixture, test_download_manager):
     """Many methods are blocked when WROL Mode is enabled."""
     channel = dumps(dict(name=simple_channel.name, directory=str(simple_channel.directory)))
     favorite = dumps(dict(video_id=simple_video.id, favorite=True))
 
-    with mock.patch('wrolpi.common.wrol_mode_enabled', lambda: True):
-        # Can't create, update, or delete a channel.
-        _, resp = api_app.test_client.post('/api/videos/channels', content=channel)
-        assert resp.status_code == HTTPStatus.FORBIDDEN
-        assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
-        _, resp = api_app.test_client.put(f'/api/videos/channels/{simple_channel.id}', content=channel)
-        assert resp.status_code == HTTPStatus.FORBIDDEN
-        assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
-        _, resp = api_app.test_client.delete(f'/api/videos/channels/{simple_channel.id}')
-        assert resp.status_code == HTTPStatus.FORBIDDEN
-        assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+    wrol_mode_fixture(True)
 
-        # Can't delete a video
-        _, resp = api_app.test_client.delete(f'/api/videos/video/{simple_video.id}')
-        assert resp.status_code == HTTPStatus.FORBIDDEN
-        assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+    # Can't create, update, or delete a channel.
+    _, resp = api_app.test_client.post('/api/videos/channels', content=channel)
+    assert resp.status_code == HTTPStatus.FORBIDDEN
+    assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+    _, resp = api_app.test_client.put(f'/api/videos/channels/{simple_channel.id}', content=channel)
+    assert resp.status_code == HTTPStatus.FORBIDDEN
+    assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+    _, resp = api_app.test_client.delete(f'/api/videos/channels/{simple_channel.id}')
+    assert resp.status_code == HTTPStatus.FORBIDDEN
+    assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
 
-        # Can't refresh or download
-        _, resp = api_app.test_client.post('/api/videos/refresh')
-        assert resp.status_code == HTTPStatus.FORBIDDEN
-        assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
-        _, resp = api_app.test_client.post(f'/api/videos/download/{simple_channel.id}')
-        assert resp.status_code == HTTPStatus.FORBIDDEN
-        assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+    # Can't delete a video
+    _, resp = api_app.test_client.delete(f'/api/videos/video/{simple_video.id}')
+    assert resp.status_code == HTTPStatus.FORBIDDEN
+    assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
 
-        # THE REST OF THESE METHODS ARE ALLOWED
-        _, resp = api_app.test_client.post('/api/videos/favorite', content=favorite)
-        assert resp.status_code == HTTPStatus.OK
+    # Can't refresh or download
+    _, resp = api_app.test_client.post('/api/files/refresh')
+    assert resp.status_code == HTTPStatus.FORBIDDEN
+    assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+    _, resp = api_app.test_client.post(f'/api/videos/download/{simple_channel.id}')
+    assert resp.status_code == HTTPStatus.FORBIDDEN
+    assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+
+    # THE REST OF THESE METHODS ARE ALLOWED
+    _, resp = api_app.test_client.post('/api/videos/favorite', content=favorite)
+    assert resp.status_code == HTTPStatus.OK
+
+    assert test_download_manager.stopped.is_set()
+
+    wrol_mode_fixture(False)
+    assert not test_download_manager.stopped.is_set()

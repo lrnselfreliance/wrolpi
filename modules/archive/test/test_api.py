@@ -5,16 +5,22 @@ from http import HTTPStatus
 def check_results(test_client, data, ids):
     request, response = test_client.post('/api/archive/search', content=json.dumps(data))
     assert response.status_code == HTTPStatus.OK, response.json
-    assert [i['id'] for i in response.json['archives']] == ids, \
-        f'{response.json["archives"][0]["id"]}..{response.json["archives"][19]["id"]}'
+    if ids:
+        assert response.json['archives'], f'Expected {len(ids)} archives but did not receive any'
+    assert [i['archive']['id'] for i in response.json['archives']] == ids, \
+        f'{response.json["archives"][0]["archive"]["id"]}..{response.json["archives"]["archive"][19]["id"]}'
 
 
 def test_archives_search(test_session, archive_directory, archive_factory, test_client):
     """Archives can be searched by their title and their contents."""
+    # Search with no archives.
+    check_results(test_client, {'search_str': 'foo'}, [])
+
     archive_factory('example.com', 'https://example.com/one', 'my archive', 'foo bar qux')
     archive_factory('example.com', 'https://example.com/one', 'other archive', 'foo baz qux qux')
     archive_factory('example.org', title='archive third', contents='baz qux qux qux')
     archive_factory('example.org')  # has no contents
+    test_session.commit()
 
     # 1 and 2 contain "foo".
     data = {'search_str': 'foo'}
@@ -44,15 +50,20 @@ def test_archives_search(test_session, archive_directory, archive_factory, test_
     data = {'search_str': 'third'}
     check_results(test_client, data, [3, ])
 
-    # All titles contain "qux", but they contain different amounts.  They are ordered by the amount.
+    # All contents contain "qux", but they contain different amounts.  They are ordered by the amount.
     data = {'search_str': 'qux'}
     check_results(test_client, data, [3, 2, 1])
 
+    data = {'search_str': 'qux', 'order_by': 'bad order_by'}
+    request, response = test_client.post('/api/archive/search', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
 
-def test_search_offset(archive_factory, test_client):
+
+def test_search_offset(test_session, archive_factory, test_client):
     """Archive search can be offset."""
     for i in range(500):
         archive_factory('example.com', f'https://example.com/{i}', contents='foo bar')
+    test_session.commit()
 
     data = {'search_str': None, 'offset': 0}
     check_results(test_client, data, list(range(500, 480, -1)))
@@ -66,28 +77,87 @@ def test_search_offset(archive_factory, test_client):
     check_results(test_client, data, [])
 
 
-def test_archives_search_no_query(archive_factory, test_client):
+def test_archives_search_no_query(test_session, archive_factory, test_client):
     """Archive Search API endpoint does not require data in the body."""
     # Add 100 random archives.
     for _ in range(100):
         archive_factory('example.com')
+    test_session.commit()
 
     # All archives are returned when no `search_str` is passed.
     request, response = test_client.post('/api/archive/search', content='{}')
     assert response.status_code == HTTPStatus.OK, response.json
-    assert [i['id'] for i in response.json['archives']] == list(range(100, 80, -1))
+    assert [i['archive']['id'] for i in response.json['archives']] == list(range(100, 80, -1))
     assert response.json['totals']['archives'] == 100
 
     # All archives are from "example.com".
     data = dict(domain='example.com')
     request, response = test_client.post('/api/archive/search', content=json.dumps(data))
     assert response.status_code == HTTPStatus.OK, response.json
-    assert [i['id'] for i in response.json['archives']] == list(range(100, 80, -1))
+    assert [i['archive']['id'] for i in response.json['archives']] == list(range(100, 80, -1))
     assert response.json['totals']['archives'] == 100
 
     # No archives are from "example.org".
     data = dict(domain='example.org')
     request, response = test_client.post('/api/archive/search', content=json.dumps(data))
     assert response.status_code == HTTPStatus.OK, response.json
-    assert [i['id'] for i in response.json['archives']] == []
+    assert [i['archive']['id'] for i in response.json['archives']] == []
     assert response.json['totals']['archives'] == 0
+
+
+def test_archive_and_domain_crud(test_session, test_client, archive_factory):
+    """
+    Getting an Archive returns it's File.  Testing deleting Archives.
+    """
+    # Can get empty results.
+    request, response = test_client.get(f'/api/archive/1')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    request, response = test_client.get(f'/api/archive/domains')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['domains'] == []
+
+    archive1 = archive_factory(domain='example.com')
+    archive2 = archive_factory(domain='example.com')
+    test_session.commit()
+
+    # Archive1 has Archive2 as alternative.
+    request, response = test_client.get(f'/api/archive/{archive1.id}')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file']['archive']['id'] == archive1.id
+    assert response.json['alternatives'][0]['archive']['id'] == archive2.id
+
+    # Archive2 has Archive1 as alternative.
+    request, response = test_client.get(f'/api/archive/{archive2.id}')
+    assert response.status_code == HTTPStatus.OK
+    assert archive2.id == response.json['file']['archive']['id']
+    assert response.json['alternatives'][0]['archive']['id'] == archive1.id
+
+    # Only one domain.
+    request, response = test_client.get(f'/api/archive/domains')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['domains'][0]['domain'] == 'example.com'
+
+    # Deleting works.
+    request, response = test_client.delete(f'/api/archive/{archive1.id}')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Trying to delete again returns NOT_FOUND.
+    request, response = test_client.delete(f'/api/archive/{archive1.id}')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+    # Can't get deleted Archive.
+    request, response = test_client.get(f'/api/archive/{archive1.id}')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+    # Archive2 no longer has alternatives.
+    request, response = test_client.get(f'/api/archive/{archive2.id}')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file']['archive']['id'] == archive2.id
+    assert response.json['alternatives'] == []
+
+    # No Archives, no Domains.
+    request, response = test_client.delete(f'/api/archive/{archive2.id}')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    request, response = test_client.get(f'/api/archive/domains')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['domains'] == []

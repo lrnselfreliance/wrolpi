@@ -9,11 +9,10 @@ import mock
 import pytest
 
 from modules.videos.channel.lib import delete_channel
-from modules.videos.common import get_no_channel_directory
-from modules.videos.models import Channel, Video
+from modules.videos.models import Channel
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
-from wrolpi.downloader import download_manager, Download
+from wrolpi.downloader import download_manager, Download, DownloadResult
 from wrolpi.test.common import assert_dict_contains
 
 
@@ -26,31 +25,8 @@ def test_get_channels(test_directory, channel_factory, test_client):
     assert len(response.json['channels']) == 3
 
 
-@mock.patch('modules.videos.lib.validate_video')
-def test_refresh_no_channel(_, test_session, test_client, test_directory, simple_channel):
-    # A regular user-defined channel
-    vid1 = simple_channel.directory / 'MyChannelName_20000101_abcdefghijk_title1.mp4'
-    vid1.touch()
-    vid2 = simple_channel.directory / 'MyChannelName_20000101_abcdefghijk_title2.mp4'
-    vid2.touch()
-
-    # The special NO CHANNEL directory.
-    no_channel_path = get_no_channel_directory()
-    vid3 = no_channel_path / 'some video.mp4'
-    vid3.touch()
-    no_channel_subdir = no_channel_path / 'subdir'
-    no_channel_subdir.mkdir()
-    vid4 = no_channel_subdir / 'other video.mp4'
-    vid4.touch()
-
-    test_client.post('/api/videos/refresh')
-    assert test_session.query(Video).count() == 4
-
-
 def test_get_video(test_client, test_session, simple_channel, video_factory):
-    """
-    Test that you get can information about a video.  Test that video file can be gotten.
-    """
+    """Test that you get can information about a video.  Test that video file can be gotten."""
     now_ = now()
     video1 = video_factory(channel_id=simple_channel.id)
     video1.upload_date, video1.title = now_, 'vid1'
@@ -66,11 +42,11 @@ def test_get_video(test_client, test_session, simple_channel, video_factory):
     # Get the video info we inserted
     _, response = test_client.get('/api/videos/video/1')
     assert response.status_code == HTTPStatus.OK, response.json
-    assert_dict_contains(response.json['video'], {'title': 'vid1'})
+    assert_dict_contains(response.json['file']['video'], {'title': 'vid1'})
 
     # The next video is included.
     assert response.json['prev'] is None
-    assert_dict_contains(response.json['next'], {'title': 'vid2'})
+    assert_dict_contains(response.json['next']['video'], {'title': 'vid2'})
 
 
 def test_channel_no_download_frequency(test_client, test_session, test_directory, simple_channel):
@@ -118,7 +94,7 @@ def test_channel_frequency_update(download_channel, test_client, test_session, t
     assert old_frequency
 
     data = dict(
-        directory=str(download_channel.directory.path),
+        directory=str(download_channel.directory),
         name=download_channel.name,
         url=download_channel.url,
         download_frequency=100,
@@ -192,73 +168,12 @@ def test_channel_download_crud(test_session, simple_channel):
     assert test_session.query(Download).count() == 0
 
 
-def test_video_search(test_client, test_session):
-    """
-    Test that videos can be searched and that their order is by their textsearch rank.
-    """
-    # These captions have repeated letters, so they will be higher in the ranking.
-    videos = [
-        ('1', 'b b b b e d d'),
-        ('2', '2 b b b d'),
-        ('3', 'b b'),
-        ('4', 'b e e'),
-        ('5', ''),
-    ]
-    for title, caption in videos:
-        test_session.add(Video(title=title, caption=caption, video_path='foo'))
-    test_session.commit()
-
-    def do_search(search_str, limit=20):
-        d = json.dumps({'search_str': search_str, 'limit': limit})
-        _, resp = test_client.post('/api/videos/search', content=d)
-        return resp
-
-    def search_is_as_expected(resp, expected):
-        assert resp.status_code == HTTPStatus.OK
-        response_ids = [i['id'] for i in resp.json['videos']]
-        assert response_ids == expected
-        assert resp.json['totals']['videos'] == len(expected)
-
-    # Repeated runs should return the same result
-    for _ in range(2):
-        # Only videos with a b are returned, ordered by the amount of b's
-        response = do_search('b')
-        search_is_as_expected(response, [1, 2, 3, 4])
-
-    # Only two captions have e
-    response = do_search('e')
-    search_is_as_expected(response, [4, 1])
-
-    # Only two captions have d
-    response = do_search('d')
-    search_is_as_expected(response, [1, 2])
-
-    # 5 can be gotten by it's title
-    response = do_search('5')
-    search_is_as_expected(response, [5])
-
-    # only video 1 has e and d
-    response = do_search('e d')
-    search_is_as_expected(response, [1])
-
-    # video 1 and 4 have b and e, but 1 has more
-    response = do_search('b e')
-    search_is_as_expected(response, [1, 4])
-
-    # Check totals are correct even with a limit
-    response = do_search('b', 2)
-    assert [i['id'] for i in response.json['videos']] == [1, 2]
-    assert response.json['totals']['videos'] == 4
-
-
 def test_video_file_name(test_session, simple_video, test_client):
-    """
-    If a Video has no title, the front-end can use the file name as the title.
-    """
+    """If a Video has no title, the front-end can use the file name as the title."""
     _, resp = test_client.get(f'/api/videos/video/{simple_video.id}')
     assert resp.status_code == HTTPStatus.OK
-    assert resp.json['video']['video_path'] == 'simple_video.mp4'
-    assert resp.json['video'].get('stem') == 'simple_video'
+    assert resp.json['file']['video']['video_path'] == 'simple_video.mp4'
+    assert resp.json['file']['video'].get('stem') == 'simple_video'
 
 
 def test_channel_conflicts(test_client, test_session, test_directory):
@@ -339,26 +254,46 @@ def test_channel_empty_url_doesnt_conflict(test_client, test_session, test_direc
 
 
 @pytest.mark.asyncio
-async def test_download_channel_no_refresh(test_session, download_channel, video_download_manager):
-    """A Channel cannot be downloaded until it has been refreshed."""
+async def test_download_channel_no_refresh(test_session, download_channel, video_download_manager, video_factory):
+    """A Channel cannot be downloaded until it has been refreshed.
+
+    Videos already downloaded are not downloaded again."""
+    vid = video_factory(channel_id=download_channel.id, with_video_file=True, with_poster_ext='jpg')
+    vid.url = 'https://example.com/1'
     d = download_channel.get_download()
     test_session.commit()
+    assert not d.next_download
 
-    def check_refreshed(expected: bool):
+    def assert_refreshed(expected: bool):
         channel = test_session.query(Channel).one()
         assert channel.refreshed == expected
 
-    check_refreshed(False)
+    assert_refreshed(False)
     test_session.commit()
 
-    with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
-        mock_extract_info.return_value = {'entries': [], 'url': 'foo', 'uploader': 'some uploader',
+    downloaded_urls = []
+
+    async def do_download(_, download):
+        # Track all downloaded URLs.
+        downloaded_urls.append(download.url)
+        return DownloadResult(success=True)
+
+    with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info, \
+            mock.patch('modules.videos.downloader.VideoDownloader.do_download', do_download):
+        entries = [
+            dict(id=vid.source_id, view_count=0, webpage_url='https://example.com/1'),  # Already downloaded.
+            dict(id='not downloaded', view_count=0, webpage_url='https://example.com/2'),
+        ]
+        mock_extract_info.return_value = {'entries': entries, 'url': 'foo', 'uploader': 'some uploader',
                                           'channel_id': 'the id', 'id': 'the id'}
         await video_download_manager.do_downloads()
         await video_download_manager.wait_for_all_downloads()
 
-    check_refreshed(True)
+    # Channel was refreshed before downloading videos.
+    assert_refreshed(True)
     assert d.next_download
+    # Only the missing video was downloaded.
+    assert downloaded_urls == ['https://example.com/2']
 
 
 def test_channel_post_directory(test_session, test_client, test_directory):
@@ -367,7 +302,7 @@ def test_channel_post_directory(test_session, test_client, test_directory):
     data = dict(name='foo', directory='foo')
     request, response = test_client.post('/api/videos/channels', content=json.dumps(data))
     assert response.status_code == HTTPStatus.CREATED
-    directory = test_session.query(Channel).filter_by(id=1).one().directory.path
+    directory = test_session.query(Channel).filter_by(id=1).one().directory
     assert (test_directory / 'foo') == directory
     assert not directory.is_dir()
     assert directory.is_absolute()
@@ -376,7 +311,7 @@ def test_channel_post_directory(test_session, test_client, test_directory):
     data = dict(name='bar', directory='bar', mkdir=True)
     request, response = test_client.post('/api/videos/channels', content=json.dumps(data))
     assert response.status_code == HTTPStatus.CREATED
-    directory = test_session.query(Channel).filter_by(id=2).one().directory.path
+    directory = test_session.query(Channel).filter_by(id=2).one().directory
     assert (test_directory / 'bar') == directory
     assert directory.is_dir()
     assert directory.is_absolute()
@@ -455,7 +390,7 @@ def test_channel_crud(test_session, test_client, test_directory):
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
-def test_search_channel_videos(test_client, test_session):
+def test_search_videos_channel(test_client, test_session, video_factory):
     with get_db_session(commit=True) as session:
         channel1 = Channel(name='Foo')
         channel2 = Channel(name='Bar')
@@ -469,29 +404,29 @@ def test_search_channel_videos(test_client, test_session):
     d = dict(channel_id=channel1.id)
     request, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
     assert response.status_code == HTTPStatus.OK
-    assert len(response.json['videos']) == 0
+    assert len(response.json['files']) == 0
 
     with get_db_session(commit=True) as session:
-        vid1 = Video(title='vid1', channel_id=channel2.id, video_path='foo')
-        vid2 = Video(title='vid2', channel_id=channel1.id, video_path='foo')
+        vid1 = video_factory(title='vid1', channel_id=channel2.id)
+        vid2 = video_factory(title='vid2', channel_id=channel1.id)
         session.add(vid1)
         session.add(vid2)
 
     # Videos are gotten by their respective channels
     request, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
     assert response.status_code == HTTPStatus.OK
-    assert len(response.json['videos']) == 1
-    assert response.json['totals']['videos'] == 1
-    assert_dict_contains(response.json['videos'][0], dict(id=2, title='vid2', channel_id=channel1.id))
+    assert len(response.json['files']) == 1
+    assert response.json['totals']['files'] == 1
+    assert_dict_contains(response.json['files'][0], dict(path='vid2.mp4', video=dict(channel_id=channel1.id)))
 
     d = dict(channel_id=channel2.id)
     request, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
     assert response.status_code == HTTPStatus.OK
-    assert len(response.json['videos']) == 1
-    assert_dict_contains(response.json['videos'][0], dict(id=1, title='vid1', channel_id=channel2.id))
+    assert len(response.json['files']) == 1
+    assert_dict_contains(response.json['files'][0], dict(path='vid1.mp4', video=dict(channel_id=channel2.id)))
 
 
-def test_get_channel_videos_pagination(test_client, test_session, simple_channel, video_factory):
+def test_get_channel_videos_pagination(test_client, test_session, simple_channel, video_factory, assert_video_search):
     for i in range(50):
         video_factory(channel_id=simple_channel.id)
 
@@ -500,7 +435,7 @@ def test_get_channel_videos_pagination(test_client, test_session, simple_channel
     test_session.flush()
     test_session.refresh(channel2)
     video_factory(channel_id=channel2.id)
-    test_session.add(Video(title='vid2', channel_id=channel2.id, video_path='foo'))
+    video_factory(title='vid2', channel_id=channel2.id, with_video_file=True)
     test_session.commit()
 
     # Get first, second, third, and empty pages of videos.
@@ -513,10 +448,8 @@ def test_get_channel_videos_pagination(test_client, test_session, simple_channel
     ]
     last_ids = []
     for offset, video_count in tests:
-        d = dict(channel_id=simple_channel.id, order_by='id', offset=offset)
-        _, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
-        assert response.status_code == HTTPStatus.OK
-        assert len(response.json['videos']) == video_count
-        current_ids = [i['id'] for i in response.json['videos']]
+        _, response = assert_video_search(channel_id=simple_channel.id, order_by='id', offset=offset, limit=20)
+        assert len(response.json['files']) == video_count, 'Returned videos does not match'
+        current_ids = [i['video']['id'] for i in response.json['files']]
         assert current_ids != last_ids, f'IDs are unchanged current_ids={current_ids}'
         last_ids = current_ids

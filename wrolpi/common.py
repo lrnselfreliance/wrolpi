@@ -1,14 +1,15 @@
 import asyncio
-import collections
 import contextlib
 import inspect
 import json
 import logging
+import multiprocessing
 import os
 import pathlib
 import queue
 import re
 import string
+import sys
 import tempfile
 from copy import deepcopy
 from datetime import datetime, date
@@ -18,7 +19,7 @@ from itertools import islice, filterfalse, tee
 from multiprocessing import Event, Queue, Lock, Manager
 from pathlib import Path
 from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any
-from urllib.parse import urlunsplit, urlparse
+from urllib.parse import urlparse
 
 import aiohttp
 import yaml
@@ -27,10 +28,11 @@ from sanic.request import Request
 from sqlalchemy import types
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import Session
 
 from wrolpi.dates import DEFAULT_TIMEZONE
 from wrolpi.errors import WROLModeEnabled, NativeOnly
-from wrolpi.vars import PUBLIC_HOST, PUBLIC_PORT, PYTEST, MODULES_DIR, \
+from wrolpi.vars import PYTEST, MODULES_DIR, \
     DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY
 
 logger = logging.getLogger()
@@ -49,19 +51,28 @@ class ModelHelper:
         d = {i.name: getattr(self, i.name) for i in self.__table__.columns}  # noqa
         return d
 
+    @classmethod
+    def upsert(cls, file, session: Session) -> Base:
+        raise NotImplementedError('This model has not defined this method.')
 
-class PathColumn(types.TypeDecorator):
-    impl = types.String
+    @staticmethod
+    def find_by_path(path, session) -> Base:
+        raise NotImplementedError('This model has not defined this method.')
 
-    def process_bind_param(self, value, dialect):
-        if isinstance(value, Path):
-            return value
-        elif value:
-            return str(value)
+    @staticmethod
+    def find_by_paths(paths, session) -> List:
+        raise NotImplementedError('This model has not defined this method.')
 
-    def process_result_value(self, value, dialect):
-        if value:
-            return Path(value)
+    @property
+    def primary_path(self):
+        raise NotImplementedError('This model has not defined this method.')
+
+
+def get_model_by_table_name(table_name):
+    """Find a model by its table name."""
+    for klass in Base._decl_class_registry.values():
+        if hasattr(klass, '__tablename__') and klass.__tablename__ == table_name:
+            return klass
 
 
 class tsvector(types.TypeDecorator):
@@ -80,10 +91,6 @@ def sanitize_link(link: str) -> str:
     """Remove any non-url safe characters, all will be lowercase."""
     new_link = ''.join(i for i in str(link).lower() if i in URL_CHARS)
     return new_link
-
-
-def string_to_boolean(s: str) -> bool:
-    return str(s).lower() in {'true', 't', '1', 'on'}
 
 
 DEFAULT_QUEUE_SIZE = 1000
@@ -138,35 +145,6 @@ def create_websocket_feed(name: str, uri: str, blueprint: Blueprint, maxsize: in
         await ws.send(json.dumps({'code': 'stream-complete'}))
 
     return q, event
-
-
-# The following code is used to consistently construct URLs that will reference this service.
-SANIC_HOST = None
-SANIC_PORT = None
-URL_COMPONENTS = collections.namedtuple('Components', ['scheme', 'netloc', 'path', 'query', 'fragment'])
-
-
-def set_sanic_url_parts(host, port):
-    """
-    Set the global parts of this service's URL.  This is used to consistently construct URLs that will reference this
-    service.
-    """
-    global SANIC_HOST
-    global SANIC_PORT
-    SANIC_HOST = host
-    SANIC_PORT = port
-
-
-def get_sanic_url(scheme: str = 'http', path: str = None, query: list = None, fragment: str = None):
-    """
-    Build a URL with the provided parts that references this running service.
-    """
-    host = PUBLIC_HOST or SANIC_HOST
-    port = PUBLIC_PORT or SANIC_PORT
-    components = URL_COMPONENTS(scheme=scheme, netloc=f'{host}:{port}', path=path,
-                                query=query, fragment=fragment)
-    unparsed = str(urlunsplit(components))
-    return unparsed
 
 
 class ConfigFile:
@@ -365,11 +343,6 @@ def wrol_mode_enabled() -> bool:
     return get_config().wrol_mode
 
 
-def set_wrol_mode(enable: bool):
-    """Enable or disable WROL Mode for all processes.  This also updates the config file."""
-    get_config().wrol_mode = enable
-
-
 def wrol_mode_check(func):
     """Wraps a function so that it cannot be called when WROL Mode is enabled."""
 
@@ -385,10 +358,40 @@ def wrol_mode_check(func):
     return check
 
 
+def enable_wrol_mode(download_manager=None):
+    """
+    Modify config to enable WROL Mode.
+
+    Stop downloads and Download Manager.
+    """
+    logger.warning('ENABLING WROL MODE')
+    get_config().wrol_mode = True
+    if not download_manager:
+        from wrolpi.downloader import download_manager
+        download_manager.stop()
+    else:
+        # Testing.
+        download_manager.stop()
+
+
+def disable_wrol_mode(download_manager=None):
+    """
+    Modify config to disable WROL Mode.
+
+    Start downloads and Download Manager.
+    """
+    logger.warning('DISABLING WROL MODE')
+    get_config().wrol_mode = False
+    if not download_manager:
+        from wrolpi.downloader import download_manager
+        download_manager.enable()
+    else:
+        # Testing.
+        download_manager.enable()
+
+
 def insert_parameter(func: Callable, parameter_name: str, item, args: Tuple, kwargs: Dict) -> Tuple[Tuple, Dict]:
-    """
-    Insert a parameter wherever it fits in the Callable's signature.
-    """
+    """Insert a parameter wherever it fits in the Callable's signature."""
     sig = inspect.signature(func)
     if parameter_name not in sig.parameters:
         raise TypeError(f'Function {func} MUST have a {parameter_name} parameter!')
@@ -403,9 +406,7 @@ def insert_parameter(func: Callable, parameter_name: str, item, args: Tuple, kwa
 
 
 def iterify(kind: type = list):
-    """
-    Convenience function to convert the output of the wrapped function to the type provided.
-    """
+    """Convenience function to convert the output of the wrapped function to the type provided."""
 
     def wrapper(func):
         @wraps(func)
@@ -575,9 +576,7 @@ def minimize_dict(d: dict, keys: Iterable) -> Optional[dict]:
 
 
 def make_media_directory(path: Union[str, Path]):
-    """
-    Make a directory relative within the media directory.
-    """
+    """Make a directory relative within the media directory."""
     media_dir = get_media_directory()
     path = media_dir / str(path)
     path.mkdir(parents=True)
@@ -592,6 +591,8 @@ def extract_domain(url):
     """
     parsed = urlparse(url)
     domain = parsed.netloc
+    if not domain:
+        raise ValueError(f'URL does not have a domain: {url=}')
     domain = domain.decode() if hasattr(domain, 'decode') else domain
     if domain.startswith('www.'):
         # Remove leading www.
@@ -601,17 +602,18 @@ def extract_domain(url):
 
 def import_modules():
     """Import all WROLPi Modules in the modules directory.  Raise an ImportError if there are no modules."""
-    try:
-        modules = [i.name for i in MODULES_DIR.iterdir() if
-                   i.is_dir() and not (i.name.startswith('_') or i.name.startswith('.'))]
-        for module in modules:
-            module = f'modules.{module}.api'
-            logger.debug(f'Importing {module}')
+    modules = [i.name for i in MODULES_DIR.iterdir() if
+               i.is_dir() and not (i.name.startswith('_') or i.name.startswith('.'))]
+    imported = []
+    for module_name in modules:
+        module = f'modules.{module_name}.api'
+        logger.debug(f'Importing {module}')
+        try:
             __import__(module, globals(), locals(), [], 0)
-    except ImportError as e:
-        logger.fatal('No modules could be found!', exc_info=e)
-        raise
-    return modules
+            imported.append(module_name)
+        except ImportError as e:
+            logger.fatal(f'Unable to import {module}', exc_info=e)
+    return imported
 
 
 def api_param_limiter(maximum: int, default: int = 20) -> callable:
@@ -636,16 +638,9 @@ def api_param_limiter(maximum: int, default: int = 20) -> callable:
     return limiter_
 
 
-@contextlib.contextmanager
-def temporary_directory_path(*a, **kw):
-    with tempfile.TemporaryDirectory(*a, **kw) as d:
-        yield pathlib.Path(d)
-
-
 def partition(pred, iterable):
-    """
-    Use a predicate to partition entries into false entries
-    and true entries
+    """Use a predicate to partition entries into false entries and true entries
+
     >>> is_even = lambda i: not i % 2
     >>> partition(is_even, range(10))
     ([0, 2, 4, 6, 8], [1, 3, 5, 7, 9])
@@ -731,11 +726,23 @@ def zig_zag(low: ZIG_TYPE, high: ZIG_TYPE) -> Generator[ZIG_TYPE, None, None]:
 
 
 def walk(path: Path) -> Generator[Path, None, None]:
-    """Recursively Walk a directory structure yielding all files and directories."""
+    """Recursively walk a directory structure yielding all files and directories."""
+    if not path.is_dir():
+        raise ValueError('Can only walk a directory.')
+
     for path in path.iterdir():
         yield path
         if path.is_dir():
             yield from walk(path)
+
+
+def get_files_and_directories(path: Path):
+    """Walk a directory, return a tuple of all files and all directories within.  (Not recursive)."""
+    if not path.is_dir():
+        raise ValueError('Can only walk a directory.')
+
+    directories, files = partition(lambda i: i.is_dir(), path.iterdir())
+    return files, directories
 
 
 # These characters are invalid in Windows or Linux.
@@ -793,3 +800,134 @@ async def aiohttp_post(url: str, json_, timeout: int = None) -> Tuple[Dict, int]
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.post(url, json=json_) as response:
             return await response.json(), response.status
+
+
+modelers = []
+
+
+def register_modeler(modeler: callable):
+    modelers.append(modeler)
+    return modeler
+
+
+def apply_modelers(files, session: Session):
+    from wrolpi.files.lib import split_path_stem_and_suffix, get_mimetype
+
+    if not files:
+        return
+
+    # Group all files by their common name (without the suffix).
+    groups = {}
+    for file in files:
+        if not file.mimetype:
+            file.mimetype = get_mimetype(file.path)
+        stem, suffix = split_path_stem_and_suffix(file.path)
+        try:
+            groups[stem].append(file)
+        except KeyError:
+            groups[stem] = [file, ]
+
+    for modeler in modelers:
+        modeler(groups, session)
+        session.commit()
+
+    for stem, group in groups.items():
+        # Index any files that were not claimed by modelers.
+        for file in group:
+            file.do_index()
+
+
+after_refresh = []
+
+
+def register_after_refresh(func: callable):
+    after_refresh.append(func)
+
+
+def apply_after_refresh():
+    for func in after_refresh:
+        logger.info(f'Applying after-refresh {func.__name__}')
+        func()
+
+
+@iterify(tuple)
+def match_paths_to_suffixes(paths: List[pathlib.Path], suffix_groups: List[Tuple[str]]):
+    paths = paths.copy()
+    for group in suffix_groups:
+        match = None
+        for suffix in group:
+            # Compare all suffixes in the group to the path's name.  Yield the first path that shares the first
+            # suffix.  If no suffix matches any path, yield None.
+            match = next(filter(lambda i: i.name.endswith(suffix), paths), None)
+            if match:
+                paths.pop(paths.index(match))
+                break
+        yield match
+
+
+@contextlib.contextmanager
+def timer(name):
+    """Prints out the time elapsed during the call of some block."""
+    before = datetime.now()
+    try:
+        yield
+    finally:
+        logger.warning(f'{name} elapsed {(datetime.now() - before).total_seconds()} seconds')
+
+
+def limit_concurrent(limit: int):
+    """
+    Wrapper that limits the amount of concurrently running functions.
+    """
+    sema = multiprocessing.Semaphore(value=limit)
+
+    def wrapper(func: callable):
+        if inspect.iscoroutinefunction(func):
+            @wraps(func)
+            async def wrapped(*a, **kw):
+                acquired = sema.acquire(block=False)
+                if not acquired:
+                    return
+                try:
+                    return await func(*a, **kw)
+                finally:
+                    sema.release()
+
+            return wrapped
+        else:
+            @wraps(func)
+            def wrapped(*a, **kw):
+                acquired = sema.acquire(block=False)
+                if not acquired:
+                    return
+                try:
+                    return func(*a, **kw)
+                finally:
+                    sema.release()
+
+            return wrapped
+
+    return wrapper
+
+
+async def count_files(path: pathlib.Path) -> int:
+    return len([i for i in walk(path) if i.is_file()])
+
+
+def truncate_object_bytes(obj: Union[List[str], str, None], maximum_bytes: int) -> List[str]:
+    """
+    Shorten an object.  This is useful when inserting something into a tsvector.
+
+    >>> i = ['foo',  'foo',  'foo',  'foo',  'foo', 'foo',  'foo',  'foo',  'foo',  'foo']
+    >>> truncate_object_bytes(i, 100)
+    ['foo',  'foo',  'foo',  'foo',  'foo']
+    """
+    if not obj:
+        # Can't decrease an empty object.
+        return obj
+    size = sys.getsizeof(obj)
+    if size < maximum_bytes:
+        return obj
+    index = -1 * round(len(obj) * .2)
+    obj = obj[:index or -1]
+    return truncate_object_bytes(obj, maximum_bytes)

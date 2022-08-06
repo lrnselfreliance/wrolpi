@@ -1,52 +1,71 @@
-import React, {useState} from "react";
-import {Card, Confirm, Container, Header, Image, Loader, Placeholder, Segment} from "semantic-ui-react";
+import React, {useContext, useState} from "react";
 import {
-    CardGroupCentered,
-    ClearButton,
+    Card,
+    Confirm,
+    Container,
+    Image,
+    Input,
+    PlaceholderHeader,
+    PlaceholderLine,
+    TableBody,
+    TableCell,
+    TableHeader,
+    TableHeaderCell,
+    TableRow
+} from "semantic-ui-react";
+import {
+    CardLink,
+    defaultSearchOrder,
+    ExternalCardLink,
+    FileIcon,
     HelpHeader,
+    mimetypeColor,
     PageContainer,
-    Paginator,
     SearchInput,
     TabLinks,
     textEllipsis,
-    uploadDate,
-    WROLModeMessage
+    uploadDate
 } from "./Common";
-import {deleteArchive, postDownload, refreshArchives} from "../api";
-import Button from "semantic-ui-react/dist/commonjs/elements/Button";
-import {Link, Route, Switch, useHistory} from "react-router-dom";
-import {ArchivePlaceholder} from "./Placeholder";
-import Table from "semantic-ui-react/dist/commonjs/collections/Table";
+import {deleteArchive, postDownload} from "../api";
+import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useArchive, useArchives, useDomains} from "../hooks/customHooks";
+import {useArchive, useDomains, useQuery, useSearchArchives} from "../hooks/customHooks";
+import {FileCards, FilesView} from "./Files";
+import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
+import _ from "lodash";
+import {ThemeContext} from "../contexts/contexts";
+import {Button, Header, Loader, Placeholder, Segment, Table} from "./Theme";
 
-function ArchivePage(props) {
+function ArchivePage() {
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [syncOpen, setSyncOpen] = useState(false);
-    const history = useHistory();
-    const archiveId = props.match.params.archive_id;
-    const [archive, alternatives] = useArchive(archiveId);
+    const navigate = useNavigate();
+    const {archiveId} = useParams();
+    const {archiveFile, alternatives} = useArchive(archiveId);
 
-    if (archive === null) {
+    if (archiveFile === null) {
         return <Segment><Loader active/></Segment>;
     }
-    if (archive === undefined) {
+    if (archiveFile === undefined) {
         return <>
             <Header as='h2'>Unknown archive</Header>
             This archive does not exist
         </>
     }
 
+    const {archive} = archiveFile;
+
     const singlefileUrl = archive.singlefile_path ? `/media/${encodeURIComponent(archive.singlefile_path)}` : null;
     const screenshotUrl = archive.screenshot_path ? `/media/${encodeURIComponent(archive.screenshot_path)}` : null;
     const readabilityUrl = archive.readability_path ? `/media/${encodeURIComponent(archive.readability_path)}` : null;
 
-    const singlefileButton = <a href={singlefileUrl} target='_blank'>
+    const singlefileButton = <ExternalCardLink to={singlefileUrl}>
         <Button content='View' color='blue'/>
-    </a>;
+    </ExternalCardLink>;
 
     const readabilityLink = readabilityUrl ?
-        <a href={readabilityUrl} target='_blank'><Button content='Article'/></a> :
+        <ExternalCardLink to={readabilityUrl}><Button content='Article'/></ExternalCardLink> :
         <Button disabled content='Article'/>;
 
     const screenshot = screenshotUrl ?
@@ -85,22 +104,26 @@ function ArchivePage(props) {
 
     let alternativesList = <Loader active/>;
     if (alternatives && alternatives.length > 0) {
-        alternativesList = <ArchivesList archives={alternatives}/>;
+        alternativesList = <FileCards files={alternatives}/>;
     } else if (alternatives && alternatives.length === 0) {
         alternativesList = <p>No alternatives available</p>;
     }
 
     return (
         <>
-            <Button icon='arrow left' content='Back' onClick={() => history.goBack()}/>
+            <Button icon='arrow left' content='Back' onClick={() => navigate(-1)}/>
 
             <Segment>
                 {screenshot}
-                <a href={singlefileUrl} target='_blank' className='no-link-underscore card-link'>
+                <ExternalCardLink to={singlefileUrl}>
                     <Header as='h2'>{textEllipsis(archive.title || archive.url, 100)}</Header>
-                </a>
+                </ExternalCardLink>
                 <Header as='h3'>{uploadDate(archive.archive_datetime)}</Header>
-                <p><a href={archive.url} target='_blank'>{textEllipsis(archive.url, 100)}</a></p>
+                <p>
+                    <ExternalCardLink to={archive.url}>
+                        {textEllipsis(archive.url, 100)}
+                    </ExternalCardLink>
+                </p>
 
                 {singlefileButton}
                 {readabilityLink}
@@ -119,32 +142,41 @@ function ArchivePage(props) {
     )
 }
 
-function ArchiveCard({archive, setDomain}) {
+export function ArchiveCard({file}) {
+    const {s} = useContext(ThemeContext);
+    const {archive} = file;
 
     const imageSrc = archive.screenshot_path ? `/media/${encodeURIComponent(archive.screenshot_path)}` : null;
     const singlefileUrl = archive.singlefile_path ? `/media/${encodeURIComponent(archive.singlefile_path)}` : null;
 
-    const domain = archive.domain.domain;
+    let screenshot = <center className='card-icon'><FileIcon file={file}/></center>;
+    if (imageSrc) {
+        screenshot = <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>;
+    }
+
+    const domain = archive.domain ? archive.domain.domain : null;
+    const domainUrl = `/archive?domain=${domain}`;
 
     return (
-        <Card>
-            <a href={singlefileUrl} target='_blank' className='no-link-underscore card-link'>
-                <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>
-            </a>
+        <Card color={mimetypeColor(file.mimetype)} {...s}>
+            <div>
+                <ExternalCardLink to={singlefileUrl}>
+                    {screenshot}
+                </ExternalCardLink>
+            </div>
             <Card.Content>
                 <Card.Header>
                     <Container textAlign='left'>
-                        <a href={singlefileUrl} target='_blank' className='no-link-underscore card-link'>
-                            <p>{textEllipsis(archive.title || archive.url, 100)}</p>
-                        </a>
+                        <ExternalCardLink to={singlefileUrl}>
+                            {textEllipsis(archive.title || archive.url, 100)}
+                        </ExternalCardLink>
                     </Container>
                 </Card.Header>
-                {setDomain &&
-                    <a onClick={() => setDomain(domain)} className="no-link-underscore card-link">
-                        {textEllipsis(domain, 40)}
-                    </a>
-                }
-                <Card.Meta>
+                {domain &&
+                    <CardLink to={domainUrl}>
+                        <p {...s}>{domain}</p>
+                    </CardLink>}
+                <Card.Meta {...s}>
                     <p>
                         {uploadDate(archive.archive_datetime)}
                     </p>
@@ -161,158 +193,145 @@ function ArchiveCard({archive, setDomain}) {
     )
 }
 
-function ArchiveCards({archives, setDomain}) {
-    return (
-        <CardGroupCentered>
-            {archives.map((i) => {
-                return <ArchiveCard
-                    key={i['id']}
-                    archive={i}
-                    setDomain={setDomain}
-                />
-            })}
-        </CardGroupCentered>
-    )
-}
-
-export function ArchivesList({archives, searchStr, setDomain}) {
-    if (archives === null || archives === undefined) {
-        // Fetching archives.
-        return <ArchivePlaceholder/>;
-    } else if (archives.length === 0 && searchStr) {
-        // Search with no results.
-        return <p>No archives found! Is your search too restrictive?</p>;
-    } else if (archives.length === 0) {
-        // No archives fetched.
-        return <Message>
-            <Message.Header>No archives</Message.Header>
-            <Message.Content>Have you archived any webpages?</Message.Content>
-        </Message>;
-    } else {
-        // Archives fetched successfully!
-        return <ArchiveCards
-            archives={archives}
-            setDomain={setDomain}
-        />;
-    }
-}
-
-export function Archives() {
-    const {archives, setPage, totalPages, searchStr, activePage, setSearchStr, domain, setDomain, search} =
-        useArchives(20);
-
-    let domainClearButton = null;
-    if (domain) {
-        domainClearButton = <ClearButton
-            onClick={() => setDomain(null)}
-            style={{marginBottom: '1em'}}
-            label={`Domain: ${domain}`}
-        />;
-    }
-
-    return (
-        <>
-            <SearchInput initValue={searchStr} onSubmit={setSearchStr}/>
-            {domainClearButton}
-            <ArchivesList
-                archives={archives}
-                searchStr={searchStr}
-                setDomain={setDomain}
-            />
-            <div style={{marginTop: '3em', textAlign: 'center'}}>
-                <Paginator activePage={activePage} totalPages={totalPages} onPageChange={setPage}/>
-            </div>
-        </>
-    )
-}
-
-class ManageArchives extends React.Component {
-    async refresh() {
-        await refreshArchives();
-    }
-
-    render() {
-        return (<>
-            <WROLModeMessage content='Cannot modify Archives'/>
-            <Button secondary
-                    id='refresh_archives'
-                    onClick={this.refresh}>
-                Refresh Archive Files
-            </Button>
-            <label htmlFor='refresh_archives'>
-                Find any new archive files. Remove Archives which no longer have files.
-            </label>
-        </>)
-    }
-}
-
-function Domains() {
-
+export function Domains() {
     const [domains] = useDomains();
-
-    const row = (domain) => {
-        return <Table.Row key={domain['domain']}>
-            <Table.Cell>
-                <Link to={`/archive?domain=${domain['domain']}`}>
-                    {domain['domain']}
-                </Link>
-            </Table.Cell>
-            <Table.Cell>{domain['url_count']}</Table.Cell>
-        </Table.Row>
-    }
-
-    if (domains && domains.length > 0) {
-        return (
-            <>
-                <Table celled>
-                    <Table.Header>
-                        <Table.Row>
-                            <Table.HeaderCell>Domain</Table.HeaderCell>
-                            <Table.HeaderCell>Archives</Table.HeaderCell>
-                        </Table.Row>
-                    </Table.Header>
-
-                    <Table.Body>
-                        {domains.map(row)}
-                    </Table.Body>
-                </Table>
-            </>
-        )
-    }
+    const [searchStr, setSearchStr] = useState('');
 
     if (domains === null) {
         return (<>
             <Placeholder>
-                <Placeholder.Header>
-                    <Placeholder.Line/>
-                    <Placeholder.Line/>
-                </Placeholder.Header>
+                <PlaceholderHeader>
+                    <PlaceholderLine/>
+                    <PlaceholderLine/>
+                </PlaceholderHeader>
             </Placeholder>
         </>)
-    }
-
-    return (<>
-        <Message>
+    } else if (!domains || domains.length === 0) {
+        return <Message>
             <Message.Header>No domains yet.</Message.Header>
             <Message.Content>Archive some webpages!</Message.Content>
-        </Message>
-    </>)
+        </Message>;
+    }
+
+    let filteredDomains = domains;
+    if (searchStr) {
+        const re = new RegExp(_.escapeRegExp(searchStr), 'i');
+        filteredDomains = domains.filter(i => re.test(i['domain']));
+    }
+
+    const row = ({domain, url_count}) => {
+        return <TableRow key={domain}>
+            <TableCell>
+                <Link to={`/archive?domain=${domain}`}>
+                    {domain}
+                </Link>
+            </TableCell>
+            <TableCell>{url_count}</TableCell>
+        </TableRow>
+    }
+
+    return <>
+        <Input
+            icon='search'
+            value={searchStr}
+            placeholder='Search...'
+            onChange={(e, {value}) => setSearchStr(value)}
+        />
+        <Table celled>
+            <TableHeader>
+                <TableRow>
+                    <TableHeaderCell>Domain</TableHeaderCell>
+                    <TableHeaderCell>Archives</TableHeaderCell>
+                </TableRow>
+            </TableHeader>
+
+            <TableBody>
+                {filteredDomains.map(row)}
+            </TableBody>
+        </Table>
+    </>;
 }
 
+function Archives() {
+    const [domains] = useDomains();
+    let filterOptions = [];
+    if (domains && domains.length > 0) {
+        domains.forEach(i => {
+            filterOptions = [...filterOptions, {text: i['domain'], key: i['domain'], value: i['domain']}]
+        });
+    }
+    const {searchParams, updateQuery} = useQuery();
 
-export function ArchiveRoute(props) {
+    let searchOrder = '-date';
+    if (searchParams.get('order')) {
+        // Use whatever order the user specified.
+        searchOrder = searchParams.get('order');
+    } else if (searchParams.get('q')) {
+        // User used a search_str
+        searchOrder = defaultSearchOrder;
+    }
+
+    const domain = searchParams.get('domain');
+    const {archives, limit, setLimit, totalPages, activePage, setPage, searchStr, setSearchStr, setOrderBy} =
+        useSearchArchives(24, domain, searchOrder);
+    const setView = (value) => updateQuery({view: value});
+    const view = searchParams.get('view');
+    const setDomain = (value) => updateQuery({'domain': value});
+
+    const archiveOrders = [
+        {key: '-date', value: '-date', text: 'Newest'},
+        {key: 'date', value: 'date', text: 'Oldest'},
+    ];
+
+    const menuColumns = (<>
+        <Grid.Column width={5}>
+            <SearchInput clearable
+                         actionIcon='search'
+                         searchStr={searchStr}
+                         onSubmit={setSearchStr}
+            />
+        </Grid.Column>
+        <Grid.Column width={5}>
+            <Dropdown selection fluid
+                      placeholder='Sort by...'
+                      value={searchOrder}
+                      options={archiveOrders}
+                      onChange={(e, {value}) => setOrderBy(value)}
+            />
+        </Grid.Column>
+    </>);
+
+    return <FilesView
+        files={archives}
+        limit={limit}
+        setLimit={setLimit}
+        activePage={activePage}
+        totalPages={totalPages}
+        showLimit={true}
+        showSelect={true}
+        view={view}
+        setView={setView}
+        setPage={setPage}
+        filterOptions={filterOptions}
+        activeFilters={domain}
+        setFilters={setDomain}
+        filterPlaceholder='Domain'
+        menuColumns={menuColumns}
+        menuColumnsCount={2}
+    />
+}
+
+export function ArchiveRoute() {
     const links = [
-        {text: 'Archives', to: '/archive', exact: true, key: 'archive'},
-        {text: 'Domains', to: '/archive/domains', key: 'domains'},
-        {text: 'Manage', to: '/archive/manage', key: 'manage'},
+        {text: 'Archives', to: '/archive', end: true},
+        {text: 'Domains', to: '/archive/domains'},
     ];
     return <PageContainer>
         <TabLinks links={links}/>
-        <Switch>
-            <Route path='/archive/domains' exact component={Domains}/>
-            <Route path='/archive/manage' exact component={ManageArchives}/>
-            <Route path='/archive/:archive_id' exact component={ArchivePage}/>
-            <Route path='/archive' exact component={Archives}/>
-        </Switch>
+        <Routes>
+            <Route path='/' element={<Archives/>}/>
+            <Route path='domains' element={<Domains/>}/>
+            <Route path=':archiveId' element={<ArchivePage/>}/>
+        </Routes>
     </PageContainer>
 }

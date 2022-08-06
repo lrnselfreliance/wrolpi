@@ -14,12 +14,14 @@ from modules.videos.models import Channel, Video
 from wrolpi.db import get_db_context
 from wrolpi.downloader import DownloadManager, Download, DownloadResult
 from wrolpi.errors import InvalidDownload
+from wrolpi.files.models import File
 from wrolpi.test.common import TestAPI
 from wrolpi.test.test_downloader import HTTPDownloader
 from wrolpi.vars import PROJECT_DIR
 
 
-def test_find_all_missing_videos(test_session, channel_factory, video_factory):
+@pytest.mark.asyncio
+async def test_find_all_missing_videos(test_session, channel_factory, video_factory):
     channel1 = channel_factory(url='some url')
     channel1.info_json = {'entries': [{'id': 'foo', 'view_count': 0}]}
     test_session.commit()
@@ -29,14 +31,14 @@ def test_find_all_missing_videos(test_session, channel_factory, video_factory):
     video_factory()
 
     # No missing videos
-    assert [] == list(find_all_missing_videos(channel1.id))
+    assert [] == [i async for i in find_all_missing_videos(channel1.id)]
 
     # Create a video that has no video file.
     video = Video(title='needs to be downloaded', channel_id=channel1.id, source_id='foo')
     test_session.add(video)
     test_session.commit()
 
-    missing = list(find_all_missing_videos(channel1.id))
+    missing = [i async for i in find_all_missing_videos(channel1.id)]
     assert len(missing) == 1
 
     # The video returned is the one we faked.
@@ -175,7 +177,7 @@ async def test_video_download_no_channel(test_session, video_download_manager, v
     mock_video_process_runner.assert_called_once()
 
     video: Video = test_session.query(Video).one()
-    assert str(video.video_path.path) == f'{channel_dir}/video.mp4'
+    assert str(video.video_path) == f'{channel_dir}/video.mp4'
 
 
 @pytest.mark.asyncio
@@ -364,19 +366,23 @@ async def test_invalid_download_url(test_session, test_download_manager, mock_vi
 
 @pytest.mark.asyncio
 async def test_video_download_1(test_session, test_directory, simple_channel, video_download_manager,
-                                mock_video_process_runner):
+                                mock_video_process_runner, image_file):
+    """A video download is performed, files are associated."""
     simple_channel.source_id = example_video_json['channel_id']
     simple_channel.directory = test_directory / 'videos/channel name'
     simple_channel.directory.mkdir(parents=True)
 
-    video_file = simple_channel.directory / 'a video.mp4'
-    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_file)
+    video_path = simple_channel.directory / 'a video.mp4'
+    shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
+    # Create a poster file which was downloaded.
+    poster_path = video_path.with_suffix('.png')
+    image_file.rename(poster_path)
 
     url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
     with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info, \
             mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
         mock_extract_info.return_value = example_video_json
-        mock_prepare_filename.return_value = (video_file, {'id': 'foo'})
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
 
         video_download_manager.create_download(url)
         await video_download_manager.wait_for_all_downloads()
@@ -389,7 +395,10 @@ async def test_video_download_1(test_session, test_directory, simple_channel, vi
     assert test_session.query(Channel).one()
 
     video: Video = test_session.query(Video).one()
-    assert video.video_path.path.is_absolute()
+    assert video.video_path.is_absolute(), 'Video path is not absolute'
+    assert video.poster_path == poster_path, 'Video poster was not discovered'
+    assert video.validated, 'Video was not validated'
+    assert video.video_file and video.video_file.indexed, 'Video was not indexed'
 
 
 @pytest.mark.asyncio
@@ -428,9 +437,9 @@ example_playlist_json = {
          'ie_key': 'Youtube',
          'title': 'video 2 title',
          'uploader': None,
-         'url': 'https://youtube.com/watch?v=video_2_url',
+         'url': 'https://www.youtube.com/shorts/video_2_url',
          'view_count': 1413,
-         'webpage_url': 'https://youtube.com/watch?v=video_2_url'},
+         'webpage_url': 'https://www.youtube.com/shorts/video_2_url'},
         {'_type': 'url',
          'description': None,
          'duration': None,
@@ -438,9 +447,9 @@ example_playlist_json = {
          'ie_key': 'Youtube',
          'title': 'video 1 title',
          'uploader': None,
-         'url': 'https://youtube.com/watch?v=video_1_url',
+         'url': 'https://www.youtube.com/watch?v=video_1_url',
          'view_count': 58504,
-         'webpage_url': 'https://youtube.com/watch?v=video_1_url'},
+         'webpage_url': 'https://www.youtube.com/watch?v=video_1_url'},
         {'_type': 'url',
          'description': None,
          'duration': None,
@@ -473,15 +482,14 @@ example_playlist_json = {
 
 @pytest.mark.asyncio
 async def test_download_playlist(test_session, test_directory, mock_video_extract_info, video_download_manager):
-    """
-    All videos in a playlist can be downloaded for it's Channel.
-    """
+    """All videos in a playlist can be downloaded for it's Channel."""
     download = Download(url='playlist url')
     test_session.add(download)
     channel = get_or_create_channel(example_playlist_json['channel_id'], download.url, example_channel_json['uploader'])
-    test_session.add(Video(url='https://youtube.com/watch?v=video_1_url',
-                           source_id='video 1 id', channel_id=channel.id, video_path='video exists',
-                           poster_path='poster exists'))
+    video_file = File(path=test_directory / 'video file.mp4')
+    test_session.add(video_file)
+    test_session.add(Video(url='https://www.youtube.com/watch?v=video_1_url',
+                           source_id='video 1 id', channel_id=channel.id, video_file=video_file))
     test_session.commit()
 
     mock_video_extract_info.return_value = example_playlist_json  # Playlist info is fetched first.
@@ -491,6 +499,10 @@ async def test_download_playlist(test_session, test_directory, mock_video_extrac
         result = await channel_downloader.do_download(download)
     assert result.success is True, 'Download was not successful'
     assert set(result.downloads) == {
-        'https://youtube.com/watch?v=video_2_url',
+        'https://www.youtube.com/watch?v=video_2_url',  # Shorts is converted to regular URL.
         'https://youtube.com/watch?v=video_3_url',
     }
+
+
+def test_channel_download_match_title(test_session, test_directory, simple_channel, video_download_manager):
+    pass

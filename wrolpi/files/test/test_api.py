@@ -6,6 +6,7 @@ from unittest import mock
 import pytest
 
 from wrolpi.errors import API_ERRORS, WROLModeEnabled
+from wrolpi.files.models import File
 from wrolpi.test.common import assert_dict_contains
 from wrolpi.vars import PROJECT_DIR
 
@@ -102,20 +103,19 @@ def test_delete_file(test_client, make_files_structure, test_directory):
     ]
 )
 def test_delete_invalid_file(test_client, file):
-    with mock.patch('modules.files.api.lib.delete_file') as mock_delete_file:
+    with mock.patch('wrolpi.files.api.lib.delete_file') as mock_delete_file:
         request, response = test_client.post('/api/files/delete', content=json.dumps({'file': file}))
         assert response.status_code == HTTPStatus.BAD_REQUEST
         mock_delete_file.assert_not_called()
 
 
-def test_delete_wrol_mode(test_client):
-    """
-    Can't delete a file when WROL Mode is enabled.
-    """
-    with mock.patch('wrolpi.common.wrol_mode_enabled', lambda: True):
-        request, response = test_client.post('/api/files/delete', content=json.dumps({'file': 'foo'}))
-        assert response.status_code == HTTPStatus.FORBIDDEN
-        assert response.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+def test_delete_wrol_mode(test_client, wrol_mode_fixture):
+    """Can't delete a file when WROL Mode is enabled."""
+    wrol_mode_fixture(True)
+
+    request, response = test_client.post('/api/files/delete', content=json.dumps({'file': 'foo'}))
+    assert response.status_code == HTTPStatus.FORBIDDEN
+    assert response.json['code'] == API_ERRORS[WROLModeEnabled]['code']
 
 
 def do_search(test_client, search_str, total, expected):
@@ -152,8 +152,61 @@ def test_files_search(test_session, test_client, make_files_structure):
     do_search(test_client, 'foo', 1, [dict(path='foo_is_the_name.txt', mimetype='text/plain', size=12)])
     do_search(test_client, 'bar', 1, [dict(path='archives/bar.txt', mimetype='text/plain', size=16)])
     do_search(test_client, 'baz', 2, [
-        dict(path='baz.mp4', mimetype='video/mp4', size=1055736),
-        dict(path='baz baz two.mp4', mimetype='video/mp4', size=1055736),
+        dict(path='baz baz two.mp4', mimetype='video/mp4', size=1056318),
+        dict(path='baz.mp4', mimetype='video/mp4', size=1056318),
     ])
-    do_search(test_client, 'two', 1, [dict(path='baz baz two.mp4', mimetype='video/mp4', size=1055736)])
+    do_search(test_client, 'two', 1, [dict(path='baz baz two.mp4', mimetype='video/mp4', size=1056318)])
     do_search(test_client, 'nothing', 0, [])
+
+    # No search string returns all Files.
+    do_search(test_client, None, 4, [
+        dict(path='archives/bar.txt'),
+        dict(path='baz baz two.mp4'),
+        dict(path='baz.mp4'),
+        dict(path='foo_is_the_name.txt'),
+    ])
+
+
+def test_associated_files(test_session, test_client, make_files_structure):
+    mp4, png, j, txt = make_files_structure([
+        'video.mp4',
+        'video.png',
+        'video.info.json',
+        'not a video.txt',
+    ])
+    test_client.post('/api/files/refresh')
+    mp4_file = test_session.query(File).filter_by(path=mp4).one()
+    png_file = test_session.query(File).filter_by(path=png).one()
+    j_file = test_session.query(File).filter_by(path=j).one()
+    txt_file = test_session.query(File).filter_by(path=txt).one()
+
+    def check_files_search(content, expected):
+        request, response = test_client.post('/api/files/search', content=json.dumps(content))
+        assert response.status_code == HTTPStatus.OK
+        assert [{'path': i['path']} for i in response.json['files']] == expected
+
+    check_files_search(
+        {'search_str': 'video'},
+        [
+            {'path': 'not a video.txt'},
+            {'path': 'video.info.json'},
+            {'path': 'video.mp4'},
+            {'path': 'video.png'},
+        ]
+    )
+
+    mp4_file.associated = False  # the modeled file
+    png_file.associated = True
+    j_file.associated = True
+    test_session.commit()
+
+    # Associated files are last.
+    check_files_search(
+        {'search_str': 'video'},
+        [
+            {'path': 'not a video.txt'},
+            {'path': 'video.mp4'},
+            {'path': 'video.info.json'},
+            {'path': 'video.png'},
+        ]
+    )

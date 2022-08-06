@@ -1,3 +1,4 @@
+import asyncio
 import pathlib
 from typing import List
 from urllib.request import Request
@@ -6,10 +7,11 @@ from sanic import response
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi.common import get_media_directory, api_param_limiter
+from wrolpi.common import get_media_directory, api_param_limiter, wrol_mode_check
 from wrolpi.errors import InvalidFile
 from wrolpi.root_api import get_blueprint, json_response
 from . import lib, schema
+from ..vars import PYTEST
 
 bp = get_blueprint('Files', '/api/files')
 
@@ -74,9 +76,23 @@ files_offset_limiter = api_param_limiter(100, 0)
 
 
 @bp.post('/refresh')
-@openapi.description('Find and index all files')
+@openapi.description('Find and index all files in the media directory.')
+@wrol_mode_check
 async def refresh(_: Request):
-    lib.refresh_files()
+    await lib.refresh_files()
+    return response.empty()
+
+
+@bp.post('/refresh/directory')
+@openapi.description('Find and index all files in the provided directory.')
+@validate(schema.DirectoryRefreshRequest)
+@wrol_mode_check
+async def refresh(_: Request, body: schema.DirectoryRefreshRequest):
+    directory = get_media_directory() / body.directory
+    if PYTEST:
+        await lib.refresh_directory_files_recursively(directory)
+    else:
+        asyncio.create_task(lib.refresh_directory_files_recursively(directory))
     return response.empty()
 
 
@@ -87,5 +103,5 @@ async def refresh(_: Request):
 )
 @validate(schema.FilesSearchRequest)
 async def search_files(_: Request, body: schema.FilesSearchRequest):
-    files, total = lib.search(body.search_str, body.limit, body.offset)
+    files, total = lib.file_search(body.search_str, body.limit, body.offset, body.mimetype, body.model)
     return json_response(dict(files=files, totals=dict(files=total)))

@@ -23,11 +23,8 @@ if not MEDIA_DIRECTORY.is_dir() and not PYTEST:
 
 CONFIG_DIR: Path = MEDIA_DIRECTORY / 'config'
 MODULES_DIR: Path = PROJECT_DIR / 'modules'
-PUBLIC_HOST = os.environ.get('PUBLIC_HOST')
-PUBLIC_PORT = os.environ.get('PUBLIC_PORT')
 
 DEFAULT_TIMEZONE_STR = 'America/Boise'
-LAST_MODIFIED_DATE_FORMAT = '%a, %d %b %Y %H:%M:%S GMT'
 DATE_FORMAT = '%Y-%M-%d'
 DATETIME_FORMAT = '%Y-%m-%d %H:%M:%S'
 DATETIME_FORMAT_MS = '%Y-%m-%d %H:%M:%S.%f'
@@ -40,10 +37,3 @@ DB_PORT = int(os.environ.get('DB_PORT', 5432))
 DB_NAME = os.environ.get('DB_NAME', 'wrolpi')
 DB_USER = os.environ.get('DB_USER', 'wrolpi')
 DB_PASSWORD = os.environ.get('DB_PASSWORD', 'wrolpi')
-
-EXAMPLE_CONFIG = {
-    'hotspot_on_startup': True,
-    'throttle_on_startup': False,
-    'timezone': 'America/Boise',
-    'wrol_mode': False,
-}

@@ -131,7 +131,9 @@ class ExtendedVideo(Video):
 
 @dataclass
 class VideoResponse:
-    video = ExtendedVideo
+    file = ExtendedVideo
+    prev = ExtendedVideo
+    next = ExtendedVideo
 
 
 @dataclass

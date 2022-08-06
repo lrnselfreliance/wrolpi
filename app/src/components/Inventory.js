@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useContext, useState} from 'react';
 import "../static/wrolpi.css";
 import {
     deleteInventory,
@@ -6,154 +6,136 @@ import {
     getBrands,
     getCategories,
     getInventories,
-    getInventory,
     getItems,
     saveInventory,
     saveItem,
     updateInventory,
     updateItem
 } from "../api";
-import {Button, Checkbox, Dropdown, Form, Grid, Header, Portal, Segment, Table} from "semantic-ui-react";
-import {Route} from "react-router-dom";
+import {
+    Checkbox,
+    Dropdown,
+    Form,
+    Grid,
+    Portal,
+    TableBody,
+    TableCell,
+    TableHeader,
+    TableHeaderCell,
+    TableRow
+} from "semantic-ui-react";
+import {Route, Routes} from "react-router-dom";
 import {toast} from 'react-semantic-toasts';
 import {arraysEqual, enumerate, PageContainer, replaceNullValues, TabLinks} from './Common';
 import _ from 'lodash';
+import {ThemeContext} from "../contexts/contexts";
+import {useInventory} from "../hooks/customHooks";
+import {Button, FormGroup, FormInput, Header, Segment, Table} from "./Theme";
 
-class InventorySummary extends React.Component {
+function InventorySummary() {
+    const {t} = useContext(ThemeContext);
+    const [inventoryId, setInventoryId] = useState();
+    const {byCategory, bySubcategory, byName} = useInventory(inventoryId);
 
-    constructor(props) {
-        super(props);
-        this.state = {
-            by_category: null,
-            by_subcategory: null,
-            by_name: null,
-            inventory: null,
+    const setInventory = (inventory) => {
+        setInventoryId(inventory.id);
+    }
+
+    const categoryTable = () => {
+        function row([key, i]) {
+            return <TableRow key={key}>
+                <TableCell>{i.category}</TableCell>
+                <TableCell>{i.total_size}</TableCell>
+                <TableCell>{i.unit}</TableCell>
+            </TableRow>
         }
-    }
 
-    async componentDidMount() {
-        await this.fetchInventory();
-    }
-
-    fetchInventory = async () => {
-        if (this.state.inventory) {
-            try {
-                let {by_category, by_subcategory, by_name} = await getInventory(this.state.inventory.id);
-                by_category = enumerate(by_category);
-                by_subcategory = enumerate(by_subcategory);
-                by_name = enumerate(by_name);
-                this.setState({by_category, by_subcategory, by_name});
-            } catch (e) {
-                console.error(e);
-            }
+        if (byCategory && byCategory.length > 0) {
+            return <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHeaderCell>Category</TableHeaderCell>
+                        <TableHeaderCell>Total Size</TableHeaderCell>
+                        <TableHeaderCell>Unit</TableHeaderCell>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {byCategory.map(row)}
+                </TableBody>
+            </Table>;
         }
+        return <p {...t}>No items have been added to this inventory.</p>;
     }
 
-    setInventory = async (inventory) => {
-        this.setState({inventory}, this.fetchInventory);
-    }
-
-    categoryTable = () => {
-        if (this.state.by_category === null || this.state.by_category.length === 0) {
-            return <p>No items have been added to this inventory.</p>;
+    const subcategoryTable = () => {
+        function row([key, i]) {
+            return <TableRow key={key}>
+                <TableCell>{i.category}</TableCell>
+                <TableCell>{i.subcategory}</TableCell>
+                <TableCell>{i.total_size}</TableCell>
+                <TableCell>{i.unit}</TableCell>
+            </TableRow>
         }
+
+        if (bySubcategory && bySubcategory.length > 0) {
+            return <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHeaderCell>Category</TableHeaderCell>
+                        <TableHeaderCell>Subcategory</TableHeaderCell>
+                        <TableHeaderCell>Total Size</TableHeaderCell>
+                        <TableHeaderCell>Unit</TableHeaderCell>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {bySubcategory.map(row)}
+                </TableBody>
+            </Table>;
+        }
+        return <p {...t}>No items have been added to this inventory.</p>;
+    }
+
+    const nameTable = () => {
 
         function row([key, i]) {
-            return <Table.Row key={key}>
-                <Table.Cell>{i.category}</Table.Cell>
-                <Table.Cell>{i.total_size}</Table.Cell>
-                <Table.Cell>{i.unit}</Table.Cell>
-            </Table.Row>
+            return <TableRow key={key}>
+                <TableCell>{i.brand}</TableCell>
+                <TableCell>{i.name}</TableCell>
+                <TableCell>{i.total_size}</TableCell>
+                <TableCell>{i.unit}</TableCell>
+            </TableRow>
         }
 
-        return <Table>
-            <Table.Header>
-                <Table.Row>
-                    <Table.HeaderCell>Category</Table.HeaderCell>
-                    <Table.HeaderCell>Total Size</Table.HeaderCell>
-                    <Table.HeaderCell>Unit</Table.HeaderCell>
-                </Table.Row>
-            </Table.Header>
-            <Table.Body>
-                {this.state.by_category.map(row)}
-            </Table.Body>
-        </Table>;
+        if (byName && byName.length > 0) {
+
+            return <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHeaderCell>Brand</TableHeaderCell>
+                        <TableHeaderCell>Product Name</TableHeaderCell>
+                        <TableHeaderCell>Total Size</TableHeaderCell>
+                        <TableHeaderCell>Unit</TableHeaderCell>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {byName.map(row)}
+                </TableBody>
+            </Table>;
+        }
+        return <p {...t}>No items have been added to this inventory.</p>;
     }
 
-    subcategoryTable = () => {
-        if (this.state.by_subcategory === null || this.state.by_subcategory.length === 0) {
-            return <p>No items have been added to this inventory.</p>;
-        }
+    return <>
+        <InventorySelector setInventory={setInventory}/>
+        <Header as='h3'>Categorized</Header>
+        {categoryTable()}
 
-        function row([key, i]) {
-            return <Table.Row key={key}>
-                <Table.Cell>{i.category}</Table.Cell>
-                <Table.Cell>{i.subcategory}</Table.Cell>
-                <Table.Cell>{i.total_size}</Table.Cell>
-                <Table.Cell>{i.unit}</Table.Cell>
-            </Table.Row>
-        }
+        <Header as='h3'>Categorized by Subcategory</Header>
+        {subcategoryTable()}
 
-        return <Table>
-            <Table.Header>
-                <Table.Row>
-                    <Table.HeaderCell>Category</Table.HeaderCell>
-                    <Table.HeaderCell>Subcategory</Table.HeaderCell>
-                    <Table.HeaderCell>Total Size</Table.HeaderCell>
-                    <Table.HeaderCell>Unit</Table.HeaderCell>
-                </Table.Row>
-            </Table.Header>
-            <Table.Body>
-                {this.state.by_subcategory.map(row)}
-            </Table.Body>
-        </Table>;
-    }
-
-    nameTable = () => {
-        if (this.state.by_name === null || this.state.by_name.length === 0) {
-            return <p>No items have been added to this inventory.</p>;
-        }
-
-        function row([key, i]) {
-            return <Table.Row key={key}>
-                <Table.Cell>{i.brand}</Table.Cell>
-                <Table.Cell>{i.name}</Table.Cell>
-                <Table.Cell>{i.total_size}</Table.Cell>
-                <Table.Cell>{i.unit}</Table.Cell>
-            </Table.Row>
-        }
-
-        return <Table>
-            <Table.Header>
-                <Table.Row>
-                    <Table.HeaderCell>Brand</Table.HeaderCell>
-                    <Table.HeaderCell>Product Name</Table.HeaderCell>
-                    <Table.HeaderCell>Total Size</Table.HeaderCell>
-                    <Table.HeaderCell>Unit</Table.HeaderCell>
-                </Table.Row>
-            </Table.Header>
-            <Table.Body>
-                {this.state.by_name.map(row)}
-            </Table.Body>
-        </Table>;
-    }
-
-    render() {
-        return (
-            <>
-                <InventorySelector setInventory={this.setInventory}/>
-                <h3>Categorized</h3>
-                {this.categoryTable()}
-
-                <h3>Categorized by Subcategory</h3>
-                {this.subcategoryTable()}
-
-                <h3>By Name</h3>
-                {this.nameTable()}
-
-            </>
-        )
-    }
+        <Header as='h3'>By Name</Header>
+        {nameTable()}
+    </>
 }
 
 class InventoryList extends React.Component {
@@ -223,102 +205,102 @@ class InventoryList extends React.Component {
         let ref = React.createRef();
         let editable = this.state.checkboxes.indexOf(item.id) >= 0;
 
-        let checkboxCell = <Table.Cell>
+        let checkboxCell = <TableCell>
             <Checkbox
                 value={item.id}
                 ref={ref}
                 onClick={() => this.handleCheckbox(ref, item)}
             />
-        </Table.Cell>;
+        </TableCell>;
 
         if (!editable) {
             // Show the user the non-editable version, until they check the checkbox.
             return (
-                <Table.Row key={item.id}>
+                <TableRow key={item.id}>
                     {checkboxCell}
-                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
                         {item.brand}
-                    </Table.Cell>
-                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    </TableCell>
+                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
                         {item.name}
-                    </Table.Cell>
-                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    </TableCell>
+                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
                         {item.item_size}
-                    </Table.Cell>
-                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    </TableCell>
+                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
                         {item.unit}
-                    </Table.Cell>
-                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    </TableCell>
+                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
                         {item.count}
-                    </Table.Cell>
-                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>{
+                    </TableCell>
+                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>{
                         item.subcategory}
-                    </Table.Cell>
-                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    </TableCell>
+                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
                         {item.category}
-                    </Table.Cell>
-                    <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    </TableCell>
+                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
                         {item.expiration_date}
-                    </Table.Cell>
-                </Table.Row>
+                    </TableCell>
+                </TableRow>
             )
         } else {
             // Insert the modified table row so the user can edit this item.
             let editItem = this.state.editItems[item.id];
-            return <Table.Row key={item.id}>
+            return <TableRow key={item.id}>
                 {checkboxCell}
-                <Table.Cell>
+                <TableCell>
                     <BrandInput
                         value={editItem.brand}
                         handleInputChange={(i, j) => this.handleInputChange(i, j, item.id)}
                     />
-                </Table.Cell>
-                <Table.Cell>
-                    <Form.Input
+                </TableCell>
+                <TableCell>
+                    <FormInput
                         fluid
                         name="name"
                         value={editItem.name}
                         onChange={(i, j) => this.handleInputChange(i, j, item.id)}
                     />
-                </Table.Cell>
-                <Table.Cell>
-                    <Form.Input
+                </TableCell>
+                <TableCell>
+                    <FormInput
                         fluid
                         name="item_size"
                         value={editItem.item_size}
                         onChange={(i, j) => this.handleInputChange(i, j, item.id)}
                     />
-                </Table.Cell>
-                <Table.Cell>
-                    <Form.Input
+                </TableCell>
+                <TableCell>
+                    <FormInput
                         fluid
                         name="unit"
                         value={editItem.unit}
                         onChange={(i, j) => this.handleInputChange(i, j, item.id)}
                     />
-                </Table.Cell>
-                <Table.Cell>
-                    <Form.Input
+                </TableCell>
+                <TableCell>
+                    <FormInput
                         fluid
                         name="count"
                         value={editItem.count}
                         onChange={(i, j) => this.handleInputChange(i, j, item.id)}
                     />
-                </Table.Cell>
+                </TableCell>
                 <TableCategoryInputs
                     handleInputChange={(i, j) => this.handleInputChange(i, j, item.id)}
                     subcategory={editItem.subcategory}
                     category={editItem.category}
                 />
-                <Table.Cell>
-                    <Form.Input
+                <TableCell>
+                    <FormInput
                         fluid
                         name="expiration_date"
                         value={editItem.expiration_date}
                         onChange={(i, j) => this.handleInputChange(i, j, item.id)}
                     />
-                </Table.Cell>
-            </Table.Row>
+                </TableCell>
+            </TableRow>
         }
     }
 
@@ -328,93 +310,95 @@ class InventoryList extends React.Component {
 
     render() {
         if (this.props.items.length === 0) {
-            return <p>Add some items using the form above!</p>
+            return <ThemeContext.Consumer>
+                {({t}) => (
+                    <p {...t}>Add some items using the form above!</p>
+                )}
+            </ThemeContext.Consumer>
         }
 
         const {sortColumns, sortDirection} = this.props;
 
-        return (
-            <>
-                <Table celled sortable>
-                    <Table.Header>
-                        <Table.Row>
-                            <Table.HeaderCell
-                                sorted={arraysEqual(sortColumns, ['id']) ? sortDirection : null}
-                                onClick={() => this.handleSort(['id'])}
-                            >
-                                Edit
-                            </Table.HeaderCell>
-                            <Table.HeaderCell
-                                sorted={arraysEqual(sortColumns, ['brand', 'name']) ? sortDirection : null}
-                                onClick={() => this.handleSort(['brand', 'name'])}
-                            >
-                                Brand
-                            </Table.HeaderCell>
-                            <Table.HeaderCell
-                                sorted={arraysEqual(sortColumns, ['name', 'brand']) ? sortDirection : null}
-                                onClick={() => this.handleSort(['name', 'brand'])}
-                            >
-                                Name
-                            </Table.HeaderCell>
-                            <Table.HeaderCell
-                                sorted={arraysEqual(sortColumns, ['size']) ? sortDirection : null}
-                                onClick={() => this.handleSort(['size'])}
-                            >
-                                Size
-                            </Table.HeaderCell>
-                            <Table.HeaderCell
-                                sorted={arraysEqual(sortColumns, ['unit']) ? sortDirection : null}
-                                onClick={() => this.handleSort(['unit'])}
-                            >
-                                Unit
-                            </Table.HeaderCell>
-                            <Table.HeaderCell
-                                sorted={arraysEqual(sortColumns, ['count']) ? sortDirection : null}
-                                onClick={() => this.handleSort(['count'])}
-                            >
-                                Count
-                            </Table.HeaderCell>
-                            <Table.HeaderCell
-                                sorted={arraysEqual(sortColumns, ['subcategory', 'category']) ? sortDirection : null}
-                                onClick={() => this.handleSort(['subcategory', 'category'])}
-                            >
-                                Subcategory
-                            </Table.HeaderCell>
-                            <Table.HeaderCell
-                                sorted={arraysEqual(sortColumns, ['category', 'subcategory']) ? sortDirection : null}
-                                onClick={() => this.handleSort(['category', 'subcategory'])}
-                            >
-                                Category
-                            </Table.HeaderCell>
-                            <Table.HeaderCell
-                                sorted={arraysEqual(sortColumns, ['expiration_date']) ? sortDirection : null}
-                                onClick={() => this.handleSort(['expiration_date'])}
-                            >
-                                Expiration Date
-                            </Table.HeaderCell>
-                        </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                        {this.props.items.map((i) => this.row(i))}
-                    </Table.Body>
-                </Table>
-                <Button
-                    color='red'
-                    onClick={this.handleRemove}
-                    disabled={this.state.checkboxes.length === 0}
-                    floated='right'
-                >
-                    Remove
-                </Button>
-                <Button
-                    secondary
-                    onClick={this.handleSave}
-                    disabled={this.state.checkboxes.length === 0}
-                >
-                    Save
-                </Button>
-            </>
-        )
+        return <>
+            <Table celled sortable>
+                <TableHeader>
+                    <TableRow>
+                        <TableHeaderCell
+                            sorted={arraysEqual(sortColumns, ['id']) ? sortDirection : null}
+                            onClick={() => this.handleSort(['id'])}
+                        >
+                            Edit
+                        </TableHeaderCell>
+                        <TableHeaderCell
+                            sorted={arraysEqual(sortColumns, ['brand', 'name']) ? sortDirection : null}
+                            onClick={() => this.handleSort(['brand', 'name'])}
+                        >
+                            Brand
+                        </TableHeaderCell>
+                        <TableHeaderCell
+                            sorted={arraysEqual(sortColumns, ['name', 'brand']) ? sortDirection : null}
+                            onClick={() => this.handleSort(['name', 'brand'])}
+                        >
+                            Name
+                        </TableHeaderCell>
+                        <TableHeaderCell
+                            sorted={arraysEqual(sortColumns, ['size']) ? sortDirection : null}
+                            onClick={() => this.handleSort(['size'])}
+                        >
+                            Size
+                        </TableHeaderCell>
+                        <TableHeaderCell
+                            sorted={arraysEqual(sortColumns, ['unit']) ? sortDirection : null}
+                            onClick={() => this.handleSort(['unit'])}
+                        >
+                            Unit
+                        </TableHeaderCell>
+                        <TableHeaderCell
+                            sorted={arraysEqual(sortColumns, ['count']) ? sortDirection : null}
+                            onClick={() => this.handleSort(['count'])}
+                        >
+                            Count
+                        </TableHeaderCell>
+                        <TableHeaderCell
+                            sorted={arraysEqual(sortColumns, ['subcategory', 'category']) ? sortDirection : null}
+                            onClick={() => this.handleSort(['subcategory', 'category'])}
+                        >
+                            Subcategory
+                        </TableHeaderCell>
+                        <TableHeaderCell
+                            sorted={arraysEqual(sortColumns, ['category', 'subcategory']) ? sortDirection : null}
+                            onClick={() => this.handleSort(['category', 'subcategory'])}
+                        >
+                            Category
+                        </TableHeaderCell>
+                        <TableHeaderCell
+                            sorted={arraysEqual(sortColumns, ['expiration_date']) ? sortDirection : null}
+                            onClick={() => this.handleSort(['expiration_date'])}
+                        >
+                            Expiration Date
+                        </TableHeaderCell>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {this.props.items.map((i) => this.row(i))}
+                </TableBody>
+            </Table>
+            <Button
+                color='red'
+                onClick={this.handleRemove}
+                disabled={this.state.checkboxes.length === 0}
+                floated='right'
+            >
+                Remove
+            </Button>
+            <Button
+                secondary
+                onClick={this.handleSave}
+                disabled={this.state.checkboxes.length === 0}
+            >
+                Save
+            </Button>
+        </>
     }
 }
 
@@ -460,45 +444,48 @@ class InventoryPortal extends React.Component {
     }
 
     render() {
-        return (
-            <>
-                <Button
-                    disabled={this.props.open}
-                    onClick={this.handleOpen}
-                    {...this.props.buttonProps}
-                />
-                <Portal onClose={this.handleClose} open={this.state.open}>
-                    <Segment
-                        style={{
-                            left: '40%',
-                            position: 'fixed',
-                            top: '50%',
-                            zIndex: 1000,
-                        }}
-                    >
-                        <Header>{this.props.header}</Header>
-                        <Form onSubmit={this.handleSubmit}>
-                            <label>Name</label>
-                            <Form.Input
-                                name='name'
-                                value={this.state.name}
-                                onChange={this.handleInputChange}
-                            />
-                            <Button primary type='submit'>Save</Button>
-                            {
-                                this.props.deleteButton &&
-                                <Button color='red'
+        return <ThemeContext.Consumer>
+            {({s}) => (
+                <>
+                    <Button
+                        disabled={this.props.open}
+                        onClick={this.handleOpen}
+                        {...this.props.buttonProps}
+                    />
+                    <Portal onClose={this.handleClose} open={this.state.open}>
+                        <Segment
+                            style={{
+                                left: '40%',
+                                position: 'fixed',
+                                top: '50%',
+                                zIndex: 1000,
+                            }}
+                        >
+                            <Header>{this.props.header}</Header>
+                            <Form onSubmit={this.handleSubmit}>
+                                <label {...s}>Name</label>
+                                <FormInput
+                                    name='name'
+                                    value={this.state.name}
+                                    onChange={this.handleInputChange}
+                                />
+                                <Button primary type='submit'>Save</Button>
+                                {
+                                    this.props.deleteButton &&
+                                    <Button
+                                        color='red'
                                         onClick={this.handleDelete}
-                                >
-                                    Delete
-                                </Button>
-                            }
-                            <Button secondary floated='right' onClick={this.handleClose}>Cancel</Button>
-                        </Form>
-                    </Segment>
-                </Portal>
-            </>
-        )
+                                    >
+                                        Delete
+                                    </Button>
+                                }
+                                <Button secondary floated='right' onClick={this.handleClose}>Cancel</Button>
+                            </Form>
+                        </Segment>
+                    </Portal>
+                </>
+            )}
+        </ThemeContext.Consumer>
     }
 }
 
@@ -647,30 +634,28 @@ class InventorySelector extends React.Component {
     }
 
     render() {
-        return (
-            <>
-                <h3>Inventory</h3>
-                <Grid>
-                    <Grid.Column width={14}>
-                        <Dropdown
-                            placeholder='Select an Inventory'
-                            fluid
-                            selection
-                            value={this.state.selected ? this.state.selected.id : null}
-                            options={this.state.options}
-                            onChange={this.setInventory}
-                        />
-                    </Grid.Column>
-                    <Grid.Column width={2}>
-                        <NewInventory success={() => this.fetchInventories()}/>
-                        <EditInventory
-                            inventory={this.state.selected}
-                            success={() => this.fetchInventories()}
-                        />
-                    </Grid.Column>
-                </Grid>
-            </>
-        )
+        return <>
+            <Header as='h3'>Inventory</Header>
+            <Grid>
+                <Grid.Column width={14}>
+                    <Dropdown
+                        placeholder='Select an Inventory'
+                        fluid
+                        selection
+                        value={this.state.selected ? this.state.selected.id : null}
+                        options={this.state.options}
+                        onChange={this.setInventory}
+                    />
+                </Grid.Column>
+                <Grid.Column width={2}>
+                    <NewInventory success={() => this.fetchInventories()}/>
+                    <EditInventory
+                        inventory={this.state.selected}
+                        success={() => this.fetchInventories()}
+                    />
+                </Grid.Column>
+            </Grid>
+        </>
     }
 }
 
@@ -717,22 +702,24 @@ class SuggestionInput extends React.Component {
     }
 
     render() {
-        return (
-            <>
-                <label>{this.props.label}</label>
-                <Form.Input
-                    fluid={this.props.fluid !== undefined ? this.props.fluid : false}
-                    list={this.props.list}
-                    name={this.props.name}
-                    placeholder={this.props.placeholder}
-                    onChange={this.handleInputChange}
-                    value={this.state.value}
-                />
-                <datalist id={this.props.list}>
-                    {this.buildOptions()}
-                </datalist>
-            </>
-        )
+        return <ThemeContext.Consumer>
+            {({s}) => (
+                <>
+                    <label {...s}>{this.props.label}</label>
+                    <FormInput
+                        fluid={this.props.fluid !== undefined ? this.props.fluid : false}
+                        list={this.props.list}
+                        name={this.props.name}
+                        placeholder={this.props.placeholder}
+                        onChange={this.handleInputChange}
+                        value={this.state.value}
+                    />
+                    <datalist id={this.props.list}>
+                        {this.buildOptions()}
+                    </datalist>
+                </>
+            )}
+        </ThemeContext.Consumer>
     }
 }
 
@@ -796,32 +783,34 @@ class CategoryInputs extends React.Component {
     render() {
         this.subcategoryRef = React.createRef();
 
-        return (
-            <Grid>
-                <Grid.Column computer={8} mobile={16}>
-                    <SuggestionInput
-                        ref={this.subcategoryRef}
-                        name='subcategory'
-                        fluid={true}
-                        list='subcategory'
-                        label='Subcategory'
-                        placeholder='Subcategory'
-                        value={this.state.subcategory}
-                        options={this.state.categories}
-                        handleInputChange={this.handleInputChange}
-                    />
-                </Grid.Column>
-                <Grid.Column computer={8} mobile={16}>
-                    <label>Category</label>
-                    <Form.Input
-                        name="category"
-                        placeholder="Category"
-                        onChange={this.handleInputChange}
-                        value={this.state.category}
-                    />
-                </Grid.Column>
-            </Grid>
-        )
+        return <ThemeContext.Consumer>
+            {({s}) => (
+                <Grid>
+                    <Grid.Column computer={8} mobile={16}>
+                        <SuggestionInput
+                            ref={this.subcategoryRef}
+                            name='subcategory'
+                            fluid={true}
+                            list='subcategory'
+                            label='Subcategory'
+                            placeholder='Subcategory'
+                            value={this.state.subcategory}
+                            options={this.state.categories}
+                            handleInputChange={this.handleInputChange}
+                        />
+                    </Grid.Column>
+                    <Grid.Column computer={8} mobile={16}>
+                        <label {...s}>Category</label>
+                        <FormInput
+                            name="category"
+                            placeholder="Category"
+                            onChange={this.handleInputChange}
+                            value={this.state.category}
+                        />
+                    </Grid.Column>
+                </Grid>
+            )}
+        </ThemeContext.Consumer>
     }
 }
 
@@ -829,7 +818,7 @@ class TableCategoryInputs extends CategoryInputs {
     render() {
         return (
             <>
-                <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
                     <SuggestionInput
                         ref={this.subcategoryRef}
                         name='subcategory'
@@ -840,16 +829,16 @@ class TableCategoryInputs extends CategoryInputs {
                         options={this.state.categories}
                         handleInputChange={this.handleInputChange}
                     />
-                </Table.Cell>
-                <Table.Cell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
-                    <Form.Input
+                </TableCell>
+                <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    <FormInput
                         fluid
                         name="category"
                         placeholder="Category"
                         onChange={this.handleInputChange}
                         value={this.state.category}
                     />
-                </Table.Cell>
+                </TableCell>
             </>
         )
     }
@@ -1017,103 +1006,107 @@ class InventoryAddList extends React.Component {
     render() {
         this.categoriesRef = React.createRef();
         this.brandRef = React.createRef();
-        return (
-            <>
-                <InventorySelector setInventory={this.setInventory}/>
-                <Form onSubmit={this.handleSubmit} style={{marginLeft: '0.5em', marginTop: '1em'}}>
-                    <Form.Group widths='equal'>
-                        <Grid>
-                            <Grid.Column computer={2} mobile={16}>
-                                <BrandInput
-                                    label='Brand'
-                                    ref={this.brandRef}
-                                    handleInputChange={this.handleInputChange}
-                                />
-                            </Grid.Column>
-                            <Grid.Column computer={3} mobile={16}>
-                                <label>Product Name</label>
-                                <Form.Input
-                                    required
-                                    name="name"
-                                    placeholder="Product Name"
-                                    onChange={this.handleInputChange}
-                                    value={this.state.name}
-                                />
-                            </Grid.Column>
-                            <Grid.Column computer={1} mobile={4}>
-                                <label>Size</label>
-                                <Form.Input
-                                    required
-                                    name="item_size"
-                                    placeholder="Size"
-                                    onChange={this.handleInputChange}
-                                    value={this.state.item_size}
-                                />
-                            </Grid.Column>
-                            <Grid.Column computer={1} mobile={4}>
-                                <label>Unit</label>
-                                <Form.Input
-                                    required
-                                    name="unit"
-                                    placeholder="Unit"
-                                    onChange={this.handleInputChange}
-                                    value={this.state.unit}
-                                />
-                            </Grid.Column>
-                            <Grid.Column computer={1} mobile={4}>
-                                <label>Count</label>
-                                <Form.Input
-                                    required
-                                    name="count"
-                                    placeholder="Count"
-                                    onChange={this.handleInputChange}
-                                    value={this.state.count}
-                                />
-                            </Grid.Column>
-                            <Grid.Column computer={4} mobile={16}>
-                                <CategoryInputs
-                                    ref={this.categoriesRef}
-                                    handleInputChange={this.handleInputChange}
-                                />
-                            </Grid.Column>
-                            <Grid.Column computer={2} mobile={16}>
-                                <label>Expiration Date</label>
-                                <Form.Input
-                                    name="expiration_date"
-                                    placeholder="Expiration Date"
-                                    onChange={this.handleInputChange}
-                                    value={this.state.expiration_date}
-                                />
-                            </Grid.Column>
-                            <Grid.Column computer={1} mobile={16}>
-                                <Button primary icon='plus' type='submit' style={{marginTop: '1.4em'}}/>
-                            </Grid.Column>
-                        </Grid>
-                    </Form.Group>
-                </Form>
-                <h4>Items in: {this.state.inventory ? this.state.inventory.name : ''}</h4>
-                <InventoryList
-                    items={this.state.items}
-                    fetchItems={this.fetchItems}
-                    handleSort={this.handleSort}
-                    sortColumns={this.state.sort.columns}
-                    sortDirection={this.state.sort.direction}
-                />
-            </>
-        )
+        return <ThemeContext.Consumer>
+            {({s}) => (
+                <>
+                    <InventorySelector setInventory={this.setInventory}/>
+                    <Form onSubmit={this.handleSubmit} style={{marginLeft: '0.5em', marginTop: '1em'}}>
+                        <FormGroup widths='equal'>
+                            <Grid>
+                                <Grid.Column computer={2} mobile={16}>
+                                    <BrandInput
+                                        label='Brand'
+                                        ref={this.brandRef}
+                                        handleInputChange={this.handleInputChange}
+                                    />
+                                </Grid.Column>
+                                <Grid.Column computer={3} mobile={16}>
+                                    <label {...s}>Product Name</label>
+                                    <FormInput
+                                        required
+                                        name="name"
+                                        placeholder="Product Name"
+                                        onChange={this.handleInputChange}
+                                        value={this.state.name}
+                                    />
+                                </Grid.Column>
+                                <Grid.Column computer={1} mobile={4}>
+                                    <label {...s}>Size</label>
+                                    <FormInput
+                                        required
+                                        name="item_size"
+                                        placeholder="Size"
+                                        onChange={this.handleInputChange}
+                                        value={this.state.item_size}
+                                    />
+                                </Grid.Column>
+                                <Grid.Column computer={1} mobile={4}>
+                                    <label {...s}>Unit</label>
+                                    <FormInput
+                                        required
+                                        name="unit"
+                                        placeholder="Unit"
+                                        onChange={this.handleInputChange}
+                                        value={this.state.unit}
+                                    />
+                                </Grid.Column>
+                                <Grid.Column computer={1} mobile={4}>
+                                    <label {...s}>Count</label>
+                                    <FormInput
+                                        required
+                                        name="count"
+                                        placeholder="Count"
+                                        onChange={this.handleInputChange}
+                                        value={this.state.count}
+                                    />
+                                </Grid.Column>
+                                <Grid.Column computer={4} mobile={16}>
+                                    <CategoryInputs
+                                        ref={this.categoriesRef}
+                                        handleInputChange={this.handleInputChange}
+                                    />
+                                </Grid.Column>
+                                <Grid.Column computer={2} mobile={16}>
+                                    <label {...s}>Expiration Date</label>
+                                    <FormInput
+                                        name="expiration_date"
+                                        placeholder="Expiration Date"
+                                        onChange={this.handleInputChange}
+                                        value={this.state.expiration_date}
+                                    />
+                                </Grid.Column>
+                                <Grid.Column computer={1} mobile={16}>
+                                    <Button primary icon='plus' type='submit' style={{marginTop: '1.4em'}}/>
+                                </Grid.Column>
+                            </Grid>
+                        </FormGroup>
+                    </Form>
+                    <Header as='h4'>Items in: {this.state.inventory ? this.state.inventory.name : ''}</Header>
+                    <InventoryList
+                        items={this.state.items}
+                        fetchItems={this.fetchItems}
+                        handleSort={this.handleSort}
+                        sortColumns={this.state.sort.columns}
+                        sortDirection={this.state.sort.direction}
+                    />
+                </>
+            )}
+        </ThemeContext.Consumer>
     }
 }
 
 export function InventoryRoute(props) {
     const links = [
-        {text: 'List', to: '/inventory', exact: true, key: 'inventory'},
+        {text: 'List', to: '/inventory', key: 'inventory', end: true},
         {text: 'Summary', to: '/inventory/summary', key: 'summary'},
     ];
     return (
         <PageContainer>
             <TabLinks links={links}/>
-            <Route path='/inventory' exact component={InventoryAddList}/>
-            <Route path='/inventory/summary' exact component={InventorySummary}/>
+            <Routes>
+                <Route path='/' exact element={<InventoryAddList/>}/>
+                <Route path='summary' exact element={<InventorySummary/>}/>
+            </Routes>
         </PageContainer>
     )
 }

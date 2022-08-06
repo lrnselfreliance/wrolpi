@@ -1,24 +1,23 @@
-import React from 'react';
+import React, {useContext} from 'react';
 import {
-    Button,
-    Checkbox,
     Confirm,
     Container,
     Dimmer,
     Divider,
-    Form,
-    Header,
     Icon,
-    Loader,
     Modal,
-    Placeholder, Progress, Statistic,
-    Table
+    PlaceholderLine,
+    TableBody,
+    TableCell,
+    TableHeader,
+    TableHeaderCell,
+    TableRow
 } from "semantic-ui-react";
 import {
     clearCompletedDownloads,
     clearFailedDownloads,
-    getDownloads,
-    getSettings, getStatus,
+    getSettings,
+    getStatus,
     killDownload,
     postDownload,
     saveSettings
@@ -26,18 +25,38 @@ import {
 import TimezoneSelect from 'react-timezone-select';
 import {
     DisableDownloadsToggle,
+    ExternalCardLink,
     HelpPopup,
-    HotspotToggle, humanFileSize,
+    HotspotToggle,
+    humanFileSize,
+    LoadStatistic,
     PageContainer,
     secondsToDate,
     secondsToFrequency,
     TabLinks,
     textEllipsis,
     ThrottleToggle,
+    Toggle,
     WROLModeMessage
 } from "./Common";
-import {Route} from "react-router-dom";
+import {Route, Routes} from "react-router-dom";
 import QRCode from "react-qr-code";
+import {ThemeContext} from "../contexts/contexts";
+import {useDownloads} from "../hooks/customHooks";
+import {
+    Button,
+    Form,
+    FormField,
+    FormGroup,
+    FormInput,
+    Header,
+    Loader,
+    Placeholder,
+    Progress,
+    Statistic,
+    StatisticGroup,
+    Table
+} from "./Theme";
 
 class Settings extends React.Component {
 
@@ -150,54 +169,53 @@ class Settings extends React.Component {
 
         const qrButton = <Button icon style={{marginBottom: '1em'}}><Icon name='qrcode' size='big'/></Button>;
 
-        return (
-            <Container fluid>
+        return <ThemeContext.Consumer>
+            {({i, t}) => <Container fluid>
                 <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
 
                 <HotspotToggle/>
-                <br/>
-                <ThrottleToggle style={{marginTop: '0.5em'}}/>
+                <ThrottleToggle/>
                 <Divider/>
 
                 <Header as='h3'>
                     The settings for your WROLPi.
                 </Header>
-                <p className="text-muted">
+                <p {...t}>
                     Any changes will be written to <i>config/wrolpi.yaml</i>.
                 </p>
 
                 <Form id="settings" onSubmit={this.handleSubmit}>
-                    <Checkbox toggle
-                              style={{marginTop: '0.5em', marginBottom: '0.5em'}}
-                              label='Download on Startup'
-                              disabled={disabled || download_on_startup === null}
-                              checked={download_on_startup === true}
-                              onChange={(e, d) => this.handleInputChange(e, 'download_on_startup', d.checked)}
-                    />
+                    <div style={{margin: '0.5em'}}>
+                        <Toggle
+                            label='Download on Startup'
+                            disabled={disabled || download_on_startup === null}
+                            checked={download_on_startup === true}
+                            onChange={(checked) => this.handleInputChange(null, 'download_on_startup', checked)}
+                        />
+                    </div>
 
-                    <br/>
-                    <Checkbox toggle
-                              style={{marginTop: '0.5em', marginBottom: '0.5em'}}
-                              label='WiFi Hotspot on Startup'
-                              disabled={disabled || hotspot_on_startup === null}
-                              checked={hotspot_on_startup === true}
-                              onChange={(e, d) => this.handleInputChange(e, 'hotspot_on_startup', d.checked)}
-                    />
+                    <div style={{margin: '0.5em'}}>
+                        <Toggle
+                            label='WiFi Hotspot on Startup'
+                            disabled={disabled || hotspot_on_startup === null}
+                            checked={hotspot_on_startup === true}
+                            onChange={(checked) => this.handleInputChange(null, 'hotspot_on_startup', checked)}
+                        />
+                    </div>
 
-                    <br/>
+                    <div style={{margin: '0.5em'}}>
+                        <Toggle
+                            label='CPU Power-save on Startup'
+                            disabled={disabled || throttle_on_startup === null}
+                            checked={throttle_on_startup === true}
+                            onChange={(checked) => this.handleInputChange(null, 'throttle_on_startup', checked)}
+                        />
+                    </div>
 
-                    <Checkbox toggle
-                              style={{marginTop: '0.5em', marginBottom: '0.5em'}}
-                              label='CPU Power-save on Startup'
-                              disabled={disabled || throttle_on_startup === null}
-                              checked={throttle_on_startup === true}
-                              onChange={(e, d) => this.handleInputChange(e, 'throttle_on_startup', d.checked)}
-                    />
-
-                    <Form.Group inline>
-                        <Form.Input
+                    <FormGroup inline>
+                        <FormInput
                             label={<>
-                                <b>Download Timeout</b>
+                                <b {...t}>Download Timeout</b>
                                 <HelpPopup content='Downloads will be stopped after this many seconds have elapsed.
                                 Downloads will never timeout if this is empty.'/>
                             </>}
@@ -205,30 +223,30 @@ class Settings extends React.Component {
                             disabled={disabled || download_timeout === null}
                             onChange={(e, d) => this.handleTimeoutChange(e, 'download_timeout', d.value)}
                         />
-                    </Form.Group>
+                    </FormGroup>
 
-                    <Form.Group inline>
-                        <Form.Input
+                    <FormGroup inline>
+                        <FormInput
                             label='Hotspot SSID'
                             value={hotspot_ssid}
                             disabled={disabled || hotspot_ssid === null}
                             onChange={(e, d) =>
                                 this.setState({hotspot_ssid: d.value}, this.handleHotspotChange)}
                         />
-                        <Form.Input
+                        <FormInput
                             label='Hotspot Password'
                             disabled={disabled || hotspot_password === null}
                             value={hotspot_password}
                             onChange={(e, d) =>
                                 this.setState({hotspot_password: d.value}, this.handleHotspotChange)}
                         />
-                        <Form.Input
+                        <FormInput
                             label='Hotspot Device'
                             disabled={disabled || hotspot_password === null}
                             value={hotspot_device}
                             onChange={(e, d) => this.handleInputChange(e, 'hotspot_device', d.value)}
                         />
-                    </Form.Group>
+                    </FormGroup>
 
                     <Modal closeIcon
                            onClose={() => this.setState({qrOpen: false})}
@@ -244,25 +262,26 @@ class Settings extends React.Component {
                         </Modal.Content>
                     </Modal>
 
-                    <Form.Field>
+                    <FormField>
                         <label>Timezone</label>
                         <TimezoneSelect
                             value={timezone}
-                            onChange={(v) => this.handleInputChange(null, 'timezone', v)}
+                            onChange={i => this.handleInputChange(null, 'timezone', i)}
                         />
-                    </Form.Field>
+                    </FormField>
 
                     <Button color="blue" type="submit" disabled={disabled}>
                         Save
                     </Button>
 
-                    <Dimmer active={pending} inverted>
+                    <Dimmer active={pending}>
                         <Loader active={pending} size='large'/>
                     </Dimmer>
 
                 </Form>
             </Container>
-        )
+            }
+        </ThemeContext.Consumer>
     }
 }
 
@@ -284,13 +303,13 @@ class WROLMode extends React.Component {
         }
     }
 
-    toggleWROLMode = async () => {
+    toggleWROLMode = async (checked) => {
         // Handle WROL Mode toggling by itself so that other settings are not modified.
         let config = {
-            wrol_mode: !this.state.WROLMode,
+            wrol_mode: checked,
         }
         await saveSettings(config);
-        this.setState({disabled: !this.state.WROLMode, WROLMode: !this.state.WROLMode});
+        this.setState({disabled: !this.state.WROLMode, WROLMode: checked});
     }
 
     render() {
@@ -298,37 +317,26 @@ class WROLMode extends React.Component {
             return <Loader active inline='centered'/>
         }
 
-        return (
-            <Container fluid>
+        return <ThemeContext.Consumer>
+            {({i, t}) => <Container fluid>
 
                 <Header as="h1">WROL Mode</Header>
-                <h4>
+                <Header as='h4'>
                     Enable read-only mode. No content can be deleted or modified. Enable this when the SHTF and you
                     want to prevent any potential loss of data.
-                </h4>
-                <p>
+                </Header>
+                <p {...t}>
                     Note: User settings and favorites can still be modified.
                 </p>
-                <Checkbox toggle
-                          checked={this.state.WROLMode}
-                          onChange={this.toggleWROLMode}
-                          label={this.state.WROLMode ? 'WROL Mode Enabled' : 'WROL Mode Disabled'}
+                <Toggle
+                    checked={this.state.WROLMode}
+                    onChange={this.toggleWROLMode}
+                    label={this.state.WROLMode ? 'WROL Mode Enabled' : 'WROL Mode Disabled'}
                 />
 
-            </Container>
-        )
+            </Container>}
+        </ThemeContext.Consumer>
     }
-}
-
-function LoadStatistic({label, value, cores}) {
-    let color;
-    const quarter = cores / 4;
-    if (cores && value >= (quarter * 3)) {
-        color = 'red';
-    } else if (cores && value >= (quarter * 2)) {
-        color = 'yellow';
-    }
-    return <Statistic label={label} value={parseFloat(value).toFixed(1)} color={color}/>;
 }
 
 function DriveInfo({used, size, percent, mount}) {
@@ -359,20 +367,20 @@ function CPUTemperatureStatistic({value}) {
     return <Statistic label='Temp C°' value={value} color={color}/>
 }
 
-function CPUUsageProgress({value, label}) {
+export function CPUUsageProgress({value, label}) {
     if (value === null) {
         return <Progress progress={0} color='grey' label='Average CPU Usage ERROR' disabled/>
     }
 
-    let color = 'grey';
+    let color = 'black';
     if (value >= 90) {
         color = 'red';
     } else if (value >= 70) {
-        color = 'orange';
+        color = 'brown';
     } else if (value >= 50) {
-        color = 'yellow';
+        color = 'orange';
     } else if (value >= 30) {
-        color = 'olive';
+        color = 'green';
     }
     return <Progress percent={value} progress color={color} label={label}/>
 }
@@ -407,34 +415,35 @@ class Status extends React.Component {
     }
 
     render() {
-        let body = <Loader active inline='centered'>Loading system status</Loader>;
-
         if (this.state.status) {
             const {cpu_info, load, drives} = this.state.status;
             const {minute_1, minute_5, minute_15} = load;
             const {percent, cores, temperature} = cpu_info;
 
-            body = (<>
-                <CPUUsageProgress value={percent} label='CPU Usage'/>
+            return <ThemeContext.Consumer>
+                {({i}) => <>
+                    <CPUUsageProgress value={percent} label='CPU Usage'/>
 
-                <CPUTemperatureStatistic value={temperature}/>
-                <Statistic label='Cores' value={cores || '?'}/>
-                <Statistic.Group>
-                    <LoadStatistic label='1 Minute Load' value={minute_1} cores={cores}/>
-                    <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
-                    <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
-                </Statistic.Group>
+                    <CPUTemperatureStatistic value={temperature}/>
+                    <Statistic label='Cores' value={cores || '?'}/>
+                    <StatisticGroup>
+                        <LoadStatistic label='1 Minute Load' value={minute_1} cores={cores}/>
+                        <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
+                        <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
+                    </StatisticGroup>
 
-                <Header as='h2'>Drive Usage</Header>
-                {drives.map(DriveInfo)}
-            </>);
+                    <Header as='h2'>Drive Usage</Header>
+                    {drives.map((drive) => <DriveInfo key={drive['mount']} {...drive}/>)}
+                </>}
+            </ThemeContext.Consumer>
         }
 
-        return (
-            <Container fluid style={{marginBottom: '5em'}}>
-                {body}
+        return <ThemeContext.Consumer>
+            {({i}) => <Container fluid style={{marginBottom: '5em'}}>
+                <Loader active inline='centered'>Loading system status</Loader>;
             </Container>
-        )
+            }
+        </ThemeContext.Consumer>
     }
 }
 
@@ -529,15 +538,15 @@ class DownloadRow extends React.Component {
             </Modal.Actions>
         </Modal>;
 
-        return (
-            <Table.Row positive={positive}>
-                <Table.Cell><a href={url} target='_blank'>{textEllipsis(url, 50)}</a></Table.Cell>
-                <Table.Cell>{secondsToFrequency(frequency)}</Table.Cell>
-                <Table.Cell>{last_successful_download ? secondsToDate(last_successful_download) : null}</Table.Cell>
-                <Table.Cell>{secondsToDate(next_download)}</Table.Cell>
-                <Table.Cell>{error && errorModal}{location && <a href={location}>View</a>}</Table.Cell>
-            </Table.Row>
-        );
+        return <TableRow positive={positive}>
+            <TableCell>
+                <ExternalCardLink to={url}>{textEllipsis(url, 50)}</ExternalCardLink>
+            </TableCell>
+            <TableCell>{secondsToFrequency(frequency)}</TableCell>
+            <TableCell>{last_successful_download ? secondsToDate(last_successful_download) : null}</TableCell>
+            <TableCell>{secondsToDate(next_download)}</TableCell>
+            <TableCell>{error && errorModal}{location && <a href={location}>View</a>}</TableCell>
+        </TableRow>
     }
 }
 
@@ -587,14 +596,14 @@ class StoppableRow extends React.Component {
         let {stopOpen, startOpen, errorModalOpen} = this.state;
 
         let completedAtCell = last_successful_download ? secondsToDate(last_successful_download) : null;
-        let buttonCell = <Table.Cell/>;
+        let buttonCell = <TableCell/>;
         let positive = false;
         let negative = false;
         let warning = false;
         if (status === 'pending' || status === 'new') {
             positive = status === 'pending';
             buttonCell = (
-                <Table.Cell>
+                <TableCell>
                     <Button
                         onClick={this.openStop}
                         color='red'
@@ -606,13 +615,13 @@ class StoppableRow extends React.Component {
                         onCancel={this.closeStop}
                         onConfirm={this.handleStop}
                     />
-                </Table.Cell>
+                </TableCell>
             );
         } else if (status === 'failed' || status === 'deferred') {
             negative = status === 'failed';
             warning = status === 'deferred';
             buttonCell = (
-                <Table.Cell>
+                <TableCell>
                     <Button
                         onClick={this.openStop}
                         color='red'
@@ -635,13 +644,13 @@ class StoppableRow extends React.Component {
                         onCancel={this.closeStart}
                         onConfirm={this.handleStart}
                     />
-                </Table.Cell>
+                </TableCell>
             );
         } else if (status === 'complete' && location) {
             buttonCell = (
-                <Table.Cell>
+                <TableCell>
                     <a href={location}>View</a>
-                </Table.Cell>
+                </TableCell>
             );
         }
         if (error) {
@@ -665,138 +674,97 @@ class StoppableRow extends React.Component {
         }
 
         return (
-            <Table.Row positive={positive} negative={negative} warning={warning}>
-                <Table.Cell><a href={url} target='_blank'>{textEllipsis(url, 50)}</a></Table.Cell>
-                <Table.Cell>{status}</Table.Cell>
-                <Table.Cell>{completedAtCell}</Table.Cell>
+            <TableRow positive={positive} negative={negative} warning={warning}>
+                <TableCell>
+                    <ExternalCardLink to={url}>{textEllipsis(url, 50)}</ExternalCardLink>
+                </TableCell>
+                <TableCell>{status}</TableCell>
+                <TableCell>{completedAtCell}</TableCell>
                 {buttonCell}
-            </Table.Row>
+            </TableRow>
         );
     }
 }
 
-class Downloads extends React.Component {
-    constructor(props) {
-        super(props);
-        this.state = {
-            once_downloads: null,
-            recurring_downloads: null,
-            pending_downloads: null,
-            stopOpen: false,
-            disabled: false,
-        };
+function Downloads() {
+    const {t} = useContext(ThemeContext);
+
+    const {onceDownloads, recurringDownloads, fetchDownloads} = useDownloads();
+
+    const tablePlaceholder = <Placeholder>
+        <PlaceholderLine/>
+        <PlaceholderLine/>
+    </Placeholder>;
+
+    const stoppableHeader = (
+        <TableHeader>
+            <TableRow>
+                <TableHeaderCell>URL</TableHeaderCell>
+                <TableHeaderCell>Status</TableHeaderCell>
+                <TableHeaderCell>Completed At</TableHeaderCell>
+                <TableHeaderCell>Control</TableHeaderCell>
+            </TableRow>
+        </TableHeader>
+    );
+
+    const nonStoppableHeader = (
+        <TableHeader>
+            <TableRow>
+                <TableHeaderCell>URL</TableHeaderCell>
+                <TableHeaderCell>Download Frequency</TableHeaderCell>
+                <TableHeaderCell>Last Successful Download</TableHeaderCell>
+                <TableHeaderCell>Next Download</TableHeaderCell>
+                <TableHeaderCell>View</TableHeaderCell>
+            </TableRow>
+        </TableHeader>
+    );
+
+    let onceTable = tablePlaceholder;
+    if (onceDownloads && onceDownloads.length === 0) {
+        onceTable = <p {...t}>No downloads are scheduled.</p>
+    } else if (onceDownloads) {
+        onceTable = (
+            <>
+                <ClearCompleteDownloads callback={fetchDownloads}/>
+                <ClearFailedDownloads callback={fetchDownloads}/>
+                <Table>
+                    {stoppableHeader}
+                    <TableBody>
+                        {onceDownloads.map((i) =>
+                            <StoppableRow fetchDownloads={fetchDownloads} key={i.id} {...i}/>
+                        )}
+                    </TableBody>
+                </Table>
+            </>);
     }
 
-    async componentDidMount() {
-        await this.fetchDownloads();
-        this.intervalId = setInterval(this.fetchDownloads, 1000 * 10);
+    let recurringTable = tablePlaceholder;
+    if (recurringDownloads && recurringDownloads.length === 0) {
+        recurringTable = <p {...t}>No recurring downloads are scheduled.</p>
+    } else if (recurringDownloads) {
+        recurringTable = <Table>
+            {nonStoppableHeader}
+            <TableBody>
+                {recurringDownloads.map((i) => <DownloadRow key={i.id} {...i}/>)}
+            </TableBody>
+        </Table>;
     }
 
-    componentWillUnmount() {
-        clearInterval(this.intervalId);
-    }
+    return <>
+        <WROLModeMessage content='Downloads are disabled because WROL Mode is enabled.'/>
+        <DisableDownloadsToggle/>
+        <Header as='h1'>Downloads</Header>
+        {onceTable}
 
-    closeStop = () => {
-        this.setState({stopOpen: false});
-    }
-
-    openStop = () => {
-        this.setState({stopOpen: true});
-    }
-
-    fetchDownloads = async () => {
-        try {
-            let data = await getDownloads();
-            this.setState({
-                once_downloads: data.once_downloads,
-                recurring_downloads: data.recurring_downloads,
-                pending_downloads: data.pending_downloads,
-            });
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    render() {
-        let tablePlaceholder = (
-            <Placeholder>
-                <Placeholder.Line/>
-                <Placeholder.Line/>
-            </Placeholder>
-        );
-
-        let stoppableHeader = (
-            <Table.Header>
-                <Table.Row>
-                    <Table.HeaderCell>URL</Table.HeaderCell>
-                    <Table.HeaderCell>Status</Table.HeaderCell>
-                    <Table.HeaderCell>Completed At</Table.HeaderCell>
-                    <Table.HeaderCell>Control</Table.HeaderCell>
-                </Table.Row>
-            </Table.Header>
-        );
-
-        let nonStoppableHeader = (
-            <Table.Header>
-                <Table.Row>
-                    <Table.HeaderCell>URL</Table.HeaderCell>
-                    <Table.HeaderCell>Download Frequency</Table.HeaderCell>
-                    <Table.HeaderCell>Last Successful Download</Table.HeaderCell>
-                    <Table.HeaderCell>Next Download</Table.HeaderCell>
-                    <Table.HeaderCell>View</Table.HeaderCell>
-                </Table.Row>
-            </Table.Header>
-        );
-
-        let onceTable = tablePlaceholder;
-        if (this.state.once_downloads !== null && this.state.once_downloads.length === 0) {
-            onceTable = <p>No downloads are scheduled.</p>
-        } else if (this.state.once_downloads !== null) {
-            onceTable = (
-                <>
-                    <ClearCompleteDownloads callback={() => this.fetchDownloads()}/>
-                    <ClearFailedDownloads callback={() => this.fetchDownloads()}/>
-                    <Table>
-                        {stoppableHeader}
-                        <Table.Body>
-                            {this.state.once_downloads.map((i) =>
-                                <StoppableRow {...i} fetchDownloads={this.fetchDownloads} key={i.id}/>
-                            )}
-                        </Table.Body>
-                    </Table>
-                </>);
-        }
-
-        let recurringTable = tablePlaceholder;
-        if (this.state.recurring_downloads !== null && this.state.recurring_downloads.length === 0) {
-            recurringTable = <p>No recurring downloads are scheduled.</p>
-        } else if (this.state.recurring_downloads !== null) {
-            recurringTable = (<Table>
-                {nonStoppableHeader}
-                <Table.Body>
-                    {this.state.recurring_downloads.map((i) => <DownloadRow {...i} key={i.id}/>)}
-                </Table.Body>
-            </Table>);
-        }
-
-        return (
-            <div>
-                <WROLModeMessage content='Downloads are disabled because WROL Mode is enabled.'/>
-                <DisableDownloadsToggle/>
-                <Header as='h1'>Downloads</Header>
-                {onceTable}
-
-                <Header as='h1'>Recurring Downloads</Header>
-                {recurringTable}
-            </div>
-        );
-    }
+        <Header as='h1'>Recurring Downloads</Header>
+        {recurringTable}
+    </>
 }
 
 export default function Admin(props) {
 
     const links = [
-        {text: 'Downloads', to: '/admin', exact: true, key: 'admin'},
+        {text: 'Downloads', to: '/admin', key: 'admin', end: true},
         {text: 'Settings', to: '/admin/settings', key: 'settings'},
         {text: 'Status', to: '/admin/status', key: 'status'},
         {text: 'WROL Mode', to: '/admin/wrol', key: 'wrol'},
@@ -805,10 +773,12 @@ export default function Admin(props) {
     return (
         <PageContainer>
             <TabLinks links={links}/>
-            <Route path='/admin' exact component={Downloads}/>
-            <Route path='/admin/settings' exact component={Settings}/>
-            <Route path='/admin/status' exact component={Status}/>
-            <Route path='/admin/wrol' exact component={WROLMode}/>
+            <Routes>
+                <Route path='/' exact element={<Downloads/>}/>
+                <Route path='settings' exact element={<Settings/>}/>
+                <Route path='status' exact element={<Status/>}/>
+                <Route path='wrol' exact element={<WROLMode/>}/>
+            </Routes>
         </PageContainer>
     )
 

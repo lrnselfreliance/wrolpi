@@ -301,10 +301,48 @@ def test_clear_downloads(test_session, test_client, test_config, test_download_m
     assert DOWNLOAD_MANAGER_CONFIG.skip_urls == ['https://example.com/5', ]
 
 
-def test_get_status(test_client):
+def test_get_status(test_client, test_session):
     """Get the server status information."""
     request, response = test_client.get('/api/status')
     assert response.status_code == HTTPStatus.OK
     assert 'cpu_info' in response.json and isinstance(response.json['cpu_info'], dict)
     assert 'load' in response.json and isinstance(response.json['load'], dict)
     assert 'drives' in response.json and isinstance(response.json['drives'], list)
+
+
+def test_post_download(test_session, test_client, test_download_manager_config):
+    """Test creating once-downlaods and recurring downloads."""
+
+    async def queue_downloads(*a, **kw):
+        pass
+
+    with mock.patch('wrolpi.downloader.DownloadManager.queue_downloads', queue_downloads):
+        # Create a single recurring Download.
+        content = dict(
+            urls='https://example.com/1\n',
+            frequency=1_000,
+            downloader='archive',
+        )
+        request, response = test_client.post('/api/download', content=json.dumps(content))
+        assert response.status_code == HTTPStatus.NO_CONTENT
+
+        assert {i.url for i in test_session.query(Download)} == {'https://example.com/1', }
+
+        # Create to once-downloads.
+        content = dict(
+            urls='https://example.com/2\nhttps://example.com/3\n',
+            downloader='archive',
+        )
+        request, response = test_client.post('/api/download', content=json.dumps(content))
+        assert response.status_code == HTTPStatus.NO_CONTENT
+
+        assert {i.url for i in test_session.query(Download)} == {f'https://example.com/{i}' for i in range(1, 4)}
+
+
+def test_get_downloaders(test_client):
+    """A list of Downloaders the user can use can be gotten."""
+    request, response = test_client.get('/api/downloaders')
+    assert response.status_code == HTTPStatus.OK
+    assert 'downloaders' in response.json, 'Downloaders not returned'
+    assert isinstance(response.json['downloaders'], list) and len(response.json['downloaders']), \
+        'No downloaders returned'

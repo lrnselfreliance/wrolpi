@@ -244,7 +244,7 @@ def test_update_censored_videos(test_session, video_factory, simple_channel):
     check_censored([(vid1.id, True), (vid2.id, True), (vid3.id, True), (vid4.id, False)])
 
 
-def test_import_favorites(test_session, simple_channel, video_factory, test_channels_config):
+def test_import_favorites(test_session, test_directory, simple_channel, video_factory, test_channels_config):
     """
     A favorited Video will be preserved through everything (channel deletion, DB wipe) and can be imported and will be
     favorited again.
@@ -254,14 +254,13 @@ def test_import_favorites(test_session, simple_channel, video_factory, test_chan
     video_factory(channel_id=simple_channel.id)  # never favorited
     vid2 = video_factory(channel_id=None)  # has no channel
     vid3 = video_factory(channel_id=simple_channel.id)
-    favorite = vid2.favorite = local_timezone(datetime(2000, 1, 1, 0, 0, 0))
-    vid3.favorite = favorite
+    favorite = vid3.favorite = vid2.favorite = local_timezone(datetime(2000, 1, 1, 0, 0, 0))
     test_session.commit()
-    vid2_video_path = vid2.video_path.path
+    vid2_video_path = vid2.video_path
 
     favorites = {
-        str(simple_channel.directory.relative): {vid3.video_path.path.name: {'favorite': favorite}},
-        'NO CHANNEL': {vid2.video_path.path.name: {'favorite': favorite}},
+        str(simple_channel.directory.relative_to(test_directory)): {vid3.video_path.name: {'favorite': favorite}},
+        'NO CHANNEL': {vid2.video_path.name: {'favorite': favorite}},
     }
 
     # Save config, verify that favorite is set.
@@ -299,7 +298,7 @@ def test_import_favorites(test_session, simple_channel, video_factory, test_chan
     # Deleting the Video in the model really removes the favorite status.
     vid3.delete()
     config = get_channels_config()
-    assert config.favorites == {'NO CHANNEL': {vid2.video_path.path.name: {'favorite': favorite}}}
+    assert config.favorites == {'NO CHANNEL': {vid2.video_path.name: {'favorite': favorite}}}
     import_and_verify([vid2.id])
 
 
@@ -369,11 +368,11 @@ def test_import_channels_config_outdated(test_session, test_directory, channel_f
     vid4 = video_factory(title='vid4')
     test_session.commit()
 
-    channel1_name, channel_1_directory = channel1.name, channel1.directory.path
-    channel2_name, channel_2_directory = channel2.name, channel2.directory.path
+    channel1_name, channel_1_directory = channel1.name, channel1.directory
+    channel2_name, channel_2_directory = channel2.name, channel2.directory
 
-    assert channel1.directory.path.exists() and channel1.directory.path.is_absolute()
-    assert channel2.directory.path.exists() and channel2.directory.path.is_absolute()
+    assert channel1.directory.exists() and channel1.directory.is_absolute()
+    assert channel2.directory.exists() and channel2.directory.is_absolute()
 
     # Channel's used to have a relative directory in the DB.
     test_session.execute('UPDATE channel SET directory=:directory WHERE id=2',
@@ -390,9 +389,9 @@ def test_import_channels_config_outdated(test_session, test_directory, channel_f
         channel['download_frequency'] = DownloadFrequency.biweekly
     # Change the favorites to the old "link" method as well.
     channels_config.favorites = {
-        sanitize_link(channel1.name): {str(vid1.video_path.path): {'favorite': now()}},
-        sanitize_link(channel2.name): {str(vid2.video_path.path): {'favorite': now()}},
-        'NO CHANNEL': {str(vid3.video_path.path): {'favorite': now()}},
+        sanitize_link(channel1.name): {str(vid1.video_path): {'favorite': now()}},
+        sanitize_link(channel2.name): {str(vid2.video_path): {'favorite': now()}},
+        'NO CHANNEL': {str(vid3.video_path): {'favorite': now()}},
     }
     channels_config.save()
 
@@ -407,9 +406,9 @@ def test_import_channels_config_outdated(test_session, test_directory, channel_f
     # No new channels were created.  Existing channels were updated.
     assert test_session.query(Channel).count() == 2
     channel1, channel2 = test_session.query(Channel).order_by(Channel.id)
-    assert channel1.name == channel1_name and str(channel1.directory.path) == str(channel_1_directory)
+    assert channel1.name == channel1_name and str(channel1.directory) == str(channel_1_directory)
     # Channel2's directory is now absolute.
-    assert channel2.name == channel2_name and str(channel2.directory.path) == str(channel_2_directory)
+    assert channel2.name == channel2_name and str(channel2.directory) == str(channel_2_directory)
     assert channel1.download_frequency == DownloadFrequency.biweekly
     assert channel2.download_frequency == DownloadFrequency.biweekly
     # Videos were favorited by their channel "link".

@@ -2,13 +2,20 @@ import {useEffect, useState} from "react";
 import {
     fetchDomains,
     filesSearch,
-    getAPIStatus,
     getArchive,
+    getChannel,
+    getChannels,
+    getDirectories,
     getDownloaders,
+    getDownloads,
     getFiles,
     getHotspotStatus,
+    getInventory,
+    getSettings,
+    getStatistics,
+    getStatus,
     getThrottleStatus,
-    getVersion,
+    getVideo,
     killDownloads,
     searchArchives,
     searchVideos,
@@ -16,64 +23,16 @@ import {
     setThrottle,
     startDownloads
 } from "../api";
-import {useHistory} from "react-router-dom";
+import {createSearchParams, useSearchParams} from "react-router-dom";
 import {toast} from "react-semantic-toasts";
+import {enumerate, humanFileSize, secondsToString} from "../components/Common";
 
-export const useSearchParam = (key, defaultValue = null) => {
-    // Get a window.location.search param.
-    const startingValue = new URLSearchParams(window.location.search).get(key);
-
-    const [value, setValue] = useState(startingValue || defaultValue);
-    const history = useHistory();
-
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        params.delete(key);
-        if (value) {
-            params.append(key, value);
-        }
-        history.push({search: params.toString()});
-    }, [value, history, key])
-
-    return [value, setValue];
+const calculatePage = (offset, limit) => {
+    return offset && limit ? Math.round((offset / limit) + 1) : 1;
 }
 
-export const useSearch = () => {
-    let [searchStr, setSearchStr] = useSearchParam('q');
-
-    const [archives, setArchives] = useState();
-    const [videos, setVideos] = useState();
-
-    const localSearchArchives = async (term) => {
-        setArchives(null);
-        try {
-            const [archives] = await searchArchives(0, 6, null, term);
-            setArchives(archives);
-        } catch (e) {
-            console.error(e);
-            setArchives([]);
-        }
-    }
-
-    const localSearchVideos = async (term) => {
-        setVideos(null);
-        try {
-            const [videos] = await searchVideos(0, 6, null, term);
-            setVideos(videos);
-        } catch (e) {
-            console.error(e);
-            setVideos([]);
-        }
-    }
-
-    useEffect(() => {
-        if (searchStr) {
-            localSearchArchives(searchStr);
-            localSearchVideos(searchStr)
-        }
-    }, [searchStr]);
-
-    return {searchStr, setSearchStr, archives, videos}
+const calculateTotalPages = (total, limit) => {
+    return total && limit ? Math.round(total / limit) + 1 : 1;
 }
 
 export const useDomains = () => {
@@ -100,71 +59,18 @@ export const useDomains = () => {
     return [domains, total];
 }
 
-export const useArchives = ({defaultLimit = 20}) => {
-    let [limit, setLimit] = useSearchParam('l', defaultLimit);
-    let [offset, setOffset] = useSearchParam('o');
-    let [searchStr, setSearchStr] = useSearchParam('q');
-    let [domain, setDomain] = useSearchParam('domain');
-
-    const [archives, setArchives] = useState(null);
-    const [totalPages, setTotalPages] = useState(0);
-    const [activePage, setActivePage] = useState((offset / limit) + 1);
-
-    const search = async () => {
-        setArchives(null);
-        try {
-            const [archives, total] = await searchArchives(offset, limit, domain, searchStr);
-            setTotalPages(Math.floor(total / limit) + 1);
-            setArchives(archives);
-        } catch (e) {
-            console.error(e);
-            setTotalPages(0);
-            setArchives([]);
-        }
-    }
-
-    useEffect(() => {
-        search();
-    }, [offset, limit, domain, searchStr]);
-
-    const setPage = (i) => {
-        i = parseInt(i);
-        let l = parseInt(limit);
-        setOffset((l * i) - l);
-        setActivePage(i);
-    }
-
-    return {
-        archives,
-        totalPages,
-        setTotalPages,
-        offset,
-        setOffset,
-        setPage,
-        limit,
-        setLimit,
-        domain,
-        setDomain,
-        searchStr,
-        setSearchStr,
-        activePage,
-        setActivePage,
-        search,
-    };
-}
-
 export const useArchive = (archiveId) => {
-    const [archive, setArchive] = useState(null);
+    const [archiveFile, setArchiveFile] = useState(null);
     const [alternatives, setAlternatives] = useState(null);
 
     const fetchArchive = async () => {
         try {
-            const [a, alt] = await getArchive(archiveId);
-            setArchive(a);
+            const [file, alt] = await getArchive(archiveId);
+            setArchiveFile(file);
             setAlternatives(alt);
         } catch (e) {
             console.error(e);
-            setArchive(undefined);
+            setArchiveFile(undefined);
         }
     }
 
@@ -172,69 +78,328 @@ export const useArchive = (archiveId) => {
         fetchArchive();
     }, [archiveId]);
 
-    return [archive, alternatives];
+    return {archiveFile, alternatives};
 }
 
-export const useVersion = () => {
-    const [version, setVersion] = useState('');
+export const useQuery = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
 
-    const fetchVersion = async () => {
+    const setQuery = (obj) => {
+        setSearchParams(createSearchParams(obj), {replace: true});
+    }
+
+    const updateQuery = (obj) => {
+        const newQuery = {};
+        for (const entry of searchParams.entries()) {
+            newQuery[entry[0]] = entry[1];
+        }
+        Object.entries(obj).forEach(([key, value]) => {
+            if (value === undefined || value === null || value === '') {
+                delete newQuery[key];
+            } else {
+                newQuery[key] = value;
+            }
+        })
+        setQuery(newQuery);
+    }
+
+    return {searchParams, setSearchParams, setQuery, updateQuery}
+}
+
+export const usePages = (defaultLimit) => {
+    const {searchParams, updateQuery} = useQuery();
+    const offset = searchParams.get('o') || 0;
+    const limit = searchParams.get('l') || defaultLimit || 24;
+    const [activePage, setActivePage] = useState(calculatePage(offset, limit));
+
+    const setLimit = (value) => {
+        setPage(1);
+        updateQuery({l: value, o: null});
+    }
+
+    const setPage = (value) => {
+        setActivePage(value);
+        value = value - 1;  // Page really starts as 0.
+        updateQuery({o: value * limit});
+    }
+
+    return {offset, limit, setLimit, activePage, setPage};
+}
+
+export const useSearchArchives = (defaultLimit, domain, order_by) => {
+    const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit)
+    const {searchParams, updateQuery} = useQuery();
+    const searchStr = searchParams.get('q') || '';
+    const order = searchParams.get('order') || order_by;
+
+    const [archives, setArchives] = useState();
+    const [totalPages, setTotalPages] = useState(0);
+
+    const localSearchArchives = async () => {
+        setArchives(null);
+        setTotalPages(0);
         try {
-            let version = await getVersion();
-            setVersion(version);
+            let [archives_, total] = await searchArchives(offset, limit, domain, searchStr, order);
+            setArchives(archives_);
+            setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
             console.error(e);
+            toast({
+                type: 'error',
+                title: 'Unexpected server response',
+                description: 'Could not get archives',
+                time: 5000,
+            });
+            setArchives([]);
         }
     }
 
     useEffect(() => {
-        fetchVersion();
-    })
+        localSearchArchives();
+    }, [searchStr, limit, domain, order, activePage]);
 
-    return version;
+    const setSearchStr = (value) => {
+        updateQuery({q: value, o: 0, order: undefined});
+    }
+
+    const setOrderBy = (value) => {
+        setPage(1);
+        updateQuery({order: value});
+    }
+
+    return {
+        archives,
+        limit,
+        setLimit,
+        offset,
+        order,
+        setOrderBy,
+        totalPages,
+        activePage,
+        setPage,
+        searchStr,
+        setSearchStr,
+    }
 }
 
-export const useSearchFiles = ({defaultLimit = 50}) => {
-    let [limit, setLimit] = useSearchParam('l', defaultLimit);
-    let [offset, setOffset] = useSearchParam('o');
-    let [searchStr, setSearchStr] = useSearchParam('q');
+export const useSearchVideos = (defaultLimit, channelId, order_by, filters) => {
+    const {searchParams, updateQuery} = useQuery();
+    const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit)
+    const searchStr = searchParams.get('q') || '';
+    const order = searchParams.get('order') || order_by;
 
-    const [searchFiles, setSearchFiles] = useState([]);
+    const [videos, setVideos] = useState();
     const [totalPages, setTotalPages] = useState(0);
-    const [activePage, setActivePage] = useState(1);
 
-    const localSearchFiles = async () => {
-        setSearchFiles([]);
+    const localSearchVideos = async () => {
+        setVideos(null);
         setTotalPages(0);
-        if (searchStr) {
+        try {
+            let [videos_, total] = await searchVideos(offset, limit, channelId, searchStr, order, filters);
+            setVideos(videos_);
+            setTotalPages(calculateTotalPages(total, limit));
+        } catch (e) {
+            console.error(e);
+            toast({
+                type: 'error',
+                title: 'Unexpected server response',
+                description: 'Could not get videos',
+                time: 5000,
+            });
+            setVideos([]);
+        }
+    }
+
+    useEffect(() => {
+        localSearchVideos();
+    }, [searchStr, limit, channelId, offset, order_by, filters.join('')]);
+
+    const setSearchStr = (value) => {
+        updateQuery({q: value, o: 0, order: undefined});
+    }
+
+    const setOrderBy = (value) => {
+        setPage(1);
+        updateQuery({order: value});
+    }
+
+    return {
+        videos,
+        totalPages,
+        limit,
+        offset,
+        order,
+        searchStr,
+        activePage,
+        setPage,
+        setLimit,
+        setSearchStr,
+        setOrderBy,
+    }
+}
+
+export const useVideo = (videoId) => {
+    const [videoFile, setVideoFile] = useState(null);
+    const [prevFile, setPrevFile] = useState(null);
+    const [nextFile, setNextFile] = useState(null);
+
+    const fetchVideo = async () => {
+        try {
+            const [v, p, n] = await getVideo(videoId);
+            setVideoFile(v);
+            setPrevFile(p);
+            setNextFile(n);
+        } catch (e) {
+            console.error(e);
+            setVideoFile(undefined);
+            setPrevFile(undefined);
+            setNextFile(undefined);
+            toast({
+                type: 'error',
+                title: 'Unexpected server response',
+                description: 'Could not get the video',
+                time: 5000,
+            })
+        }
+    }
+
+    useEffect(() => {
+        fetchVideo();
+    }, [videoId]);
+
+    return {videoFile, prevFile, nextFile};
+}
+
+export const useChannel = (channel_id) => {
+    const emptyChannel = {
+        name: '',
+        directory: '',
+        mkdir: false,
+        url: '',
+        download_frequency: '',
+        match_regex: '',
+    };
+    const [fetched, setFetched] = useState(false);
+    const [channel, setChannel] = useState(emptyChannel);
+    const [original, setOriginal] = useState({});
+
+    const localGetChannel = async () => {
+        if (channel_id) {
             try {
-                let [files, total] = await filesSearch(offset, limit, searchStr);
-                setSearchFiles(files);
-                setTotalPages(Math.floor(total / limit) + 1);
+                const c = await getChannel(channel_id);
+                // Prevent controlled to uncontrolled.
+                c['url'] = c['url'] || '';
+                c['download_frequency'] = c['download_frequency'] || '';
+                c['match_regex'] = c['match_regex'] || '';
+                setChannel(c);
+                setOriginal(c);
+                setFetched(true);
             } catch (e) {
                 console.error(e);
                 toast({
                     type: 'error',
                     title: 'Unexpected server response',
-                    description: 'Could not get files',
+                    description: 'Could not get Channel',
                     time: 5000,
                 });
             }
+        } else {
+            setChannel(emptyChannel);
+        }
+    }
+
+    useEffect(() => {
+        localGetChannel();
+    }, [channel_id])
+
+    const changeValue = (name, value) => {
+        setChannel({...channel, [name]: value});
+    }
+
+    return {channel, changeValue, original, fetched, fetchChannel: localGetChannel};
+}
+
+export const useChannels = () => {
+    const [channels, setChannels] = useState(null);
+
+    const fetchChannels = async () => {
+        setChannels(null);
+        try {
+            const c = await getChannels();
+            setChannels(c);
+        } catch (e) {
+            console.error(e);
+            toast({
+                type: 'error',
+                title: 'Unexpected server response',
+                description: 'Could not get channels',
+                time: 5000,
+            });
+        }
+    }
+
+    useEffect(() => {
+        fetchChannels();
+    }, []);
+
+    return {channels, fetchChannels}
+}
+
+export const useSearchFiles = (defaultLimit = 48, emptySearch = false, mimetype, model) => {
+    const {searchParams, updateQuery} = useQuery();
+    const limit = searchParams.get('l') || defaultLimit;
+    const offset = searchParams.get('o') || 0;
+    const searchStr = searchParams.get('q');
+    const mimetype_ = searchParams.get('mimetype');
+    const model_ = searchParams.get('model');
+
+    const [searchFiles, setSearchFiles] = useState(null);
+    const [totalPages, setTotalPages] = useState(0);
+    const [activePage, setActivePage] = useState(calculatePage(offset, limit));
+
+    const localSearchFiles = async () => {
+        if (!emptySearch && !searchStr) {
+            return;
+        }
+        setSearchFiles(null);
+        setTotalPages(0);
+        try {
+            let [files, total] = await filesSearch(
+                offset, limit, searchStr, mimetype || mimetype_, model || model_);
+            setSearchFiles(files);
+            setTotalPages(calculateTotalPages(total, limit));
+        } catch (e) {
+            console.error(e);
+            toast({
+                type: 'error',
+                title: 'Unexpected server response',
+                description: 'Could not get files',
+                time: 5000,
+            });
         }
     }
 
     useEffect(() => {
         localSearchFiles();
-    }, [searchStr, limit, offset, activePage]);
+    }, [searchStr, limit, offset, activePage, mimetype, mimetype_, model, model_]);
 
     const setPage = (i) => {
         i = parseInt(i);
         let l = parseInt(limit);
-        setOffset((l * i) - l);
+        updateQuery({o: (l * i) - l})
         setActivePage(i);
     }
 
-    return {searchFiles, totalPages, limit, setLimit, setOffset, searchStr, setSearchStr, activePage, setPage};
+    const setSearchStr = (value) => {
+        updateQuery({q: value, o: null});
+    }
+
+    const setLimit = (value) => {
+        setActivePage(1);
+        updateQuery({l: value, o: 0});
+    }
+
+    return {searchFiles, totalPages, limit, searchStr, mimetype, setSearchStr, activePage, setPage, setLimit};
 }
 
 export const useBrowseFiles = () => {
@@ -291,6 +456,31 @@ export const useHotspot = () => {
     }
 
     return {on, setOn, setHotspot: localSetHotspot};
+}
+
+export const useDownloads = () => {
+    const [onceDownloads, setOnceDownloads] = useState();
+    const [recurringDownloads, setRecurringDownloads] = useState();
+
+    const fetchDownloads = async () => {
+        try {
+            const data = await getDownloads();
+            setOnceDownloads(data['once_downloads']);
+            setRecurringDownloads(data['recurring_downloads']);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    useEffect(() => {
+        fetchDownloads();
+        const interval = setInterval(() => {
+            fetchDownloads();
+        }, 1000 * 3);
+        return () => clearInterval(interval);
+    }, []);
+
+    return {onceDownloads, recurringDownloads, fetchDownloads}
 }
 
 export const useDownloaders = () => {
@@ -356,21 +546,146 @@ export const useThrottle = () => {
     return {on, setOn, setThrottle: localSetThrottle};
 }
 
-export const useUp = () => {
-    // Checks that the API is up.
-    const fetchAPIStatus = async () => {
-        let status = await getAPIStatus();
-        if (status === false) {
+export const useDirectories = (defaultDirectory) => {
+    const [directories, setDirectories] = useState();
+    const [directory, setDirectory] = useState(defaultDirectory);
+
+    const fetchDirectories = async () => {
+        if (defaultDirectory && directory === '') {
+            setDirectory(defaultDirectory);
+        }
+        try {
+            setDirectories(await getDirectories(directory));
+        } catch (e) {
             toast({
                 type: 'error',
-                title: 'Error!',
-                description: `API did not respond.  Check the server's status.`,
+                title: 'Unexpected server response',
+                description: 'Could not get directories',
                 time: 5000,
             });
         }
     }
 
     useEffect(() => {
-        fetchAPIStatus();
+        fetchDirectories();
+    }, [directory, defaultDirectory]);
+
+    return {directory, directories, setDirectory};
+}
+
+export const useSettings = () => {
+    const [settings, setSettings] = useState({});
+
+    const fetchSettings = async () => {
+        try {
+            setSettings(await getSettings())
+        } catch (e) {
+            setSettings({});
+            toast({
+                type: 'error',
+                title: 'Unexpected server response',
+                description: 'Could not get directories',
+                time: 5000,
+            });
+        }
+    }
+
+    useEffect(() => {
+        fetchSettings();
     }, []);
+
+    return {settings, fetchSettings};
+}
+
+export const useSettingsInterval = () => {
+    const {settings, fetchSettings} = useSettings();
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            fetchSettings();
+        }, 1000 * 3);
+        return () => clearInterval(interval);
+    }, []);
+
+    return {settings, fetchSettings};
+}
+
+export const useStatus = () => {
+    const [status, setStatus] = useState({});
+
+    const fetchStatus = async () => {
+        try {
+            const s = await getStatus();
+            setStatus(s);
+        } catch (e) {
+            console.error(e);
+            toast({
+                type: 'error',
+                title: 'Unexpected server response',
+                description: 'Could not get server status',
+                time: 5000,
+            });
+        }
+    }
+
+    useEffect(() => {
+        fetchStatus();
+        const interval = setInterval(() => {
+            // console.log('fetch');
+            fetchStatus();
+        }, 1000 * 5);
+        return () => clearInterval(interval);
+    }, []);
+
+    return {status, fetchStatus}
+}
+
+export const useVideoStatistics = () => {
+    const [statistics, setStatistics] = useState({});
+
+    const fetchStatistics = async () => {
+        try {
+            let stats = await getStatistics();
+            stats.videos.sum_duration = secondsToString(stats.videos.sum_duration);
+            stats.videos.sum_size = humanFileSize(stats.videos.sum_size, true);
+            stats.videos.max_size = humanFileSize(stats.videos.max_size, true);
+            stats.historical.average_size = humanFileSize(stats.historical.average_size, true);
+            setStatistics(stats);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    useEffect(() => {
+        fetchStatistics();
+    }, []);
+
+    return {statistics, fetchStatistics}
+}
+
+export const useInventory = (inventoryId) => {
+    const [byCategory, setByCategory] = useState();
+    const [bySubcategory, setBySubcategory] = useState();
+    const [byName, setByName] = useState();
+
+    const fetchInventory = async () => {
+        if (!inventoryId) {
+            return
+        }
+
+        try {
+            const inventory = await getInventory(inventoryId);
+            setByCategory(enumerate(inventory['by_category']));
+            setBySubcategory(enumerate(inventory['by_subcategory']));
+            setByName(enumerate(inventory['by_name']));
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    useEffect(() => {
+        fetchInventory();
+    }, [inventoryId]);
+
+    return {byCategory, bySubcategory, byName, fetchInventory}
 }

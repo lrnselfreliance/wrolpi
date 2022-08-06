@@ -9,8 +9,8 @@ import pytz
 from sanic import Sanic
 from sanic.signals import Event
 
-from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, after_startup, limit_concurrent, admin
-from wrolpi.common import logger, get_config, import_modules, check_media_directory
+from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, after_startup, admin
+from wrolpi.common import logger, get_config, import_modules, check_media_directory, limit_concurrent, wrol_mode_enabled
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, PYTEST
@@ -174,33 +174,49 @@ async def set_log_level(args):
 
 @after_startup
 @limit_concurrent(1)
-def periodic_downloads(app: Sanic, loop):
-    """A simple function that perpetually calls downloader_manager.do_downloads() after sleeping."""
+async def periodic_downloads(app: Sanic, loop):
+    """
+    A simple function that perpetually calls downloader_manager.do_downloads() after sleeping.
+
+    Limited to only one process.
+    """
     # Set all downloads to new.
     download_manager.reset_downloads()
 
-    config = get_config()
-    if config.wrol_mode:
-        logger.warning(f'Not starting download worker because WROL Mode is enabled.')
-        download_manager.kill()
-        return
-    if config.download_on_startup is False:
-        logger.warning(f'Not starting download worker because Downloads are disabled on startup.')
-        download_manager.kill()
+    if wrol_mode_enabled:
+        logger.warning(f'Not starting download manager because WROL Mode is enabled.')
+        download_manager.disable()
         return
 
-    logger.info('Starting download manager.')
+    config = get_config()
+    if config.download_on_startup is False:
+        logger.warning(f'Not starting download manager because Downloads are disabled on startup.')
+        download_manager.disable()
+        return
+
+    download_manager.enable()
 
     async def _periodic_download():
-        download_manager.start_workers()
         await download_manager.do_downloads()
-        await asyncio.sleep(60)
-        app.add_task(_periodic_download())  # noqa
+        await asyncio.sleep(30)
+        await app.add_task(_periodic_download())  # noqa
 
-    app.add_task(_periodic_download())
+    await app.add_task(_periodic_download())
+
+
+@after_startup
+async def start_workers(app: Sanic, loop):
+    """All Sanic processes have their own Download workers."""
+    if wrol_mode_enabled():
+        logger.warning(f'Not starting download workers because WROL Mode is enabled.')
+        download_manager.stop()
+        return
+
+    download_manager.start_workers()
 
 
 @root_api.api_app.signal(Event.SERVER_SHUTDOWN_BEFORE)
+@limit_concurrent(1)
 def handle_server_shutdown(*args, **kwargs):
     """Stop downloads when server is shutting down."""
     if not PYTEST:

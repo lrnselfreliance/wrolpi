@@ -1,10 +1,10 @@
 from contextlib import contextmanager
 from functools import wraps
-from typing import ContextManager, Tuple, List, Union
+from typing import ContextManager, Tuple, List, Union, Type
 
 import psycopg2
 import sqlalchemy.exc
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import NullPool
 
@@ -156,10 +156,10 @@ def optional_session(commit: Union[callable, bool] = False):
 
 
 @optional_session
-def get_ranked_models(ranked_ids: List[int], model: Base, session: Session = None) -> List[Base]:
-    """
-    Get all objects whose ids are in the `ranked_ids`, order them by their position in `ranked_ids`.
-    """
-    results = session.query(model).filter(model.id.in_(ranked_ids)).all()
-    results = sorted(results, key=lambda i: ranked_ids.index(i.id))
+def get_ranked_models(ranked_ids: List, model: Type[Base], session: Session = None) -> List[Base]:
+    """Get all objects whose ids are in the `ranked_ids`, order them by their position in `ranked_ids`."""
+    pkey = inspect(model).primary_key[0]
+    pkey_name = pkey.name
+    results = list(session.query(model).filter(pkey.in_(ranked_ids)).all())
+    results = sorted(results, key=lambda i: ranked_ids.index(getattr(i, pkey_name)))
     return results

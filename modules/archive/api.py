@@ -1,4 +1,3 @@
-import asyncio
 from http import HTTPStatus
 
 from sanic import response, Request
@@ -22,8 +21,9 @@ logger = logger.getChild(__name__)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 async def get_archive(_: Request, archive_id: int):
     archive = lib.get_archive(archive_id=archive_id)
-    alternatives = archive.alternatives
-    return json_response({'archive': archive, 'alternatives': alternatives})
+    archive_file = archive.singlefile_file.__json__()
+    alternatives = [i.singlefile_file.__json__() for i in archive.alternatives]
+    return json_response({'file': archive_file, 'alternatives': alternatives})
 
 
 @bp.delete('/<archive_id:int>')
@@ -32,13 +32,6 @@ async def get_archive(_: Request, archive_id: int):
 @wrol_mode_check
 async def delete_archive(_: Request, archive_id: int):
     lib.delete_archive(archive_id)
-    return response.empty()
-
-
-@bp.post('/refresh')
-@wrol_mode_check
-async def refresh_archives(_: Request):
-    asyncio.ensure_future(lib.refresh_archives())
     return response.empty()
 
 
@@ -65,6 +58,6 @@ async def search_archives(_: Request, body: schema.ArchiveSearchRequest):
     limit = archive_limit_limiter(body.limit)
     offset = body.offset or 0
 
-    archives, total = lib.search(search_str, domain, limit, offset)
+    archives, total = lib.archive_search(search_str, domain, limit, offset, body.order_by)
     ret = dict(archives=archives, totals=dict(archives=total))
     return json_response(ret)

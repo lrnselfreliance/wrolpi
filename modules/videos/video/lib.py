@@ -1,3 +1,4 @@
+import pathlib
 from datetime import datetime
 from typing import Tuple, Optional, List
 
@@ -8,6 +9,9 @@ from sqlalchemy.orm.exc import NoResultFound
 from wrolpi.common import run_after, logger
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import UnknownVideo
+from wrolpi.files.lib import assign_file_prefetched_models, handle_search_results
+from wrolpi.files.models import File
+from wrolpi.vars import PYTEST
 from ..lib import save_channels_config
 from ..models import Video
 
@@ -31,49 +35,49 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
         video.set_viewed()
         previous_video, next_video = video.get_surrounding_videos()
 
-        caption = video.caption
-        video = video.__json__()
-        video['caption'] = caption
-        previous_video = previous_video.__json__() if previous_video else None
-        next_video = next_video.__json__() if next_video else None
+        caption = video.video_file.d_text
+        video = video.video_file.__json__()
+        video['video']['caption'] = caption
+        previous_video = previous_video.video_file.__json__() if previous_video else None
+        next_video = next_video.video_file.__json__() if next_video else None
 
     return video, previous_video, next_video
 
 
 VIDEO_ORDERS = {
-    'upload_date': 'upload_date ASC, LOWER(video_path) ASC',
-    '-upload_date': 'upload_date DESC NULLS LAST, LOWER(video_path) DESC',
-    'rank': '2 DESC, LOWER(video_path) DESC',
-    '-rank': '2 ASC, LOWER(video_path) ASC',
-    'id': 'id ASC',
-    '-id': 'id DESC',
-    'size': 'size ASC, LOWER(video_path) ASC',
-    '-size': 'size DESC, LOWER(video_path) DESC',
-    'duration': 'duration ASC, LOWER(video_path) ASC',
-    '-duration': 'duration DESC, LOWER(video_path) DESC',
-    'favorite': 'favorite ASC, LOWER(video_path) ASC',
-    '-favorite': 'favorite DESC, LOWER(video_path) DESC',
-    'viewed': 'viewed ASC',
-    '-viewed': 'viewed DESC',
-    'view_count': 'view_count ASC',
-    '-view_count': 'view_count DESC',
-    'modification_datetime': 'modification_datetime ASC',
-    '-modification_datetime': 'modification_datetime DESC',
+    'upload_date': 'v.upload_date ASC, LOWER(v.video_path) ASC',
+    '-upload_date': 'v.upload_date DESC NULLS LAST, LOWER(v.video_path) DESC',
+    'rank': '2 DESC, LOWER(v.video_path) DESC',
+    '-rank': '2 ASC, LOWER(v.video_path) ASC',
+    'id': 'v.id ASC',
+    '-id': 'v.id DESC',
+    'size': 'f.size ASC, LOWER(v.video_path) ASC',
+    '-size': 'f.size DESC, LOWER(v.video_path) DESC',
+    'duration': 'duration ASC, LOWER(v.video_path) ASC',
+    '-duration': 'duration DESC, LOWER(v.video_path) DESC',
+    'favorite': 'favorite ASC, LOWER(v.video_path) ASC',
+    '-favorite': 'favorite DESC, LOWER(v.video_path) DESC',
+    'viewed': 'v.viewed ASC',
+    '-viewed': 'v.viewed DESC',
+    'view_count': 'v.view_count ASC',
+    '-view_count': 'v.view_count DESC',
+    'modification_datetime': 'f.modification_datetime ASC',
+    '-modification_datetime': 'f.modification_datetime DESC',
 }
 NO_NULL_ORDERS = {
-    'viewed': '\nAND viewed IS NOT NULL',
-    '-viewed': '\nAND viewed IS NOT NULL',
-    'duration': '\nAND duration IS NOT NULL',
-    '-duration': '\nAND duration IS NOT NULL',
-    'size': '\nAND size IS NOT NULL',
-    '-size': '\nAND size IS NOT NULL',
-    'view_count': '\nAND view_count IS NOT NULL',
-    '-view_count': '\nAND view_count IS NOT NULL',
-    'modification_datetime': '\nAND modification_datetime IS NOT NULL',
-    '-modification_datetime': '\nAND modification_datetime IS NOT NULL',
+    'viewed': 'v.viewed IS NOT NULL',
+    '-viewed': 'v.viewed IS NOT NULL',
+    'duration': 'v.duration IS NOT NULL',
+    '-duration': 'v.duration IS NOT NULL',
+    'size': 'f.size IS NOT NULL',
+    '-size': 'f.size IS NOT NULL',
+    'view_count': 'v.view_count IS NOT NULL',
+    '-view_count': 'v.view_count IS NOT NULL',
+    'modification_datetime': 'f.modification_datetime IS NOT NULL',
+    '-modification_datetime': 'f.modification_datetime IS NOT NULL',
 }
 DEFAULT_VIDEO_ORDER = 'rank'
-VIDEO_QUERY_LIMIT = 20
+VIDEO_QUERY_LIMIT = 24
 
 
 def video_search(
@@ -84,71 +88,61 @@ def video_search(
         order_by: str = None,
         filters: List[str] = None,
 ) -> Tuple[List[dict], int]:
-    with get_db_curs() as curs:
-        params = dict(search_str=search_str, offset=offset)
-        channel_where = ''
-        if channel_id:
-            channel_where = 'AND channel_id = %(channel_id)s'
-            params['channel_id'] = channel_id
+    wheres = ['v.video_path IS NOT NULL']
 
-        # Filter for/against favorites, if it was provided
-        favorites_where = ''
-        if isinstance(filters, list) and 'favorite' in filters:
-            favorites_where = 'AND favorite IS NOT NULL'
+    params = dict(search_str=search_str, offset=offset)
+    if channel_id:
+        wheres.append('v.channel_id = %(channel_id)s')
+        params['channel_id'] = channel_id
 
-        censored_where = ''
-        if isinstance(filters, list) and 'censored' in filters:
-            censored_where = 'AND censored = true'
+    # Filter for/against favorites, if it was provided
+    if isinstance(filters, list) and 'favorite' in filters:
+        wheres.append('v.favorite IS NOT NULL')
 
-        where = ''
-        if search_str:
-            # A search_str was provided by the user, modify the query to filter by it.
-            columns = 'id, ts_rank_cd(textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
-            where = 'AND textsearch @@ websearch_to_tsquery(%(search_str)s)'
-            params['search_str'] = search_str
-        else:
-            # No search_str provided.  Get id and total only.
-            columns = 'id, COUNT(*) OVER() AS total'
+    if isinstance(filters, list) and 'censored' in filters:
+        wheres.append('v.censored = true')
 
-        # Convert the user-friendly order by into a real order by, restrict what can be interpolated by using the
-        # whitelist.
-        order = VIDEO_ORDERS[DEFAULT_VIDEO_ORDER]
-        if order_by:
-            try:
-                order = VIDEO_ORDERS[order_by]
-            except KeyError:
-                raise
-            if order_by in NO_NULL_ORDERS:
-                where += NO_NULL_ORDERS[order_by]
+    if search_str:
+        # A search_str was provided by the user, modify the query to filter by it.
+        select_columns = 'f.path, ts_rank(f.textsearch, websearch_to_tsquery(%(search_str)s)), ' \
+                         'COUNT(*) OVER() AS total'
+        wheres.append('f.textsearch @@ websearch_to_tsquery(%(search_str)s)')
+        params['search_str'] = search_str
+        join = 'LEFT JOIN file f on f.path = v.video_path'
+    else:
+        # No search_str provided.  Get path and total only.
+        select_columns = 'v.video_path AS path, COUNT(*) OVER() AS total'
+        join = ''
 
-        query = f'''
-            SELECT
-                {columns}
-            FROM video
-            WHERE
-                video_path IS NOT NULL
-                {where}
-                {channel_where}
-                {favorites_where}
-                {censored_where}
-            ORDER BY {order}
-            OFFSET %(offset)s LIMIT {int(limit)}
-        '''.strip()
-        logger.debug(query)
+    if order_by in {'size', '-size', 'modification_datetime', '-modification_datetime'}:
+        # Size and modification_datetime are from the video file.
+        join = 'LEFT JOIN file f on f.path = v.video_path'
 
-        curs.execute(query, params)
+    # Convert the user-friendly order by into a real order by, restrict what can be interpolated by using the
+    # whitelist.
+    order = VIDEO_ORDERS[DEFAULT_VIDEO_ORDER]
+    if order_by:
         try:
-            results = [dict(i) for i in curs.fetchall()]
-        except psycopg2.ProgrammingError:
-            # No videos
-            return [], 0
-        total = results[0]['total'] if results else 0
-        ranked_ids = [i['id'] for i in results]
+            order = VIDEO_ORDERS[order_by]
+        except KeyError:
+            raise
+        if order_by in NO_NULL_ORDERS:
+            wheres.append(NO_NULL_ORDERS[order_by])
 
-    with get_db_session() as session:
-        results = get_ranked_models(ranked_ids, Video, session=session)
-        results = [i.__json__() for i in results]
+    wheres = '\n AND '.join(wheres)
+    where = f'WHERE\n{wheres}' if wheres else ''
+    stmt = f'''
+        SELECT
+            {select_columns}
+        FROM video v
+        {join}
+        {where}
+        ORDER BY {order}
+        OFFSET %(offset)s LIMIT {int(limit)}
+    '''.strip()
+    logger.debug(stmt, params)
 
+    results, total = handle_search_results(stmt, params)
     return results, total
 
 

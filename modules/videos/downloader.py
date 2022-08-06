@@ -13,19 +13,20 @@ from yt_dlp.extractor import YoutubeTabIE  # noqa
 from yt_dlp.utils import UnsupportedError, DownloadError
 
 from wrolpi.cmd import which
-from wrolpi.common import logger, extract_domain, get_media_directory
+from wrolpi.common import logger, get_media_directory, escape_file_name
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.db import optional_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
+from wrolpi.files.models import File
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
 from .common import apply_info_json, get_no_channel_directory, get_videos_directory
-from .lib import upsert_video, refresh_channel_videos, get_downloader_config
+from .lib import get_downloader_config
 from .models import Video, Channel
 from .schema import ChannelPostRequest
-from .video_url_resolver import video_url_resolver
+from .video_url_resolver import normalize_youtube_shorts_url
 
 logger = logger.getChild(__name__)
 ydl_logger = logger.getChild('youtube-dl')
@@ -84,16 +85,16 @@ class ChannelDownloader(Downloader, ABC):
     async def do_download(self, download: Download) -> DownloadResult:
         """Update a Channel's catalog, then schedule downloads of every missing video."""
         info = extract_info(download.url, process=False)
-        # Resolve the entries generator.
+        # Resolve the "entries" generator.
         info['entries'] = list(info['entries'])
         download.info_json = info
         if session := Session.object_session(download):
             # May not have a session during testing.
             session.commit()
 
-        name = info['uploader']
+        kind = info['uploader']
         channel_source_id = info['channel_id']
-        channel = get_or_create_channel(channel_source_id, download.url, name)
+        channel = get_or_create_channel(channel_source_id, download.url, kind)
         channel.dict()  # get all attributes while we have the session.
 
         location = f'/videos/channel/{channel.id}/video' if channel and channel.id else None
@@ -103,33 +104,49 @@ class ChannelDownloader(Downloader, ABC):
             if is_a_playlist:
                 downloads = self.get_playlist_downloads(download)
             else:
-                downloads = self.get_channel_downloads(download, info, channel)
+                downloads = await self.get_channel_downloads(download, info, channel)
             return DownloadResult(success=True, location=location, downloads=downloads)
         except Exception:
-            name = 'playlist' if is_a_playlist else 'channel'
-            logger.warning(f'Failed to update catalog of {name} {download.url}')
+            if PYTEST:
+                raise
+            kind = 'playlist' if is_a_playlist else 'channel'
+            logger.warning(f'Failed to update catalog of {kind} {download.url}')
             return DownloadResult(success=False, location=location, error=str(traceback.format_exc()))
 
     @staticmethod
-    def get_channel_downloads(download: Download, info: dict, channel: Channel) -> List[str]:
+    async def get_channel_downloads(download: Download, info: dict, channel: Channel) -> List[str]:
         """Get a list of all videos in a Channel, schedule downloads for any missing videos."""
+        channel_id = channel.id
+
         update_channel_catalog(channel, info)
 
-        domain = extract_domain(download.url)
-        missing_videos = find_all_missing_videos(channel.id)
-        downloads = []
-        for _, _, missing_video in missing_videos:
-            url = missing_video.get('webpage_url') or video_url_resolver(domain, missing_video)
-            downloads.append(url)
+        with get_db_session(commit=True) as session:
+            channel = get_channel(session, channel_id=channel_id, return_dict=False)
+            if not channel.videos or not channel.refreshed:
+                logger.warning(f'Refreshing videos in {channel.directory} because {channel} has no video records!')
+                await channel.refresh_files()
+                session.commit()  # Commit the refresh.
+                session.refresh(channel)
+
+        # Get all videos in the channel.
+        downloads = [i.get('webpage_url') or i.get('url') for i in download.info_json['entries']]
+        # YouTube Shorts are handled specially.
+        downloads = list(map(normalize_youtube_shorts_url, downloads))
+        # Only download those that have not yet been downloaded.
+        already_downloaded = [i.url for i in video_downloader.already_downloaded(*downloads)]
+        downloads = [i for i in downloads if i not in already_downloaded]
         return downloads
 
     @staticmethod
     def get_playlist_downloads(download: Download) -> List[str]:
         """Get a list of all videos in a playlist, schedule downloads for any missing videos."""
         # Get all videos in the playlist
-        downloads = [i['url'] for i in download.info_json['entries']]
+        downloads = [i.get('webpage_url') or i.get('url') for i in download.info_json['entries']]
+        # YouTube Shorts are handled specially.
+        downloads = [normalize_youtube_shorts_url(i) for i in downloads]
         # Only download those that have not yet been downloaded.
-        downloads = [i for i in downloads if not video_downloader.already_downloaded(i)]
+        already_downloaded = [i.url for i in video_downloader.already_downloaded(*downloads)]
+        downloads = [i for i in downloads if i not in already_downloaded]
         return downloads
 
 
@@ -153,9 +170,13 @@ class VideoDownloader(Downloader, ABC):
         return f'<VideoDownloader>'
 
     @optional_session
-    def already_downloaded(self, url: str, session: Session = None) -> bool:
+    def already_downloaded(self, *urls: str, session: Session = None) -> List:
         # We only consider a video record with a video file as "downloaded".
-        return bool(session.query(Video).filter(Video.url == url, Video.video_path != None, ).count())  # noqa
+        videos = list(session.query(Video).filter(
+            Video.url.in_(urls),
+            Video.video_path != None,  # noqa
+        ))
+        return videos
 
     @classmethod
     def valid_url(cls, url) -> Tuple[bool, Optional[dict]]:
@@ -200,7 +221,7 @@ class VideoDownloader(Downloader, ABC):
         # Use the default directory if this video has no channel.
         out_dir = get_no_channel_directory()
         if channel:
-            out_dir = channel.directory.path
+            out_dir = channel.directory
         out_dir.mkdir(exist_ok=True, parents=True)
 
         logs = None  # noqa
@@ -244,10 +265,14 @@ class VideoDownloader(Downloader, ABC):
                 )
 
             with get_db_session(commit=True) as session:
-                # If the video is from a channel, it will already be in the database.
-                source_id = entry['id']
-                existing_video = session.query(Video).filter_by(source_id=source_id).one_or_none()
-                video = upsert_video(session, video_path, channel, id_=existing_video.id if existing_video else None)
+                video_file = File.upsert(video_path, session)
+                video: Video = Video.upsert(video_file, session)
+                video.source_id = entry['id']
+                if channel:
+                    video.channel_id = channel.id
+                video.video_file.do_index()
+                video.validate(session)
+                session.flush([video])
                 video_id = video.id
         except UnrecoverableDownloadError:
             raise
@@ -335,7 +360,7 @@ def get_or_create_channel(source_id: str = None, url: str = None, name: str = No
         raise ValueError(f'Cannot create channel without a name')
 
     # Channel does not exist.  Create one in the video directory.
-    channel_directory = get_videos_directory() / name
+    channel_directory = get_videos_directory() / escape_file_name(name)
     if not channel_directory.is_dir():
         channel_directory.mkdir(parents=True)
     data = ChannelPostRequest(
@@ -409,7 +434,7 @@ def update_channel_catalog(channel: Channel, info: dict):
 
     # Write the Channel's info to a JSON file.
     if channel.directory:
-        info_json_path = channel.directory.path / f'{channel.name}.info.json'
+        info_json_path = channel.directory / f'{channel.name}.info.json'
         with info_json_path.open('wt') as fh:
             json.dump(info, fh, indent=2)
 
@@ -440,7 +465,7 @@ def _find_all_missing_videos(channel_id: id) -> List[Tuple]:
         return missing_videos
 
 
-def find_all_missing_videos(channel_id: int = None) -> Tuple[dict, dict]:
+async def find_all_missing_videos(channel_id: int = None):
     """
     Find all videos that don't have a video file, but are found in the DB (taken from the channel's info_json).
 
@@ -453,7 +478,7 @@ def find_all_missing_videos(channel_id: int = None) -> Tuple[dict, dict]:
     # Check that the channel has some videos.  We can't be sure what is missing if we don't know what we have.
     if channel.refreshed is False:
         # Refresh this channel's videos.
-        refresh_channel_videos(channel)
+        await channel.refresh_files()
 
     match_regex = re.compile(channel.match_regex) if channel.match_regex else None
 

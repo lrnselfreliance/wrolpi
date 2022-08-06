@@ -1,6 +1,9 @@
-import React from "react";
+import React, {useContext} from "react";
 import {NavLink} from "react-router-dom";
 import {Dropdown, Menu, Responsive} from "semantic-ui-react";
+import {SettingsContext, ThemeContext} from "../contexts/contexts";
+import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
+import {DarkModeToggle} from "./Common";
 
 const responsiveWidth = 500;
 
@@ -43,11 +46,12 @@ function MenuLink(props) {
     }
 
     if (!props.link.links) {
+        const exact = props.link.exact ? {exact: null} : {};
         return (
             <NavLink
                 className={classes}
-                exact={props.link.exact || false}
                 to={props.link.to}
+                {...exact}
             >
                 {props.link.text}
             </NavLink>
@@ -60,10 +64,15 @@ function MenuLink(props) {
 }
 
 export function NavBar() {
+    const settings = useContext(SettingsContext);
+    const wrol_mode = settings ? settings.wrol_mode : null;
+    const topNavText = wrol_mode ? <>WROLPi&nbsp; <Icon name='lock'/></> : 'WROLPi';
+    const {i} = useContext(ThemeContext);
+
     return (
-        <Menu>
+        <Menu {...i}>
             {/*Always show WROLPi home button*/}
-            <MenuLink link={{to: '/', text: 'WROLPi', exact: true}}/>
+            <MenuLink link={{to: '/', text: topNavText, exact: true}}/>
 
             {/*Show the links in a menu when on desktop*/}
             {links.map((link) => {
@@ -72,11 +81,17 @@ export function NavBar() {
                 )
             })}
             <Responsive minWidth={responsiveWidth} as={Menu.Menu} position="right">
+                <div style={{margin: '0.8em'}}>
+                    <DarkModeToggle/>
+                </div>
                 {rightLinks.map((link) => <MenuLink link={link} key={link.key}/>)}
             </Responsive>
 
             {/*Show the menu items in a dropdown when on mobile*/}
             <Responsive as={Menu.Menu} maxWidth={responsiveWidth - 1} position='right'>
+                <div style={{margin: '0.8em'}}>
+                    <DarkModeToggle/>
+                </div>
                 <Dropdown item icon="bars">
                     <Dropdown.Menu>
                         {collapsedLinks.map((link) =>

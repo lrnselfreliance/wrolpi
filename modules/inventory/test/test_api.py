@@ -84,6 +84,15 @@ def test_inventory_api(test_session, test_client):
     inventory = response.json['inventories'][0]
     inventory_id = inventory['id']
 
+    request, response = test_client.get(f'/api/inventory/{inventory_id}')
+    assert response.status_code == HTTPStatus.OK
+
+    request, response = test_client.get('/api/inventory/categories')
+    assert response.status_code == HTTPStatus.OK
+
+    request, response = test_client.get('/api/inventory/brands')
+    assert response.status_code == HTTPStatus.OK
+
     inventory = dict(name='new name')
     request, response = test_client.put(f'/api/inventory/{inventory_id}', content=json.dumps(inventory))
     assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code

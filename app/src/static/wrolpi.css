@@ -26,3 +26,9 @@ textarea.otp {
 .inline-header span {
     margin-left: 1em;
 }
+
+.card-icon {
+    min-height: 163px;
+    text-align: center;
+    padding-top: 53px;
+}

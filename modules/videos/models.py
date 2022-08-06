@@ -1,18 +1,21 @@
 import json
+import pathlib
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Generator
+from typing import Optional, Generator, Dict, List
 
-from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, Computed
-from sqlalchemy.orm import relationship, Session, deferred
+from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey
+from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import Base, tsvector, ModelHelper, logger, get_media_directory
+from wrolpi.common import Base, ModelHelper, logger, get_media_directory
 from wrolpi.dates import now, TZDateTime
 from wrolpi.db import get_db_curs
 from wrolpi.downloader import Download, download_manager
-from wrolpi.errors import UnknownVideo, UnknownFile, UnknownDirectory
-from wrolpi.media_path import MediaPathType, MediaPath
+from wrolpi.errors import UnknownVideo
+from wrolpi.files.lib import refresh_directory_files_recursively, glob_shared_stem
+from wrolpi.files.models import File
+from wrolpi.media_path import MediaPathType
 
 logger = logger.getChild(__name__)
 
@@ -22,18 +25,8 @@ class Video(ModelHelper, Base):
     id = Column(Integer, primary_key=True)
     channel_id = Column(Integer, ForeignKey('channel.id'))
     channel = relationship('Channel', primaryjoin='Video.channel_id==Channel.id', back_populates='videos')
-    idempotency = Column(String)
     validated = Column(Boolean, default=False)
 
-    # File paths
-    caption_path = Column(MediaPathType)
-    description_path = Column(MediaPathType)
-    ext = Column(String)
-    info_json_path = Column(MediaPathType)
-    poster_path = Column(MediaPathType)
-    video_path = Column(MediaPathType)
-
-    caption = deferred(Column(String))  # slow to fetch
     censored = Column(Boolean, default=False)
     duration = Column(Integer)
     favorite = Column(TZDateTime)
@@ -46,17 +39,41 @@ class Video(ModelHelper, Base):
     view_count = Column(Integer)
     viewed = Column(TZDateTime)
 
-    textsearch = deferred(
-        Column(tsvector, Computed('''to_tsvector('english'::regconfig,
-                                               ((COALESCE(title, ''::text) || ' '::text) ||
-                                                COALESCE(caption, ''::text)))''')))
+    # Associated Files
+    caption_path: pathlib.Path = Column(MediaPathType, ForeignKey('file.path', ondelete='CASCADE'))
+    caption_file: File = relationship('File', primaryjoin='Video.caption_path==File.path')
+    info_json_path: pathlib.Path = Column(MediaPathType, ForeignKey('file.path', ondelete='CASCADE'))
+    info_json_file: File = relationship('File', primaryjoin='Video.info_json_path==File.path')
+    poster_path: pathlib.Path = Column(MediaPathType, ForeignKey('file.path', ondelete='CASCADE'))
+    poster_file: File = relationship('File', primaryjoin='Video.poster_path==File.path')
+    video_path: pathlib.Path = Column(MediaPathType, ForeignKey('file.path', ondelete='CASCADE'))
+    video_file: File = relationship('File', primaryjoin='Video.video_path==File.path')
 
     def __repr__(self):
-        video_path = self.video_path
-        if self.video_path and isinstance(self.video_path, MediaPath):
-            video_path = self.video_path.path.relative_to(get_media_directory())
-        return f'<Video id={self.id} title={repr(self.title)} path={video_path} channel={self.channel_id} ' \
+        v = self.video_file
+        if self.video_path:
+            video_path = self.video_path.path if hasattr(self.video_path, 'path') else self.video_path
+            v = video_path.relative_to(get_media_directory())
+        return f'<Video id={self.id} title={repr(self.title)} path={v} channel={self.channel_id} ' \
                f'source_id={repr(self.source_id)}>'
+
+    @classmethod
+    def upsert(cls, video_file: File, session: Session):
+        video = session.query(Video).filter_by(video_file=video_file).one_or_none()
+        if not video:
+            video = Video(video_file=video_file)
+        video: Video
+        video.video_path = video.video_path or video_file.path
+        video.video_file = video.video_file or video_file
+        video.size = video.video_path.stat().st_size
+        session.add(video)
+
+        video.find_my_files()
+
+        # Claim the video file for this model.
+        video.video_file.model = cls.__tablename__
+
+        return video
 
     def dict(self) -> dict:
         d = super().dict()
@@ -72,35 +89,34 @@ class Video(ModelHelper, Base):
         from .common import minimize_video
         return minimize_video(self.dict())
 
-    def _clear_paths(self):
-        self.caption_path = None
-        self.description_path = None
-        self.ext = None
-        self.info_json_path = None
-        self.poster_path = None
-        self.video_path = None
+    def _clear_files(self):
+        # Use setattr to avoid confusing PyCharm
+        setattr(self, 'caption_file', None)
+        setattr(self, 'description_file', None)
+        setattr(self, 'ext', None)
+        setattr(self, 'info_json_file', None)
+        setattr(self, 'poster_file', None)
+        setattr(self, 'video_file', None)
 
-    def my_paths(self) -> Generator[Path, None, None]:
+    def my_files(self) -> Generator[Path, None, None]:
         """Return all paths of this Video.  Returns nothing if all paths are None."""  # noqa
-        if self.description_path:  # noqa
-            yield self.description_path.path
-        if self.poster_path:
-            yield self.poster_path.path
-        if self.caption_path:
-            yield self.caption_path.path
-        if self.info_json_path:
-            yield self.info_json_path.path
-        if self.video_path:
-            yield self.video_path.path
+        if self.poster_file:
+            yield self.poster_file.path
+        if self.caption_file:
+            yield self.caption_file.path
+        if self.info_json_file:
+            yield self.info_json_file.path
+        if self.video_file:
+            yield self.video_file.path
 
     def delete(self):
         """
         Remove all files related to this video.  Add it to it's Channel's skip list.
         """
-        for path in self.my_paths():
+        for path in self.my_files():
             path.unlink(missing_ok=True)
 
-        self._clear_paths()
+        self._clear_files()
 
         needs_save = bool(self.favorite)
 
@@ -126,21 +142,15 @@ class Video(ModelHelper, Base):
     def set_viewed(self):
         self.viewed = now()
 
-    def get_info_json(self) -> Optional[JSON]:
+    def get_info_json(self) -> Optional[Dict]:
         """If this Video has an info_json file, return it's contents.  Otherwise, return None."""
-        if not self.info_json_path:
+        info_json_path = self.info_json_file.path if self.info_json_file else self.info_json_path
+        if not info_json_path:
             return
 
         try:
-            info_json_path = self.info_json_path.path if \
-                isinstance(self.info_json_path, MediaPath) else self.info_json_path
-            with open(info_json_path, 'rb') as fh:
-                contents = json.load(fh)
-                return contents
-        except UnknownFile:
-            pass
-        except UnknownDirectory:
-            pass
+            with info_json_path.open('rb') as fh:
+                return json.load(fh)
         except Exception as e:
             logger.warning(f'Unable to parse info json {self.info_json_path}', exc_info=e)
             return None
@@ -230,7 +240,7 @@ class Video(ModelHelper, Base):
     def __json__(self):
         from modules.videos.common import minimize_video_info_json
         info_json = minimize_video_info_json(self.get_info_json()) if self.info_json_path else None
-        stem = self.video_path.path.stem if self.video_path else None
+        stem = self.video_path.stem if self.video_path else None
 
         d = dict(
             caption_path=self.caption_path,
@@ -249,44 +259,78 @@ class Video(ModelHelper, Base):
             upload_date=self.upload_date,
             url=self.url,
             validated=self.validated,
-            video_path=self.video_path,
             view_count=self.view_count,
+            video_path=self.video_path.relative_to(get_media_directory()),
             viewed=self.viewed,
         )
         return d
 
-    def validate(self):
+    def validate(self, session: Session):
         """Perform a validation of this video and it's files.  Mark this video as validated if no errors occur."""
-        if not self.video_path:
+        if not self.video_file:
             # Can't validate if there is no video file.
             return False
 
         from .lib import validate_video
         try:
-            validate_video(self, self.channel.generate_posters if self.channel else False)
+            validate_video(self, self.channel.generate_posters if self.channel else False, session)
             self.validated = True
         except Exception as e:
             logger.warning(f'Failed to validate video {self}', exc_info=e)
 
         return self.validated
 
-    def check_for_corruption(self):
-        """Uses ffprobe to check if this video is corrupt."""
+    def find_my_files(self):
+        """Search near the video file for it's associated files.  (poster, caption, etc.)"""
+        from modules.videos.common import match_video_files
         if not self.video_path:
-            return
+            raise ValueError("Can't find files when I don't have a video path!")
 
-        from .lib import check_for_video_corruption
-        return check_for_video_corruption(self.video_path.path)
+        # Associated files share the same stem, but different extensions.
+        associated_paths = glob_shared_stem(self.video_path)
+        associated_paths.pop(associated_paths.index(self.video_path))
+
+        # Get the session from the video first, fallback to the video file.
+        session: Session = Session.object_session(self) or Session.object_session(self.video_file)
+
+        files = [File.upsert(i, session) for i in associated_paths]
+        _, poster_file, description_file, caption_file, info_json_file = match_video_files(files)
+
+        if poster_file:
+            poster_file.do_index()
+        if caption_file:
+            caption_file.do_index()
+        if info_json_file:
+            info_json_file.do_index()
+
+        session.flush([i for i in files])
+
+        self.poster_file = poster_file
+        self.caption_file = caption_file
+        self.info_json_file = info_json_file
+
+    @staticmethod
+    def find_by_path(path, session):
+        video = session.query(Video).filter_by(video_path=path).one_or_none()
+        return video
+
+    @staticmethod
+    def find_by_paths(paths: List[pathlib.Path], session) -> List:
+        videos = list(session.query(Video).filter(Video.video_path.in_(paths)))
+        return videos
+
+    @property
+    def primary_path(self):
+        return self.video_path
 
 
 class Channel(ModelHelper, Base):
     __tablename__ = 'channel'
     id = Column(Integer, primary_key=True)
     name = Column(String)
-    idempotency = Column(String)
     url = Column(String, unique=True)
     match_regex = Column(String)
-    directory: MediaPath = Column(MediaPathType)
+    directory: pathlib.Path = Column(MediaPathType)
     skip_download_videos = Column(ARRAY(String))
     generate_posters = Column(Boolean, default=False)  # generating posters may delete files, and can be slow.
     calculate_duration = Column(Boolean, default=True)
@@ -337,6 +381,12 @@ class Channel(ModelHelper, Base):
         for key, value in data.items():
             setattr(self, key, value)
 
+        # We need an absolute directory.
+        if isinstance(self.directory, pathlib.Path) and not self.directory.is_absolute():
+            self.directory = get_media_directory() / self.directory
+        elif isinstance(self.directory, str) and not pathlib.Path(self.directory).is_absolute():
+            self.directory = get_media_directory() / self.directory
+
         # All channels with a URL and download_frequency should have a download.
         session = Session.object_session(self)
         if download and not self.download_frequency:
@@ -360,7 +410,7 @@ class Channel(ModelHelper, Base):
         """
         config = dict(
             calculate_duration=self.calculate_duration,
-            directory=str(self.directory.path),
+            directory=str(self.directory),
             download_frequency=self.download_frequency,
             favorites={},
             generate_posters=self.generate_posters,
@@ -400,6 +450,7 @@ class Channel(ModelHelper, Base):
 
     def dict(self, with_statistics: bool = False):
         d = super(Channel, self).dict()
+        d['directory'] = self.directory.relative_to(get_media_directory())
         if with_statistics:
             d['statistics'] = self.get_statistics()
         return d
@@ -425,3 +476,8 @@ class Channel(ModelHelper, Base):
             largest_video=largest_video,
         )
         return statistics
+
+    async def refresh_files(self):
+        """Refresh all files within this Channel's directory.  Mark this channel as refreshed."""
+        await refresh_directory_files_recursively(self.directory)
+        self.refreshed = True

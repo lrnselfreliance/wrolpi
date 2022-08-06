@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from wrolpi.db import optional_session, get_db_session
+from wrolpi.db import optional_session
 
 
 def test_optional_session(test_session):
@@ -34,4 +34,3 @@ def test_optional_session(test_session):
     func()
     func(session=test_session)
     func(test_session)
-

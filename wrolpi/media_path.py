@@ -9,9 +9,11 @@ PATH_TYPE = Union[str, pathlib.Path]
 
 
 class MediaPath:
+    """Enforce that a given path is within the Media Directory.
+
+    Provide access to methods and properties on the underlying pathlib.Path.
     """
-    Enforce that a given path is within the Media Directory.
-    """
+    impl = types.String
 
     def __init__(self, path: PATH_TYPE):
         path = self._validate_path(path)
@@ -22,6 +24,9 @@ class MediaPath:
 
     def __str__(self):
         return str(self.relative)
+
+    def __getitem__(self, item):
+        return self._path
 
     @classmethod
     def _validate_path(cls, path: PATH_TYPE):
@@ -60,25 +65,38 @@ class MediaPath:
     def startswith(self, other):
         return str(self._path).startswith(other)
 
+    def endswith(self, other):
+        return str(self._path).endswith(other)
+
+    @property
+    def name(self):
+        return self.path.name
+
     @property
     def relative(self):
         """Get the path relative to the media directory."""
         return self._path.relative_to(get_media_directory())
+
+    def __hash__(self):
+        return hash(str(self._path)) if self._path else hash(None)
 
 
 class MediaPathType(types.TypeDecorator):  # noqa
     impl = types.String
 
     def process_bind_param(self, value, dialect):
-        if isinstance(value, str) and len(value) == 0:
+        """Convert paths into what the DB expects. (pathlib.Path -> str)"""
+        if value == '':
             raise ValueError('MediaPath cannot be empty')
 
         if isinstance(value, pathlib.Path):
             return str(value.absolute())
         elif isinstance(value, str) or value is None:
             return value
+        elif isinstance(value, MediaPath):
+            return str(value.path)
         raise ValueError(f'Invalid MediaPath ({type(value)}): {value}')
 
     def process_result_value(self, value, dialect):
         if value:
-            return MediaPath(value)
+            return pathlib.Path(value)

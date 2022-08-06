@@ -1,12 +1,15 @@
 import json
+import json
 import os
 import pathlib
+import re
 import subprocess
 import tempfile
+from datetime import timedelta
 from decimal import Decimal
 from functools import partial
 from pathlib import Path
-from typing import Union, Tuple, List, Set, Iterable, Optional
+from typing import Union, List, Set, Iterable, Optional, Tuple
 
 import PIL
 from PIL import Image
@@ -14,13 +17,13 @@ from sqlalchemy.orm import Session
 
 from wrolpi.cmd import which
 from wrolpi.common import logger, iterify, get_media_directory, \
-    minimize_dict, any_extensions
+    minimize_dict, any_extensions, match_paths_to_suffixes
 from wrolpi.db import get_db_session, get_db_curs
-from wrolpi.errors import UnknownFile, ChannelNameConflict, ChannelURLConflict, \
+from wrolpi.errors import ChannelNameConflict, ChannelURLConflict, \
     ChannelDirectoryConflict, ChannelSourceIdConflict
-from wrolpi.media_path import MediaPath
+from wrolpi.files.models import File
 from wrolpi.vars import DEFAULT_FILE_PERMISSIONS
-from .models import Channel, Video
+from .models import Channel
 
 logger = logger.getChild(__name__)
 
@@ -32,6 +35,7 @@ MINIMUM_VIDEO_KEYS = {'id', 'title', 'upload_date', 'duration', 'channel', 'chan
                       'view_count'}
 # These are the supported video formats.  These are in order of their preference.
 VIDEO_EXTENSIONS = ('mp4', 'ogg', 'webm', 'flv')
+match_video_extensions = partial(any_extensions, extensions=VIDEO_EXTENSIONS)
 
 FFMPEG_BIN = which('ffmpeg', '/usr/bin/ffmpeg', warn=True)
 
@@ -49,38 +53,11 @@ def get_videos_directory() -> pathlib.Path:
 
 
 def get_no_channel_directory() -> pathlib.Path:
-    """Get the "NO CHANNEL" directory in the videos directory.  Make it if it does not exist."""
+    """Get the "NO CHANNEL" directory in the videos directory.  Make it if it does not exist."""  # noqa
     directory = get_videos_directory() / 'NO CHANNEL'
     if not directory.is_dir():
         directory.mkdir(parents=True)
     return directory
-
-
-VALID_VIDEO_KINDS = {'video', 'caption', 'poster', 'description', 'info_json'}
-
-
-def get_absolute_video_path(video: Video, kind: str = 'video') -> MediaPath:
-    if kind not in VALID_VIDEO_KINDS:
-        raise Exception(f'Unknown video path kind {kind}')
-    path = getattr(video, f'{kind}_path')
-    if path:
-        return path
-    raise UnknownFile()
-
-
-match_video_extensions = partial(any_extensions, extensions=VIDEO_EXTENSIONS)
-
-
-def generate_video_paths(directory: Union[str, pathlib.Path]) -> Tuple[str, pathlib.Path]:
-    """Generate a list of video paths in the provided directory."""
-    directory = pathlib.Path(directory)
-
-    for child in directory.iterdir():
-        if child.is_file() and match_video_extensions(child.name):
-            child = child.absolute()
-            yield child
-        elif child.is_dir():
-            yield from generate_video_paths(child)
 
 
 @iterify(set)
@@ -190,13 +167,46 @@ def get_matching_directories(path: Union[str, Path]) -> List[str]:
     return paths
 
 
-def generate_video_poster(video_path: Path) -> Path:
-    """Create a poster (aka thumbnail) next to the provided video_path."""
+def duration_to_seconds(duration: str) -> int:
+    """Convert ffmpeg duration to seconds"""
+    hours, minutes, seconds = duration.split(':')
+    seconds, microseconds = seconds.split('.')
+    return int(timedelta(
+        hours=int(hours),
+        minutes=int(minutes),
+        seconds=int(seconds),
+        microseconds=int(microseconds),
+    ).total_seconds())
+
+
+def seconds_to_duration(seconds: int) -> str:
+    """Convert integer seconds to ffmpeg duration"""
+    hours, seconds = divmod(seconds, 3600)
+    minutes, seconds = divmod(seconds, 60)
+    return f'{hours:02}:{minutes:02}:{seconds:02}.000'
+
+
+DURATION_REGEX = re.compile(r'Duration: ([\d:.]+),')
+
+
+def get_duration_from_ffmpeg(stderr: str) -> int:
+    """Extract the duration from FFPEG's stderr, return this duration as integer seconds."""
+    duration = DURATION_REGEX.findall(stderr)
+    duration = duration_to_seconds(duration[0]) if duration else None
+    return duration
+
+
+def generate_video_poster(video_path: Path) -> Tuple[Path, Optional[int]]:
+    """Create a poster (aka thumbnail) next to the provided video_path.  Also returns the video duration."""
     poster_path = video_path.with_suffix('.jpg')
     cmd = (FFMPEG_BIN, '-n', '-i', str(video_path), '-f', 'mjpeg', '-vframes', '1', '-ss', '00:00:05.000',
            str(poster_path))
+    if poster_path.exists():
+        # Poster already exists.
+        return poster_path, None
     try:
-        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stderr = proc.stderr.decode()
         logger.info(f'Generated poster at {poster_path}')
     except subprocess.CalledProcessError as e:
         logger.warning(f'FFMPEG poster generation failed with stdout: {e.stdout.decode()}')
@@ -205,7 +215,8 @@ def generate_video_poster(video_path: Path) -> Path:
     if not poster_path.exists():
         raise Exception(f'Failed to find generated poster! {poster_path}')
 
-    return poster_path
+    duration = get_duration_from_ffmpeg(stderr)
+    return poster_path, duration
 
 
 def convert_image(existing_path: Path, destination_path: Path, ext: str = 'jpeg'):
@@ -237,7 +248,7 @@ def is_valid_poster(poster_path: Path) -> bool:
 FFPROBE_BIN = which('ffprobe', '/usr/bin/ffprobe', warn=True)
 
 
-def get_video_duration(video_path: Path) -> Optional[int]:
+def get_video_duration(video_path: Path) -> int:
     """Get the duration of a video in seconds.  Do this using ffprobe."""
     if not isinstance(video_path, Path):
         video_path = Path(video_path)
@@ -261,25 +272,29 @@ def get_video_duration(video_path: Path) -> Optional[int]:
 
 
 def check_for_video_corruption(video_path: Path) -> bool:
-    """Uses ffprobe to check for specific ways a video file can be corrupt."""
-    if not isinstance(video_path, Path):
-        video_path = Path(video_path)
+    """Uses ffprobe to check for specific ways a video file can be corrupt.
+
+    Also attempts to screenshot the video near the end of it's duration, this check if the video is corrupted somewhere
+    in the middle."""
+    video_path = Path(video_path) if not isinstance(video_path, Path) else video_path
+
     if not video_path.is_file():
         raise FileNotFoundError(f'{video_path} does not exist!')
     if not FFPROBE_BIN:
         raise SystemError('ffprobe is not installed!')
 
-    cmd = [FFPROBE_BIN, str(video_path)]
+    # Just read the video using FFMPEG, this prints out useful information about the video.
+    cmd = (FFPROBE_BIN, str(video_path))
     try:
         proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     except subprocess.CalledProcessError as e:
-        logger.warning(f'FFPROBE failed to check for corruption with stdout: {e.stdout.decode()}')
         logger.warning(f'FFPROBE failed to check for corruption with stderr: {e.stderr.decode()}')
         return True  # video is corrupt.
 
     messages = (
         b'Invalid NAL unit size',
         b'Error splitting the input into NAL units',
+        b'Invalid data found when processing input',
     )
     corrupt = False
     for error in messages:
@@ -347,3 +362,19 @@ def minimize_video(video: dict) -> dict:
         video['info_json'] = minimize_video_info_json(video['info_json'])
 
     return video
+
+
+match_video_paths = partial(match_paths_to_suffixes, suffix_groups=(
+    tuple(f'.{i}' for i in VIDEO_EXTENSIONS),
+    ('.jpg', '.jpeg', '.webp', '.png'),
+    ('.description',),
+    ('.en.vtt', '.en.srt'),
+    ('.info.json',),
+))
+
+
+@iterify(tuple)
+def match_video_files(files: List[File]) -> Tuple[File, File, File, File, File]:
+    video_paths = match_video_paths([i.path for i in files])
+    for path in video_paths:
+        yield next((i for i in files if i.path == path), None)

@@ -21,7 +21,7 @@ function timeoutPromise(ms, promise) {
     })
 }
 
-async function apiCall(url, method, body, ms = 10000) {
+async function apiCall(url, method, body, ms = 20000) {
     let init = {method};
     if (body !== undefined) {
         init.body = JSON.stringify(body);
@@ -33,7 +33,7 @@ async function apiCall(url, method, body, ms = 10000) {
     try {
         // await the response or error.
         let response = await timeoutPromise(ms, promise);
-        if (200 <= response.status < 300) {
+        if (200 <= response.status && response.status < 300) {
             // Request was successful.
             return response;
         }
@@ -44,7 +44,7 @@ async function apiCall(url, method, body, ms = 10000) {
             toast({
                 type: 'error',
                 title: 'WROL Mode is enabled!',
-                description: 'This functionality is not enabled while WROL Mode is enabled!',
+                description: 'This functionality is disabled while WROL Mode is enabled!',
                 time: 5000,
             });
         }
@@ -97,8 +97,8 @@ export async function createChannel(channel) {
     return await apiPost(`${VIDEOS_API}/channels`, channel);
 }
 
-export async function deleteChannel(id) {
-    return apiDelete(`${VIDEOS_API}/channels/${id}`);
+export async function deleteChannel(channelId) {
+    return apiDelete(`${VIDEOS_API}/channels/${channelId}`);
 }
 
 export async function getChannels() {
@@ -120,24 +120,25 @@ export async function getChannel(id) {
     return (await response.json())['channel'];
 }
 
-export async function searchVideos(offset, limit, channel_id, searchStr, order_by, filters) {
+export async function searchVideos(offset, limit, channelId, searchStr, order_by, filters = []) {
     // Build a search query to retrieve a list of videos from the API
-    offset = offset || 0;
-    limit = limit || DEFAULT_LIMIT;
-    let body = {offset, limit, filters};
+    offset = parseInt(offset || 0);
+    limit = parseInt(limit || DEFAULT_LIMIT);
+    let body = {offset, limit, filters, order_by: order_by || 'rank'};
 
     if (searchStr) {
-        body.search_str = searchStr;
+        body['search_str'] = searchStr;
     }
-    if (channel_id) {
-        body.channel_id = channel_id;
+    if (channelId) {
+        body['channel_id'] = parseInt(channelId);
     }
-    body.order_by = order_by ? order_by : 'rank'
+
+    console.debug('searching videos', body);
 
     let response = await apiPost(`${VIDEOS_API}/search`, body);
     if (response.status === 200) {
         let data = await response.json();
-        return [data['videos'], data['totals']['videos']];
+        return [data['files'], data['totals']['files']];
     } else {
         toast({
             type: 'error',
@@ -145,13 +146,14 @@ export async function searchVideos(offset, limit, channel_id, searchStr, order_b
             description: 'Failed to search videos.  See server logs.',
             time: 5000,
         });
+        return [[], 0];
     }
 }
 
 export async function getVideo(video_id) {
     let response = await apiGet(`${VIDEOS_API}/video/${video_id}`);
     let data = await response.json();
-    return [data['video'], data['prev'], data['next']];
+    return [data['file'], data['prev'], data['next']];
 }
 
 export async function deleteVideo(video_id) {
@@ -221,7 +223,6 @@ export async function getDownloads() {
     }
 }
 
-
 export async function validateRegex(regex) {
     let response = await apiPost(`${API_URI}/valid_regex`, {regex});
     return (await response.json())['valid'];
@@ -247,18 +248,8 @@ export async function getStatistics() {
     }
 }
 
-export async function refresh() {
-    let response = await apiPost(`${VIDEOS_API}/refresh`);
-    return await response.json();
-}
-
-export async function download() {
-    let response = await apiPost(`${VIDEOS_API}/download`);
-    return await response.json();
-}
-
-export async function downloadChannel(id) {
-    let url = `${VIDEOS_API}/download/${id}`;
+export async function downloadChannel(channelId) {
+    let url = `${VIDEOS_API}/channels/download/${channelId}`;
     let response = await apiPost(url);
     let json = await response.json();
     if (response.status === 400 && json['code'] === 30) {
@@ -271,8 +262,8 @@ export async function downloadChannel(id) {
     }
 }
 
-export async function refreshChannel(id) {
-    let url = `${VIDEOS_API}/refresh/${id}`;
+export async function refreshChannel(channelId) {
+    let url = `${VIDEOS_API}/channels/refresh/${channelId}`;
     await fetch(url, {method: 'POST'});
 }
 
@@ -381,7 +372,6 @@ export async function getItems(inventoryId) {
 }
 
 export async function saveItem(inventoryId, item) {
-    item = emptyToNull(item);
     return await apiPost(`${API_URI}/inventory/${inventoryId}/item`, item);
 }
 
@@ -399,7 +389,7 @@ export async function deleteArchive(archive_id) {
     return await apiDelete(`${API_URI}/archive/${archive_id}`);
 }
 
-export async function searchArchives(offset, limit, domain = null, searchStr = null) {
+export async function searchArchives(offset, limit, domain, searchStr, order) {
     // Build a search query to retrieve a list of videos from the API
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
@@ -410,7 +400,11 @@ export async function searchArchives(offset, limit, domain = null, searchStr = n
     if (searchStr) {
         body['search_str'] = searchStr;
     }
+    if (order) {
+        body['order_by'] = order;
+    }
 
+    console.debug('searching archives', body);
     let response = await apiPost(`${ARCHIVES_API}/search`, body);
     if (response.status === 200) {
         let data = await response.json();
@@ -423,10 +417,6 @@ export async function searchArchives(offset, limit, domain = null, searchStr = n
             time: 5000,
         });
     }
-}
-
-export async function refreshArchives() {
-    return await apiPost(`${ARCHIVES_API}/refresh`);
 }
 
 export async function fetchDomains() {
@@ -448,7 +438,7 @@ export async function getArchive(archiveId) {
     const response = await apiGet(`${ARCHIVES_API}/${archiveId}`);
     if (response.status === 200) {
         const data = await response.json();
-        return [data['archive'], data['alternatives']];
+        return [data['file'], data['alternatives']];
     } else {
         toast({
             type: 'error',
@@ -502,8 +492,15 @@ const replaceFileDatetimes = (files) => {
     return files;
 }
 
-export async function filesSearch(offset, limit, searchStr) {
+export async function filesSearch(offset, limit, searchStr, mimetype, model) {
     const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit)};
+    if (mimetype) {
+        body['mimetype'] = mimetype;
+    }
+    if (model) {
+        body['model'] = model;
+    }
+    console.debug('searching files', body);
     const response = await apiPost(`${API_URI}/files/search`, body);
 
     if (response.status === 200) {
@@ -518,11 +515,27 @@ export async function filesSearch(offset, limit, searchStr) {
             description: 'Cannot search files.  See server logs.',
             time: 5000,
         });
+        return [null, null];
     }
 }
 
 export async function refreshFiles() {
     return await apiPost(`${API_URI}/files/refresh`);
+}
+
+export async function refreshDirectoryFiles(directory) {
+    let body = {directory};
+    try {
+        return await apiPost(`${API_URI}/files/refresh/directory`, body);
+    } catch (e) {
+        console.error(e);
+        toast({
+            type: 'error',
+            title: 'Unable to refresh directory',
+            description: 'Cannot refresh the files in the directory.  See server logs.',
+            time: 5000,
+        });
+    }
 }
 
 export async function getFiles(directories) {
@@ -538,13 +551,6 @@ export async function deleteFile(file) {
     await apiPost(`${API_URI}/files/delete`, body);
 }
 
-export async function getVersion() {
-    let response = await apiGet(`${API_URI}/settings`);
-    if (response.status === 200) {
-        let data = await response.json();
-        return data['version'];
-    }
-}
 
 export async function getHotspotStatus() {
     let response = await getSettings();

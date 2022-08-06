@@ -123,7 +123,7 @@ def get_categories() -> List[Tuple[str, str]]:
     """
     categories = DEFAULT_CATEGORIES.copy()
     with get_db_curs() as curs:
-        curs.execute('SELECT DISTINCT subcategory, category FROM item ORDER BY 1, 2')
+        curs.execute("SELECT DISTINCT COALESCE(subcategory, ''), COALESCE(category, '') FROM item ORDER BY 1, 2")
         try:
             db_categories = curs.fetchall()
             db_categories = [tuple(i) for i in db_categories]

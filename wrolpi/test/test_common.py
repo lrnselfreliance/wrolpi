@@ -8,7 +8,7 @@ from decimal import Decimal
 import pytest
 
 from wrolpi.common import insert_parameter, date_range, api_param_limiter, chdir, zig_zag, \
-    escape_file_name
+    escape_file_name, match_paths_to_suffixes, truncate_object_bytes
 from wrolpi.dates import set_timezone, now
 from wrolpi.errors import InvalidTimezone
 from wrolpi.test.common import build_test_directories
@@ -292,7 +292,51 @@ def test_zig_zag(low, high, expected):
         ('foo*', 'foo'),
         ('foo&', 'foo&'),
         ('foo%', 'foo'),
+        ('foo!', 'foo'),
     ]
 )
 def test_escape_file_name(name, expected):
     assert escape_file_name(name) == expected
+
+
+@pytest.mark.parametrize(
+    'paths,suffix_groups,expected', [
+        ([], [], ()),
+        (['foo.mp4', 'foo.info.json'], [('.mp4',)], ('foo.mp4',)),
+        (['foo.mp4', 'foo.info.json'], [('.mp4',), ('.info.json',)], ('foo.mp4', 'foo.info.json')),
+        (['foo.mp4', 'foo.info.json'], [('.mp4',), ('.nope',), ('.info.json',)], ('foo.mp4', None, 'foo.info.json')),
+        (['foo.mp4', 'foo.info.json', 'extra.txt'], [('.mp4',)], ('foo.mp4',)),
+        (['foo.mp4'], [('.mp4', '.flv'), ('.info.json',)], ('foo.mp4', None)),
+        (
+                # Two files are matched to the closest suffix.
+                ['foo.info.json', 'bar.json'],
+                [('.info.json',), ('.json',)],  # TODO longest suffix must be first
+                ('foo.info.json', 'bar.json'),
+        ),
+    ]
+)
+def test_match_paths_to_suffixes(paths, suffix_groups, expected):
+    paths = [pathlib.Path(i) for i in paths]
+    expected = tuple(pathlib.Path(i) if i else None for i in expected)
+    assert (i := match_paths_to_suffixes(paths, suffix_groups)) == expected, f'{i} != {expected}'
+
+
+def test_truncate_object_bytes():
+    """
+    Objects can be truncated (lists will be shortened) so they will fit in tsvector columns.
+    """
+    assert truncate_object_bytes(['foo'] * 10, 100) == ['foo'] * 5
+    assert truncate_object_bytes(['foo'] * 1_000, 100) == ['foo'] * 5
+    assert truncate_object_bytes(['foo'] * 1_000_000, 100) == ['foo'] * 5
+    assert truncate_object_bytes(['foo'] * 1_000_000, 200) == ['foo'] * 14
+    assert truncate_object_bytes([], 200) == []
+
+    assert truncate_object_bytes(None, 100) is None
+    assert truncate_object_bytes('', 100) is ''
+
+    assert truncate_object_bytes('foo' * 100, 99) == 'foofoofoofoofoofoofoofoofoofoofoofoofoof'
+    assert truncate_object_bytes('foo' * 100, 80) == 'foofoofoofoofoofoofoofoofo'
+    assert truncate_object_bytes('foo' * 100, 55) == 'foofo'
+    assert truncate_object_bytes('foo' * 100, 51) == 'f'
+    assert truncate_object_bytes('foo' * 100, 50) == ''
+    assert truncate_object_bytes('foo' * 100, 0) == ''

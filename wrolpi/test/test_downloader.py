@@ -1,6 +1,9 @@
 import asyncio
+import json
+import time
 from abc import ABC
 from datetime import datetime
+from http import HTTPStatus
 from itertools import zip_longest
 from typing import Tuple, Optional
 from unittest import mock
@@ -365,40 +368,3 @@ async def test_process_runner_timeout(test_directory):
     elapsed = datetime.now() - start
     assert 2 < elapsed.total_seconds() < 4
 
-
-@pytest.mark.asyncio
-async def test_multi_domain_download(test_session, test_directory, test_download_manager):
-    class TestDownloader(Downloader, ABC):
-        name = 'test_downloader'
-
-        @classmethod
-        def valid_url(cls, url: str) -> Tuple[bool, Optional[dict]]:
-            return True, {}
-
-        async def do_download(self, download: Download) -> DownloadResult:
-            await asyncio.sleep(1)
-            return DownloadResult(success=True)
-
-    async def wait_and_assert(urls_, max_seconds):
-        downloads = test_download_manager.create_downloads(urls_, downloader=test_downloader.name)
-        assert downloads and all(isinstance(i, Download) for i in downloads), 'Did not get Downloads'
-        start = now()
-        await test_download_manager.wait_for_all_downloads()
-        assert (elapsed := now() - start).total_seconds() < max_seconds, \
-            f'Downloads took {elapsed} seconds.  Were they in parallel?'
-        downloads = test_download_manager.get_downloads(test_session)
-        incomplete = [i.url for i in downloads if i.status != 'complete']
-        assert not incomplete, f'Some downloads did not complete: {incomplete}'
-
-    test_downloader = TestDownloader()
-    test_download_manager.register_downloader(test_downloader)
-
-    # Each domain's downloads will be processed one at a time.
-    # example.com and example.org will both download in parallel.
-    urls = ['https://example.com/1', 'https://example.com/2', 'https://example.com/3', 'https://example.org/1',
-            'https://example.org/2']
-    await wait_and_assert(urls, 4)
-
-    # Downloading more domains that workers is possible.
-    urls = [f'https://example.{i}' for i in range(test_download_manager.worker_count + 2)]
-    await wait_and_assert(urls, 3)

@@ -11,7 +11,7 @@
     "react-dropzone": "^11.4.2",
     "react-keyed-file-browser": "^1.14.0",
     "react-qr-code": "^2.0.7",
-    "react-router-dom": "^5.2.0",
+    "react-router-dom": "^6.3.0",
     "react-scripts": "^3.4.1",
     "react-semantic-toasts": "^0.6.5",
     "react-timezone-select": "0.8.4",

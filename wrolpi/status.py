@@ -8,9 +8,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import List
 
-from wrolpi.common import logger
-
 from wrolpi.cmd import which
+from wrolpi.common import logger
 
 logger = logger.getChild(__name__)
 

@@ -1,10 +1,19 @@
 import React from "react";
 import {HelpPopup, humanFileSize, PageContainer, TabLinks, WROLModeMessage} from "./Common";
-import {Route} from "react-router-dom";
+import {Route, Routes} from "react-router-dom";
 import {getMapImportStatus, importMapFiles} from "../api";
-import Table from "semantic-ui-react/dist/commonjs/collections/Table";
-import {Button, Checkbox, Icon, Loader, Placeholder} from "semantic-ui-react";
+import {
+    Checkbox,
+    PlaceholderLine,
+    TableBody,
+    TableCell,
+    TableFooter,
+    TableHeader,
+    TableHeaderCell,
+    TableRow
+} from "semantic-ui-react";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
+import {Button, Icon, Loader, Placeholder, Table} from "./Theme";
 
 class ManageMap extends React.Component {
     constructor(props) {
@@ -76,28 +85,28 @@ class ManageMap extends React.Component {
         let ref = React.createRef();
         const {size, path, imported, time_to_import} = pbf;
         let sizeCells = (<>
-            <Table.Cell>{humanFileSize(size)}</Table.Cell>
-            <Table.Cell>{humanFileSize(size * 25)}</Table.Cell>
-            <Table.Cell>{time_to_import}</Table.Cell>
+            <TableCell>{humanFileSize(size)}</TableCell>
+            <TableCell>{humanFileSize(size * 25)}</TableCell>
+            <TableCell>{time_to_import}</TableCell>
         </>);
-        return <Table.Row key={path}>
-            <Table.Cell collapsing>
+        return <TableRow key={path}>
+            <TableCell collapsing>
                 <Checkbox
                     disabled={disabled}
                     ref={ref}
                     onChange={(e, data) => this.handleCheckbox(data.checked, pbf)}
                 />
-            </Table.Cell>
-            <Table.Cell>
+            </TableCell>
+            <TableCell>
                 <a href={`/media/${path}`}>{path}</a>
-            </Table.Cell>
-            <Table.Cell>
+            </TableCell>
+            <TableCell>
                 {path === this.state.importing ?
                     <Loader active inline size='mini'/> :
                     imported ? 'yes' : 'no'}
-            </Table.Cell>
-            {size !== null ? sizeCells : <Table.Cell colSpan={3}/>}
-        </Table.Row>
+            </TableCell>
+            {size !== null ? sizeCells : <TableCell colSpan={3}/>}
+        </TableRow>
     }
 
     render() {
@@ -170,19 +179,19 @@ class ManageMap extends React.Component {
         let rows;
         if (!files) {
             // Fetch request is not complete.
-            rows = <Table.Row>
-                <Table.Cell/>
-                <Table.Cell colSpan={6}>
+            rows = <TableRow>
+                <TableCell/>
+                <TableCell colSpan={6}>
                     <Placeholder>
-                        <Placeholder.Line/>
-                        <Placeholder.Line/>
+                        <PlaceholderLine/>
+                        <PlaceholderLine/>
                     </Placeholder>
-                </Table.Cell>
-            </Table.Row>;
+                </TableCell>
+            </TableRow>;
         } else if (files.length === 0) {
-            rows = <Table.Row>
-                <Table.Cell/><Table.Cell colSpan={5}>No PBF map files were found in <b>map/pbf</b></Table.Cell>
-            </Table.Row>;
+            rows = <TableRow>
+                <TableCell/><TableCell colSpan={5}>No PBF map files were found in <b>map/pbf</b></TableCell>
+            </TableRow>;
         } else {
             rows = files.map(i => this.tableRow(i, disabled));
         }
@@ -191,37 +200,35 @@ class ManageMap extends React.Component {
             content='Upon importing, a PBF file will consume more disk space than the original file.'/>;
         let timeHelpPopup = <HelpPopup content='Estimated for a Raspberry Pi 4'/>;
 
-        return (
-            <PageContainer>
-                <WROLModeMessage content='Cannot modify Map'/>
-                {dockerWarning}
-                {downloadMessage}
-                {importingLoader}
-                <Table>
-                    <Table.Header>
-                        <Table.Row>
-                            <Table.HeaderCell/>
-                            <Table.HeaderCell>PBF File</Table.HeaderCell>
-                            <Table.HeaderCell>Imported</Table.HeaderCell>
-                            <Table.HeaderCell>Size</Table.HeaderCell>
-                            <Table.HeaderCell>Space Required {spaceHelpPopup}</Table.HeaderCell>
-                            <Table.HeaderCell>Time to Import {timeHelpPopup}</Table.HeaderCell>
-                        </Table.Row>
-                    </Table.Header>
-                    <Table.Body>
-                        {rows}
-                    </Table.Body>
-                    <Table.Footer>
-                        <Table.Row>
-                            <Table.HeaderCell/>
-                            <Table.HeaderCell colSpan={5}>
-                                {importButton}
-                            </Table.HeaderCell>
-                        </Table.Row>
-                    </Table.Footer>
-                </Table>
-            </PageContainer>
-        );
+        return <PageContainer>
+            <WROLModeMessage content='Cannot modify Map'/>
+            {dockerWarning}
+            {downloadMessage}
+            {importingLoader}
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHeaderCell/>
+                        <TableHeaderCell>PBF File</TableHeaderCell>
+                        <TableHeaderCell>Imported</TableHeaderCell>
+                        <TableHeaderCell>Size</TableHeaderCell>
+                        <TableHeaderCell>Space Required {spaceHelpPopup}</TableHeaderCell>
+                        <TableHeaderCell>Time to Import {timeHelpPopup}</TableHeaderCell>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {rows}
+                </TableBody>
+                <TableFooter>
+                    <TableRow>
+                        <TableHeaderCell/>
+                        <TableHeaderCell colSpan={5}>
+                            {importButton}
+                        </TableHeaderCell>
+                    </TableRow>
+                </TableFooter>
+            </Table>
+        </PageContainer>
     }
 }
 
@@ -241,13 +248,15 @@ function MapApp() {
 
 export function MapRoute() {
     const links = [
-        {text: 'Map', to: '/map', exact: true, key: 'map'},
-        {text: 'Manage', to: '/map/manage', exact: true, key: 'manage'},
+        {text: 'Map', to: '/map', key: 'map', end: true},
+        {text: 'Manage', to: '/map/manage', key: 'manage'},
     ];
 
     return <div style={{marginTop: '2em'}}>
         <TabLinks links={links}/>
-        <Route path='/map' exact component={MapApp}/>
-        <Route path='/map/manage' exact component={ManageMap}/>
+        <Routes>
+            <Route path='/' exact element={<MapApp/>}/>
+            <Route path='manage' exact element={<ManageMap/>}/>
+        </Routes>
     </div>
 }

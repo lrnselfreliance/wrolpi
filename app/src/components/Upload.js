@@ -1,9 +1,11 @@
 import React, {useState} from "react";
-import {Button, Form, Header, Loader, TextArea} from "semantic-ui-react";
 import {getDownloaders, postDownload} from "../api";
 import {frequencyOptions, rssFrequencyOptions, WROLModeMessage} from "./Common";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
+import {ThemeContext} from "../contexts/contexts";
+import {Button, Form, FormInput, Header, Loader, TextArea} from "./Theme";
+import {FormDropdown} from "semantic-ui-react";
 
 const validUrl = /^(http|https):\/\/[^ "]+$/;
 
@@ -55,22 +57,22 @@ class Downloader extends React.Component {
         let disabled = !this.state.urls || !this.state.valid || this.state.pending || !this.state.downloader;
         const {header} = this.props;
 
-        return (
-            <Form onSubmit={this.submitDownload}>
-                <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
-                <Header as='h3'>{header}</Header>
-                <Form.Field>
+        return <ThemeContext.Consumer>
+            {({i}) => (
+                <Form onSubmit={this.submitDownload}>
+                    <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
+                    <Header as='h3'>{header}</Header>
                     <TextArea required
                               placeholder={'Enter one URL per line'}
                               name='urls'
                               onChange={this.handleInputChange}
                               value={this.state.urls}
                     />
-                </Form.Field>
-                <Button content='Cancel' onClick={this.props.clearSelected}/>
-                <Button primary style={{marginTop: '1em'}} disabled={disabled}>Download</Button>
-            </Form>
-        )
+                    <Button content='Cancel' onClick={this.props.clearSelected}/>
+                    <Button primary style={{marginTop: '1em'}} disabled={disabled}>Download</Button>
+                </Form>
+            )}
+        </ThemeContext.Consumer>
     }
 }
 
@@ -134,42 +136,41 @@ class ChannelDownload extends React.Component {
                 in the future.</Message.Content>
         </Message>);
 
-        return (
-            <Form>
-                <Header as='h4'><Icon name='video'/> Channel / Playlist</Header>
-                <Form.Input
-                    required
-                    label='URL'
-                    placeholder='https://example.com/channel/videos'
-                    value={url}
-                    error={error}
-                    onChange={this.handleUrlChange}
-                />
-                <Form.Dropdown
-                    required
-                    selection
-                    label='Download Frequency'
-                    name='download_frequency'
-                    placeholder='Frequency'
-                    options={this.freqOptions}
-                    value={frequency}
-                    selected={frequency}
-                    onChange={this.handleFrequencyChange}
-                />
+        return <Form>
+            <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
+            <Header as='h4'><Icon name='video'/> Channel / Playlist</Header>
+            <FormInput
+                required
+                label='URL'
+                placeholder='https://example.com/channel/videos'
+                value={url}
+                error={error}
+                onChange={this.handleUrlChange}
+            />
+            <FormDropdown
+                required
+                selection
+                label='Download Frequency'
+                name='download_frequency'
+                placeholder='Frequency'
+                options={this.freqOptions}
+                value={frequency}
+                selected={frequency}
+                onChange={this.handleFrequencyChange}
+            />
 
-                {frequency === 0 && onceMessage}
+            {frequency === 0 && onceMessage}
 
-                <Button content='Cancel' onClick={this.props.clearSelected}/>
-                <Button
-                    color='blue'
-                    content='Download'
-                    onClick={this.handleSubmit}
-                    disabled={buttonDisabled}
-                />
-                <Loader active={pending}/>
-                {success && <Icon name='check'/>}
-            </Form>
-        )
+            <Button content='Cancel' onClick={this.props.clearSelected}/>
+            <Button
+                color='blue'
+                content='Download'
+                onClick={this.handleSubmit}
+                disabled={buttonDisabled}
+            />
+            <Loader active={pending}/>
+            {success && <Icon name='check'/>}
+        </Form>
     }
 }
 
@@ -236,63 +237,68 @@ class RSSDownload extends ChannelDownload {
                 in the future.</Message.Content>
         </Message>);
 
-        return (
-            <Form>
-                <Header as='h4'><Icon name='rss'/> RSS Feed</Header>
-                <Form.Input
-                    required
-                    label='URL'
-                    placeholder='https://example.com/feed'
-                    value={url}
-                    error={error}
-                    onChange={this.handleUrlChange}
-                />
-                <Form.Dropdown
-                    required
-                    selection
-                    label='Download Frequency'
-                    name='download_frequency'
-                    placeholder='Frequency'
-                    options={this.freqOptions}
-                    value={frequency}
-                    selected={frequency}
-                    onChange={this.handleFrequencyChange}
-                />
-                {frequency === 0 && onceMessage}
-                <Form.Dropdown selection required
-                               name='sub_downloader'
-                               label='Downloader'
-                               options={this.state.downloaders}
-                               placeholder='Select a downloader'
-                               onChange={this.handleInputChange}
-                />
+        return <Form>
+            <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
+            <Header as='h4'><Icon name='rss'/> RSS Feed</Header>
+            <FormInput
+                required
+                label='URL'
+                placeholder='https://example.com/feed'
+                value={url}
+                error={error}
+                onChange={this.handleUrlChange}
+            />
+            <FormDropdown
+                required
+                selection
+                label='Download Frequency'
+                name='download_frequency'
+                placeholder='Frequency'
+                options={this.freqOptions}
+                value={frequency}
+                selected={frequency}
+                onChange={this.handleFrequencyChange}
+            />
+            {frequency === 0 && onceMessage}
+            <FormDropdown selection required
+                          name='sub_downloader'
+                          label='Downloader'
+                          options={this.state.downloaders}
+                          placeholder='Select a downloader'
+                          onChange={this.handleInputChange}
+            />
 
-                <Button content='Cancel' onClick={this.props.clearSelected}/>
-                <Button
-                    color='blue'
-                    content='Download'
-                    onClick={this.handleSubmit}
-                    disabled={buttonDisabled}
-                />
-                <Loader active={pending}/>
-                {success && <Icon name='check'/>}
-            </Form>
-        )
+            <Button content='Cancel' onClick={this.props.clearSelected}/>
+            <Button
+                color='blue'
+                content='Download'
+                onClick={this.handleSubmit}
+                disabled={buttonDisabled}
+            />
+            <Loader active={pending}/>
+            {success && <Icon name='check'/>}
+        </Form>
     }
 }
 
-export function Downloads() {
+export function DownloadMenu({onOpen}) {
     const [downloader, setDownloader] = useState();
 
+    const localOnOpen = (name) => {
+        setDownloader(name);
+        onOpen(name)
+    }
+
     let body = (<>
-        <Button content='Videos' onClick={() => setDownloader('video')}/>
-        <Button content='Archive' onClick={() => setDownloader('archive')}/>
-        <Button content='Channel/Playlist' onClick={() => setDownloader('video_channel')}/>
-        <Button content='RSS Feed' onClick={() => setDownloader('rss')}/>
+        <Button content='Videos' onClick={() => localOnOpen('video')} style={{marginBottom: '1em'}}/>
+        <Button content='Archive' onClick={() => localOnOpen('archive')} style={{marginBottom: '1em'}}/>
+        <Button content='Channel/Playlist' onClick={() => localOnOpen('video_channel')}
+                style={{marginBottom: '1em'}}/>
+        <Button content='RSS Feed' onClick={() => localOnOpen('rss')} style={{marginBottom: '1em'}}/>
     </>);
 
     function clearSelected() {
-        setDownloader(null);
+        localOnOpen(null);
         body = null;
     }
 
@@ -307,10 +313,8 @@ export function Downloads() {
 
     body = downloader in downloaders ? downloaders[downloader] : body;
 
-    return (
-        <>
-            <Header as='h2'>Download</Header>
-            {body}
-        </>
-    )
+    return <>
+        <Header as='h2'>Download</Header>
+        {body}
+    </>
 }

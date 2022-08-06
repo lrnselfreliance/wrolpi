@@ -1,5 +1,6 @@
+import functools
 from pathlib import Path
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Optional
 
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
@@ -7,7 +8,6 @@ from sqlalchemy.orm.exc import NoResultFound
 from wrolpi.common import run_after, logger, \
     get_media_directory
 from wrolpi.db import get_db_curs, optional_session
-from wrolpi.downloader import download_manager
 from wrolpi.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError, InvalidDownload
 from .. import schema
 from ..common import check_for_channel_conflicts
@@ -125,6 +125,9 @@ def update_channel(session: Session, *, data: schema.ChannelPutRequest, channel_
                 data.directory.mkdir()
             else:
                 raise UnknownDirectory()
+    elif data.directory:
+        # Keep the old directory because the user can't change a Channel's directory.
+        data.directory = channel.directory
 
     # Verify that the URL/Name/directory aren't taken
     check_for_channel_conflicts(
@@ -165,7 +168,7 @@ def create_channel(session: Session, data: schema.ChannelPostRequest, return_dic
         name=data.name,
         url=data.url or None,
         match_regex=data.match_regex,
-        directory=data.directory,  # noqa
+        directory=get_media_directory() / data.directory,
         download_frequency=data.download_frequency,
         source_id=data.source_id,
     )

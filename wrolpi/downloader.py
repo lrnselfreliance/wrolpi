@@ -1,14 +1,16 @@
 import asyncio
 import multiprocessing
+import os
 import pathlib
 import traceback
 from abc import ABC
-from asyncio import Queue, Task, QueueEmpty
+from asyncio import Task
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 from enum import Enum
 from functools import partial
 from operator import attrgetter
+from queue import Empty
 from typing import List, Dict, Generator
 from typing import Tuple, Optional
 from urllib.parse import urlparse
@@ -48,7 +50,7 @@ class DownloadResult:
     success: bool = False
 
 
-class Download(ModelHelper, Base):
+class Download(ModelHelper, Base):  # noqa
     """Model that is used to schedule downloads."""
     __tablename__ = 'download'  # noqa
     id = Column(Integer, primary_key=True)
@@ -178,7 +180,7 @@ class Downloader:
         raise NotImplementedError()
 
     @optional_session
-    def already_downloaded(self, url: str, session: Session = None):
+    def already_downloaded(self, urls: List[str], session: Session = None):
         raise NotImplementedError()
 
     @property
@@ -275,10 +277,10 @@ class DownloadManager:
         self.instances: Tuple[Downloader] = tuple()
         self._instances = dict()
         self.disabled = multiprocessing.Event()
-        self.stopped: bool = False
-        self.download_queue: Queue = Queue()
+        self.stopped = multiprocessing.Event()
+        self.download_queue: multiprocessing.Queue = multiprocessing.Queue()
         self.workers: List[Task] = []
-        self.worker_count: int = 4
+        self.worker_count: int = 1
         self.data = multiprocessing.Manager().dict()
         # We haven't started downloads yet, so no domains are downloading.
         self.data['processing_domains'] = []
@@ -295,31 +297,46 @@ class DownloadManager:
         self.instances = tuple(self.priority_sorter(i))
         self._instances[instance.name] = instance
 
-    async def download_worker(self, num: int, queue: Queue):
+    async def download_worker(self, num: int):
         """Fetch a download from the queue, perform the download then store the results.
 
         Calls DownloadManger.start_downloads() after a download completes.
         """
-        logger.debug(f'DownloadManager.download_worker {num} starting up')
         from wrolpi.db import get_db_session
 
+        pid = os.getpid()
+        worker_logger = logger.getChild(f'download_worker.{pid}.{num}')
+
+        status = 'disabled' if self.disabled.is_set() else 'enabled'
+        worker_logger.info(f'Starting up.  DownloadManager is {status}.')
+
         while True:
-            if self.stopped:
+            if self.stopped.is_set():
+                # Service is restarting, close the worker.
                 return
 
-            try:
-                download: Download = queue.get_nowait()
-                download_id, url = download.id, download.url
-                logger.debug(f'Download worker {num} got download {download}')
+            disabled = self.disabled.is_set()
 
-                downloader: Downloader = download.get_downloader()
-                if not downloader:
-                    logger.warning(f'Could not find downloader for {download.downloader=}')
+            if disabled:
+                # Downloading is disabled, wait for it to enable.
+                await asyncio.sleep(1)
+                continue
+
+            try:
+                download_id, url = self.download_queue.get_nowait()
+                worker_logger.debug(f'Got download {download_id}')
 
                 with get_db_session(commit=True) as session:
                     # Mark the download as started in new session so the change is committed.
                     download = session.query(Download).filter_by(id=download_id).one()
                     download.started()
+
+                # Set the Download's manager.  Testing will not use the global manager.
+                download.manager = self
+
+                downloader: Downloader = download.get_downloader()
+                if not downloader:
+                    worker_logger.warning(f'Could not find downloader for {download.downloader=}')
 
                 self.data['processing_domains'].append(download.domain)
 
@@ -331,15 +348,15 @@ class DownloadManager:
                         result = downloader.do_download(download)
                 except UnrecoverableDownloadError as e:
                     # Download failed and should not be retried.
-                    logger.warning(f'UnrecoverableDownloadError for {url}', exc_info=e)
+                    worker_logger.warning(f'UnrecoverableDownloadError for {url}', exc_info=e)
                     result = DownloadResult(success=False, error=str(traceback.format_exc()))
                     try_again = False
                 except Exception as e:
-                    logger.warning(f'Failed to download {url}.  Will be tried again later.', exc_info=e)
+                    worker_logger.warning(f'Failed to download {url}.  Will be tried again later.', exc_info=e)
                     result = DownloadResult(success=False, error=str(traceback.format_exc()))
 
                 error_len = len(result.error) if result.error else 0
-                logger.debug(f'Got success={result.success} from {downloader} with {error_len=}')
+                worker_logger.debug(f'Got success={result.success} from {downloader} with {error_len=}')
 
                 with get_db_session(commit=True) as session:
                     # Modify the download in a new session because downloads may take a long time.
@@ -352,7 +369,7 @@ class DownloadManager:
                     download.next_download = self.calculate_next_download(download, session)
 
                     if result.downloads:
-                        logger.info(f'Adding {len(result.downloads)} downloads from result of {download.url}')
+                        worker_logger.info(f'Adding {len(result.downloads)} downloads from result of {download.url}')
                         self.create_downloads(result.downloads, session,
                                               downloader=download.sub_downloader)
 
@@ -364,21 +381,20 @@ class DownloadManager:
                     else:
                         download.defer()
 
-                queue.task_done()
                 # Remove this domain from the running list.
                 self._remove_domain(download.domain)
                 # Request any new downloads be added to the queue.
                 asyncio.create_task(self.queue_downloads())
             except asyncio.CancelledError:
-                logger.warning(f'download_worker canceled!')
-                queue.task_done()
+                worker_logger.warning('Canceled!')
+                self.download_queue.task_done()
                 return
-            except QueueEmpty:
+            except Empty:
                 # No work yet.
                 await asyncio.sleep(0.1)
                 continue
             except Exception as e:
-                logger.warning(f'Download worker had unexpected error', exc_info=e)
+                worker_logger.warning(f'Unexpected error', exc_info=e)
 
     def _add_domain(self, domain: str):
         """Add a domain to the processing list.
@@ -404,9 +420,10 @@ class DownloadManager:
                     # Loop isn't running, start one.  Probably testing.
                     loop = asyncio.get_event_loop()
 
-            logger.debug(f'Starting {self.worker_count} download workers')
+            pid = os.getpid()
+            logger.warning(f'Starting {self.worker_count} download workers. {pid=}')
             for i in range(self.worker_count):
-                coro = self.download_worker(i, self.download_queue)
+                coro = self.download_worker(i)
                 task = loop.create_task(coro)
                 self.workers.append(task)
 
@@ -522,8 +539,9 @@ class DownloadManager:
     async def queue_downloads(self, session: Session = None):
         """Put all downloads in queue.  Will only queue downloads if there are workers to take them.  Each worker
         only receives one domain, this is to prevent downloading from one domain many times at once."""
-        if self.disabled.is_set():
-            raise InvalidDownload('DownloadManager is disabled')
+        if self.disabled.is_set() or self.stopped.is_set():
+            # Don't queue downloads when disabled.
+            return
 
         if len(self.data['processing_domains']) >= len(self.workers):
             return
@@ -532,14 +550,17 @@ class DownloadManager:
         new_downloads = session.query(Download).filter(
             Download.status == 'new',
             Download.domain not in self.data['processing_domains'],
-        ).order_by(Download.id)  # noqa
+        ).order_by(
+            Download.frequency.is_(None),
+            Download.frequency,
+            Download.id)  # noqa
         count = 0
         for download in new_downloads:
             download.manager = self  # Assign this Download to this manager.
             domain = download.domain
             if domain not in self.data['processing_domains']:
                 self._add_domain(domain)
-                await self.download_queue.put(download)
+                self.download_queue.put((download.id, download.url))
                 count += 1
         if count:
             logger.debug(f'Added {count} downloads to queue.')
@@ -586,7 +607,6 @@ class DownloadManager:
             if self.download_queue.empty():
                 # Queue is empty.
                 break
-        await self.download_queue.join()
 
     @staticmethod
     def reset_downloads():
@@ -698,32 +718,37 @@ class DownloadManager:
                 downloader.kill()
             download.fail()
 
-    def stop(self):
-        """Stop all Downloaders, defer all pending downloads."""
-        logger.warning('Stopping all downloads')
-        self.stopped = True
+    def disable(self):
+        """Stop all downloads and downloaders.  Workers will stay idle."""
+        logger.info('Disabling downloads and downloaders.')
+        self.disabled.set()
         for downloader in self.instances:
             downloader.kill()
         for download in self.get_pending_downloads():
             download.defer()
         self.cancel_workers()
 
-    def kill(self):
-        """Kill all downloads.  Do not start new downloads."""
-        self.disabled.set()
-        try:
-            self.stop()
-        except Exception as e:
-            logger.critical(f'Failed to kill downloads!', exc_info=e)
+    def stop(self):
+        """Stop all downloads, downloaders and workers, defer all pending downloads."""
+        logger.warning('Stopping all workers')
+        self.stopped.set()
+        self.disable()
 
-    def enable(self):
-        """Enable downloading.  Start downloading."""
+    def enable(self, loop=None):
+        """Enable downloading.  Start downloading.  Start workers."""
         logger.info('Enabling downloading')
         for downloader in self.instances:
             downloader.clear()
+        self.stopped.clear()
         self.disabled.clear()
-        self.start_workers()
-        asyncio.create_task(self.do_downloads())
+        self.start_workers(loop)
+
+        try:
+            asyncio.create_task(self.do_downloads())
+        except RuntimeError:
+            # This may not work while testing.
+            if not PYTEST:
+                raise
 
     FINISHED_STATUSES = ('complete', 'failed')
 
@@ -806,6 +831,14 @@ class DownloadManager:
             once_downloads=once_downloads,
         )
         return data
+
+    @staticmethod
+    def get_summary():
+        with get_db_curs() as curs:
+            stmt = """SELECT COUNT(*) AS pending_downloads FROM download WHERE status='pending'"""
+            curs.execute(stmt)
+            result = [dict(i) for i in curs.fetchall()][0]
+            return result
 
     @optional_session
     def get_pending_downloads(self, session: Session) -> List[Download]:

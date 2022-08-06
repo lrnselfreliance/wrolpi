@@ -18,12 +18,11 @@ from sanic_ext.extensions.openapi import openapi
 
 from wrolpi import admin, status
 from wrolpi.admin import HotspotStatus
-from wrolpi.common import set_sanic_url_parts, logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
-    wrol_mode_check, native_only, set_wrol_mode
+from wrolpi.common import logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
+    wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, InvalidTimezone, API_ERRORS, APIError, ValidationError, HotspotError
-from wrolpi.media_path import MediaPath
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, DownloadRequest, EchoResponse
 from wrolpi.vars import DOCKERIZED
 from wrolpi.version import __version__
@@ -53,8 +52,6 @@ def add_blueprint(bp: Union[Blueprint, BlueprintGroup]):
 
 
 def run_webserver(loop, host: str, port: int, workers: int = 8):
-    set_sanic_url_parts(host, port)
-
     # Attach all blueprints after they have been defined.
     for bp in BLUEPRINTS:
         api_app.blueprint(bp)
@@ -118,6 +115,8 @@ def get_settings(_: Request):
     config = get_config()
 
     settings = {
+        'download_manager_disabled': download_manager.disabled.is_set(),
+        'download_manager_stopped': download_manager.stopped.is_set(),
         'download_on_startup': config.download_on_startup,
         'download_timeout': config.download_timeout,
         'hotspot_device': config.hotspot_device,
@@ -125,7 +124,7 @@ def get_settings(_: Request):
         'hotspot_password': config.hotspot_password,
         'hotspot_ssid': config.hotspot_ssid,
         'hotspot_status': admin.hotspot_status().name,
-        'media_directory': get_media_directory(),
+        'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.
         'throttle_on_startup': config.throttle_on_startup,
         'throttle_status': admin.throttle_status().name,
         'timezone': config.timezone,
@@ -145,11 +144,11 @@ def update_settings(_: Request, body: SettingsRequest):
 
     if body.wrol_mode is False:
         # Disable WROL Mode
-        set_wrol_mode(False)
+        disable_wrol_mode()
         return response.empty()
     elif body.wrol_mode is True:
         # Enable WROL Mode
-        set_wrol_mode(True)
+        enable_wrol_mode()
         return response.empty()
 
     try:
@@ -163,9 +162,6 @@ def update_settings(_: Request, body: SettingsRequest):
     wrolpi_config = get_config()
     old_password = wrolpi_config.hotspot_password
     wrolpi_config.update(config)
-
-    if body.wrol_mode:
-        download_manager.kill()
 
     # If the password was changed, we need to restart the hotspot.
     password_changed = (new_password := config.get('hotspot_password')) and old_password != new_password
@@ -231,7 +227,7 @@ async def kill_download(_: Request, download_id: int):
 @root_api.post('/download/kill')
 @openapi.description('Kill all downloads.  Disable downloading.')
 async def kill_downloads(_: Request):
-    download_manager.kill()
+    download_manager.disable()
     return response.empty()
 
 
@@ -319,7 +315,8 @@ async def get_status(_: Request):
     cpu_info = await status.get_cpu_info()
     load = await status.get_load()
     drives = await status.get_drives_info()
-    ret = dict(cpu_info=cpu_info, load=load, drives=drives)
+    downloads = download_manager.get_summary()
+    ret = dict(cpu_info=cpu_info, load=load, drives=drives, downloads=downloads)
     return json_response(ret)
 
 
@@ -340,10 +337,12 @@ class CustomJSONEncoder(json.JSONEncoder):
                 if hasattr(obj, 'dict'):
                     return obj.dict()
             elif isinstance(obj, Path):
-                return str(obj)
-            elif isinstance(obj, MediaPath):
                 media_directory = get_media_directory()
-                path = obj.path.relative_to(media_directory)
+                try:
+                    path = obj.relative_to(media_directory)
+                except ValueError:
+                    # Path may not be absolute.
+                    path = obj
                 if str(path) == '.':
                     return ''
                 return str(path)

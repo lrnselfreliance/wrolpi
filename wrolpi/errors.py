@@ -148,6 +148,10 @@ class HotspotError(APIError):
     pass
 
 
+class UnknownArchive(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -325,5 +329,10 @@ API_ERRORS = {
         'code': next(error_codes),
         'message': 'Updating/accessing Hotspot encountered an error',
         'status': HTTPStatus.INTERNAL_SERVER_ERROR,
+    },
+    UnknownArchive: {
+        'code': next(error_codes),
+        'message': 'Unable to find the archive',
+        'status': HTTPStatus.NOT_FOUND,
     }
 }

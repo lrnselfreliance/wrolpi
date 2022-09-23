@@ -5,6 +5,7 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import logger, wrol_mode_check, api_param_limiter
+from wrolpi.errors import ValidationError
 from wrolpi.root_api import get_blueprint, json_response
 from wrolpi.schema import JSONErrorResponse
 from . import lib, schema
@@ -26,12 +27,17 @@ async def get_archive(_: Request, archive_id: int):
     return json_response({'file': archive_file, 'alternatives': alternatives})
 
 
-@bp.delete('/<archive_id:int>')
+@bp.delete('/<archive_ids:int>')
+@bp.delete('/<archive_ids:[0-9,]+>')
 @openapi.description('Delete an individual archive')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
-async def delete_archive(_: Request, archive_id: int):
-    lib.delete_archive(archive_id)
+async def delete_archive(_: Request, archive_ids: str):
+    try:
+        archive_ids = [int(i) for i in str(archive_ids).split(',')]
+    except ValueError:
+        raise ValidationError('Could not parse archive ids')
+    lib.delete_archives(*archive_ids)
     return response.empty()
 
 

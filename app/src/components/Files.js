@@ -6,7 +6,8 @@ import {
     Confirm,
     Divider,
     Dropdown,
-    Image, PlaceholderLine,
+    Image,
+    PlaceholderLine,
     TableBody,
     TableCell,
     TableHeader,
@@ -226,16 +227,16 @@ function ImageRow({file, checkbox}) {
     return (
         <Table.Row>
             {checkbox}
-            <Table.Cell>
+            <TableCell>
                 <center>
                     {poster}
                 </center>
-            </Table.Cell>
-            <Table.Cell>
+            </TableCell>
+            <TableCell>
                 <ExternalCardLink to={url}>
                     <p>{textEllipsis(file.title || file.stem || file.path, 100)}</p>
                 </ExternalCardLink>
-            </Table.Cell>
+            </TableCell>
         </Table.Row>
     )
 }
@@ -250,9 +251,9 @@ function FileRow({file, selectOn, onSelect}) {
                 console.error('No onSelect declared');
             }
         };
-        checkbox = <Table.Cell>
+        checkbox = <TableCell>
             <Checkbox onChange={localOnSelect}/>
-        </Table.Cell>
+        </TableCell>
     }
 
     if (file.model === 'video' && 'video' in file) {
@@ -314,6 +315,7 @@ export function FilesView({
                               setView,
                               showView = true,
                               showSelect = false,
+                              selectElem,
                               onSelect,
                               setPage,
                               menuColumnsCount,
@@ -394,6 +396,7 @@ export function FilesView({
             </Grid.Column>
             {menuColumns}
         </Grid>
+        {selectOn && selectElem}
         {body}
         {paginator}
     </>

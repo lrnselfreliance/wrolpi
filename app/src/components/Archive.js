@@ -26,7 +26,7 @@ import {
     textEllipsis,
     uploadDate
 } from "./Common";
-import {deleteArchive, postDownload} from "../api";
+import {deleteArchives, postDownload} from "../api";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useArchive, useDomains, useQuery, useSearchArchives} from "../hooks/customHooks";
@@ -74,7 +74,8 @@ function ArchivePage() {
 
     const localDeleteArchive = async () => {
         setDeleteOpen(false);
-        await deleteArchive(archive.id);
+        await deleteArchives([archive.id]);
+        navigate(-1);
     }
     const localSyncArchive = async () => {
         setSyncOpen(false);
@@ -254,6 +255,9 @@ export function Domains() {
 
 function Archives() {
     const [domains] = useDomains();
+    const [selectedArchives, setSelectedArchives] = useState([]);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+
     let filterOptions = [];
     if (domains && domains.length > 0) {
         domains.forEach(i => {
@@ -272,7 +276,18 @@ function Archives() {
     }
 
     const domain = searchParams.get('domain');
-    const {archives, limit, setLimit, totalPages, activePage, setPage, searchStr, setSearchStr, setOrderBy} =
+    const {
+        archives,
+        limit,
+        setLimit,
+        totalPages,
+        activePage,
+        setPage,
+        searchStr,
+        setSearchStr,
+        setOrderBy,
+        fetchArchives
+    } =
         useSearchArchives(24, domain, searchOrder);
     const setView = (value) => updateQuery({view: value});
     const view = searchParams.get('view');
@@ -301,6 +316,45 @@ function Archives() {
         </Grid.Column>
     </>);
 
+    const onSelect = (path, checked) => {
+        let archiveId;
+        if (archives) {
+            archives.forEach(i => {
+                if (i && i['archive'] && i['path'] === path) {
+                    archiveId = i['archive']['id'];
+                }
+            });
+        }
+        if (checked && archiveId) {
+            setSelectedArchives([...selectedArchives, archiveId]);
+        } else {
+            setSelectedArchives(selectedArchives.filter(i => i !== archiveId));
+        }
+    }
+
+    const onDelete = async (e) => {
+        setDeleteOpen(false);
+        e.preventDefault();
+        await deleteArchives(selectedArchives);
+        await fetchArchives();
+        setSelectedArchives([]);
+    }
+
+    const selectElm = <div style={{marginTop: '0.5em'}}>
+        <Button
+            color='red'
+            disabled={!selectedArchives || selectedArchives.length === 0}
+            onClick={() => setDeleteOpen(true)}
+        >Delete</Button>
+        <Confirm
+            open={deleteOpen}
+            content='Are you sure you want to delete these archives files?  This cannot be undone.'
+            confirmButton='Delete'
+            onCancel={() => setDeleteOpen(false)}
+            onConfirm={onDelete}
+        />
+    </div>;
+
     return <FilesView
         files={archives}
         limit={limit}
@@ -309,6 +363,8 @@ function Archives() {
         totalPages={totalPages}
         showLimit={true}
         showSelect={true}
+        onSelect={onSelect}
+        selectElem={selectElm}
         view={view}
         setView={setView}
         setPage={setPage}

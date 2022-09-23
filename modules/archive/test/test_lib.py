@@ -7,7 +7,7 @@ import mock
 import pytest
 
 from modules.archive import lib
-from modules.archive.lib import get_or_create_domain, get_new_archive_files, delete_archive, do_archive, get_domains, \
+from modules.archive.lib import get_or_create_domain, get_new_archive_files, delete_archives, do_archive, get_domains, \
     group_archive_files, ArchiveFiles
 from modules.archive.models import Archive, Domain
 from wrolpi.dates import local_timezone
@@ -174,18 +174,20 @@ def test_fills_contents_with_refresh(test_client, test_session, archive_factory)
 
 
 def test_delete_archive(test_session, archive_factory):
+    """Archives can be deleted."""
     archive1 = archive_factory('example.com', 'https://example.com/1')
     archive2 = archive_factory('example.com', 'https://example.com/1')
     archive3 = archive_factory('example.com', 'https://example.com/1')
+    test_session.commit()
+
+    assert test_session.query(Archive).count() == 3
 
     # Delete the oldest.
-    delete_archive(archive1.id)
-
-    # Delete the latest.
-    delete_archive(archive3.id)
+    delete_archives(archive1.id, archive3.id)
+    assert test_session.query(Archive).count() == 1
 
     # Delete the last archive.  The Domain should also be deleted.
-    delete_archive(archive2.id)
+    delete_archives(archive2.id)
     domain = test_session.query(Domain).one_or_none()
     assert domain is None
 

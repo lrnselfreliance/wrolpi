@@ -385,8 +385,19 @@ export async function deleteItems(itemIds) {
     await apiDelete(`${API_URI}/inventory/item/${i}`);
 }
 
-export async function deleteArchive(archive_id) {
-    return await apiDelete(`${API_URI}/archive/${archive_id}`);
+export async function deleteArchives(archiveIds) {
+    let i = archiveIds.join(',');
+    try {
+        return await apiDelete(`${API_URI}/archive/${i}`);
+    } catch (e) {
+        console.error(e);
+        toast({
+            type: 'error',
+            title: 'Unexpected server response',
+            description: 'Unable to delete archives',
+            time: 5000,
+        });
+    }
 }
 
 export async function searchArchives(offset, limit, domain, searchStr, order) {

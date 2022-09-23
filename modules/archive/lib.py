@@ -332,15 +332,16 @@ def get_archive(session, archive_id: int) -> Archive:
     return archive
 
 
-def delete_archive(archive_id: int):
+def delete_archives(*archive_ids: List[int]):
     """Delete an Archive and all of it's files."""
     with get_db_session(commit=True) as session:
-        archive: Archive = session.query(Archive).filter_by(id=archive_id).one_or_none()
-        if not archive:
-            raise UnknownArchive(f'Unknown Archive with id: {archive_id}')
+        archives: List[Archive] = list(session.query(Archive).filter(Archive.id.in_(archive_ids)))
+        if not archives:
+            raise UnknownArchive(f'Unknown Archives with IDs: {", ".join(map(str, archive_ids))}')
 
         # Delete any files associated with this URL.
-        archive.delete()
+        for archive in archives:
+            archive.delete()
 
 
 def archive_strptime(dt: str) -> datetime:

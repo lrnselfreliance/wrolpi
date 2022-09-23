@@ -179,6 +179,7 @@ export const useSearchArchives = (defaultLimit, domain, order_by) => {
         setPage,
         searchStr,
         setSearchStr,
+        fetchArchives: localSearchArchives,
     }
 }
 

@@ -14,9 +14,9 @@ class RSSHTTPDownloader(HTTPDownloader):
         return DownloadResult(success=True)
 
     @optional_session
-    def already_downloaded(self, url: str, session=None):
-        download = session.query(Download).filter_by(url=url).one_or_none()
-        return download
+    def already_downloaded(self, *urls: List[str], session=None):
+        downloads = list(session.query(Download).filter(Download.url.in_(urls)))
+        return downloads
 
 
 @pytest.mark.asyncio
@@ -30,10 +30,10 @@ async def test_rss_download(test_session, test_download_manager):
     def check_downloads(expected: List[dict]):
         downloads = test_session.query(Download).order_by(Download.id).all()
         for download, expected in zip_longest(downloads, expected):
-            assert download.id == expected['id'] \
-                   and download.status == expected['status'] \
-                   and download.url == expected['url'] \
-                   and download.attempts == expected['attempts'], f'{download} != {expected}'
+            assert download.id == expected['id'], 'Download id does not match'
+            assert download.status == expected['status'], 'Download status does not match'
+            assert download.url == expected['url'], 'Download URL does not match'
+            assert download.attempts == expected['attempts'], 'Download attempts do not match'
 
     with mock.patch('wrolpi.downloader.parse_feed') as mock_parse_feed:
         mock_parse_feed.return_value = dict(

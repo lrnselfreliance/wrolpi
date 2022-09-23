@@ -184,7 +184,9 @@ async def test_video_download_no_channel(test_session, video_download_manager, v
 async def test_download_channel(test_session, simple_channel, video_download_manager, video_file,
                                 mock_video_extract_info, mock_video_prepare_filename,
                                 mock_video_process_runner):
-    """Downloading (updating the catalog of) a Channel creates download records for all of it's missing videos."""
+    """Downloading (updating the catalog of) a Channel creates download records for all of it's missing videos.
+
+    If a Channel has `match_regex` only those videos with matching titles will be downloaded."""
     url = 'https://www.youtube.com/c/LearningSelfReliance/videos'
 
     mock_video_prepare_filename.return_value = video_file
@@ -202,6 +204,17 @@ async def test_download_channel(test_session, simple_channel, video_download_man
         assert download.url == expected
         # Download is run only for test.
         assert download.status == 'complete'
+
+    # A channel with `match_regex` only returns matching video URLs.
+    simple_channel.match_regex = '.*(2).*'
+    test_session.query(Download).delete()
+    test_session.commit()
+    with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
+        mock_get_channel.return_value = simple_channel
+        video_download_manager.recurring_download(url, 100)
+        await video_download_manager.wait_for_all_downloads()
+    downloads = video_download_manager.get_once_downloads(test_session)
+    assert [i.url for i in downloads] == ['https://youtube.com/watch?v=video_2_url']
 
 
 def test_get_or_create_channel(test_session):
@@ -502,7 +515,3 @@ async def test_download_playlist(test_session, test_directory, mock_video_extrac
         'https://www.youtube.com/watch?v=video_2_url',  # Shorts is converted to regular URL.
         'https://youtube.com/watch?v=video_3_url',
     }
-
-
-def test_channel_download_match_title(test_session, test_directory, simple_channel, video_download_manager):
-    pass

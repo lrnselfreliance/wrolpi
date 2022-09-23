@@ -370,8 +370,7 @@ class DownloadManager:
 
                     if result.downloads:
                         worker_logger.info(f'Adding {len(result.downloads)} downloads from result of {download.url}')
-                        self.create_downloads(result.downloads, session,
-                                              downloader=download.sub_downloader)
+                        self.create_downloads(result.downloads, session, downloader=download.sub_downloader)
 
                     if try_again is False and not download.frequency:
                         # Only once-downloads can fail.
@@ -1001,14 +1000,14 @@ class RSSDownloader(Downloader, ABC):
         sub_downloader = self.manager.get_downloader_by_name(download.sub_downloader)
         for idx, entry in enumerate(feed['entries']):
             if url := entry.get('link'):
-                if not sub_downloader.already_downloaded(url):
-                    urls.append(url)
+                urls.append(url.strip())
             else:
                 logger.warning(f'RSS entry {idx} did not have a link!')
 
-        session = Session.object_session(download)
-        self.manager.create_downloads(urls, session=session, downloader=download.sub_downloader)
-        return DownloadResult(success=True)
+        # Only download new URLs.
+        urls = [i for i in urls if i not in [i.url for i in sub_downloader.already_downloaded(*urls)]]
+
+        return DownloadResult(success=True, downloads=urls)
 
     @staticmethod
     def acceptable_bozo_errors(feed):

@@ -101,10 +101,10 @@ class ChannelDownloader(Downloader, ABC):
 
         is_a_playlist = self.is_a_playlist(info)
         try:
-            if is_a_playlist:
-                downloads = self.get_playlist_downloads(download)
-            else:
-                downloads = await self.get_channel_downloads(download, info, channel)
+            if not is_a_playlist:
+                await self.prepare_channel_for_downloads(download, channel)
+
+            downloads = self.get_missing_videos(download, channel)
             return DownloadResult(success=True, location=location, downloads=downloads)
         except Exception:
             if PYTEST:
@@ -113,14 +113,14 @@ class ChannelDownloader(Downloader, ABC):
             logger.warning(f'Failed to update catalog of {kind} {download.url}')
             return DownloadResult(success=False, location=location, error=str(traceback.format_exc()))
 
-    @staticmethod
-    async def get_channel_downloads(download: Download, info: dict, channel: Channel) -> List[str]:
-        """Get a list of all videos in a Channel, schedule downloads for any missing videos."""
+    @classmethod
+    async def prepare_channel_for_downloads(cls, download: Download, channel: Channel):
+        """Update the Channel's video catalog.  Refresh the Channel's files if necessary."""
         channel_id = channel.id
 
-        update_channel_catalog(channel, info)
+        update_channel_catalog(channel, download.info_json)
 
-        with get_db_session(commit=True) as session:
+        with get_db_session() as session:
             channel = get_channel(session, channel_id=channel_id, return_dict=False)
             if not channel.videos or not channel.refreshed:
                 logger.warning(f'Refreshing videos in {channel.directory} because {channel} has no video records!')
@@ -128,20 +128,18 @@ class ChannelDownloader(Downloader, ABC):
                 session.commit()  # Commit the refresh.
                 session.refresh(channel)
 
-        # Get all videos in the channel.
-        downloads = [i.get('webpage_url') or i.get('url') for i in download.info_json['entries']]
-        # YouTube Shorts are handled specially.
-        downloads = list(map(normalize_youtube_shorts_url, downloads))
-        # Only download those that have not yet been downloaded.
-        already_downloaded = [i.url for i in video_downloader.already_downloaded(*downloads)]
-        downloads = [i for i in downloads if i not in already_downloaded]
-        return downloads
-
     @staticmethod
-    def get_playlist_downloads(download: Download) -> List[str]:
-        """Get a list of all videos in a playlist, schedule downloads for any missing videos."""
-        # Get all videos in the playlist
-        downloads = [i.get('webpage_url') or i.get('url') for i in download.info_json['entries']]
+    def get_missing_videos(download: Download, channel: Channel) -> List[str]:
+        """
+        Return all URLs of Videos in the `info_json` which need to be downloaded.
+        """
+        downloads = download.info_json['entries']
+        if channel.match_regex:
+            # Only download Videos that have matching titles.
+            match_regex = re.compile(channel.match_regex)
+            downloads = [i for i in downloads if (title := i.get('title')) and match_regex.match(title)]
+        # Prefer `webpage_url` before `url` for all entries.
+        downloads = [i.get('webpage_url') or i.get('url') for i in downloads]
         # YouTube Shorts are handled specially.
         downloads = [normalize_youtube_shorts_url(i) for i in downloads]
         # Only download those that have not yet been downloaded.

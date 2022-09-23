@@ -236,6 +236,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by, filters) => {
         setLimit,
         setSearchStr,
         setOrderBy,
+        fetchVideos: localSearchVideos,
     }
 }
 

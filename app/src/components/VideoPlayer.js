@@ -1,5 +1,5 @@
 import React, {useContext, useState} from 'react';
-import {deleteVideo, favoriteVideo} from "../api";
+import {deleteVideos, favoriteVideo} from "../api";
 import {Link, useNavigate, useParams} from "react-router-dom";
 import {humanFileSize, humanNumber, PageContainer, secondsToTimestamp, uploadDate, useTitle, VideoCard} from "./Common";
 import {Confirm} from "semantic-ui-react";
@@ -40,7 +40,7 @@ function VideoPage({videoFile, prevFile, nextFile, ...props}) {
 
     const handleDeleteVideo = async (video_id) => {
         try {
-            await deleteVideo(video_id)
+            await deleteVideos(video_id)
         } catch (e) {
             setDeleteOpen(false);
             throw e;

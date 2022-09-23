@@ -333,8 +333,8 @@ function Archives() {
     }
 
     const onDelete = async (e) => {
-        setDeleteOpen(false);
         e.preventDefault();
+        setDeleteOpen(false);
         await deleteArchives(selectedArchives);
         await fetchArchives();
         setSelectedArchives([]);

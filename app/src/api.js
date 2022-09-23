@@ -156,13 +156,14 @@ export async function getVideo(video_id) {
     return [data['file'], data['prev'], data['next']];
 }
 
-export async function deleteVideo(video_id) {
-    let response = await apiDelete(`${VIDEOS_API}/video/${video_id}`);
+export async function deleteVideos(videoIds) {
+    const i = videoIds.join(',');
+    let response = await apiDelete(`${VIDEOS_API}/video/${i}`);
     if (response.status !== 204) {
         toast({
             type: 'error',
             title: 'Unexpected server response',
-            description: 'Failed to delete video.  See server logs.',
+            description: 'Failed to delete videos.  See server logs.',
             time: 5000,
         });
     }

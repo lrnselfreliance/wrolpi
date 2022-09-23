@@ -8,7 +8,7 @@ from sanic_ext.extensions.openapi import openapi
 from wrolpi.common import logger, wrol_mode_check, run_after, get_media_directory, \
     get_relative_to_media_directory
 from wrolpi.db import get_db_session
-from wrolpi.errors import InvalidOrderBy
+from wrolpi.errors import InvalidOrderBy, ValidationError
 from wrolpi.root_api import json_response
 from wrolpi.schema import JSONErrorResponse
 from . import lib
@@ -68,14 +68,18 @@ def directories(_, body: schema.DirectoriesRequest):
     return response.json({'directories': dirs})
 
 
-@video_bp.delete('/video/<video_id:int>')
-@openapi.description('Delete a video.')
+@video_bp.delete('/video/<video_ids:[0-9,]+>')
+@video_bp.delete('/video/<video_ids:int>')
+@openapi.description('Delete videos.')
 @openapi.response(HTTPStatus.NO_CONTENT)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
 @run_after(lib.save_channels_config)
-def video_delete(_: Request, video_id: int):
-    with get_db_session(commit=True) as session:
-        video = lib.get_video(session, video_id)
-        video.delete()
+def video_delete(_: Request, video_ids: str):
+    try:
+        video_ids = [int(i) for i in str(video_ids).split(',')]
+    except Exception:
+        return ValidationError('Unable to parse video ids')
+
+    lib.delete_videos(*video_ids)
     return response.raw('', HTTPStatus.NO_CONTENT)

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {Link, Route, Routes, useParams} from "react-router-dom";
 import {
     defaultSearchOrder,
@@ -11,13 +11,14 @@ import {
     videoOrders
 } from "./Common"
 import VideoPage from "./VideoPlayer";
-import {Dropdown, PlaceholderHeader, PlaceholderLine, StatisticLabel, StatisticValue} from "semantic-ui-react";
+import {Confirm, Dropdown, PlaceholderHeader, PlaceholderLine, StatisticLabel, StatisticValue} from "semantic-ui-react";
 import {Channels, EditChannel, NewChannel} from "./Channels";
 import {useChannel, useQuery, useSearchVideos, useVideo, useVideoStatistics} from "../hooks/customHooks";
 import {FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
+import {Button, Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
+import {deleteVideos} from "../api";
 
 export function VideoWrapper() {
     const {videoId} = useParams();
@@ -30,6 +31,8 @@ export function VideoWrapper() {
 function Videos({filter}) {
     const {channelId} = useParams();
     const {searchParams, updateQuery} = useQuery();
+    const [selectedVideos, setSelectedVideos] = useState([]);
+    const [deleteOpen, setDeleteOpen] = useState(false);
 
     let searchOrder = defaultVideoOrder;
     if (searchParams.get('order')) {
@@ -43,7 +46,7 @@ function Videos({filter}) {
     let filtersEnabled = searchParams.getAll('filter');
     filtersEnabled = filter ? [...filtersEnabled, filter] : filtersEnabled;
 
-    const {searchStr, setSearchStr, videos, activePage, setPage, limit, setLimit, totalPages, setOrderBy} =
+    const {searchStr, setSearchStr, videos, activePage, setPage, limit, setLimit, totalPages, setOrderBy, fetchVideos} =
         useSearchVideos(null, channelId, searchOrder, filtersEnabled);
     const setView = (value) => updateQuery({view: value});
     const view = searchParams.get('view');
@@ -90,6 +93,45 @@ function Videos({filter}) {
         </Placeholder>;
     }
 
+    const onSelect = (path, checked) => {
+        let videoId;
+        if (videos) {
+            videos.forEach(i => {
+                if (i && i['video'] && i['path'] === path) {
+                    videoId = i['video']['id'];
+                }
+            });
+        }
+        if (checked && videoId) {
+            setSelectedVideos([...selectedVideos, videoId]);
+        } else {
+            setSelectedVideos(selectedVideos.filter(i => i !== videoId));
+        }
+    }
+
+    const onDelete = async (e) => {
+        e.preventDefault();
+        setDeleteOpen(false);
+        await deleteVideos(selectedVideos);
+        await fetchVideos();
+        setSelectedVideos([]);
+    }
+
+    const selectElm = <div style={{marginTop: '0.5em'}}>
+        <Button
+            color='red'
+            disabled={!selectedVideos || selectedVideos.length === 0}
+            onClick={() => setDeleteOpen(true)}
+        >Delete</Button>
+        <Confirm
+            open={deleteOpen}
+            content='Are you sure you want to delete these video files?  This cannot be undone.'
+            confirmButton='Delete'
+            onCancel={() => setDeleteOpen(false)}
+            onConfirm={onDelete}
+        />
+    </div>;
+
     return <>
         {header}
         <FilesView
@@ -101,6 +143,8 @@ function Videos({filter}) {
             showView={true}
             showLimit={true}
             showSelect={true}
+            onSelect={onSelect}
+            selectElem={selectElm}
             setView={setView}
             setLimit={setLimit}
             setPage={setPage}

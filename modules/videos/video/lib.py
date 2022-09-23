@@ -1,17 +1,13 @@
-import pathlib
 from datetime import datetime
 from typing import Tuple, Optional, List
 
-import psycopg2
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
 from wrolpi.common import run_after, logger
-from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
+from wrolpi.db import get_db_session, optional_session
 from wrolpi.errors import UnknownVideo
-from wrolpi.files.lib import assign_file_prefetched_models, handle_search_results
-from wrolpi.files.models import File
-from wrolpi.vars import PYTEST
+from wrolpi.files.lib import handle_search_results
 from ..lib import save_channels_config
 from ..models import Video
 
@@ -156,3 +152,13 @@ def set_video_favorite(video_id: int, favorite: bool) -> Optional[datetime]:
         favorite = video.set_favorite(favorite)
 
     return favorite
+
+
+@optional_session
+def delete_videos(*video_ids: int, session: Session = None):
+    videos = list(session.query(Video).filter(Video.id.in_(video_ids)))
+    if not videos:
+        raise UnknownVideo('Could not find videos to delete')
+
+    for video in videos:
+        video.delete()

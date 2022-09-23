@@ -84,6 +84,7 @@ def upgrade():
     CREATE INDEX video_poster_path_idx ON video(poster_path);
     CREATE INDEX video_video_path_idx ON video(video_path);
     CREATE INDEX video_url_idx ON video(url);
+    CREATE INDEX video_channel_id_idx ON video(channel_id);
     ''')
 
     session.execute('ALTER TABLE channel DROP COLUMN IF EXISTS idempotency')
@@ -178,6 +179,7 @@ def downgrade():
     DROP INDEX IF EXISTS video_poster_path_idx;
     DROP INDEX IF EXISTS video_video_path_idx;
     DROP INDEX IF EXISTS video_url_idx;
+    DROP INDEX IF EXISTS video_channel_id_idx;
     ''')
     session.execute('''
         ALTER TABLE video

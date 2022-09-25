@@ -4,7 +4,6 @@ import os
 import pathlib
 import traceback
 from abc import ABC
-from asyncio import Task
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 from enum import Enum
@@ -180,7 +179,7 @@ class Downloader:
         raise NotImplementedError()
 
     @optional_session
-    def already_downloaded(self, urls: List[str], session: Session = None):
+    def already_downloaded(self, *urls: List[str], session: Session = None):
         raise NotImplementedError()
 
     @property
@@ -272,18 +271,22 @@ class DownloadManager:
     URLs to be downloaded, then only one worker will be busy.
     """
     priority_sorter = partial(sorted, key=attrgetter('priority'))
+    manager = multiprocessing.Event()
 
     def __init__(self):
         self.instances: Tuple[Downloader] = tuple()
         self._instances = dict()
         self.disabled = multiprocessing.Event()
         self.stopped = multiprocessing.Event()
+
         self.download_queue: multiprocessing.Queue = multiprocessing.Queue()
-        self.workers: List[Task] = []
+        self.workers: List[Dict] = []
         self.worker_count: int = 1
+
         self.data = multiprocessing.Manager().dict()
         # We haven't started downloads yet, so no domains are downloading.
         self.data['processing_domains'] = []
+        self.data['workers'] = dict()
 
     def register_downloader(self, instance: Downloader):
         if not isinstance(instance, Downloader):
@@ -305,14 +308,15 @@ class DownloadManager:
         from wrolpi.db import get_db_session
 
         pid = os.getpid()
-        worker_logger = logger.getChild(f'download_worker.{pid}.{num}')
+        name = f'{pid}.{num}'
+        worker_logger = logger.getChild(f'download_worker.{name}')
 
         status = 'disabled' if self.disabled.is_set() else 'enabled'
         worker_logger.info(f'Starting up.  DownloadManager is {status}.')
 
         while True:
             if self.stopped.is_set():
-                # Service is restarting, close the worker.
+                # Service may be restarting, close the worker.
                 return
 
             disabled = self.disabled.is_set()
@@ -391,7 +395,6 @@ class DownloadManager:
             except Empty:
                 # No work yet.
                 await asyncio.sleep(0.1)
-                continue
             except Exception as e:
                 worker_logger.warning(f'Unexpected error', exc_info=e)
 
@@ -412,6 +415,7 @@ class DownloadManager:
     def start_workers(self, loop=None):
         """Start all download worker tasks.  Does nothing if they are already running."""
         if not self.workers:
+            logger.warning('Starting workers')
             if not loop:
                 try:
                     loop = asyncio.get_running_loop()
@@ -436,6 +440,28 @@ class DownloadManager:
         if self.workers_running():
             for task in self.workers:
                 task.cancel()
+
+    async def perpetual_download(self):
+        """
+        A method that calls itself forever.  It will queue new downloads when they are ready.
+
+        Only one of these can be running at a time.
+        """
+        if self.manager.is_set():
+            # Only one manager needs to be running.
+            return
+
+        self.manager.set()
+
+        async def _perpetual_download():
+            if self.stopped.is_set():
+                return
+
+            await download_manager.do_downloads()
+            await asyncio.sleep(5)
+            asyncio.create_task(_perpetual_download())
+
+        asyncio.create_task(_perpetual_download())
 
     def get_downloader(self, url: str) -> Tuple[Downloader, Dict]:
         for i in self.instances:
@@ -743,6 +769,7 @@ class DownloadManager:
         self.start_workers(loop)
 
         try:
+            asyncio.create_task(self.perpetual_download())
             asyncio.create_task(self.do_downloads())
         except RuntimeError:
             # This may not work while testing.

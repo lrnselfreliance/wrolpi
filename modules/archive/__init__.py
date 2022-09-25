@@ -46,7 +46,7 @@ class ArchiveDownloader(Downloader, ABC):
         return DownloadResult(success=True, location=f'/archive/{archive.id}')
 
     @optional_session
-    def already_downloaded(self, urls: List[str], session: Session = None) -> List:
+    def already_downloaded(self, *urls: List[str], session: Session = None) -> List:
         archives = list(session.query(Archive).filter(Archive.url.in_(urls)))
         return archives
 

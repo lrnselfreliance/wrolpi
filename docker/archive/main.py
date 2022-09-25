@@ -57,7 +57,7 @@ async def call_single_file(url) -> bytes:
     See https://github.com/gildas-lormeau/SingleFile
     """
     logger.info(f'archiving {url}')
-    cmd = ['/usr/src/app/node_modules/single-file/cli/single-file', url,
+    cmd = ['/usr/src/app/node_modules/single-file-cli/single-file', url,
            '--browser-executable-path', '/usr/bin/chromium-browser', '--browser-args', '["--no-sandbox"]',
            '--dump-content']
     logger.debug(f'archive cmd: {cmd}')
@@ -139,4 +139,4 @@ async def post_archive(request: Request):
 
 
 if __name__ == '__main__':
-    app.run('0.0.0.0', 8080, workers=4)
+    app.run('0.0.0.0', 8080, workers=4, auto_reload=True)

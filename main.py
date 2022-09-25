@@ -9,7 +9,7 @@ import pytz
 from sanic import Sanic
 from sanic.signals import Event
 
-from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, after_startup, admin
+from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, admin, after_startup
 from wrolpi.common import logger, get_config, import_modules, check_media_directory, limit_concurrent, wrol_mode_enabled
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
@@ -176,14 +176,14 @@ async def set_log_level(args):
 @limit_concurrent(1)
 async def periodic_downloads(app: Sanic, loop):
     """
-    A simple function that perpetually calls downloader_manager.do_downloads() after sleeping.
+    Starts the perpetual downloader on download manager.
 
     Limited to only one process.
     """
     # Set all downloads to new.
     download_manager.reset_downloads()
 
-    if wrol_mode_enabled:
+    if wrol_mode_enabled():
         logger.warning(f'Not starting download manager because WROL Mode is enabled.')
         download_manager.disable()
         return
@@ -195,13 +195,7 @@ async def periodic_downloads(app: Sanic, loop):
         return
 
     download_manager.enable()
-
-    async def _periodic_download():
-        await download_manager.do_downloads()
-        await asyncio.sleep(30)
-        await app.add_task(_periodic_download())  # noqa
-
-    await app.add_task(_periodic_download())
+    await app.add_task(download_manager.perpetual_download())
 
 
 @after_startup

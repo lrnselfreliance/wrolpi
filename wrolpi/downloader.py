@@ -458,7 +458,7 @@ class DownloadManager:
                 return
 
             await download_manager.do_downloads()
-            await asyncio.sleep(5)
+            await asyncio.sleep(30)
             asyncio.create_task(_perpetual_download())
 
         asyncio.create_task(_perpetual_download())

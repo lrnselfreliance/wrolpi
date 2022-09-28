@@ -23,42 +23,67 @@ import {
     TextArea as TEXTAREA
 } from "semantic-ui-react";
 
-export function ThemeWrapper(props) {
+export function ThemeWrapper({children, ...props}) {
+    if (Object.keys(props).length > 0) {
+        console.log(props);
+        console.error('ThemeWrapper does not support props!');
+    }
+
     const [i, setI] = useState({});
     const [s, setS] = useState({});
     const [t, setT] = useState({});
     const [theme, setTheme] = useState();
 
-    const setDarkTheme = () => {
+    const setDarkTheme = (save = false) => {
         console.debug('setDarkTheme');
         setI({inverted: true});
         setS({style: {backgroundColor: '#1B1C1D', color: '#dddddd'}});
         setT({style: {color: '#dddddd'}});
         setTheme(darkTheme);
         document.body.style.background = '#1B1C1D';
+        if (save) {
+            saveTheme(darkTheme);
+        }
     }
 
-    const setLightTheme = () => {
+    const setLightTheme = (save = false) => {
         console.debug('setLightTheme');
         setI({inverted: undefined});
         setS({});
         setT({});
         setTheme(lightTheme);
         document.body.style.background = '#FFFFFF';
+        if (save) {
+            saveTheme(lightTheme);
+        }
+    }
+
+    const saveTheme = (value) => {
+        console.debug('saveTheme', value);
+        localStorage.setItem('color-scheme', value);
     }
 
     useEffect(() => {
-        // Set initial theme on first page load.
-        window.matchMedia('(prefers-color-scheme: dark)').matches && setDarkTheme();
+        const colorScheme = localStorage.getItem('color-scheme');
+        if (colorScheme === null) {
+            // No saved theme, use the systems color scheme first, if no system theme, use dark.
+            window.matchMedia('(prefers-color-scheme: dark)').matches ? setDarkTheme() : setLightTheme();
+        } else if (colorScheme === darkTheme) {
+            // User saved dark theme.
+            setDarkTheme();
+        } else if (colorScheme === lightTheme) {
+            // User saved light theme.
+            setLightTheme();
+        }
         // Add listener to watch and handle theme changes.
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener(
-            'change', (e) => e.matches ? setDarkTheme(): setLightTheme());
+            'change', (e) => e.matches ? setDarkTheme() : setLightTheme());
     }, []);
 
     const themeValue = {i, s, t, theme, setDarkTheme, setLightTheme};
 
     return <ThemeContext.Provider value={themeValue}>
-        {props.children}
+        {children}
     </ThemeContext.Provider>
 }
 

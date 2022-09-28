@@ -852,10 +852,11 @@ export function DarkModeToggle() {
     const darkMode = theme === darkTheme;
 
     const toggleDarkMode = () => {
+        // Save the selection.  The user manually chose the theme.
         if (darkMode) {
-            setLightTheme();
+            setLightTheme(true);
         } else {
-            setDarkTheme();
+            setDarkTheme(true);
         }
     }
 

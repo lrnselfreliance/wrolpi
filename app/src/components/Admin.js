@@ -25,13 +25,12 @@ import {
 import TimezoneSelect from 'react-timezone-select';
 import {
     DisableDownloadsToggle,
-    ExternalCardLink,
     HelpPopup,
     HotspotToggle,
     humanFileSize,
     LoadStatistic,
     PageContainer,
-    secondsToDate,
+    secondsToElapsedPopup,
     secondsToFrequency,
     TabLinks,
     textEllipsis,
@@ -540,11 +539,13 @@ class DownloadRow extends React.Component {
 
         return <TableRow positive={positive}>
             <TableCell>
-                <ExternalCardLink to={url}>{textEllipsis(url, 50)}</ExternalCardLink>
+                <a href={location || url} target='_blank' rel='noopener noreferrer'>
+                    {textEllipsis(url, 50)}
+                </a>
             </TableCell>
             <TableCell>{secondsToFrequency(frequency)}</TableCell>
-            <TableCell>{last_successful_download ? secondsToDate(last_successful_download) : null}</TableCell>
-            <TableCell>{secondsToDate(next_download)}</TableCell>
+            <TableCell>{last_successful_download ? secondsToElapsedPopup(last_successful_download) : null}</TableCell>
+            <TableCell>{secondsToElapsedPopup(next_download)}</TableCell>
             <TableCell>{error && errorModal}{location && <a href={location}>View</a>}</TableCell>
         </TableRow>
     }
@@ -595,7 +596,7 @@ class StoppableRow extends React.Component {
         let {url, last_successful_download, status, location, error} = this.props;
         let {stopOpen, startOpen, errorModalOpen} = this.state;
 
-        let completedAtCell = last_successful_download ? secondsToDate(last_successful_download) : null;
+        let completedAtCell = last_successful_download ? secondsToElapsedPopup(last_successful_download) : null;
         let buttonCell = <TableCell/>;
         let positive = false;
         let negative = false;
@@ -676,9 +677,8 @@ class StoppableRow extends React.Component {
         return (
             <TableRow positive={positive} negative={negative} warning={warning}>
                 <TableCell>
-                    <ExternalCardLink to={url}>{textEllipsis(url, 50)}</ExternalCardLink>
+                    <a href={location || url} target='_blank' rel='noopener noreferrer'>{textEllipsis(url, 50)}</a>
                 </TableCell>
-                <TableCell>{status}</TableCell>
                 <TableCell>{completedAtCell}</TableCell>
                 {buttonCell}
             </TableRow>
@@ -700,7 +700,6 @@ function Downloads() {
         <TableHeader>
             <TableRow>
                 <TableHeaderCell>URL</TableHeaderCell>
-                <TableHeaderCell>Status</TableHeaderCell>
                 <TableHeaderCell>Completed At</TableHeaderCell>
                 <TableHeaderCell>Control</TableHeaderCell>
             </TableRow>
@@ -712,8 +711,8 @@ function Downloads() {
             <TableRow>
                 <TableHeaderCell>URL</TableHeaderCell>
                 <TableHeaderCell>Download Frequency</TableHeaderCell>
-                <TableHeaderCell>Last Successful Download</TableHeaderCell>
-                <TableHeaderCell>Next Download</TableHeaderCell>
+                <TableHeaderCell>Completed At</TableHeaderCell>
+                <TableHeaderCell>Next</TableHeaderCell>
                 <TableHeaderCell>View</TableHeaderCell>
             </TableRow>
         </TableHeader>

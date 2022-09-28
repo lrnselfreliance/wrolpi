@@ -1,5 +1,5 @@
-import React, {useContext} from 'react';
-import {ThemeContext} from "../contexts/contexts";
+import React, {useContext, useEffect, useState} from 'react';
+import {darkTheme, lightTheme, ThemeContext} from "../contexts/contexts";
 import {
     Accordion as ACCORDION,
     Button as BUTTON,
@@ -22,6 +22,46 @@ import {
     TabPane as TAB_PANE,
     TextArea as TEXTAREA
 } from "semantic-ui-react";
+
+export function ThemeWrapper(props) {
+    const [i, setI] = useState({});
+    const [s, setS] = useState({});
+    const [t, setT] = useState({});
+    const [theme, setTheme] = useState();
+
+    const setDarkTheme = () => {
+        console.debug('setDarkTheme');
+        setI({inverted: true});
+        setS({style: {backgroundColor: '#1B1C1D', color: '#dddddd'}});
+        setT({style: {color: '#dddddd'}});
+        setTheme(darkTheme);
+        document.body.style.background = '#1B1C1D';
+    }
+
+    const setLightTheme = () => {
+        console.debug('setLightTheme');
+        setI({inverted: undefined});
+        setS({});
+        setT({});
+        setTheme(lightTheme);
+        document.body.style.background = '#FFFFFF';
+    }
+
+    useEffect(() => {
+        window.matchMedia('(prefers-color-scheme: dark)').matches && setDarkTheme();
+
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener(
+            'change', (e) => e.matches && setDarkTheme());
+        window.matchMedia('(prefers-color-scheme: light)').addEventListener(
+            'change', (e) => e.matches && setLightTheme());
+    }, []);
+
+    const themeValue = {i, s, t, theme, setDarkTheme, setLightTheme};
+
+    return <ThemeContext.Provider value={themeValue}>
+        {props.children}
+    </ThemeContext.Provider>
+}
 
 // Simple wrappers for Semantic UI elements to use the current theme.
 

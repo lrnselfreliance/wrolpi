@@ -1,5 +1,5 @@
 import React, {useContext, useState} from 'react';
-import {deleteVideos, favoriteVideo} from "../api";
+import {deleteVideos} from "../api";
 import {Link, useNavigate, useParams} from "react-router-dom";
 import {humanFileSize, humanNumber, PageContainer, secondsToTimestamp, uploadDate, useTitle, VideoCard} from "./Common";
 import {Confirm} from "semantic-ui-react";
@@ -13,7 +13,7 @@ import {Button, Header, Icon, Segment, Tab, TabPane} from "./Theme";
 const MEDIA_PATH = '/media';
 
 
-function VideoPage({videoFile, prevFile, nextFile, ...props}) {
+function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
     const {theme} = useContext(ThemeContext);
 
     const navigate = useNavigate();
@@ -33,10 +33,8 @@ function VideoPage({videoFile, prevFile, nextFile, ...props}) {
         return <VideoPlaceholder/>;
     }
     if (videoFile === undefined) {
-        return <PageContainer><p>Could not find video</p></PageContainer>;
+        return <PageContainer><Header as='h4'>Could not find video</Header></PageContainer>;
     }
-
-    let favorite = video.favorite;
 
     const handleDeleteVideo = async (video_id) => {
         try {
@@ -60,22 +58,22 @@ function VideoPage({videoFile, prevFile, nextFile, ...props}) {
         viewCount = viewCount || video.info_json['view_count'];
     }
 
+    const favorite = video && video.favorite;
     let handleFavorite = async (e) => {
         e.preventDefault();
-        favorite = await favoriteVideo(video.id, !!!favorite);
+        if (video) {
+            setFavorite(!favorite);
+        }
     }
-    let favorite_button;
-    if (favorite) {
-        favorite_button = (<Button color='green' style={{'margin': '0.5em'}} onClick={handleFavorite}>
+    const favorite_button = (
+        <Button
+            color='green'
+            style={{'margin': '0.5em'}}
+            onClick={handleFavorite}
+        >
             <Icon name='heart'/>
-            Unfavorite
+            {favorite ? 'Unfavorite' : 'Favorite'}
         </Button>);
-    } else {
-        favorite_button = (<Button basic color='green' style={{'margin': '0.5em'}} onClick={handleFavorite}>
-            <Icon name='heart'/>
-            Favorite
-        </Button>);
-    }
 
     let descriptionPane = {
         menuItem: 'Description', render: () => <TabPane>

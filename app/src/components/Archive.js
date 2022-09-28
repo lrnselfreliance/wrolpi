@@ -50,7 +50,7 @@ function ArchivePage() {
     if (archiveFile === undefined) {
         return <>
             <Header as='h2'>Unknown archive</Header>
-            This archive does not exist
+            <Header as='h4'>This archive does not exist</Header>
         </>
     }
 

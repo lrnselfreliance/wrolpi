@@ -22,10 +22,11 @@ import {deleteVideos} from "../api";
 
 export function VideoWrapper() {
     const {videoId} = useParams();
-    const {videoFile, prevFile, nextFile} = useVideo(videoId);
+    const {videoFile, prevFile, nextFile, setFavorite} = useVideo(videoId);
     scrollToTop();
 
-    return <VideoPage videoFile={videoFile} prevFile={prevFile} nextFile={nextFile} autoplay={true}/>
+    return <VideoPage videoFile={videoFile} prevFile={prevFile} nextFile={nextFile}
+                      setFavorite={setFavorite} autoplay={true}/>
 }
 
 function Videos({filter}) {

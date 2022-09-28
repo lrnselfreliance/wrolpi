@@ -36,7 +36,7 @@ import {CardPlacholder} from "./Placeholder";
 import {ArchiveCard} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {ThemeContext} from "../contexts/contexts";
-import {Button, Icon, Placeholder, Segment, Table} from "./Theme";
+import {Button, Header, Icon, Placeholder, Segment, Table} from "./Theme";
 
 const icons = {
     File: <Icon name='file'/>,
@@ -209,7 +209,7 @@ export function FileCards({files}) {
             {files.map((i) => <FileCard key={i['path']} file={i}/>)}
         </CardGroupCentered>
     } else if (files && files.length === 0) {
-        return <p>No files found.</p>
+        return <Header as='h4'>No files found.</Header>
     } else {
         return <CardGroupCentered><CardPlacholder/></CardGroupCentered>
     }

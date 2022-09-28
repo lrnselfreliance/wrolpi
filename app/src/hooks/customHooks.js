@@ -1,5 +1,6 @@
 import {useEffect, useState} from "react";
 import {
+    favoriteVideo,
     fetchDomains,
     filesSearch,
     getArchive,
@@ -25,7 +26,7 @@ import {
 } from "../api";
 import {createSearchParams, useSearchParams} from "react-router-dom";
 import {toast} from "react-semantic-toasts";
-import {enumerate, humanFileSize, secondsToString} from "../components/Common";
+import {enumerate, humanFileSize, secondsToFullDuration} from "../components/Common";
 
 const calculatePage = (offset, limit) => {
     return offset && limit ? Math.round((offset / limit) + 1) : 1;
@@ -265,11 +266,24 @@ export const useVideo = (videoId) => {
         }
     }
 
+    const setFavorite = async (value) => {
+        if (!videoFile) {
+            console.error('No video to favorite');
+            return
+        }
+        try {
+            await favoriteVideo(videoFile.video.id, value);
+            fetchVideo();
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
     useEffect(() => {
         fetchVideo();
     }, [videoId]);
 
-    return {videoFile, prevFile, nextFile};
+    return {videoFile, prevFile, nextFile, setFavorite};
 }
 
 export const useChannel = (channel_id) => {
@@ -648,7 +662,7 @@ export const useVideoStatistics = () => {
     const fetchStatistics = async () => {
         try {
             let stats = await getStatistics();
-            stats.videos.sum_duration = secondsToString(stats.videos.sum_duration);
+            stats.videos.sum_duration = secondsToFullDuration(stats.videos.sum_duration);
             stats.videos.sum_size = humanFileSize(stats.videos.sum_size, true);
             stats.videos.max_size = humanFileSize(stats.videos.max_size, true);
             stats.historical.average_size = humanFileSize(stats.historical.average_size, true);

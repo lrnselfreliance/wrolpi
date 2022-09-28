@@ -30,6 +30,56 @@ export function Paginator({activePage, onPageChange, totalPages, showFirstAndLas
     />)
 }
 
+export function divmod(x, y) {
+    return [Math.floor(x / y), x % y];
+}
+
+export function secondsElapsed(seconds) {
+    // Convert the provided seconds into a human-readable string of the time elapsed between the provided timestamp
+    // and now.
+    if (!seconds || seconds < 0) {
+        return null;
+    }
+
+    let years;
+    let days;
+    let hours;
+    let minutes;
+
+    seconds = Math.abs((new Date().getTime() / 1000) - seconds);
+    [years, seconds] = divmod(seconds, secondsToYears);
+    [days, seconds] = divmod(seconds, secondsToDays);
+    [hours, seconds] = divmod(seconds, secondsToHours);
+    [minutes, seconds] = divmod(seconds, secondsToMinutes);
+    seconds = Math.floor(seconds);
+
+    if (years > 0 && days > 30) {
+        return `${years}y${days}d`;
+    } else if (years > 0) {
+        return `${years}y`;
+    } else if (days > 0) {
+        return `${days}d`;
+    } else if (hours > 0) {
+        return `${hours}h`;
+    } else if (minutes > 0) {
+        return `${minutes}m`;
+    }
+    return `${seconds}s`
+}
+
+export function secondsToElapsedPopup(seconds) {
+    // Return a Popup which allows the user see a more detailed timestamp when hovering.
+    const elapsed = secondsElapsed(seconds);
+    if (!elapsed) {
+        return <></>;
+    }
+    return <Popup
+        content={secondsToTimestamp(seconds)}
+        on='hover'
+        trigger={<span>{elapsed}</span>}
+    />
+}
+
 export function secondsToDuration(video) {
     let duration = video.duration;
     let hours = Math.floor(duration / 3600);
@@ -249,25 +299,25 @@ const secondsToDays = 86400;
 const secondsToHours = 3600;
 const secondsToMinutes = 60;
 
-export function secondsToString(seconds) {
+export function secondsToFullDuration(seconds) {
     let s = '';
 
-    let numYears = Math.floor(seconds / secondsToYears);
-    if (numYears) {
-        s = `${numYears}Y`;
-        seconds -= numYears * secondsToYears;
+    let years, days, hours, minutes;
+    [years, seconds] = divmod(seconds, secondsToYears);
+    [days, seconds] = divmod(seconds, secondsToDays);
+    [hours, seconds] = divmod(seconds, secondsToHours);
+    [minutes] = divmod(seconds, secondsToMinutes);
+    if (years > 0) {
+        s = `${years}Y`;
     }
-    let numDays = Math.floor(seconds / secondsToDays);
-    if (numDays) {
-        s = `${s} ${numDays}D`;
-        seconds -= numDays * secondsToDays;
+    if (days > 0) {
+        s = `${s} ${days}D`;
     }
-    let numHours = Math.floor(seconds / secondsToHours);
-    if (numHours) {
-        seconds -= numHours * secondsToHours;
+    if (hours > 0 || minutes > 0) {
+        hours = String(hours).padStart(2, '0');
+        minutes = String(minutes).padStart(2, '0');
+        s = `${s} ${hours}:${minutes}`;
     }
-    let numMinutes = Math.floor(seconds / secondsToMinutes);
-    s = `${s} ${numHours}:${numMinutes}H`;
     return s;
 }
 
@@ -278,7 +328,11 @@ export function secondsToDate(seconds) {
 
 export function secondsToTimestamp(seconds) {
     let d = new Date(seconds * 1000);
-    return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()} ${d.getHours()}:${d.getMinutes()}:${d.getSeconds()}`;
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const sec = String(d.getSeconds()).padStart(2, '0');
+    return `${d.getFullYear()}-${d.getMonth() + 1}-${day} ${hours}:${minutes}:${sec}`;
 }
 
 export function humanFileSize(bytes, si = false, dp = 1) {

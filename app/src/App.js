@@ -1,4 +1,4 @@
-import React, {useContext, useEffect, useState} from 'react';
+import React, {useContext, useState} from 'react';
 import './App.css';
 import {NavBar} from "./components/Nav";
 import {Link, Route, Routes} from "react-router-dom";
@@ -16,8 +16,8 @@ import {LoadStatistic, PageContainer, SearchInput, useTitle} from "./components/
 import {FilesRoute, FilesSearchView} from "./components/Files";
 import {useSearchFiles, useSettingsInterval, useStatus} from "./hooks/customHooks";
 import {MapRoute} from "./components/Map";
-import {darkTheme, lightTheme, SettingsContext, ThemeContext} from "./contexts/contexts";
-import {Header, Segment, Statistic, StatisticGroup} from "./components/Theme";
+import {SettingsContext, ThemeContext} from "./contexts/contexts";
+import {Header, Segment, Statistic, StatisticGroup, ThemeWrapper} from "./components/Theme";
 
 function Dashboard() {
     useTitle('Dashboard');
@@ -119,42 +119,8 @@ function Footer() {
 export default function App() {
     const {settings} = useSettingsInterval();
 
-    const [i, setI] = useState({});
-    const [s, setS] = useState({});
-    const [t, setT] = useState({});
-    const [theme, setTheme] = useState();
-
-    const setDarkTheme = () => {
-        console.debug('setDarkTheme');
-        setI({inverted: true});
-        setS({style: {backgroundColor: '#1B1C1D', color: '#dddddd'}});
-        setT({style: {color: '#dddddd'}});
-        setTheme(darkTheme);
-        document.body.style.background = '#1B1C1D';
-    }
-
-    const setLightTheme = () => {
-        console.debug('setLightTheme');
-        setI({inverted: undefined});
-        setS({});
-        setT({});
-        setTheme(lightTheme);
-        document.body.style.background = '#FFFFFF';
-    }
-
-    useEffect(() => {
-        window.matchMedia('(prefers-color-scheme: dark)').matches && setDarkTheme();
-
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener(
-            'change', (e) => e.matches && setDarkTheme());
-        window.matchMedia('(prefers-color-scheme: light)').addEventListener(
-            'change', (e) => e.matches && setLightTheme());
-    }, []);
-
-    const themeValue = {i, s, t, theme, setDarkTheme, setLightTheme};
-
     return (
-        <ThemeContext.Provider value={themeValue}>
+        <ThemeWrapper>
             <SettingsContext.Provider value={settings}>
                 <header>
                     <NavBar/>
@@ -177,6 +143,6 @@ export default function App() {
                 <SemanticToastContainer position="top-right"/>
                 <Footer/>
             </SettingsContext.Provider>
-        </ThemeContext.Provider>
+        </ThemeWrapper>
     );
 }

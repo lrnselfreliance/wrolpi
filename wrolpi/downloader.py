@@ -282,6 +282,7 @@ class DownloadManager:
         self.download_queue: multiprocessing.Queue = multiprocessing.Queue()
         self.workers: List[Dict] = []
         self.worker_count: int = 1
+        self.worker_alive_frequency = timedelta(minutes=10)
 
         self.data = multiprocessing.Manager().dict()
         # We haven't started downloads yet, so no domains are downloading.
@@ -311,13 +312,18 @@ class DownloadManager:
         name = f'{pid}.{num}'
         worker_logger = logger.getChild(f'download_worker.{name}')
 
-        status = 'disabled' if self.disabled.is_set() else 'enabled'
-        worker_logger.info(f'Starting up.  DownloadManager is {status}.')
+        worker_logger.info(f'Starting up.  DownloadManager is disabled={self.disabled.is_set()}.')
+        last_heartbeat = now()
 
         while True:
             if self.stopped.is_set():
                 # Service may be restarting, close the worker.
+                worker_logger.warning("DownloadManager is stopped.  I'm stopping.")
                 return
+
+            if now() - last_heartbeat > self.worker_alive_frequency:
+                worker_logger.debug("I'm alive")
+                last_heartbeat = now()
 
             disabled = self.disabled.is_set()
 
@@ -415,7 +421,6 @@ class DownloadManager:
     def start_workers(self, loop=None):
         """Start all download worker tasks.  Does nothing if they are already running."""
         if not self.workers:
-            logger.warning('Starting workers')
             if not loop:
                 try:
                     loop = asyncio.get_running_loop()
@@ -423,8 +428,6 @@ class DownloadManager:
                     # Loop isn't running, start one.  Probably testing.
                     loop = asyncio.get_event_loop()
 
-            pid = os.getpid()
-            logger.warning(f'Starting {self.worker_count} download workers. {pid=}')
             for i in range(self.worker_count):
                 coro = self.download_worker(i)
                 task = loop.create_task(coro)

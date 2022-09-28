@@ -65,17 +65,17 @@ export function ThemeWrapper({children, ...props}) {
 
     useEffect(() => {
         const colorScheme = localStorage.getItem('color-scheme');
-        if (colorScheme === null) {
-            // No saved theme, use the systems color scheme first, if no system theme, use dark.
-            window.matchMedia('(prefers-color-scheme: dark)').matches ? setDarkTheme() : setLightTheme();
-        } else if (colorScheme === darkTheme) {
+        if (colorScheme === darkTheme) {
             // User saved dark theme.
             setDarkTheme();
         } else if (colorScheme === lightTheme) {
             // User saved light theme.
             setLightTheme();
+        } else {
+            // No saved theme, use the systems color scheme first, if no system theme, use dark.
+            window.matchMedia('(prefers-color-scheme: dark)').matches ? setDarkTheme() : setLightTheme();
         }
-        // Add listener to watch and handle theme changes.
+        // Add listener to match the system theme.
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener(
             'change', (e) => e.matches ? setDarkTheme() : setLightTheme());
     }, []);

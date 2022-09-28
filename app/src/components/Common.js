@@ -843,8 +843,11 @@ export function LoadStatistic({label, value, cores, ...props}) {
     } else if (cores && value >= (quarter * 2)) {
         color = 'orange';
     }
-    return <Statistic label={label} value={value ? parseFloat(value).toFixed(1) : '?'} color={color}
-                      {...props}/>;
+    return <Statistic
+        label={label}
+        value={value ? parseFloat(value).toFixed(1) : '?'}
+        color={color}
+        {...props}/>;
 }
 
 export function DarkModeToggle() {

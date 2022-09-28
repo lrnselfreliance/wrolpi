@@ -48,12 +48,11 @@ export function ThemeWrapper(props) {
     }
 
     useEffect(() => {
+        // Set initial theme on first page load.
         window.matchMedia('(prefers-color-scheme: dark)').matches && setDarkTheme();
-
+        // Add listener to watch and handle theme changes.
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener(
-            'change', (e) => e.matches && setDarkTheme());
-        window.matchMedia('(prefers-color-scheme: light)').addEventListener(
-            'change', (e) => e.matches && setLightTheme());
+            'change', (e) => e.matches ? setDarkTheme(): setLightTheme());
     }, []);
 
     const themeValue = {i, s, t, theme, setDarkTheme, setLightTheme};

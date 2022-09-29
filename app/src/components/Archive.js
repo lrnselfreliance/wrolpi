@@ -35,7 +35,7 @@ import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
 import _ from "lodash";
 import {ThemeContext} from "../contexts/contexts";
-import {Button, Header, Loader, Placeholder, Segment, Table} from "./Theme";
+import {Button, CardIcon, Header, Loader, Placeholder, Segment, Table} from "./Theme";
 
 function ArchivePage() {
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -150,7 +150,7 @@ export function ArchiveCard({file}) {
     const imageSrc = archive.screenshot_path ? `/media/${encodeURIComponent(archive.screenshot_path)}` : null;
     const singlefileUrl = archive.singlefile_path ? `/media/${encodeURIComponent(archive.singlefile_path)}` : null;
 
-    let screenshot = <center className='card-icon'><FileIcon file={file}/></center>;
+    let screenshot = <CardIcon><FileIcon file={file}/></CardIcon>;
     if (imageSrc) {
         screenshot = <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>;
     }

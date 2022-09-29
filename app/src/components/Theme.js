@@ -216,3 +216,9 @@ export function TextArea(props) {
     props = invertedNull({...i, ...props});
     return <TEXTAREA {...props}/>
 }
+
+export function CardIcon(props) {
+    const {i} = useContext(ThemeContext);
+    const inverted = i['inverted'] === true ? 'inverted' : null;
+    return <center className={`card-icon ${inverted}`} {...props}/>
+}

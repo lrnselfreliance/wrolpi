@@ -36,7 +36,7 @@ import {CardPlacholder} from "./Placeholder";
 import {ArchiveCard} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {ThemeContext} from "../contexts/contexts";
-import {Button, Header, Icon, Placeholder, Segment, Table} from "./Theme";
+import {Button, CardIcon, Header, Icon, Placeholder, Segment, Table} from "./Theme";
 
 const icons = {
     File: <Icon name='file'/>,
@@ -144,7 +144,7 @@ function ImageCard({file}) {
     const {s} = useContext(ThemeContext);
     const url = `/media/${encodeURIComponent(file.path)}`;
 
-    let poster = <center className='card-icon'><FileIcon file={file}/></center>;
+    let poster = <CardIcon><FileIcon file={file}/></CardIcon>;
     if (file.size && file.size < 50000000) {
         // Image is less than 5mb, use it.
         poster = <Image wrapped
@@ -189,9 +189,9 @@ function FileCard({file}) {
 
     return <Card color={color}>
         <ExternalCardLink to={url}>
-            <center className='card-icon'>
+            <CardIcon>
                 <FileIcon file={file}/>
-            </center>
+            </CardIcon>
         </ExternalCardLink>
         <Card.Content {...s}>
             <Card.Header>

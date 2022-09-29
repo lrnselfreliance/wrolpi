@@ -5,7 +5,7 @@ import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
 import {getSettings} from "../api";
 import {darkTheme, SettingsContext, ThemeContext} from "../contexts/contexts";
-import {Button, Form, Header, Icon, Menu, Statistic} from "./Theme";
+import {Button, CardIcon, Form, Header, Icon, Menu, Statistic} from "./Theme";
 
 export const API_URI = `http://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -152,7 +152,7 @@ export function VideoCard({file}) {
     if (video.favorite) {
         imageLabel = {corner: 'left', icon: 'heart', color: 'green'};
     }
-    let poster = <center className='card-icon'><FileIcon file={file}/></center>;
+    let poster = <CardIcon><FileIcon file={file}/></CardIcon>;
     if (poster_url) {
         poster = <Image wrapped
                         src={poster_url}

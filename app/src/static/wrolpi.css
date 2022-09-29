@@ -32,3 +32,7 @@ textarea.otp {
     text-align: center;
     padding-top: 53px;
 }
+
+.card-icon.inverted {
+    background-color: #222222;
+}

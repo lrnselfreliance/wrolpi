@@ -209,6 +209,13 @@ async def start_workers(app: Sanic, loop):
     download_manager.start_workers()
 
 
+@after_startup
+@limit_concurrent(1)
+async def bandwidth_worker(app: Sanic, loop):
+    from wrolpi import status
+    await app.add_task(status.bandwidth_worker())
+
+
 @root_api.api_app.signal(Event.SERVER_SHUTDOWN_BEFORE)
 @limit_concurrent(1)
 def handle_server_shutdown(*args, **kwargs):

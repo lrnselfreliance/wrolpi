@@ -6,8 +6,8 @@ import {DownloadMenu} from "./components/Upload";
 import {FilesSearchView} from "./components/Files";
 import {Header, Segment, Statistic, StatisticGroup} from "./components/Theme";
 import {Link} from "react-router-dom";
-import {CPUUsageProgress} from "./components/admin/Status";
-import {Divider} from "semantic-ui-react";
+import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
+import {ProgressPlaceholder} from "./components/Placeholder";
 
 export function Dashboard() {
     useTitle('Dashboard');
@@ -69,15 +69,19 @@ function DashboardStatus() {
         <Link to='/admin/status'>
             <Header as='h2'>Status</Header>
             <CPUUsageProgress value={percent} label='CPU Usage'/>
+
             <Header as='h3'>Load</Header>
             <StatisticGroup size='mini'>
                 <LoadStatistic label='1 Minute' value={load['minute_1']} cores={cores}/>
                 <LoadStatistic label='5 Minute' value={load['minute_5']} cores={cores}/>
                 <LoadStatistic label='15 Minute' value={load['minute_15']} cores={cores}/>
             </StatisticGroup>
-        </Link>
 
-        <Divider/>
+            <Header as='h3'>Bandwidth</Header>
+            {status && status['bandwidth'] ?
+                status['bandwidth'].map(i => <BandwidthProgressCombined key={i['name']} bandwidth={i}/>) :
+                <ProgressPlaceholder/>}
+        </Link>
 
         <Link to='/admin'>
             <StatisticGroup size='mini'>

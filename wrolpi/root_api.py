@@ -312,11 +312,9 @@ async def throttle_off(_: Request):
 @root_api.get('/status')
 @openapi.description('Get the status of CPU/load/etc.')
 async def get_status(_: Request):
-    cpu_info = await status.get_cpu_info()
-    load = await status.get_load()
-    drives = await status.get_drives_info()
+    s = await status.get_status()
     downloads = download_manager.get_summary()
-    ret = dict(cpu_info=cpu_info, load=load, drives=drives, downloads=downloads)
+    ret = dict(downloads=downloads, **s.__dict__)
     return json_response(ret)
 
 

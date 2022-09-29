@@ -23,6 +23,12 @@ formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(messag
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
+SINGLEFILE_PATH = pathlib.Path('/usr/src/app/node_modules/single-file-cli/single-file')
+if not SINGLEFILE_PATH.is_file():
+    SINGLEFILE_PATH = pathlib.Path('/usr/src/app/node_modules/single-file/cli/single-file')
+if not SINGLEFILE_PATH.is_file():
+    raise FileNotFoundError("Can't find single-file executable!")
+
 # Increase response timeout, archiving can take several minutes.
 RESPONSE_TIMEOUT = 10 * 60
 config = {
@@ -57,13 +63,22 @@ async def call_single_file(url) -> bytes:
     See https://github.com/gildas-lormeau/SingleFile
     """
     logger.info(f'archiving {url}')
-    cmd = ['/usr/src/app/node_modules/single-file-cli/single-file', url,
-           '--browser-executable-path', '/usr/bin/chromium-browser', '--browser-args', '["--no-sandbox"]',
-           '--dump-content']
+    cmd = f'{SINGLEFILE_PATH}' \
+          r' --browser-executable-path /usr/bin/chromium-browser' \
+          r' --browser-args [\"--no-sandbox\"]' \
+          r' --dump-content ' \
+          f' {url}'
     logger.debug(f'archive cmd: {cmd}')
-    output = subprocess.check_output(cmd)
+    proc = await asyncio.create_subprocess_shell(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdout, stderr = await proc.communicate()
+
+    if stderr:
+        for line in stderr.decode().splitlines():
+            logger.error(line)
+    if proc.returncode != 0 or not stdout:
+        raise ValueError(f'Failed to single-file {url}')
     logger.debug(f'done archiving for {url}')
-    return output
+    return stdout
 
 
 async def extract_readability(path: str, url: str) -> dict:
@@ -133,8 +148,8 @@ async def post_archive(request: Request):
             screenshot=screenshot,
         )
         return response.json(ret)
-    except Exception:
-        logger.fatal(f'Failed to archive {url}', exc_info=True)
+    except Exception as e:
+        logger.error(f'Failed to archive {url}', exc_info=e)
         return response.json({'error': f'Failed to archive {url}'})
 
 

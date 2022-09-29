@@ -36,3 +36,10 @@ export function ChannelPlaceholder() {
         </Placeholder>
     )
 }
+
+export function ProgressPlaceholder() {
+    return <Placeholder style={{marginBottom: '1em'}}>
+        <PlaceholderLine/>
+        <PlaceholderLine/>
+    </Placeholder>
+}

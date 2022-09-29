@@ -355,8 +355,24 @@ export function humanFileSize(bytes, si = false, dp = 1) {
     return bytes.toFixed(dp) + ' ' + units[u];
 }
 
+export function humanBandwidth(bytes) {
+    // Convert bytes to Mbps and return a string.
+    bytes /= 125;
+    let size = 'Kbps';
+    if (bytes > 1000) {
+        bytes /= 125_000;
+        size = 'Mbps';
+    }
+    if (bytes > 1000) {
+        bytes /= 1000;
+        size = 'Gbps';
+    }
+    bytes = Math.round(bytes);
+    return `${bytes} ${size}`;
+}
+
 export function humanNumber(num, dp = 1) {
-    // Convert large numbers to a more human readable format.
+    // Convert large numbers to a more human-readable format.
     // >> humanNumber(1000)
     // 1.0k
     // >> humanNumber(1500000)

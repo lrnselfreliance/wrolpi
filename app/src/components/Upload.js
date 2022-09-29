@@ -275,13 +275,13 @@ export function DownloadMenu({onOpen}) {
         onOpen(name)
     }
 
-    let body = (<ButtonGroup>
+    let body = (<>
         <Button color='blue' content='Videos' onClick={() => localOnOpen('video')} style={{marginBottom: '1em'}}/>
         <Button color='green' content='Archive' onClick={() => localOnOpen('archive')} style={{marginBottom: '1em'}}/>
         <Button color='blue' content='Channel/Playlist' onClick={() => localOnOpen('video_channel')}
                 style={{marginBottom: '1em'}}/>
         <Button content='RSS Feed' onClick={() => localOnOpen('rss')} style={{marginBottom: '1em'}}/>
-    </ButtonGroup>);
+    </>);
 
     function clearSelected() {
         localOnOpen(null);

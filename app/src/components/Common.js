@@ -1,11 +1,11 @@
 import React, {useContext, useEffect, useState} from "react";
-import {Card, Container, Image, Input, Pagination, Popup, Responsive, TableCell, TableRow} from 'semantic-ui-react';
+import {Card, Container, Image, Input, Pagination, Responsive, TableCell, TableRow} from 'semantic-ui-react';
 import {Link, NavLink} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
 import {getSettings} from "../api";
 import {darkTheme, SettingsContext, ThemeContext} from "../contexts/contexts";
-import {Button, CardIcon, Form, Header, Icon, Menu, Statistic} from "./Theme";
+import {Button, CardIcon, Form, Header, Icon, Menu, Popup, Statistic} from "./Theme";
 
 export const API_URI = `http://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -835,17 +835,15 @@ export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
 }
 
 export function LoadStatistic({label, value, cores, ...props}) {
-    let color;
     const quarter = cores / 4;
     if (cores && value >= (quarter * 3)) {
-        color = 'red';
+        props['color'] = 'red';
     } else if (cores && value >= (quarter * 2)) {
-        color = 'orange';
+        props['color'] = 'orange';
     }
     return <Statistic
         label={label}
         value={value ? parseFloat(value).toFixed(1) : '?'}
-        color={color}
         {...props}/>;
 }
 

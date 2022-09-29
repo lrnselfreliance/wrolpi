@@ -1,103 +1,22 @@
-import React, {useContext, useState} from 'react';
+import React, {useContext} from 'react';
 import './App.css';
 import {NavBar} from "./components/Nav";
-import {Link, Route, Routes} from "react-router-dom";
+import {Route, Routes} from "react-router-dom";
 import {VideosRoute, VideoWrapper} from "./components/Videos";
 import Admin from "./components/admin/Admin";
-import {Container, Divider} from "semantic-ui-react";
+import {Container} from "semantic-ui-react";
 import 'semantic-ui-offline/semantic.min.css';
 import {SemanticToastContainer} from 'react-semantic-toasts';
 import 'react-semantic-toasts/styles/react-semantic-alert.css';
 import {AppsRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/Inventory";
 import {ArchiveRoute} from "./components/Archive";
-import {DownloadMenu} from "./components/Upload";
-import {LoadStatistic, PageContainer, SearchInput, useTitle} from "./components/Common";
-import {FilesRoute, FilesSearchView} from "./components/Files";
-import {useSearchFiles, useSettingsInterval, useStatus} from "./hooks/customHooks";
+import {FilesRoute} from "./components/Files";
+import {useSettingsInterval} from "./hooks/customHooks";
 import {MapRoute} from "./components/Map";
 import {SettingsContext, ThemeContext} from "./contexts/contexts";
-import {Header, Segment, Statistic, StatisticGroup, ThemeWrapper} from "./components/Theme";
-import {CPUUsageProgress} from "./components/admin/Status";
-
-function Dashboard() {
-    useTitle('Dashboard');
-
-    const {searchStr, setSearchStr} = useSearchFiles();
-
-    const [downloadOpen, setDownloadOpen] = useState(false);
-    const onDownloadOpen = (name) => setDownloadOpen(!!name);
-    const {wrol_mode} = useContext(SettingsContext);
-
-    const downloads = <DownloadMenu onOpen={onDownloadOpen}/>;
-
-    // Only show dashboard parts if not searching.
-    let body;
-    if (searchStr) {
-        body = <FilesSearchView showLimit={true} showSelect={true} showSelectButton={true}/>;
-    } else {
-        body = <>
-            {!wrol_mode && downloads}
-            {/* Hide Status when user is starting a download */}
-            {!downloadOpen && <DashboardStatus/>}
-        </>;
-    }
-
-    return (
-        <PageContainer>
-            <SearchInput clearable
-                         searchStr={searchStr}
-                         onSubmit={setSearchStr}
-                         size='large'
-                         placeholder='Search Everywhere...'
-                         actionIcon='search'
-                         style={{marginBottom: '2em'}}
-            />
-            {body}
-        </PageContainer>
-    )
-}
-
-function DashboardStatus() {
-    const {status} = useStatus();
-    let percent = 0;
-    let load = {};
-    let cores = 0;
-    let pending_downloads = '?';
-    if (status && status['cpu_info']) {
-        percent = status['cpu_info']['percent'];
-        load = status['load'];
-        cores = status['cpu_info']['cores'];
-        pending_downloads = status['downloads']['pending_downloads'];
-    }
-
-    const {download_manager_disabled, download_manager_stopped} = useContext(SettingsContext);
-    if (pending_downloads === 0 && (download_manager_disabled || download_manager_stopped)) {
-        pending_downloads = 'x';
-    }
-
-    return <Segment>
-        <Link to='/admin/status'>
-            <Header as='h2'>Status</Header>
-            <CPUUsageProgress value={percent} label='CPU Usage'/>
-            <Header as='h3'>Load</Header>
-            <StatisticGroup size='mini'>
-                <LoadStatistic label='1 Minute' value={load['minute_1']} cores={cores}/>
-                <LoadStatistic label='5 Minute' value={load['minute_5']} cores={cores}/>
-                <LoadStatistic label='15 Minute' value={load['minute_15']} cores={cores}/>
-            </StatisticGroup>
-        </Link>
-
-        <Divider/>
-
-        <Link to='/admin'>
-            <StatisticGroup size='mini'>
-                <Statistic label='Downloads' value={pending_downloads}/>
-            </StatisticGroup>
-        </Link>
-
-    </Segment>;
-}
+import {ThemeWrapper} from "./components/Theme";
+import {Dashboard} from "./Dashboard";
 
 function PageNotFound() {
     return (

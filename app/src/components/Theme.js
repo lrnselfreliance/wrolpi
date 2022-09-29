@@ -105,21 +105,29 @@ const invertedNull = (props) => {
     return props;
 }
 
+const defaultGrey = (props, inverted) => {
+    // Some elements look softer when grey, use grey only if another color is not provided.
+    if (inverted) {
+        return {color: 'grey', ...props};
+    }
+    return props;
+}
+
 export function Button(props) {
-    const {i} = useContext(ThemeContext);
-    props = {...i, ...props};
+    const {i, inverted} = useContext(ThemeContext);
+    props = defaultGrey({...i, ...props}, inverted);
     return <BUTTON {...props}/>
 }
 
 export function Accordion(props) {
-    const {i} = useContext(ThemeContext);
-    props = {...i, ...props};
+    const {i, inverted} = useContext(ThemeContext);
+    props = defaultGrey({...i, ...props}, inverted);
     return <ACCORDION {...props}/>
 }
 
 export function Header(props) {
-    const {i} = useContext(ThemeContext);
-    props = {...i, ...props};
+    const {i, inverted} = useContext(ThemeContext);
+    props = defaultGrey({...i, ...props}, inverted);
     return <HEADER {...props}/>
 }
 
@@ -191,8 +199,8 @@ export function Segment(props) {
 }
 
 export function Statistic(props) {
-    const {i} = useContext(ThemeContext);
-    props = {...i, ...props};
+    const {i, inverted} = useContext(ThemeContext);
+    props = defaultGrey({...i, ...props}, inverted);
     return <STATISTIC {...props}/>
 }
 

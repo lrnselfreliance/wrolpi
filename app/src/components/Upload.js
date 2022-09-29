@@ -5,7 +5,7 @@ import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, Form, FormInput, Header, Loader, TextArea} from "./Theme";
-import {FormDropdown} from "semantic-ui-react";
+import {ButtonGroup, FormDropdown} from "semantic-ui-react";
 
 const validUrl = /^(http|https):\/\/[^ "]+$/;
 
@@ -13,10 +13,7 @@ class Downloader extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            urls: '',
-            valid: true,
-            pending: false,
-            downloader: props.downloader,
+            urls: '', valid: true, pending: false, downloader: props.downloader,
         };
     }
 
@@ -58,20 +55,18 @@ class Downloader extends React.Component {
         const {header} = this.props;
 
         return <ThemeContext.Consumer>
-            {({i}) => (
-                <Form onSubmit={this.submitDownload}>
-                    <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
-                    <Header as='h3'>{header}</Header>
-                    <TextArea required
-                              placeholder={'Enter one URL per line'}
-                              name='urls'
-                              onChange={this.handleInputChange}
-                              value={this.state.urls}
-                    />
-                    <Button content='Cancel' onClick={this.props.clearSelected}/>
-                    <Button primary style={{marginTop: '1em'}} disabled={disabled}>Download</Button>
-                </Form>
-            )}
+            {({i}) => (<Form onSubmit={this.submitDownload}>
+                <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
+                <Header as='h3'>{header}</Header>
+                <TextArea required
+                          placeholder={'Enter one URL per line'}
+                          name='urls'
+                          onChange={this.handleInputChange}
+                          value={this.state.urls}
+                />
+                <Button content='Cancel' onClick={this.props.clearSelected}/>
+                <Button primary style={{marginTop: '1em'}} disabled={disabled}>Download</Button>
+            </Form>)}
         </ThemeContext.Consumer>
     }
 }
@@ -80,18 +75,9 @@ class ChannelDownload extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            url: '',
-            frequency: 604800,
-            pending: false,
-            disabled: false,
-            ready: false,
-            error: null,
-            success: null,
+            url: '', frequency: 604800, pending: false, disabled: false, ready: false, error: null, success: null,
         };
-        this.freqOptions = [
-            {key: 'once', text: 'Once', value: 0},
-            ...frequencyOptions,
-        ];
+        this.freqOptions = [{key: 'once', text: 'Once', value: 0}, ...frequencyOptions,];
         this.handleUrlChange = this.handleUrlChange.bind(this);
         this.handleSubmit = this.handleSubmit.bind(this);
         this.handleFrequencyChange = this.handleFrequencyChange.bind(this);
@@ -289,13 +275,13 @@ export function DownloadMenu({onOpen}) {
         onOpen(name)
     }
 
-    let body = (<>
-        <Button content='Videos' onClick={() => localOnOpen('video')} style={{marginBottom: '1em'}}/>
-        <Button content='Archive' onClick={() => localOnOpen('archive')} style={{marginBottom: '1em'}}/>
-        <Button content='Channel/Playlist' onClick={() => localOnOpen('video_channel')}
+    let body = (<ButtonGroup>
+        <Button color='blue' content='Videos' onClick={() => localOnOpen('video')} style={{marginBottom: '1em'}}/>
+        <Button color='green' content='Archive' onClick={() => localOnOpen('archive')} style={{marginBottom: '1em'}}/>
+        <Button color='blue' content='Channel/Playlist' onClick={() => localOnOpen('video_channel')}
                 style={{marginBottom: '1em'}}/>
         <Button content='RSS Feed' onClick={() => localOnOpen('rss')} style={{marginBottom: '1em'}}/>
-    </>);
+    </ButtonGroup>);
 
     function clearSelected() {
         localOnOpen(null);

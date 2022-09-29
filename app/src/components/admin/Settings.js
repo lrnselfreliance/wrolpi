@@ -97,6 +97,11 @@ export class Settings extends React.Component {
         this.setState({[name]: value});
     }
 
+    handleQrOpen = async (e) => {
+        e.preventDefault();
+        this.setState({qrOpen: true});
+    }
+
     render() {
         if (this.state.ready === false) {
             return <Loader active inline='centered'/>
@@ -199,7 +204,7 @@ export class Settings extends React.Component {
 
                     <Modal closeIcon
                            onClose={() => this.setState({qrOpen: false})}
-                           onOpen={() => this.setState({qrOpen: true})}
+                           onOpen={this.handleQrOpen}
                            open={this.state.qrOpen}
                            trigger={qrButton}
                     >

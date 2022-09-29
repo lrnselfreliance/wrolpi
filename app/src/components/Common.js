@@ -719,8 +719,7 @@ export function ThrottleToggle() {
 
 export function Toggle({label, checked, disabled, onChange, icon}) {
     // Custom toggle because Semantic UI does not handle inverted labels correctly.
-    const {i, t} = useContext(ThemeContext);
-    const inverted = i && i['inverted'] === true ? 'inverted' : '';
+    const {t, inverted} = useContext(ThemeContext);
 
     let style = {marginLeft: '1em'};
     if (t && t.style) {

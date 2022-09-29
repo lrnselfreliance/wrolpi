@@ -32,6 +32,7 @@ export function ThemeWrapper({children, ...props}) {
     const [i, setI] = useState({});
     const [s, setS] = useState({});
     const [t, setT] = useState({});
+    const [inverted, setInverted] = useState('');
     const [theme, setTheme] = useState();
 
     const setDarkTheme = (save = false) => {
@@ -39,6 +40,7 @@ export function ThemeWrapper({children, ...props}) {
         setI({inverted: true});
         setS({style: {backgroundColor: '#1B1C1D', color: '#dddddd'}});
         setT({style: {color: '#dddddd'}});
+        setInverted('inverted');
         setTheme(darkTheme);
         document.body.style.background = '#1B1C1D';
         if (save) {
@@ -51,6 +53,7 @@ export function ThemeWrapper({children, ...props}) {
         setI({inverted: undefined});
         setS({});
         setT({});
+        setInverted('');
         setTheme(lightTheme);
         document.body.style.background = '#FFFFFF';
         if (save) {
@@ -80,7 +83,13 @@ export function ThemeWrapper({children, ...props}) {
             'change', (e) => e.matches ? setDarkTheme() : setLightTheme());
     }, []);
 
-    const themeValue = {i, s, t, theme, setDarkTheme, setLightTheme};
+    const themeValue = {
+        i, // Used for Semantic elements which support "inverted".
+        t, // Used to invert text.
+        s, // Used to invert the style some elements.
+        inverted, // Used to add "invert" to className.
+        theme, setDarkTheme, setLightTheme
+    };
 
     return <ThemeContext.Provider value={themeValue}>
         {children}
@@ -218,7 +227,6 @@ export function TextArea(props) {
 }
 
 export function CardIcon(props) {
-    const {i} = useContext(ThemeContext);
-    const inverted = i['inverted'] === true ? 'inverted' : null;
+    const {inverted} = useContext(ThemeContext);
     return <center className={`card-icon ${inverted}`} {...props}/>
 }

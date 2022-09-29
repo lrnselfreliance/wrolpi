@@ -3,7 +3,7 @@ import './App.css';
 import {NavBar} from "./components/Nav";
 import {Link, Route, Routes} from "react-router-dom";
 import {VideosRoute, VideoWrapper} from "./components/Videos";
-import Admin, {CPUUsageProgress} from "./components/Admin";
+import Admin from "./components/admin/Admin";
 import {Container, Divider} from "semantic-ui-react";
 import 'semantic-ui-offline/semantic.min.css';
 import {SemanticToastContainer} from 'react-semantic-toasts';
@@ -18,6 +18,7 @@ import {useSearchFiles, useSettingsInterval, useStatus} from "./hooks/customHook
 import {MapRoute} from "./components/Map";
 import {SettingsContext, ThemeContext} from "./contexts/contexts";
 import {Header, Segment, Statistic, StatisticGroup, ThemeWrapper} from "./components/Theme";
+import {CPUUsageProgress} from "./components/admin/Status";
 
 function Dashboard() {
     useTitle('Dashboard');

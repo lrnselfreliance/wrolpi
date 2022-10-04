@@ -56,6 +56,17 @@ async def index(_):
     return response.html(index_html)
 
 
+async def check_output(cmd, always_log_stderr: bool = False, cwd=None):
+    proc = await asyncio.create_subprocess_shell(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd)
+    stdout, stderr = await proc.communicate()
+    if always_log_stderr is True or proc.returncode != 0:
+        # Always log when requested, or when the call failed.
+        for line in stderr.decode().splitlines():
+            logger.error(line)
+
+    return stdout, stderr, proc.returncode
+
+
 async def call_single_file(url) -> bytes:
     """
     Call the CLI command for SingleFile.
@@ -69,13 +80,8 @@ async def call_single_file(url) -> bytes:
           r' --dump-content ' \
           f' {url}'
     logger.debug(f'archive cmd: {cmd}')
-    proc = await asyncio.create_subprocess_shell(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    stdout, stderr = await proc.communicate()
-
-    if stderr:
-        for line in stderr.decode().splitlines():
-            logger.error(line)
-    if proc.returncode != 0 or not stdout:
+    stdout, stderr, return_code = await check_output(cmd, always_log_stderr=True)
+    if return_code != 0 or not stdout:
         raise ValueError(f'Failed to single-file {url}')
     logger.debug(f'done archiving for {url}')
     return stdout
@@ -88,24 +94,31 @@ async def extract_readability(path: str, url: str) -> dict:
     See https://github.com/ArchiveBox/readability-extractor
     """
     logger.info(f'readability for {url}')
-    cmd = ['readability-extractor', path, url]
+    cmd = f'readability-extractor {path} {url}'
     logger.debug(f'readability cmd: {cmd}')
-    output = subprocess.check_output(cmd)
-    output = json.loads(output)
+    stdout, stderr, return_code = await check_output(cmd)
+    output = json.loads(stdout)
     logger.debug(f'done readability for {url}')
     return output
 
 
 async def take_screenshot(url: str) -> bytes:
-    cmd = ['/usr/bin/chromium-browser', '--headless', '--disable-gpu', '--no-sandbox', '--screenshot',
-           '--window-size=1280,720', url]
     logger.info(f'Screenshot: {url}')
+    cmd = '/usr/bin/chromium-browser' \
+          ' --headless' \
+          ' --disable-gpu' \
+          ' --no-sandbox' \
+          ' --screenshot' \
+          ' --window-size=1280,720' \
+          f' {url}'
     logger.debug(f'Screenshot cmd: {cmd}')
     with tempfile.TemporaryDirectory() as tmp_dir:
         try:
-            subprocess.check_output(cmd, cwd=tmp_dir)
-        except Exception:
-            logger.error(f'Failed to screenshot {url}', exc_info=True)
+            stdout, stderr, return_code = await check_output(cmd, cwd=tmp_dir)
+            if return_code != 0:
+                raise ValueError(f'Screenshot failed {return_code=}')
+        except Exception as e:
+            logger.error(f'Failed to screenshot {url}', exc_info=e)
             return b''
 
         path = pathlib.Path(f'{tmp_dir}/screenshot.png')
@@ -113,7 +126,7 @@ async def take_screenshot(url: str) -> bytes:
             return b''
 
         size = os.path.getsize(path)
-        logger.info(f'Successful screenshot ({size} bytes) at {path}')
+        logger.info(f'Successful screenshot of {url} ({size} bytes) at {path}')
         png = path.read_bytes()
         return png
 
@@ -150,7 +163,7 @@ async def post_archive(request: Request):
         return response.json(ret)
     except Exception as e:
         logger.error(f'Failed to archive {url}', exc_info=e)
-        return response.json({'error': f'Failed to archive {url}'})
+        return response.json({'error': f'Failed to archive {url} error was... \n\n {e}'})
 
 
 if __name__ == '__main__':

@@ -113,6 +113,10 @@ async def request_archive(url: str):
     data = {'url': url}
     try:
         contents, status = await aiohttp_post(f'{ARCHIVE_SERVICE}/json', json_=data, timeout=ARCHIVE_TIMEOUT)
+        if contents and (error := contents.get('error')):
+            # Report the error from the archive service.
+            raise Exception(f'Received error from archive service: {error}')
+
         readability = contents['readability']
         # Compressed base64
         singlefile = contents['singlefile']

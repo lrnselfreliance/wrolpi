@@ -13,7 +13,6 @@ from modules.archive.models import Archive, Domain
 from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_session
 from wrolpi.files.models import File
-from wrolpi.media_path import MediaPath
 from wrolpi.root_api import CustomJSONEncoder
 from wrolpi.test.common import skip_circleci
 
@@ -587,3 +586,27 @@ def test_archive_order(test_session, test_directory, archive_factory):
 
     assert archive2 > archive1
     assert archive1 < archive2
+
+
+@pytest.mark.asyncio
+async def test_archive_download_index(test_session, test_directory, image_file):
+    """An Archive is indexed when it is downloaded."""
+    with mock.patch('modules.archive.lib.request_archive') as mock_request_archive:
+        singlefile = '<html><title>the singlefile</title></html>'
+        readability = dict(
+            content='<html>the readability</html>',
+            textContent='the readability',
+        )
+        mock_request_archive.return_value = (singlefile, readability, image_file.read_bytes())
+        archive = await lib.do_archive('https://example.com')
+
+    assert isinstance(archive, lib.Archive), 'Did not get an archive'
+    assert archive.singlefile_path and archive.singlefile_path.exists() and \
+           archive.singlefile_path.read_text() == singlefile, 'Singlefile was not stored'
+    assert archive.readability_path and archive.readability_path.exists()
+    assert archive.readability_json_path
+    assert archive.readability_txt_path and archive.readability_txt_path.exists()
+    assert archive.readability_txt_file.d_text == '{the,readability}', 'Readability text was not indexed'
+    assert archive.title == 'the singlefile', 'Did not get the title from the singlefile'
+    assert archive.screenshot_path and archive.screenshot_file and archive.screenshot_path.is_file(), \
+        'Did not store the screenshot'

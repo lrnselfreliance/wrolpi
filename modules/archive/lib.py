@@ -104,10 +104,8 @@ def get_new_archive_files(url: str, title: Optional[str]) -> ArchiveFiles:
 ARCHIVE_TIMEOUT = Seconds.minute * 10  # Wait at most 10 minutes for response.
 
 
-async def request_archive(url: str):
-    """
-    Send a request to the archive service to archive the URL.
-    """
+async def request_archive(url: str) -> Tuple[str, Optional[str], Optional[str]]:
+    """Send a request to the archive service to archive the URL."""
     logger.info(f'Sending archive request to archive service: {url}')
 
     data = {'url': url}
@@ -133,13 +131,10 @@ async def request_archive(url: str):
     if not readability:
         logger.info(f'Failed to get readability for {url=}')
 
-    if not singlefile:
-        logger.info(f'Failed to get singlefile for {url=}')
-    else:
-        # Decode and decompress.
-        singlefile = base64.b64decode(singlefile)
-        singlefile = gzip.decompress(singlefile)
-        singlefile = singlefile.decode()
+    # Decode and decompress.
+    singlefile = base64.b64decode(singlefile)
+    singlefile = gzip.decompress(singlefile)
+    singlefile = singlefile.decode()
 
     if not screenshot:
         logger.info(f'Failed to get screenshot for {url=}')
@@ -235,7 +230,7 @@ def local_archive(url: str):
 async def do_archive(url: str) -> Archive:
     """
     Perform the real archive request to the archiving service.  Store the resulting data into files.  Create an Archive
-    record in the DB.  Create Domain/URL if missing.
+    record in the DB.  Create Domain if missing.
     """
     logger.info(f'Archiving {url}')
 
@@ -267,14 +262,13 @@ async def do_archive(url: str) -> Archive:
             fh.write(readability_txt)
     else:
         # No readability was returned, so there are no files.
-        readability_txt = archive_files.readability_txt = archive_files.readability = None
+        archive_files.readability_txt = archive_files.readability = None
 
     # Store the single-file HTML in its own file.
-    with archive_files.singlefile.open('wt') as fh:
-        fh.write(singlefile)
+    archive_files.singlefile.write_text(singlefile)
+
     if screenshot:
-        with archive_files.screenshot.open('wb') as fh:
-            fh.write(screenshot)
+        archive_files.screenshot.write_bytes(screenshot)
     else:
         archive_files.screenshot = None
 
@@ -284,16 +278,36 @@ async def do_archive(url: str) -> Archive:
     with archive_files.readability_json.open('wt') as fh:
         fh.write(json.dumps(readability))
 
+    # Create any File models that we can, index them all.
+    singlefile_file = File(path=archive_files.singlefile, model='archive')
+    singlefile_file.do_index()
+    readability_file = None
+    if archive_files.readability:
+        readability_file = File(path=archive_files.readability, associated=True)
+        readability_file.do_index()
+    readability_json_file = None
+    if archive_files.readability_json:
+        readability_json_file = File(path=archive_files.readability_json, associated=True)
+        readability_json_file.do_index()
+    readability_txt_file = None
+    if archive_files.readability_txt:
+        readability_txt_file = File(path=archive_files.readability_txt, associated=True)
+        readability_txt_file.do_index()
+    screenshot_file = None
+    if archive_files.screenshot:
+        screenshot_file = File(path=archive_files.screenshot, associated=True)
+        screenshot_file.do_index()
+
     with get_db_session(commit=True) as session:
         domain = get_or_create_domain(session, url)
         archive = Archive(
             title=title,
             archive_datetime=now(),
-            singlefile_file=File(path=archive_files.singlefile, model='archive'),
-            readability_file=File(path=archive_files.readability) if archive_files.readability else None,
-            readability_json_file=File(path=archive_files.readability_json) if archive_files.readability_json else None,
-            readability_txt_file=File(path=archive_files.readability_txt) if archive_files.readability_txt else None,
-            screenshot_file=File(path=archive_files.screenshot) if archive_files.screenshot else None,
+            singlefile_file=singlefile_file,
+            readability_file=readability_file,
+            readability_json_file=readability_json_file,
+            readability_txt_file=readability_txt_file,
+            screenshot_file=screenshot_file,
             url=url,
             domain_id=domain.id,
         )

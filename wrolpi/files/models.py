@@ -106,8 +106,10 @@ class File(ModelHelper, Base):
 
         try:
             if force_index or self.indexed is not True:
+                # Get the indexer on a separate line for debugging.
+                indexer = self.indexer
                 # Only read the contents of the file once.
-                self.a_text, self.b_text, self.c_text, self.d_text = self.indexer.create_index(self)
+                self.a_text, self.b_text, self.c_text, self.d_text = indexer.create_index(self)
                 self.a_text = truncate_object_bytes(self.a_text, MAX_TEXT_FILE_BYTES)
                 self.b_text = truncate_object_bytes(self.b_text, MAX_TEXT_FILE_BYTES)
                 self.c_text = truncate_object_bytes(self.c_text, MAX_TEXT_FILE_BYTES)

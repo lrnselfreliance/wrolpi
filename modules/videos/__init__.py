@@ -1,3 +1,4 @@
+import itertools
 import json
 import pathlib
 from abc import ABC
@@ -21,8 +22,9 @@ __all__ = ['video_modeler', 'VideoIndexer']
 
 @register_modeler
 def video_modeler(groups: Dict[str, List[File]], session: Session):
+    count = itertools.cycle(range(101))
+
     # Only process groups that contain a video file.
-    count = 0
     local_groups = groups.copy()
     for stem, group in local_groups.items():
         video_file = next((i for i in group if i.mimetype.split('/')[0] == 'video' and i.path.suffix != '.part'), None)
@@ -57,8 +59,7 @@ def video_modeler(groups: Dict[str, List[File]], session: Session):
         # Remove this group, it will not be processed by other modelers.
         del groups[stem]
 
-        count += 1
-        if not count % 100:
+        if next(count) == 100:
             # Commit occasionally.
             session.commit()
 

@@ -1,3 +1,4 @@
+import itertools
 import json
 import pathlib
 from abc import ABC
@@ -62,7 +63,7 @@ def archive_modeler(groups: Dict[str, List[File]], session: Session):
         if any(lib.is_singlefile_file(i.path) for i in group):
             archive_groups[stem] = group
 
-    count = 0
+    count = itertools.cycle(range(101))
     for stem, group in archive_groups.items():
         readability_file, singlefile_file, readability_json_file, readability_txt_file, screenshot_file = \
             match_archive_files(group)
@@ -96,8 +97,7 @@ def archive_modeler(groups: Dict[str, List[File]], session: Session):
         # Remove this group, it will not be processed by other modelers.
         del groups[stem]
 
-        count += 1
-        if not count % 100:
+        if next(count) == 100:
             # Commit occasionally.
             session.commit()
 

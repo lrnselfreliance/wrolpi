@@ -392,113 +392,6 @@ export function humanNumber(num, dp = 1) {
     return num.toFixed(dp) + units[i];
 }
 
-export class APIForm extends React.Component {
-
-    constructor(props) {
-        super(props);
-
-        this.state = {
-            dirty: false,
-            disabled: false,
-            error: false,
-            loading: false,
-            message_content: '',
-            message_header: '',
-            success: false,
-        }
-    }
-
-    setError = (header, content, errorName) => {
-        let errors = {...this.state.errors};
-        if (errorName) {
-            errors[errorName] = true;
-        }
-        this.setState({
-            error: true, errors: errors, message_content: content, message_header: header, success: false,
-        });
-    }
-
-    setSuccess = (header, content) => {
-        this.setState({
-            error: false, message_content: content, message_header: header, success: true,
-        });
-    }
-
-    initFormValues = (original) => {
-        // Set the "original" values in state to the provided values.  This will be used to compare against any form
-        // changes.
-        let inputs = {};
-        let errors = {};
-        let inputKeys = Object.keys(this.state.inputs);
-        for (let i = 0; i < inputKeys.length; i++) {
-            let key = inputKeys[i];
-            inputs[key] = original[key] || '';
-            errors[key] = false;
-        }
-
-        this.setState({original: {...original}, inputs: inputs, errors: errors});
-    }
-
-    isDirty = () => {
-        // Compare dictionaries "inputs" and "original".  "original" should never change once it is set.
-        let inputKeys = Object.keys(this.state.inputs);
-        for (let i = 0; i < inputKeys.length; i++) {
-            let name = inputKeys[i];
-            if (!this.state.original && this.state.inputs[name]) {
-                // Form has changed from it's empty value.
-                return true;
-            } else if (this.state.original && this.state.original[name] !== this.state.inputs[name]) {
-                // Form has changed from it's initial value.
-                return true;
-            }
-        }
-        return false;
-    }
-
-    checkDirty = () => {
-        this.setState({dirty: this.isDirty()})
-    }
-
-    getEmptyErrors = () => {
-        let errors = {};
-        let inputKeys = Object.keys(this.state.inputs);
-        for (let i = 0; i < inputKeys.length; i++) {
-            let key = inputKeys[i];
-            errors[key] = false;
-        }
-        return errors;
-    }
-
-    setLoading = () => {
-        this.setState({
-            disabled: true, error: false, errors: this.getEmptyErrors(), loading: true, success: false,
-        })
-    }
-
-    clearLoading = () => {
-        this.setState({
-            disabled: false, loading: false,
-        })
-    }
-
-    handleInputChange = async (event, {name, value}) => {
-        let inputs = this.state.inputs;
-        inputs[name] = value;
-        this.setState({inputs: inputs}, this.checkDirty);
-    }
-
-    handleCheckbox = async (checkbox) => {
-        let checked = checkbox.current.state.checked;
-        let name = checkbox.current.props.name;
-
-        let inputs = this.state.inputs;
-        inputs[name] = !checked;
-
-        this.setState({inputs: inputs}, this.checkDirty);
-    }
-
-}
-
 export function replaceNullValues(obj, newValue) {
     newValue = newValue === undefined ? '' : newValue;
     let keys = Object.keys(obj);
@@ -531,24 +424,6 @@ export function scrollToTop() {
     window.scrollTo({
         top: 0, behavior: "auto"
     });
-}
-
-export function changePageHistory(history, location, activePage, searchStr, searchOrder, filters) {
-    let search = `?page=${activePage}`;
-    if (searchStr) {
-        search = `${search}&q=${searchStr}`;
-    }
-    if (searchOrder) {
-        search = `${search}&o=${searchOrder}`;
-    }
-    if (filters.length > 0) {
-        filters = filters.join(',');
-        search = `${search}&f=${filters}`;
-    }
-    history.push({
-        pathname: location.pathname, search: search,
-    });
-    scrollToTop();
 }
 
 export function SearchInput({
@@ -594,27 +469,6 @@ export function SearchInput({
             action={action}
         />
     </Form>
-}
-
-export const useWROLMode = () => {
-    const [enabled, setEnabled] = useState(false);
-
-    const fetchStatus = async () => {
-        try {
-            const settings = await getSettings();
-            if (settings) {
-                setEnabled(settings.wrol_mode);
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    useEffect(() => {
-        fetchStatus();
-    }, []);
-
-    return enabled;
 }
 
 export function WROLModeMessage({content}) {

@@ -1,18 +1,18 @@
 #! /usr/bin/env python3
 import argparse
-import asyncio
-import inspect
 import logging
+import os
 import sys
 
 import pytz
 from sanic import Sanic
 from sanic.signals import Event
 
-from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, admin, after_startup
+from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, admin
 from wrolpi.common import logger, get_config, import_modules, check_media_directory, limit_concurrent, wrol_mode_enabled
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
+from wrolpi.root_api import api_app
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, PYTEST
 from wrolpi.version import get_version_string
 
@@ -71,7 +71,7 @@ def launch_interactive_shell():
         code.interact(banner=INTERACTIVE_BANNER, local=locals())
 
 
-async def main(loop):
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--verbose', action='count')
     parser.add_argument('--version', action='store_true', default=False)
@@ -111,7 +111,7 @@ async def main(loop):
         return 0
 
     logger.warning(f'Starting with: {sys.argv}')
-    await set_log_level(args)
+    set_log_level(args)
     logger.debug(get_version_string())
 
     if DOCKERIZED:
@@ -142,17 +142,15 @@ async def main(loop):
     for func in BEFORE_STARTUP_FUNCTIONS:
         try:
             logger.debug(f'Calling {func} before startup.')
-            coro = func()
-            if inspect.iscoroutine(coro):
-                await coro
+            func()
         except Exception as e:
             logger.warning(f'Startup {func} failed!', exc_info=e)
 
     # Run the API.
-    return root_api.main(loop, args)
+    return root_api.main(args)
 
 
-async def set_log_level(args):
+def set_log_level(args):
     """
     Set the level at the root logger so all children that have been created (or will be created) share the same level.
     """
@@ -172,9 +170,8 @@ async def set_log_level(args):
     logger.warning(f'Logging level: {level_name}')
 
 
-@after_startup
-@limit_concurrent(1)
-async def periodic_downloads(app: Sanic, loop):
+@api_app.after_server_start
+async def periodic_downloads(app: Sanic):
     """
     Starts the perpetual downloader on download manager.
 
@@ -184,22 +181,22 @@ async def periodic_downloads(app: Sanic, loop):
     download_manager.reset_downloads()
 
     if wrol_mode_enabled():
-        logger.warning(f'Not starting download manager because WROL Mode is enabled.')
+        logger.warning('Not starting download manager because WROL Mode is enabled.')
         download_manager.disable()
         return
 
     config = get_config()
     if config.download_on_startup is False:
-        logger.warning(f'Not starting download manager because Downloads are disabled on startup.')
+        logger.warning('Not starting download manager because Downloads are disabled on startup.')
         download_manager.disable()
         return
 
     download_manager.enable()
-    await app.add_task(download_manager.perpetual_download())
+    app.add_task(download_manager.perpetual_download())
 
 
-@after_startup
-async def start_workers(app: Sanic, loop):
+@api_app.after_server_start
+async def start_workers(app: Sanic):
     """All Sanic processes have their own Download workers."""
     if wrol_mode_enabled():
         logger.warning(f'Not starting download workers because WROL Mode is enabled.')
@@ -209,11 +206,10 @@ async def start_workers(app: Sanic, loop):
     download_manager.start_workers()
 
 
-@after_startup
-@limit_concurrent(1)
-async def bandwidth_worker(app: Sanic, loop):
+@api_app.after_server_start
+async def bandwidth_worker(app: Sanic):
     from wrolpi import status
-    await app.add_task(status.bandwidth_worker())
+    app.add_task(status.bandwidth_worker())
 
 
 @root_api.api_app.signal(Event.SERVER_SHUTDOWN_BEFORE)
@@ -225,6 +221,4 @@ def handle_server_shutdown(*args, **kwargs):
 
 
 if __name__ == '__main__':
-    loop_ = asyncio.get_event_loop()
-    result_ = loop_.run_until_complete(main(loop_))
-    sys.exit(result_)
+    sys.exit(main())

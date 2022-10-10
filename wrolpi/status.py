@@ -339,21 +339,19 @@ def _get_nic_tick(name_):
 
 
 def _calculate_bytes_per_second(history: List[Tuple]) -> Tuple[int, int, int]:
-    """
-    Calculate the bytes-per-second between the oldest and newest tick.
-    """
+    """Calculate the bytes-per-second between the oldest and newest tick."""
     (oldest_now, oldest_recv, oldest_sent, _), (newest_now, newest_recv, newest_sent, _) = \
         history[0], history[-1]
     elapsed = int(newest_now - oldest_now)
+    if elapsed == 0:
+        return 0, 0, 0
     bytes_recv_ps = int((newest_recv - oldest_recv) // elapsed)
     bytes_sent_ps = int((newest_sent - oldest_sent) // elapsed)
     return bytes_recv_ps, bytes_sent_ps, elapsed
 
 
 async def bandwidth_worker(count: int = None):
-    """
-    A background process which will gather historical data about all NIC bandwidth statistics.
-    """
+    """A background process which will gather historical data about all NIC bandwidth statistics."""
     if not psutil:
         return
 

@@ -7,7 +7,7 @@ from sanic import response
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi.common import get_media_directory, api_param_limiter, wrol_mode_check
+from wrolpi.common import get_media_directory, wrol_mode_check
 from wrolpi.errors import InvalidFile
 from wrolpi.root_api import get_blueprint, json_response
 from . import lib, schema
@@ -71,10 +71,6 @@ async def delete_file(_: Request, body: schema.DeleteRequest):
     return response.empty()
 
 
-files_limit_limiter = api_param_limiter(100)
-files_offset_limiter = api_param_limiter(100, 0)
-
-
 @bp.post('/refresh')
 @openapi.description('Find and index all files in the media directory.')
 @wrol_mode_check
@@ -87,7 +83,7 @@ async def refresh(_: Request):
 @openapi.description('Find and index all files in the provided directory.')
 @validate(schema.DirectoryRefreshRequest)
 @wrol_mode_check
-async def refresh(_: Request, body: schema.DirectoryRefreshRequest):
+async def refresh_directory(_: Request, body: schema.DirectoryRefreshRequest):
     directory = get_media_directory() / body.directory
     if PYTEST:
         await lib.refresh_directory_files_recursively(directory)

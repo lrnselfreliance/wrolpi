@@ -15,9 +15,9 @@ pytest==6.2.5
 python-dotenv==0.19.2
 python-magic~=0.4.27
 pytz==2021.3
-sanic-ext==22.1.2
-sanic-testing==0.8.2
-sanic==21.12.2
+sanic-ext==22.6.3
+sanic-testing==22.6.0
+sanic==22.6.2
 selenium==4.1.0
 srt==3.5.1
 websockets==10.1

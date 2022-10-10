@@ -24,7 +24,6 @@ from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, InvalidTimezone, API_ERRORS, APIError, ValidationError, HotspotError
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, DownloadRequest, EchoResponse
-from wrolpi.vars import DOCKERIZED
 from wrolpi.version import __version__
 
 logger = logger.getChild(__name__)
@@ -33,9 +32,9 @@ api_app = Sanic(name='api_app')
 
 DEFAULT_HOST, DEFAULT_PORT = '127.0.0.1', '8081'
 
-root_api = Blueprint('RootAPI', url_prefix='/api')
+api_bp = Blueprint('RootAPI', url_prefix='/api')
 
-BLUEPRINTS = [root_api, ]
+BLUEPRINTS = [api_bp, ]
 
 
 def get_blueprint(name: str, url_prefix: str) -> Blueprint:
@@ -51,13 +50,12 @@ def add_blueprint(bp: Union[Blueprint, BlueprintGroup]):
     BLUEPRINTS.append(bp)
 
 
-def run_webserver(loop, host: str, port: int, workers: int = 8):
+def run_webserver(host: str, port: int, workers: int = 8):
     # Attach all blueprints after they have been defined.
     for bp in BLUEPRINTS:
         api_app.blueprint(bp)
 
-    # TODO remove the auto reload when development is stable
-    kwargs = dict(host=host, port=port, workers=workers, auto_reload=DOCKERIZED)
+    kwargs = dict(host=host, port=port, workers=workers, debug=False, access_log=False, auto_reload=True)
     logger.debug(f'Running Sanic {sanic_version} with kwargs {kwargs}')
     return api_app.run(**kwargs)
 
@@ -70,8 +68,8 @@ def init_parser(parser):
                         help='How many web workers to run')
 
 
-def main(loop, args):
-    return run_webserver(loop, args.host, args.port, args.workers)
+def main(args):
+    return run_webserver(args.host, args.port, args.workers)
 
 
 index_html = '''
@@ -94,7 +92,7 @@ def index(_):
     return response.html(index_html)
 
 
-@root_api.route('/echo', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
+@api_bp.route('/echo', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
 @openapi.description('Echo whatever is sent to this.')
 @openapi.response(HTTPStatus.OK, EchoResponse)
 async def echo(request: Request):
@@ -108,7 +106,7 @@ async def echo(request: Request):
     return response.json(ret)
 
 
-@root_api.route('/settings', methods=['GET', 'OPTIONS'])
+@api_bp.route('/settings', methods=['GET', 'OPTIONS'])
 @openapi.description('Get WROLPi settings')
 @openapi.response(HTTPStatus.OK, SettingsResponse)
 def get_settings(_: Request):
@@ -134,7 +132,7 @@ def get_settings(_: Request):
     return json_response(settings)
 
 
-@root_api.patch('/settings')
+@api_bp.patch('/settings')
 @openapi.description('Update WROLPi settings')
 @validate(json=SettingsRequest)
 def update_settings(_: Request, body: SettingsRequest):
@@ -178,7 +176,7 @@ def update_settings(_: Request, body: SettingsRequest):
     return response.empty()
 
 
-@root_api.post('/valid_regex')
+@api_bp.post('/valid_regex')
 @openapi.description('Check if the regex is valid.')
 @openapi.response(HTTPStatus.OK, RegexResponse)
 @openapi.response(HTTPStatus.BAD_REQUEST, RegexResponse)
@@ -191,7 +189,7 @@ def valid_regex(_: Request, body: RegexRequest):
         return response.json({'valid': False, 'regex': body.regex}, HTTPStatus.BAD_REQUEST)
 
 
-@root_api.post('/download')
+@api_bp.post('/download')
 @openapi.description('Download the many URLs that are provided.')
 @validate(DownloadRequest)
 @wrol_mode_check
@@ -210,49 +208,49 @@ async def post_download(_: Request, body: DownloadRequest):
     return response.empty()
 
 
-@root_api.get('/download')
+@api_bp.get('/download')
 @openapi.description('Get all Downloads that need to be processed.')
 async def get_downloads(_: Request):
     data = download_manager.get_fe_downloads()
     return json_response(data)
 
 
-@root_api.post('/download/<download_id:int>/kill')
+@api_bp.post('/download/<download_id:int>/kill')
 @openapi.description('Kill a download.  It will be stopped if it is pending.')
 async def kill_download(_: Request, download_id: int):
     download_manager.kill_download(download_id)
     return response.empty()
 
 
-@root_api.post('/download/kill')
+@api_bp.post('/download/kill')
 @openapi.description('Kill all downloads.  Disable downloading.')
 async def kill_downloads(_: Request):
     download_manager.disable()
     return response.empty()
 
 
-@root_api.post('/download/enable')
+@api_bp.post('/download/enable')
 @openapi.description('Enable and start downloading.')
 async def enable_downloads(_: Request):
     download_manager.enable()
     return response.empty()
 
 
-@root_api.post('/download/clear_completed')
+@api_bp.post('/download/clear_completed')
 @openapi.description('Clear completed downloads')
 async def clear_completed(_: Request):
     download_manager.delete_completed()
     return response.empty()
 
 
-@root_api.post('/download/clear_failed')
+@api_bp.post('/download/clear_failed')
 @openapi.description('Clear failed downloads')
 async def clear_failed(_: Request):
     download_manager.delete_failed()
     return response.empty()
 
 
-@root_api.delete('/download/<download_id:integer>')
+@api_bp.delete('/download/<download_id:integer>')
 @openapi.description('Delete a download')
 @wrol_mode_check
 async def delete_download(_: Request, download_id: int):
@@ -260,7 +258,7 @@ async def delete_download(_: Request, download_id: int):
     return response.empty(HTTPStatus.NO_CONTENT if deleted else HTTPStatus.NOT_FOUND)
 
 
-@root_api.get('/downloaders')
+@api_bp.get('/downloaders')
 @openapi.description('List all Downloaders that can be specified by the user.')
 async def get_downloaders(_: Request):
     downloaders = download_manager.list_downloaders()
@@ -269,7 +267,7 @@ async def get_downloaders(_: Request):
     return json_response(ret)
 
 
-@root_api.post('/hotspot/on')
+@api_bp.post('/hotspot/on')
 @openapi.description('Turn on the hotspot')
 @native_only
 async def hotspot_on(_: Request):
@@ -279,7 +277,7 @@ async def hotspot_on(_: Request):
     return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
 
 
-@root_api.post('/hotspot/off')
+@api_bp.post('/hotspot/off')
 @openapi.description('Turn off the hotspot')
 @native_only
 async def hotspot_off(_: Request):
@@ -289,7 +287,7 @@ async def hotspot_off(_: Request):
     return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
 
 
-@root_api.post('/throttle/on')
+@api_bp.post('/throttle/on')
 @openapi.description('Turn on CPU throttling')
 @native_only
 async def throttle_on(_: Request):
@@ -299,7 +297,7 @@ async def throttle_on(_: Request):
     return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
 
 
-@root_api.post('/throttle/off')
+@api_bp.post('/throttle/off')
 @openapi.description('Turn off CPU throttling')
 @native_only
 async def throttle_off(_: Request):
@@ -309,7 +307,7 @@ async def throttle_off(_: Request):
     return response.empty(HTTPStatus.INTERNAL_SERVER_ERROR)
 
 
-@root_api.get('/status')
+@api_bp.get('/status')
 @openapi.description('Get the status of CPU/load/etc.')
 async def get_status(_: Request):
     s = await status.get_status()

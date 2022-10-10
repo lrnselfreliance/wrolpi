@@ -32,8 +32,9 @@ class MapFile(Base, ModelHelper):
     def __json__(self):
         return {
             'id': self.id,
-            'path': self.path,
             'imported': self.imported,
+            'path': self.path,
+            'seconds_to_import': (seconds := seconds_to_import(self.path, self.size)),
             'size': self.size,
-            'time_to_import': dates.seconds_to_timestamp(seconds_to_import(self.path, self.size)),
+            'time_to_import': dates.seconds_to_timestamp(seconds),
         }

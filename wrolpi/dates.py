@@ -7,7 +7,7 @@ import pytz
 from sqlalchemy import types
 
 from wrolpi.errors import InvalidTimezone
-from wrolpi.vars import DEFAULT_TIMEZONE_STR, DATETIME_FORMAT, DATETIME_FORMAT_MS
+from wrolpi.vars import DATETIME_FORMAT, DATETIME_FORMAT_MS, DEFAULT_TIMEZONE_STR
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,6 @@ class Seconds(int, Enum):
     hour = minute * 60
     day = hour * 24
     week = day * 7
-    year = day * 366
 
 
 def set_test_now(dt: datetime):
@@ -32,9 +31,7 @@ def set_test_now(dt: datetime):
 
 
 def set_timezone(tz: pytz.timezone):
-    """
-    Change the global timezone for WROLPi.  This does NOT save the config.
-    """
+    """Change the global timezone for WROLPi.  This does NOT save the config."""
     global DEFAULT_TIMEZONE
 
     if not tz:
@@ -48,31 +45,24 @@ def set_timezone(tz: pytz.timezone):
 
 
 def utc_now() -> datetime:
-    """
-    Get the current DateTime in UTC.  Timezone aware.
-    """
-    return datetime.utcnow().astimezone(pytz.utc)
+    """Get the current DateTime in UTC.  Timezone aware."""
+    return datetime.now(tz=timezone.utc)
 
 
 def now(tz: pytz.timezone = None) -> datetime:
     """Get the current DateTime in the provided timezone.  Timezone aware."""
     if TEST_DATETIME:
         return TEST_DATETIME
-    tz = tz or DEFAULT_TIMEZONE
-    return datetime.utcnow().astimezone(tz)
+    return datetime.now(tz=tz or DEFAULT_TIMEZONE)
 
 
 def local_timezone(dt: datetime) -> datetime:
-    """
-    Convert the DateTime provided to the local Timezone.  Timezone aware.
-    """
+    """Convert the DateTime provided to the local Timezone.  Timezone aware."""
     return dt.astimezone(DEFAULT_TIMEZONE)
 
 
 def today() -> date:
-    """
-    Return today's date.
-    """
+    """Return today's date."""
     return now().date()
 
 
@@ -99,14 +89,10 @@ def from_timestamp(timestamp: float) -> datetime:
 def seconds_to_timestamp(seconds: Union[int, float]) -> str:
     """Convert an integer into a timestamp string."""
     seconds = int(seconds)
-    weeks = seconds // Seconds.week
-    seconds = seconds % Seconds.week
-    days = seconds // Seconds.day
-    seconds = seconds % Seconds.day
-    hours = seconds // Seconds.hour
-    seconds = seconds % Seconds.hour
-    minutes = seconds // Seconds.minute
-    seconds = seconds % Seconds.minute
+    weeks, seconds = divmod(seconds, Seconds.week)
+    days, seconds = divmod(seconds, Seconds.day)
+    hours, seconds = divmod(seconds, Seconds.hour)
+    minutes, seconds = divmod(seconds, Seconds.minute)
     timestamp = f'{hours:02}:{minutes:02}:{seconds:02}'
     if weeks:
         timestamp = f'{weeks}w {days}d {timestamp}'

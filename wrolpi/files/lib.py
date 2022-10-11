@@ -264,7 +264,8 @@ async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str
     refresh_logger.info(f'Done refreshing files in {directory}')
 
 
-def file_search(search_str: str, limit: int, offset: int, mimetype: str = None, model: str = None) -> Tuple[List[dict], int]:
+def file_search(search_str: str, limit: int, offset: int, mimetype: str = None, model: str = None) -> Tuple[
+    List[dict], int]:
     """
     Search the Files table.  Order the returned Files by their rank if `search_str` is provided.  Return all files if
     `search_str` is empty.

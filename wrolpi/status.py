@@ -112,7 +112,7 @@ TOP_REGEX = re.compile(r'^%Cpu\(s\):\s+(\d+\.\d+)', re.MULTILINE)
 
 def get_cpu_info_psutil() -> CPUInfo:
     cpu_freq = psutil.cpu_freq()
-    percent = psutil.cpu_percent(interval=1)
+    percent = psutil.cpu_percent(interval=0.1)
 
     # Prefer "coretemp", fallback to the first temperature.
     temp = psutil.sensors_temperatures()

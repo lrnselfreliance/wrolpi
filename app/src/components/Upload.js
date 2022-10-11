@@ -1,11 +1,11 @@
-import React, {useState} from "react";
+import React, {useContext, useState} from "react";
 import {getDownloaders, postDownload} from "../api";
-import {frequencyOptions, rssFrequencyOptions, WROLModeMessage} from "./Common";
+import {frequencyOptions, HelpPopup, rssFrequencyOptions, WROLModeMessage} from "./Common";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {ThemeContext} from "../contexts/contexts";
-import {Button, Form, FormInput, Header, Loader, TextArea} from "./Theme";
-import {ButtonGroup, FormDropdown} from "semantic-ui-react";
+import {Accordion, Button, Form, FormInput, Header, Loader, TextArea} from "./Theme";
+import {AccordionContent, AccordionTitle, FormDropdown} from "semantic-ui-react";
 
 const validUrl = /^(http|https):\/\/[^ "]+$/;
 
@@ -160,20 +160,31 @@ class ChannelDownload extends React.Component {
     }
 }
 
+function ExcludedURLsLabel() {
+    const {t} = useContext(ThemeContext);
+    const excludedURLsHelp = <HelpPopup content='A comma-separated list of words that should not be downloaded.'/>
+    return <div style={{marginBottom: '0.5em'}} {...t}>
+        Excluded URLs
+        {excludedURLsHelp}
+    </div>
+}
+
 class RSSDownload extends ChannelDownload {
     constructor(props) {
         super(props);
         this.state = {
-            url: '',
+            disabled: false,
+            downloader: null,
+            downloaders: [],
+            error: null,
+            excludedURLs: '',
             frequency: 604800,
             pending: false,
-            disabled: false,
             ready: false,
-            error: null,
-            success: null,
-            downloaders: [],
-            downloader: null,
             sub_downloader: null,
+            success: null,
+            url: '',
+            activeIndex: -1,
         };
         this.freqOptions = rssFrequencyOptions;
     }
@@ -197,12 +208,12 @@ class RSSDownload extends ChannelDownload {
     handleSubmit = async (e) => {
         e.preventDefault();
         this.setState({disabled: true, pending: true, success: null, error: null});
-        const {url, frequency, sub_downloader} = this.state;
+        const {url, frequency, sub_downloader, excludedURLs} = this.state;
         if (!url) {
             this.setState({error: 'URL is required'});
             return;
         }
-        let response = await postDownload(url, 'rss', frequency, sub_downloader);
+        let response = await postDownload(url, 'rss', frequency, sub_downloader, excludedURLs);
         if (response.status === 204) {
             this.setState({pending: false, disabled: false, success: true, url: '', ready: false});
         } else {
@@ -212,8 +223,19 @@ class RSSDownload extends ChannelDownload {
         }
     }
 
+    handleAdvancedClick = async (e, {index}) => {
+        const {activeIndex} = this.state;
+        const newIndex = activeIndex === index ? -1 : index;
+        this.setState({activeIndex: newIndex});
+    }
+
+    handleExcludedURLsChange = async (e, {value}) => {
+        e.preventDefault();
+        this.setState({excludedURLs: value});
+    }
+
     render() {
-        const {ready, disabled, url, error, frequency, pending, success} = this.state;
+        const {ready, disabled, url, error, frequency, pending, success, activeIndex, excludedURLs} = this.state;
         const buttonDisabled = !ready || disabled;
 
         const onceMessage = (<Message>
@@ -253,6 +275,25 @@ class RSSDownload extends ChannelDownload {
                           placeholder='Select a downloader'
                           onChange={this.handleInputChange}
             />
+            <Accordion style={{paddingBottom: '1em'}}>
+                <AccordionTitle
+                    active={activeIndex === 0}
+                    index={0}
+                    onClick={this.handleAdvancedClick}
+                >
+                    <Icon name='dropdown'/>
+                    Advanced
+                </AccordionTitle>
+                <AccordionContent active={activeIndex === 0}>
+                    <FormInput
+                        label={<ExcludedURLsLabel/>}
+                        placeholder='example.com,example.org'
+                        value={excludedURLs}
+                        error={error}
+                        onChange={this.handleExcludedURLsChange}
+                    />
+                </AccordionContent>
+            </Accordion>
 
             <Button content='Cancel' onClick={this.props.clearSelected}/>
             <Button

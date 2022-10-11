@@ -196,15 +196,17 @@ def valid_regex(_: Request, body: RegexRequest):
 async def post_download(_: Request, body: DownloadRequest):
     # URLs are provided in a textarea, lets split all lines.
     urls = [i.strip() for i in str(body.urls).strip().splitlines()]
+    excluded_urls = [i.strip() for i in body.excluded_urls.split(',')] if body.excluded_urls else None
     downloader = body.downloader
     if not downloader or downloader in ('auto', 'None', 'null'):
         downloader = None
     if body.frequency:
         download_manager.recurring_download(urls[0], body.frequency, downloader=downloader,
-                                            sub_downloader=body.sub_downloader, reset_attempts=True)
+                                            sub_downloader=body.sub_downloader, reset_attempts=True,
+                                            excluded_urls=excluded_urls)
     else:
         download_manager.create_downloads(urls, downloader=downloader, sub_downloader=body.sub_downloader,
-                                          reset_attempts=True)
+                                          reset_attempts=True, excluded_urls=excluded_urls)
     return response.empty()
 
 
@@ -250,7 +252,7 @@ async def clear_failed(_: Request):
     return response.empty()
 
 
-@api_bp.delete('/download/<download_id:integer>')
+@api_bp.delete('/download/<download_id:[0-9]+>')
 @openapi.description('Delete a download')
 @wrol_mode_check
 async def delete_download(_: Request, download_id: int):

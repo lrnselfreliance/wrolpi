@@ -461,8 +461,8 @@ export async function getArchive(archiveId) {
     }
 }
 
-export async function postDownload(urls, downloader, frequency, sub_downloader) {
-    let body = {urls: urls, downloader: downloader, frequency: frequency || null};
+export async function postDownload(urls, downloader, frequency, sub_downloader, excludedURLs) {
+    let body = {urls: urls, downloader: downloader, frequency: frequency || null, excluded_urls: excludedURLs};
     if (sub_downloader) {
         body['sub_downloader'] = sub_downloader;
     }

@@ -1,17 +1,14 @@
-import asyncio
 import json
-import time
 from abc import ABC
 from datetime import datetime
 from http import HTTPStatus
 from itertools import zip_longest
-from typing import Tuple, Optional
 from unittest import mock
 from unittest.mock import MagicMock
 
 import pytest
 
-from wrolpi.dates import local_timezone, Seconds, now
+from wrolpi.dates import local_timezone, Seconds
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download, DownloadFrequency, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError, InvalidDownload, WROLModeEnabled
@@ -368,3 +365,33 @@ async def test_process_runner_timeout(test_directory):
     elapsed = datetime.now() - start
     assert 2 < elapsed.total_seconds() < 4
 
+
+def test_crud_download(test_client, test_session, test_download_manager):
+    """Test the ways that Downloads can be created."""
+    http_downloader = HTTPDownloader()
+    test_download_manager.register_downloader(http_downloader)
+
+    body = dict(
+        urls='https://example.com',
+        downloader=http_downloader.name,
+        frequency=DownloadFrequency.weekly,
+        excluded_urls='example.org,something',
+    )
+    request, response = test_client.post('/api/download', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.NO_CONTENT, response.body
+
+    download: Download = test_session.query(Download).one()
+    assert download.id
+    assert download.url == 'https://example.com'
+    assert download.downloader == 'http'
+    assert download.frequency == DownloadFrequency.weekly
+    assert download.settings['excluded_urls'] == ['example.org', 'something']
+
+    request, response = test_client.get('/api/download')
+    assert response.status_code == HTTPStatus.OK
+    assert 'recurring_downloads' in response.json
+    assert [i['url'] for i in response.json['recurring_downloads']] == ['https://example.com']
+
+    request, response = test_client.delete(f'/api/download/{download.id}')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert test_session.query(Download).count() == 0

@@ -3,7 +3,6 @@ import {Card, Container, Image, Input, Pagination, Responsive, TableCell, TableR
 import {Link, NavLink} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
-import {getSettings} from "../api";
 import {darkTheme, SettingsContext, ThemeContext} from "../contexts/contexts";
 import {Button, CardIcon, Form, Header, Icon, Menu, Popup, Statistic} from "./Theme";
 

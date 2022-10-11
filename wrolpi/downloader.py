@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 from enum import Enum
 from functools import partial
+from itertools import filterfalse
 from operator import attrgetter
 from queue import Empty
 from typing import List, Dict, Generator
@@ -63,6 +64,7 @@ class Download(ModelHelper, Base):  # noqa
     last_successful_download = Column(TZDateTime)
     location = Column(Text)
     next_download = Column(TZDateTime)
+    settings = Column(JSONB)
     status = Column(String, default='new')
     sub_downloader = Column(Text)
     _manager = None
@@ -137,6 +139,15 @@ class Download(ModelHelper, Base):  # noqa
     @manager.setter
     def manager(self, value):
         self._manager = value
+
+    def filter_excluded(self, urls: List[str]) -> List[str]:
+        """Return any URLs that do not match my excluded_urls."""
+        if self.settings and (excluded_urls := self.settings.get('excluded_urls')):
+            def excluded(url: str):
+                return any(i in url for i in excluded_urls)
+
+            return list(filterfalse(excluded, urls))
+        return urls
 
 
 class Downloader:
@@ -370,7 +381,7 @@ class DownloadManager:
 
                 with get_db_session(commit=True) as session:
                     # Modify the download in a new session because downloads may take a long time.
-                    download = session.query(Download).filter_by(id=download_id).one()
+                    download: Download = session.query(Download).filter_by(id=download_id).one()
                     # Use a new location if provided, keep the old location if no new location is provided, otherwise
                     # clear out an outdated location.
                     download.location = result.location or download.location or None
@@ -380,7 +391,8 @@ class DownloadManager:
 
                     if result.downloads:
                         worker_logger.info(f'Adding {len(result.downloads)} downloads from result of {download.url}')
-                        self.create_downloads(result.downloads, session, downloader=download.sub_downloader)
+                        urls = download.filter_excluded(result.downloads)
+                        self.create_downloads(urls, session, downloader=download.sub_downloader)
 
                     if try_again is False and not download.frequency:
                         # Only once-downloads can fail.
@@ -495,15 +507,15 @@ class DownloadManager:
 
     @optional_session
     def create_download(self, url: str, session: Session = None, downloader: str = None, reset_attempts: bool = False,
-                        sub_downloader: str = None) -> Download:
+                        sub_downloader: str = None, excluded_urls: List[str] = None) -> Download:
         """Schedule a URL for download.  If the URL failed previously, it may be retried."""
-        downloads = self.create_downloads([url], session=session, downloader=downloader,
+        downloads = self.create_downloads([url], session=session, downloader=downloader, excluded_urls=excluded_urls,
                                           reset_attempts=reset_attempts, sub_downloader=sub_downloader)
         return downloads[0]
 
     @optional_session
     def create_downloads(self, urls: List[str], session: Session = None, downloader: str = None,
-                         reset_attempts: bool = False, sub_downloader: str = None) \
+                         reset_attempts: bool = False, sub_downloader: str = None, excluded_urls: List[str] = None) \
             -> List[Download]:
         """Schedule all URLs for download.  If one cannot be downloaded, none will be added."""
         if not all(urls):
@@ -537,6 +549,7 @@ class DownloadManager:
                 download.downloader = local_downloader.name
                 download.info_json = info_json or download.info_json
                 download.sub_downloader = sub_downloader
+                download.settings = {'excluded_urls': excluded_urls}
                 downloads.append(download)
 
         # Start downloading ASAP.
@@ -550,14 +563,16 @@ class DownloadManager:
         return downloads
 
     def recurring_download(self, url: str, frequency: int, downloader: str = None,
-                           sub_downloader: str = None, reset_attempts: bool = False) -> Download:
+                           sub_downloader: str = None, reset_attempts: bool = False,
+                           excluded_urls: List[str] = None) -> Download:
         """Schedule a recurring download."""
         if not frequency:
             raise ValueError('Recurring download must have a frequency!')
 
         with get_db_session(commit=True) as session:
             download, = self.create_downloads([url, ], session=session, downloader=downloader,
-                                              sub_downloader=sub_downloader, reset_attempts=reset_attempts)
+                                              sub_downloader=sub_downloader, reset_attempts=reset_attempts,
+                                              excluded_urls=excluded_urls)
             download.frequency = frequency
 
         return download
@@ -575,13 +590,13 @@ class DownloadManager:
             return
 
         # Find download whose domain isn't already being downloaded.
-        new_downloads = session.query(Download).filter(
+        new_downloads = list(session.query(Download).filter(
             Download.status == 'new',
             Download.domain not in self.data['processing_domains'],
         ).order_by(
             Download.frequency.is_(None),
             Download.frequency,
-            Download.id)  # noqa
+            Download.id))  # noqa
         count = 0
         for download in new_downloads:
             download.manager = self  # Assign this Download to this manager.

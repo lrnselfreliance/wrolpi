@@ -78,7 +78,7 @@ export function BandwidthProgressGroup({bandwidth, ...props}) {
     </Grid>
 }
 
-export function BandwidthProgressCombined({bandwidth , ...props}) {
+export function BandwidthProgressCombined({bandwidth, ...props}) {
     const maxBytes = bandwidth['speed'] ? bandwidth['speed'] * 125_000 : 125_000_000;
     const combined = bandwidth['bytes_recv'] + bandwidth['bytes_sent']
     return <BandwidthProgress label={bandwidth['name']} bytes={combined} maxBytes={maxBytes} {...props}/>

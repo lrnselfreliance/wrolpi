@@ -240,10 +240,7 @@ def test_get_or_create_channel(test_session):
         (dict(name='qux'), c4),
     ]
     for kwargs, expected in tests:
-        try:
-            channel = get_or_create_channel(**kwargs)
-        except Exception as e:
-            raise Exception(f'get_or_create_channel failed with {kwargs=}') from e
+        channel = get_or_create_channel(**kwargs)
         assert expected.id == channel.id, f'Expected {expected} for {kwargs} but got {channel}'
 
     # A new channel is created.  It will not be automatically downloaded.

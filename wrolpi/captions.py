@@ -17,14 +17,17 @@ __all__ = ['read_captions', 'extract_captions']
 def get_caption_text(caption_path: Union[str, Path]) -> Generator:
     """Return all text from each caption of a caption file."""
     if str(caption_path).endswith('vtt'):
+        # VTT
         for caption in webvtt.read(caption_path):
             text = str(caption.text).strip()
             yield text
     else:
+        # Finally, try SRT
         with open(caption_path, 'rt') as fh:
             contents = fh.read()
             for subtitle in srt.parse(contents):
-                yield subtitle.content
+                if any(subtitle.content):
+                    yield subtitle.content
 
 
 def get_unique_caption_lines(caption_path: Union[str, Path]) -> Generator:

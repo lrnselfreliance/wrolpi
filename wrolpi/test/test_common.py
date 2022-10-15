@@ -333,7 +333,7 @@ def test_truncate_object_bytes():
     assert truncate_object_bytes([], 200) == []
 
     assert truncate_object_bytes(None, 100) is None
-    assert truncate_object_bytes('', 100) is ''
+    assert truncate_object_bytes('', 100) == ''
 
     assert truncate_object_bytes('foo' * 100, 99) == 'foofoofoofoofoofoofoofoofoofoofoofoofoof'
     assert truncate_object_bytes('foo' * 100, 80) == 'foofoofoofoofoofoofoofoofo'

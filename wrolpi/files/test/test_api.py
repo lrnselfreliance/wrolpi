@@ -29,8 +29,6 @@ def test_list_files_api(test_client, make_files_structure, test_directory):
         assert not response.json.get('errors')
         results = sorted(response.json['files'], key=lambda i: i['key'])
         for f1, f2 in zip_longest(results, expected_files):
-            if f1 is None or f2 is None:
-                assert f1 == f2
             for key in f2.keys():
                 assert f1[key] == f2[key], f'{f1} != {f2}'
 

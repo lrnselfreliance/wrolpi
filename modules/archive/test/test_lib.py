@@ -78,9 +78,7 @@ async def test_relationships(test_session, test_directory):
 
 
 def test_archive_refresh_deleted_archive(test_client, test_session, archive_directory, archive_factory):
-    """
-    Archives/Domains should be deleted when archive files are deleted.
-    """
+    """Archives/Domains should be deleted when archive files are deleted."""
     archive1 = archive_factory('example.com', 'https://example.com/1')
     archive2 = archive_factory('example.com', 'https://example.com/1')
     archive3 = archive_factory('example.com')

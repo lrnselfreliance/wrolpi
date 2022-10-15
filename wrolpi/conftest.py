@@ -183,6 +183,15 @@ def video_file(test_directory) -> pathlib.Path:
 
 
 @pytest.fixture
+def corrupted_video_file(test_directory) -> pathlib.Path:
+    """Return a copy of the corrupted video file in the `test_directory`."""
+    destination = test_directory / f'{uuid4()}.mp4'
+    shutil.copy(PROJECT_DIR / 'test/corrupted.mp4', destination)
+
+    yield destination
+
+
+@pytest.fixture
 def image_file(test_directory) -> pathlib.Path:
     """Create a small image file in the `test_directory`."""
     destination = test_directory / f'{uuid4()}.jpeg'
@@ -193,7 +202,7 @@ def image_file(test_directory) -> pathlib.Path:
 @pytest.fixture
 def vtt_file1(test_directory) -> pathlib.Path:
     """Return a copy of the example1 VTT file in the `test_directory`."""
-    destination = test_directory / f'{uuid4()}.jpeg'
+    destination = test_directory / f'{uuid4()}.en.vtt'
     shutil.copy(PROJECT_DIR / 'test/example1.en.vtt', destination)
     yield destination
 
@@ -201,8 +210,24 @@ def vtt_file1(test_directory) -> pathlib.Path:
 @pytest.fixture
 def vtt_file2(test_directory) -> pathlib.Path:
     """Return a copy of the example2 VTT file in the `test_directory`."""
-    destination = test_directory / f'{uuid4()}.jpeg'
+    destination = test_directory / f'{uuid4()}.en.vtt'
     shutil.copy(PROJECT_DIR / 'test/example2.en.vtt', destination)
+    yield destination
+
+
+@pytest.fixture
+def srt_file3(test_directory) -> pathlib.Path:
+    """Return a copy of the example3 SRT file in the `test_directory`."""
+    destination = test_directory / f'{uuid4()}.en.srt'
+    shutil.copy(PROJECT_DIR / 'test/example3.en.srt', destination)
+    yield destination
+
+
+@pytest.fixture
+def bad_vtt_file(test_directory) -> pathlib.Path:
+    """Return a copy of the bad_caption VTT file in the `test_directory`."""
+    destination = test_directory / f'{uuid4()}.en.vtt'
+    shutil.copy(PROJECT_DIR / 'test/bad_caption.en.vtt', destination)
     yield destination
 
 

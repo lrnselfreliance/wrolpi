@@ -2,6 +2,8 @@ from datetime import timedelta
 from http import HTTPStatus
 from json import dumps
 
+import pytest
+
 from modules.videos.models import Video
 from modules.videos.video.lib import get_video_for_app
 from wrolpi.dates import now
@@ -73,7 +75,8 @@ def test_get_video_for_app(test_session, simple_channel, simple_video):
     assert vid['video']['id'] == simple_video.id
 
 
-def test_video_delete(test_session, test_directory, channel_factory, video_factory):
+@pytest.mark.asyncio
+def test_video_delete(test_client, test_session, test_directory, channel_factory, video_factory):
     """Video.delete() removes the video's files, but leave the DB record."""
     channel1, channel2 = channel_factory(), channel_factory()
     vid1 = video_factory(channel_id=channel1.id, with_video_file=True, with_caption_file=True)
@@ -89,7 +92,8 @@ def test_video_delete(test_session, test_directory, channel_factory, video_facto
     assert channel1.skip_download_videos is None
     assert channel2.skip_download_videos is None
 
-    vid1.delete()
+    request, response = test_client.delete(f'/api/videos/video/{vid1.id}')
+    assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Video was added to skip list.
     assert len(channel1.skip_download_videos) == 1
@@ -98,11 +102,20 @@ def test_video_delete(test_session, test_directory, channel_factory, video_facto
     assert vid1_video_path.is_file() is False and vid1_caption_path.is_file() is False
     assert vid2_video_path.is_file() and vid2_info_json_path.is_file()
 
-    vid2.delete()
+    request, response = test_client.delete(f'/api/videos/video/{vid2.id}')
+    assert response.status_code == HTTPStatus.NO_CONTENT
 
     assert test_session.query(Video).count() == 2
     assert vid1_video_path.is_file() is False and vid1_caption_path.is_file() is False
     assert vid2_video_path.is_file() is False and vid2_info_json_path.is_file() is False
+
+    # 3 does not exist.
+    request, response = test_client.delete(f'/api/videos/video/3')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+    # Can't parse the ids.
+    request, response = test_client.delete(f'/api/videos/video/3,')
+    assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
 def test_wrol_mode(test_directory, simple_channel, simple_video, wrol_mode_fixture, test_download_manager):
@@ -144,3 +157,28 @@ def test_wrol_mode(test_directory, simple_channel, simple_video, wrol_mode_fixtu
 
     wrol_mode_fixture(False)
     assert not test_download_manager.stopped.is_set()
+
+
+def test_video_directory_search(test_client, make_files_structure):
+    """Test that video directories can be searched."""
+    make_files_structure([
+        'foo/',
+        'fool/',
+        'not a directory',
+    ])
+
+    def assert_directories(search_str, expected):
+        body = dict(search_str=search_str)
+        request, response = test_client.post('/api/videos/directories', content=dumps(body))
+        assert response.status_code == HTTPStatus.OK
+        assert response.json['directories'] == expected
+
+    # All directories are returned.
+    assert_directories(None, ['foo', 'fool', 'videos'])
+    assert_directories('', ['foo', 'fool', 'videos'])
+    # Matches both directories.
+    assert_directories('fo', ['foo', 'fool'])
+    # Matches the one directory exactly.
+    assert_directories('foo', ['foo'])
+    # Does not exist.
+    assert_directories('food', [])

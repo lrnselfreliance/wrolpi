@@ -151,7 +151,7 @@ def test_delete_file(make_files_structure, test_directory):
         ('123foo bar', ['123foo', 'bar']),
     ]
 )
-def split_file_name_into_words(path, expected):
+def test_split_file_name_into_words(path, expected):
     assert lib.split_file_name_into_words(Path(path)) == expected
 
 

@@ -323,7 +323,8 @@ class DownloadManager:
         name = f'{pid}.{num}'
         worker_logger = logger.getChild(f'download_worker.{name}')
 
-        worker_logger.info(f'Starting up.  DownloadManager is disabled={self.disabled.is_set()}.')
+        disabled = 'is disabled' if self.disabled.is_set() else 'is NOT disabled'
+        worker_logger.info(f'Starting up.  DownloadManager {disabled}.')
         last_heartbeat = now()
 
         while True:

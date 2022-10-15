@@ -1,50 +1,36 @@
-import json
-import pathlib
-import tempfile
-import unittest
-from unittest import mock
+import pytest
+from sqlalchemy import Column
+from sqlalchemy.exc import StatementError
 
-from wrolpi.common import set_test_media_directory
-from wrolpi.media_path import MediaPath
-from wrolpi.root_api import CustomJSONEncoder
+from wrolpi.common import ModelHelper, Base
+from wrolpi.media_path import MediaPathType
 
 
-class TestMediaPath(unittest.TestCase):
+class TestTable(Base, ModelHelper):
+    __tablename__ = 'testtable'
+    path = Column(MediaPathType, primary_key=True)
 
-    def setUp(self):
-        self.test_dir = tempfile.TemporaryDirectory()
-        set_test_media_directory(pathlib.Path(self.test_dir.name))
-        path = pathlib.Path(self.test_dir.name).absolute()
-        self.patch = mock.patch('wrolpi.media_path.get_media_directory', lambda: path)
-        self.patch.start()
 
-    def tearDown(self):
-        set_test_media_directory(None)
-        self.test_dir.cleanup()
-        self.patch.stop()
+def test_media_path_type(test_session, test_directory):
+    """MediaPathType checks that paths are valid.  They must be in the media directory, absolute, and not empty."""
+    # A NULL media path is ok.
+    foo = TestTable()
+    test_session.commit()
 
-    def test_errors(self):
-        self.assertRaises(ValueError, MediaPath, '')
-        self.assertRaises(ValueError, MediaPath, '/')
+    # The correct media path is in the media directory, and absolute.
+    foo.path = test_directory / 'foo'
+    test_session.add(foo)
+    test_session.commit()
 
-    def test_json(self):
-        p = MediaPath('foo')
-        result = json.dumps(p, cls=CustomJSONEncoder)
-        self.assertEqual(result, '"foo"')
+    # The path cannot be empty.
+    foo.path = ''
+    with pytest.raises(StatementError) as error:
+        test_session.commit()
+    assert 'cannot be empty' in str(error)
+    test_session.rollback()
 
-    def test_paths(self):
-        # Paths may be relative to media directory.
-        d = MediaPath('foo')
-        self.assertEqual(d._path, pathlib.Path(f'{self.test_dir.name}/foo'))
-
-        # Absolute paths must be in media directory.
-        d = MediaPath(f'{self.test_dir.name}/foo')
-        self.assertEqual(d._path, pathlib.Path(f'{self.test_dir.name}/foo'))
-
-        # Error is raised when the path is not in the media path.
-        self.assertRaises(ValueError, MediaPath, '/tmp/foo')
-
-    def test_repr(self):
-        d = MediaPath('foo')
-        assert self.test_dir.name not in repr(d)
-        assert self.test_dir.name not in str(d)
+    # Paths must be strings or Path.
+    foo.path = 1
+    with pytest.raises(StatementError) as error:
+        test_session.commit()
+    assert 'Invalid MediaPath type' in str(error)

@@ -4,11 +4,12 @@ import tempfile
 import unittest
 from datetime import date, datetime
 from decimal import Decimal
+from unittest import mock
 
 import pytest
 
 from wrolpi.common import insert_parameter, date_range, api_param_limiter, chdir, zig_zag, \
-    escape_file_name, match_paths_to_suffixes, truncate_object_bytes
+    escape_file_name, match_paths_to_suffixes, truncate_object_bytes, check_media_directory
 from wrolpi.dates import set_timezone, now
 from wrolpi.errors import InvalidTimezone
 from wrolpi.test.common import build_test_directories
@@ -340,3 +341,15 @@ def test_truncate_object_bytes():
     assert truncate_object_bytes('foo' * 100, 51) == 'f'
     assert truncate_object_bytes('foo' * 100, 50) == ''
     assert truncate_object_bytes('foo' * 100, 0) == ''
+
+
+def test_check_media_directory(test_directory):
+    """The directory provided by the test_directory fixture is a valid media directory."""
+    assert check_media_directory() is True
+
+
+def test_bad_check_media_directory():
+    """/dev/full is not a valid media directory, warnings are issued and the check fails."""
+    with mock.patch('wrolpi.common.get_media_directory') as mock_get_media_directory:
+        mock_get_media_directory.return_value = pathlib.Path('/dev/full')
+        assert check_media_directory() is False

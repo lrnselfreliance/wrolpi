@@ -8,6 +8,7 @@ import tempfile
 from typing import List, Callable, Union, Dict
 from typing import Tuple, Set
 from unittest import mock
+from unittest.mock import MagicMock
 from uuid import uuid1, uuid4
 
 import pytest
@@ -83,6 +84,7 @@ def test_directory() -> pathlib.Path:
     """
     with tempfile.TemporaryDirectory() as tmp_dir:
         tmp_path = pathlib.Path(tmp_dir)
+        tmp_path.chmod(0o40755)
         assert tmp_path.is_dir()
         set_test_media_directory(tmp_path)
         yield tmp_path
@@ -246,3 +248,20 @@ def wrol_mode_fixture(test_config, test_download_manager):
             disable_wrol_mode(test_download_manager)
 
     return set_wrol_mode
+
+
+@pytest.fixture
+def mock_create_subprocess_shell():
+    def mocker(communicate_return=None, return_code=None):
+        async def communicate(*a, **kw):
+            return communicate_return or (None, None)
+
+        async def create_subprocess_shell(*a, **kw):
+            proc = MagicMock()
+            proc.communicate = communicate
+            proc.returncode = return_code if return_code is not None else 0
+            return proc
+
+        return create_subprocess_shell
+
+    return mocker

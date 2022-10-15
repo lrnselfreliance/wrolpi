@@ -1,12 +1,10 @@
 import asyncio
 import contextlib
 import inspect
-import json
 import logging
 import multiprocessing
 import os
 import pathlib
-import queue
 import re
 import string
 import sys
@@ -16,15 +14,13 @@ from datetime import datetime, date
 from decimal import Decimal
 from functools import wraps
 from itertools import islice, filterfalse, tee
-from multiprocessing import Event, Queue, Lock, Manager
+from multiprocessing import Lock, Manager
 from pathlib import Path
 from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any
 from urllib.parse import urlparse
 
 import aiohttp
 import yaml
-from sanic import Blueprint
-from sanic.request import Request
 from sqlalchemy import types
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
@@ -91,60 +87,6 @@ def sanitize_link(link: str) -> str:
     """Remove any non-url safe characters, all will be lowercase."""
     new_link = ''.join(i for i in str(link).lower() if i in URL_CHARS)
     return new_link
-
-
-DEFAULT_QUEUE_SIZE = 1000
-QUEUE_TIMEOUT = 10
-
-feed_logger = logger.getChild('ws_feed')
-
-EVENTS = []
-QUEUES = []
-
-
-def create_websocket_feed(name: str, uri: str, blueprint: Blueprint, maxsize: int = DEFAULT_QUEUE_SIZE):
-    """
-    Build the objects needed to run a websocket which will pass on messages from a multiprocessing.Queue.
-
-    :param name: the name that will be reported in the global event feeds
-    :param uri: the Sanic URI that the websocket will listen on
-    :param blueprint: the Sanic Blueprint to attach the websocket to
-    :param maxsize: the maximum size of the Queue
-    :return:
-    """
-    q = Queue(maxsize=maxsize)
-    QUEUES.append(q)
-    event = Event()
-    EVENTS.append((name, event))
-
-    @blueprint.websocket(uri)
-    async def local_websocket(_: Request, ws):
-        feed_logger.info(f'client connected to {ws}')
-        feed_logger.debug(f'event.is_set: {event.is_set()}')
-        any_messages = False
-        while q.qsize() or event.is_set():
-            # Pass along messages from the queue until its empty, or the event is cleared.  Give up after 1 second so
-            # the worker can take another request.
-            try:
-                msg = q.get(timeout=QUEUE_TIMEOUT)
-                any_messages = True
-                dump = json.dumps(msg)
-                await ws.send(dump)
-
-                # yield back to the event loop
-                await asyncio.sleep(0)
-            except queue.Empty:  # pragma: no cover
-                # No messages yet, try again while event is set
-                pass
-        feed_logger.info(f'loop complete')
-
-        if any_messages is False:
-            await ws.send(json.dumps({'code': 'no-messages'}))
-
-        # No messages left, stream is complete
-        await ws.send(json.dumps({'code': 'stream-complete'}))
-
-    return q, event
 
 
 class ConfigFile:

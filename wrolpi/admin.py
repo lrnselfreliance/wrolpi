@@ -47,9 +47,9 @@ def hotspot_status() -> HotspotStatus:
 
 
 def enable_hotspot():
-    """Turn the wifi interface into a hotspot.
+    """Turn the Wi-Fi interface into a hotspot.
 
-    If wifi is already running, replace that with a hotspot.
+    If Wi-Fi is already running, replace that with a hotspot.
     """
     status = hotspot_status()
     logger.warning(f'Hotspot status: {status}')
@@ -76,7 +76,7 @@ def enable_hotspot():
 
 
 def disable_hotspot():
-    """Turn off the wifi interface."""
+    """Turn off the Wi-Fi interface."""
     cmd = (SUDO_BIN, NMCLI_BIN, 'radio', 'wifi', 'off')
     try:
         subprocess.check_call(cmd)

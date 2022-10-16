@@ -566,7 +566,7 @@ export function HotspotToggle() {
             label='WiFi Hotspot'
             disabled={disabled}
             checked={on === true}
-            onChange={(e, data) => setHotspot(data.checked)}
+            onChange={checked => setHotspot(checked)}
         />
         {disabled && <HelpPopup content='Hotspot is not supported on this server'/>}
     </div>);
@@ -580,7 +580,7 @@ export function ThrottleToggle() {
             label='CPU Power-save'
             disabled={disabled}
             checked={on === true}
-            onChange={(e, data) => setThrottle(data.checked)}
+            onChange={checked => setThrottle(checked)}
         />
         {disabled && <HelpPopup content='CPU Power-save is not supported on this server'/>}
     </div>);

@@ -144,7 +144,7 @@ export class Settings extends React.Component {
                             label='Download on Startup'
                             disabled={disabled || download_on_startup === null}
                             checked={download_on_startup === true}
-                            onChange={(checked) => this.handleInputChange(null, 'download_on_startup', checked)}
+                            onChange={checked => this.handleInputChange(null, 'download_on_startup', checked)}
                         />
                     </div>
 
@@ -153,7 +153,7 @@ export class Settings extends React.Component {
                             label='WiFi Hotspot on Startup'
                             disabled={disabled || hotspot_on_startup === null}
                             checked={hotspot_on_startup === true}
-                            onChange={(checked) => this.handleInputChange(null, 'hotspot_on_startup', checked)}
+                            onChange={checked => this.handleInputChange(null, 'hotspot_on_startup', checked)}
                         />
                     </div>
 
@@ -162,7 +162,7 @@ export class Settings extends React.Component {
                             label='CPU Power-save on Startup'
                             disabled={disabled || throttle_on_startup === null}
                             checked={throttle_on_startup === true}
-                            onChange={(checked) => this.handleInputChange(null, 'throttle_on_startup', checked)}
+                            onChange={checked => this.handleInputChange(null, 'throttle_on_startup', checked)}
                         />
                     </div>
 

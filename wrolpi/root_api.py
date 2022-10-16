@@ -327,6 +327,8 @@ class CustomJSONEncoder(json.JSONEncoder):
                 return obj.__json__()
             elif isinstance(obj, datetime):
                 return obj.timestamp()
+            elif isinstance(obj, date):
+                return datetime(obj.year, obj.month, obj.day).timestamp()
             elif isinstance(obj, Decimal):
                 return str(obj)
             elif isinstance(obj, Base):

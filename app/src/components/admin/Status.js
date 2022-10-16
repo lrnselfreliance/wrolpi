@@ -28,7 +28,7 @@ function CPUTemperatureStatistic({value, high_temperature, critical_temperature}
     const props = {};
     if ((critical_temperature && value >= critical_temperature) || (!critical_temperature && value >= 75)) {
         props['color'] = 'red';
-    } else if ((high_temperature && value >= high_temperature) || (!high_temperature && value >= 60)) {
+    } else if ((high_temperature && value >= high_temperature) || (!high_temperature && value >= 55)) {
         props['color'] = 'orange';
     }
     return <Statistic label='Temp C°' value={value} {...props}/>

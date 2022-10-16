@@ -209,7 +209,7 @@ async def _refresh_all_files():
     with get_db_curs(commit=True) as curs:
         curs.execute('DELETE FROM file WHERE idempotency < %s OR idempotency is null RETURNING path', (idempotency,))
         deleted = list(curs.fetchall())
-        logger.warning(f'{deleted=}')
+        logger.debug(f'{deleted=}')
         logger.warning(f'Removed {len(deleted)} missing files')
 
     apply_after_refresh()

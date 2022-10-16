@@ -557,7 +557,7 @@ def archive_search(search_str: str, domain: str, limit: int, offset: int, order_
         OFFSET %(offset)s
         LIMIT %(limit)s
     '''
-    logger.warning(stmt, params)
+    logger.debug(stmt, params)
 
     results, total = handle_search_results(stmt, params)
     return results, total

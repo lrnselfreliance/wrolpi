@@ -52,7 +52,7 @@ def enable_hotspot():
     If Wi-Fi is already running, replace that with a hotspot.
     """
     status = hotspot_status()
-    logger.warning(f'Hotspot status: {status}')
+    logger.info(f'Hotspot status: {status}')
 
     if status == HotspotStatus.connected:
         logger.info('Hotspot already connected.  Restarting hotspot.')

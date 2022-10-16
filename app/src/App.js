@@ -12,57 +12,53 @@ import {AppsRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/Inventory";
 import {ArchiveRoute} from "./components/Archive";
 import {FilesRoute} from "./components/Files";
-import {useSettingsInterval} from "./hooks/customHooks";
+import {useStatusInterval} from "./hooks/customHooks";
 import {MapRoute} from "./components/Map";
-import {SettingsContext, ThemeContext} from "./contexts/contexts";
+import {StatusContext, ThemeContext} from "./contexts/contexts";
 import {ThemeWrapper} from "./components/Theme";
 import {Dashboard} from "./Dashboard";
 
 function PageNotFound() {
-    return (
-        <Container fluid>
-            <h1 className="display-4">Page Not Found!</h1>
-            <p>The page you requested cannot be found</p>
-        </Container>
-    )
+    return (<Container fluid>
+        <h1 className="display-4">Page Not Found!</h1>
+        <p>The page you requested cannot be found</p>
+    </Container>)
 }
 
 function Footer() {
     const {t} = useContext(ThemeContext);
-
-    const {version} = useContext(SettingsContext);
+    const {status} = useContext(StatusContext);
+    const {version} = status;
     return <Container textAlign='center' style={{marginTop: '1.5em', marginBottom: '1em'}}>
         <span {...t}>WROLPi v{version} <a href='https://github.com/lrnselfreliance/wrolpi'>GitHub</a></span>
     </Container>
 }
 
 export default function App() {
-    const {settings} = useSettingsInterval();
+    const status = useStatusInterval();
 
-    return (
-        <ThemeWrapper>
-            <SettingsContext.Provider value={settings}>
-                <header>
-                    <NavBar/>
-                </header>
-                <>
-                    <Routes>
-                        <Route path='/videos/video/:videoId' exact element={<VideoWrapper/>}/>
-                        <Route path='/videos/channel/:channelId/video/:videoId' exact element={<VideoWrapper/>}/>
-                        <Route path="/" exact element={<Dashboard/>}/>
-                        <Route path="/videos/*" element={<VideosRoute/>}/>
-                        <Route path="/admin/*" element={<Admin/>}/>
-                        <Route path="/apps/*" element={<AppsRoute/>}/>
-                        <Route path="/inventory/*" element={<InventoryRoute/>}/>
-                        <Route path='/archive/*' element={<ArchiveRoute/>}/>
-                        <Route path='/map/*' element={<MapRoute/>}/>
-                        <Route path='/files/*' element={<FilesRoute/>}/>
-                        <Route element={<PageNotFound/>}/>
-                    </Routes>
-                </>
-                <SemanticToastContainer position="top-right"/>
-                <Footer/>
-            </SettingsContext.Provider>
-        </ThemeWrapper>
-    );
+    return (<ThemeWrapper>
+        <StatusContext.Provider value={status}>
+            <header>
+                <NavBar/>
+            </header>
+            <>
+                <Routes>
+                    <Route path='/videos/video/:videoId' exact element={<VideoWrapper/>}/>
+                    <Route path='/videos/channel/:channelId/video/:videoId' exact element={<VideoWrapper/>}/>
+                    <Route path="/" exact element={<Dashboard/>}/>
+                    <Route path="/videos/*" element={<VideosRoute/>}/>
+                    <Route path="/admin/*" element={<Admin/>}/>
+                    <Route path="/apps/*" element={<AppsRoute/>}/>
+                    <Route path="/inventory/*" element={<InventoryRoute/>}/>
+                    <Route path='/archive/*' element={<ArchiveRoute/>}/>
+                    <Route path='/map/*' element={<MapRoute/>}/>
+                    <Route path='/files/*' element={<FilesRoute/>}/>
+                    <Route element={<PageNotFound/>}/>
+                </Routes>
+            </>
+            <SemanticToastContainer position="top-right"/>
+            <Footer/>
+        </StatusContext.Provider>
+    </ThemeWrapper>);
 }

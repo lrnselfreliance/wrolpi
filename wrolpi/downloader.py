@@ -877,13 +877,26 @@ class DownloadManager:
         )
         return data
 
-    @staticmethod
-    def get_summary():
+    def get_summary(self) -> dict:
+        """
+        Get a summary of what Downloads are happening as well as the status of the DownloadManager.
+        """
         with get_db_curs() as curs:
-            stmt = """SELECT COUNT(*) AS pending_downloads FROM download WHERE status='pending'"""
+            stmt = """
+                SELECT
+                 COUNT(*) FILTER (WHERE status = 'pending') AS pending_downloads,
+                 COUNT(*) FILTER (WHERE frequency IS NOT NULL) AS recurring_downloads
+                FROM download
+                """
             curs.execute(stmt)
-            result = [dict(i) for i in curs.fetchall()][0]
-            return result
+            counts = list(map(dict, curs.fetchall()))[0]
+        summary = dict(
+            pending=counts['pending_downloads'],
+            recurring=counts['recurring_downloads'],
+            disabled=self.disabled.is_set(),
+            stopped=self.stopped.is_set(),
+        )
+        return summary
 
     @optional_session
     def get_pending_downloads(self, session: Session) -> List[Download]:

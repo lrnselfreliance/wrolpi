@@ -1,7 +1,7 @@
 import {LoadStatistic, PageContainer, SearchInput, useTitle} from "./components/Common";
-import {useSearchFiles, useStatus} from "./hooks/customHooks";
+import {useSearchFiles} from "./hooks/customHooks";
 import React, {useContext, useState} from "react";
-import {SettingsContext} from "./contexts/contexts";
+import {StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Upload";
 import {FilesSearchView} from "./components/Files";
 import {Header, Segment, Statistic, StatisticGroup} from "./components/Theme";
@@ -14,10 +14,11 @@ export function Dashboard() {
 
     const {searchStr, setSearchStr} = useSearchFiles();
 
+    const {status} = useContext(StatusContext);
+    const wrol_mode = status ? status['wrol_mode'] : null;
+
     const [downloadOpen, setDownloadOpen] = useState(false);
     const onDownloadOpen = (name) => setDownloadOpen(!!name);
-    const {wrol_mode} = useContext(SettingsContext);
-
     const downloads = <DownloadMenu onOpen={onDownloadOpen}/>;
 
     // Only show dashboard parts if not searching.
@@ -32,8 +33,7 @@ export function Dashboard() {
         </>;
     }
 
-    return (
-        <PageContainer>
+    return (<PageContainer>
             <SearchInput clearable
                          searchStr={searchStr}
                          onSubmit={setSearchStr}
@@ -43,12 +43,12 @@ export function Dashboard() {
                          style={{marginBottom: '2em'}}
             />
             {body}
-        </PageContainer>
-    )
+        </PageContainer>)
 }
 
 function DashboardStatus() {
-    const {status} = useStatus();
+    const {status} = useContext(StatusContext);
+
     let percent = 0;
     let load = {};
     let cores = 0;
@@ -57,12 +57,11 @@ function DashboardStatus() {
         percent = status['cpu_info']['percent'];
         load = status['load'];
         cores = status['cpu_info']['cores'];
-        pending_downloads = status['downloads']['pending_downloads'];
     }
 
-    const {download_manager_disabled, download_manager_stopped} = useContext(SettingsContext);
-    if (pending_downloads === 0 && (download_manager_disabled || download_manager_stopped)) {
-        pending_downloads = 'x';
+    const {downloads} = status;
+    if (downloads) {
+        pending_downloads = downloads['disabled'] ? 'x' : downloads['pending'];
     }
 
     return <Segment>
@@ -78,8 +77,8 @@ function DashboardStatus() {
             </StatisticGroup>
 
             <Header as='h3'>Bandwidth</Header>
-            {status && status['bandwidth'] ?
-                status['bandwidth'].map(i => <BandwidthProgressCombined key={i['name']} bandwidth={i}/>) :
+            {status && status['bandwidth'] ? status['bandwidth'].map(i => <BandwidthProgressCombined key={i['name']}
+                                                                                                     bandwidth={i}/>) :
                 <ProgressPlaceholder/>}
         </Link>
 

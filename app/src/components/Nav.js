@@ -1,7 +1,7 @@
 import React, {useContext} from "react";
 import {NavLink} from "react-router-dom";
 import {Dropdown, Menu, Responsive} from "semantic-ui-react";
-import {SettingsContext, ThemeContext} from "../contexts/contexts";
+import {StatusContext, ThemeContext} from "../contexts/contexts";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {DarkModeToggle} from "./Common";
 
@@ -64,8 +64,8 @@ function MenuLink(props) {
 }
 
 export function NavBar() {
-    const settings = useContext(SettingsContext);
-    const wrol_mode = settings ? settings.wrol_mode : null;
+    const {status} = useContext(StatusContext);
+    const wrol_mode = status ? status['wrol_mode'] : null;
     const topNavText = wrol_mode ? <>WROLPi&nbsp; <Icon name='lock'/></> : 'WROLPi';
     const {i} = useContext(ThemeContext);
 

@@ -3,7 +3,7 @@ import {Card, Container, Image, Input, Pagination, Responsive, TableCell, TableR
 import {Link, NavLink} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
-import {darkTheme, SettingsContext, ThemeContext} from "../contexts/contexts";
+import {darkTheme, StatusContext, ThemeContext} from "../contexts/contexts";
 import {Button, CardIcon, Form, Header, Icon, Menu, Popup, Statistic} from "./Theme";
 
 export const API_URI = `http://${window.location.host}/api`;
@@ -471,8 +471,8 @@ export function SearchInput({
 }
 
 export function WROLModeMessage({content}) {
-    const settings = useContext(SettingsContext);
-    const wrol_mode = settings ? settings.wrol_mode : null;
+    const {status} = useContext(StatusContext);
+    const wrol_mode = status ? status.wrol_mode : null;
 
     if (wrol_mode) {
         return <Message icon='lock' header='WROL Mode Enabled' content={content}/>

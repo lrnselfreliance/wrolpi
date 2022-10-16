@@ -10,3 +10,5 @@ export const ThemeContext = React.createContext({
     setTheme: () => {
     },
 });
+
+export const StatusContext = React.createContext({});

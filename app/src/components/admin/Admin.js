@@ -1,6 +1,6 @@
 import React from 'react';
 import {Container} from "semantic-ui-react";
-import {getSettings, saveSettings} from "../../api";
+import {getStatus, saveSettings} from "../../api";
 import {PageContainer, TabLinks, Toggle} from "../Common";
 import {Route, Routes} from "react-router-dom";
 import {ThemeContext} from "../../contexts/contexts";
@@ -20,8 +20,8 @@ class WROLMode extends React.Component {
 
     async componentDidMount() {
         try {
-            let settings = await getSettings();
-            this.setState({ready: true, WROLMode: settings.wrol_mode});
+            const {wrol_mode} = await getStatus();
+            this.setState({ready: true, WROLMode: wrol_mode});
         } catch (e) {
             console.error(e);
         }
@@ -42,7 +42,7 @@ class WROLMode extends React.Component {
         }
 
         return <ThemeContext.Consumer>
-            {({i, t}) => <Container fluid>
+            {({t}) => <Container fluid>
 
                 <Header as="h1">WROL Mode</Header>
                 <Header as='h4'>

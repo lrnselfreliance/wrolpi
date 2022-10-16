@@ -656,6 +656,19 @@ export const useStatus = () => {
     return {status, fetchStatus}
 }
 
+export const useStatusInterval = () => {
+    const {status, fetchStatus} = useStatus();
+
+    useEffect(() => {
+        const interval = setInterval(() => {
+            fetchStatus();
+        }, 1000 * 3);
+        return () => clearInterval(interval);
+    }, []);
+
+    return {status, fetchStatus};
+}
+
 export const useVideoStatistics = () => {
     const [statistics, setStatistics] = useState({});
 

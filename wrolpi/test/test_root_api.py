@@ -310,6 +310,10 @@ def test_get_status(test_client, test_session):
     assert 'cpu_info' in response.json and isinstance(response.json['cpu_info'], dict)
     assert 'load' in response.json and isinstance(response.json['load'], dict)
     assert 'drives' in response.json and isinstance(response.json['drives'], list)
+    assert 'downloads' in response.json and isinstance(response.json['downloads'], dict)
+    assert 'hotspot_status' in response.json and isinstance(response.json['hotspot_status'], str)
+    assert 'throttle_status' in response.json and isinstance(response.json['throttle_status'], str)
+    assert 'version' in response.json and isinstance(response.json['version'], str)
 
 
 def test_post_download(test_session, test_client, test_download_manager_config):

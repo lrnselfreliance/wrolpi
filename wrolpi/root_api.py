@@ -314,7 +314,17 @@ async def throttle_off(_: Request):
 async def get_status(_: Request):
     s = await status.get_status()
     downloads = download_manager.get_summary()
-    ret = dict(downloads=downloads, **s.__dict__)
+    ret = dict(
+        bandwidth=s.bandwidth,
+        cpu_info=s.cpu_info,
+        downloads=downloads,
+        drives=s.drives,
+        hotspot_status=admin.hotspot_status().name,
+        load=s.load,
+        throttle_status=admin.throttle_status().name,
+        version=__version__,
+        wrol_mode=wrol_mode_enabled(),
+    )
     return json_response(ret)
 
 

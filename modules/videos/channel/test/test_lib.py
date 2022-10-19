@@ -7,6 +7,7 @@ from modules.videos.channel import lib
 from modules.videos.lib import save_channels_config, import_channels_config
 from modules.videos.models import Channel, Video
 from wrolpi.errors import UnknownChannel
+from wrolpi.files.lib import refresh_files
 
 
 @pytest.mark.parametrize('params', [
@@ -93,7 +94,8 @@ def test_channels_no_url(test_session, test_directory):
     import_channels_config()
 
 
-def test_refresh_videos_finds_channel(test_session, test_client, channel_factory, video_factory):
+@pytest.mark.asyncio
+async def test_refresh_videos_finds_channel(test_session, test_client, channel_factory, video_factory):
     """A Video will be assigned to a Channel by its info json first, then to its directory."""
     channel1 = channel_factory(source_id='channel1')
     channel2 = channel_factory(source_id='channel2')
@@ -110,20 +112,20 @@ def test_refresh_videos_finds_channel(test_session, test_client, channel_factory
     with mock.patch('wrolpi.common.after_refresh') as mock_after_refresh:
         # Channel can be found in `video_cleanup`, prevent that with mock.
         mock_after_refresh.side_effect = []
-        test_client.post('/api/files/refresh')
+        await refresh_files()
 
     # Channel in info_json was found during validation.
     assert vid1.channel_id == channel1.id
 
     # Refresh using cleanup, info json should be trusted.
-    test_client.post('/api/files/refresh')
+    await refresh_files()
     assert vid1.channel_id == channel1.id
 
     # Remove the info json, the Video's Channel will be its directory.
     vid1.channel_id = None
     vid1.info_json_path.unlink()
     test_session.commit()
-    test_client.post('/api/files/refresh')
+    await refresh_files()
     test_session.refresh(vid1)
     vid1 = test_session.query(Video).one()
     assert vid1.channel_id == channel2.id

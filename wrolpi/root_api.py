@@ -1,5 +1,5 @@
 import json
-import multiprocessing
+import json
 import re
 from datetime import datetime, date
 from decimal import Decimal
@@ -24,13 +24,13 @@ from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, InvalidTimezone, API_ERRORS, APIError, ValidationError, HotspotError
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, DownloadRequest, EchoResponse
+from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
+    truthy_arg
 from wrolpi.version import __version__
 
 logger = logger.getChild(__name__)
 
 api_app = Sanic(name='api_app')
-
-DEFAULT_HOST, DEFAULT_PORT = '127.0.0.1', '8081'
 
 api_bp = Blueprint('RootAPI', url_prefix='/api')
 
@@ -50,26 +50,47 @@ def add_blueprint(bp: Union[Blueprint, BlueprintGroup]):
     BLUEPRINTS.append(bp)
 
 
-def run_webserver(host: str, port: int, workers: int = 8):
+def run_webserver(
+        host: str = API_HOST,
+        port: int = API_PORT,
+        workers: int = API_WORKERS,
+        api_debug: bool = API_DEBUG,
+        access_log: bool = API_ACCESS_LOG,
+):
     # Attach all blueprints after they have been defined.
     for bp in BLUEPRINTS:
         api_app.blueprint(bp)
 
-    kwargs = dict(host=host, port=port, workers=workers, debug=False, access_log=False, auto_reload=True)
-    logger.debug(f'Running Sanic {sanic_version} with kwargs {kwargs}')
+    kwargs = dict(
+        host=host,
+        port=port,
+        workers=workers,
+        debug=api_debug,
+        access_log=access_log,
+        auto_reload=DOCKERIZED,
+    )
+    logger.warning(f'Running Sanic {sanic_version} with kwargs {kwargs}')
     return api_app.run(**kwargs)
 
 
 def init_parser(parser):
     # Called by WROLPI's main() function
-    parser.add_argument('-H', '--host', default=DEFAULT_HOST, help='What network interface to connect webserver')
-    parser.add_argument('-p', '--port', default=DEFAULT_PORT, type=int, help='What port to connect webserver')
-    parser.add_argument('-w', '--workers', default=multiprocessing.cpu_count(), type=int,
-                        help='How many web workers to run')
+    parser.add_argument('-H', '--host', default=API_HOST, help='What network interface to connect webserver')
+    parser.add_argument('-p', '--port', default=API_PORT, type=int, help='What port to connect webserver')
+    parser.add_argument('-w', '--workers', default=API_WORKERS, type=int, help='How many web workers to run')
+    parser.add_argument('--access-log', default=API_ACCESS_LOG, type=truthy_arg, help='Enable Sanic access log')
+    parser.add_argument('--api-debug', default=API_DEBUG, type=truthy_arg, help='Enable Sanic debug log')
+    parser.add_argument('--api-auto-reload', default=API_AUTO_RELOAD, type=truthy_arg, help='Enable Sanic auto reload')
 
 
 def main(args):
-    return run_webserver(args.host, args.port, args.workers)
+    return run_webserver(
+        host=args.host,
+        port=args.port,
+        workers=args.workers,
+        api_debug=args.api_debug,
+        access_log=args.access_log,
+    )
 
 
 index_html = '''
@@ -313,14 +334,21 @@ async def throttle_off(_: Request):
 @openapi.description('Get the status of CPU/load/etc.')
 async def get_status(_: Request):
     s = await status.get_status()
-    downloads = download_manager.get_summary()
+    try:
+        downloads = download_manager.get_summary()
+    except Exception as e:
+        logger.error('Unable to get download status', exc_info=e)
+        downloads = dict()
+
     ret = dict(
         bandwidth=s.bandwidth,
         cpu_info=s.cpu_info,
+        disk_bandwidth=s.disk_bandwidth,
         downloads=downloads,
         drives=s.drives,
         hotspot_status=admin.hotspot_status().name,
         load=s.load,
+        memory_stats=s.memory_stats,
         throttle_status=admin.throttle_status().name,
         version=__version__,
         wrol_mode=wrol_mode_enabled(),

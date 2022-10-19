@@ -3,7 +3,7 @@ import {NavLink} from "react-router-dom";
 import {Dropdown, Menu, Responsive} from "semantic-ui-react";
 import {StatusContext, ThemeContext} from "../contexts/contexts";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {DarkModeToggle} from "./Common";
+import {DarkModeToggle, HotspotStatusIcon} from "./Common";
 
 const responsiveWidth = 500;
 
@@ -63,6 +63,10 @@ function MenuLink(props) {
     }
 }
 
+function NavIcon(props) {
+    return <div style={{margin: '0.8em'}}>{props.children}</div>
+}
+
 export function NavBar() {
     const {status} = useContext(StatusContext);
     const wrol_mode = status ? status['wrol_mode'] : null;
@@ -81,17 +85,15 @@ export function NavBar() {
                 )
             })}
             <Responsive minWidth={responsiveWidth} as={Menu.Menu} position="right">
-                <div style={{margin: '0.8em'}}>
-                    <DarkModeToggle/>
-                </div>
+                <NavIcon><HotspotStatusIcon/></NavIcon>
+                <NavIcon><DarkModeToggle/></NavIcon>
                 {rightLinks.map((link) => <MenuLink link={link} key={link.key}/>)}
             </Responsive>
 
             {/*Show the menu items in a dropdown when on mobile*/}
             <Responsive as={Menu.Menu} maxWidth={responsiveWidth - 1} position='right'>
-                <div style={{margin: '0.8em'}}>
-                    <DarkModeToggle/>
-                </div>
+                <NavIcon><HotspotStatusIcon/></NavIcon>
+                <NavIcon><DarkModeToggle/></NavIcon>
                 <Dropdown item icon="bars">
                     <Dropdown.Menu>
                         {collapsedLinks.map((link) =>

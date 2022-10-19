@@ -3,11 +3,39 @@ import shutil
 from http import HTTPStatus
 from pathlib import Path
 
+import pytest
+
 from modules.videos.models import Video, Channel
 from modules.videos.video import lib as video_lib
 from wrolpi.downloader import DownloadFrequency
+from wrolpi.files.lib import refresh_files
 from wrolpi.files.models import File
 from wrolpi.vars import PROJECT_DIR
+
+
+@pytest.mark.asyncio
+async def test_refresh_videos_index(test_session, test_directory, video_factory):
+    """A video discovered during refresh has files associated with it.  Only the video file is indexed."""
+    video_factory(with_video_file=True, with_caption_file=True, with_poster_ext='jpg', with_info_json=True)
+    test_session.commit()
+
+    test_session.query(Video).delete()
+    test_session.query(File).delete()
+    test_session.commit()
+
+    for _ in range(1):
+        # Refreshing twice does not change the results.
+        await refresh_files()
+
+        assert test_session.query(File).count() == 4
+        video: Video = test_session.query(Video).one()
+        assert video.video_file.indexed is True, 'Video was not indexed'
+        assert video.video_file.a_text, 'Video title was not indexed'
+        assert video.video_file.d_text, 'Video captions were not indexed'
+
+        assert not video.poster_file.indexed
+        assert not video.caption_file.indexed
+        assert not video.info_json_file.indexed
 
 
 def test_refresh_videos(test_client, test_session, test_directory, simple_channel, video_factory):

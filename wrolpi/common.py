@@ -1,4 +1,5 @@
 import asyncio
+import atexit
 import contextlib
 import inspect
 import logging
@@ -26,7 +27,7 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
-from wrolpi.dates import DEFAULT_TIMEZONE
+from wrolpi.dates import DEFAULT_TIMEZONE, now
 from wrolpi.errors import WROLModeEnabled, NativeOnly
 from wrolpi.vars import PYTEST, MODULES_DIR, \
     DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY
@@ -36,6 +37,58 @@ ch = logging.StreamHandler()
 formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
 ch.setFormatter(formatter)
 logger.addHandler(ch)
+
+__all__ = [
+    'Base',
+    'ModelHelper',
+    'get_model_by_table_name',
+    'tsvector',
+    'compile_tsvector',
+    'sanitize_link',
+    'ConfigFile',
+    'get_config',
+    'set_test_config',
+    'wrol_mode_enabled',
+    'wrol_mode_check',
+    'enable_wrol_mode',
+    'disable_wrol_mode',
+    'insert_parameter',
+    'iterify',
+    'date_range',
+    'remove_whitespace',
+    'run_after',
+    'set_test_media_directory',
+    'get_media_directory',
+    'check_media_directory',
+    'get_absolute_media_path',
+    'get_relative_to_media_directory',
+    'get_files_and_directories',
+    'minimize_dict',
+    'make_media_directory',
+    'extract_domain',
+    'import_modules',
+    'api_param_limiter',
+    'partition',
+    'chdir',
+    'zig_zag',
+    'walk',
+    'escape_file_name',
+    'native_only',
+    'recursive_map',
+    'any_extensions',
+    'aiohttp_post',
+    'register_modeler',
+    'apply_modelers',
+    'register_after_refresh',
+    'apply_after_refresh',
+    'match_paths_to_suffixes',
+    'chunks',
+    'chunks_by_name',
+    'timer',
+    'cum_timer',
+    'limit_concurrent',
+    'truncate_object_bytes'
+]
 
 # Base is used for all SQLAlchemy models.
 Base = declarative_base()
@@ -367,11 +420,6 @@ dt_or_d = Union[datetime, date]
 def date_range(start: dt_or_d, end: dt_or_d, steps: int) -> List[dt_or_d]:
     delta = (end - start) // steps
     return [start + (delta * i) for i in range(steps)]
-
-
-def chunks(it, size):
-    it = iter(it)
-    return iter(lambda: tuple(islice(it, size)), ())
 
 
 WHITESPACE = re.compile(r'\s')
@@ -763,7 +811,7 @@ def apply_modelers(files, session: Session):
     for file in files:
         if not file.mimetype:
             file.mimetype = get_mimetype(file.path)
-        stem, suffix = split_path_stem_and_suffix(file.path)
+        stem, _ = split_path_stem_and_suffix(file.path)
         try:
             groups[stem].append(file)
         except KeyError:
@@ -771,7 +819,6 @@ def apply_modelers(files, session: Session):
 
     for modeler in modelers:
         modeler(groups, session)
-        session.commit()
 
     for stem, group in groups.items():
         # Index any files that were not claimed by modelers.
@@ -784,6 +831,7 @@ after_refresh = []
 
 def register_after_refresh(func: callable):
     after_refresh.append(func)
+    return func
 
 
 def apply_after_refresh():
@@ -807,6 +855,56 @@ def match_paths_to_suffixes(paths: List[pathlib.Path], suffix_groups: List[Tuple
         yield match
 
 
+def chunks(it: Iterable, size: int):
+    """Split an iterable into iterables of the defined length."""
+    it = iter(it)
+    return iter(lambda: tuple(islice(it, size)), ())
+
+
+def chunks_by_name(it: List[Union[pathlib.Path, str]], size: int) -> Generator[List[pathlib.Path], None, None]:
+    """
+    Attempt to split a list of paths near the defined size.  Keep groups of files together when they share
+    matching names.
+
+    >>> files = ['1.mp4', '1.txt', '2.mp4', '2.txt', '2.png', '3.mp4']
+    >>> chunks_by_name(files, 2)
+    [['1.mp4', '1.txt'], ['2.mp4', '2.txt', '2.png'], ['3.mp4']]
+    >>> chunks_by_name(files, 3)
+    [['1.mp4', '1.txt', '2.mp4', '2.txt', '2.png'], ['3.mp4']]
+    """
+    if not isinstance(size, int) or size < 1:
+        raise ValueError('size must be a positive integer')
+
+    if not it or len(it) < size:
+        yield it
+        return
+
+    if not isinstance(it, list):
+        raise ValueError('iterable must a list')
+
+    from wrolpi.files.lib import split_path_stem_and_suffix
+    it = sorted(it.copy())
+    index = size
+    last_name = None
+    while it:
+        if index >= len(it):
+            # Ran out of items, yield what is left.
+            yield it
+            return
+        path = it[index]
+        name, _ = split_path_stem_and_suffix(path)
+        if last_name and name != last_name:
+            # Found a break in the path names, yield and reset.
+            chunk, it = it[:index], it[index:]
+            index = size
+            last_name = None
+            yield chunk
+            continue
+        # Didn't find a name change, try again.
+        last_name = name
+        index += 1
+
+
 @contextlib.contextmanager
 def timer(name):
     """Prints out the time elapsed during the call of some block."""
@@ -815,6 +913,35 @@ def timer(name):
         yield
     finally:
         logger.warning(f'{name} elapsed {(datetime.now() - before).total_seconds()} seconds')
+
+
+TIMERS = dict()
+
+
+@contextlib.contextmanager
+def cum_timer(name: str):
+    """Track time usage within this context's name.  The cumulative calls to this context will be printed on exit."""
+    before = now()
+    try:
+        yield
+    finally:
+        total_seconds = (now() - before).total_seconds()
+        existing_seconds, calls = TIMERS.get(name, (0, 0))
+        TIMERS[name] = (existing_seconds + total_seconds, calls + 1)
+
+
+@atexit.register
+def print_timer():
+    """Print any cumulative timers that have been stored during exit."""
+    if not TIMERS:
+        return
+
+    total = sum(i[0] for i in TIMERS.values())
+    for name, (seconds, calls) in sorted(TIMERS.items(), key=lambda i: i[1]):
+        percent = int((seconds / total) * 100)
+        seconds = round(seconds, 5)
+        print(f'CUM_TIMER: {repr(name)} elapsed {seconds} cumulative seconds ({percent}%)'
+              f' {calls} calls', file=sys.stderr)
 
 
 def limit_concurrent(limit: int):
@@ -850,10 +977,6 @@ def limit_concurrent(limit: int):
             return wrapped
 
     return wrapper
-
-
-async def count_files(path: pathlib.Path) -> int:
-    return len([i for i in walk(path) if i.is_file()])
 
 
 def truncate_object_bytes(obj: Union[List[str], str, None], maximum_bytes: int) -> List[str]:

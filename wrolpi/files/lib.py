@@ -4,6 +4,7 @@ import glob
 import pathlib
 import re
 import subprocess
+from asyncio import Task
 from functools import wraps
 from pathlib import Path
 from typing import List, Tuple, Union
@@ -13,12 +14,12 @@ from sqlalchemy.orm import Session
 
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
-    get_files_and_directories, apply_modelers, apply_after_refresh, get_model_by_table_name
+    get_files_and_directories, apply_modelers, apply_after_refresh, get_model_by_table_name, chunks_by_name
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidFile
 from wrolpi.files.models import File
-from wrolpi.vars import PYTEST
+from wrolpi.vars import PYTEST, FILE_REFRESH_CHUNK_SIZE
 
 try:
     import magic
@@ -88,20 +89,6 @@ def delete_file(file: str):
 
 FILE_NAME_REGEX = re.compile(r'[_ .]')
 
-
-def split_file_name_into_words(path: Path) -> List[str]:
-    """
-    Split a file name into words.
-
-    >>> split_path_stem_and_suffix(Path('foo.mp4'))
-    ['foo']
-    >>> split_path_stem_and_suffix(Path('foo bar.mp4'))
-    ['foo', 'bar']
-    """
-    words = [str(i) for i in FILE_NAME_REGEX.split(path.stem)]
-    return words
-
-
 FILE_BIN = which('file', '/usr/bin/file')
 
 
@@ -144,55 +131,88 @@ def split_path_stem_and_suffix(path: Union[pathlib.Path, str]) -> Tuple[str, str
     return path.name, ''
 
 
+refresh_logger = logger.getChild('refresh')
+
+
 @wrol_mode_check
-def _refresh_files_list(paths: List[pathlib.Path], idempotency: datetime.datetime):
+async def _refresh_files_list(paths: List[pathlib.Path], idempotency: datetime.datetime):
     """Upsert, index, and model all provided paths."""
     # Update the idempotency if any files already in the DB.
     if not paths:
         return
 
-    paths = set(paths)
+    for idx, chunk in enumerate(map(set, chunks_by_name(paths, FILE_REFRESH_CHUNK_SIZE))):
+        with get_db_session(commit=True) as session:
+            existing_files = list(session.query(File).filter(File.path.in_(chunk)))
+            existing_paths = {i.path for i in existing_files}
+            # Add any new files into the database.
+            new_files = []
+            if new_paths := (chunk - existing_paths):
+                new_files = [File(path=i, idempotency=idempotency, mimetype=get_mimetype(i)) for i in new_paths]
+                session.add_all(new_files)
+                session.flush(new_files)
+            # Apply models to all files.  Many files will have no model.
+            all_files = existing_files + new_files
+            apply_modelers(all_files, session)
 
-    with get_db_session(commit=True) as session:
-        existing_files = list(session.query(File).filter(File.path.in_(paths)))
-        for existing_file in existing_files:
-            existing_file.idempotency = idempotency
-        session.commit()
+            # Update idempotency for existing files after modelers.  Otherwise SQLAlchemy forgets.
+            for existing_file in existing_files:
+                existing_file.idempotency = idempotency
 
-        existing_paths = {i.path for i in existing_files}
-        # Add any new files into the database.
-        new_files = []
-        if new_paths := (paths - existing_paths):
-            new_files = [File(path=i, idempotency=idempotency) for i in new_paths]
-            session.add_all(new_files)
-        # Commit before modeling.  Just in case modeling fails.
-        session.commit()
+        if idx > 0:
+            parent = all_files[0].path.parent
+            refresh_logger.debug(f'Committed chunk of {len(chunk)} files in {parent}')
 
-        # Apply models to all files.  Many files will have no model.
-        apply_modelers(existing_files + new_files, session)
+        # Sleep between chunks to catch cancel.
+        await asyncio.sleep(0)
 
 
-refresh_logger = logger.getChild('refresh')
-
-
-async def _refresh_directory_files_recursively(directory, idempotency):
-    """
-    Refresh all files in a directory, recursively refresh all files in subdirectories.
-    """
+async def _refresh_directory_files_recursively(directory: pathlib.Path, idempotency: datetime):
+    """Refresh all files in a directory, recursively refresh all files in subdirectories."""
     directories = [directory, ]
     while directories:
         directory = directories.pop(0)
         try:
             files, new_directories = get_files_and_directories(directory)
-            refresh_logger.debug(f'Refreshing {len(files)} files in {directory}')
             directories.extend(new_directories)
-            _refresh_files_list(files, idempotency)
+            if files:
+                refresh_logger.info(f'Refreshing {len(files)} files in {directory}')
+                await _refresh_files_list(files, idempotency)
         except Exception as e:
-            logger.error(f'Failed to refresh files in {directory}', exc_info=e)
+            refresh_logger.error(f'Failed to refresh files in {directory}', exc_info=e)
+        except asyncio.CancelledError:
+            refresh_logger.error(f'Refresh canceled during {directory}')
+            raise
+
+
+REFRESH_TASKS: List[Task] = []
+
+
+async def cancel_refresh_tasks():
+    """Cancel all refresh tasks, if any."""
+    if REFRESH_TASKS:
+        refresh_logger.warning(f'Canceling {len(REFRESH_TASKS)} refreshes')
+        for task in REFRESH_TASKS:
+            task.cancel()
+        await asyncio.gather(*REFRESH_TASKS)
+
+
+def cancelable_wrapper(func: callable):
+    @wraps(func)
+    async def wrapped(*args, **kwargs):
+        if PYTEST:
+            return await func(*args, **kwargs)
+
+        task = asyncio.create_task(func(*args, **kwargs))
+        REFRESH_TASKS.append(task)
+
+    return wrapped
 
 
 @limit_concurrent(1)  # Only one refresh at a time.
-async def _refresh_all_files():
+@wrol_mode_check
+@cancelable_wrapper
+async def refresh_files():
     """Find, model, and index all files in the media directory."""
     refresh_logger.warning('Refreshing all files')
 
@@ -217,18 +237,9 @@ async def _refresh_all_files():
     refresh_logger.warning('Done refreshing Files')
 
 
-@wraps(_refresh_all_files)
-@wrol_mode_check
-async def refresh_files():
-    """Schedule a refresh task if not testing.  If testing, do a synchronous refresh."""
-    if PYTEST:
-        return await _refresh_all_files()
-
-    asyncio.create_task(_refresh_all_files())
-
-
 @limit_concurrent(1)
 @wrol_mode_check
+@cancelable_wrapper
 async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str]):
     """Upsert and index all files within a directory (recursively).
 

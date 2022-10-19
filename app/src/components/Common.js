@@ -1,5 +1,5 @@
 import React, {useContext, useEffect, useState} from "react";
-import {Card, Container, Image, Input, Pagination, Responsive, TableCell, TableRow} from 'semantic-ui-react';
+import {Card, Container, IconGroup, Image, Input, Pagination, Responsive, TableCell, TableRow} from 'semantic-ui-react';
 import {Link, NavLink} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
@@ -732,6 +732,24 @@ export function DarkModeToggle() {
     return <>
         <Toggle checked={darkMode} onChange={toggleDarkMode} icon={darkMode ? 'moon' : 'sun'}/>
     </>
+}
+
+export function HotspotStatusIcon() {
+    const {on, setHotspot} = useHotspot();
+    const toggleHotspot = (e) => {
+        e.preventDefault();
+        if (on != null) {
+            setHotspot(!on);
+        }
+    }
+
+    return <a href='#' onClick={toggleHotspot}>
+        <IconGroup size='large'>
+            <Icon name='wifi' disabled={on !== true}/>
+            {on === false && <Icon corner name='x'/>}
+            {on === null && <Icon corner name='question'/>}
+        </IconGroup>
+    </a>
 }
 
 export function useTitle(title) {

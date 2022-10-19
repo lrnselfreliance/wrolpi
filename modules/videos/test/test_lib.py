@@ -70,14 +70,14 @@ def test_parse_video_file_name(file_name, expected):
 
 
 @pytest.mark.asyncio
-async def test_associated_files(test_session, test_directory, video_file, image_file, vtt_file1):
+async def test_associated_video_files(test_session, test_directory, video_file, image_file, vtt_file1):
     """A Video file has files related to it.  They should be attached to the Video record."""
     caption_file = video_file.with_suffix('.en.vtt')
     vtt_file1.rename(caption_file)
     poster_file = video_file.with_suffix('.jpeg')
     image_file.rename(poster_file)
 
-    await files_lib._refresh_all_files()
+    await files_lib.refresh_files()
     test_session.commit()
 
     # All files were found.
@@ -93,7 +93,7 @@ async def test_associated_files(test_session, test_directory, video_file, image_
     assert video.video_file.size
     assert video.video_file.indexed
 
-    await files_lib._refresh_all_files()
+    await files_lib.refresh_files()
     test_session.commit()
 
     # No new files were added.
@@ -113,7 +113,7 @@ async def test_unassociated_video(test_session, test_directory, video_file):
     video_file.rename(new_video_file_path)
     video_file = new_video_file_path
 
-    await files_lib._refresh_all_files()
+    await files_lib.refresh_files()
     test_session.commit()
 
     video: Video = test_session.query(Video).one()

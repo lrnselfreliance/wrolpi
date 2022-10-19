@@ -4,12 +4,13 @@ import tempfile
 import unittest
 from datetime import date, datetime
 from decimal import Decimal
+from itertools import zip_longest
 from unittest import mock
 
 import pytest
 
-from wrolpi.common import insert_parameter, date_range, api_param_limiter, chdir, zig_zag, \
-    escape_file_name, match_paths_to_suffixes, truncate_object_bytes, check_media_directory
+import wrolpi.vars
+from wrolpi import common
 from wrolpi.dates import set_timezone, now
 from wrolpi.errors import InvalidTimezone
 from wrolpi.test.common import build_test_directories
@@ -63,51 +64,51 @@ def test_insert_parameter():
     def func(foo, bar):
         pass
 
-    results = insert_parameter(func, 'bar', 'bar', (1,), {})
+    results = common.insert_parameter(func, 'bar', 'bar', (1,), {})
     assert results == ((1, 'bar'), {})
 
     def func(foo, bar, baz):
         pass
 
-    results = insert_parameter(func, 'bar', 'bar', (1, 2), {})
+    results = common.insert_parameter(func, 'bar', 'bar', (1, 2), {})
     assert results == ((1, 'bar', 2), {})
 
     def func(foo, baz, bar=None):
         pass
 
-    results = insert_parameter(func, 'bar', 'bar', (1, 2), {})
+    results = common.insert_parameter(func, 'bar', 'bar', (1, 2), {})
     assert results == ((1, 2, 'bar'), {})
 
     def func(foo, baz, bar=None):
         pass
 
-    results = insert_parameter(func, 'baz', 'baz', (1, 2), {})
+    results = common.insert_parameter(func, 'baz', 'baz', (1, 2), {})
     assert results == ((1, 'baz', 2), {})
 
     def func(foo, baz, qux=None, bar=None):
         pass
 
-    results = insert_parameter(func, 'bar', 'bar', (1, 2, 3), {})
+    results = common.insert_parameter(func, 'bar', 'bar', (1, 2, 3), {})
     assert results == ((1, 2, 3, 'bar'), {})
 
     # bar is not defined as a parameter!
     def func(foo):
         pass
 
-    pytest.raises(TypeError, insert_parameter, func, 'bar', 'bar', (1,), {})
+    pytest.raises(TypeError, common.insert_parameter, func, 'bar', 'bar', (1,), {})
 
 
 class TestCommon(unittest.TestCase):
 
     def test_date_range(self):
         # A single step results in the start.
-        result = date_range(date(1970, 1, 1), date(1970, 1, 2), 1)
+        result = common.date_range(date(1970, 1, 1), date(1970, 1, 2), 1)
         assert result == [
             date(1970, 1, 1),
         ]
 
         # Many steps on a single day results in the same day.
-        result = date_range(date(1970, 1, 1), date(1970, 1, 1), 5)
+        result = common.date_range(date(1970, 1, 1), date(1970, 1, 1), 5)
         assert result == [
             date(1970, 1, 1),
             date(1970, 1, 1),
@@ -117,7 +118,7 @@ class TestCommon(unittest.TestCase):
         ]
 
         # Many steps on a single datetime results in a range of times.
-        result = date_range(datetime(1970, 1, 1), datetime(1970, 1, 1, 23, 59, 59), 5)
+        result = common.date_range(datetime(1970, 1, 1), datetime(1970, 1, 1, 23, 59, 59), 5)
         assert result == [
             datetime(1970, 1, 1, 0, 0),
             datetime(1970, 1, 1, 4, 47, 59, 800000),
@@ -126,8 +127,8 @@ class TestCommon(unittest.TestCase):
             datetime(1970, 1, 1, 19, 11, 59, 200000),
         ]
 
-        # date_range is not inclusive, like range().
-        result = date_range(date(1970, 1, 1), date(1970, 1, 5), 4)
+        # common.date_range is not inclusive, like range().
+        result = common.date_range(date(1970, 1, 1), date(1970, 1, 5), 4)
         assert result == [
             date(1970, 1, 1),
             date(1970, 1, 2),
@@ -136,7 +137,7 @@ class TestCommon(unittest.TestCase):
         ]
 
         # Reversed dates are supported.
-        result = date_range(date(1970, 1, 5), date(1970, 1, 1), 4)
+        result = common.date_range(date(1970, 1, 5), date(1970, 1, 1), 4)
         assert result == [
             date(1970, 1, 5),
             date(1970, 1, 4),
@@ -145,7 +146,7 @@ class TestCommon(unittest.TestCase):
         ]
 
         # Large date spans are supported.
-        result = date_range(date(1970, 1, 1), date(2020, 5, 1), 4)
+        result = common.date_range(date(1970, 1, 1), date(2020, 5, 1), 4)
         assert result == [
             date(1970, 1, 1),
             date(1982, 8, 1),
@@ -153,7 +154,7 @@ class TestCommon(unittest.TestCase):
             date(2007, 10, 1),
         ]
 
-        result = date_range(datetime(1970, 1, 1, 0, 0, 0), datetime(1970, 1, 1, 10, 0), 8)
+        result = common.date_range(datetime(1970, 1, 1, 0, 0, 0), datetime(1970, 1, 1, 10, 0), 8)
         assert result == [
             datetime(1970, 1, 1, 0, 0),
             datetime(1970, 1, 1, 1, 15),
@@ -166,7 +167,7 @@ class TestCommon(unittest.TestCase):
         ]
 
         # More steps than days
-        result = date_range(date(1970, 1, 1), date(1970, 1, 7), 10)
+        result = common.date_range(date(1970, 1, 1), date(1970, 1, 7), 10)
         assert result == [
             date(1970, 1, 1),
             date(1970, 1, 1),
@@ -215,7 +216,7 @@ class TestCommon(unittest.TestCase):
     ]
 )
 def test_api_param_limiter(i, expected):
-    limiter = api_param_limiter(100)  # should never return an integer greater than 100.
+    limiter = common.api_param_limiter(100)  # should never return an integer greater than 100.
     assert limiter(i) == expected
 
 
@@ -227,22 +228,22 @@ def test_chdir():
     home = os.environ.get('HOME')
     assert home
 
-    with chdir():
+    with common.chdir():
         assert os.getcwd() != original
         assert str(os.getcwd()).startswith('/tmp')
         assert os.environ['HOME'] != os.getcwd()
     # Replace $HOME
-    with chdir(with_home=True):
+    with common.chdir(with_home=True):
         assert os.getcwd() != original
         assert str(os.getcwd()).startswith('/tmp')
         assert os.environ['HOME'] == os.getcwd()
 
     with tempfile.TemporaryDirectory() as d:
         # Without replacing $HOME
-        with chdir(pathlib.Path(d), with_home=True):
+        with common.chdir(pathlib.Path(d), with_home=True):
             assert os.getcwd() == d
             assert os.environ['HOME'] == os.getcwd()
-        with chdir(pathlib.Path(d)):
+        with common.chdir(pathlib.Path(d)):
             assert os.getcwd() == d
             assert os.environ['HOME'] != os.getcwd()
 
@@ -271,7 +272,7 @@ def test_chdir():
     ])
 ])
 def test_zig_zag(low, high, expected):
-    zagger = zig_zag(low, high)
+    zagger = common.zig_zag(low, high)
     for i in expected:
         result = next(zagger)
         assert result == i
@@ -297,7 +298,7 @@ def test_zig_zag(low, high, expected):
     ]
 )
 def test_escape_file_name(name, expected):
-    assert escape_file_name(name) == expected
+    assert common.escape_file_name(name) == expected
 
 
 @pytest.mark.parametrize(
@@ -319,37 +320,121 @@ def test_escape_file_name(name, expected):
 def test_match_paths_to_suffixes(paths, suffix_groups, expected):
     paths = [pathlib.Path(i) for i in paths]
     expected = tuple(pathlib.Path(i) if i else None for i in expected)
-    assert (i := match_paths_to_suffixes(paths, suffix_groups)) == expected, f'{i} != {expected}'
+    assert (i := common.match_paths_to_suffixes(paths, suffix_groups)) == expected, f'{i} != {expected}'
 
 
 def test_truncate_object_bytes():
     """
     Objects can be truncated (lists will be shortened) so they will fit in tsvector columns.
     """
-    assert truncate_object_bytes(['foo'] * 10, 100) == ['foo'] * 5
-    assert truncate_object_bytes(['foo'] * 1_000, 100) == ['foo'] * 5
-    assert truncate_object_bytes(['foo'] * 1_000_000, 100) == ['foo'] * 5
-    assert truncate_object_bytes(['foo'] * 1_000_000, 200) == ['foo'] * 14
-    assert truncate_object_bytes([], 200) == []
+    assert common.truncate_object_bytes(['foo'] * 10, 100) == ['foo'] * 5
+    assert common.truncate_object_bytes(['foo'] * 1_000, 100) == ['foo'] * 5
+    assert common.truncate_object_bytes(['foo'] * 1_000_000, 100) == ['foo'] * 5
+    assert common.truncate_object_bytes(['foo'] * 1_000_000, 200) == ['foo'] * 14
+    assert common.truncate_object_bytes([], 200) == []
 
-    assert truncate_object_bytes(None, 100) is None
-    assert truncate_object_bytes('', 100) == ''
+    assert common.truncate_object_bytes(None, 100) is None
+    assert common.truncate_object_bytes('', 100) == ''
 
-    assert truncate_object_bytes('foo' * 100, 99) == 'foofoofoofoofoofoofoofoofoofoofoofoofoof'
-    assert truncate_object_bytes('foo' * 100, 80) == 'foofoofoofoofoofoofoofoofo'
-    assert truncate_object_bytes('foo' * 100, 55) == 'foofo'
-    assert truncate_object_bytes('foo' * 100, 51) == 'f'
-    assert truncate_object_bytes('foo' * 100, 50) == ''
-    assert truncate_object_bytes('foo' * 100, 0) == ''
+    assert common.truncate_object_bytes('foo' * 100, 99) == 'foofoofoofoofoofoofoofoofoofoofoofoofoof'
+    assert common.truncate_object_bytes('foo' * 100, 80) == 'foofoofoofoofoofoofoofoofo'
+    assert common.truncate_object_bytes('foo' * 100, 55) == 'foofo'
+    assert common.truncate_object_bytes('foo' * 100, 51) == 'f'
+    assert common.truncate_object_bytes('foo' * 100, 50) == ''
+    assert common.truncate_object_bytes('foo' * 100, 0) == ''
 
 
 def test_check_media_directory(test_directory):
     """The directory provided by the test_directory fixture is a valid media directory."""
-    assert check_media_directory() is True
+    assert common.check_media_directory() is True
 
 
 def test_bad_check_media_directory():
     """/dev/full is not a valid media directory, warnings are issued and the check fails."""
     with mock.patch('wrolpi.common.get_media_directory') as mock_get_media_directory:
         mock_get_media_directory.return_value = pathlib.Path('/dev/full')
-        assert check_media_directory() is False
+        assert common.check_media_directory() is False
+
+
+def test_chunks_by_name(test_directory, make_files_structure):
+    """`chunks_by_name` breaks a list of paths on the name change close to the size."""
+    with pytest.raises(ValueError):
+        assert list(common.chunks_by_name([], 0)) == [[]]
+
+    assert list(common.chunks_by_name([], 5)) == [[]]
+    assert list(common.chunks_by_name([1, 2, 3], 5)) == [[1, 2, 3]]
+
+    files = make_files_structure([
+        'foo.mp4', 'foo.txt', 'foo.png', 'foo.info.json',
+        'bar.mp4', 'bar.readability.txt', 'bar.jpeg', 'bar.info.json',
+        'baz.mp4', 'baz.txt', 'baz.jpg', 'baz.info.json',
+        'qux.mp4', 'qux.txt', 'qux.tif', 'qux.info.json',
+    ])
+
+    def assert_chunks(size, files_, expected):
+        for chunk, expected_chunk in zip_longest(list(common.chunks_by_name(files_, size)), expected):
+            assert chunk == [test_directory / i for i in expected_chunk]
+
+    assert_chunks(8, files, [
+        ['bar.info.json', 'bar.jpeg', 'bar.mp4', 'bar.readability.txt',
+         'baz.info.json', 'baz.jpg', 'baz.mp4', 'baz.txt',
+         'foo.info.json', 'foo.mp4', 'foo.png', 'foo.txt'],
+        ['qux.info.json', 'qux.mp4', 'qux.tif', 'qux.txt'],
+    ])
+
+    assert_chunks(6, files, [
+        ['bar.info.json', 'bar.jpeg', 'bar.mp4', 'bar.readability.txt',
+         'baz.info.json', 'baz.jpg', 'baz.mp4', 'baz.txt'],
+        ['foo.info.json', 'foo.mp4', 'foo.png', 'foo.txt',
+         'qux.info.json', 'qux.mp4', 'qux.tif', 'qux.txt'],
+    ])
+
+    assert_chunks(5, files, [
+        ['bar.info.json', 'bar.jpeg', 'bar.mp4', 'bar.readability.txt',
+         'baz.info.json', 'baz.jpg', 'baz.mp4', 'baz.txt'],
+        ['foo.info.json', 'foo.mp4', 'foo.png', 'foo.txt',
+         'qux.info.json', 'qux.mp4', 'qux.tif', 'qux.txt'],
+    ])
+
+    assert_chunks(3, files, [
+        ['bar.info.json', 'bar.jpeg', 'bar.mp4', 'bar.readability.txt'],
+        ['baz.info.json', 'baz.jpg', 'baz.mp4', 'baz.txt'],
+        ['foo.info.json', 'foo.mp4', 'foo.png', 'foo.txt'],
+        ['qux.info.json', 'qux.mp4', 'qux.tif', 'qux.txt'],
+    ])
+
+    assert_chunks(1, files, [
+        ['bar.info.json', 'bar.jpeg', 'bar.mp4', 'bar.readability.txt'],
+        ['baz.info.json', 'baz.jpg', 'baz.mp4', 'baz.txt'],
+        ['foo.info.json', 'foo.mp4', 'foo.png', 'foo.txt'],
+        ['qux.info.json', 'qux.mp4', 'qux.tif', 'qux.txt'],
+    ])
+
+    files = make_files_structure(['1.mp4', '1.txt', '2.mp4', '2.txt', '2.png', '3.mp4'])
+    assert_chunks(1, files, [['1.mp4', '1.txt'], ['2.mp4', '2.png', '2.txt'], ['3.mp4']])
+    assert_chunks(3, files, [['1.mp4', '1.txt', '2.mp4', '2.png', '2.txt'], ['3.mp4']])
+    assert_chunks(6, files, [['1.mp4', '1.txt', '2.mp4', '2.png', '2.txt', '3.mp4']])
+    # List is not sorted because it is less than the size.
+    assert_chunks(20, files, [['1.mp4', '1.txt', '2.mp4', '2.txt', '2.png', '3.mp4']])
+
+
+@pytest.mark.parametrize(
+    'value,expected', [
+        ('true', True),
+        ('t', True),
+        ('True', True),
+        ('1', True),
+        ('yes', True),
+        ('no', False),
+        ('0', False),
+        ('False', False),
+        ('false', False),
+        ('f', False),
+        ('other', False),
+        ('trust', False),
+        ('', False),
+        (None, False),
+    ]
+)
+def test_truthy_arg(value, expected):
+    assert wrolpi.vars.truthy_arg(value) is expected, f'{value} != {expected}'

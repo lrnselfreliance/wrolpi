@@ -1,4 +1,3 @@
-import itertools
 import json
 import pathlib
 from abc import ABC
@@ -63,10 +62,10 @@ def archive_modeler(groups: Dict[str, List[File]], session: Session):
         if any(lib.is_singlefile_file(i.path) for i in group):
             archive_groups[stem] = group
 
-    count = itertools.cycle(range(101))
     for stem, group in archive_groups.items():
         readability_file, singlefile_file, readability_json_file, readability_txt_file, screenshot_file = \
             match_archive_files(group)
+
         archive: Archive = Archive.find_by_path(singlefile_file.path, session)
         if not archive:
             archive = Archive(singlefile_file=singlefile_file)
@@ -78,16 +77,16 @@ def archive_modeler(groups: Dict[str, List[File]], session: Session):
 
         if archive.readability_file:
             archive.readability_file.associated = True
-            archive.readability_file.do_index()
+            archive.readability_file.do_stats()
         if archive.readability_json_file:
             archive.readability_json_file.associated = True
-            archive.readability_json_file.do_index()
+            archive.readability_json_file.do_stats()
         if archive.readability_txt_file:
             archive.readability_txt_file.associated = True
-            archive.readability_txt_file.do_index()
+            archive.readability_txt_file.do_stats()
         if archive.screenshot_file:
             archive.screenshot_file.associated = True
-            archive.screenshot_file.do_index()
+            archive.screenshot_file.do_stats()
 
         archive.singlefile_file.model = Archive.__tablename__
 
@@ -96,10 +95,6 @@ def archive_modeler(groups: Dict[str, List[File]], session: Session):
 
         # Remove this group, it will not be processed by other modelers.
         del groups[stem]
-
-        if next(count) == 100:
-            # Commit occasionally.
-            session.commit()
 
 
 @register_after_refresh
@@ -130,15 +125,14 @@ def archive_cleanup():
     with get_db_session(commit=True) as session:
         # Remove any Domains without any Archives.
         domain_ids = [i[0] for i in session.execute('SELECT DISTINCT domain_id FROM archive') if i[0]]
-        deleted = 0
         for domain in session.query(Domain):
             if domain.id not in domain_ids:
-                deleted += 1
                 session.delete(domain)
 
 
 @register_indexer('text/html')
 class ArchiveIndexer(Indexer, ABC):
+    """Gathers index data from the files associated with an Archive."""
 
     @staticmethod
     def get_title(file: File):

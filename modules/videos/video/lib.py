@@ -34,8 +34,8 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
         caption = video.video_file.d_text
         video = video.video_file.__json__()
         video['video']['caption'] = caption
-        previous_video = previous_video.video_file.__json__() if previous_video else None
-        next_video = next_video.video_file.__json__() if next_video else None
+        previous_video = previous_video.video_file.__json__() if previous_video and previous_video.video_file else None
+        next_video = next_video.video_file.__json__() if next_video and next_video.video_file else None
 
     return video, previous_video, next_video
 

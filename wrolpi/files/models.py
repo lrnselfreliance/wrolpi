@@ -91,18 +91,7 @@ class File(ModelHelper, Base):
 
     def do_index(self, force_index: bool = False):
         """Gather any missing information about this file.  Index the contents of this file using an Indexer."""
-        from wrolpi.files.lib import split_path_stem_and_suffix
-
-        if not self.mimetype:
-            from wrolpi.files.lib import get_mimetype
-            self.mimetype = get_mimetype(self.path)
-
-        self.title = self.title or self.path.name
-        _, self.suffix = split_path_stem_and_suffix(self.path)
-
-        stat = self.path.stat()
-        self.size = stat.st_size
-        self.modification_datetime = from_timestamp(stat.st_mtime)
+        self.do_stats()
 
         try:
             if force_index or self.indexed is not True:
@@ -118,6 +107,22 @@ class File(ModelHelper, Base):
             self.indexed = True
         except Exception as e:
             logger.error(f'Failed to index {self.path}', exc_info=e)
+
+    def do_stats(self):
+        """Assign the mimetype, title, size, modification_time of this file."""
+        from wrolpi.files.lib import split_path_stem_and_suffix
+        if not self.mimetype:
+            from wrolpi.files.lib import get_mimetype
+            self.mimetype = get_mimetype(self.path)
+        self.title = self.title or self.path.name
+        stat = self.path.stat()
+        self.size = stat.st_size
+        self.modification_datetime = from_timestamp(stat.st_mtime)
+        name, self.suffix = split_path_stem_and_suffix(self.path)
+
+        # Use title as the a_text temporarily, this may be overwritten by indexer.
+        # TODO this is very slow.  What can be done instead?
+        self.a_text = self.a_text or name
 
     @validates('path')
     def validate_path(self, key, value):

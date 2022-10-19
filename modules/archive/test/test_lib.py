@@ -12,6 +12,7 @@ from modules.archive.lib import get_or_create_domain, get_new_archive_files, del
 from modules.archive.models import Archive, Domain
 from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_session
+from wrolpi.files.lib import refresh_files
 from wrolpi.files.models import File
 from wrolpi.root_api import CustomJSONEncoder
 from wrolpi.test.common import skip_circleci
@@ -428,6 +429,43 @@ def test_refresh_archives(test_session, test_directory, test_client, make_files_
     assert response.json['files'][0].get('path') == 'archive/example.com/2021-10-05-16-20-10_NA.html', \
         'Could not find readability text file containing "text"'
     assert response.json['files'][0]['archive']['archive_datetime'], 'Archive has no datetime'
+
+
+@pytest.mark.asyncio
+async def test_refresh_archives_index(test_session, test_directory, test_client, make_files_structure):
+    """Archives are indexed using ArchiveIndexer and archive_modeler."""
+    # The start of a typical singlefile html file.
+    singlefile_contents = '''<!DOCTYPE html> <html lang="en"><!--
+ Page saved with SingleFile 
+ url: https://example.com
+ saved date: Mon May 16 2022 23:51:35 GMT+0000 (Coordinated Universal Time)
+--><head><meta charset="utf-8">'''
+
+    singlefile, *_ = make_files_structure({
+        'archive/example.com/2021-10-05-16-20-10_NA.html': singlefile_contents,
+        'archive/example.com/2021-10-05-16-20-10_NA.png': None,
+        'archive/example.com/2021-10-05-16-20-10_NA.readability.txt': 'article text contents',
+        'archive/example.com/2021-10-05-16-20-10_NA.readability.json':
+            '{"url": "https://example.com", "title": "the title"}',
+        'archive/example.com/2021-10-05-16-20-10_NA.readability.html': '<html></html>',
+    })
+
+    await refresh_files()
+
+    archive: Archive = test_session.query(Archive).one()
+    assert archive.singlefile_path == singlefile
+    assert archive.singlefile_file.a_text == 'the title'
+    assert archive.singlefile_file.d_text == 'article text contents'
+
+    # The associated files are not indexed.
+    for name in ('screenshot_file', 'readability_file', 'readability_json_file', 'readability_txt_file'):
+        file = getattr(archive, name)
+        assert file.associated is True, 'The associated file is not marked'
+        assert file.indexed is False
+        # file.a_text is the file name.
+        assert not file.b_text
+        assert not file.c_text
+        assert not file.d_text
 
 
 def test_refresh_archives_invalid_file(test_session, test_directory, test_client, make_files_structure):

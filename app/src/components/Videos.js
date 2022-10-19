@@ -169,7 +169,7 @@ function Statistics() {
     }
 
     const videoNames = [
-        {key: 'videos', label: 'Downloaded Videos'},
+        {key: 'videos', label: 'Videos'},
         {key: 'favorites', label: 'Favorite Videos'},
         {key: 'sum_size', label: 'Total Size'},
         {key: 'max_size', label: 'Largest Video'},

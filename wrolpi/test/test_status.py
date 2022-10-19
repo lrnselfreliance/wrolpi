@@ -59,22 +59,26 @@ async def test_get_drives_info():
 @pytest.mark.asyncio
 async def test_get_bandwidth_info():
     """Bandwidth requires psutil"""
-    bandwidths = await status.get_bandwidth_info()
-    assert bandwidths == []
+    nic_bandwidths, disk_bandwidths = await status.get_bandwidth_info()
+    assert nic_bandwidths == []
+    assert disk_bandwidths == []
 
     await status.bandwidth_worker(2)
-    bandwidths = await status.get_bandwidth_info()
-    assert isinstance(bandwidths, list)
-    assert len(bandwidths) > 0
-    assert isinstance(bandwidths[0], status.BandwidthInfo)
+    nic_bandwidths, disk_bandwidths = await status.get_bandwidth_info()
+    assert isinstance(nic_bandwidths, list)
+    assert len(nic_bandwidths) > 0
+    assert isinstance(nic_bandwidths[0], status.NICBandwidthInfo)
+    assert isinstance(disk_bandwidths, list)
+    assert len(disk_bandwidths) > 0
+    assert isinstance(disk_bandwidths[0], status.DiskBandwidthInfo)
 
     with mock.patch('wrolpi.status.psutil.net_io_counters') as mock_net_io_counters:
         # NO FALLBACK!
         mock_net_io_counters.side_effect = Exception('testing no psutil')
         await status.bandwidth_worker(1)
-        bandwidths = await status.get_bandwidth_info()
-        assert isinstance(bandwidths[0].bytes_recv, int)
-        assert isinstance(bandwidths[0].bytes_sent, int)
-        assert isinstance(bandwidths[0].elapsed, int)
-        assert isinstance(bandwidths[0].speed, int)
-        assert isinstance(bandwidths[0].name, str)
+        nic_bandwidths, disk_bandwidths = await status.get_bandwidth_info()
+        assert isinstance(nic_bandwidths[0].bytes_recv, int)
+        assert isinstance(nic_bandwidths[0].bytes_sent, int)
+        assert isinstance(nic_bandwidths[0].elapsed, int)
+        assert isinstance(nic_bandwidths[0].speed, int)
+        assert isinstance(nic_bandwidths[0].name, str)

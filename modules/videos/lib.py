@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 
 from wrolpi import before_startup
-from wrolpi.common import ConfigFile, get_media_directory, sanitize_link
+from wrolpi.common import ConfigFile, get_media_directory, sanitize_link, after_refresh, register_after_refresh
 from wrolpi.dates import from_timestamp, Seconds
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.files.models import File
@@ -375,8 +375,14 @@ def save_channels_config(session=None, preserve_favorites: bool = True):
 
 
 @before_startup
+@register_after_refresh
 def import_channels_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
+    if PYTEST and not TEST_CHANNELS_CONFIG:
+        logger.warning(f'Not importing channels during this test.  Use `test_channels_config` fixture if you would'
+                       f'like to call this.')
+        return
+
     logger.info('Importing videos config')
     try:
         config = get_channels_config()

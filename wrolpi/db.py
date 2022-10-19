@@ -1,3 +1,4 @@
+import logging
 from contextlib import contextmanager
 from functools import wraps
 from typing import ContextManager, Tuple, List, Union, Type
@@ -41,7 +42,7 @@ postgres_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/{d
 
 # This engine is used for all normal tasks (except testing).
 db_args = get_db_args()
-connect_args = dict(application_name='wrolpi_api')
+connect_args = dict(application_name='wrolpi_api', connect_timeout=600)
 uri = 'postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**db_args)
 engine = create_engine(uri, poolclass=NullPool, connect_args=connect_args)
 session_maker = sessionmaker(bind=engine)
@@ -73,6 +74,9 @@ def get_db_context() -> Tuple[create_engine, Session]:
     if PYTEST and not local_engine.url.database.startswith('wrolpi_testing_'):
         raise ValueError(f'Running tests, but a test database is not being used!! {local_engine.url=}')
     return local_engine, session
+
+
+# logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 
 
 @contextmanager

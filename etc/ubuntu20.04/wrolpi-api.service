@@ -5,7 +5,7 @@ PartOf=wrolpi.target
 
 [Service]
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /opt/wrolpi/main.py api
+ExecStart=/usr/bin/python3 /opt/wrolpi/main.py -v api
 Group=wrolpi
 User=wrolpi
 WorkingDirectory=/opt/wrolpi/

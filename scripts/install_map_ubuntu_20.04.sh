@@ -18,6 +18,21 @@ apt install -y libboost-all-dev git tar unzip wget bzip2 build-essential autocon
 /usr/bin/npm install -g carto
 /usr/bin/carto -v
 
+function yes_or_no {
+  while true; do
+    read -p "$* [y/n]:" yn
+    case $yn in
+    [Yy]*) return 0 ;;
+    [Nn]*) return 1 ;;
+    esac
+  done
+}
+
+sudo -u postgres psql -c '\l' | grep gis &&
+  yes_or_no "Map database already exists.  Replace it?" &&
+  systemctl stop renderd &&
+  sudo -u postgres dropdb gis
+
 # Create `gis` database for map.
 sudo -u postgres psql -c '\l' | grep gis || sudo -u postgres createdb -E UTF8 -O wrolpi gis
 sudo -u postgres psql -d gis -c "CREATE EXTENSION postgis;" || :
@@ -64,7 +79,7 @@ while [ "${COUNT}" -lt "${MAX_TRIES}" ]; do
     external_data=true
   [[ "${dc_import}" = false ]] &&
     # Run import in "create" mode so basic tables will be created.
-    sudo -u wrolpi osm2pgsql -d gis --create --slim -G --hstore --tag-transform-script \
+    sudo -u wrolpi nice -n 18 osm2pgsql -d gis --create --slim -G --hstore --tag-transform-script \
       /opt/openstreetmap-carto/openstreetmap-carto.lua -C 2000 --number-processes 4 \
       -S /opt/openstreetmap-carto/openstreetmap-carto.style /tmp/district-of-columbia-latest.osm.pbf &&
     dc_import=true

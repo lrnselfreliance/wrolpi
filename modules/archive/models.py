@@ -12,6 +12,7 @@ from sqlalchemy.orm.collections import InstrumentedList
 from wrolpi.common import ModelHelper, Base, logger
 from wrolpi.dates import TZDateTime
 from wrolpi.errors import InvalidArchive
+from wrolpi.files.lib import split_path_stem_and_suffix
 from wrolpi.files.models import File
 from wrolpi.media_path import MediaPathType
 
@@ -78,6 +79,7 @@ class Archive(Base, ModelHelper):
         return self.archive_datetime > other.archive_datetime
 
     def __json__(self):
+        stem, _ = split_path_stem_and_suffix(self.singlefile_path) if self.singlefile_path else (None, None)
         d = dict(
             archive_datetime=self.archive_datetime,
             domain=self.domain.dict() if self.domain else None,
@@ -88,7 +90,7 @@ class Archive(Base, ModelHelper):
             readability_txt_path=self.readability_txt_path,
             screenshot_path=self.screenshot_path,
             singlefile_path=self.singlefile_path,
-            stem=self.singlefile_path.stem if self.singlefile_path else None,
+            stem=stem,
             title=self.title,
             url=self.url,
         )
@@ -172,7 +174,8 @@ class Archive(Base, ModelHelper):
 
         readability_json_file = self.readability_json_file
         if not readability_json_file or not readability_json_file.path.is_file():
-            raise InvalidArchive(f'Archive must have a readability json file: {self.singlefile_file.path}')
+            logger.warning(f'Archive must have a readability json file: {self.singlefile_file.path}')
+            return
 
         try:
             with readability_json_file.path.open() as fh:

@@ -1,7 +1,6 @@
 #! /usr/bin/env python3
 import argparse
 import logging
-import os
 import sys
 
 import pytz
@@ -12,6 +11,7 @@ from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, admin
 from wrolpi.common import logger, get_config, import_modules, check_media_directory, limit_concurrent, wrol_mode_enabled
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
+from wrolpi.files.lib import cancel_refresh_tasks
 from wrolpi.root_api import api_app
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, PYTEST
 from wrolpi.version import get_version_string
@@ -214,10 +214,11 @@ async def bandwidth_worker(app: Sanic):
 
 @root_api.api_app.signal(Event.SERVER_SHUTDOWN_BEFORE)
 @limit_concurrent(1)
-def handle_server_shutdown(*args, **kwargs):
+async def handle_server_shutdown(*args, **kwargs):
     """Stop downloads when server is shutting down."""
     if not PYTEST:
         download_manager.stop()
+        await cancel_refresh_tasks()
 
 
 if __name__ == '__main__':

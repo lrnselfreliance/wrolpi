@@ -103,6 +103,8 @@ class TextIndexer(Indexer, ABC):
 
     Detects VTT (caption) files and forwards them on."""
 
+    _ignored_suffixes = ('.json', '.vtt', '.srt', '.csv')
+
     @classmethod
     def create_index(cls, file):
         path = file.path.path if hasattr(file.path, 'path') else file.path
@@ -120,10 +122,7 @@ class TextIndexer(Indexer, ABC):
 
     @classmethod
     def detect_special_indexer(cls, file):
-        if file.path.name.endswith('.json'):
-            # JSON files are detected as "text/plain" but we don't want them to be indexed.
-            return DefaultIndexer
-        if file.path.name.endswith('.vtt') or file.path.name.endswith('.srt'):
-            # Don't process caption files.
+        if any(file.path.name.endswith(i) for i in cls._ignored_suffixes):
+            # Some text files aren't for humans.
             return DefaultIndexer
         return cls

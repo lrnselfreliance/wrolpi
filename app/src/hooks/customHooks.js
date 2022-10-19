@@ -1,4 +1,4 @@
-import {useEffect, useState} from "react";
+import {useContext, useEffect, useRef, useState} from "react";
 import {
     favoriteVideo,
     fetchDomains,
@@ -27,6 +27,7 @@ import {
 import {createSearchParams, useSearchParams} from "react-router-dom";
 import {toast} from "react-semantic-toasts";
 import {enumerate, humanFileSize, secondsToFullDuration} from "../components/Common";
+import {StatusContext} from "../contexts/contexts";
 
 const calculatePage = (offset, limit) => {
     return offset && limit ? Math.round((offset / limit) + 1) : 1;
@@ -35,6 +36,25 @@ const calculatePage = (offset, limit) => {
 const calculateTotalPages = (total, limit) => {
     return total && limit ? Math.round(total / limit) + 1 : 1;
 }
+
+export const useRecurringTimeout = (callback, delay) => {
+    const timer = useRef(null);
+
+    useEffect(() => {
+        const repeat = async () => {
+            // Recursively call the callback.
+            await callback();
+            timer.current = window.setTimeout(repeat, delay);
+        }
+
+        // Call the repeating function instantly to fetch data fast.
+        repeat();
+
+        // Clear the timeout on unload.
+        return () => clearTimeout(timer.current);
+    }, [delay])
+}
+
 
 export const useDomains = () => {
     const [domains, setDomains] = useState(null);
@@ -441,34 +461,24 @@ export const useBrowseFiles = () => {
 
 export const useHotspot = () => {
     const [on, setOn] = useState(null);
-
-    const fetchHotspotStatus = async () => {
-        let status;
-        try {
-            status = await getHotspotStatus();
-        } catch (e) {
-            console.error(e);
-        }
-        if (status === 'connected') {
-            // Hotspot is on.
-            setOn(true);
-        } else if (status === 'disconnected' || status === 'unavailable') {
-            // Hotspot can be turned on.
-            setOn(false);
-        } else {
-            // Hotspot is not supported.  API is probably running in a Docker container.
-            setOn(null);
-        }
-    }
+    const {status} = useContext(StatusContext);
 
     useEffect(() => {
-        fetchHotspotStatus();
-    }, []);
+        if (status && status['hotspot_status']) {
+            const {hotspot_status} = status;
+            if (hotspot_status === 'connected') {
+                setOn(true);
+            } else if (hotspot_status === 'disconnected' || hotspot_status === 'unavailable') {
+                setOn(false);
+            } else {
+                setOn(null);
+            }
+        }
+    }, [status]);
 
     const localSetHotspot = async (on) => {
         setOn(null);
         await setHotspot(on);
-        await fetchHotspotStatus();
     }
 
     return {on, setOn, setHotspot: localSetHotspot};
@@ -488,13 +498,7 @@ export const useDownloads = () => {
         }
     }
 
-    useEffect(() => {
-        fetchDownloads();
-        const interval = setInterval(() => {
-            fetchDownloads();
-        }, 1000 * 3);
-        return () => clearInterval(interval);
-    }, []);
+    useRecurringTimeout(fetchDownloads, 3 * 1000);
 
     return {onceDownloads, recurringDownloads, fetchDownloads}
 }
@@ -616,12 +620,7 @@ export const useSettings = () => {
 export const useSettingsInterval = () => {
     const {settings, fetchSettings} = useSettings();
 
-    useEffect(() => {
-        const interval = setInterval(() => {
-            fetchSettings();
-        }, 1000 * 3);
-        return () => clearInterval(interval);
-    }, []);
+    useRecurringTimeout(fetchSettings(), 1000 * 3);
 
     return {settings, fetchSettings};
 }
@@ -644,27 +643,13 @@ export const useStatus = () => {
         }
     }
 
-    useEffect(() => {
-        fetchStatus();
-        const interval = setInterval(() => {
-            // console.log('fetch');
-            fetchStatus();
-        }, 1000 * 5);
-        return () => clearInterval(interval);
-    }, []);
-
     return {status, fetchStatus}
 }
 
 export const useStatusInterval = () => {
     const {status, fetchStatus} = useStatus();
 
-    useEffect(() => {
-        const interval = setInterval(() => {
-            fetchStatus();
-        }, 1000 * 3);
-        return () => clearInterval(interval);
-    }, []);
+    useRecurringTimeout(fetchStatus, 1000 * 3);
 
     return {status, fetchStatus};
 }

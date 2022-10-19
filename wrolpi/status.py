@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import asyncio
 import multiprocessing
+import pathlib
 import re
 import subprocess
 from dataclasses import dataclass
@@ -9,7 +10,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from wrolpi.cmd import which
-from wrolpi.common import logger
+from wrolpi.common import logger, limit_concurrent
 from wrolpi.dates import now
 
 try:
@@ -41,9 +42,9 @@ class SystemLoad:
 
     def __json__(self):
         return dict(
-            minute_1=str(self.minute_1),
-            minute_5=str(self.minute_5),
-            minute_15=str(self.minute_15),
+            minute_1=str(round(self.minute_1, 2)),
+            minute_5=str(round(self.minute_5, 2)),
+            minute_15=str(round(self.minute_15, 2)),
         )
 
 
@@ -179,6 +180,60 @@ async def get_cpu_info() -> CPUInfo:
     return info
 
 
+MEMORY_TOTAL = re.compile(r'^MemTotal:\s+(\d+)\s+kB$', re.MULTILINE)
+MEMORY_FREE = re.compile(r'^MemFree:\s+(\d+)\s+kB$', re.MULTILINE)
+MEMORY_CACHED = re.compile(r'^Cached:\s+(\d+)\s+kB$', re.MULTILINE)
+
+
+@dataclass
+class MemoryStats:
+    total: int = None
+    used: int = None
+    free: int = None
+    cached: int = None
+
+    def __json__(self):
+        return dict(
+            total=self.total,
+            used=self.used,
+            free=self.free,
+            cached=self.cached,
+        )
+
+
+def get_memory_stats_psutil():
+    mem = psutil.virtual_memory()
+    mem = MemoryStats(
+        total=mem.total,
+        used=mem.used,
+        free=mem.free,
+        cached=mem.cached,
+    )
+    return mem
+
+
+async def get_memory_stats():
+    try:
+        return get_memory_stats_psutil()
+    except Exception as e:
+        warn_once(e)
+
+    meminfo = pathlib.Path('/proc/meminfo')
+    if meminfo.is_file() and (contents := meminfo.read_text()):
+        total = int(i[0]) if (i := MEMORY_TOTAL.findall(contents)) else None
+        free = int(i[0]) if (i := MEMORY_FREE.findall(contents)) else None
+        cached = int(i[0]) if (i := MEMORY_CACHED.findall(contents)) else None
+        mem = MemoryStats(
+            total=int(total * 1024) if total else None,
+            free=int(free * 1024) if free else None,
+            cached=int(cached * 1024) if cached else None,
+            used=int(total - free) if total and free else None,
+        )
+        return mem
+
+    return MemoryStats()
+
+
 @dataclass
 class DriveInfo:
     mount: str = None
@@ -263,7 +318,7 @@ async def get_drives_info() -> List[DriveInfo]:
 
 
 @dataclass
-class BandwidthInfo:
+class NICBandwidthInfo:
     bytes_recv: int = None
     bytes_sent: int = None
     elapsed: int = None
@@ -288,6 +343,8 @@ IGNORED_NIC_NAMES = {
     'br-',
 }
 
+BANDWIDTH = multiprocessing.Manager().dict()
+
 
 def get_nic_names() -> List[str]:
     """Finds all non-virtual and non-docker network interface names."""
@@ -299,31 +356,57 @@ def get_nic_names() -> List[str]:
     return names
 
 
-BANDWIDTH = multiprocessing.Manager().dict()
+@dataclass
+class DiskBandwidthInfo:
+    bytes_read: int = None
+    bytes_write: int = None
+    elapsed: int = None
+    name: str = None
+
+    def __json__(self):
+        return dict(
+            bytes_read=self.bytes_read,
+            bytes_write=self.bytes_write,
+            elapsed=self.elapsed,
+            name=self.name,
+        )
 
 
-async def get_bandwidth_info() -> List[BandwidthInfo]:
-    """
-    Get all bandwidth information for all NICs.
-    """
-    infos = []
+DRIVE_BANDWIDTH = multiprocessing.Manager().dict()
+
+
+async def get_bandwidth_info() -> Tuple[List[NICBandwidthInfo], List[DiskBandwidthInfo]]:
+    """Get all bandwidth information for all NICs."""
+    nics_info = []
+    disks_info = []
     try:
         for name in sorted(BANDWIDTH.keys()):
             nic = BANDWIDTH[name]
             if 'bytes_recv_ps' not in nic:
                 # Not stats collected yet.
                 continue
-            infos.append(BandwidthInfo(
+            nics_info.append(NICBandwidthInfo(
                 bytes_recv=nic['bytes_recv_ps'],
                 bytes_sent=nic['bytes_sent_ps'],
                 elapsed=nic['elapsed'],
                 name=name,
                 speed=nic['speed'],
             ))
+        for name in sorted(DRIVE_BANDWIDTH.keys()):
+            disk = DRIVE_BANDWIDTH[name]
+            if 'bytes_read_ps' not in disk:
+                # No status collected yet
+                continue
+            disks_info.append(DiskBandwidthInfo(
+                bytes_read=disk['bytes_read_ps'],
+                bytes_write=disk['bytes_write_ps'],
+                elapsed=disk['elapsed'],
+                name=name,
+            ))
     except Exception as e:
         warn_once(e)
 
-    return infos
+    return nics_info, disks_info
 
 
 def _get_nic_tick(name_):
@@ -341,7 +424,7 @@ def _get_nic_tick(name_):
 
 def _calculate_bytes_per_second(history: List[Tuple]) -> Tuple[int, int, int]:
     """Calculate the bytes-per-second between the oldest and newest tick."""
-    (oldest_now, oldest_recv, oldest_sent, _), (newest_now, newest_recv, newest_sent, _) = \
+    (oldest_now, oldest_recv, oldest_sent, *_), (newest_now, newest_recv, newest_sent, *_) = \
         history[0], history[-1]
     elapsed = int(newest_now - oldest_now)
     if elapsed == 0:
@@ -351,6 +434,7 @@ def _calculate_bytes_per_second(history: List[Tuple]) -> Tuple[int, int, int]:
     return bytes_recv_ps, bytes_sent_ps, elapsed
 
 
+@limit_concurrent(1)
 async def bandwidth_worker(count: int = None):
     """A background process which will gather historical data about all NIC bandwidth statistics."""
     if not psutil:
@@ -370,6 +454,17 @@ async def bandwidth_worker(count: int = None):
                 # Append to history for this NIC.
                 nic['historical'] = (nic['historical'] + [_get_nic_tick(name_), ])[-21:]
                 BANDWIDTH.update({name_: nic})
+
+        timestamp = now().timestamp()
+        for name_, disk in psutil.disk_io_counters(perdisk=True).items():
+            tic = timestamp, disk.read_bytes, disk.write_bytes
+            if bw := DRIVE_BANDWIDTH.get(name_):
+                bw['historical'] = (bw['historical'] + [tic, ])[-21:]
+                DRIVE_BANDWIDTH.update({name_: bw})
+            else:
+                DRIVE_BANDWIDTH.update({
+                    name_: dict(historical=[tic, ]),
+                })
 
     # Initialize the stats.
     append_all_stats()
@@ -394,6 +489,20 @@ async def bandwidth_worker(count: int = None):
                     speed=historical[-1][-1],  # Use the most recent speed.
                 )
             })
+        for name, stats in DRIVE_BANDWIDTH.items():
+            if 'historical' not in stats:
+                continue
+
+            historical = stats['historical']
+            bytes_read_ps, bytes_write_ps, elapsed = _calculate_bytes_per_second(historical)
+            DRIVE_BANDWIDTH.update({
+                name: dict(
+                    historical=historical,
+                    bytes_read_ps=bytes_read_ps,
+                    bytes_write_ps=bytes_write_ps,
+                    elapsed=elapsed,
+                )
+            })
 
 
 @dataclass
@@ -401,21 +510,26 @@ class Status:
     cpu_info: CPUInfo
     load: SystemLoad
     drives: List[DriveInfo]
-    bandwidth: BandwidthInfo
+    bandwidth: NICBandwidthInfo
+    disk_bandwidth: DiskBandwidthInfo
+    memory_stats: MemoryStats
 
 
 async def get_status() -> Status:
-    cpu_info, load, drives, bandwidth = await asyncio.gather(
+    cpu_info, load, drives, memory_stats, (nic_bandwidth, disk_bandwidth) = await asyncio.gather(
         get_cpu_info(),
         get_load(),
         get_drives_info(),
+        get_memory_stats(),
         get_bandwidth_info(),
     )
     return Status(
         cpu_info=cpu_info,
         load=load,
         drives=drives,
-        bandwidth=bandwidth,
+        bandwidth=nic_bandwidth,
+        disk_bandwidth=disk_bandwidth,
+        memory_stats=memory_stats,
     )
 
 
@@ -428,6 +542,7 @@ if __name__ == '__main__':
 
     task = asyncio.gather(
         get_cpu_info(),
+        get_memory_stats(),
         get_load(),
         get_drives_info(),
         get_bandwidth_info(),

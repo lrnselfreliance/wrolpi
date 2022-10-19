@@ -22,12 +22,12 @@ fi
 
 if [[ ${1} == *.osm.pbf ]]; then
   # Import a PBF file.
-  osm2pgsql -d gis --append --slim -G --hstore --tag-transform-script \
-    /opt/openstreetmap-carto/openstreetmap-carto.lua -C 2000 --number-processes 4 \
+  nice -n 18 osm2pgsql -d gis --append --slim -G --hstore --tag-transform-script \
+    /opt/openstreetmap-carto/openstreetmap-carto.lua -C 2000 --number-processes 3 \
     -S /opt/openstreetmap-carto/openstreetmap-carto.style "${1}"
 elif [[ ${1} == *.dump ]]; then
   # Import a Postgresql dump.
-  pg_restore -j4 --no-owner -d gis "${1}"
+  nice -n 18 pg_restore -j3 --no-owner -d gis "${1}"
 else
   echo "Cannot import unknown map file"
   exit 5

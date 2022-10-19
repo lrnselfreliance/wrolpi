@@ -1,8 +1,11 @@
+import asyncio
 import json
 import shutil
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import List
+from uuid import uuid4
 
 import mock
 import pytest
@@ -143,21 +146,6 @@ def test_delete_file(make_files_structure, test_directory):
 @pytest.mark.parametrize(
     'path,expected',
     [
-        ('foo.mp4', ['foo']),
-        ('foo bar.txt', ['foo', 'bar']),
-        ('foo_bar.mp4', ['foo', 'bar']),
-        ('foo-bar', ['foo-bar']),
-        ('123 foo bar', ['123', 'foo', 'bar']),
-        ('123foo bar', ['123foo', 'bar']),
-    ]
-)
-def test_split_file_name_into_words(path, expected):
-    assert lib.split_file_name_into_words(Path(path)) == expected
-
-
-@pytest.mark.parametrize(
-    'path,expected',
-    [
         ('foo', ('foo', '')),
         ('foo.mp4', ('foo', '.mp4')),
         ('foo.info.json', ('foo', '.info.json')),
@@ -195,6 +183,42 @@ async def test_refresh_files(test_session, make_files_structure, test_directory)
 
     await lib.refresh_files()
     assert_files(test_session, [])
+
+
+@pytest.mark.asyncio
+async def test_refresh_many_files(test_session, make_files_structure):
+    count = 1_000
+    make_files_structure([f'{uuid4()}.txt' for _ in range(count)])
+    await lib.refresh_files()
+    assert test_session.query(File).count() == count
+
+    await lib.refresh_files()
+    assert test_session.query(File).count() == count
+
+
+@pytest.mark.asyncio
+async def test_refresh_cancel(test_session, make_files_structure, test_directory):
+    """Refresh tasks can be canceled."""
+    # Creat a lot of files so the refresh will take too long.
+    make_files_structure([f'{uuid4()}.txt' for _ in range(1_000)])
+
+    async def assert_cancel(task_):
+        # Time the time it takes to cancel.
+        before = datetime.now()
+        # Sleep so the refresh task has time to run.
+        await asyncio.sleep(0.1)
+
+        # Cancel the refresh (it will be sleeping soon).
+        task_.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task_
+        assert (datetime.now() - before).total_seconds() < 0.5, 'Task took too long.  Was the refresh canceled?'
+
+    task = asyncio.create_task(lib.refresh_files())
+    await assert_cancel(task)
+
+    task = asyncio.create_task(lib.refresh_directory_files_recursively(test_directory))
+    await assert_cancel(task)
 
 
 @pytest.mark.asyncio
@@ -276,7 +300,7 @@ async def test_files_indexer(test_session, make_files_structure):
     # Enable slow feature for testing.
     # TODO can this be sped up to always be included?
     with mock.patch('modules.videos.EXTRACT_SUBTITLES', True):
-        await lib._refresh_all_files()
+        await lib.refresh_files()
 
     bzip_file, gzip_file, text_file, zip_file, image_file, unknown_file, info_json_file, video_file \
         = test_session.query(File).order_by(File.path)
@@ -330,7 +354,7 @@ async def test_large_text_indexer(test_session, make_files_structure):
     large, = make_files_structure({
         'large_file.txt': 'foo ' * 1_000_000,
     })
-    await lib._refresh_all_files()
+    await lib.refresh_files()
     assert test_session.query(File).count() == 1
 
     assert large.is_file() and large.stat().st_size == 4_000_000

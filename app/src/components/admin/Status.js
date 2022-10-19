@@ -1,10 +1,10 @@
-import {Header, Loader, Progress, Statistic, StatisticGroup} from "../Theme";
-import React from "react";
+import {Header, Progress, Statistic, StatisticGroup} from "../Theme";
+import React, {useContext} from "react";
 import {humanBandwidth, humanFileSize, LoadStatistic} from "../Common";
-import {getStatus} from "../../api";
-import {Container, Divider} from "semantic-ui-react";
+import {Divider} from "semantic-ui-react";
 import {ProgressPlaceholder} from "../Placeholder";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import {StatusContext} from "../../contexts/contexts";
 
 function DriveInfo({used, size, percent, mount}) {
     let color;
@@ -102,75 +102,64 @@ export function CPUUsageProgress({value, label}) {
     return <Progress percent={value} progress color={color} label={label}/>
 }
 
-export class Status extends React.Component {
+export function Status() {
+    const {status} = useContext(StatusContext);
 
-    constructor(props) {
-        super(props);
-        this.state = {
-            status: null,
-        }
-        this.fetchStatus = this.fetchStatus.bind(this);
+    let percent;
+    let cores;
+    let temperature;
+    let high_temperature;
+    let critical_temperature;
+    let minute_1;
+    let minute_5;
+    let minute_15;
+    let bandwidth;
+    let drives = [];
+
+    if (status && status['cpu_info']) {
+        const {cpu_info, load} = status;
+        percent = cpu_info['percent'];
+        cores = cpu_info['cores'];
+        temperature = cpu_info['temperature'];
+        high_temperature = cpu_info['high_temperature'];
+        critical_temperature = cpu_info['critical_temperature'];
+
+        minute_1 = load['minute_1'];
+        minute_5 = load['minute_5'];
+        minute_15 = load['minute_15'];
+
+        drives = status['drives'];
+        bandwidth = status['bandwidth'];
     }
 
-    async componentDidMount() {
-        await this.fetchStatus();
-        this.intervalId = setInterval(this.fetchStatus, 1000 * 5);
-    }
+    return <>
+        <CPUUsageProgress value={percent} label='CPU Usage'/>
 
-    componentWillUnmount() {
-        clearInterval(this.intervalId);
-    }
+        <CPUTemperatureStatistic
+            value={temperature}
+            high_temperature={high_temperature}
+            critical_temperature={critical_temperature}
+        />
+        <Statistic label='Cores' value={cores || '?'}/>
 
-    fetchStatus = async () => {
-        try {
-            let status = await getStatus();
-            this.setState({status: status});
-        } catch (e) {
-            console.error(e);
-            this.setState({status: null});
-        }
-    }
+        <Divider/>
 
-    render() {
-        if (this.state.status) {
-            const {cpu_info, load, drives, bandwidth} = this.state.status;
-            const {minute_1, minute_5, minute_15} = load;
-            const {percent, cores, temperature, high_temperature, critical_temperature} = cpu_info;
+        <StatisticGroup>
+            <LoadStatistic label='1 Minute Load' value={minute_1} cores={cores}/>
+            <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
+            <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
+        </StatisticGroup>
 
-            return <>
-                <CPUUsageProgress value={percent} label='CPU Usage'/>
+        <Divider/>
 
-                <CPUTemperatureStatistic
-                    value={temperature}
-                    high_temperature={high_temperature}
-                    critical_temperature={critical_temperature}
-                />
-                <Statistic label='Cores' value={cores || '?'}/>
+        <Header as='h1'>Bandwidth</Header>
+        {bandwidth ?
+            bandwidth.map(i => <BandwidthProgressGroup key={i['name']} bandwidth={i}/>) :
+            <ProgressPlaceholder/>}
 
-                <Divider/>
+        <Divider/>
 
-                <StatisticGroup>
-                    <LoadStatistic label='1 Minute Load' value={minute_1} cores={cores}/>
-                    <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
-                    <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
-                </StatisticGroup>
-
-                <Divider/>
-
-                <Header as='h1'>Bandwidth</Header>
-                {bandwidth ?
-                    bandwidth.map(i => <BandwidthProgressGroup key={i['name']} bandwidth={i}/>) :
-                    <ProgressPlaceholder/>}
-
-                <Divider/>
-
-                <Header as='h1'>Drive Usage</Header>
-                {drives.map((drive) => <DriveInfo key={drive['mount']} {...drive}/>)}
-            </>
-        }
-
-        return <Container fluid style={{marginBottom: '5em'}}>
-            <Loader active inline='centered' size='big'>Loading system status</Loader>
-        </Container>
-    }
+        <Header as='h1'>Drive Usage</Header>
+        {drives.map((drive) => <DriveInfo key={drive['mount']} {...drive}/>)}
+    </>
 }

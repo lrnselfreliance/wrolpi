@@ -1,4 +1,3 @@
-import itertools
 import json
 import pathlib
 from abc import ABC
@@ -22,12 +21,10 @@ __all__ = ['video_modeler', 'VideoIndexer']
 
 @register_modeler
 def video_modeler(groups: Dict[str, List[File]], session: Session):
-    count = itertools.cycle(range(101))
-
-    # Only process groups that contain a video file.
     local_groups = groups.copy()
+    videos = []
     for stem, group in local_groups.items():
-        video_file = next((i for i in group if i.mimetype.split('/')[0] == 'video' and i.path.suffix != '.part'), None)
+        video_file = next((i for i in group if i.mimetype.startswith('video/') and i.path.suffix != '.part'), None)
         if not video_file:
             # Not a video group.
             continue
@@ -40,28 +37,34 @@ def video_modeler(groups: Dict[str, List[File]], session: Session):
 
         if poster_file:
             poster_file.associated = True
-            poster_file.do_index()
+            poster_file.do_stats()
         if caption_file:
             caption_file.associated = True
-            caption_file.do_index()
+            caption_file.do_stats()
         if info_json_file:
             info_json_file.associated = True
-            info_json_file.do_index()
+            info_json_file.do_stats()
 
-        video: Video = Video.upsert(video_file, session)
+        video = session.query(Video).filter_by(video_file=video_file).one_or_none()
+        if not video:
+            video = Video(video_file=video_file)
+            session.add(video)
         video.poster_file = poster_file
         video.caption_file = caption_file
         video.info_json_file = info_json_file
+        video.size = video_file.path.stat().st_size
+        video_file.model = Video.__tablename__
 
-        video.video_file.do_index()
-        video.validate(session)
+        videos.append(video)
 
-        # Remove this group, it will not be processed by other modelers.
-        del groups[stem]
+    if videos:
+        session.flush(videos)
+        for video in videos:
+            video.video_file.do_index()
+            video.validate(session)
 
-        if next(count) == 100:
-            # Commit occasionally.
-            session.commit()
+            # Remove this group, it will not be processed by other modelers.
+            del groups[video.video_path.stem]
 
 
 @register_after_refresh

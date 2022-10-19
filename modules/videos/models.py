@@ -13,7 +13,7 @@ from wrolpi.dates import now, TZDateTime
 from wrolpi.db import get_db_curs
 from wrolpi.downloader import Download, download_manager
 from wrolpi.errors import UnknownVideo
-from wrolpi.files.lib import refresh_directory_files_recursively, glob_shared_stem
+from wrolpi.files.lib import refresh_directory_files_recursively, glob_shared_stem, split_path_stem_and_suffix
 from wrolpi.files.models import File
 from wrolpi.media_path import MediaPathType
 
@@ -240,7 +240,7 @@ class Video(ModelHelper, Base):
     def __json__(self):
         from modules.videos.common import minimize_video_info_json
         info_json = minimize_video_info_json(self.get_info_json()) if self.info_json_path else None
-        stem = self.video_path.stem if self.video_path else None
+        stem, _ = split_path_stem_and_suffix(self.video_path) if self.video_file else (None, None)
 
         d = dict(
             caption_path=self.caption_path,

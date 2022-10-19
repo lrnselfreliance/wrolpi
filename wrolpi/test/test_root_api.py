@@ -314,6 +314,7 @@ def test_get_status(test_client, test_session):
     assert 'hotspot_status' in response.json and isinstance(response.json['hotspot_status'], str)
     assert 'throttle_status' in response.json and isinstance(response.json['throttle_status'], str)
     assert 'version' in response.json and isinstance(response.json['version'], str)
+    assert 'memory_stats' in response.json and isinstance(response.json['memory_stats'], dict)
 
 
 def test_post_download(test_session, test_client, test_download_manager_config):

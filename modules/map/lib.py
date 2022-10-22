@@ -76,9 +76,12 @@ def get_or_create_map_file(pbf_path: Path, session: Session) -> MapFile:
     return map_file
 
 
+import_logger = logger.getChild('import')
+
+
 async def import_files(files: List[str]):
     if IMPORT_EVENT.is_set():
-        logger.warning('Map import already running...')
+        import_logger.warning('Map import already running...')
         return
 
     # Import dumps, then pbfs.
@@ -86,21 +89,21 @@ async def import_files(files: List[str]):
     files = [get_media_directory() / i for i in files]
     files = sorted(files, key=lambda i: import_order.index(i.suffix))
 
-    logger.warning(f'Importing: {", ".join(map(str, files))}')
+    import_logger.warning(f'Importing: {", ".join(map(str, files))}')
 
     any_success = False
     try:
         IMPORT_EVENT.set()
         for path in files:
             if not path.is_file():
-                logger.fatal(f'Map file does not exist! {path}')
+                import_logger.fatal(f'Map file does not exist! {path}')
                 continue
 
             with get_db_session() as session:
                 map_file = session.query(MapFile).filter_by(path=path).one_or_none()
                 if map_file and map_file.imported:
                     # Don't import a map file twice.
-                    logger.debug(f'{path} is already imported')
+                    import_logger.debug(f'{path} is already imported')
                     continue
 
             success = False
@@ -110,7 +113,7 @@ async def import_files(files: List[str]):
                 success = True
                 any_success = True
             except Exception as e:
-                logger.warning('Failed to run import', exc_info=e)
+                import_logger.warning('Failed to run import', exc_info=e)
             finally:
                 IMPORTING['path'] = None
 
@@ -134,30 +137,30 @@ async def import_file(path: Path):
     Supports *.osm.pbf and *.dump files."""
     if str(path).endswith('.osm.pbf'):
         if not is_pbf_file(path):
-            logger.warning(f'Could not import non-pbf file: {path}')
+            import_logger.warning(f'Could not import non-pbf file: {path}')
             raise ValueError('Invalid PBF file')
     elif path.suffix == '.dump':
         if not is_dump_file(path):
-            logger.warning(f'Could not import non-dump file: {path}')
+            import_logger.warning(f'Could not import non-dump file: {path}')
             raise ValueError('Invalid dump file')
     else:
         raise ValueError(f'Cannot import unknown file! {path}')
 
     cmd = f'{BASH_BIN} {PROJECT_DIR}/scripts/import_map.sh {path.absolute()}'
-    logger.debug(f'Running import script: {cmd}')
+    import_logger.debug(f'Running import script: {cmd}')
     start = now()
     proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
 
     stdout, stderr = await proc.communicate()
     elapsed = now() - start
     success = 'Successful' if proc.returncode == 0 else 'Unsuccessful'
-    logger.info(f'{success} import of {path.name} took {timedelta_to_timestamp(elapsed)}')
+    import_logger.info(f'{success} import of {path.name} took {timedelta_to_timestamp(elapsed)}')
     if proc.returncode != 0:
         # Log all lines.  Truncate long lines.
         for line in stdout.decode().splitlines():
-            logger.debug(line[:500])
+            import_logger.debug(line[:500])
         for line in stderr.decode().splitlines():
-            logger.error(line[:500])
+            import_logger.error(line[:500])
         raise ValueError(f'Importing map file failed with return code {proc.returncode}')
 
 

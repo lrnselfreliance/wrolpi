@@ -40,7 +40,7 @@ def truthy_arg(value: str) -> bool:
     False
     """
     v = str(value).lower()
-    return v == 'true' or v == 't' or v == '1' or v == 'yes'
+    return v == 'true' or v == 't' or v == '1' or v == 'yes' or v == 'y'
 
 
 # Get the media directory from the environment.

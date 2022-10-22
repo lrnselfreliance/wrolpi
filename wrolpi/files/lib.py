@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
-    get_files_and_directories, apply_modelers, apply_after_refresh, get_model_by_table_name, chunks_by_name
+    get_files_and_directories, apply_modelers, apply_after_refresh, get_model_by_table_name, chunks_by_name, \
+    background_task
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidFile
@@ -203,7 +204,7 @@ def cancelable_wrapper(func: callable):
         if PYTEST:
             return await func(*args, **kwargs)
 
-        task = asyncio.create_task(func(*args, **kwargs))
+        task = background_task(func(*args, **kwargs))
         REFRESH_TASKS.append(task)
 
     return wrapped

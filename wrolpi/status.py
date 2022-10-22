@@ -12,6 +12,7 @@ from typing import List, Optional, Tuple
 from wrolpi.cmd import which
 from wrolpi.common import logger, limit_concurrent
 from wrolpi.dates import now
+from wrolpi.vars import DOCKERIZED
 
 try:
     import psutil
@@ -358,21 +359,22 @@ def get_nic_names() -> List[str]:
 
 @dataclass
 class DiskBandwidthInfo:
-    bytes_read: int = None
-    bytes_write: int = None
+    bytes_read_ps: int = None
+    bytes_write_ps: int = None
     elapsed: int = None
     name: str = None
 
     def __json__(self):
         return dict(
-            bytes_read=self.bytes_read,
-            bytes_write=self.bytes_write,
+            bytes_read_ps=self.bytes_read_ps,
+            bytes_write_ps=self.bytes_write_ps,
             elapsed=self.elapsed,
             name=self.name,
         )
 
 
-DRIVE_BANDWIDTH = multiprocessing.Manager().dict()
+IGNORED_DISK_NAMES = ('loop',)
+DISKS_BANDWIDTH = multiprocessing.Manager().dict()
 
 
 async def get_bandwidth_info() -> Tuple[List[NICBandwidthInfo], List[DiskBandwidthInfo]]:
@@ -392,14 +394,22 @@ async def get_bandwidth_info() -> Tuple[List[NICBandwidthInfo], List[DiskBandwid
                 name=name,
                 speed=nic['speed'],
             ))
-        for name in sorted(DRIVE_BANDWIDTH.keys()):
-            disk = DRIVE_BANDWIDTH[name]
+        used_disks = []
+        for name in sorted(DISKS_BANDWIDTH.keys()):
+            disk = DISKS_BANDWIDTH[name]
             if 'bytes_read_ps' not in disk:
                 # No status collected yet
                 continue
+            if any(name.startswith(i) for i in used_disks):
+                # Report only the first disk.  Do not report it's partitions.  Disks are sorted to make this work!
+                # i.e. report "sda" but not "sda1" or "sda2".
+                continue
+            if any(name.startswith(i) for i in IGNORED_DISK_NAMES):
+                continue
+            used_disks.append(name)
             disks_info.append(DiskBandwidthInfo(
-                bytes_read=disk['bytes_read_ps'],
-                bytes_write=disk['bytes_write_ps'],
+                bytes_read_ps=disk['bytes_read_ps'],
+                bytes_write_ps=disk['bytes_write_ps'],
                 elapsed=disk['elapsed'],
                 name=name,
             ))
@@ -458,11 +468,11 @@ async def bandwidth_worker(count: int = None):
         timestamp = now().timestamp()
         for name_, disk in psutil.disk_io_counters(perdisk=True).items():
             tic = timestamp, disk.read_bytes, disk.write_bytes
-            if bw := DRIVE_BANDWIDTH.get(name_):
+            if bw := DISKS_BANDWIDTH.get(name_):
                 bw['historical'] = (bw['historical'] + [tic, ])[-21:]
-                DRIVE_BANDWIDTH.update({name_: bw})
+                DISKS_BANDWIDTH.update({name_: bw})
             else:
-                DRIVE_BANDWIDTH.update({
+                DISKS_BANDWIDTH.update({
                     name_: dict(historical=[tic, ]),
                 })
 
@@ -489,13 +499,13 @@ async def bandwidth_worker(count: int = None):
                     speed=historical[-1][-1],  # Use the most recent speed.
                 )
             })
-        for name, stats in DRIVE_BANDWIDTH.items():
+        for name, stats in DISKS_BANDWIDTH.items():
             if 'historical' not in stats:
                 continue
 
             historical = stats['historical']
             bytes_read_ps, bytes_write_ps, elapsed = _calculate_bytes_per_second(historical)
-            DRIVE_BANDWIDTH.update({
+            DISKS_BANDWIDTH.update({
                 name: dict(
                     historical=historical,
                     bytes_read_ps=bytes_read_ps,

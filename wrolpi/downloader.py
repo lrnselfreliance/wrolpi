@@ -21,7 +21,8 @@ from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
-from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, WROLPI_CONFIG
+from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, WROLPI_CONFIG, \
+    background_task
 from wrolpi.dates import TZDateTime, now, Seconds, local_timezone, recursive_replace_tz
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
@@ -323,8 +324,8 @@ class DownloadManager:
         name = f'{pid}.{num}'
         worker_logger = logger.getChild(f'download_worker.{name}')
 
-        disabled = 'is disabled' if self.disabled.is_set() else 'is NOT disabled'
-        worker_logger.info(f'Starting up.  DownloadManager {disabled}.')
+        disabled = 'disabled' if self.disabled.is_set() else 'enabled'
+        worker_logger.info(f'Starting up.  DownloadManager is {disabled}.')
         last_heartbeat = now()
 
         while True:
@@ -406,7 +407,7 @@ class DownloadManager:
                 # Remove this domain from the running list.
                 self._remove_domain(download.domain)
                 # Request any new downloads be added to the queue.
-                asyncio.create_task(self.queue_downloads())
+                background_task(self.queue_downloads())
             except asyncio.CancelledError:
                 worker_logger.warning('Canceled!')
                 self.download_queue.task_done()
@@ -475,9 +476,9 @@ class DownloadManager:
 
             await download_manager.do_downloads()
             await asyncio.sleep(30)
-            asyncio.create_task(_perpetual_download())
+            background_task(_perpetual_download())
 
-        asyncio.create_task(_perpetual_download())
+        background_task(_perpetual_download())
 
     def get_downloader(self, url: str) -> Tuple[Downloader, Dict]:
         for i in self.instances:
@@ -555,7 +556,7 @@ class DownloadManager:
 
         # Start downloading ASAP.
         try:
-            asyncio.create_task(self.queue_downloads())
+            background_task(self.queue_downloads())
         except RuntimeError:
             # Event loop isn't running.  Probably testing?
             if not PYTEST:
@@ -788,8 +789,8 @@ class DownloadManager:
         self.start_workers(loop)
 
         try:
-            asyncio.create_task(self.perpetual_download())
-            asyncio.create_task(self.do_downloads())
+            background_task(self.perpetual_download())
+            background_task(self.do_downloads())
         except RuntimeError:
             # This may not work while testing.
             if not PYTEST:

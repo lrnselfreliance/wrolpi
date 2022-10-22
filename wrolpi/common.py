@@ -10,6 +10,7 @@ import re
 import string
 import sys
 import tempfile
+from asyncio import Task
 from copy import deepcopy
 from datetime import datetime, date
 from decimal import Decimal
@@ -87,7 +88,8 @@ __all__ = [
     'timer',
     'cum_timer',
     'limit_concurrent',
-    'truncate_object_bytes'
+    'truncate_object_bytes',
+    'background_task',
 ]
 
 # Base is used for all SQLAlchemy models.
@@ -996,3 +998,17 @@ def truncate_object_bytes(obj: Union[List[str], str, None], maximum_bytes: int) 
     index = -1 * round(len(obj) * .2)
     obj = obj[:index or -1]
     return truncate_object_bytes(obj, maximum_bytes)
+
+
+BACKGROUND_TASKS = set()
+
+
+def background_task(coro) -> Task:
+    """Convenience function which creates an asyncio task for the provided coroutine.
+
+    The task is stored in a global set of background tasks so the task will not be discarded by the garbage collector.
+    """
+    task = asyncio.create_task(coro)
+    BACKGROUND_TASKS.add(task)
+    task.add_done_callback(BACKGROUND_TASKS.discard)
+    return task

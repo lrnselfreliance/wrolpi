@@ -344,6 +344,7 @@ async def get_status(_: Request):
         bandwidth=s.bandwidth,
         cpu_info=s.cpu_info,
         disk_bandwidth=s.disk_bandwidth,
+        dockerized=DOCKERIZED,
         downloads=downloads,
         drives=s.drives,
         hotspot_status=admin.hotspot_status().name,

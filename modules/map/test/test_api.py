@@ -86,17 +86,8 @@ def test_status_and_import(test_client, test_session, test_directory):
 def test_empty_import(test_client, test_session, test_directory):
     """Some files must be requested."""
     with mock.patch('modules.map.lib.import_file') as mock_import_file:
-        body = {'pbfs': []}
+        body = {'files': []}
         request, response = test_client.post('/api/map/import', content=json.dumps(body))
         assert response.status_code == HTTPStatus.BAD_REQUEST
         mock_import_file.assert_not_called()
-
-        body = {'dumps': []}
-        request, response = test_client.post('/api/map/import', content=json.dumps(body))
-        assert response.status_code == HTTPStatus.BAD_REQUEST
-        mock_import_file.assert_not_called()
-
-        body = {'pbfs': [], 'dumps': []}
-        request, response = test_client.post('/api/map/import', content=json.dumps(body))
-        assert response.status_code == HTTPStatus.BAD_REQUEST
-        mock_import_file.assert_not_called()
+        assert 'validate' in response.json['error']

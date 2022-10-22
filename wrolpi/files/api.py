@@ -7,7 +7,7 @@ from sanic import response
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi.common import get_media_directory, wrol_mode_check
+from wrolpi.common import get_media_directory, wrol_mode_check, background_task
 from wrolpi.errors import InvalidFile
 from wrolpi.root_api import get_blueprint, json_response
 from . import lib, schema
@@ -88,7 +88,7 @@ async def refresh_directory(_: Request, body: schema.DirectoryRefreshRequest):
     if PYTEST:
         await lib.refresh_directory_files_recursively(directory)
     else:
-        asyncio.create_task(lib.refresh_directory_files_recursively(directory))
+        background_task(lib.refresh_directory_files_recursively(directory))
     return response.empty()
 
 

@@ -7,7 +7,7 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from modules.map import lib, schema
-from wrolpi.common import wrol_mode_check, get_media_directory
+from wrolpi.common import wrol_mode_check, get_media_directory, background_task
 from wrolpi.errors import ValidationError
 from wrolpi.root_api import get_blueprint, json_response
 from wrolpi.vars import PYTEST, DOCKERIZED
@@ -34,7 +34,7 @@ async def import_pbfs(_: Request, body: schema.ImportPost):
     if PYTEST:
         await coro
     else:
-        asyncio.create_task(coro)
+        background_task(coro)
     return response.empty()
 
 

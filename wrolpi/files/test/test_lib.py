@@ -212,7 +212,7 @@ async def test_refresh_cancel(test_session, make_files_structure, test_directory
         task_.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task_
-        assert (datetime.now() - before).total_seconds() < 0.5, 'Task took too long.  Was the refresh canceled?'
+        assert (datetime.now() - before).total_seconds() < 0.8, 'Task took too long.  Was the refresh canceled?'
 
     task = asyncio.create_task(lib.refresh_files())
     await assert_cancel(task)

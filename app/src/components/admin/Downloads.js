@@ -1,4 +1,4 @@
-import React, {useContext} from "react";
+import React, {useContext, useState} from "react";
 import {clearCompletedDownloads, clearFailedDownloads, killDownload, postDownload} from "../../api";
 import {Link} from "react-router-dom";
 import {
@@ -9,6 +9,7 @@ import {
     WROLModeMessage
 } from "../Common";
 import {
+    Button as SemanticButton,
     Confirm,
     Modal,
     PlaceholderLine,
@@ -18,7 +19,7 @@ import {
     TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
-import {Button, Header, Placeholder, Table} from "../Theme";
+import {Button, Header, Icon, Placeholder, Table} from "../Theme";
 import {ThemeContext} from "../../contexts/contexts";
 import {useDownloads} from "../../hooks/customHooks";
 
@@ -113,7 +114,7 @@ class DownloadRow extends React.Component {
                 <pre style={{overflowX: 'scroll'}}>{error}</pre>
             </Modal.Content>
             <Modal.Actions>
-                <Button onClick={() => this.setState({errorModalOpen: false})}>Close</Button>
+                <SemanticButton onClick={() => this.setState({errorModalOpen: false})}>Close</SemanticButton>
             </Modal.Actions>
         </Modal>;
 

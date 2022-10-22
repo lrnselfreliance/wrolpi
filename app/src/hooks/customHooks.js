@@ -10,7 +10,6 @@ import {
     getDownloaders,
     getDownloads,
     getFiles,
-    getHotspotStatus,
     getInventory,
     getSettings,
     getStatistics,
@@ -462,6 +461,8 @@ export const useBrowseFiles = () => {
 export const useHotspot = () => {
     const [on, setOn] = useState(null);
     const {status} = useContext(StatusContext);
+    // Hotspot is unsupported on Docker.
+    const {dockerized} = status;
 
     useEffect(() => {
         if (status && status['hotspot_status']) {
@@ -481,7 +482,7 @@ export const useHotspot = () => {
         await setHotspot(on);
     }
 
-    return {on, setOn, setHotspot: localSetHotspot};
+    return {on, setOn, setHotspot: localSetHotspot, dockerized};
 }
 
 export const useDownloads = () => {

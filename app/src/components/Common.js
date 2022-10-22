@@ -1,5 +1,16 @@
 import React, {useContext, useEffect, useState} from "react";
-import {Card, Container, IconGroup, Image, Input, Pagination, Responsive, TableCell, TableRow} from 'semantic-ui-react';
+import {
+    Card,
+    Container,
+    IconGroup,
+    Image,
+    Input,
+    Modal,
+    Pagination,
+    Responsive,
+    TableCell,
+    TableRow
+} from 'semantic-ui-react';
 import {Link, NavLink} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
@@ -734,22 +745,61 @@ export function DarkModeToggle() {
     </>
 }
 
+
+export function UnsupportedModal(header, message, icon) {
+    const [open, setOpen] = useState(false);
+    const onOpen = () => setOpen(true);
+    const onClose = () => setOpen(false);
+
+    const modal = <Modal basic closeIcon
+                         onOpen={onOpen}
+                         onClose={onClose}
+                         open={open}
+    >
+        <Header>
+            <Icon name={icon || 'exclamation triangle'}/>
+            {header || 'Unsupported'}
+        </Header>
+        <Modal.Content>
+            <Modal.Description>
+                {message}
+            </Modal.Description>
+        </Modal.Content>
+        <Modal.Actions>
+            <Button basic inverted onClick={onClose}>Ok</Button>
+        </Modal.Actions>
+    </Modal>;
+
+    return {modal, doClose: onClose, doOpen: onOpen};
+}
+
 export function HotspotStatusIcon() {
-    const {on, setHotspot} = useHotspot();
+    const {on, setHotspot, dockerized} = useHotspot();
+    const {modal, doOpen} = UnsupportedModal(
+        'Unsupported on Docker',
+        'You cannot toggle the hotspot on Docker.'
+    );
+
     const toggleHotspot = (e) => {
         e.preventDefault();
+        if (dockerized) {
+            doOpen();
+        }
         if (on != null) {
             setHotspot(!on);
         }
     }
 
-    return <a href='#' onClick={toggleHotspot}>
-        <IconGroup size='large'>
-            <Icon name='wifi' disabled={on !== true}/>
-            {on === false && <Icon corner name='x'/>}
-            {on === null && <Icon corner name='question'/>}
-        </IconGroup>
-    </a>
+    return <>
+        <a href='#' onClick={toggleHotspot}>
+            <IconGroup size='large'>
+                <Icon name='wifi' disabled={on !== true}/>
+                {on === false && <Icon corner name='x'/>}
+                {on === null && <Icon corner name='question'/>}
+            </IconGroup>
+        </a>
+        {modal}
+    </>
 }
 
 export function useTitle(title) {

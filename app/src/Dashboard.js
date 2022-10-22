@@ -8,6 +8,7 @@ import {Header, Segment, Statistic, StatisticGroup} from "./components/Theme";
 import {Link} from "react-router-dom";
 import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
 import {ProgressPlaceholder} from "./components/Placeholder";
+import {Divider} from "semantic-ui-react";
 
 export function Dashboard() {
     useTitle('Dashboard');
@@ -34,16 +35,16 @@ export function Dashboard() {
     }
 
     return (<PageContainer>
-            <SearchInput clearable
-                         searchStr={searchStr}
-                         onSubmit={setSearchStr}
-                         size='large'
-                         placeholder='Search Everywhere...'
-                         actionIcon='search'
-                         style={{marginBottom: '2em'}}
-            />
-            {body}
-        </PageContainer>)
+        <SearchInput clearable
+                     searchStr={searchStr}
+                     onSubmit={setSearchStr}
+                     size='large'
+                     placeholder='Search Everywhere...'
+                     actionIcon='search'
+                     style={{marginBottom: '2em'}}
+        />
+        {body}
+    </PageContainer>)
 }
 
 function DashboardStatus() {
@@ -64,23 +65,27 @@ function DashboardStatus() {
         pending_downloads = downloads['disabled'] ? 'x' : downloads['pending'];
     }
 
+    let bandwidths = <ProgressPlaceholder/>;
+    if (status && status['bandwidth']) {
+        bandwidths = status['bandwidth'].map(i => <BandwidthProgressCombined key={i['name']} bandwidth={i}/>);
+    }
+
     return <Segment>
         <Link to='/admin/status'>
             <Header as='h2'>Status</Header>
             <CPUUsageProgress value={percent} label='CPU Usage'/>
 
-            <Header as='h3'>Load</Header>
             <StatisticGroup size='mini'>
-                <LoadStatistic label='1 Minute' value={load['minute_1']} cores={cores}/>
-                <LoadStatistic label='5 Minute' value={load['minute_5']} cores={cores}/>
-                <LoadStatistic label='15 Minute' value={load['minute_15']} cores={cores}/>
+                <LoadStatistic label='1 Min. Load' value={load['minute_1']} cores={cores}/>
+                <LoadStatistic label='5 Min. Load' value={load['minute_5']} cores={cores}/>
+                <LoadStatistic label='15 Min. Load' value={load['minute_15']} cores={cores}/>
             </StatisticGroup>
 
             <Header as='h3'>Bandwidth</Header>
-            {status && status['bandwidth'] ? status['bandwidth'].map(i => <BandwidthProgressCombined key={i['name']}
-                                                                                                     bandwidth={i}/>) :
-                <ProgressPlaceholder/>}
+            {bandwidths}
         </Link>
+
+        <Divider/>
 
         <Link to='/admin'>
             <StatisticGroup size='mini'>

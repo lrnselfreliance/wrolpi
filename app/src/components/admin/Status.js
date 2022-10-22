@@ -1,7 +1,7 @@
 import {Header, Progress, Statistic, StatisticGroup} from "../Theme";
 import React, {useContext} from "react";
 import {humanBandwidth, humanFileSize, LoadStatistic} from "../Common";
-import {Divider} from "semantic-ui-react";
+import {Divider, Responsive} from "semantic-ui-react";
 import {ProgressPlaceholder} from "../Placeholder";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {StatusContext} from "../../contexts/contexts";
@@ -21,9 +21,50 @@ function DriveInfo({used, size, percent, mount}) {
     />
 }
 
+function DiskBandwidthProgress({bytes_ps, total, label}) {
+    let percent = bytes_ps / total;
+    percent = percent || 0;
+    let color = null;
+    if (percent >= 90) {
+        color = 'red';
+    } else if (percent >= 80) {
+        color = 'orange';
+    } else if (percent >= 50) {
+        color = 'yellow';
+    }
+    label = `${label} ${humanBandwidth(bytes_ps)}`;
+    return <Progress percent={percent} label={label} color={color} key={label}/>;
+}
+
+function DiskBandwidth({name, bytes_read_ps, bytes_write_ps}) {
+    const total = 10_000_000; // Arbitrary size.  What is the real speed of the disk?
+
+    const read = <DiskBandwidthProgress
+        bytes_ps={bytes_read_ps}
+        total={total}
+        label={`${name} read`}
+    />;
+    const write = <DiskBandwidthProgress
+        bytes_ps={bytes_write_ps}
+        total={total}
+        label={`${name} write`}
+    />;
+
+    return <Grid columns={2}>
+        <Grid.Row>
+            <Grid.Column>{read}</Grid.Column>
+            <Grid.Column>{write}</Grid.Column>
+        </Grid.Row>
+    </Grid>
+}
+
 function CPUTemperatureStatistic({value, high_temperature, critical_temperature}) {
     if (!value) {
         return <Statistic label='Temp C°' value='?'/>
+    }
+    if (critical_temperature && critical_temperature === high_temperature) {
+        // Critical and high are equal, manually change it so high changes color before critical.
+        high_temperature = critical_temperature - 25;
     }
     const props = {};
     if ((critical_temperature && value >= critical_temperature) || (!critical_temperature && value >= 75)) {
@@ -66,7 +107,7 @@ export function BandwidthProgressGroup({bandwidth, ...props}) {
         {...props}
     />;
 
-    return <Grid columns={2} stackable>
+    return <Grid columns={2}>
         <Grid.Row>
             <Grid.Column>
                 {recv}
@@ -96,8 +137,6 @@ export function CPUUsageProgress({value, label}) {
         color = 'brown';
     } else if (value >= 50) {
         color = 'orange';
-    } else if (value >= 30) {
-        color = 'green';
     }
     return <Progress percent={value} progress color={color} label={label}/>
 }
@@ -115,6 +154,7 @@ export function Status() {
     let minute_15;
     let bandwidth;
     let drives = [];
+    let disk_bandwidth = [];
 
     if (status && status['cpu_info']) {
         const {cpu_info, load} = status;
@@ -130,36 +170,61 @@ export function Status() {
 
         drives = status['drives'];
         bandwidth = status['bandwidth'];
+        disk_bandwidth = status['disk_bandwidth'];
     }
 
     return <>
         <CPUUsageProgress value={percent} label='CPU Usage'/>
 
-        <CPUTemperatureStatistic
-            value={temperature}
-            high_temperature={high_temperature}
-            critical_temperature={critical_temperature}
-        />
-        <Statistic label='Cores' value={cores || '?'}/>
+        <Responsive minWidth={770}>
+            <StatisticGroup>
+                <CPUTemperatureStatistic
+                    value={temperature}
+                    high_temperature={high_temperature}
+                    critical_temperature={critical_temperature}
+                />
+                <LoadStatistic label='1 Minute Load' value={minute_1} cores={cores}/>
+                <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
+                <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
+            </StatisticGroup>
 
-        <Divider/>
+            <Divider/>
 
-        <StatisticGroup>
-            <LoadStatistic label='1 Minute Load' value={minute_1} cores={cores}/>
-            <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
-            <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
-        </StatisticGroup>
+            <Header as='h1'>Network Bandwidth</Header>
+            {bandwidth ?
+                bandwidth.map(i => <BandwidthProgressGroup key={i['name']} bandwidth={i}/>) :
+                <ProgressPlaceholder/>}
 
-        <Divider/>
+            <Divider/>
 
-        <Header as='h1'>Bandwidth</Header>
-        {bandwidth ?
-            bandwidth.map(i => <BandwidthProgressGroup key={i['name']} bandwidth={i}/>) :
-            <ProgressPlaceholder/>}
+            <Header as='h1'>Drive Usage</Header>
+            {drives.map((drive) => <DriveInfo key={drive['mount']} {...drive}/>)}
 
-        <Divider/>
+            <Header as='h1'>Drive Bandwidth</Header>
+            {disk_bandwidth.map((disk) => <DiskBandwidth key={disk['name']} {...disk}/>)}
+        </Responsive>
+        <Responsive maxWidth={769}>
+            <StatisticGroup size='mini'>
+                <CPUTemperatureStatistic
+                    value={temperature}
+                    high_temperature={high_temperature}
+                    critical_temperature={critical_temperature}
+                />
+                <LoadStatistic label='1 Min. Load' value={minute_1} cores={cores}/>
+                <LoadStatistic label='5 Min. Load' value={minute_5} cores={cores}/>
+                <LoadStatistic label='15 Min. Load' value={minute_15} cores={cores}/>
+            </StatisticGroup>
 
-        <Header as='h1'>Drive Usage</Header>
-        {drives.map((drive) => <DriveInfo key={drive['mount']} {...drive}/>)}
+            <Header as='h2'>Network Bandwidth</Header>
+            {bandwidth ?
+                bandwidth.map(i => <BandwidthProgressGroup key={i['name']} bandwidth={i}/>) :
+                <ProgressPlaceholder/>}
+
+            <Header as='h2'>Drive Usage</Header>
+            {drives.map((drive) => <DriveInfo key={drive['mount']} {...drive}/>)}
+
+            <Header as='h2'>Drive Bandwidth</Header>
+            {disk_bandwidth.map((disk) => <DiskBandwidth key={disk['name']} {...disk}/>)}
+        </Responsive>
     </>
 }

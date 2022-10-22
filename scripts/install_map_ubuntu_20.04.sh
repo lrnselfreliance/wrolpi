@@ -79,8 +79,9 @@ while [ "${COUNT}" -lt "${MAX_TRIES}" ]; do
     external_data=true
   [[ "${dc_import}" = false ]] &&
     # Run import in "create" mode so basic tables will be created.
-    sudo -u wrolpi nice -n 18 osm2pgsql -d gis --create --slim -G --hstore --tag-transform-script \
-      /opt/openstreetmap-carto/openstreetmap-carto.lua -C 2000 --number-processes 4 \
+    sudo -u wrolpi nice -n 18 osm2pgsql -d gis --create --slim -G --hstore \
+      --tag-transform-script /opt/openstreetmap-carto/openstreetmap-carto.lua \
+      -C 2000 --number-processes 3 \
       -S /opt/openstreetmap-carto/openstreetmap-carto.style /tmp/district-of-columbia-latest.osm.pbf &&
     dc_import=true
   [[ "${indexes}" = false ]] &&

@@ -34,7 +34,7 @@ except ImportError:
 
 logger = logger.getChild(__name__)
 
-__all__ = ['list_files', 'delete_file', 'split_path_stem_and_suffix', 'refresh_files', 'file_search', 'get_mimetype']
+__all__ = ['list_files', 'delete_file', 'split_path_stem_and_suffix', 'refresh_files', 'search_files', 'get_mimetype']
 
 
 def filter_parent_directories(directories: List[Path]) -> List[Path]:
@@ -276,8 +276,8 @@ async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str
     refresh_logger.info(f'Done refreshing files in {directory}')
 
 
-def file_search(search_str: str, limit: int, offset: int, mimetype: str = None, model: str = None) -> Tuple[
-    List[dict], int]:
+def search_files(search_str: str, limit: int, offset: int, mimetype: str = None, model: str = None) -> \
+        Tuple[List[dict], int]:
     """
     Search the Files table.  Order the returned Files by their rank if `search_str` is provided.  Return all files if
     `search_str` is empty.
@@ -342,6 +342,11 @@ def handle_search_results(statement: str, params):
             return [], 0
         total = results[0]['total'] if results else 0
         ranked_paths = [pathlib.Path(i['path']) for i in results]
+        try:
+            ranks = [i['ts_rank'] for i in results]
+        except KeyError:
+            # No `ts_rank`, probably not searching `file.textsearch`.
+            ranks = []
 
     with get_db_session() as session:
         results = get_ranked_models(ranked_paths, File, session=session)
@@ -352,6 +357,9 @@ def handle_search_results(statement: str, params):
             if PYTEST:
                 raise
         results = [i.__json__() for i in results]
+        # Preserve the ts_ranks, if any.
+        for idx, rank in enumerate(ranks):
+            results[idx]['ts_rank'] = rank
 
     return results, total
 

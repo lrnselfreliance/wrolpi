@@ -98,6 +98,6 @@ async def refresh_directory(_: Request, body: schema.DirectoryRefreshRequest):
     body=schema.FilesSearchRequest,
 )
 @validate(schema.FilesSearchRequest)
-async def search_files(_: Request, body: schema.FilesSearchRequest):
-    files, total = lib.file_search(body.search_str, body.limit, body.offset, body.mimetype, body.model)
+async def post_search_files(_: Request, body: schema.FilesSearchRequest):
+    files, total = lib.search_files(body.search_str, body.limit, body.offset, body.mimetype, body.model)
     return json_response(dict(files=files, totals=dict(files=total)))

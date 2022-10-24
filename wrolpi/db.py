@@ -1,4 +1,3 @@
-import logging
 from contextlib import contextmanager
 from functools import wraps
 from typing import ContextManager, Tuple, List, Union, Type
@@ -160,10 +159,10 @@ def optional_session(commit: Union[callable, bool] = False):
 
 
 @optional_session
-def get_ranked_models(ranked_ids: List, model: Type[Base], session: Session = None) -> List[Base]:
-    """Get all objects whose ids are in the `ranked_ids`, order them by their position in `ranked_ids`."""
+def get_ranked_models(ranked_primary_keys: List, model: Type[Base], session: Session = None) -> List[Base]:
+    """Get all objects whose primary keys are in the `ranked_primary_keys`, preserve their order."""
     pkey = inspect(model).primary_key[0]
     pkey_name = pkey.name
-    results = list(session.query(model).filter(pkey.in_(ranked_ids)).all())
-    results = sorted(results, key=lambda i: ranked_ids.index(getattr(i, pkey_name)))
+    results = list(session.query(model).filter(pkey.in_(ranked_primary_keys)).all())
+    results = sorted(results, key=lambda i: ranked_primary_keys.index(getattr(i, pkey_name)))
     return results

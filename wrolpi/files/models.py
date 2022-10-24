@@ -49,7 +49,7 @@ class File(ModelHelper, Base):
         path = str(self.path.relative_to(get_media_directory()))
         return f'<File {path=} mime={self.mimetype} model={self.model}>'
 
-    def __json__(self):
+    def __json__(self) -> dict:
         path = self.path.relative_to(get_media_directory())
         d = dict(
             associated=self.associated,

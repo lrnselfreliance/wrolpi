@@ -39,7 +39,7 @@ async def search(_: Request, body: schema.VideoSearchRequest):
     if body.order_by not in lib.VIDEO_ORDERS:
         raise InvalidOrderBy('Invalid order by')
 
-    files, videos_total = lib.video_search(
+    files, videos_total = lib.search_videos(
         body.search_str,
         body.offset,
         body.limit,

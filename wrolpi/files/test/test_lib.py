@@ -326,17 +326,17 @@ async def test_files_indexer(test_session, make_files_structure):
     assert video_file.suffix == '.mp4'
 
     # File are indexed by their titles and contents.
-    files, total = lib.file_search('file', 10, 0)
+    files, total = lib.search_files('file', 10, 0)
     assert total == 7, 'All files contain "file" in their file name.  The associated video file is hidden.'
-    files, total = lib.file_search('image', 10, 0)
+    files, total = lib.search_files('image', 10, 0)
     assert total == 1 and files[0]['title'] == 'an image file.jpeg', 'The image file title contains "image".'
-    files, total = lib.file_search('contents', 10, 0)
+    files, total = lib.search_files('contents', 10, 0)
     assert total == 1 and files[0]['title'] == 'a text file.txt', 'The text file contains "contents".'
-    files, total = lib.file_search('video', 10, 0)
+    files, total = lib.search_files('video', 10, 0)
     assert total == 1 and {i['title'] for i in files} == {'a video file.mp4'}, 'The video file contains "video".'
-    files, total = lib.file_search('yawn', 10, 0)
+    files, total = lib.search_files('yawn', 10, 0)
     assert total == 1 and files[0]['title'] == 'a video file.mp4', 'The video file captions contain "yawn".'
-    files, total = lib.file_search('bunny', 10, 0)
+    files, total = lib.search_files('bunny', 10, 0)
     assert total == 3 and {i['title'] for i in files} == {'a zip file.zip', 'a bzip file.bzip', 'a gzip file.gzip'}, \
         'The zip files contain a file with "bunny" in the title.'
 

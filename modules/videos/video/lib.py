@@ -76,7 +76,7 @@ DEFAULT_VIDEO_ORDER = 'rank'
 VIDEO_QUERY_LIMIT = 24
 
 
-def video_search(
+def search_videos(
         search_str: str = None,
         offset: int = None,
         limit: int = VIDEO_QUERY_LIMIT,

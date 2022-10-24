@@ -6,7 +6,7 @@ import sqlalchemy
 from modules.videos.common import apply_info_json
 from modules.videos.lib import parse_video_file_name, validate_video, get_statistics
 from modules.videos.models import Video
-from modules.videos.video.lib import video_search
+from modules.videos.video.lib import search_videos
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import File
 
@@ -27,19 +27,19 @@ def test_search_censored_videos(test_session, simple_channel, video_factory):
 
     # All source_ids are in the entries.
     set_entries(map(str, range(50)))
-    videos, total = video_search(filters=['censored'], order_by='id', limit=20)
+    videos, total = search_videos(filters=['censored'], order_by='id', limit=20)
     assert [i['video']['source_id'] for i in videos] == []
     assert total == 0
 
     # First 5 are censored.
     set_entries(map(str, range(5, 50)))
-    videos, total = video_search(filters=['censored'], order_by='id', limit=20)
+    videos, total = search_videos(filters=['censored'], order_by='id', limit=20)
     assert [i['video']['source_id'] for i in videos] == [str(i) for i in range(5)]
     assert total == 5
 
     # First 25 are censored.
     set_entries(map(str, range(25, 50)))
-    videos, total = video_search(filters=['censored'], order_by='id', limit=20)
+    videos, total = search_videos(filters=['censored'], order_by='id', limit=20)
     assert [i['video']['source_id'] for i in videos] == [str(i) for i in range(20)]
     assert total == 25
 

@@ -25,7 +25,7 @@ export function Dashboard() {
     // Only show dashboard parts if not searching.
     let body;
     if (searchStr) {
-        body = <FilesSearchView showLimit={true} showSelect={true} showSelectButton={true}/>;
+        body = <FilesSearchView showLimit={true} showSelectButton={true}/>;
     } else {
         body = <>
             {!wrol_mode && downloads}

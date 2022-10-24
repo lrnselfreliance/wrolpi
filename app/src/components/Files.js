@@ -1,23 +1,10 @@
 import React, {useContext} from "react";
 import FileBrowser from 'react-keyed-file-browser';
-import {
-    Card,
-    Checkbox,
-    Confirm,
-    Divider,
-    Dropdown,
-    Image,
-    PlaceholderLine,
-    TableBody,
-    TableCell,
-    TableHeader,
-    TableHeaderCell,
-    TableRow,
-} from "semantic-ui-react";
+import {Card, Confirm, Divider, Dropdown, Image, PlaceholderLine, TableCell, TableHeaderCell,} from "semantic-ui-react";
 import 'react-keyed-file-browser/dist/react-keyed-file-browser.css';
 import {deleteFile, refreshDirectoryFiles, refreshFiles} from "../api";
 import {
-    ArchiveRow,
+    ArchiveRowCells,
     CardGroupCentered,
     ExternalCardLink,
     FileIcon,
@@ -28,7 +15,7 @@ import {
     textEllipsis,
     uploadDate,
     VideoCard,
-    VideoRow
+    VideoRowCells
 } from "./Common";
 import {useBrowseFiles, useQuery, useSearchFiles} from "../hooks/customHooks";
 import {Route, Routes} from "react-router-dom";
@@ -36,7 +23,8 @@ import {CardPlacholder} from "./Placeholder";
 import {ArchiveCard} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {ThemeContext} from "../contexts/contexts";
-import {Button, CardIcon, Header, Icon, Placeholder, Segment, Table} from "./Theme";
+import {Button, CardIcon, Header, Icon, Placeholder, Segment} from "./Theme";
+import {SelectableTable} from "./Tables";
 
 const icons = {
     File: <Icon name='file'/>,
@@ -215,7 +203,7 @@ export function FileCards({files}) {
     }
 }
 
-function ImageRow({file, checkbox}) {
+function ImageRowCells({file}) {
     const url = `/media/${encodeURIComponent(file.path)}`;
 
     let poster = <FileIcon file={file} size='large'/>;
@@ -224,75 +212,53 @@ function ImageRow({file, checkbox}) {
         poster = <Image wrapped src={url} width='50px'/>;
     }
 
-    return (
-        <Table.Row>
-            {checkbox}
-            <TableCell>
-                <center>
-                    {poster}
-                </center>
-            </TableCell>
-            <TableCell>
-                <ExternalCardLink to={url}>
-                    <p>{textEllipsis(file.title || file.stem || file.path, 100)}</p>
-                </ExternalCardLink>
-            </TableCell>
-        </Table.Row>
-    )
+    // Fragment for SelectableRow
+    return (<React.Fragment>
+        <TableCell>
+            <center>
+                {poster}
+            </center>
+        </TableCell>
+        <TableCell>
+            <ExternalCardLink to={url}>
+                <p>{textEllipsis(file.title || file.stem || file.path, 100)}</p>
+            </ExternalCardLink>
+        </TableCell>
+    </React.Fragment>)
 }
 
-function FileRow({file, selectOn, onSelect}) {
-    let checkbox;
-    if (selectOn) {
-        const localOnSelect = (e, {checked}) => {
-            try {
-                onSelect(file.key, checked);
-            } catch (e) {
-                console.error('No onSelect declared');
-            }
-        };
-        checkbox = <TableCell>
-            <Checkbox onChange={localOnSelect}/>
-        </TableCell>
-    }
-
+function FileRow({file}) {
     if (file.model === 'video' && 'video' in file) {
-        return <VideoRow key={file['path']} file={file} checkbox={checkbox}/>;
+        return <VideoRowCells file={file}/>;
     } else if (file.model === 'archive' && 'archive' in file) {
-        return <ArchiveRow key={file['path']} file={file} checkbox={checkbox}/>;
+        return <ArchiveRowCells file={file}/>;
     } else if (file.mimetype && file.mimetype.startsWith('image/')) {
-        return <ImageRow key={file['path']} file={file} checkbox={checkbox}/>;
+        return <ImageRowCells file={file}/>;
     }
-
     const onDownloadFile = async () => window.open(`/media/${file.key}`);
 
-    return <TableRow>
-        {checkbox}
+    // Fragment for SelectableRow
+    return <React.Fragment>
         <TableCell>
             <center><FileIcon file={file} size='large'/></center>
         </TableCell>
         <TableCell onClick={() => onDownloadFile()}>
             {textEllipsis(file.title)}
         </TableCell>
-    </TableRow>
+    </React.Fragment>
 }
 
-export function FileTable({files, selectOn, onSelect}) {
+export function FileTable({files, selectOn, onSelect, footer}) {
     if (files && files.length > 0) {
-        return (
-            <Table unstackable striped compact='very'>
-                <TableHeader>
-                    <TableRow>
-                        {selectOn && <TableHeaderCell/>}
-                        <TableHeaderCell>Poster</TableHeaderCell>
-                        <TableHeaderCell>Title</TableHeaderCell>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {files.map(i => <FileRow key={i['path']} file={i} selectOn={selectOn} onSelect={onSelect}/>)}
-                </TableBody>
-            </Table>
-        )
+        const headerContents = ['Poster', 'Title'];
+        const rows = files.map(i => <FileRow key={i['key']} file={i}/>);
+        return <SelectableTable
+            headerContents={headerContents}
+            selectOn={selectOn}
+            onSelect={onSelect}
+            footer={footer}
+            rows={rows}
+        />;
     } else if (files && files.length === 0) {
         return <Segment><p>No results!</p></Segment>
     } else {
@@ -372,7 +338,12 @@ export function FilesView({
 
     let body;
     if (view === 'list') {
-        body = <FileTable files={files} selectOn={selectOn} onSelect={onSelect}/>;
+        const footer = selectOn && selectElem ?
+            <>
+                <TableHeaderCell/>
+                <TableHeaderCell>{selectElem}</TableHeaderCell>
+            </> : null;
+        body = <FileTable files={files} selectOn={selectOn} onSelect={onSelect} footer={footer}/>;
     } else {
         body = <FileCards files={files}/>;
     }
@@ -396,7 +367,6 @@ export function FilesView({
             </Grid.Column>
             {menuColumns}
         </Grid>
-        {selectOn && selectElem}
         {body}
         {paginator}
     </>

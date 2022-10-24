@@ -1,16 +1,5 @@
 import React, {useContext, useEffect, useState} from "react";
-import {
-    Card,
-    Container,
-    IconGroup,
-    Image,
-    Input,
-    Modal,
-    Pagination,
-    Responsive,
-    TableCell,
-    TableRow
-} from 'semantic-ui-react';
+import {Card, Container, IconGroup, Image, Input, Modal, Pagination, Responsive, TableCell} from 'semantic-ui-react';
 import {Link, NavLink} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
@@ -196,7 +185,7 @@ export function VideoCard({file}) {
     </Card>)
 }
 
-export function VideoRow({file, checkbox}) {
+export function VideoRowCells({file}) {
     const {video} = file;
 
     let video_url = `/videos/video/${video.id}`;
@@ -216,8 +205,8 @@ export function VideoRow({file, checkbox}) {
         poster = <FileIcon file={file} size='large'/>;
     }
 
-    return (<TableRow>
-        {checkbox}
+    // Fragment for SelectableRow
+    return <React.Fragment>
         <TableCell>
             <center>
                 {poster}
@@ -228,10 +217,10 @@ export function VideoRow({file, checkbox}) {
                 {textEllipsis(video.title || video.stem || video.video_path, 100)}
             </CardLink>
         </TableCell>
-    </TableRow>)
+    </React.Fragment>
 }
 
-export function ArchiveRow({file, checkbox}) {
+export function ArchiveRowCells({file}) {
     const {archive} = file;
 
     const archiveUrl = `/archive/${archive.id}`;
@@ -246,8 +235,8 @@ export function ArchiveRow({file, checkbox}) {
         poster = <FileIcon file={file} size='large'/>;
     }
 
-    return (<TableRow>
-        {checkbox}
+    // Fragment for SelectableRow
+    return (<React.Fragment>
         <TableCell>
             <center>{poster}</center>
         </TableCell>
@@ -256,7 +245,7 @@ export function ArchiveRow({file, checkbox}) {
                 {textEllipsis(archive.title || archive.stem, 100)}
             </CardLink>
         </TableCell>
-    </TableRow>)
+    </React.Fragment>)
 }
 
 export function RequiredAsterisk() {
@@ -775,10 +764,7 @@ export function UnsupportedModal(header, message, icon) {
 
 export function HotspotStatusIcon() {
     const {on, setHotspot, dockerized} = useHotspot();
-    const {modal, doOpen} = UnsupportedModal(
-        'Unsupported on Docker',
-        'You cannot toggle the hotspot on Docker.'
-    );
+    const {modal, doOpen} = UnsupportedModal('Unsupported on Docker', 'You cannot toggle the hotspot on Docker.');
 
     const toggleHotspot = (e) => {
         e.preventDefault();

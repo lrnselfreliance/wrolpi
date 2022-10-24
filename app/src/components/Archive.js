@@ -286,12 +286,11 @@ function Archives() {
         searchStr,
         setSearchStr,
         setOrderBy,
-        fetchArchives
-    } =
-        useSearchArchives(24, domain, searchOrder);
+        fetchArchives,
+    } = useSearchArchives(24, domain, searchOrder);
     const setView = (value) => updateQuery({view: value});
     const view = searchParams.get('view');
-    const setDomain = (value) => updateQuery({'domain': value});
+    const setDomain = (value) => updateQuery({'domain': value, 'o': 0});
 
     const archiveOrders = [
         {key: '-date', value: '-date', text: 'Newest'},

@@ -662,9 +662,9 @@ export const useVideoStatistics = () => {
         try {
             let stats = await getStatistics();
             stats.videos.sum_duration = secondsToFullDuration(stats.videos.sum_duration);
-            stats.videos.sum_size = humanFileSize(stats.videos.sum_size, true);
-            stats.videos.max_size = humanFileSize(stats.videos.max_size, true);
-            stats.historical.average_size = humanFileSize(stats.historical.average_size, true);
+            stats.videos.sum_size = humanFileSize(stats.videos.sum_size);
+            stats.videos.max_size = humanFileSize(stats.videos.max_size);
+            stats.historical.average_size = humanFileSize(stats.historical.average_size);
             setStatistics(stats);
         } catch (e) {
             console.error(e);

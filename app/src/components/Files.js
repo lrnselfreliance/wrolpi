@@ -175,6 +175,8 @@ function FileCard({file}) {
     const url = `/media/${encodeURIComponent(file.path)}`;
     const color = mimetypeColor(file.mimetype);
 
+    const size = file.size !== null && file.size !== undefined ? humanFileSize(file.size) : null;
+
     return <Card color={color}>
         <ExternalCardLink to={url}>
             <CardIcon>
@@ -187,6 +189,8 @@ function FileCard({file}) {
                     {textEllipsis(file.title || file.stem || file.path)}
                 </ExternalCardLink>
             </Card.Header>
+            <p>{uploadDate(file.modified / 1000)}</p>
+            <p>{size}</p>
         </Card.Content>
     </Card>
 }
@@ -248,7 +252,7 @@ function FileRow({file}) {
     </React.Fragment>
 }
 
-export function FileTable({files, selectOn, onSelect, footer}) {
+export function FileTable({files, selectOn, onSelect, footer, selectedKeys}) {
     if (files && files.length > 0) {
         const headerContents = ['Poster', 'Title'];
         const rows = files.map(i => <FileRow key={i['key']} file={i}/>);
@@ -256,6 +260,7 @@ export function FileTable({files, selectOn, onSelect, footer}) {
             headerContents={headerContents}
             selectOn={selectOn}
             onSelect={onSelect}
+            selectedKeys={selectedKeys}
             footer={footer}
             rows={rows}
         />;
@@ -282,6 +287,7 @@ export function FilesView({
                               showView = true,
                               showSelect = false,
                               selectElem,
+                              selectedKeys,
                               onSelect,
                               setPage,
                               menuColumnsCount,
@@ -343,7 +349,8 @@ export function FilesView({
                 <TableHeaderCell/>
                 <TableHeaderCell>{selectElem}</TableHeaderCell>
             </> : null;
-        body = <FileTable files={files} selectOn={selectOn} onSelect={onSelect} footer={footer}/>;
+        body = <FileTable files={files} selectOn={selectOn}
+                          onSelect={onSelect} footer={footer} selectedKeys={selectedKeys}/>;
     } else {
         body = <FileCards files={files}/>;
     }

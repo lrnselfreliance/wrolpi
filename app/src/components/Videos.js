@@ -112,26 +112,29 @@ function Videos({filter}) {
     }
 
     const onSelect = (path, checked) => {
-        let videoId;
-        if (videos) {
-            videos.forEach(i => {
-                if (i && i['video'] && i['path'] === path) {
-                    videoId = i['video']['id'];
-                }
-            });
-        }
-        if (checked && videoId) {
-            setSelectedVideos([...selectedVideos, videoId]);
-        } else {
-            setSelectedVideos(selectedVideos.filter(i => i !== videoId));
+        if (checked && path) {
+            setSelectedVideos([...selectedVideos, path]);
+        } else if (path) {
+            setSelectedVideos(selectedVideos.filter(i => i !== path));
         }
     }
 
     const onDelete = async (e) => {
         e.preventDefault();
         setDeleteOpen(false);
-        await deleteVideos(selectedVideos);
+        const videoIds = videos.filter(i => selectedVideos.indexOf(i['path']) >= 0).map(i => i['video']['id']);
+        await deleteVideos(videoIds);
         await fetchVideos();
+        setSelectedVideos([]);
+    }
+
+    const invertSelection = async () => {
+        const newSelectedVideos = videos.map(video => video['key']).filter(i => selectedVideos.indexOf(i) < 0);
+        setSelectedVideos(newSelectedVideos);
+    }
+
+    const clearSelection = async (e) => {
+        if (e) e.preventDefault();
         setSelectedVideos([]);
     }
 
@@ -148,6 +151,20 @@ function Videos({filter}) {
             onCancel={() => setDeleteOpen(false)}
             onConfirm={onDelete}
         />
+        <Button
+            color='grey'
+            onClick={() => invertSelection()}
+            disabled={!videos || videos.length === 0}
+        >
+            Invert
+        </Button>
+        <Button
+            color='yellow'
+            onClick={() => clearSelection()}
+            disabled={(videos && videos.length === 0) || selectedVideos.length === 0}
+        >
+            Clear
+        </Button>
     </div>;
 
     return <>
@@ -162,6 +179,7 @@ function Videos({filter}) {
             showLimit={true}
             showSelect={true}
             onSelect={onSelect}
+            selectedKeys={selectedVideos}
             selectElem={selectElm}
             setView={setView}
             setLimit={setLimit}

@@ -8,7 +8,7 @@ from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, Fore
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import Base, ModelHelper, logger, get_media_directory
+from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task
 from wrolpi.dates import now, TZDateTime
 from wrolpi.db import get_db_curs
 from wrolpi.downloader import Download, download_manager
@@ -360,9 +360,7 @@ class Channel(ModelHelper, Base):
         self.skip_download_videos = skip_download_videos
 
     def delete_with_videos(self):
-        """
-        Delete all Video records (but not video files) related to this Channel.  Then delete the Channel.
-        """
+        """Delete all Video records (but not video files) related to this Channel.  Then delete the Channel."""
         session = Session.object_session(self)
         # Delete the video records, but not the video files!
         session.query(Video).filter_by(channel_id=self.id).delete()

@@ -320,26 +320,29 @@ function Archives() {
     </>);
 
     const onSelect = (path, checked) => {
-        let archiveId;
-        if (archives) {
-            archives.forEach(i => {
-                if (i && i['archive'] && i['path'] === path) {
-                    archiveId = i['archive']['id'];
-                }
-            });
-        }
-        if (checked && archiveId) {
-            setSelectedArchives([...selectedArchives, archiveId]);
-        } else {
-            setSelectedArchives(selectedArchives.filter(i => i !== archiveId));
+        if (checked && path) {
+            setSelectedArchives([...selectedArchives, path]);
+        } else if (path) {
+            setSelectedArchives(selectedArchives.filter(i => i !== path));
         }
     }
 
     const onDelete = async (e) => {
         e.preventDefault();
         setDeleteOpen(false);
-        await deleteArchives(selectedArchives);
+        const archiveIds = archives.filter(i => selectedArchives.indexOf(i['path']) >= 0).map(i => i['archive']['id']);
+        await deleteArchives(archiveIds);
         await fetchArchives();
+        setSelectedArchives([]);
+    }
+
+    const invertSelection = async () => {
+        const newSelectedArchives = archives.map(archive => archive['key']).filter(i => selectedArchives.indexOf(i) < 0);
+        setSelectedArchives(newSelectedArchives);
+    }
+
+    const clearSelection = async (e) => {
+        if (e) e.preventDefault();
         setSelectedArchives([]);
     }
 
@@ -356,6 +359,20 @@ function Archives() {
             onCancel={() => setDeleteOpen(false)}
             onConfirm={onDelete}
         />
+        <Button
+            color='grey'
+            onClick={() => invertSelection()}
+            disabled={!archives || archives.length === 0}
+        >
+            Invert
+        </Button>
+        <Button
+            color='yellow'
+            onClick={() => clearSelection()}
+            disabled={(archives && archives.length === 0) || selectedArchives.length === 0}
+        >
+            Clear
+        </Button>
     </div>;
 
     return <FilesView
@@ -368,6 +385,7 @@ function Archives() {
         showSelect={true}
         onSelect={onSelect}
         selectElem={selectElm}
+        selectedKeys={selectedArchives}
         view={view}
         setView={setView}
         setPage={setPage}

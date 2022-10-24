@@ -320,7 +320,7 @@ export function secondsToTimestamp(seconds) {
     return `${d.getFullYear()}-${d.getMonth() + 1}-${day} ${hours}:${minutes}:${sec}`;
 }
 
-export function humanFileSize(bytes, si = false, dp = 1) {
+export function humanFileSize(bytes, dp = 1) {
     const thresh = 1024;
 
     if (Math.abs(bytes) < thresh) {

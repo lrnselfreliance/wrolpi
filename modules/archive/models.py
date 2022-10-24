@@ -49,7 +49,7 @@ class Archive(Base, ModelHelper):
                    f'domain={self.domain.domain}>'
         return f'<Archive id={self.id} url={self.url} singlefile={repr(str(self.singlefile_path))}>'
 
-    def my_paths(self) -> Generator:
+    def my_paths(self) -> Generator[pathlib.Path, None, None]:
         if self.singlefile_path:
             yield self.singlefile_path
         if self.readability_path:
@@ -60,6 +60,18 @@ class Archive(Base, ModelHelper):
             yield self.readability_txt_path
         if self.screenshot_path:
             yield self.screenshot_path
+
+    def my_files(self) -> Generator[File, None, None]:
+        if self.singlefile_file:
+            yield self.singlefile_file
+        if self.readability_file:
+            yield self.readability_file
+        if self.readability_json_file:
+            yield self.readability_json_file
+        if self.readability_txt_file:
+            yield self.readability_txt_file
+        if self.screenshot_file:
+            yield self.screenshot_file
 
     def unlink(self):
         """
@@ -101,16 +113,8 @@ class Archive(Base, ModelHelper):
 
         session = Session.object_session(self)
 
-        if self.screenshot_file:
-            session.delete(self.screenshot_file)
-        if self.readability_json_file:
-            session.delete(self.readability_json_file)
-        if self.readability_file:
-            session.delete(self.readability_file)
-        if self.singlefile_file:
-            session.delete(self.singlefile_file)
-        if self.readability_txt_file:
-            session.delete(self.readability_txt_file)
+        for file in self.my_files():
+            session.delete(file)
 
         session.delete(self)
 
@@ -130,19 +134,6 @@ class Archive(Base, ModelHelper):
             Archive.url == self.url,
         ).order_by(Archive.archive_datetime))
         return alternatives
-
-    def my_files(self) -> Generator[pathlib.Path, None, None]:
-        """Return all paths of this Archive.  Returns nothing if all paths are None."""  # noqa
-        if self.singlefile_path:
-            yield self.singlefile_path
-        if self.readability_path:
-            yield self.readability_path
-        if self.readability_txt_path:
-            yield self.readability_txt_path
-        if self.readability_json_path:
-            yield self.readability_json_path
-        if self.screenshot_path:
-            yield self.screenshot_path
 
     @staticmethod
     def find_by_path(path, session: Session) -> Base:

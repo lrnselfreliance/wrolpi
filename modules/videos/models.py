@@ -75,45 +75,34 @@ class Video(ModelHelper, Base):
 
         return video
 
-    def dict(self) -> dict:
-        d = super().dict()
-        if self.channel_id:
-            d['channel'] = self.channel.dict()
-        d['info_json'] = self.get_info_json()
-        return d
+    def my_paths(self) -> Generator[Path, None, None]:
+        """Return all paths of this Video.  Returns nothing if all paths are None."""
+        if self.poster_path:
+            yield self.poster_path
+        if self.caption_path:
+            yield self.caption_path
+        if self.info_json_path:
+            yield self.info_json_path
+        if self.video_path:
+            yield self.video_path
 
-    def get_minimize(self) -> dict:
-        """
-        Get a dictionary representation of this Video suitable for sending out the API.
-        """
-        from .common import minimize_video
-        return minimize_video(self.dict())
-
-    def _clear_files(self):
-        # Use setattr to avoid confusing PyCharm
-        setattr(self, 'caption_file', None)
-        setattr(self, 'description_file', None)
-        setattr(self, 'ext', None)
-        setattr(self, 'info_json_file', None)
-        setattr(self, 'poster_file', None)
-        setattr(self, 'video_file', None)
-
-    def my_files(self) -> Generator[Path, None, None]:
-        """Return all paths of this Video.  Returns nothing if all paths are None."""  # noqa
+    def my_files(self) -> Generator[File, None, None]:
+        """Return all Files of this Video.  Returns nothing if all paths are None."""
         if self.poster_file:
-            yield self.poster_file.path
+            yield self.poster_file
         if self.caption_file:
-            yield self.caption_file.path
+            yield self.caption_file
         if self.info_json_file:
-            yield self.info_json_file.path
+            yield self.info_json_file
         if self.video_file:
-            yield self.video_file.path
+            yield self.video_file
 
     def delete(self):
         """
-        Remove all files related to this video.  Add it to it's Channel's skip list.
+        Remove all files and File records related to this video.  Delete this Video record.
+        Add it to it's Channel's skip list.
         """
-        for path in self.my_files():
+        for path in self.my_paths():
             path.unlink(missing_ok=True)
 
         needs_save = bool(self.favorite)
@@ -124,14 +113,8 @@ class Video(ModelHelper, Base):
         session.commit()
         session.delete(self)
 
-        if self.poster_file:
-            session.delete(self.poster_file)
-        if self.video_file:
-            session.delete(self.video_file)
-        if self.caption_file:
-            session.delete(self.caption_file)
-        if self.info_json_file:
-            session.delete(self.info_json_file)
+        for file in self.my_files():
+            session.delete(file)
 
         if needs_save:
             # Save the Channels config.  This video was a favorite and that needs to be removed.

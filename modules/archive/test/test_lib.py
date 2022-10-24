@@ -100,27 +100,27 @@ def test_archive_refresh_deleted_archive(test_client, test_session, archive_dire
     check_counts(archive_count=5, domain_count=1)
 
     # Delete archive2's files, it's the latest for 'https://example.com/1'
-    for path in archive2.my_files():
+    for path in archive2.my_paths():
         path.unlink()
     test_client.post('/api/files/refresh')
     check_counts(archive_count=4, domain_count=1)
 
     # Delete archive1's files, now the URL is empty.
-    for path in archive1.my_files():
+    for path in archive1.my_paths():
         path.unlink()
     test_client.post('/api/files/refresh')
     check_counts(archive_count=3, domain_count=0)
 
     # Delete archive3, now there is now example.com domain
-    for path in archive3.my_files():
+    for path in archive3.my_paths():
         path.unlink()
     test_client.post('/api/files/refresh')
     check_counts(archive_count=2, domain_count=0)
 
     # Delete all the rest of the archives
-    for path in archive4.my_files():
+    for path in archive4.my_paths():
         path.unlink()
-    for path in archive5.my_files():
+    for path in archive5.my_paths():
         path.unlink()
     test_client.post('/api/files/refresh')
     check_counts(archive_count=0, domain_count=0)
@@ -179,9 +179,9 @@ def test_delete_archive(test_session, archive_factory):
     test_session.commit()
 
     # Files are real.
-    assert archive1.my_files() and all(i.is_file() for i in archive1.my_files())
-    assert archive2.my_files() and all(i.is_file() for i in archive2.my_files())
-    assert archive3.my_files() and all(i.is_file() for i in archive3.my_files())
+    assert archive1.my_paths() and all(i.is_file() for i in archive1.my_paths())
+    assert archive2.my_paths() and all(i.is_file() for i in archive2.my_paths())
+    assert archive3.my_paths() and all(i.is_file() for i in archive3.my_paths())
 
     assert test_session.query(Archive).count() == 3
     assert test_session.query(File).count() == 15
@@ -191,10 +191,10 @@ def test_delete_archive(test_session, archive_factory):
     assert test_session.query(Archive).count() == 1
     assert test_session.query(File).count() == 5
     # Files were deleted.
-    assert archive1.my_files() and not any(i.is_file() for i in archive1.my_files())
-    assert archive3.my_files() and not any(i.is_file() for i in archive3.my_files())
+    assert archive1.my_paths() and not any(i.is_file() for i in archive1.my_paths())
+    assert archive3.my_paths() and not any(i.is_file() for i in archive3.my_paths())
     # Archive2 is untouched
-    assert archive2.my_files() and all(i.is_file() for i in archive2.my_files())
+    assert archive2.my_paths() and all(i.is_file() for i in archive2.my_paths())
 
     # Delete the last archive.  The Domain should also be deleted.
     delete_archives(archive2.id)
@@ -204,7 +204,7 @@ def test_delete_archive(test_session, archive_factory):
 
     # All Files were deleted.
     assert test_session.query(File).count() == 0
-    assert archive2.my_files() and not any(i.is_file() for i in archive2.my_files())
+    assert archive2.my_paths() and not any(i.is_file() for i in archive2.my_paths())
 
 
 def test_get_domains(test_session, archive_factory):
@@ -617,9 +617,9 @@ def test_migrate_archive_files(test_session, archive_directory, archive_factory)
              'example.org/2000-01-01-00-00-00_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.readability.json')),
     ]
     # New Archive files still exist.
-    assert all(i.is_file() for i in archive1.my_files())
-    assert all(i.is_file() for i in archive2.my_files())
-    assert all(i.is_file() for i in archive3.my_files())
+    assert all(i.is_file() for i in archive1.my_paths())
+    assert all(i.is_file() for i in archive2.my_paths())
+    assert all(i.is_file() for i in archive3.my_paths())
 
 
 def test_archive_files(test_directory):

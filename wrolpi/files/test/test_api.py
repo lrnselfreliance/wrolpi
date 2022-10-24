@@ -204,7 +204,5 @@ def test_associated_files(test_session, test_client, make_files_structure):
         [
             {'path': 'not a video.txt'},
             {'path': 'video.mp4'},
-            {'path': 'video.info.json'},
-            {'path': 'video.png'},
         ]
     )

@@ -290,15 +290,15 @@ def file_search(search_str: str, limit: int, offset: int, mimetype: str = None, 
         model: Only return files that match this model.
     """
     params = dict(offset=offset, limit=limit)
-    wheres = []
+    wheres = ['associated = false']
     selects = []
-    order_by = 'associated, 1 ASC'
+    order_by = '1 ASC'
 
     if search_str:
         params['search_str'] = search_str
         wheres.append('textsearch @@ websearch_to_tsquery(%(search_str)s)')
         selects.append('ts_rank(textsearch, websearch_to_tsquery(%(search_str)s))')
-        order_by = 'associated, 2 DESC'
+        order_by = '2 DESC'
 
     if mimetype and len(mimetype.split('/')) == 1:
         params['mimetype'] = f'{mimetype}/%'

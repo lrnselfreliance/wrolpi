@@ -281,7 +281,7 @@ async def test_files_indexer(test_session, make_files_structure):
         'a zip file.zip',
         'images/an image file.jpeg',
         'unknown file',
-        'videos/a video file.info.json',
+        'videos/a video file.info.json',  # This is "associated" and will be hidden.
         'videos/a video file.mp4',
     ]
     bzip_path, gzip_path, text_path, zip_path, image_path, unknown_path, info_json_path, video_path \
@@ -327,14 +327,13 @@ async def test_files_indexer(test_session, make_files_structure):
 
     # File are indexed by their titles and contents.
     files, total = lib.file_search('file', 10, 0)
-    assert total == len(source_files), 'All files contain "file" in their file name.'
+    assert total == 7, 'All files contain "file" in their file name.  The associated video file is hidden.'
     files, total = lib.file_search('image', 10, 0)
     assert total == 1 and files[0]['title'] == 'an image file.jpeg', 'The image file title contains "image".'
     files, total = lib.file_search('contents', 10, 0)
     assert total == 1 and files[0]['title'] == 'a text file.txt', 'The text file contains "contents".'
     files, total = lib.file_search('video', 10, 0)
-    assert total == 2 and {i['title'] for i in files} == {'a video file.info.json', 'a video file.mp4'}, \
-        'The video files contains "video".'
+    assert total == 1 and {i['title'] for i in files} == {'a video file.mp4'}, 'The video file contains "video".'
     files, total = lib.file_search('yawn', 10, 0)
     assert total == 1 and files[0]['title'] == 'a video file.mp4', 'The video file captions contain "yawn".'
     files, total = lib.file_search('bunny', 10, 0)

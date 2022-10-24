@@ -101,7 +101,18 @@ class Archive(Base, ModelHelper):
 
         session = Session.object_session(self)
 
-        session.query(Archive).filter_by(id=self.id).delete()
+        if self.screenshot_file:
+            session.delete(self.screenshot_file)
+        if self.readability_json_file:
+            session.delete(self.readability_json_file)
+        if self.readability_file:
+            session.delete(self.readability_file)
+        if self.singlefile_file:
+            session.delete(self.singlefile_file)
+        if self.readability_txt_file:
+            session.delete(self.readability_txt_file)
+
+        session.delete(self)
 
         if self.domain:
             domain_archives = [i.id for i in self.domain.archives]

@@ -8,7 +8,7 @@ from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, Fore
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task
+from wrolpi.common import Base, ModelHelper, logger, get_media_directory
 from wrolpi.dates import now, TZDateTime
 from wrolpi.db import get_db_curs
 from wrolpi.downloader import Download, download_manager
@@ -116,14 +116,22 @@ class Video(ModelHelper, Base):
         for path in self.my_files():
             path.unlink(missing_ok=True)
 
-        self._clear_files()
-
         needs_save = bool(self.favorite)
 
         self.add_to_skip_list()
         self.favorite = None
         session = Session.object_session(self)
         session.commit()
+        session.delete(self)
+
+        if self.poster_file:
+            session.delete(self.poster_file)
+        if self.video_file:
+            session.delete(self.video_file)
+        if self.caption_file:
+            session.delete(self.caption_file)
+        if self.info_json_file:
+            session.delete(self.info_json_file)
 
         if needs_save:
             # Save the Channels config.  This video was a favorite and that needs to be removed.

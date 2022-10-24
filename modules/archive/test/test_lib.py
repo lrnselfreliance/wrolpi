@@ -178,16 +178,33 @@ def test_delete_archive(test_session, archive_factory):
     archive3 = archive_factory('example.com', 'https://example.com/1')
     test_session.commit()
 
+    # Files are real.
+    assert archive1.my_files() and all(i.is_file() for i in archive1.my_files())
+    assert archive2.my_files() and all(i.is_file() for i in archive2.my_files())
+    assert archive3.my_files() and all(i.is_file() for i in archive3.my_files())
+
     assert test_session.query(Archive).count() == 3
+    assert test_session.query(File).count() == 15
 
     # Delete the oldest.
     delete_archives(archive1.id, archive3.id)
     assert test_session.query(Archive).count() == 1
+    assert test_session.query(File).count() == 5
+    # Files were deleted.
+    assert archive1.my_files() and not any(i.is_file() for i in archive1.my_files())
+    assert archive3.my_files() and not any(i.is_file() for i in archive3.my_files())
+    # Archive2 is untouched
+    assert archive2.my_files() and all(i.is_file() for i in archive2.my_files())
 
     # Delete the last archive.  The Domain should also be deleted.
     delete_archives(archive2.id)
+    assert test_session.query(Archive).count() == 0
     domain = test_session.query(Domain).one_or_none()
     assert domain is None
+
+    # All Files were deleted.
+    assert test_session.query(File).count() == 0
+    assert archive2.my_files() and not any(i.is_file() for i in archive2.my_files())
 
 
 def test_get_domains(test_session, archive_factory):

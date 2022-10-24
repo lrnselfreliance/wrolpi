@@ -1,5 +1,6 @@
 from modules.videos.models import Video
 from wrolpi.dates import now
+from wrolpi.files.models import File
 
 
 def test_timezone(test_session):
@@ -25,3 +26,20 @@ def test_delete_video_no_channel(test_session, simple_video):
 
     assert not simple_video.channel
     simple_video.delete()
+
+
+def test_delete_video(test_session, simple_video, image_file):
+    """When a Video record is deleted, all referenced file records should be deleted."""
+    simple_video.poster_file = File(path=image_file)
+    test_session.add(simple_video.poster_file)
+    test_session.commit()
+
+    assert simple_video.video_path.is_file(), 'Video file was not created.'
+    assert simple_video.poster_path.is_file(), 'Video poster was not created.'
+    assert test_session.query(Video).count() == 1, 'Video was not created.'
+    assert test_session.query(File).count() == 2, 'Video file and poster file were not created.'
+
+    simple_video.delete()
+    test_session.commit()
+    assert test_session.query(Video).count() == 0, 'Video was not deleted.'
+    assert test_session.query(File).count() == 0, 'Video files were not deleted.'

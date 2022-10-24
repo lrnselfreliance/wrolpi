@@ -521,19 +521,20 @@ ARCHIVE_ORDERS = {
 
 def archive_search(search_str: str, domain: str, limit: int, offset: int, order_by: str) -> Tuple[List[Archive], int]:
     wheres = []
-    params = dict(offset=offset, limit=limit)
+
+    params = dict(search_str=search_str, offset=int(offset), limit=int(limit))
     order = '1 DESC'
 
     if search_str:
-        columns = 'f.path, ts_rank(f.textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
+        # A search_str was provided by the user, modify the query to filter by it.
+        select_columns = 'f.path, ts_rank(f.textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
+        wheres.append('f.textsearch @@ websearch_to_tsquery(%(search_str)s)')
         params['search_str'] = search_str
-        wheres.append('\nAND textsearch @@ websearch_to_tsquery(%(search_str)s)')
-        # highest rank, then most recent
-        if not order_by:
-            order = ARCHIVE_ORDERS['rank']
+        join = 'LEFT JOIN file f on f.path = a.singlefile_path'
     else:
-        # No search_str provided, get path and total only.
-        columns = 'f.path, COUNT(*) OVER() AS total'
+        # No search_str provided.  Get path and total only.  Don't join the "file" to speed up query.
+        select_columns = 'a.singlefile_path AS path, COUNT(*) OVER() AS total'
+        join = ''
 
     if order_by:
         try:
@@ -543,20 +544,19 @@ def archive_search(search_str: str, domain: str, limit: int, offset: int, order_
 
     if domain:
         params['domain'] = domain
-        wheres.append('AND domain_id = (select id from domains where domains.domain = %(domain)s)')
+        wheres.append('domain_id = (select id from domains where domains.domain = %(domain)s)')
 
-    wheres = '\n'.join(wheres)
+    wheres = '\n AND '.join(wheres)
+    where = f'WHERE\n{wheres}' if wheres else ''
     stmt = f'''
-        SELECT {columns}
-        FROM archive a
-            LEFT JOIN file f on f.path = a.singlefile_path
-        WHERE
-            a.singlefile_path != ''
-            {wheres}
-        ORDER BY {order}
-        OFFSET %(offset)s
-        LIMIT %(limit)s
-    '''
+            SELECT
+                {select_columns}
+            FROM archive a
+            {join}
+            {where}
+            ORDER BY {order}
+            OFFSET %(offset)s LIMIT %(limit)s
+        '''.strip()
     logger.debug(stmt, params)
 
     results, total = handle_search_results(stmt, params)

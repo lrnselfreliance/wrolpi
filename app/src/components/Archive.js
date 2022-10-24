@@ -292,10 +292,14 @@ function Archives() {
     const view = searchParams.get('view');
     const setDomain = (value) => updateQuery({'domain': value, 'o': 0});
 
-    const archiveOrders = [
+    let archiveOrders = [
         {key: '-date', value: '-date', text: 'Newest'},
         {key: 'date', value: 'date', text: 'Oldest'},
     ];
+
+    if (searchStr) {
+        archiveOrders = [{key: 'rank', value: 'rank', text: 'Search Rank'}, ...archiveOrders];
+    }
 
     const menuColumns = (<>
         <Grid.Column width={5}>

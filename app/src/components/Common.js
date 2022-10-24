@@ -255,20 +255,6 @@ export function RequiredAsterisk() {
 export let defaultVideoOrder = '-upload_date';
 export let defaultSearchOrder = 'rank';
 
-export let videoOrders = [{key: '-upload_date', value: '-upload_date', text: 'Newest'}, {
-    key: 'upload_date', value: 'upload_date', text: 'Oldest'
-}, {key: '-duration', value: '-duration', text: 'Longest'}, {
-    key: 'duration', value: 'duration', text: 'Shortest'
-}, {key: '-viewed', value: '-viewed', text: 'Recently viewed'}, {
-    key: '-size', value: '-size', text: 'Largest'
-}, {key: 'size', value: 'size', text: 'Smallest'}, {
-    key: '-view_count', value: '-view_count', text: 'Most Views'
-}, {key: 'view_count', value: 'view_count', text: 'Least Views'}, {
-    key: '-modification_datetime', value: '-modification_datetime', text: 'Newest File'
-}, {key: 'modification_datetime', value: 'modification_datetime', text: 'Oldest File'},]
-
-export let searchOrders = [{key: 'rank', value: 'rank', text: 'Search Rank', title: 'Search Results'},];
-
 export const frequencyOptions = [{key: 'daily', text: 'Daily', value: 86400}, {
     key: 'weekly', text: 'Weekly', value: 604800
 }, {key: 'biweekly', text: 'Biweekly', value: 1209600}, {

@@ -7,8 +7,7 @@ import {
     scrollToTop,
     SearchInput,
     TabLinks,
-    useTitle,
-    videoOrders
+    useTitle
 } from "./Common"
 import VideoPage from "./VideoPlayer";
 import {Confirm, Dropdown, PlaceholderHeader, PlaceholderLine, StatisticLabel, StatisticValue} from "semantic-ui-react";
@@ -59,6 +58,24 @@ function Videos({filter}) {
         {text: 'Censored', key: 'censored', value: 'censored'},
     ];
     const setFilters = (value) => updateQuery({filter: value});
+
+    let videoOrders = [
+        {key: '-upload_date', value: '-upload_date', text: 'Newest'},
+        {key: 'upload_date', value: 'upload_date', text: 'Oldest'},
+        {key: '-duration', value: '-duration', text: 'Longest'},
+        {key: 'duration', value: 'duration', text: 'Shortest'},
+        {key: '-viewed', value: '-viewed', text: 'Recently viewed'},
+        {key: '-size', value: '-size', text: 'Largest'},
+        {key: 'size', value: 'size', text: 'Smallest'},
+        {key: '-view_count', value: '-view_count', text: 'Most Views'},
+        {key: 'view_count', value: 'view_count', text: 'Least Views'},
+        {key: '-modification_datetime', value: '-modification_datetime', text: 'Newest File'},
+        {key: 'modification_datetime', value: 'modification_datetime', text: 'Oldest File'},
+    ];
+
+    if (searchStr) {
+        videoOrders = [{key: 'rank', value: 'rank', text: 'Search Rank'}, ...videoOrders];
+    }
 
     const menuColumns = <>
         <Grid.Column mobile={8} computer={5}>

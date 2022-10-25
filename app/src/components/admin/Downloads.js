@@ -98,11 +98,6 @@ class DownloadRow extends React.Component {
             (text) => <Link to={location}>{text}</Link> :
             (text) => <a href={url} target='_blank' rel='noopener noreferrer'>{text}</a>;
 
-        let positive = false;
-        if (status === 'pending') {
-            positive = true;
-        }
-
         const errorModal = <Modal
             closeIcon
             onClose={() => this.setState({errorModalOpen: false})}
@@ -119,12 +114,15 @@ class DownloadRow extends React.Component {
             </Modal.Actions>
         </Modal>;
 
-        return <TableRow positive={positive}>
+        return <TableRow>
             <TableCell>
                 {link(textEllipsis(url, 50))}
             </TableCell>
             <TableCell>{secondsToFrequency(frequency)}</TableCell>
-            <TableCell>{last_successful_download ? secondsToElapsedPopup(last_successful_download) : null}</TableCell>
+            <TableCell>
+                {last_successful_download ? secondsToElapsedPopup(last_successful_download) : null}
+                {status === 'pending' ? <Loader active inline size='tiny'/> : null}
+            </TableCell>
             <TableCell>{secondsToElapsedPopup(next_download)}</TableCell>
             <TableCell>{error && errorModal}{link('View')}</TableCell>
         </TableRow>

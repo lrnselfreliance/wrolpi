@@ -4,7 +4,7 @@ import {Route, Routes} from "react-router-dom";
 import {getMapImportStatus, importMapFiles} from "../api";
 import {
     Checkbox,
-    Loader,
+    Loader as SLoader,
     PlaceholderLine,
     TableBody,
     TableCell,
@@ -14,7 +14,7 @@ import {
     TableRow
 } from "semantic-ui-react";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {Button, Icon, Placeholder, Table} from "./Theme";
+import {Button, Icon, Loader, Placeholder, Table} from "./Theme";
 
 class ManageMap extends React.Component {
     constructor(props) {
@@ -103,7 +103,7 @@ class ManageMap extends React.Component {
             </TableCell>
             <TableCell>
                 {path === this.state.importing ?
-                    <Loader active inline size='mini'/> :
+                    <SLoader active inline size='mini'/> :
                     imported ? 'yes' : 'no'}
             </TableCell>
             {size !== null ? sizeCells : <TableCell colSpan={3}/>}

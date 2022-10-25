@@ -4,6 +4,7 @@ import {Route, Routes} from "react-router-dom";
 import {getMapImportStatus, importMapFiles} from "../api";
 import {
     Checkbox,
+    Loader,
     PlaceholderLine,
     TableBody,
     TableCell,
@@ -13,7 +14,7 @@ import {
     TableRow
 } from "semantic-ui-react";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {Button, Icon, Loader, Placeholder, Table} from "./Theme";
+import {Button, Icon, Placeholder, Table} from "./Theme";
 
 class ManageMap extends React.Component {
     constructor(props) {

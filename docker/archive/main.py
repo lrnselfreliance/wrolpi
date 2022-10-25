@@ -78,7 +78,7 @@ async def call_single_file(url) -> bytes:
           r' --browser-executable-path /usr/bin/chromium-browser' \
           r' --browser-args [\"--no-sandbox\"]' \
           r' --dump-content ' \
-          f' {url}'
+          f' "{url}"'
     logger.debug(f'archive cmd: {cmd}')
     stdout, stderr, return_code = await check_output(cmd, always_log_stderr=True)
     if return_code != 0 or not stdout:
@@ -94,7 +94,7 @@ async def extract_readability(path: str, url: str) -> dict:
     See https://github.com/ArchiveBox/readability-extractor
     """
     logger.info(f'readability for {url}')
-    cmd = f'readability-extractor {path} {url}'
+    cmd = f'readability-extractor {path} "{url}"'
     logger.debug(f'readability cmd: {cmd}')
     stdout, stderr, return_code = await check_output(cmd)
     output = json.loads(stdout)
@@ -110,7 +110,7 @@ async def take_screenshot(url: str) -> bytes:
           ' --no-sandbox' \
           ' --screenshot' \
           ' --window-size=1280,720' \
-          f' {url}'
+          f' "{url}"'
     logger.debug(f'Screenshot cmd: {cmd}')
     with tempfile.TemporaryDirectory() as tmp_dir:
         try:

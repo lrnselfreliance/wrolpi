@@ -1,5 +1,5 @@
 import React, {useContext, useEffect, useState} from 'react';
-import {darkTheme, lightTheme, ThemeContext} from "../contexts/contexts";
+import {ThemeContext} from "../contexts/contexts";
 import {
     Accordion as ACCORDION,
     Button as BUTTON,
@@ -22,6 +22,9 @@ import {
     TabPane as TAB_PANE,
     TextArea as TEXTAREA
 } from "semantic-ui-react";
+
+export const darkTheme = 'dark';
+export const lightTheme = 'light';
 
 export function ThemeWrapper({children, ...props}) {
     if (Object.keys(props).length > 0) {

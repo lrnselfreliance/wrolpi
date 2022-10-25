@@ -3,8 +3,8 @@ import {Card, Container, IconGroup, Image, Input, Modal, Pagination, Responsive,
 import {Link, NavLink} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
-import {darkTheme, StatusContext, ThemeContext} from "../contexts/contexts";
-import {Button, CardIcon, Form, Header, Icon, Menu, Popup, Statistic} from "./Theme";
+import {StatusContext, ThemeContext} from "../contexts/contexts";
+import {Button, CardIcon, darkTheme, Form, Header, Icon, Menu, Popup, Statistic} from "./Theme";
 
 export const API_URI = `http://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;

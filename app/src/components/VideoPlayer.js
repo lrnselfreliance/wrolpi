@@ -7,8 +7,8 @@ import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {VideoPlaceholder} from "./Placeholder";
 import {useChannel} from "../hooks/customHooks";
-import {darkTheme, ThemeContext} from "../contexts/contexts";
-import {Button, Header, Icon, Segment, Tab, TabPane} from "./Theme";
+import {ThemeContext} from "../contexts/contexts";
+import {Button, darkTheme, Header, Icon, Segment, Tab, TabPane} from "./Theme";
 
 const MEDIA_PATH = '/media';
 

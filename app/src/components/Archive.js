@@ -24,7 +24,8 @@ import {
     SearchInput,
     TabLinks,
     textEllipsis,
-    uploadDate
+    uploadDate,
+    useTitle
 } from "./Common";
 import {deleteArchives, postDownload} from "../api";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
@@ -43,6 +44,12 @@ function ArchivePage() {
     const navigate = useNavigate();
     const {archiveId} = useParams();
     const {archiveFile, alternatives} = useArchive(archiveId);
+
+    let title;
+    if (archiveFile && archiveFile.archive) {
+        title = archiveFile.archive.title;
+    }
+    useTitle(title);
 
     if (archiveFile === null) {
         return <Segment><Loader active/></Segment>;
@@ -195,6 +202,8 @@ export function ArchiveCard({file}) {
 }
 
 export function Domains() {
+    useTitle('Archive Domains');
+
     const [domains] = useDomains();
     const [searchStr, setSearchStr] = useState('');
 
@@ -257,6 +266,8 @@ function Archives() {
     const [domains] = useDomains();
     const [selectedArchives, setSelectedArchives] = useState([]);
     const [deleteOpen, setDeleteOpen] = useState(false);
+
+    useTitle('Archives');
 
     let filterOptions = [];
     if (domains && domains.length > 0) {

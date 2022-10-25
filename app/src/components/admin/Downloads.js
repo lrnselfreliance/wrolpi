@@ -6,6 +6,7 @@ import {
     secondsToElapsedPopup,
     secondsToFrequency,
     textEllipsis,
+    useTitle,
     WROLModeMessage
 } from "../Common";
 import {
@@ -266,6 +267,8 @@ class StoppableRow extends React.Component {
 }
 
 export function Downloads() {
+    useTitle('Downloads');
+
     const {t} = useContext(ThemeContext);
 
     const {onceDownloads, recurringDownloads, fetchDownloads} = useDownloads();

@@ -26,7 +26,7 @@ import {
 } from "semantic-ui-react";
 import {Route, Routes} from "react-router-dom";
 import {toast} from 'react-semantic-toasts';
-import {arraysEqual, enumerate, PageContainer, replaceNullValues, TabLinks} from './Common';
+import {arraysEqual, enumerate, PageContainer, replaceNullValues, TabLinks, useTitle} from './Common';
 import _ from 'lodash';
 import {ThemeContext} from "../contexts/contexts";
 import {useInventory} from "../hooks/customHooks";
@@ -1096,6 +1096,8 @@ class InventoryAddList extends React.Component {
 }
 
 export function InventoryRoute(props) {
+    useTitle('Inventory');
+
     const links = [
         {text: 'List', to: '/inventory', key: 'inventory', end: true},
         {text: 'Summary', to: '/inventory/summary', key: 'summary'},

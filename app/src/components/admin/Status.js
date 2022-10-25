@@ -1,6 +1,6 @@
 import {Header, Progress, Statistic, StatisticGroup} from "../Theme";
 import React, {useContext} from "react";
-import {humanBandwidth, humanFileSize, LoadStatistic} from "../Common";
+import {humanBandwidth, humanFileSize, LoadStatistic, useTitle} from "../Common";
 import {Divider, Responsive} from "semantic-ui-react";
 import {ProgressPlaceholder} from "../Placeholder";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
@@ -141,6 +141,8 @@ export function CPUUsageProgress({value, label}) {
 }
 
 export function Status() {
+    useTitle('Status');
+
     const {status} = useContext(StatusContext);
 
     let percent;

@@ -14,6 +14,7 @@ import {
     Paginator,
     textEllipsis,
     uploadDate,
+    useTitle,
     VideoCard,
     VideoRowCells
 } from "./Common";
@@ -35,6 +36,8 @@ const icons = {
 };
 
 export function Files() {
+    useTitle('Files');
+
     const {t} = useContext(ThemeContext);
 
     const {browseFiles, setOpenFolders, fetchFiles} = useBrowseFiles();

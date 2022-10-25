@@ -11,6 +11,7 @@ export const VIDEOS_API = `${API_URI}/videos`;
 export const ARCHIVES_API = `${API_URI}/archive`;
 export const OTP_API = `${API_URI}/otp`;
 export const DEFAULT_LIMIT = 20;
+export const NAME = process.env && process.env.REACT_APP_NAME ? process.env.REACT_APP_NAME : null;
 
 export function Paginator({activePage, onPageChange, totalPages, showFirstAndLast, size = 'mini'}) {
     const handlePageChange = (e, {activePage}) => {
@@ -777,18 +778,19 @@ export function HotspotStatusIcon() {
 export function useTitle(title) {
     const documentDefined = typeof document !== 'undefined';
     const originalTitle = React.useRef(documentDefined ? document.title : null);
+    const name = NAME ? `${NAME} WROLPi` : `WROLPi`;
 
     useEffect(() => {
         if (!documentDefined) {
             return;
         }
 
-        const newTitle = `${title} - WROLPi`
+        const newTitle = `${title} - ${name}`
         if (title && document.title !== newTitle) {
             document.title = newTitle;
         }
         return () => {
             document.title = originalTitle.current;
         }
-    }, []);
+    }, [title]);
 }

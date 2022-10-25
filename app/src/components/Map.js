@@ -1,5 +1,5 @@
 import React from "react";
-import {HelpPopup, humanFileSize, PageContainer, TabLinks, WROLModeMessage} from "./Common";
+import {HelpPopup, humanFileSize, PageContainer, TabLinks, useTitle, WROLModeMessage} from "./Common";
 import {Route, Routes} from "react-router-dom";
 import {getMapImportStatus, importMapFiles} from "../api";
 import {
@@ -248,6 +248,8 @@ function MapApp() {
 }
 
 export function MapRoute() {
+    useTitle('Map');
+
     const links = [
         {text: 'Map', to: '/map', key: 'map', end: true},
         {text: 'Manage', to: '/map/manage', key: 'manage'},

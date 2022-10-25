@@ -29,6 +29,12 @@ export function VideoWrapper() {
 }
 
 function Videos({filter}) {
+    let title = 'Videos';
+    if (filter && filter.indexOf('favorite') >= 0) {
+        title = 'Favorite Videos';
+    }
+    useTitle(title);
+
     const {channelId} = useParams();
     const {searchParams, updateQuery} = useQuery();
     const [selectedVideos, setSelectedVideos] = useState([]);
@@ -196,6 +202,8 @@ function Videos({filter}) {
 }
 
 function Statistics() {
+    useTitle('Video Statistics');
+
     const {statistics} = useVideoStatistics();
     const {videos, historical, channels} = statistics;
 
@@ -246,8 +254,6 @@ function Statistics() {
 }
 
 export function VideosRoute(props) {
-    useTitle('Videos');
-
     const links = [
         {text: 'Videos', to: '/videos', key: 'videos', end: true},
         {text: 'Favorites', to: '/videos/favorites', key: 'favorites'},

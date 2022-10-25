@@ -1,7 +1,7 @@
 import React from 'react';
 import {Container} from "semantic-ui-react";
 import {getStatus, saveSettings} from "../../api";
-import {PageContainer, TabLinks, Toggle} from "../Common";
+import {PageContainer, TabLinks, Toggle, useTitle} from "../Common";
 import {Route, Routes} from "react-router-dom";
 import {ThemeContext} from "../../contexts/contexts";
 import {Header, Loader} from "../Theme";

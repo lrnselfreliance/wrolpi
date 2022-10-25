@@ -3,7 +3,7 @@ import {Divider, SegmentGroup} from "semantic-ui-react";
 import {Route, Routes} from "react-router-dom";
 import "../static/wrolpi.css";
 import {decryptOTP, encryptOTP} from "../api";
-import {PageContainer} from "./Common";
+import {PageContainer, useTitle} from "./Common";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, Header, Segment, TextArea} from "./Theme";
 
@@ -122,6 +122,8 @@ class Decrypt extends React.Component {
 }
 
 function OTP() {
+    useTitle('One Time Pad');
+
     const {t} = useContext(ThemeContext);
 
     let newPadURL = `http://${window.location.host}/api/otp/html`;

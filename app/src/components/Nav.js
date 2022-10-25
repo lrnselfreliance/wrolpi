@@ -3,7 +3,7 @@ import {NavLink} from "react-router-dom";
 import {Dropdown, Menu, Responsive} from "semantic-ui-react";
 import {StatusContext, ThemeContext} from "../contexts/contexts";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {DarkModeToggle, HotspotStatusIcon} from "./Common";
+import {DarkModeToggle, HotspotStatusIcon, NAME} from "./Common";
 
 const responsiveWidth = 500;
 
@@ -70,7 +70,8 @@ function NavIcon(props) {
 export function NavBar() {
     const {status} = useContext(StatusContext);
     const wrol_mode = status ? status['wrol_mode'] : null;
-    const topNavText = wrol_mode ? <>WROLPi&nbsp; <Icon name='lock'/></> : 'WROLPi';
+    const name = NAME || 'WROLPi';
+    const topNavText = wrol_mode ? <>{name}&nbsp; <Icon name='lock'/></> : name;
     const {i} = useContext(ThemeContext);
 
     return (

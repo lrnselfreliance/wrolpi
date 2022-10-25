@@ -22,6 +22,7 @@ import {
     secondsToDate,
     secondsToFrequency,
     Toggle,
+    useTitle,
     WROLModeMessage
 } from "./Common";
 import {Link, useNavigate, useParams} from "react-router-dom";
@@ -123,6 +124,12 @@ function ChannelPage({create, header}) {
     const navigate = useNavigate();
     const {channelId} = useParams();
     const {channel, changeValue, fetchChannel} = useChannel(channelId);
+
+    let title;
+    if (channel && channel.name) {
+        title = channel.name;
+    }
+    useTitle(title);
 
     if (!channel) {
         return <Loader active/>;
@@ -455,6 +462,7 @@ export function EditChannel(props) {
 }
 
 export function NewChannel(props) {
+    useTitle('New Channel');
     return <ChannelPage header='New Channel' {...props} create/>
 }
 
@@ -507,6 +515,7 @@ function MobileChannelRow({channel}) {
 
 
 export function Channels() {
+    useTitle('Channels');
 
     const {channels} = useChannels();
     const [searchStr, setSearchStr] = useState('');

@@ -289,10 +289,13 @@ class Video(ModelHelper, Base):
 
         if poster_file:
             poster_file.do_index()
+            poster_file.associated = True
         if caption_file:
             caption_file.do_index()
+            caption_file.associated = True
         if info_json_file:
             info_json_file.do_index()
+            info_json_file.associated = True
 
         session.flush([i for i in files])
 

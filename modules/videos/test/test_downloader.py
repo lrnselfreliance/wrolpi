@@ -413,12 +413,13 @@ async def test_video_download_1(test_session, test_directory, simple_channel, vi
 
 @pytest.mark.asyncio
 async def test_download_result(test_session, test_directory, video_download_manager, mock_video_process_runner,
-                               mock_video_extract_info):
+                               mock_video_extract_info, image_file):
     """VideoDownloader returns a DownloadResult when complete."""
     channel_directory = test_directory / 'videos/channel name'
     channel_directory.mkdir(parents=True)
     video_file = channel_directory / 'the video.mp4'
     shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_file)
+    image_file.rename(video_file.with_suffix('.jpg'))
 
     mock_video_extract_info.return_value = example_video_json
     with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
@@ -429,6 +430,12 @@ async def test_download_result(test_session, test_directory, video_download_mana
     download: Download = test_session.query(Download).one()
     assert download.url == 'https://example.com'
     assert download.location == '/videos/channel/1/video/1'
+
+    # Video files are associated.
+    video = test_session.query(Video).one()
+    assert not video.video_file.associated, 'Video file should not be associated.'
+    assert video.poster_path.is_file(), 'Poster file was not found.'
+    assert video.poster_file.associated, 'Poster file was not associated.'
 
 
 example_playlist_json = {

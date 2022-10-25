@@ -663,3 +663,9 @@ async def test_archive_download_index(test_session, test_directory, image_file):
     assert archive.title == 'the singlefile', 'Did not get the title from the singlefile'
     assert archive.screenshot_path and archive.screenshot_file and archive.screenshot_path.is_file(), \
         'Did not store the screenshot'
+
+    assert not archive.singlefile_file.associated
+    assert archive.readability_txt_file.associated \
+           and archive.readability_json_file.associated \
+           and archive.readability_file.associated \
+           and archive.screenshot_file.associated, 'Archive files must be associated'

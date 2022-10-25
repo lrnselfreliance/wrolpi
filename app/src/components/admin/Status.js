@@ -58,7 +58,7 @@ function DiskBandwidth({name, bytes_read_ps, bytes_write_ps}) {
     </Grid>
 }
 
-function CPUTemperatureStatistic({value, high_temperature, critical_temperature}) {
+function CPUTemperatureStatistic({value, high_temperature, critical_temperature, ...props}) {
     if (!value) {
         return <Statistic label='Temp C°' value='?'/>
     }
@@ -66,7 +66,6 @@ function CPUTemperatureStatistic({value, high_temperature, critical_temperature}
         // Critical and high are equal, manually change it so high changes color before critical.
         high_temperature = critical_temperature - 25;
     }
-    const props = {};
     if ((critical_temperature && value >= critical_temperature) || (!critical_temperature && value >= 75)) {
         props['color'] = 'red';
     } else if ((high_temperature && value >= high_temperature) || (!high_temperature && value >= 55)) {
@@ -209,10 +208,11 @@ export function Status() {
                     value={temperature}
                     high_temperature={high_temperature}
                     critical_temperature={critical_temperature}
+                    style={{marginRight: 0}}
                 />
                 <LoadStatistic label='1 Min. Load' value={minute_1} cores={cores}/>
-                <LoadStatistic label='5 Min. Load' value={minute_5} cores={cores}/>
-                <LoadStatistic label='15 Min. Load' value={minute_15} cores={cores}/>
+                <LoadStatistic label='5 Min.' value={minute_5} cores={cores}/>
+                <LoadStatistic label='15 Min.' value={minute_15} cores={cores}/>
             </StatisticGroup>
 
             <Header as='h2'>Network Bandwidth</Header>

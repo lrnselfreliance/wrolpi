@@ -1,4 +1,4 @@
-import React, {useContext, useState} from "react";
+import React, {useContext} from "react";
 import {clearCompletedDownloads, clearFailedDownloads, killDownload, postDownload} from "../../api";
 import {Link} from "react-router-dom";
 import {
@@ -11,6 +11,7 @@ import {
 import {
     Button as SemanticButton,
     Confirm,
+    Loader,
     Modal,
     PlaceholderLine,
     TableBody,
@@ -19,7 +20,7 @@ import {
     TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
-import {Button, Header, Icon, Placeholder, Table} from "../Theme";
+import {Button, Header, Placeholder, Table} from "../Theme";
 import {ThemeContext} from "../../contexts/contexts";
 import {useDownloads} from "../../hooks/customHooks";
 
@@ -181,11 +182,7 @@ class StoppableRow extends React.Component {
 
         let completedAtCell = last_successful_download ? secondsToElapsedPopup(last_successful_download) : null;
         let buttonCell = <TableCell/>;
-        let positive = false;
-        let negative = false;
-        let warning = false;
         if (status === 'pending' || status === 'new') {
-            positive = status === 'pending';
             buttonCell = (
                 <TableCell>
                     <Button
@@ -202,8 +199,6 @@ class StoppableRow extends React.Component {
                 </TableCell>
             );
         } else if (status === 'failed' || status === 'deferred') {
-            negative = status === 'failed';
-            warning = status === 'deferred';
             buttonCell = (
                 <TableCell>
                     <Button
@@ -258,11 +253,14 @@ class StoppableRow extends React.Component {
         }
 
         return (
-            <TableRow positive={positive} negative={negative} warning={warning}>
+            <TableRow>
                 <TableCell>
                     {link(textEllipsis(url, 50))}
                 </TableCell>
-                <TableCell>{completedAtCell}</TableCell>
+                <TableCell>
+                    {completedAtCell}
+                    {status === 'pending' ? <Loader active inline size='tiny'/> : null}
+                </TableCell>
                 {buttonCell}
             </TableRow>
         );

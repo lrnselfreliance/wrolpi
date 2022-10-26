@@ -42,6 +42,9 @@ chown -R wrolpi:wrolpi /opt/wrolpi
 # Give WROLPi group a few privileged commands via sudo without password.
 cat >/etc/sudoers.d/90-wrolpi <<'EOF'
 %wrolpi ALL=(ALL) NOPASSWD:/usr/bin/nmcli,/usr/bin/cpufreq-set
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart renderd.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop renderd.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start renderd.service
 EOF
 chmod 660 /etc/sudoers.d/90-wrolpi
 # Verify this new file is valid.

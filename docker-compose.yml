@@ -54,6 +54,7 @@ services:
       - './app/public:/app/public'
       - './app/src:/app/src'
       - './app/package.json:/app/package.json'
+      - '.env:/app/.env'
     command: 'npm run start'
     stdin_open: true
     healthcheck:

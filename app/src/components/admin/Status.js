@@ -21,7 +21,7 @@ function DriveInfo({used, size, percent, mount}) {
     />
 }
 
-function DiskBandwidthProgress({bytes_ps, total, label}) {
+function DiskBandwidthProgress({bytes_ps, total, label, ...props}) {
     let percent = bytes_ps / total;
     percent = percent || 0;
     let color = null;
@@ -33,7 +33,7 @@ function DiskBandwidthProgress({bytes_ps, total, label}) {
         color = 'yellow';
     }
     label = `${label} ${humanBandwidth(bytes_ps)}`;
-    return <Progress percent={percent} label={label} color={color} key={label}/>;
+    return <Progress percent={percent} label={label} color={color} key={label} {...props}/>;
 }
 
 function DiskBandwidth({name, bytes_read_ps, bytes_write_ps}) {
@@ -43,11 +43,15 @@ function DiskBandwidth({name, bytes_read_ps, bytes_write_ps}) {
         bytes_ps={bytes_read_ps}
         total={total}
         label={`${name} read`}
+        size='tiny'
+        disabled={bytes_read_ps === 0}
     />;
     const write = <DiskBandwidthProgress
         bytes_ps={bytes_write_ps}
         total={total}
         label={`${name} write`}
+        size='tiny'
+        disabled={bytes_write_ps === 0}
     />;
 
     return <Grid columns={2}>
@@ -85,7 +89,8 @@ export function BandwidthProgress({label = '', bytes, maxBytes, ...props}) {
     } else if (percent > 90) {
         props['color'] = 'red';
     }
-    return <Progress percent={percent} label={label} {...props}/>
+    const disabled = percent === 0;
+    return <Progress percent={percent} label={label} disabled={disabled} {...props}/>
 }
 
 export function BandwidthProgressGroup({bandwidth, ...props}) {
@@ -96,6 +101,7 @@ export function BandwidthProgressGroup({bandwidth, ...props}) {
         bytes={bandwidth['bytes_recv']}
         label={`${bandwidth['name']} In`}
         maxBytes={maxBytes}
+        size='small'
         {...props}
     />;
 
@@ -103,6 +109,7 @@ export function BandwidthProgressGroup({bandwidth, ...props}) {
         bytes={bandwidth['bytes_sent']}
         label={`${bandwidth['name']} Out`}
         maxBytes={maxBytes}
+        size='small'
         {...props}
     />;
 

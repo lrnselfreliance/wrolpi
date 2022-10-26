@@ -342,19 +342,23 @@ export function humanFileSize(bytes, dp = 1) {
 }
 
 export function humanBandwidth(bytes) {
-    // Convert bytes to Mbps and return a string.
-    bytes /= 125;
-    let size = 'Kbps';
-    if (bytes > 1000) {
-        bytes /= 125_000;
-        size = 'Mbps';
+    // Convert bytes to MBps and return a string.
+    const thresh = 1024;
+
+    if (Math.abs(bytes) < thresh) {
+        return bytes + ' Bps';
     }
-    if (bytes > 1000) {
-        bytes /= 1000;
-        size = 'Gbps';
-    }
-    bytes = Math.round(bytes);
-    return `${bytes} ${size}`;
+
+    const units = ['KBps', 'MBps', 'GBps', 'TBps', 'PBps', 'EBps', 'ZBps', 'YBps'];
+    let u = -1;
+    const r = 10;
+
+    do {
+        bytes /= thresh;
+        ++u;
+    } while (Math.round(Math.abs(bytes) * r) / r >= thresh && u < units.length - 1);
+
+    return bytes.toFixed(0) + ' ' + units[u];
 }
 
 export function humanNumber(num, dp = 1) {

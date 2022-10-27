@@ -4,7 +4,7 @@ import {Link, NavLink} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
 import {StatusContext, ThemeContext} from "../contexts/contexts";
-import {Button, CardIcon, darkTheme, Form, Header, Icon, Menu, Popup, Statistic} from "./Theme";
+import {Button, CardIcon, darkTheme, Form, Header, Icon, lightTheme, Menu, Popup, Statistic} from "./Theme";
 
 export const API_URI = `http://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -708,21 +708,19 @@ export function LoadStatistic({label, value, cores, ...props}) {
 }
 
 export function DarkModeToggle() {
-    const {theme, setDarkTheme, setLightTheme} = useContext(ThemeContext);
-    const darkMode = theme === darkTheme;
-
-    const toggleDarkMode = () => {
-        // Save the selection.  The user manually chose the theme.
-        if (darkMode) {
-            setLightTheme(true);
-        } else {
-            setDarkTheme(true);
-        }
+    const {savedTheme, cycleSavedTheme} = useContext(ThemeContext);
+    let iconName = 'lightbulb outline';
+    if (savedTheme === darkTheme) {
+        iconName = 'moon';
+    } else if (savedTheme === lightTheme) {
+        iconName = 'sun';
     }
 
-    return <>
-        <Toggle checked={darkMode} onChange={toggleDarkMode} icon={darkMode ? 'moon' : 'sun'}/>
-    </>
+    return <Icon
+        name={iconName}
+        onClick={cycleSavedTheme}
+        style={{cursor: 'pointer'}}
+    />
 }
 
 

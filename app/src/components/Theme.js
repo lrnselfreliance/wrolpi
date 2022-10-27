@@ -25,6 +25,9 @@ import {
 
 export const darkTheme = 'dark';
 export const lightTheme = 'light';
+export const defaultTheme = lightTheme;
+export const systemTheme = 'system';
+export const themeSessionKey = 'color-scheme';
 
 export function ThemeWrapper({children, ...props}) {
     if (Object.keys(props).length > 0) {
@@ -32,11 +35,17 @@ export function ThemeWrapper({children, ...props}) {
         console.error('ThemeWrapper does not support props!');
     }
 
+    // Properties to manipulate elements with theme.
+    // Example <p {...s}>This paragraph changes style</p>
     const [i, setI] = useState({});
     const [s, setS] = useState({});
     const [t, setT] = useState({});
     const [inverted, setInverted] = useState('');
-    const [theme, setTheme] = useState();
+
+    // theme can be one of [darkTheme, lightTheme]
+    const [theme, setTheme] = useState(defaultTheme);
+    // savedTheme can be one of [null, darkTheme, lightTheme, systemTheme]
+    const [savedTheme, setSavedTheme] = useState(localStorage.getItem('color-scheme'));
 
     const setDarkTheme = (save = false) => {
         console.debug('setDarkTheme');
@@ -64,26 +73,58 @@ export function ThemeWrapper({children, ...props}) {
         }
     }
 
-    const saveTheme = (value) => {
-        console.debug('saveTheme', value);
-        localStorage.setItem('color-scheme', value);
+    const setSystemTheme = () => {
+        console.debug('setSystemTheme');
+        saveTheme(systemTheme);
     }
 
-    useEffect(() => {
-        const colorScheme = localStorage.getItem('color-scheme');
-        if (colorScheme === darkTheme) {
-            // User saved dark theme.
-            setDarkTheme();
-        } else if (colorScheme === lightTheme) {
-            // User saved light theme.
-            setLightTheme();
-        } else {
-            // No saved theme, use the systems color scheme first, if no system theme, use dark.
-            window.matchMedia('(prefers-color-scheme: dark)').matches ? setDarkTheme() : setLightTheme();
+    const saveTheme = (value) => {
+        setSavedTheme(value);
+        localStorage.setItem(themeSessionKey, value);
+    }
+
+    const cycleSavedTheme = (e) => {
+        // Cycle: System -> Dark -> Light
+        if (e) {
+            e.preventDefault();
         }
-        // Add listener to match the system theme.
-        window.matchMedia('(prefers-color-scheme: dark)').addEventListener(
-            'change', (e) => e.matches ? setDarkTheme() : setLightTheme());
+        if (savedTheme === systemTheme || savedTheme == null) {
+            saveTheme(darkTheme);
+        } else if (savedTheme === darkTheme) {
+            saveTheme(lightTheme);
+        } else if (savedTheme === lightTheme) {
+            saveTheme(systemTheme);
+        } else {
+            console.error(`Unknown theme! savedTheme=${savedTheme}`);
+        }
+        applyTheme();
+    }
+
+    const matchTheme = () => {
+        // Returns darkTheme if saved theme is dark, lightTheme if saved theme is dark,
+        // darkTheme if system prefers dark, otherwise lightTheme.
+        const colorScheme = localStorage.getItem(themeSessionKey);
+        setSavedTheme(colorScheme);
+        if (colorScheme === darkTheme) {
+            return darkTheme;
+        } else if (colorScheme === lightTheme) {
+            return lightTheme
+        }
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? darkTheme : lightTheme;
+    }
+
+    const applyTheme = () => {
+        const match = matchTheme();
+        if (match === darkTheme) {
+            setDarkTheme();
+        } else {
+            setLightTheme();
+        }
+    };
+
+    useEffect(() => {
+        applyTheme();
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
     }, []);
 
     const themeValue = {
@@ -91,7 +132,12 @@ export function ThemeWrapper({children, ...props}) {
         t, // Used to invert text.
         s, // Used to invert the style some elements.
         inverted, // Used to add "invert" to className.
-        theme, setDarkTheme, setLightTheme
+        theme,
+        savedTheme,
+        setDarkTheme,
+        setLightTheme,
+        setSystemTheme,
+        cycleSavedTheme,
     };
 
     return <ThemeContext.Provider value={themeValue}>

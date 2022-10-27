@@ -946,10 +946,8 @@ def print_timer():
               f' {calls} calls', file=sys.stderr)
 
 
-def limit_concurrent(limit: int):
-    """
-    Wrapper that limits the amount of concurrently running functions.
-    """
+def limit_concurrent(limit: int, throw: bool = False):
+    """Wrapper that limits the amount of concurrently running functions."""
     sema = multiprocessing.Semaphore(value=limit)
 
     def wrapper(func: callable):
@@ -958,6 +956,8 @@ def limit_concurrent(limit: int):
             async def wrapped(*a, **kw):
                 acquired = sema.acquire(block=False)
                 if not acquired:
+                    if throw:
+                        raise ValueError(f'Reached concurrent limit! {func=}')
                     return
                 try:
                     return await func(*a, **kw)
@@ -970,6 +970,8 @@ def limit_concurrent(limit: int):
             def wrapped(*a, **kw):
                 acquired = sema.acquire(block=False)
                 if not acquired:
+                    if throw:
+                        raise ValueError(f'Reached concurrent limit! {func=}')
                     return
                 try:
                     return func(*a, **kw)

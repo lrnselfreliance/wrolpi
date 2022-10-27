@@ -39,6 +39,8 @@ import {ThemeContext} from "../contexts/contexts";
 import {Button, CardIcon, Header, Loader, Placeholder, Segment, Table} from "./Theme";
 
 function ArchivePage() {
+    const {s} = useContext(ThemeContext);
+
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [syncOpen, setSyncOpen] = useState(false);
     const navigate = useNavigate();
@@ -117,6 +119,26 @@ function ArchivePage() {
         alternativesList = <p>No alternatives available</p>;
     }
 
+    const domain = archive.domain ? archive.domain.domain : null;
+    let domainHeader;
+    if (domain) {
+        const domainUrl = `/archive?domain=${domain}`;
+        domainHeader = <Header as='h5'>
+            <CardLink to={domainUrl}>
+                {domain}
+            </CardLink>
+        </Header>;
+    }
+
+    let urlHeader;
+    if (archive.url) {
+        urlHeader = <Header as='h5'>
+            <ExternalCardLink to={archive.url}>
+                {textEllipsis(archive.url, 100)}
+            </ExternalCardLink>
+        </Header>;
+    }
+
     return (
         <>
             <Button icon='arrow left' content='Back' onClick={() => navigate(-1)}/>
@@ -127,11 +149,8 @@ function ArchivePage() {
                     <Header as='h2'>{textEllipsis(archive.title || archive.url, 100)}</Header>
                 </ExternalCardLink>
                 <Header as='h3'>{uploadDate(archive.archive_datetime)}</Header>
-                <p>
-                    <ExternalCardLink to={archive.url}>
-                        {textEllipsis(archive.url, 100)}
-                    </ExternalCardLink>
-                </p>
+                {domainHeader}
+                {urlHeader}
 
                 {singlefileButton}
                 {readabilityLink}

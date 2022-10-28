@@ -13,7 +13,7 @@ apt install -y libboost-all-dev git tar unzip wget bzip2 build-essential autocon
   libicu-dev libgdal-dev libcairo2-dev libcairomm-1.0-dev libagg-dev liblua5.2-dev ttf-unifont lua5.1 liblua5.1-0-dev \
   postgis postgresql-12-postgis-3 postgresql-12-postgis-3-scripts osm2pgsql gdal-bin libmapnik-dev mapnik-utils \
   python3-mapnik apache2 apache2-dev libcurl4-gnutls-dev libiniparser-dev libmemcached-dev librados-dev \
-  fonts-noto-cjk fonts-noto-hinted fonts-noto-unhinted postgresql-contrib
+  fonts-noto-cjk fonts-noto-hinted fonts-noto-unhinted postgresql-contrib osmium-tool
 
 /usr/bin/npm install -g carto
 /usr/bin/carto -v

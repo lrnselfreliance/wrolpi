@@ -9,7 +9,7 @@ set -e
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
 # Install map dependencies.
 apt install -y libapache2-mod-tile renderd tar unzip wget bzip2 apache2 lua5.1 mapnik-utils python3-mapnik gdal-bin \
-  fonts-noto-cjk fonts-noto-hinted fonts-noto-unhinted ttf-unifont
+  fonts-noto-cjk fonts-noto-hinted fonts-noto-unhinted ttf-unifont osmium-tool
 
 /usr/bin/npm install -g carto
 /usr/local/bin/carto -v

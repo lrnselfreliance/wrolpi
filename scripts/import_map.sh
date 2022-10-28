@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/bin/bash -ex
+
+MERGED_TMP_FILE=/tmp/wrolpi-merged.osm.pbf
 
 if [ ! -f /opt/openstreetmap-carto/openstreetmap-carto.lua ]; then
   echo "openstreetmap-carto.lua file is missing.  Has install been completed?"
@@ -15,20 +17,54 @@ if [ "${1}" == "" ]; then
   exit 3
 fi
 
-if [ ! -f "${1}" ]; then
-  echo "File does not exist! ${1}"
-  exit 4
-fi
+function cleanup() {
+  if [ -f ${MERGED_TMP_FILE} ]; then
+    rm ${MERGED_TMP_FILE}
+  fi
+}
+
+trap cleanup EXIT
+cleanup
 
 if [[ ${1} == *.osm.pbf ]]; then
-  # Import a PBF file.
-  nice -n 18 osm2pgsql -d gis --append --slim -G --hstore --tag-transform-script \
-    /opt/openstreetmap-carto/openstreetmap-carto.lua -C 2000 --number-processes 3 \
-    -S /opt/openstreetmap-carto/openstreetmap-carto.style "${1}"
+  # Import PBF files.
+  for i in "$@"; do
+    if [[ $i != *.osm.pbf ]]; then
+      echo "Cannot mix file types"
+      exit 5
+    fi
+    if [ ! -f "${i}" ]; then
+      echo "File does not exist! ${i}"
+      exit 6
+    fi
+  done
+
+  # Use 1/4 of the RAM to import.  1/2 causes crashes on RPi.
+  RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
+  MAX_CACHE=$((RAM_KB / 1024 / 4))
+
+  pbf_path=${1}
+  pbf_paths=($@)
+  if [[ ${#pbf_paths[@]} -gt 1 ]]; then
+    # More than one PBF, merge them before import.
+    nice -n 18 osmium merge $@ -o ${MERGED_TMP_FILE}
+    pbf_path=${MERGED_TMP_FILE}
+  fi
+
+  nice -n 18 osm2pgsql -d gis --create --slim -G --hstore \
+    --tag-transform-script /opt/openstreetmap-carto/openstreetmap-carto.lua \
+    -C ${MAX_CACHE} \
+    --number-processes 3 \
+    -S /opt/openstreetmap-carto/openstreetmap-carto.style \
+    "${pbf_path}"
 elif [[ ${1} == *.dump ]]; then
+  if [ ! -f "${1}" ]; then
+    echo "File does not exist! ${1}"
+    exit 4
+  fi
   # Import a Postgresql dump.
   nice -n 18 pg_restore -j3 --no-owner -d gis "${1}"
 else
   echo "Cannot import unknown map file"
-  exit 5
+  exit 7
 fi

@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {Link, Route, Routes, useParams} from "react-router-dom";
 import {
     defaultSearchOrder,
@@ -22,7 +22,9 @@ import {deleteVideos} from "../api";
 export function VideoWrapper() {
     const {videoId} = useParams();
     const {videoFile, prevFile, nextFile, setFavorite} = useVideo(videoId);
-    scrollToTop();
+
+    // Scroll to the top when videoId changes.
+    useEffect(scrollToTop, [videoId]);
 
     return <VideoPage videoFile={videoFile} prevFile={prevFile} nextFile={nextFile}
                       setFavorite={setFavorite} autoplay={true}/>

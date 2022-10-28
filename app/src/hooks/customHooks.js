@@ -266,6 +266,12 @@ export const useVideo = (videoId) => {
     const [nextFile, setNextFile] = useState(null);
 
     const fetchVideo = async () => {
+        if (videoId && videoFile && videoFile.video.id !== videoId) {
+            // Video is changing.  Clear the old video before fetching.
+            setVideoFile(null);
+            setPrevFile(null);
+            setNextFile(null);
+        }
         try {
             const [v, p, n] = await getVideo(videoId);
             setVideoFile(v);

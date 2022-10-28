@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import multiprocessing
 import os
 import pathlib
@@ -301,6 +302,9 @@ class DownloadManager:
         self.data['processing_domains'] = []
         self.data['workers'] = dict()
 
+    def __repr__(self):
+        return f'<DownloadManager pid={os.getpid()}>'
+
     def register_downloader(self, instance: Downloader):
         if not isinstance(instance, Downloader):
             raise ValueError(f'Invalid downloader cannot be registered! {instance=}')
@@ -418,6 +422,21 @@ class DownloadManager:
             except Exception as e:
                 worker_logger.warning(f'Unexpected error', exc_info=e)
 
+    def log(self, message: str, level=logging.DEBUG, exc_info=None):
+        logger.log(level, f'{self} {message}', exc_info=exc_info)
+
+    def log_info(self, message: str):
+        return self.log(message, logging.INFO)
+
+    def log_debug(self, message: str):
+        return self.log(message, logging.DEBUG)
+
+    def log_error(self, message: str, exc_info=None):
+        return self.log(message, logging.ERROR, exc_info)
+
+    def log_warning(self, message: str):
+        return self.log(message, logging.WARNING)
+
     def _add_domain(self, domain: str):
         """Add a domain to the processing list.
 
@@ -471,6 +490,7 @@ class DownloadManager:
         self.manager.set()
 
         async def _perpetual_download():
+            self.log_debug('perpetual download is alive')
             if self.stopped.is_set():
                 return
 
@@ -535,7 +555,7 @@ class DownloadManager:
                     # User manually entered this download, remove it from the skip list.
                     self.remove_from_skip_list(url)
                 elif url in DOWNLOAD_MANAGER_CONFIG.skip_urls:
-                    logger.warning(f'Skipping {url} because it is in the download_manager.yaml skip list.')
+                    self.log_warning(f'Skipping {url} because it is in the download_manager.yaml skip list.')
                     continue
                 info_json = None
                 if not shared_downloader:
@@ -560,7 +580,7 @@ class DownloadManager:
         except RuntimeError:
             # Event loop isn't running.  Probably testing?
             if not PYTEST:
-                logger.info(f'Unable to queue downloads after creating {len(downloads)} download(s).')
+                self.log_info(f'Unable to queue downloads after creating {len(downloads)} download(s).')
 
         return downloads
 
@@ -608,7 +628,7 @@ class DownloadManager:
                 self.download_queue.put((download.id, download.url))
                 count += 1
         if count:
-            logger.debug(f'Added {count} downloads to queue.')
+            self.log_debug(f'Added {count} downloads to queue.')
 
     async def do_downloads(self):
         """Schedule any downloads that are new.
@@ -621,12 +641,12 @@ class DownloadManager:
         try:
             self.renew_recurring_downloads()
         except Exception as e:
-            logger.error(f'Unable to renew downloads!', exc_info=e)
+            self.log_error(f'Unable to renew downloads!', exc_info=e)
 
         try:
             self.delete_old_once_downloads()
         except Exception as e:
-            logger.error(f'Unable to delete old downloads!', exc_info=e)
+            self.log_error(f'Unable to delete old downloads!', exc_info=e)
 
         await self.queue_downloads()
 
@@ -713,15 +733,16 @@ class DownloadManager:
         now_ = now()
 
         recurring = self.get_recurring_downloads(session)
-        renewed = False
+        renewed_count = 0
         for download in recurring:
             # A new download may not have a `next_download`, create it if necessary.
             download.next_download = download.next_download or self.calculate_next_download(download, session=session)
             if download.next_download < now_:
                 download.renew()
-                renewed = True
+                renewed_count += 1
 
-        if renewed:
+        if renewed_count:
+            self.log_debug(f'Renewed {renewed_count} recurring downloads')
             session.commit()
 
     def get_downloads(self, session: Session) -> List[Download]:
@@ -758,14 +779,14 @@ class DownloadManager:
         with get_db_session(commit=True) as session:
             download = self.get_download(session, id_=download_id)
             downloader = download.get_downloader()
-            logger.warning(f'Killing download {download_id} in {downloader}')
+            self.log_warning(f'Killing download {download_id} in {downloader}')
             if download.status == 'pending':
                 downloader.kill()
             download.fail()
 
     def disable(self):
         """Stop all downloads and downloaders.  Workers will stay idle."""
-        logger.info('Disabling downloads and downloaders.')
+        self.log_info('Disabling downloads and downloaders.')
         self.disabled.set()
         for downloader in self.instances:
             downloader.kill()
@@ -775,13 +796,13 @@ class DownloadManager:
 
     def stop(self):
         """Stop all downloads, downloaders and workers, defer all pending downloads."""
-        logger.warning('Stopping all workers')
+        self.log_warning('Stopping all workers')
         self.stopped.set()
         self.disable()
 
     def enable(self, loop=None):
         """Enable downloading.  Start downloading.  Start workers."""
-        logger.info('Enabling downloading')
+        self.log_info('Enabling downloading')
         for downloader in self.instances:
             downloader.clear()
         self.stopped.clear()

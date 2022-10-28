@@ -5,89 +5,134 @@ from itertools import zip_longest
 import mock
 
 
+def assert_map_file_status(test_client, expected, status_code=HTTPStatus.OK):
+    request, response = test_client.get('/api/map/files')
+    assert response.status_code == status_code
+    for pbf, expected_ in zip_longest(response.json['files'], expected):
+        assert pbf['imported'] == expected_['imported']
+        assert pbf['path'].endswith(expected_['path'])
+    assert response.json['pending'] is None
+
+
 @mock.patch('modules.map.lib.is_pbf_file', lambda i: True)
 @mock.patch('modules.map.lib.is_dump_file', lambda i: True)
-def test_status_and_import(test_client, test_session, test_directory):
+def test_status_and_import(test_client, test_session, make_files_structure, mock_create_subprocess_shell):
     """PBF files can be imported, and the status of the import can be monitored."""
-    (test_directory / 'map/pbf').mkdir(parents=True)
-    (test_directory / 'map/dump').mkdir()
-    pbf1 = test_directory / 'map/pbf/some-country.osm.pbf'
-    pbf2 = test_directory / 'map/pbf/other-country.osm.pbf'
-    pbf1.touch()
-    pbf2.touch()
-    dump1 = test_directory / 'map/dump/dumpy.dump'
-    dump1.touch()
-
-    def check_status(response_json, expected_):
-        for pbf, expected_ in zip_longest(response_json['files'], expected_):
-            assert pbf['imported'] == expected_['imported']
-            assert pbf['path'].endswith(expected_['path'])
-        assert response.json['importing'] is None
+    pbf1, pbf2, dump1 = make_files_structure([
+        'map/pbf/some-country.osm.pbf',
+        'map/pbf/other-country.osm.pbf',
+        'map/dump/dumpy.dump',
+    ])
 
     # The PBF files can be found, but have not yet been imported.
-    request, response = test_client.get('/api/map/files')
-    assert response.status_code == HTTPStatus.OK
     expected = [
         {'imported': False, 'path': 'map/dump/dumpy.dump'},
         {'imported': False, 'path': 'map/pbf/other-country.osm.pbf'},
         {'imported': False, 'path': 'map/pbf/some-country.osm.pbf'},
     ]
-    check_status(response.json, expected)
+    assert_map_file_status(test_client, expected)
 
-    with mock.patch('modules.map.lib.import_file') as mock_import_file:
+    with mock.patch('modules.map.lib.asyncio') as mock_asyncio:
+        mock_asyncio.create_subprocess_shell = mock_create_subprocess_shell(return_code=0)
         body = {'files': [str(pbf1), ], }
         request, response = test_client.post('/api/map/import', content=json.dumps(body))
         assert response.status_code == HTTPStatus.NO_CONTENT
-        # Only one PBF import is requested.
-        mock_import_file.assert_called_once()
 
-    request, response = test_client.get('/api/map/files')
-    assert response.status_code == HTTPStatus.OK
     expected = [
         {'imported': False, 'path': 'map/dump/dumpy.dump'},
         {'imported': False, 'path': 'map/pbf/other-country.osm.pbf'},
         {'imported': True, 'path': 'map/pbf/some-country.osm.pbf'},
     ]
-    check_status(response.json, expected)
+    assert_map_file_status(test_client, expected)
 
-    with mock.patch('modules.map.lib.import_file') as mock_import_file:
+    with mock.patch('modules.map.lib.asyncio') as mock_asyncio:
+        mock_asyncio.create_subprocess_shell = mock_create_subprocess_shell(return_code=0)
         body = {'files': [str(pbf1), str(pbf2)]}
         request, response = test_client.post('/api/map/import', content=json.dumps(body))
         assert response.status_code == HTTPStatus.NO_CONTENT
-        # Both PBF imports are requested, but only one is performed.
-        mock_import_file.assert_called_once()
 
-    request, response = test_client.get('/api/map/files')
-    assert response.status_code == HTTPStatus.OK
     expected = [
         {'imported': False, 'path': 'map/dump/dumpy.dump'},
         {'imported': True, 'path': 'map/pbf/other-country.osm.pbf'},
         {'imported': True, 'path': 'map/pbf/some-country.osm.pbf'},
     ]
-    check_status(response.json, expected)
+    assert_map_file_status(test_client, expected)
 
-    with mock.patch('modules.map.lib.import_file') as mock_import_file:
+    with mock.patch('modules.map.lib.asyncio') as mock_asyncio:
+        mock_asyncio.create_subprocess_shell = mock_create_subprocess_shell(return_code=0)
         body = {'files': [str(dump1), ]}
         request, response = test_client.post('/api/map/import', content=json.dumps(body))
         assert response.status_code == HTTPStatus.NO_CONTENT
-        # Dump is imported.
-        mock_import_file.assert_called_once()
 
-    request, response = test_client.get('/api/map/files')
-    assert response.status_code == HTTPStatus.OK
     expected = [
         {'imported': True, 'path': 'map/dump/dumpy.dump'},
         {'imported': True, 'path': 'map/pbf/other-country.osm.pbf'},
         {'imported': True, 'path': 'map/pbf/some-country.osm.pbf'},
     ]
-    check_status(response.json, expected)
+    assert_map_file_status(test_client, expected)
+
+
+@mock.patch('modules.map.lib.is_pbf_file', lambda i: True)
+@mock.patch('modules.map.lib.is_dump_file', lambda i: True)
+def test_multiple_import(test_client, test_session, test_directory, make_files_structure, mock_create_subprocess_shell):
+    """Multiple PBFs can be imported.  Importing a second time overwrites the previous imports."""
+    pbf1, pbf2, pbf3, dump = make_files_structure([
+        'map/pbf/country1.osm.pbf',
+        'map/pbf/country2.osm.pbf',
+        'map/pbf/country3.osm.pbf',
+        'map/dumpy.dump',
+    ])
+
+    with mock.patch('modules.map.lib.asyncio') as mock_asyncio:
+        mock_asyncio.create_subprocess_shell = mock_create_subprocess_shell(return_code=0)
+        body = {'files': [str(pbf2), str(pbf1)]}
+        request, response = test_client.post('/api/map/import', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Two PBFs can be merged and imported.
+    expected = [
+        {'imported': False, 'path': 'map/dumpy.dump'},
+        {'imported': True, 'path': 'map/pbf/country1.osm.pbf'},
+        {'imported': True, 'path': 'map/pbf/country2.osm.pbf'},
+        {'imported': False, 'path': 'map/pbf/country3.osm.pbf'},
+    ]
+    assert_map_file_status(test_client, expected)
+
+    with mock.patch('modules.map.lib.asyncio') as mock_asyncio:
+        mock_asyncio.create_subprocess_shell = mock_create_subprocess_shell(return_code=0)
+        body = {'files': [str(pbf3), ]}
+        request, response = test_client.post('/api/map/import', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # New imports overwrite old imports.
+    expected = [
+        {'imported': False, 'path': 'map/dumpy.dump'},
+        {'imported': False, 'path': 'map/pbf/country1.osm.pbf'},
+        {'imported': False, 'path': 'map/pbf/country2.osm.pbf'},
+        {'imported': True, 'path': 'map/pbf/country3.osm.pbf'},
+    ]
+    assert_map_file_status(test_client, expected)
+
+    with mock.patch('modules.map.lib.asyncio') as mock_asyncio:
+        mock_asyncio.create_subprocess_shell = mock_create_subprocess_shell(return_code=0)
+        # Can't mix PBF and dump.
+        body = {'files': [str(dump), ]}
+        request, response = test_client.post('/api/map/import', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Dump does not overwrite.
+    expected = [
+        {'imported': True, 'path': 'map/dumpy.dump'},
+        {'imported': False, 'path': 'map/pbf/country1.osm.pbf'},
+        {'imported': False, 'path': 'map/pbf/country2.osm.pbf'},
+        {'imported': True, 'path': 'map/pbf/country3.osm.pbf'},
+    ]
+    assert_map_file_status(test_client, expected)
 
 
 def test_empty_import(test_client, test_session, test_directory):
     """Some files must be requested."""
-    with mock.patch('modules.map.lib.import_file') as mock_import_file:
-        body = {'files': []}
-        request, response = test_client.post('/api/map/import', content=json.dumps(body))
-        assert response.status_code == HTTPStatus.BAD_REQUEST
-        mock_import_file.assert_not_called()
-        assert 'validate' in response.json['error']
+    body = {'files': []}
+    request, response = test_client.post('/api/map/import', content=json.dumps(body))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert 'validate' in response.json['error']

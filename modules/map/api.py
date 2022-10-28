@@ -40,15 +40,15 @@ async def import_pbfs(_: Request, body: schema.ImportPost):
 
 @bp.get('/files')
 @openapi.description('Find any map files, get their import status')
-def pbf(_: Request):
+def get_files_status(_: Request):
     paths = lib.get_import_status()
     paths = sorted(paths, key=lambda i: str(i.path))
-    importing = lib.IMPORTING.get('path')
-    if importing:
-        importing = Path(importing).relative_to(get_media_directory())
+    pending = lib.IMPORTING.get('pending')
+    if pending:
+        pending = [Path(i).relative_to(get_media_directory()) for i in pending]
     body = dict(
         files=paths,
-        importing=importing,
+        pending=pending,
         import_running=lib.IMPORT_EVENT.is_set(),
         dockerized=DOCKERIZED,
     )

@@ -21,7 +21,7 @@ class ManageMap extends React.Component {
         super(props);
         this.state = {
             files: null,
-            importing: null,
+            pending: null,
             import_running: false,
             selectedPaths: [],
             dockerized: null,
@@ -42,7 +42,7 @@ class ManageMap extends React.Component {
             const importStatus = await getMapImportStatus();
             this.setState({
                 files: importStatus['files'],
-                importing: importStatus['importing'],
+                pending: importStatus['pending'],
                 import_running: importStatus['import_running'],
                 dockerized: importStatus['dockerized'],
             });
@@ -102,7 +102,7 @@ class ManageMap extends React.Component {
                 <a href={`/media/${path}`}>{path}</a>
             </TableCell>
             <TableCell>
-                {path === this.state.importing ?
+                {this.state.pending && this.state.pending.indexOf(path) >= 0 ?
                     <SLoader active inline size='mini'/> :
                     imported ? 'yes' : 'no'}
             </TableCell>
@@ -111,7 +111,7 @@ class ManageMap extends React.Component {
     }
 
     render() {
-        const {files, selectedPaths, import_running, importing, dockerized} = this.state;
+        const {files, selectedPaths, import_running, pending, dockerized} = this.state;
 
         let dockerWarning;
         if (dockerized === true) {
@@ -164,9 +164,9 @@ class ManageMap extends React.Component {
             </Message.Content>
         </Message>
 
-        let importingLoader = (
-            <Loader size='large' active={import_running} inline='centered'>Importing: {importing}</Loader>
-        );
+        const importingMessage = pending ?
+            pending.length > 1 ? 'Importing...' : `Importing ${pending[0]}`
+            : null;
 
         let disabled = dockerized || !files || files.length === 0 || import_running;
         let importButton = <Button
@@ -205,7 +205,9 @@ class ManageMap extends React.Component {
             <WROLModeMessage content='Cannot modify Map'/>
             {dockerWarning}
             {downloadMessage}
-            {importingLoader}
+            <Loader size='large' active={import_running} inline='centered'>
+                {importingMessage}
+            </Loader>
             <Table>
                 <TableHeader>
                     <TableRow>

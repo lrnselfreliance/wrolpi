@@ -16,8 +16,9 @@ from wrolpi.vars import PYTEST, PROJECT_DIR
 logger = logger.getChild(__name__)
 
 IMPORT_EVENT = Event()
-IMPORTING = Manager().dict()
-IMPORTING['path'] = None
+IMPORTING = Manager().dict(dict(
+    pending=None,
+))
 
 
 def get_map_directory() -> Path:
@@ -78,23 +79,50 @@ def get_or_create_map_file(pbf_path: Path, session: Session) -> MapFile:
 
 import_logger = logger.getChild('import')
 
+OSMIUM_BIN = which('osmium', '/usr/bin/osmium')
 
-async def import_files(files: List[str]):
+
+async def import_files(paths: List[str]):
     if IMPORT_EVENT.is_set():
-        import_logger.warning('Map import already running...')
+        import_logger.error('Map import already running...')
         return
 
-    # Import dumps, then pbfs.
-    import_order = ('.dump', '.pbf')
-    files = [get_media_directory() / i for i in files]
-    files = sorted(files, key=lambda i: import_order.index(i.suffix))
+    paths = [get_media_directory() / i for i in paths]
+    import_logger.warning(f'Importing: {", ".join(map(str, paths))}')
 
-    import_logger.warning(f'Importing: {", ".join(map(str, files))}')
+    dumps = [i for i in paths if i.suffix == '.dump']
+    pbfs = [i for i in paths if i.suffix == '.pbf']
 
     any_success = False
     try:
         IMPORT_EVENT.set()
-        for path in files:
+        if pbfs:
+            success = False
+            try:
+                IMPORTING.update(dict(
+                    pending=list(pbfs),
+                ))
+                await run_import_command(*pbfs)
+                success = True
+                any_success = True
+            except Exception as e:
+                import_logger.warning('Failed to run import', exc_info=e)
+            finally:
+                IMPORTING.update(dict(
+                    pending=None,
+                ))
+
+            if success:
+                with get_db_session(commit=True) as session:
+                    # Any previously imported PBFs are no longer imported.
+                    for pbf_path in pbfs:
+                        pbf_file = get_or_create_map_file(pbf_path, session)
+                        pbf_file.imported = True
+                    for pbf_file in session.query(MapFile):
+                        pbf_file.imported = pbf_file.path in pbfs
+
+        for path in dumps:
+            # Import each dump individually.
             if not path.is_file():
                 import_logger.fatal(f'Map file does not exist! {path}')
                 continue
@@ -108,14 +136,18 @@ async def import_files(files: List[str]):
 
             success = False
             try:
-                IMPORTING['path'] = str(path)
-                await import_file(path)
+                IMPORTING.update(dict(
+                    pending=str(path),
+                ))
+                await run_import_command(path)
                 success = True
                 any_success = True
             except Exception as e:
                 import_logger.warning('Failed to run import', exc_info=e)
             finally:
-                IMPORTING['path'] = None
+                IMPORTING.update(dict(
+                    pending=None,
+                ))
 
             if success:
                 with get_db_session(commit=True) as session:
@@ -124,37 +156,50 @@ async def import_files(files: List[str]):
     finally:
         if any_success:
             # A map was imported, remove the tile cache files.
-            clear_mod_tile()
+            await clear_mod_tile()
         IMPORT_EVENT.clear()
 
 
 BASH_BIN = which('bash', '/bin/bash', warn=True)
 
 
-async def import_file(path: Path):
-    """Run the map import script on the provided path.
+async def run_import_command(*paths: Path):
+    """Run the map import script on the provided paths.
 
-    Supports *.osm.pbf and *.dump files."""
-    if str(path).endswith('.osm.pbf'):
-        if not is_pbf_file(path):
-            import_logger.warning(f'Could not import non-pbf file: {path}')
-            raise ValueError('Invalid PBF file')
-    elif path.suffix == '.dump':
-        if not is_dump_file(path):
-            import_logger.warning(f'Could not import non-dump file: {path}')
-            raise ValueError('Invalid dump file')
-    else:
-        raise ValueError(f'Cannot import unknown file! {path}')
+    Can only import a single *.dump file, or a list of *.osm.pbf files.  They cannot be mixed.
+    """
+    paths = [i.absolute() for i in paths]
+    dumps = [i for i in paths if i.suffix == '.dump']
+    pbfs = [i for i in paths if i.suffix == '.pbf']
 
-    cmd = f'{BASH_BIN} {PROJECT_DIR}/scripts/import_map.sh {path.absolute()}'
-    import_logger.debug(f'Running import script: {cmd}')
+    # Only import a single dump, or a list of pbfs.  No other combinations acceptable.
+    if not paths:
+        raise ValueError('Must import a file')
+    if not dumps and not pbfs:
+        raise ValueError('Cannot import unknown file!')
+    if dumps and pbfs:
+        raise ValueError('Cannot import mixed dumps and pbfs.')
+    if len(dumps) > 1:
+        raise ValueError('Cannot import more than one dump')
+    if dumps and not is_dump_file(dumps[0]):
+        import_logger.warning(f'Could not import non-dump file: {dumps}')
+        raise ValueError('Invalid dump file')
+    if pbfs:
+        for path in pbfs:
+            if not is_pbf_file(path):
+                import_logger.warning(f'Could not import non-pbf file: {path}')
+                raise ValueError('Invalid PBF file')
+
+    paths = ' '.join(str(i) for i in paths)
+    cmd = f'{BASH_BIN} {PROJECT_DIR}/scripts/import_map.sh {paths}'
+    import_logger.warning(f'Running map import command: {cmd}')
     start = now()
     proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
 
     stdout, stderr = await proc.communicate()
     elapsed = now() - start
     success = 'Successful' if proc.returncode == 0 else 'Unsuccessful'
-    import_logger.info(f'{success} import of {path.name} took {timedelta_to_timestamp(elapsed)}')
+    import_logger.info(f'{success} import of {repr(paths)} took {timedelta_to_timestamp(elapsed)}')
     if proc.returncode != 0:
         # Log all lines.  Truncate long lines.
         for line in stdout.decode().splitlines():
@@ -180,7 +225,7 @@ MOD_TILE_CACHE_DIR = Path('/var/lib/mod_tile/ajt')
 
 
 @wrol_mode_check
-def clear_mod_tile():
+async def clear_mod_tile():
     """Remove all cached map tile files"""
     if PYTEST:
         return
@@ -188,5 +233,4 @@ def clear_mod_tile():
     logger.warning('Clearing map tile cache files')
 
     if MOD_TILE_CACHE_DIR.is_dir():
-        cmd = ('rm', '-r', MOD_TILE_CACHE_DIR)
-        subprocess.check_call(cmd)
+        await asyncio.create_subprocess_shell(f'rm -r {MOD_TILE_CACHE_DIR}')

@@ -277,8 +277,10 @@ def wrol_mode_fixture(test_config, test_download_manager):
 
 @pytest.fixture
 def mock_create_subprocess_shell():
-    def mocker(communicate_return=None, return_code=None):
+    def mocker(communicate_return=None, return_code=None, communicate_side_effect = None):
         async def communicate(*a, **kw):
+            if communicate_side_effect:
+                return communicate_side_effect()
             return communicate_return or (None, None)
 
         async def create_subprocess_shell(*a, **kw):

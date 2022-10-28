@@ -40,6 +40,7 @@ ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 __all__ = [
+    'logger',
     'Base',
     'ModelHelper',
     'get_model_by_table_name',

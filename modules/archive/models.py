@@ -2,7 +2,7 @@ import datetime
 import json
 import pathlib
 import re
-from typing import Generator
+from typing import Generator, Optional, Iterable
 
 import pytz
 from sqlalchemy import Column, Integer, String, ForeignKey, Boolean
@@ -129,7 +129,7 @@ class Archive(Base, ModelHelper):
                 self.domain.delete()
 
     @property
-    def alternatives(self):
+    def alternatives(self) -> Iterable[Base]:
         """
         Get a list of Archives that share my URL.
         """
@@ -142,7 +142,7 @@ class Archive(Base, ModelHelper):
         return alternatives
 
     @staticmethod
-    def find_by_path(path, session: Session) -> Base:
+    def find_by_path(path, session: Session) -> Optional[Base]:
         archive = session.query(Archive).filter_by(singlefile_path=path).one_or_none()
         return archive
 
@@ -150,9 +150,10 @@ class Archive(Base, ModelHelper):
         """
         Read the start of the singlefile (if any) and decode the Archive information.
         """
-        if not self.singlefile_path or not self.singlefile_file:
-            return
         path = self.singlefile_file.path if self.singlefile_file else self.singlefile_path
+        if not path:
+            # Can't read contents of nothing.
+            return
 
         with path.open('rt') as fh:
             head = fh.read(500)
@@ -180,7 +181,8 @@ class Archive(Base, ModelHelper):
         """Read the Readability JSON file, apply its contents to this record."""
         readability_json_file = self.readability_json_file
         if not readability_json_file or not readability_json_file.path.is_file():
-            logger.warning(f'{self.singlefile_file.path} does not have an info json file')
+            path = self.singlefile_file.path if self.singlefile_file else self.singlefile_path
+            logger.warning(f'{path} does not have an info json file')
             return
 
         try:

@@ -18,6 +18,11 @@ from wrolpi.media_path import MediaPathType
 
 logger = logger.getChild(__name__)
 
+__all__ = ['Archive', 'Domain']
+
+MATCH_URL = re.compile(r'^\s+?url:\s+?(http.*)', re.MULTILINE)
+MATCH_DATE = re.compile(r'^\s+?saved date:\s+?(.*)', re.MULTILINE)
+
 
 class Archive(Base, ModelHelper):
     __tablename__ = 'archive'
@@ -144,39 +149,37 @@ class Archive(Base, ModelHelper):
         """
         Read the start of the singlefile (if any) and decode the Archive information.
         """
-        match_url = re.compile(r'^\s+?url:\s+?(http.*)', re.MULTILINE)
-        match_date = re.compile(r'^\s+?saved date:\s+?(.*)', re.MULTILINE)
+        if not self.singlefile_path or not self.singlefile_file:
+            return
+        path = self.singlefile_file.path if self.singlefile_file else self.singlefile_path
 
-        if self.singlefile_path:
-            with self.singlefile_path.open('rt') as fh:
-                head = fh.read(500)
-                if 'Page saved with SingleFile' not in head:
-                    return
-                try:
-                    if match := match_url.findall(head):
-                        self.url = match[0].strip()
-                except Exception as e:
-                    logger.error(f'Could not get URL from singlefile {self.singlefile_path}', exc_info=e)
-                try:
-                    if match := match_date.findall(head):
-                        dt = match[0].strip()
-                        dt = ' '.join(dt.split(' ')[:5])
-                        # SingleFile uses GMT.
-                        dt = datetime.datetime.strptime(
-                            dt,
-                            '%a %b %d %Y %H:%M:%S'  # Fri Jun 17 2022 19:24:52
-                        ).replace(tzinfo=pytz.timezone('GMT'))
-                        self.archive_datetime = dt
-                except Exception as e:
-                    logger.error(f'Could not get archive date from singlefile {self.singlefile_path}', exc_info=e)
+        with path.open('rt') as fh:
+            head = fh.read(500)
+            if 'Page saved with SingleFile' not in head:
+                return
+            try:
+                if match := MATCH_URL.findall(head):
+                    self.url = match[0].strip()
+            except Exception as e:
+                logger.error(f'Could not get URL from singlefile {path}', exc_info=e)
+            try:
+                if match := MATCH_DATE.findall(head):
+                    dt = match[0].strip()
+                    dt = ' '.join(dt.split(' ')[:5])
+                    # SingleFile uses GMT.
+                    dt = datetime.datetime.strptime(
+                        dt,
+                        '%a %b %d %Y %H:%M:%S'  # Fri Jun 17 2022 19:24:52
+                    ).replace(tzinfo=pytz.timezone('GMT'))
+                    self.archive_datetime = dt
+            except Exception as e:
+                logger.error(f'Could not get archive date from singlefile {path}', exc_info=e)
 
     def read_readability_data(self):
         """Read the Readability JSON file, apply its contents to this record."""
-        from modules.archive.lib import get_or_create_domain, get_title_from_html
-
         readability_json_file = self.readability_json_file
         if not readability_json_file or not readability_json_file.path.is_file():
-            logger.warning(f'Archive must have a readability json file: {self.singlefile_file.path}')
+            logger.warning(f'{self.singlefile_file.path} does not have an info json file')
             return
 
         try:
@@ -187,21 +190,30 @@ class Archive(Base, ModelHelper):
         except Exception as e:
             raise InvalidArchive() from e
 
-        domain = None
-        if url:
-            domain = get_or_create_domain(Session.object_session(self), url)
-
-        if not title:
-            title = get_title_from_html(self.singlefile_path.read_text())
-
         self.url = url
         self.title = title
+
+    def apply_domain(self):
+        """Get the domain from the URL."""
+        from modules.archive.lib import get_or_create_domain
+        domain = None
+        if self.url:
+            domain = get_or_create_domain(Session.object_session(self), self.url)
+        # Clear domain if the URL is missing.
         self.domain_id = domain.id if domain else None
+
+    def apply_title(self):
+        """Get the title from the Singlefile, if its missing."""
+        from modules.archive.lib import get_title_from_html
+        if self.singlefile_path and not self.title:
+            self.title = get_title_from_html(self.singlefile_path.read_text())
 
     def validate(self):
         try:
             self.read_readability_data()
             self.read_singlefile_data()
+            self.apply_domain()
+            self.apply_title()
             self.validated = True
         except Exception as e:
             logger.warning(f'Unable to validate {self}', exc_info=e)

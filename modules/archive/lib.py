@@ -488,13 +488,29 @@ def is_archive_file(path: pathlib.Path) -> bool:
     return path.is_file() and path.suffix.lower() in ARCHIVE_SUFFIXES and bool(ARCHIVE_MATCHER.match(path.name))
 
 
+SINGLEFILE_HEADER = '''<!--
+ Page saved with SingleFile'''
+
+
 def is_singlefile_file(path: pathlib.Path) -> bool:
     """
     Archive singlefile files are expected to start with the following: %Y-%m-%d-%H-%M-%S
     they must end with .html, but never with .readability.html.
     """
-    return path.is_file() and path.suffix.lower() == '.html' and not path.name.endswith('.readability.html') \
-           and bool(ARCHIVE_MATCHER.match(path.name))
+    if not path.is_file() or \
+            path.suffix.lower() != '.html' or \
+            path.name.lower().endswith('.readability.html') or \
+            path.stat().st_size == 0:
+        return False
+    if ARCHIVE_MATCHER.match(path.name):
+        # A file name matching exactly the Archive format from WROLPi should always be an Archive.
+        return True
+    with path.open('rt') as fh:
+        # Lastly, try to read the header of this HTML file.
+        header = fh.read(500)
+        if SINGLEFILE_HEADER in header:
+            return True
+    return False
 
 
 def get_domains():

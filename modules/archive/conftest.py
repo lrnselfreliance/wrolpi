@@ -1,3 +1,4 @@
+import copy
 import datetime
 import json
 import pathlib
@@ -84,3 +85,28 @@ def archive_factory(test_session, archive_directory, make_files_structure):
         return archive
 
     return _
+
+
+SINGLEFILE_CONTENTS = '''<html><!--
+ Page saved with SingleFile 
+ url: https://example.com 
+ saved date: Thu May 12 2022 00:38:02 GMT+0000 (Coordinated Universal Time)
+--><head><meta charset="utf-8">
+
+<meta name="msapplication-TileColor" content="#2d89ef">
+<meta name="theme-color" content="#000000">
+
+<title>the title</title>
+
+<body>
+some body contents
+</body>
+
+</html>
+'''
+
+
+@pytest.fixture
+def singlefile_contents() -> str:
+    """Return a short HTML string that contains an example Singlefile file."""
+    return copy.deepcopy(SINGLEFILE_CONTENTS)

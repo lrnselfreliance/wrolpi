@@ -565,6 +565,23 @@ def test_is_archive_file(name, expected, test_directory):
     assert lib.is_archive_file(path) == expected
 
 
+@pytest.mark.parametrize(
+    'name,expected', [
+        ('foo', False),
+        ('2000-01-01-00-00-00_Some NA.html', True),
+        ('2000-01-01-00-00-00_Some NA.readability.html', False),
+        ('2000-01-01-00-00-00_ジにてこちら.html', True),
+        ('2000-01-01-00-00-00_Some Title.readability.txt', False),
+        ('foo.txt', False),
+        ('foo.html', True),
+    ]
+)
+def test_is_singlefile_file(name, expected, make_files_structure, singlefile_contents):
+    """A Singlefile may not be created by WROLPi, an HTML file created by Singlefile can also be an Archive."""
+    path, = make_files_structure({name: singlefile_contents})
+    assert lib.is_singlefile_file(path) == expected
+
+
 @skip_circleci
 def test_migrate_archive_files(test_session, archive_directory, archive_factory):
     """Test that migration of all old Archive formatted files are migrated."""

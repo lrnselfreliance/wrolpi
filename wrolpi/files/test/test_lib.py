@@ -13,7 +13,7 @@ from PIL import Image
 from sqlalchemy.orm import Session
 
 from modules import videos
-from wrolpi.common import get_media_directory
+from wrolpi.common import get_media_directory, timer
 from wrolpi.errors import InvalidFile
 from wrolpi.files import lib, indexers
 from wrolpi.files.models import File
@@ -187,12 +187,15 @@ async def test_refresh_files(test_session, make_files_structure, test_directory)
 
 @pytest.mark.asyncio
 async def test_refresh_many_files(test_session, make_files_structure):
+    """Used to profile file refreshing"""
     count = 1_000
     make_files_structure([f'{uuid4()}.txt' for _ in range(count)])
-    await lib.refresh_files()
+    with timer('first refresh'):
+        await lib.refresh_files()
     assert test_session.query(File).count() == count
 
-    await lib.refresh_files()
+    with timer('second refresh'):
+        await lib.refresh_files()
     assert test_session.query(File).count() == count
 
 
@@ -343,6 +346,12 @@ async def test_files_indexer(test_session, make_files_structure):
     with mock.patch('modules.videos.VideoIndexer.create_index') as mock_create_index:
         mock_create_index.side_effect = Exception('This should not be called twice')
         await lib.refresh_files()
+
+    # Change the contents, the file should be re-indexed.
+    text_path.write_text('new text contents')
+    await lib.refresh_files()
+    files, total = lib.search_files('new', 10, 0)
+    assert total == 1
 
 
 @pytest.mark.asyncio

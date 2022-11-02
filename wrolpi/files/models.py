@@ -108,9 +108,17 @@ class File(ModelHelper, Base):
         except Exception as e:
             logger.error(f'Failed to index {self.path}', exc_info=e)
 
-    def do_stats(self):
-        """Assign the mimetype, title, size, modification_time of this file."""
+    def do_stats(self) -> bool:
+        """Assign the mimetype, title, size, modification_time of this file.
+
+        Returns True if the file has changed since last index.  Change is detected by comparing old size, mimetype
+        modification datetime."""
         from wrolpi.files.lib import split_path_stem_and_suffix
+
+        old_mimetype = self.mimetype
+        old_size = self.size
+        old_modification_datetime = self.modification_datetime
+
         if not self.mimetype:
             from wrolpi.files.lib import get_mimetype
             self.mimetype = get_mimetype(self.path)
@@ -120,9 +128,15 @@ class File(ModelHelper, Base):
         self.modification_datetime = from_timestamp(stat.st_mtime)
         name, self.suffix = split_path_stem_and_suffix(self.path)
 
-        # Use title as the a_text temporarily, this may be overwritten by indexer.
-        # TODO this is very slow.  What can be done instead?
-        self.a_text = self.a_text or name
+        changed = old_mimetype != self.mimetype \
+                  or old_size != self.size \
+                  or old_modification_datetime != self.modification_datetime
+
+        if changed:
+            self.indexed = False
+            # Use title as the a_text temporarily, this may be overwritten by indexer.
+            self.a_text = self.a_text or name
+        return changed
 
     @validates('path')
     def validate_path(self, key, value):

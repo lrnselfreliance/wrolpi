@@ -686,3 +686,30 @@ async def test_archive_download_index(test_session, test_directory, image_file):
            and archive.readability_json_file.associated \
            and archive.readability_file.associated \
            and archive.screenshot_file.associated, 'Archive files must be associated'
+
+
+def test_archive_alternatives(test_session, archive_factory):
+    """Archive's that share a URL are alternatives.
+
+    Archive's with an empty URL are not associated."""
+    archive1 = archive_factory(url='https://example.com/1')
+    archive2 = archive_factory(url='https://example.com/1')
+    archive3 = archive_factory(url='https://example.com/2')
+    archive4 = archive_factory()
+    archive5 = archive_factory()
+
+    assert archive1 in archive2.alternatives, 'archive1 is an alternative for archive2'
+    assert archive2 in archive1.alternatives, 'archive2 is an alternative for archive2'
+    assert archive3 not in archive1.alternatives and archive3 not in archive2.alternatives, 'archive3 is unique'
+    assert not archive3.alternatives, 'archive3 has no alternatives'
+    assert not archive4.alternatives, 'archive4 has no alternatives'
+    assert not archive5.alternatives, 'archive5 has no alternatives'
+
+    test_session.commit()
+
+    assert archive1 in archive2.alternatives, 'archive1 is an alternative for archive2'
+    assert archive2 in archive1.alternatives, 'archive2 is an alternative for archive2'
+    assert archive3 not in archive1.alternatives and archive3 not in archive2.alternatives, 'archive3 is unique'
+    assert not archive3.alternatives, 'archive3 has no alternatives'
+    assert not archive4.alternatives, 'archive4 has no alternatives'
+    assert not archive5.alternatives, 'archive5 has no alternatives'

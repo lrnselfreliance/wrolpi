@@ -137,6 +137,7 @@ class Archive(Base, ModelHelper):
         alternatives = list(session.query(Archive).filter(
             Archive.id != self.id,
             Archive.url == self.url,
+            Archive.url != None,
         ).order_by(Archive.archive_datetime))
         return alternatives
 

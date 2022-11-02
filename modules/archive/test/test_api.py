@@ -106,9 +106,7 @@ def test_archives_search_no_query(test_session, archive_factory, test_client):
 
 
 def test_archive_and_domain_crud(test_session, test_client, archive_factory):
-    """
-    Getting an Archive returns it's File.  Testing deleting Archives.
-    """
+    """Getting an Archive returns it's File.  Testing deleting Archives."""
     # Can get empty results.
     request, response = test_client.get(f'/api/archive/1')
     assert response.status_code == HTTPStatus.NOT_FOUND
@@ -116,8 +114,8 @@ def test_archive_and_domain_crud(test_session, test_client, archive_factory):
     assert response.status_code == HTTPStatus.OK
     assert response.json['domains'] == []
 
-    archive1 = archive_factory(domain='example.com')
-    archive2 = archive_factory(domain='example.com')
+    archive1 = archive_factory(domain='example.com', url='https://example.com/1')
+    archive2 = archive_factory(domain='example.com', url='https://example.com/1')
     test_session.commit()
 
     # Archive1 has Archive2 as alternative.

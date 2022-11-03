@@ -141,11 +141,6 @@ class Archive(Base, ModelHelper):
         ).order_by(Archive.archive_datetime))
         return alternatives
 
-    @staticmethod
-    def find_by_path(path, session: Session) -> Optional[Base]:
-        archive = session.query(Archive).filter_by(singlefile_path=path).one_or_none()
-        return archive
-
     def read_singlefile_data(self):
         """
         Read the start of the singlefile (if any) and decode the Archive information.
@@ -153,7 +148,7 @@ class Archive(Base, ModelHelper):
         path = self.singlefile_file.path if self.singlefile_file else self.singlefile_path
         if not path:
             # Can't read contents of nothing.
-            return
+            raise ValueError('Cannot read singlefile data when this has no files')
 
         with path.open('rt') as fh:
             head = fh.read(500)
@@ -220,6 +215,11 @@ class Archive(Base, ModelHelper):
             self.validated = True
         except Exception as e:
             logger.warning(f'Unable to validate {self}', exc_info=e)
+
+    @staticmethod
+    def find_by_path(path, session: Session) -> Optional[Base]:
+        archive = session.query(Archive).filter_by(singlefile_path=path).one_or_none()
+        return archive
 
     @staticmethod
     def find_by_paths(paths, session):

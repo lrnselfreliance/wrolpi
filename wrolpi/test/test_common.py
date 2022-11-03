@@ -1,3 +1,6 @@
+import asyncio
+import ctypes.wintypes
+import multiprocessing
 import os
 import pathlib
 import tempfile
@@ -5,12 +8,14 @@ import unittest
 from datetime import date, datetime
 from decimal import Decimal
 from itertools import zip_longest
+from time import sleep
 from unittest import mock
 
 import pytest
 
 import wrolpi.vars
 from wrolpi import common
+from wrolpi.common import cum_timer, TIMERS, print_timer, limit_concurrent, run_after
 from wrolpi.dates import set_timezone, now
 from wrolpi.errors import InvalidTimezone
 from wrolpi.test.common import build_test_directories
@@ -440,3 +445,127 @@ def test_chunks_by_name(test_directory, make_files_structure):
 )
 def test_truthy_arg(value, expected):
     assert wrolpi.vars.truthy_arg(value) is expected, f'{value} != {expected}'
+
+
+@pytest.mark.asyncio
+async def test_cum_timer():
+    """`cum_timer` can be used to profile code."""
+    print_timer()
+
+    with cum_timer('test_cum_timer'):
+        await asyncio.sleep(0.1)
+    assert TIMERS.get('test_cum_timer')
+    total, calls = TIMERS['test_cum_timer']
+    assert total > 0
+    assert calls == 1
+
+    print_timer()
+
+
+@pytest.mark.asyncio
+async def test_limit_concurrent_async():
+    """`limit_concurrent` can throw an error when the limit is reached."""
+
+    @limit_concurrent(1)
+    async def sleeper():
+        await asyncio.sleep(1)
+
+    # `throw` was not defined.
+    await asyncio.gather(sleeper(), sleeper())
+
+    @limit_concurrent(1, throw=True)
+    async def sleeper():
+        await asyncio.sleep(1)
+
+    # One is acceptable.
+    await asyncio.gather(sleeper())
+
+    with pytest.raises(ValueError) as e:
+        # Two will throw.
+        await asyncio.gather(sleeper(), sleeper())
+    assert 'concurrent limit' in str(e)
+
+
+def test_limit_concurrent_sync():
+    """`limit_concurrent` can throw an error when the limit is reached."""
+
+    count = multiprocessing.Value('i', 0)
+    assert count.value == 0
+
+    @limit_concurrent(1)
+    def sleeper():
+        sleep(1)
+        count.value += 1
+
+    # One is acceptable.
+    sleeper()
+    assert count.value == 1
+
+    error_value = multiprocessing.Value(ctypes.c_bool)
+    assert error_value.value is False
+
+    def sleeper_wrapper():
+        try:
+            sleeper()
+        except ValueError as e:
+            error_value.value = 'concurrent limit' in str(e)
+
+    def run():
+        count.value = 0
+        p1 = multiprocessing.Process(target=sleeper_wrapper)
+        p2 = multiprocessing.Process(target=sleeper_wrapper)
+        p1.start()
+        p2.start()
+        p1.join()
+        p2.join()
+
+    # `throw` is not defined, only one wrapper runs.
+    run()
+    assert error_value.value is False
+    # Only one counted.
+    assert count.value == 1
+
+    @limit_concurrent(1, throw=True)
+    def sleeper():
+        sleep(1)
+        count.value += 1
+
+    error_value.value = False
+    assert error_value.value is False
+
+    # Error was thrown.
+    run()
+    assert error_value.value is True
+    assert count.value == 1
+
+
+@pytest.mark.asyncio
+async def test_run_after():
+    """`run_after` wrapper will run a function asynchronously after the wrapped function completes."""
+    count = multiprocessing.Value(ctypes.c_int, 0)
+
+    def counter():
+        count.value += 1
+
+    with mock.patch('wrolpi.common.RUN_AFTER', True):
+        @run_after(counter)
+        async def foo():
+            await asyncio.sleep(0)
+            return 'yup'
+
+    # Test async wrapped and after.
+    assert await foo() == 'yup', 'Did not get the returned value'
+    # Sleep so "after" will run.
+    await asyncio.sleep(0)
+    assert count.value == 1, 'Counter did not run after'
+
+    with mock.patch('wrolpi.common.RUN_AFTER', True):
+        @run_after(counter)
+        def foo():
+            return 'good'
+
+    # Test sync wrapped and after.
+    assert foo() == 'good', 'Did not get the returned value'
+    # Sleep so "after" will run.
+    await asyncio.sleep(0)
+    assert count.value == 2, 'Counter did not run after'

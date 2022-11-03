@@ -77,7 +77,6 @@ __all__ = [
     'escape_file_name',
     'native_only',
     'recursive_map',
-    'any_extensions',
     'aiohttp_post',
     'register_modeler',
     'apply_modelers',
@@ -432,6 +431,9 @@ def remove_whitespace(s: str) -> str:
     return WHITESPACE.sub('', s)
 
 
+RUN_AFTER = False
+
+
 def run_after(after: callable, *args, **kwargs) -> callable:
     """Run the `after` function sometime in the future ofter the wrapped function returns."""
     if not inspect.iscoroutinefunction(after):
@@ -441,7 +443,7 @@ def run_after(after: callable, *args, **kwargs) -> callable:
             return synchronous_after(*a, **kw)
 
     def wrapper(func: callable):
-        if PYTEST:
+        if PYTEST and RUN_AFTER is False:
             return func
 
         if inspect.iscoroutinefunction(func):
@@ -777,14 +779,6 @@ def recursive_map(obj: Any, func: callable):
         type_ = type(obj)
         return type_(map(lambda i: recursive_map(i, func), obj))
     return func(obj)
-
-
-def any_extensions(filename: str, extensions: Iterable = ()):
-    """Return True only if the file name ends with any of the possible extensions.
-
-    Matches lower or upper case of the extension.
-    """
-    return any(filename.lower().endswith(ext) for ext in extensions)
 
 
 async def aiohttp_post(url: str, json_, timeout: int = None) -> Tuple[Dict, int]:

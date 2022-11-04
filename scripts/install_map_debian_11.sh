@@ -1,6 +1,6 @@
 #! /usr/bin/bash
 # This script installs OpenStreetMap tile server.
-# This server uses Apache2, renderd and mod_tile to render and display map tiles.
+# This server uses Apache2, renderd, and mod_tile to render and display map tiles.
 
 set -x
 set -e
@@ -31,26 +31,18 @@ sed -i -e 's/^DAEMON=.*/DAEMON=\/usr\/bin\/$NAME/' /etc/init.d/renderd
 sed -i -e 's/^DAEMON_ARGS=.*/DAEMON_ARGS="-c \/etc\/renderd.conf"/' /etc/init.d/renderd
 cp /tmp/mod_tile/debian/renderd.service /lib/systemd/system/
 chmod +x /etc/init.d/renderd
-[ ! -d /var/lib/mod_tile ] && mkdir /var/lib/mod_tile
-chown wrolpi /var/lib/mod_tile
 
 # Initialize gis database.
 git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto || :
+sudo -u wrolpi /bin/bash -c '(cd /opt/openstreetmap-carto && git fetch && git checkout master && git reset --hard origin/master && git pull --ff)'
 chown -R wrolpi:wrolpi /opt/openstreetmap-carto
 cd /opt/openstreetmap-carto
 if [[ ! -f /opt/openstreetmap-carto/mapnik.xml || ! -s /opt/openstreetmap-carto/mapnik.xml ]]; then
   /usr/local/bin/carto project.mml >/opt/openstreetmap-carto/mapnik.xml
 fi
-# Initialize indexes and global polygons.
-sudo -u wrolpi /opt/openstreetmap-carto/scripts/get-external-data.py -d gis -U wrolpi
-# Use D.C. to initialized DB because it is so small.
-wget --continue https://download.geofabrik.de/north-america/us/district-of-columbia-latest.osm.pbf \
-  -O /tmp/district-of-columbia-latest.osm.pbf
-# Run import in "create" mode so basic tables will be created.
-sudo -u wrolpi osm2pgsql -d gis --create --slim -G --hstore --tag-transform-script \
-  /opt/openstreetmap-carto/openstreetmap-carto.lua -C 2000 --number-processes 4 \
-  -S /opt/openstreetmap-carto/openstreetmap-carto.style /tmp/district-of-columbia-latest.osm.pbf
-sudo -u wrolpi psql -d gis -f /opt/openstreetmap-carto/indexes.sql
+
+# Reset map.  Force it.
+/opt/wrolpi/scripts/reset_map.sh -f
 
 cp /opt/wrolpi/etc/debian11/renderd.conf /etc/renderd.conf
 # Configure Apache2 to listen on 8084.

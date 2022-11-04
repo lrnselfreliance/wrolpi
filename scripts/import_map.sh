@@ -17,6 +17,13 @@ if [ "${1}" == "" ]; then
   exit 3
 fi
 
+HAS_ICE_SHEET=false
+psql gis wrolpi -c '\d' | grep icesheet_polygons && HAS_ICE_SHEET=true
+if [ ${HAS_ICE_SHEET} = false ]; then
+  echo "Missing icesheet_polygons.  Run reset_map.sh"
+  exit 4
+fi
+
 function cleanup() {
   if [ -f ${MERGED_TMP_FILE} ]; then
     rm ${MERGED_TMP_FILE}
@@ -60,11 +67,11 @@ if [[ ${1} == *.osm.pbf ]]; then
 elif [[ ${1} == *.dump ]]; then
   if [ ! -f "${1}" ]; then
     echo "File does not exist! ${1}"
-    exit 4
+    exit 7
   fi
   # Import a Postgresql dump.
   nice -n 18 pg_restore -j3 --no-owner -d gis "${1}"
 else
   echo "Cannot import unknown map file"
-  exit 7
+  exit 8
 fi

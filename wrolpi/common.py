@@ -46,6 +46,7 @@ __all__ = [
     'get_model_by_table_name',
     'tsvector',
     'compile_tsvector',
+    'WROLPI_CONFIG',
     'sanitize_link',
     'ConfigFile',
     'get_config',
@@ -90,6 +91,7 @@ __all__ = [
     'limit_concurrent',
     'truncate_object_bytes',
     'background_task',
+    'get_warn_once',
 ]
 
 # Base is used for all SQLAlchemy models.
@@ -1009,3 +1011,17 @@ def background_task(coro) -> Task:
     BACKGROUND_TASKS.add(task)
     task.add_done_callback(BACKGROUND_TASKS.discard)
     return task
+
+
+def get_warn_once(message: str, logger_: logging.Logger, level=logging.ERROR):
+    """Create a function that will report an error only once.
+
+    This is used when a function will be called many times, but the error is not important."""
+    event = multiprocessing.Event()
+
+    def warn_once(exception: Exception):
+        if not event.is_set():
+            logger_.log(level, message, exc_info=exception)
+            event.set()
+
+    return warn_once

@@ -2,7 +2,7 @@ import enum
 import subprocess
 
 from wrolpi.cmd import which
-from wrolpi.common import logger, WROLPI_CONFIG
+from wrolpi.common import logger, WROLPI_CONFIG, get_warn_once
 from wrolpi.vars import DEFAULT_CPU_FREQUENCY, DOCKERIZED
 
 logger = logger.getChild(__name__)
@@ -13,6 +13,8 @@ CPUFREQ_INFO_BIN = which('cpufreq-info', '/usr/bin/cpufreq-info')
 CPUFREQ_SET_BIN = which('cpufreq-set', '/usr/bin/cpufreq-set')
 
 POWER_SAVE_FREQ = 'powersave'  # noqa
+
+warn_once = get_warn_once('Unable to use nmcli', logger)
 
 
 class HotspotStatus(enum.Enum):
@@ -28,10 +30,9 @@ def hotspot_status() -> HotspotStatus:
 
     cmd = (NMCLI_BIN,)
     try:
-        output = subprocess.check_output(cmd).decode().strip()
-    except FileNotFoundError as e:
-        if not DOCKERIZED:
-            logger.debug(f'Could not get hotspot status', exc_info=e)
+        output = subprocess.check_output(cmd, stderr=subprocess.PIPE).decode().strip()
+    except Exception as e:
+        warn_once(e)
         return HotspotStatus.unknown
 
     device = WROLPI_CONFIG.hotspot_device

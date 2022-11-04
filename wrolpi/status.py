@@ -10,9 +10,8 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from wrolpi.cmd import which
-from wrolpi.common import logger, limit_concurrent
+from wrolpi.common import logger, limit_concurrent, get_warn_once
 from wrolpi.dates import now
-from wrolpi.vars import DOCKERIZED
 
 try:
     import psutil
@@ -23,16 +22,8 @@ except ImportError:
 logger = logger.getChild(__name__)
 
 UPTIME_BIN = which('uptime', '/usr/bin/uptime')
-PSUTIL_WARNED = multiprocessing.Event()
 
-
-def warn_once(exception: Exception):
-    """
-    Don't spam the logs with errors when status can't use psutil.
-    """
-    if not PSUTIL_WARNED.is_set():
-        logger.error(f'Unable to use psutil', exc_info=exception)
-        PSUTIL_WARNED.set()
+warn_once = get_warn_once('Unable to use psutil', logger)
 
 
 @dataclass

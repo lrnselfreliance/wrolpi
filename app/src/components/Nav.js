@@ -15,11 +15,11 @@ const links = [
     {text: 'Inventory', to: '/inventory', key: 'inventory'},
     {
         key: 'apps', text: 'Apps', links: [
-            {to: '/apps/otp', text: 'One Time Pad', exact: true},
+            {to: '/apps/otp', text: 'One Time Pad', end: true},
         ]
     },
 ];
-const admin = {to: '/admin', text: 'Admin', exact: true, key: 'admin'};
+const admin = {to: '/admin', text: 'Admin', key: 'admin'};
 const rightLinks = [admin,];
 
 const collapsedLinks = links.concat([admin,]);
@@ -38,27 +38,24 @@ function DropdownLinks(props) {
     )
 }
 
-function MenuLink(props) {
+function MenuLink({link}) {
     // Wrapper around NavLink to handle Navlink/Dropdown change.
     let classes = 'item';
-    if (props.link.header) {
-        classes = `${classes} header`;
-    }
 
-    if (!props.link.links) {
-        const exact = props.link.exact ? {exact: null} : {};
+    if (!link.links) {
+        const end = link.end ? {end: true} : {end: undefined};
         return (
             <NavLink
                 className={classes}
-                to={props.link.to}
-                {...exact}
+                to={link.to}
+                {...end}
             >
-                {props.link.text}
+                {link.text}
             </NavLink>
         )
     } else {
         return (
-            <DropdownLinks link={props.link}/>
+            <DropdownLinks link={link}/>
         )
     }
 }
@@ -77,7 +74,7 @@ export function NavBar() {
     return (
         <Menu {...i}>
             {/*Always show WROLPi home button*/}
-            <MenuLink link={{to: '/', text: topNavText, exact: true}}/>
+            <MenuLink link={{to: '/', text: topNavText, end: true}}/>
 
             {/*Show the links in a menu when on desktop*/}
             {links.map((link) => {

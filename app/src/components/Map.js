@@ -76,7 +76,7 @@ function DownloadMessage() {
 
 function SlowImportMessage() {
     const {status} = useContext(StatusContext);
-    if (status && status['cpu_info'] && status['cpu_info']['temperature'] >= 55) {
+    if (status && status['cpu_info'] && status['cpu_info']['temperature'] >= 80) {
         return <Message warning icon>
             <SIcon name='exclamation'/>
             <Message.Content>

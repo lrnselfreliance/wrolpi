@@ -1,5 +1,4 @@
 import json
-import json
 import os
 import pathlib
 import re
@@ -17,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi.cmd import which
 from wrolpi.common import logger, iterify, get_media_directory, \
-    minimize_dict, any_extensions, match_paths_to_suffixes
+    minimize_dict, match_paths_to_suffixes
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import ChannelNameConflict, ChannelURLConflict, \
     ChannelDirectoryConflict, ChannelSourceIdConflict
@@ -35,7 +34,6 @@ MINIMUM_VIDEO_KEYS = {'id', 'title', 'upload_date', 'duration', 'channel', 'chan
                       'view_count'}
 # These are the supported video formats.  These are in order of their preference.
 VIDEO_EXTENSIONS = ('mp4', 'ogg', 'webm', 'flv')
-match_video_extensions = partial(any_extensions, extensions=VIDEO_EXTENSIONS)
 
 FFMPEG_BIN = which('ffmpeg', '/usr/bin/ffmpeg', warn=True)
 

@@ -1,9 +1,10 @@
-import React from "react";
+import React, {useContext} from "react";
 import {HelpPopup, humanFileSize, PageContainer, TabLinks, useTitle, WROLModeMessage} from "./Common";
 import {Route, Routes} from "react-router-dom";
 import {getMapImportStatus, importMapFiles} from "../api";
 import {
     Checkbox,
+    Icon as SIcon,
     Loader as SLoader,
     PlaceholderLine,
     TableBody,
@@ -14,7 +15,81 @@ import {
     TableRow
 } from "semantic-ui-react";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {Button, Icon, Loader, Placeholder, Table} from "./Theme";
+import {Button, Loader, Placeholder, Table} from "./Theme";
+import {StatusContext} from "../contexts/contexts";
+
+function DockerMapImportWarning() {
+    const {status} = useContext(StatusContext);
+    if (status['dockerized']) {
+        return <Message negative icon>
+            <SIcon name='hand point right'/>
+            <Message.Content>
+                <Message.Header>
+                    Maps are not fully supported in a Docker container!
+                </Message.Header>
+
+                <p><b>Only one PBF can be imported and displayed in the docker container.</b></p>
+
+                <p>To import a map file, run the following docker-compose commands:</p>
+                <pre>  docker-compose stop map</pre>
+                <pre>  docker-compose rm map</pre>
+                <pre>  docker-compose run --rm -v /absolute/path/to/map.osm.pbf:/data.osm.pbf
+                        -v openstreetmap-data:/var/lib/postgresql/12/main map import
+                    </pre>
+
+                <p>Be sure to change <b>/absolute/path/to/map.osm.pbf</b>!</p>
+
+                <p>After you have imported a new PBF file, you need to clear the rendered tile cache:</p>
+                <pre>  docker volume rm openstreetmap-rendered-tiles</pre>
+                <pre>  docker volume create openstreetmap-rendered-tiles</pre>
+
+                <p>Start your map container:</p>
+                <pre>  docker-compose up -d map</pre>
+            </Message.Content>
+        </Message>;
+    }
+    return <></>;
+}
+
+function DownloadMessage() {
+    return <Message info icon>
+        <SIcon name='question'/>
+        <Message.Content>
+            <Message.Header>
+                Where do I get map files?
+            </Message.Header>
+
+            <p>You can download map files from&nbsp;
+                <a href='https://download.geofabrik.de/'>https://download.geofabrik.de/</a>
+            </p>
+
+            <p><b>Download only the areas you need</b>. Large regions like all of Asia, or the entire
+                planet are most likely <b>too large</b> and won't render quickly. I recommend only
+                importing files less than 1GB on a Raspberry Pi.</p>
+
+            <p>Only <b>*.osm.pbf</b> files are supported!</p>
+
+            <p>Place downloaded map files into <b>map/pbf</b> so they can be imported here.</p>
+        </Message.Content>
+    </Message>
+}
+
+function SlowImportMessage() {
+    const {status} = useContext(StatusContext);
+    if (status && status['cpu_info'] && status['cpu_info']['temperature'] >= 55) {
+        return <Message warning icon>
+            <SIcon name='exclamation'/>
+            <Message.Content>
+                <Message.Header>
+                    CPU temperature is too high
+                </Message.Header>
+                <p>Any import may take much more time because the CPU is throttled.</p>
+                <small>If your import takes more time than estimated, you will need an aftermarket cooler.</small>
+            </Message.Content>
+        </Message>
+    }
+    return <></>
+}
 
 class ManageMap extends React.Component {
     constructor(props) {
@@ -113,57 +188,6 @@ class ManageMap extends React.Component {
     render() {
         const {files, selectedPaths, import_running, pending, dockerized} = this.state;
 
-        let dockerWarning;
-        if (dockerized === true) {
-            dockerWarning = <Message negative icon>
-                <Icon name='hand point right'/>
-                <Message.Content>
-                    <Message.Header>
-                        Maps are not fully supported in a Docker container!
-                    </Message.Header>
-
-                    <p><b>Only one PBF can be imported and displayed in the docker container.</b></p>
-
-                    <p>To import a map file, run the following docker-compose commands:</p>
-                    <pre>  docker-compose stop map</pre>
-                    <pre>  docker-compose rm map</pre>
-                    <pre>  docker-compose run --rm -v /absolute/path/to/map.osm.pbf:/data.osm.pbf
-                        -v openstreetmap-data:/var/lib/postgresql/12/main map import
-                    </pre>
-
-                    <p>Be sure to change <b>/absolute/path/to/map.osm.pbf</b>!</p>
-
-                    <p>After you have imported a new PBF file, you need to clear the rendered tile cache:</p>
-                    <pre>  docker volume rm openstreetmap-rendered-tiles</pre>
-                    <pre>  docker volume create openstreetmap-rendered-tiles</pre>
-
-                    <p>Start your map container:</p>
-                    <pre>  docker-compose up -d map</pre>
-                </Message.Content>
-            </Message>
-        }
-
-        let downloadMessage = <Message info icon>
-            <Icon name='question'/>
-            <Message.Content>
-                <Message.Header>
-                    Where do I get map files?
-                </Message.Header>
-
-                <p>You can download map files from&nbsp;
-                    <a href='https://download.geofabrik.de/'>https://download.geofabrik.de/</a>
-                </p>
-
-                <p><b>Download only the areas you need</b>. Large regions like all of Asia, or the entire
-                    planet are most likely <b>too large</b> and won't render quickly. I recommend only
-                    importing files less than 1GB on a Raspberry Pi.</p>
-
-                <p>Only <b>*.osm.pbf</b> files are supported!</p>
-
-                <p>Place downloaded map files into <b>map/pbf</b> so they can be imported here.</p>
-            </Message.Content>
-        </Message>
-
         const importingMessage = pending ?
             pending.length > 1 ? 'Importing...' : `Importing ${pending[0]}`
             : null;
@@ -203,8 +227,9 @@ class ManageMap extends React.Component {
 
         return <PageContainer>
             <WROLModeMessage content='Cannot modify Map'/>
-            {dockerWarning}
-            {downloadMessage}
+            <DockerMapImportWarning/>
+            <DownloadMessage/>
+            <SlowImportMessage/>
             <Loader size='large' active={import_running} inline='centered'>
                 {importingMessage}
             </Loader>

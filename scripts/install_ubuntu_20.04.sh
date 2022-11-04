@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 echo "Ubuntu 20.04 install start: $(date '+%Y-%m-%d %H:%M:%S')"
 
 set -x

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 if [ ! -d /opt/openstreetmap-carto ]; then
   echo "/opt/openstreetmap-carto does not exist.  Run install.sh!"

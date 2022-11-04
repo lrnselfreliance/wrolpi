@@ -1,4 +1,4 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash -ex
 
 MERGED_TMP_FILE=/tmp/wrolpi-merged.osm.pbf
 

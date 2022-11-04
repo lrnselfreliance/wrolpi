@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Use 1/4 of the RAM to import.  1/2 causes crashes on RPi.
 RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
@@ -79,6 +79,11 @@ sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO wrolpi;"
 # Reset "imported" status of any map files.
 sudo -u postgres psql -d wrolpi -c "UPDATE map_file SET imported=false"
 
-/opt/wrolpi/scripts/initialize_map.sh
+bash /opt/wrolpi/scripts/initialize_map.sh
 
-echo "Map has been reset"
+echo "Map has been reset.
+
+Restart renderd with:
+
+ # sudo systemctl restart renderd
+"

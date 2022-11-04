@@ -14,12 +14,12 @@ class ItemPostRequest:
     count: Union[str, Decimal]
     category: str
     subcategory: str
-    expiration_date: Optional[float]
+    expiration_date: Optional[str]
 
     def __post_init__(self):
         self.item_size = Decimal(self.item_size) if self.item_size else None
         self.count = Decimal(self.count) if self.count else None
-        self.expiration_date = from_timestamp(self.expiration_date) if self.expiration_date else None
+        self.expiration_date = from_timestamp(float(self.expiration_date)) if self.expiration_date else None
 
 
 @dataclass

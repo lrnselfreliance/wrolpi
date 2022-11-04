@@ -17,7 +17,7 @@ import {createChannel, deleteChannel, downloadChannel, refreshChannel, updateCha
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {
     frequencyOptions,
-    humanFileSize,
+    humanFileSize, isEmpty,
     RequiredAsterisk,
     secondsToDate,
     secondsToFrequency,
@@ -574,7 +574,7 @@ export function Channels() {
                 </TableBody>
             </Table>
         </>
-    } else if (channels.length === 0) {
+    } else if (isEmpty(channels)) {
         return <>
             {header}
             <Message>

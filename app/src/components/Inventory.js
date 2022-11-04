@@ -26,7 +26,7 @@ import {
 } from "semantic-ui-react";
 import {Route, Routes} from "react-router-dom";
 import {toast} from 'react-semantic-toasts';
-import {arraysEqual, enumerate, PageContainer, replaceNullValues, TabLinks, useTitle} from './Common';
+import {arraysEqual, enumerate, isEmpty, PageContainer, replaceNullValues, TabLinks, useTitle} from './Common';
 import _ from 'lodash';
 import {ThemeContext} from "../contexts/contexts";
 import {useInventory} from "../hooks/customHooks";
@@ -50,7 +50,7 @@ function InventorySummary() {
             </TableRow>
         }
 
-        if (byCategory && byCategory.length > 0) {
+        if (!isEmpty(byCategory)) {
             return <Table>
                 <TableHeader>
                     <TableRow>
@@ -77,7 +77,7 @@ function InventorySummary() {
             </TableRow>
         }
 
-        if (bySubcategory && bySubcategory.length > 0) {
+        if (!isEmpty(bySubcategory )) {
             return <Table>
                 <TableHeader>
                     <TableRow>
@@ -106,7 +106,7 @@ function InventorySummary() {
             </TableRow>
         }
 
-        if (byName && byName.length > 0) {
+        if (!isEmpty(byName)) {
 
             return <Table>
                 <TableHeader>
@@ -309,7 +309,7 @@ class InventoryList extends React.Component {
     }
 
     render() {
-        if (this.props.items.length === 0) {
+        if (isEmpty(this.props.items)) {
             return <ThemeContext.Consumer>
                 {({t}) => (
                     <p {...t}>Add some items using the form above!</p>
@@ -386,7 +386,7 @@ class InventoryList extends React.Component {
             <Button
                 color='red'
                 onClick={this.handleRemove}
-                disabled={this.state.checkboxes.length === 0}
+                disabled={isEmpty(this.state.checkboxes)}
                 floated='right'
             >
                 Remove
@@ -394,7 +394,7 @@ class InventoryList extends React.Component {
             <Button
                 secondary
                 onClick={this.handleSave}
-                disabled={this.state.checkboxes.length === 0}
+                disabled={isEmpty(this.state.checkboxes)}
             >
                 Save
             </Button>

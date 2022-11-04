@@ -22,6 +22,7 @@ import {
     TabPane as TAB_PANE,
     TextArea as TEXTAREA
 } from "semantic-ui-react";
+import {isEmpty} from "./Common";
 
 export const darkTheme = 'dark';
 export const lightTheme = 'light';
@@ -30,7 +31,7 @@ export const systemTheme = 'system';
 export const themeSessionKey = 'color-scheme';
 
 export function ThemeWrapper({children, ...props}) {
-    if (Object.keys(props).length > 0) {
+    if (!isEmpty(props)) {
         console.log(props);
         console.error('ThemeWrapper does not support props!');
     }

@@ -1,7 +1,7 @@
 import React, {useContext, useState} from 'react';
 import {deleteVideos} from "../api";
 import {Link, useNavigate, useParams} from "react-router-dom";
-import {humanFileSize, humanNumber, PageContainer, secondsToTimestamp, uploadDate, useTitle, VideoCard} from "./Common";
+import {humanFileSize, humanNumber, PageContainer, secondsToTimestamp, uploadDate, useTitle} from "./Common";
 import {Confirm} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
@@ -9,6 +9,7 @@ import {VideoPlaceholder} from "./Placeholder";
 import {useChannel} from "../hooks/customHooks";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, darkTheme, Header, Icon, Segment, Tab, TabPane} from "./Theme";
+import {VideoCard} from "./Videos";
 
 const MEDIA_PATH = '/media';
 

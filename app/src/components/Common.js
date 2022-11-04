@@ -1,10 +1,10 @@
 import React, {useContext, useEffect, useState} from "react";
-import {Card, Container, IconGroup, Image, Input, Modal, Pagination, Responsive, TableCell} from 'semantic-ui-react';
+import {Card, Container, IconGroup, Input, Modal, Pagination, Responsive} from 'semantic-ui-react';
 import {Link, NavLink} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
 import {StatusContext, ThemeContext} from "../contexts/contexts";
-import {Button, CardIcon, darkTheme, Form, Header, Icon, lightTheme, Menu, Popup, Statistic} from "./Theme";
+import {Button, darkTheme, Form, Header, Icon, lightTheme, Menu, Popup, Statistic} from "./Theme";
 
 export const API_URI = `http://${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -131,122 +131,6 @@ export function ExternalCardLink({to, ...props}) {
     return <a href={to} target='_blank' rel='noopener noreferrer' className='no-link-underscore card-link' {...t}>
         {props.children}
     </a>
-}
-
-export function VideoCard({file}) {
-    const {video} = file;
-    const {s} = useContext(ThemeContext);
-
-    let video_url = `/videos/video/${video.id}`;
-    const upload_date = uploadDate(video.upload_date);
-    // A video may not have a channel.
-    const channel = video.channel ? video.channel : null;
-    let channel_url = null;
-    if (channel) {
-        channel_url = `/videos/channel/${channel.id}/video`;
-        video_url = `/videos/channel/${channel.id}/video/${video.id}`;
-    }
-    const poster_url = video.poster_path ? `/media/${encodeURIComponent(video.poster_path)}` : null;
-
-    let imageLabel = null;
-    if (video.favorite) {
-        imageLabel = {corner: 'left', icon: 'heart', color: 'green'};
-    }
-    let poster = <CardIcon><FileIcon file={file}/></CardIcon>;
-    if (poster_url) {
-        poster = <Image wrapped
-                        src={poster_url}
-                        label={imageLabel}
-                        style={{position: 'relative', width: '100%'}}
-        />;
-    }
-
-    return (<Card color={mimetypeColor(file.mimetype)}>
-        <Link to={video_url}>
-            {poster}
-        </Link>
-        <Duration video={video}/>
-        <Card.Content {...s}>
-            <Card.Header>
-                <Container textAlign='left'>
-                    <Link to={video_url} className="no-link-underscore card-link">
-                        <p {...s}>{textEllipsis(video.title || video.stem || video.video_path, 100)}</p>
-                    </Link>
-                </Container>
-            </Card.Header>
-            <Card.Description>
-                <Container textAlign='left'>
-                    {channel && <Link to={channel_url} className="no-link-underscore card-link">
-                        <b {...s}>{channel.name}</b>
-                    </Link>}
-                    <p {...s}>{upload_date}</p>
-                </Container>
-            </Card.Description>
-        </Card.Content>
-    </Card>)
-}
-
-export function VideoRowCells({file}) {
-    const {video} = file;
-
-    let video_url = `/videos/video/${video.id}`;
-    const poster_url = video.poster_path ? `/media/${encodeURIComponent(video.poster_path)}` : null;
-
-    let poster;
-    let imageLabel = video.favorite ? {corner: 'left', icon: 'heart', color: 'green'} : null;
-    if (poster_url) {
-        poster = <CardLink to={video_url}>
-            <Image wrapped
-                   src={poster_url}
-                   label={imageLabel}
-                   width='50px'
-            />
-        </CardLink>
-    } else {
-        poster = <FileIcon file={file} size='large'/>;
-    }
-
-    // Fragment for SelectableRow
-    return <React.Fragment>
-        <TableCell>
-            <center>
-                {poster}
-            </center>
-        </TableCell>
-        <TableCell>
-            <CardLink to={video_url}>
-                {textEllipsis(video.title || video.stem || video.video_path, 100)}
-            </CardLink>
-        </TableCell>
-    </React.Fragment>
-}
-
-export function ArchiveRowCells({file}) {
-    const {archive} = file;
-
-    const archiveUrl = `/archive/${archive.id}`;
-    const posterUrl = archive.screenshot_path ? `/media/${encodeURIComponent(archive.screenshot_path)}` : null;
-
-    let poster;
-    if (posterUrl) {
-        poster = <CardLink to={archiveUrl}>
-            <Image wrapped src={posterUrl} width='50px'/>
-        </CardLink>;
-    } else {
-        poster = <FileIcon file={file} size='large'/>;
-    }
-
-    // Fragment for SelectableRow
-    return (<React.Fragment>
-        <TableCell>
-            <center>{poster}</center>
-        </TableCell>
-        <TableCell>
-            <CardLink to={archiveUrl}>
-                {textEllipsis(archive.title || archive.stem, 100)}
-            </CardLink>
-        </TableCell>
-    </React.Fragment>)
 }
 
 export function RequiredAsterisk() {
@@ -408,6 +292,16 @@ export function arraysEqual(a, b) {
         if (a[i] !== b[i]) return false;
     }
     return true;
+}
+
+export function isEmpty(i) {
+    const str = Object.prototype.toString.call(i);
+    if (str === '[object Object]') {
+        return Object.keys(i).length === 0;
+    } else if (str === '[object Array]') {
+        return i.length === 0;
+    }
+    return !i;
 }
 
 export function scrollToTop() {

@@ -19,6 +19,7 @@ import {
     ExternalCardLink,
     FileIcon,
     HelpHeader,
+    isEmpty,
     mimetypeColor,
     PageContainer,
     SearchInput,
@@ -113,9 +114,9 @@ function ArchivePage() {
     </>);
 
     let alternativesList = <Loader active/>;
-    if (alternatives && alternatives.length > 0) {
+    if (!isEmpty(alternatives)) {
         alternativesList = <FileCards files={alternatives}/>;
-    } else if (alternatives && alternatives.length === 0) {
+    } else if (isEmpty(alternatives)) {
         alternativesList = <p>No alternatives available</p>;
     }
 
@@ -235,7 +236,7 @@ export function Domains() {
                 </PlaceholderHeader>
             </Placeholder>
         </>)
-    } else if (!domains || domains.length === 0) {
+    } else if (isEmpty(domains)) {
         return <Message>
             <Message.Header>No domains yet.</Message.Header>
             <Message.Content>Archive some webpages!</Message.Content>
@@ -289,7 +290,7 @@ function Archives() {
     useTitle('Archives');
 
     let filterOptions = [];
-    if (domains && domains.length > 0) {
+    if (!isEmpty(domains)) {
         domains.forEach(i => {
             filterOptions = [...filterOptions, {text: i['domain'], key: i['domain'], value: i['domain']}]
         });
@@ -379,7 +380,7 @@ function Archives() {
     const selectElm = <div style={{marginTop: '0.5em'}}>
         <Button
             color='red'
-            disabled={!selectedArchives || selectedArchives.length === 0}
+            disabled={isEmpty(selectedArchives)}
             onClick={() => setDeleteOpen(true)}
         >Delete</Button>
         <Confirm
@@ -392,14 +393,14 @@ function Archives() {
         <Button
             color='grey'
             onClick={() => invertSelection()}
-            disabled={!archives || archives.length === 0}
+            disabled={isEmpty(archives)}
         >
             Invert
         </Button>
         <Button
             color='yellow'
             onClick={() => clearSelection()}
-            disabled={(archives && archives.length === 0) || selectedArchives.length === 0}
+            disabled={isEmpty(archives) || isEmpty(selectedArchives)}
         >
             Clear
         </Button>
@@ -426,6 +427,34 @@ function Archives() {
         menuColumns={menuColumns}
         menuColumnsCount={2}
     />
+}
+
+export function ArchiveRowCells({file}) {
+    const {archive} = file;
+
+    const archiveUrl = `/archive/${archive.id}`;
+    const posterUrl = archive.screenshot_path ? `/media/${encodeURIComponent(archive.screenshot_path)}` : null;
+
+    let poster;
+    if (posterUrl) {
+        poster = <CardLink to={archiveUrl}>
+            <Image wrapped src={posterUrl} width='50px'/>
+        </CardLink>;
+    } else {
+        poster = <FileIcon file={file} size='large'/>;
+    }
+
+    // Fragment for SelectableRow
+    return (<React.Fragment>
+        <TableCell>
+            <center>{poster}</center>
+        </TableCell>
+        <TableCell>
+            <CardLink to={archiveUrl}>
+                {textEllipsis(archive.title || archive.stem, 100)}
+            </CardLink>
+        </TableCell>
+    </React.Fragment>)
 }
 
 export function ArchiveRoute() {

@@ -4,28 +4,27 @@ import {Card, Confirm, Divider, Dropdown, Image, PlaceholderLine, TableCell, Tab
 import 'react-keyed-file-browser/dist/react-keyed-file-browser.css';
 import {deleteFile, refreshDirectoryFiles, refreshFiles} from "../api";
 import {
-    ArchiveRowCells,
     CardGroupCentered,
     ExternalCardLink,
     FileIcon,
     humanFileSize,
+    isEmpty,
     mimetypeColor,
     PageContainer,
     Paginator,
     textEllipsis,
     uploadDate,
-    useTitle,
-    VideoCard,
-    VideoRowCells
+    useTitle
 } from "./Common";
 import {useBrowseFiles, useQuery, useSearchFiles} from "../hooks/customHooks";
 import {Route, Routes} from "react-router-dom";
 import {CardPlacholder} from "./Placeholder";
-import {ArchiveCard} from "./Archive";
+import {ArchiveCard, ArchiveRowCells} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, CardIcon, Header, Icon, Placeholder, Segment} from "./Theme";
 import {SelectableTable} from "./Tables";
+import {VideoCard, VideoRowCells} from "./Videos";
 
 const icons = {
     File: <Icon name='file'/>,
@@ -199,11 +198,11 @@ function FileCard({file}) {
 }
 
 export function FileCards({files}) {
-    if (files && files.length > 0) {
+    if (!isEmpty(files)) {
         return <CardGroupCentered>
             {files.map((i) => <FileCard key={i['path']} file={i}/>)}
         </CardGroupCentered>
-    } else if (files && files.length === 0) {
+    } else if (isEmpty(files)) {
         return <Header as='h4'>No files found.</Header>
     } else {
         return <CardGroupCentered><CardPlacholder/></CardGroupCentered>
@@ -256,7 +255,7 @@ function FileRow({file}) {
 }
 
 export function FileTable({files, selectOn, onSelect, footer, selectedKeys}) {
-    if (files && files.length > 0) {
+    if (!isEmpty(files)) {
         const headerContents = ['Poster', 'Title'];
         const rows = files.map(i => <FileRow key={i['key']} file={i}/>);
         return <SelectableTable
@@ -267,7 +266,7 @@ export function FileTable({files, selectOn, onSelect, footer, selectedKeys}) {
             footer={footer}
             rows={rows}
         />;
-    } else if (files && files.length === 0) {
+    } else if (isEmpty(files)) {
         return <Segment><p>No results!</p></Segment>
     } else {
         return <Placeholder>

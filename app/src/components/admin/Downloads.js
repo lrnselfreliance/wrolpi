@@ -2,7 +2,7 @@ import React, {useContext} from "react";
 import {clearCompletedDownloads, clearFailedDownloads, killDownload, postDownload} from "../../api";
 import {Link} from "react-router-dom";
 import {
-    DisableDownloadsToggle,
+    DisableDownloadsToggle, isEmpty,
     secondsToElapsedPopup,
     secondsToFrequency,
     textEllipsis,
@@ -301,7 +301,7 @@ export function Downloads() {
     );
 
     let onceTable = tablePlaceholder;
-    if (onceDownloads && onceDownloads.length === 0) {
+    if (isEmpty(onceDownloads)) {
         onceTable = <p {...t}>No downloads are scheduled.</p>
     } else if (onceDownloads) {
         onceTable = (
@@ -320,7 +320,7 @@ export function Downloads() {
     }
 
     let recurringTable = tablePlaceholder;
-    if (recurringDownloads && recurringDownloads.length === 0) {
+    if (isEmpty(recurringDownloads)) {
         recurringTable = <p {...t}>No recurring downloads are scheduled.</p>
     } else if (recurringDownloads) {
         recurringTable = <Table>

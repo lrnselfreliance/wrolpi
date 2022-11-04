@@ -1,23 +1,42 @@
-import React, {useEffect, useState} from 'react';
+import React, {useContext, useEffect, useState} from 'react';
 import {Link, Route, Routes, useParams} from "react-router-dom";
 import {
+    CardLink,
     defaultSearchOrder,
     defaultVideoOrder,
+    Duration,
+    FileIcon,
+    isEmpty,
+    mimetypeColor,
     PageContainer,
     scrollToTop,
     SearchInput,
     TabLinks,
+    textEllipsis,
+    uploadDate,
     useTitle
 } from "./Common"
 import VideoPage from "./VideoPlayer";
-import {Confirm, Dropdown, PlaceholderHeader, PlaceholderLine, StatisticLabel, StatisticValue} from "semantic-ui-react";
+import {
+    Card,
+    Confirm,
+    Container,
+    Dropdown,
+    Image,
+    PlaceholderHeader,
+    PlaceholderLine,
+    StatisticLabel,
+    StatisticValue,
+    TableCell
+} from "semantic-ui-react";
 import {Channels, EditChannel, NewChannel} from "./Channels";
 import {useChannel, useQuery, useSearchVideos, useVideo, useVideoStatistics} from "../hooks/customHooks";
 import {FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {Button, Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
+import {Button, CardIcon, Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
 import {deleteVideos} from "../api";
+import {ThemeContext} from "../contexts/contexts";
 
 export function VideoWrapper() {
     const {videoId} = useParams();
@@ -149,7 +168,7 @@ function Videos({filter}) {
     const selectElm = <div style={{marginTop: '0.5em'}}>
         <Button
             color='red'
-            disabled={!selectedVideos || selectedVideos.length === 0}
+            disabled={isEmpty(selectedVideos)}
             onClick={() => setDeleteOpen(true)}
         >Delete</Button>
         <Confirm
@@ -162,14 +181,14 @@ function Videos({filter}) {
         <Button
             color='grey'
             onClick={() => invertSelection()}
-            disabled={!videos || videos.length === 0}
+            disabled={isEmpty(videos)}
         >
             Invert
         </Button>
         <Button
             color='yellow'
             onClick={() => clearSelection()}
-            disabled={(videos && videos.length === 0) || selectedVideos.length === 0}
+            disabled={isEmpty(videos) || isEmpty(selectedVideos)}
         >
             Clear
         </Button>
@@ -279,3 +298,90 @@ export function VideosRoute(props) {
     )
 }
 
+export function VideoCard({file}) {
+    const {video} = file;
+    const {s} = useContext(ThemeContext);
+
+    let video_url = `/videos/video/${video.id}`;
+    const upload_date = uploadDate(video.upload_date);
+    // A video may not have a channel.
+    const channel = video.channel ? video.channel : null;
+    let channel_url = null;
+    if (channel) {
+        channel_url = `/videos/channel/${channel.id}/video`;
+        video_url = `/videos/channel/${channel.id}/video/${video.id}`;
+    }
+    const poster_url = video.poster_path ? `/media/${encodeURIComponent(video.poster_path)}` : null;
+
+    let imageLabel = null;
+    if (video.favorite) {
+        imageLabel = {corner: 'left', icon: 'heart', color: 'green'};
+    }
+    let poster = <CardIcon><FileIcon file={file}/></CardIcon>;
+    if (poster_url) {
+        poster = <Image wrapped
+                        src={poster_url}
+                        label={imageLabel}
+                        style={{position: 'relative', width: '100%'}}
+        />;
+    }
+
+    return (<Card color={mimetypeColor(file.mimetype)}>
+        <Link to={video_url}>
+            {poster}
+        </Link>
+        <Duration video={video}/>
+        <Card.Content {...s}>
+            <Card.Header>
+                <Container textAlign='left'>
+                    <Link to={video_url} className="no-link-underscore card-link">
+                        <p {...s}>{textEllipsis(video.title || video.stem || video.video_path, 100)}</p>
+                    </Link>
+                </Container>
+            </Card.Header>
+            <Card.Description>
+                <Container textAlign='left'>
+                    {channel && <Link to={channel_url} className="no-link-underscore card-link">
+                        <b {...s}>{channel.name}</b>
+                    </Link>}
+                    <p {...s}>{upload_date}</p>
+                </Container>
+            </Card.Description>
+        </Card.Content>
+    </Card>)
+}
+
+export function VideoRowCells({file}) {
+    const {video} = file;
+
+    let video_url = `/videos/video/${video.id}`;
+    const poster_url = video.poster_path ? `/media/${encodeURIComponent(video.poster_path)}` : null;
+
+    let poster;
+    let imageLabel = video.favorite ? {corner: 'left', icon: 'heart', color: 'green'} : null;
+    if (poster_url) {
+        poster = <CardLink to={video_url}>
+            <Image wrapped
+                   src={poster_url}
+                   label={imageLabel}
+                   width='50px'
+            />
+        </CardLink>
+    } else {
+        poster = <FileIcon file={file} size='large'/>;
+    }
+
+    // Fragment for SelectableRow
+    return <React.Fragment>
+        <TableCell>
+            <center>
+                {poster}
+            </center>
+        </TableCell>
+        <TableCell>
+            <CardLink to={video_url}>
+                {textEllipsis(video.title || video.stem || video.video_path, 100)}
+            </CardLink>
+        </TableCell>
+    </React.Fragment>
+}

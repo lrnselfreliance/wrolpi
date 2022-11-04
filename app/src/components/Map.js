@@ -1,5 +1,5 @@
 import React, {useContext} from "react";
-import {HelpPopup, humanFileSize, PageContainer, TabLinks, useTitle, WROLModeMessage} from "./Common";
+import {HelpPopup, humanFileSize, isEmpty, PageContainer, TabLinks, useTitle, WROLModeMessage} from "./Common";
 import {Route, Routes} from "react-router-dom";
 import {getMapImportStatus, importMapFiles} from "../api";
 import {
@@ -131,7 +131,7 @@ class ManageMap extends React.Component {
 
         this.setState({'ready': false});
         const {files, selectedPaths} = this.state;
-        if (!selectedPaths || selectedPaths.length === 0) {
+        if (isEmpty(selectedPaths)) {
             // No files are selected, import all.
             let paths = [];
             for (let i = 0; i < files.length; i++) {
@@ -192,13 +192,13 @@ class ManageMap extends React.Component {
             pending.length > 1 ? 'Importing...' : `Importing ${pending[0]}`
             : null;
 
-        let disabled = dockerized || !files || files.length === 0 || import_running;
+        let disabled = dockerized || isEmpty(files) || import_running;
         let importButton = <Button
             primary
             disabled={disabled}
             onClick={this.import}
         >
-            {selectedPaths.length > 0 ? 'Import Selected' : 'Import All'}
+            {!isEmpty(selectedPaths) ? 'Import Selected' : 'Import All'}
         </Button>;
 
         let rows;
@@ -213,7 +213,7 @@ class ManageMap extends React.Component {
                     </Placeholder>
                 </TableCell>
             </TableRow>;
-        } else if (files.length === 0) {
+        } else if (isEmpty(files)) {
             rows = <TableRow>
                 <TableCell/><TableCell colSpan={5}>No PBF map files were found in <b>map/pbf</b></TableCell>
             </TableRow>;

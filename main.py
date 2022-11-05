@@ -10,7 +10,7 @@ from sanic.signals import Event
 from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, admin
 from wrolpi.common import logger, get_config, import_modules, check_media_directory, limit_concurrent, wrol_mode_enabled
 from wrolpi.dates import set_timezone
-from wrolpi.downloader import download_manager
+from wrolpi.downloader import download_manager, import_downloads_config
 from wrolpi.files.lib import cancel_refresh_tasks
 from wrolpi.root_api import api_app
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, PYTEST
@@ -168,6 +168,11 @@ def set_log_level(args):
     effective_level = logger.getEffectiveLevel()
     level_name = logging.getLevelName(effective_level)
     logger.warning(f'Logging level: {level_name}')
+
+
+@api_app.before_server_start
+async def download_startup(app: Sanic):
+    await import_downloads_config()
 
 
 @api_app.after_server_start

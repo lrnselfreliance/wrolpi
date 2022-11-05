@@ -1,3 +1,4 @@
+import asyncio
 import json
 from abc import ABC
 from datetime import datetime
@@ -10,7 +11,7 @@ import pytest
 
 from wrolpi.dates import local_timezone, Seconds
 from wrolpi.db import get_db_context
-from wrolpi.downloader import Downloader, Download, DownloadFrequency, DownloadResult
+from wrolpi.downloader import Downloader, Download, DownloadFrequency, DownloadResult, import_downloads_config
 from wrolpi.errors import UnrecoverableDownloadError, InvalidDownload, WROLModeEnabled
 from wrolpi.test.common import assert_dict_contains
 
@@ -395,3 +396,88 @@ def test_crud_download(test_client, test_session, test_download_manager):
     request, response = test_client.delete(f'/api/download/{download.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert test_session.query(Download).count() == 0
+
+
+@pytest.mark.asyncio
+async def test_downloads_config(test_client, test_session, test_download_manager, test_download_manager_config):
+    from wrolpi.downloader import DOWNLOAD_MANAGER_CONFIG
+
+    def assert_downloads(expected_):
+        assert test_session.query(Download).count() == len(expected_), 'Download count does not match'
+        downloads = test_session.query(Download).order_by(Download.url)
+        for download_, expected_ in zip_longest(downloads, expected_):
+            assert_dict_contains(download_.__json__(), expected_)
+
+    # Can import with an empty config.
+    await import_downloads_config()
+    assert_downloads([])
+
+    http_downloader = HTTPDownloader()
+    http_downloader.do_download = MagicMock()
+    http_downloader.do_download.return_value = DownloadResult(success=True)
+    test_download_manager.register_downloader(http_downloader)
+
+    download1, download2 = test_download_manager.create_downloads([
+        'https://example.com/1',
+        'https://example.com/2',
+    ], downloader=HTTPDownloader.name)
+    test_download_manager.recurring_download(
+        'https://example.com/3',
+        frequency=DownloadFrequency.weekly,
+        downloader=HTTPDownloader.name,
+    )
+    download2.next_download = local_timezone(datetime(2000, 1, 2, 0, 0, 0))
+    # Completed once-downloads should be ignored.
+    download1.last_successful_download = local_timezone(datetime(2000, 1, 1, 0, 0, 0))
+    test_session.commit()
+
+    # Allow background tasks to run.
+    await asyncio.sleep(0)
+
+    # Downloads were saved to config.
+    assert DOWNLOAD_MANAGER_CONFIG.downloads, 'No downloads were saved'
+    expected = [
+        # https://example.com/1 is missing because it is completed.
+        dict(
+            url='https://example.com/2',
+            frequency=None,
+            next_download=local_timezone(datetime(2000, 1, 2, 0, 0, 0)),
+            downloader='http',
+            sub_downloader=None,
+        ),
+        dict(
+            url='https://example.com/3',
+            frequency=DownloadFrequency.weekly,
+            downloader='http',
+            sub_downloader=None,
+        ),
+    ]
+    for download, expected in zip_longest(DOWNLOAD_MANAGER_CONFIG.downloads, expected):
+        assert_dict_contains(download, expected)
+
+    # Delete a Downloads, so we can import what was saved.
+    test_session.query(Download).delete()
+    test_session.commit()
+
+    # Import the saved downloads.
+    await import_downloads_config()
+    expected = [
+        dict(
+            url='https://example.com/2',
+            frequency=None,
+            next_download=local_timezone(datetime(2000, 1, 2, 0, 0, 0)),
+            downloader='http',
+            sub_downloader=None,
+        ),
+        dict(
+            url='https://example.com/3',
+            frequency=DownloadFrequency.weekly,
+            downloader='http',
+            sub_downloader=None,
+        ),
+    ]
+    assert_downloads(expected)
+
+    # Import again, no duplicates.
+    await import_downloads_config()
+    assert_downloads(expected)

@@ -12,7 +12,7 @@ from functools import partial
 from itertools import filterfalse
 from operator import attrgetter
 from queue import Empty
-from typing import List, Dict, Generator
+from typing import List, Dict, Generator, Iterable
 from typing import Tuple, Optional
 from urllib.parse import urlparse
 
@@ -23,7 +23,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, WROLPI_CONFIG, \
-    background_task
+    background_task, limit_concurrent
 from wrolpi.dates import TZDateTime, now, Seconds, local_timezone, recursive_replace_tz
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
@@ -91,6 +91,7 @@ class Download(ModelHelper, Base):  # noqa
             location=self.location,
             next_download=self.next_download,
             status=self.status,
+            sub_downloader=self.sub_downloader,
             url=self.url,
         )
         return d
@@ -126,7 +127,8 @@ class Download(ModelHelper, Base):  # noqa
         if self.downloader:
             return self.manager.get_downloader_by_name(self.downloader)
 
-        return self.manager.get_downloader(self.url)
+        downloader, _ = self.manager.get_downloader(self.url)
+        return downloader
 
     @property
     def domain(self):
@@ -362,6 +364,7 @@ class DownloadManager:
                 download.manager = self
 
                 downloader: Downloader = download.get_downloader()
+                logger.warning(f'{downloader=}')
                 if not downloader:
                     worker_logger.warning(f'Could not find downloader for {download.downloader=}')
 
@@ -379,6 +382,7 @@ class DownloadManager:
                     result = DownloadResult(success=False, error=str(traceback.format_exc()))
                     try_again = False
                 except Exception as e:
+
                     worker_logger.warning(f'Failed to download {url}.  Will be tried again later.', exc_info=e)
                     result = DownloadResult(success=False, error=str(traceback.format_exc()))
 
@@ -412,6 +416,8 @@ class DownloadManager:
                 self._remove_domain(download.domain)
                 # Request any new downloads be added to the queue.
                 background_task(self.queue_downloads())
+                # Save the config now that the Download has finished.
+                background_task(save_downloads_config())
             except asyncio.CancelledError:
                 worker_logger.warning('Canceled!')
                 self.download_queue.task_done()
@@ -574,9 +580,11 @@ class DownloadManager:
                 download.settings = {'excluded_urls': excluded_urls}
                 downloads.append(download)
 
-        # Start downloading ASAP.
         try:
+            # Start downloading ASAP.
             background_task(self.queue_downloads())
+            # Save the config now that new Downloads exist.
+            background_task(save_downloads_config())
         except RuntimeError:
             # Event loop isn't running.  Probably testing?
             if not PYTEST:
@@ -744,6 +752,9 @@ class DownloadManager:
         if renewed_count:
             self.log_debug(f'Renewed {renewed_count} recurring downloads')
             session.commit()
+
+            # Save the config now that some Downloads renewed.
+            background_task(save_downloads_config())
 
     def get_downloads(self, session: Session) -> List[Download]:
         downloads = list(session.query(Download).all())
@@ -1017,6 +1028,7 @@ class DownloadMangerConfig(ConfigFile):
     file_name = 'download_manager.yaml'
     default_config = dict(
         skip_urls=[],
+        downloads=[],
     )
 
     @property
@@ -1027,6 +1039,14 @@ class DownloadMangerConfig(ConfigFile):
     def skip_urls(self, value: List[str]):
         self.update({'skip_urls': value})
 
+    @property
+    def downloads(self) -> List[dict]:
+        return self._config['downloads']
+
+    @downloads.setter
+    def downloads(self, value: List[dict]):
+        self.update({'downloads': value})
+
 
 DOWNLOAD_MANAGER_CONFIG: DownloadMangerConfig = DownloadMangerConfig()
 
@@ -1036,6 +1056,79 @@ def set_test_download_manager_config(enabled: bool):
     DOWNLOAD_MANAGER_CONFIG = None
     if enabled:
         DOWNLOAD_MANAGER_CONFIG = DownloadMangerConfig()
+
+
+@optional_session(commit=False)
+async def save_downloads_config(session: Session):
+    """Fetch all Downloads from the DB, save them to the Download Manager Config."""
+    downloads: Iterable[Download] = session.query(Download).order_by(Download.url)
+    config = []
+    for download in downloads:
+        if download.last_successful_download and not download.frequency:
+            # This once-download has completed, do not save it.
+            continue
+        config.append(dict(
+            downloader=download.downloader,
+            frequency=download.frequency,
+            last_successful_download=download.last_successful_download,
+            location=download.location,
+            next_download=download.next_download,
+            status=download.status,
+            sub_downloader=download.sub_downloader,
+            url=download.url,
+        ))
+    if config != DOWNLOAD_MANAGER_CONFIG.downloads:
+        # Only save if there are changes.
+        DOWNLOAD_MANAGER_CONFIG.downloads = config
+
+
+@optional_session
+@limit_concurrent(1)
+async def import_downloads_config(session: Session):
+    """Upsert all Downloads in the Download Manager Config into the DB.
+
+    The config is the source of truth."""
+    if not DOWNLOAD_MANAGER_CONFIG.downloads:
+        return
+
+    try:
+        logger.warning('Importing downloads in config')
+
+        downloads_by_url = {i['url']: i for i in DOWNLOAD_MANAGER_CONFIG.downloads}
+        existing_downloads = list(session.query(Download))
+        for existing in existing_downloads:
+            download = downloads_by_url.pop(existing.url, None)
+            if download:
+                # Download in config already exists, update the DB record.
+                # The config is the source of truth.
+                existing.downloader = download['downloader']
+                existing.frequency = download['frequency']
+                existing.last_successful_download = download['last_successful_download']
+                existing.location = download['location']
+                existing.next_download = download['next_download']
+                existing.status = download['status']
+                existing.sub_downloader = download['sub_downloader']
+                logger.debug(f'Updating download {existing.url} with {download}')
+
+        for download in downloads_by_url.values():
+            # These downloads are new, import them.
+            download = Download(
+                downloader=download['downloader'],
+                frequency=download['frequency'],
+                last_successful_download=download['last_successful_download'],
+                location=download['location'],
+                next_download=download['next_download'],
+                status=download['status'],
+                sub_downloader=download['sub_downloader'],
+                url=(url := download['url']),
+            )
+            session.add(download)
+            logger.info(f'Adding new download {url}')
+
+        session.commit()
+    except Exception as e:
+        logger.error('Failed to import downloads', exc_info=e)
+        raise
 
 
 def parse_feed(url: str) -> FeedParserDict:
@@ -1079,6 +1172,9 @@ class RSSDownloader(Downloader, ABC):
         # Only download URLs that have not yet been downloaded.
         urls = []
         sub_downloader = self.manager.get_downloader_by_name(download.sub_downloader)
+        if not sub_downloader:
+            raise ValueError(f'Unable to find sub_downloader for {download.url}')
+
         for idx, entry in enumerate(feed['entries']):
             if url := entry.get('link'):
                 urls.append(url.strip())

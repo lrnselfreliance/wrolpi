@@ -1,7 +1,7 @@
+import asyncio
 import pathlib
 import shutil
 from copy import copy
-from itertools import zip_longest
 from unittest import mock
 
 import pytest
@@ -196,14 +196,15 @@ async def test_download_channel(test_session, simple_channel, video_download_man
         video_download_manager.create_download(url)
         await video_download_manager.wait_for_all_downloads()
 
+    # Let background tasks run.
+    await asyncio.sleep(0)
+
     # Two videos are in the example channel.
     downloads = video_download_manager.get_once_downloads(test_session)
     downloads = filter(lambda i: 'watch' in i.url, downloads)
-    expected = ['https://youtube.com/watch?v=video_2_url', 'https://youtube.com/watch?v=video_1_url']
-    for download, expected in zip_longest(downloads, expected):
-        assert download.url == expected
-        # Download is run only for test.
-        assert download.status == 'complete'
+    assert {i.url for i in downloads} == \
+           {'https://youtube.com/watch?v=video_2_url', 'https://youtube.com/watch?v=video_1_url'}
+    assert all(i.status == 'complete' for i in downloads)
 
     # A channel with `match_regex` only returns matching video URLs.
     simple_channel.match_regex = '.*(2).*'

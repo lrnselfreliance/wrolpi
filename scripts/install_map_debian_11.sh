@@ -33,6 +33,7 @@ cp /tmp/mod_tile/debian/renderd.service /lib/systemd/system/
 chmod +x /etc/init.d/renderd
 
 # Initialize gis database.
+[ -d /opt/openstreetmap-carto ] && chown -R wrolpi:wrolpi /opt/openstreetmap-carto
 git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto || :
 sudo -u wrolpi /bin/bash -c '(cd /opt/openstreetmap-carto && git fetch && git checkout master && git reset --hard origin/master && git pull --ff)'
 chown -R wrolpi:wrolpi /opt/openstreetmap-carto

@@ -6,7 +6,8 @@ from wrolpi import dates
 from wrolpi.common import Base, ModelHelper
 from wrolpi.media_path import MediaPathType
 
-RPI4_PBF_BYTES_PER_SECOND = 7573
+# Bps calculated using many tests on a well-cooled RPi4.
+RPI4_PBF_BYTES_PER_SECOND = 3943
 
 
 def seconds_to_import(path: Path, size: int) -> int:

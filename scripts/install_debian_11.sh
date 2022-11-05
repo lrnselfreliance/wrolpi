@@ -11,14 +11,18 @@ apt install -y apt-transport-https ca-certificates curl gnupg-agent gcc libpq-de
   chromium chromium-driver cpufrequtils network-manager npm
 
 # Install Archiving tools.
-npm install -g 'git+https://github.com/gildas-lormeau/SingleFile'
-npm install -g 'git+https://github.com/pirate/readability-extractor'
-
-# Build React app
-[[ ! -f /usr/local/bin/serve || ! -f /usr/bin/serve ]] && npm -g install serve
-cd /opt/wrolpi/app || exit 5
-npm install || npm install || npm install || npm install # try install multiple times
-npm run build
+SF_VERSION="1.0.15"
+if [ "$(single-file --version)" != "${SF_VERSION}" ]; then
+  (
+    wget --continue https://github.com/gildas-lormeau/SingleFile/archive/refs/tags/v${SF_VERSION}.tar.gz -O \
+      /tmp/SingleFile.git.tar.gz
+    cd /tmp
+    tar xf SingleFile.git.tar.gz
+    cd SingleFile-${SF_VERSION}
+    npm install
+  ) &  # Install in background.
+fi
+readability-extractor --version || npm install -g 'git+https://github.com/pirate/readability-extractor'
 
 # Setup the virtual environment that main.py expects
 pip3 --version || (
@@ -27,8 +31,16 @@ pip3 --version || (
     python3 /tmp/get-pip.py
 )
 
-# Install python requirements files
-pip3 install -r /opt/wrolpi/requirements.txt
+# Build React app in background job.
+[[ ! -f /usr/local/bin/serve || ! -f /usr/bin/serve ]] && npm -g install serve
+cd /opt/wrolpi/app || exit 5
+npm install || npm install || npm install || npm install # try install multiple times  :(
+npm run build &
+
+# Install python requirements files in background job.
+pip3 install -r /opt/wrolpi/requirements.txt &
+
+wait $(jobs -p)
 
 # Install the WROLPi nginx config over the default nginx config.
 cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf

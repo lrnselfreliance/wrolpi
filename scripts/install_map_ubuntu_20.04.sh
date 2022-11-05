@@ -19,7 +19,7 @@ set -e
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
 # Install map dependencies.
 apt install -y libboost-all-dev git tar unzip wget bzip2 build-essential autoconf libtool libxml2-dev libgeos-dev \
-  libgeos++-dev libpq-dev libbz2-dev libproj-dev munin-node munin protobuf-c-compiler libfreetype6-dev libtiff5-dev \
+  libgeos++-dev libpq-dev libbz2-dev libproj-dev protobuf-c-compiler libfreetype6-dev libtiff5-dev \
   libicu-dev libgdal-dev libcairo2-dev libcairomm-1.0-dev libagg-dev liblua5.2-dev ttf-unifont lua5.1 liblua5.1-0-dev \
   postgis postgresql-12-postgis-3 postgresql-12-postgis-3-scripts osm2pgsql gdal-bin libmapnik-dev mapnik-utils \
   python3-mapnik apache2 apache2-dev libcurl4-gnutls-dev libiniparser-dev libmemcached-dev librados-dev \

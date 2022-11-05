@@ -26,7 +26,7 @@ Help() {
 }
 
 FORCE=false
-while getopts ":hf:" option; do
+while getopts ":hf" option; do
   case $option in
   h) # display Help
     Help

@@ -200,9 +200,9 @@ function FileCard({file}) {
 export function FileCards({files}) {
     if (!isEmpty(files)) {
         return <CardGroupCentered>
-            {files.map((i) => <FileCard key={i['path']} file={i}/>)}
+            {files.map(i => <FileCard key={i['path']} file={i}/>)}
         </CardGroupCentered>
-    } else if (isEmpty(files)) {
+    } else if (files && files.length === 0) {
         return <Header as='h4'>No files found.</Header>
     } else {
         return <CardGroupCentered><CardPlacholder/></CardGroupCentered>

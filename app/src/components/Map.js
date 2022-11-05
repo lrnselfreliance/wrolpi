@@ -4,6 +4,7 @@ import {Route, Routes} from "react-router-dom";
 import {getMapImportStatus, importMapFiles} from "../api";
 import {
     Checkbox,
+    Divider,
     Icon as SIcon,
     Loader as SLoader,
     PlaceholderLine,
@@ -45,6 +46,11 @@ function DockerMapImportWarning() {
 
                 <p>Start your map container:</p>
                 <pre>  docker-compose up -d map</pre>
+
+                <Divider/>
+
+                <p>You can merge multiple PBF files using osmium (the merged file can then be imported):</p>
+                <pre>  osmium merge file1.osm.pbf file2.osm.pbf -o merged.osm.pbf</pre>
             </Message.Content>
         </Message>;
     }

@@ -15,7 +15,7 @@ cd /opt/openstreetmap-carto || exit 2
 MAX_TRIES=3
 COUNT=0
 SUCCESS=false
-external_data=true
+external_data=false
 dc_import=false
 indexes=false
 while [ "${COUNT}" -lt "${MAX_TRIES}" ]; do

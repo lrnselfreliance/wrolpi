@@ -10,6 +10,7 @@ from wrolpi.captions import read_captions, extract_captions
 from wrolpi.common import logger, register_modeler, register_after_refresh, limit_concurrent
 from wrolpi.db import get_db_curs
 from wrolpi.files.indexers import Indexer, register_indexer
+from wrolpi.files.lib import split_path_stem_and_suffix
 from wrolpi.files.models import File
 from wrolpi.vars import PYTEST
 from .downloader import video_downloader  # Import downloaders so they are registered.
@@ -64,7 +65,8 @@ def video_modeler(groups: Dict[str, List[File]], session: Session):
             video.validate(session)
 
             # Remove this group, it will not be processed by other modelers.
-            del groups[video.video_path.stem]
+            stem, _ = split_path_stem_and_suffix(video.video_path)
+            del groups[stem]
 
 
 @register_after_refresh

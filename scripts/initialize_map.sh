@@ -5,6 +5,8 @@ if [ ! -d /opt/openstreetmap-carto ]; then
   exit 1
 fi
 
+set -x
+
 # Use D.C. to initialized DB because it is so small.
 wget --continue https://download.geofabrik.de/north-america/us/district-of-columbia-latest.osm.pbf \
   -O /tmp/district-of-columbia-latest.osm.pbf || :

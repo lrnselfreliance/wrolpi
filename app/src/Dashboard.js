@@ -85,7 +85,7 @@ function DashboardStatus() {
             {bandwidths}
         </Link>
 
-        <Divider/>
+        <Divider style={{marginTop: '3em'}}/>
 
         <Link to='/admin'>
             <StatisticGroup size='mini'>

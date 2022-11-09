@@ -1,5 +1,5 @@
 import React, {useContext, useEffect, useState} from "react";
-import {Card, Container, IconGroup, Input, Modal, Pagination, Responsive} from 'semantic-ui-react';
+import {Card, Container, IconGroup, Image, Input, Modal, Pagination, Responsive} from 'semantic-ui-react';
 import {Link, NavLink} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
@@ -421,6 +421,18 @@ export function CardGroupCentered(props) {
             </Card.Group>
         </Responsive>
     </div>)
+}
+
+export function CardPosterLink({to, poster_url, imageLabel}) {
+    const {s} = useContext(ThemeContext);
+    const style = {display: 'flex', justifyContent: 'center', ...s['style']};
+    return <Link to={to} style={style}>
+        <Image fluid
+               src={poster_url}
+               label={imageLabel}
+               style={{maxHeight: '163px', width: 'auto'}}
+        />
+    </Link>
 }
 
 export function HelpPopup({icon, size, content, position}) {

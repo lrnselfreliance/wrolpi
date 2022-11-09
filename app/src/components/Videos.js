@@ -2,6 +2,7 @@ import React, {useContext, useEffect, useState} from 'react';
 import {Link, Route, Routes, useParams} from "react-router-dom";
 import {
     CardLink,
+    CardPosterLink,
     defaultSearchOrder,
     defaultVideoOrder,
     Duration,
@@ -317,19 +318,13 @@ export function VideoCard({file}) {
     if (video.favorite) {
         imageLabel = {corner: 'left', icon: 'heart', color: 'green'};
     }
-    let poster = <CardIcon><FileIcon file={file}/></CardIcon>;
+    let poster = <Link to={video_url}><CardIcon><FileIcon file={file}/></CardIcon></Link>;
     if (poster_url) {
-        poster = <Image wrapped
-                        src={poster_url}
-                        label={imageLabel}
-                        style={{position: 'relative', width: '100%'}}
-        />;
+        poster = <CardPosterLink to={video_url} poster_url={poster_url} imageLabel={imageLabel}/>;
     }
 
     return (<Card color={mimetypeColor(file.mimetype)}>
-        <Link to={video_url}>
-            {poster}
-        </Link>
+        {poster}
         <Duration video={video}/>
         <Card.Content {...s}>
             <Card.Header>

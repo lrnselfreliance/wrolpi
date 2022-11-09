@@ -437,7 +437,7 @@ function ChannelPage({create, header}) {
                             onConfirm={handleDeleteConfirm}
                         />
                         <Button
-                            color='blue'
+                            color='violet'
                             onClick={handleDownloadChannel}
                             disabled={!channel.url || !channel.download_frequency}
                         >

@@ -1,7 +1,7 @@
 import React, {useContext} from 'react';
 import './App.css';
 import {NavBar} from "./components/Nav";
-import {Route, Routes} from "react-router-dom";
+import {Link, Route, Routes} from "react-router-dom";
 import {VideosRoute, VideoWrapper} from "./components/Videos";
 import Admin from "./components/admin/Admin";
 import {Container} from "semantic-ui-react";
@@ -17,6 +17,7 @@ import {MapRoute} from "./components/Map";
 import {StatusContext, ThemeContext} from "./contexts/contexts";
 import {ThemeWrapper} from "./components/Theme";
 import {Dashboard} from "./Dashboard";
+import {Donate} from "./components/Donate";
 
 function PageNotFound() {
     return (<Container fluid>
@@ -28,9 +29,15 @@ function PageNotFound() {
 function Footer() {
     const {t} = useContext(ThemeContext);
     const {status} = useContext(StatusContext);
-    const {version} = status;
-    return <Container textAlign='center' style={{marginTop: '1.5em', marginBottom: '1em'}}>
-        <span {...t}>WROLPi v{version} <a href='https://github.com/lrnselfreliance/wrolpi'>GitHub</a></span>
+    let {version} = status;
+    version = version ? `v${version}` : null;
+    return <Container textAlign='center' style={{marginTop: '1.5em', marginBottom: '1em', ...t}}>
+        <span {...t}>
+            WROLPi {version} &nbsp;•&nbsp;
+            <Link to='/donate'>Donate</Link> &nbsp;•&nbsp;
+            <a href='https://github.com/lrnselfreliance/wrolpi'>GitHub</a> &nbsp;•&nbsp;
+            <a href='https://discord.gg/HrwFk7nqA2'>Discord</a>
+            </span>
     </Container>
 }
 
@@ -54,6 +61,7 @@ export default function App() {
                     <Route path='/archive/*' element={<ArchiveRoute/>}/>
                     <Route path='/map/*' element={<MapRoute/>}/>
                     <Route path='/files/*' element={<FilesRoute/>}/>
+                    <Route path='/donate' element={<Donate/>}/>
                     <Route element={<PageNotFound/>}/>
                 </Routes>
             </>

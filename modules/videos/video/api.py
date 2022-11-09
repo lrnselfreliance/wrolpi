@@ -5,13 +5,12 @@ from sanic.request import Request
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi.common import logger, wrol_mode_check, run_after, get_media_directory, \
-    get_relative_to_media_directory
+from wrolpi.common import logger, wrol_mode_check, run_after
 from wrolpi.errors import InvalidOrderBy, ValidationError
 from wrolpi.root_api import json_response
 from wrolpi.schema import JSONErrorResponse
 from . import lib
-from .. import common, schema
+from .. import schema
 
 video_bp = Blueprint('Video', '/api/videos')
 
@@ -50,21 +49,6 @@ async def search(_: Request, body: schema.VideoSearchRequest):
 
     ret = {'files': list(files), 'totals': {'files': videos_total}}
     return json_response(ret)
-
-
-@video_bp.post('/directories')
-@openapi.definition(
-    summary='Get all directories that match the search_str, prefixed by the media directory.',
-    body=schema.DirectoriesRequest,
-)
-@openapi.response(HTTPStatus.OK, schema.DirectoriesResponse)
-@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
-@validate(schema.DirectoriesRequest)
-def directories(_, body: schema.DirectoriesRequest):
-    search_str = str(get_media_directory() / (body.search_str or ''))
-    dirs = common.get_matching_directories(search_str)
-    dirs = [str(get_relative_to_media_directory(i)) for i in dirs]
-    return response.json({'directories': dirs})
 
 
 @video_bp.delete('/video/<video_ids:[0-9,]+>')

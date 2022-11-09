@@ -24,3 +24,13 @@ class FilesSearchRequest:
 @dataclass
 class DirectoryRefreshRequest:
     directory: str = None
+
+
+@dataclass
+class DirectoriesRequest:
+    search_str: Optional[str] = ''
+
+
+@dataclass
+class DirectoriesResponse:
+    directories: List[str]

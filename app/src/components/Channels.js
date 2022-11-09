@@ -16,8 +16,10 @@ import {
 import {createChannel, deleteChannel, downloadChannel, refreshChannel, updateChannel, validateRegex} from "../api";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {
+    DirectoryInput,
     frequencyOptions,
-    humanFileSize, isEmpty,
+    humanFileSize,
+    isEmpty,
     RequiredAsterisk,
     secondsToDate,
     secondsToFrequency,
@@ -30,7 +32,7 @@ import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
 import {ChannelPlaceholder} from "./Placeholder";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {useChannel, useChannels, useDirectories, useSettings} from "../hooks/customHooks";
+import {useChannel, useChannels} from "../hooks/customHooks";
 import {toast} from "react-semantic-toasts";
 import _ from "lodash";
 import {
@@ -48,41 +50,6 @@ import {
 } from "./Theme";
 import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
 
-
-function DirectoryInput({disabled, error, placeholder, setInput, value, required}) {
-    const {directory, directories, setDirectory} = useDirectories(value);
-    const {settings} = useSettings();
-
-    if (!directories || !settings) {
-        return <></>;
-    }
-
-    const localSetInput = (e, {value}) => {
-        setInput(value);
-        setDirectory(value);
-    }
-
-    const {media_directory} = settings;
-
-    return (
-        <div>
-            <Input
-                required={required}
-                disabled={disabled}
-                name='directory'
-                list='directories'
-                error={error}
-                label={media_directory}
-                value={directory}
-                onChange={localSetInput}
-                placeholder={placeholder}
-            />
-            <datalist id='directories'>
-                {directories.map(i => <option key={i} value={i}>{i}</option>)}
-            </datalist>
-        </div>
-    );
-}
 
 function ChannelStatistics({statistics}) {
     if (!statistics) {

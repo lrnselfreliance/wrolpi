@@ -241,7 +241,7 @@ def make_files_structure(test_directory) -> Callable[[Union[List, Dict]], List[p
             for name in paths_:
                 path = test_directory / name
                 if name.endswith('/'):
-                    path.mkdir()
+                    path.mkdir(parents=True, exist_ok=True)
                 else:
                     path.parent.mkdir(parents=True, exist_ok=True)
                     path.touch()

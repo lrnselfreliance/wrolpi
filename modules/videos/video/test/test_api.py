@@ -157,28 +157,3 @@ def test_wrol_mode(test_directory, simple_channel, simple_video, wrol_mode_fixtu
 
     wrol_mode_fixture(False)
     assert not test_download_manager.stopped.is_set()
-
-
-def test_video_directory_search(test_client, make_files_structure):
-    """Test that video directories can be searched."""
-    make_files_structure([
-        'foo/',
-        'fool/',
-        'not a directory',
-    ])
-
-    def assert_directories(search_str, expected):
-        body = dict(search_str=search_str)
-        request, response = test_client.post('/api/videos/directories', content=dumps(body))
-        assert response.status_code == HTTPStatus.OK
-        assert response.json['directories'] == expected
-
-    # All directories are returned.
-    assert_directories(None, ['foo', 'fool', 'videos'])
-    assert_directories('', ['foo', 'fool', 'videos'])
-    # Matches both directories.
-    assert_directories('fo', ['foo', 'fool'])
-    # Matches the one directory exactly.
-    assert_directories('foo', ['foo'])
-    # Does not exist.
-    assert_directories('food', [])

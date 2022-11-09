@@ -256,9 +256,12 @@ class VideoDownloader(Downloader, ABC):
             logger.info('Could not find channel')
 
         # Use the default directory if this video has no channel.
-        out_dir = get_no_channel_directory()
-        if channel:
-            out_dir = channel.directory
+        if settings.get('destination'):
+            out_dir = pathlib.Path(settings['destination'])
+        else:
+            out_dir = get_no_channel_directory()
+            if channel:
+                out_dir = channel.directory
         out_dir.mkdir(exist_ok=True, parents=True)
 
         logs = None  # noqa

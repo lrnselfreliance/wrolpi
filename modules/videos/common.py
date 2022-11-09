@@ -8,7 +8,7 @@ from datetime import timedelta
 from decimal import Decimal
 from functools import partial
 from pathlib import Path
-from typing import Union, List, Set, Iterable, Optional, Tuple
+from typing import List, Set, Iterable, Optional, Tuple
 
 import PIL
 from PIL import Image
@@ -134,35 +134,6 @@ def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None,
         conflicts = base_where.filter(Channel.source_id == source_id)
         if list(conflicts):
             raise ChannelSourceIdConflict()
-
-
-def get_matching_directories(path: Union[str, Path]) -> List[str]:
-    """
-    Return a list of directory strings that start with the provided path.  If the path is a directory, return it's
-    subdirectories, if the directory contains no subdirectories, return the directory.
-    """
-    path = str(path)
-
-    ignored_directories = {
-        str(get_no_channel_directory()),
-    }
-
-    if os.path.isdir(path):
-        # The provided path is a directory, return its subdirectories, or itself if no subdirectories exist
-        paths = [os.path.join(path, i) for i in os.listdir(path)]
-        paths = sorted(i for i in paths if os.path.isdir(i) and i not in ignored_directories)
-        if len(paths) == 0:
-            return [path]
-        return paths
-
-    head, tail = os.path.split(path)
-    paths = os.listdir(head)
-    paths = [os.path.join(head, i) for i in paths]
-    pattern = path.lower()
-    paths = sorted(
-        i for i in paths if os.path.isdir(i) and i.lower().startswith(pattern) and i not in ignored_directories)
-
-    return paths
 
 
 def duration_to_seconds(duration: str) -> int:

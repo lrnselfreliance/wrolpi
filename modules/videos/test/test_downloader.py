@@ -443,6 +443,21 @@ async def test_download_result(test_session, test_directory, video_download_mana
     assert video.poster_file.associated, 'Poster file was not associated.'
 
 
+@pytest.mark.asyncio
+async def test_download_destination(test_session, test_directory, video_download_manager,
+                                    mock_video_process_runner, mock_video_extract_info, mock_video_prepare_filename):
+    mock_video_extract_info.return_value = example_video_json
+
+    settings = dict(destination=f'{test_directory}/custom')
+    video_download_manager.create_download('https://example.com', downloader=VideoDownloader.name, settings=settings)
+    mock_video_process_runner.return_value = (0, {'stdout': '', 'stderr': ''})
+    mock_video_prepare_filename.return_value = str(test_directory / 'test video.mp4')
+    await video_download_manager.wait_for_all_downloads()
+
+    # Output directory matches the custom directory specified.
+    assert mock_video_prepare_filename.call_args_list[0].kwargs['ydl'].params['outtmpl']['default']\
+        .startswith(f'{test_directory}/custom/%(uploader)s')
+
 example_playlist_json = {
     '_type': 'playlist',
     'availability': None,

@@ -1,5 +1,5 @@
-import asyncio
 import pathlib
+from http import HTTPStatus
 from typing import List
 from urllib.request import Request
 
@@ -7,10 +7,11 @@ from sanic import response
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi.common import get_media_directory, wrol_mode_check, background_task
+from wrolpi.common import get_media_directory, wrol_mode_check, background_task, get_relative_to_media_directory
 from wrolpi.errors import InvalidFile
 from wrolpi.root_api import get_blueprint, json_response
 from . import lib, schema
+from ..schema import JSONErrorResponse
 from ..vars import PYTEST
 
 bp = get_blueprint('Files', '/api/files')
@@ -101,3 +102,21 @@ async def refresh_directory(_: Request, body: schema.DirectoryRefreshRequest):
 async def post_search_files(_: Request, body: schema.FilesSearchRequest):
     files, total = lib.search_files(body.search_str, body.limit, body.offset, body.mimetype, body.model)
     return json_response(dict(files=files, totals=dict(files=total)))
+
+
+@bp.post('/directories')
+@openapi.definition(
+    summary='Get all directories that match the search_str, prefixed by the media directory.',
+    body=schema.DirectoriesRequest,
+)
+@openapi.response(HTTPStatus.OK, schema.DirectoriesResponse)
+@openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
+@validate(schema.DirectoriesRequest)
+def directories(_, body: schema.DirectoriesRequest):
+    path = get_media_directory() / (body.search_str or '')
+    search_str = str(path)
+    dirs = lib.get_matching_directories(search_str)
+    dirs = [str(get_relative_to_media_directory(i)) for i in dirs]
+
+    body = {'directories': dirs, 'exists': path.exists(), 'is_dir': path.is_dir(), 'is_file': path.is_file()}
+    return response.json(body)

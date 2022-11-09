@@ -1,6 +1,7 @@
 import asyncio
 import datetime
 import glob
+import os
 import pathlib
 import re
 import subprocess
@@ -423,3 +424,30 @@ def assign_file_prefetched_models(files: List[File]) -> List[File]:
             pass
 
     return files
+
+
+def get_matching_directories(path: Union[str, Path]) -> List[str]:
+    """
+    Return a list of directory strings that start with the provided path.  If the path is a directory, return it's
+    subdirectories, if the directory contains no subdirectories, return the directory.
+    """
+    path = str(path)
+
+    ignored_directories = {}
+
+    if os.path.isdir(path):
+        # The provided path is a directory, return its subdirectories, or itself if no subdirectories exist
+        paths = [os.path.join(path, i) for i in os.listdir(path)]
+        paths = sorted(i for i in paths if os.path.isdir(i) and i not in ignored_directories)
+        if len(paths) == 0:
+            return [path]
+        return paths
+
+    head, tail = os.path.split(path)
+    paths = os.listdir(head)
+    paths = [os.path.join(head, i) for i in paths]
+    pattern = path.lower()
+    paths = sorted(
+        i for i in paths if os.path.isdir(i) and i.lower().startswith(pattern) and i not in ignored_directories)
+
+    return paths

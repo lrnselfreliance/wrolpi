@@ -12,47 +12,11 @@ from modules.videos.models import Channel, Video
 from wrolpi.common import get_absolute_media_path, sanitize_link
 from wrolpi.dates import local_timezone, now
 from wrolpi.downloader import Download, DownloadFrequency
-from wrolpi.test.common import build_test_directories, TestAPI
 from wrolpi.vars import PROJECT_DIR
 from .. import common
-from ..common import get_matching_directories, convert_image, remove_duplicate_video_paths, \
+from ..common import convert_image, remove_duplicate_video_paths, \
     apply_info_json, get_video_duration, generate_video_poster, is_valid_poster
 from ..lib import save_channels_config, get_channels_config, import_channels_config
-
-
-class TestCommon(TestAPI):
-
-    def test_matching_directories(self):
-        structure = [
-            'foo/qux/',
-            'Bar/',
-            'baz/baz'
-            'barr',
-            'bazz',
-        ]
-
-        with build_test_directories(structure) as temp_dir:
-            temp_dir = pathlib.Path(temp_dir)
-
-            # No directories have c
-            matches = get_matching_directories(temp_dir / 'c')
-            assert matches == []
-
-            # Get all directories starting with f
-            matches = get_matching_directories(temp_dir / 'f')
-            assert matches == [str(temp_dir / 'foo')]
-
-            # Get all directories starting with b, ignore case
-            matches = get_matching_directories(temp_dir / 'b')
-            assert matches == [str(temp_dir / 'Bar'), str(temp_dir / 'baz')]
-
-            # baz matches, but it has no subdirectories
-            matches = get_matching_directories(temp_dir / 'baz')
-            assert matches == [str(temp_dir / 'baz')]
-
-            # foo is an exact match, return subdirectories
-            matches = get_matching_directories(temp_dir / 'foo')
-            assert matches == [str(temp_dir / 'foo/qux')]
 
 
 def test_get_absolute_media_path():

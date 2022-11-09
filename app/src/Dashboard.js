@@ -2,7 +2,7 @@ import {LoadStatistic, PageContainer, SearchInput, useTitle} from "./components/
 import {useSearchFiles} from "./hooks/customHooks";
 import React, {useContext, useState} from "react";
 import {StatusContext} from "./contexts/contexts";
-import {DownloadMenu} from "./components/Upload";
+import {DownloadMenu} from "./components/Download";
 import {FilesSearchView} from "./components/Files";
 import {Header, Segment, Statistic, StatisticGroup} from "./components/Theme";
 import {Link} from "react-router-dom";

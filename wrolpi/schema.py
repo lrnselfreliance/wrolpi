@@ -54,6 +54,7 @@ class DownloadRequest:
     frequency: Optional[int] = None
     sub_downloader: Optional[str] = None
     excluded_urls: Optional[str] = None
+    destination: Optional[str] = None
 
 
 @dataclass

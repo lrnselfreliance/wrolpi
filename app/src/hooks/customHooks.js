@@ -576,13 +576,20 @@ export const useThrottle = () => {
 export const useDirectories = (defaultDirectory) => {
     const [directories, setDirectories] = useState();
     const [directory, setDirectory] = useState(defaultDirectory);
+    const [exists, setExists] = useState();
+    const [isDir, setIsDir] = useState();
+    const [isFile, setIsFile] = useState();
 
     const fetchDirectories = async () => {
         if (defaultDirectory && directory === '') {
             setDirectory(defaultDirectory);
         }
         try {
-            setDirectories(await getDirectories(directory));
+            const {directories, is_dir, exists_, is_file} = await getDirectories(directory);
+            setDirectories(directories);
+            setIsDir(is_dir);
+            setExists(exists_);
+            setIsFile(is_file);
         } catch (e) {
             toast({
                 type: 'error',
@@ -597,7 +604,7 @@ export const useDirectories = (defaultDirectory) => {
         fetchDirectories();
     }, [directory, defaultDirectory]);
 
-    return {directory, directories, setDirectory};
+    return {directory, directories, setDirectory, exists, isDir, isFile};
 }
 
 export const useSettings = () => {

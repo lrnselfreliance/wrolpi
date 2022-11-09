@@ -221,7 +221,7 @@ async def post_download(_: Request, body: DownloadRequest):
     downloader = body.downloader
     if not downloader or downloader in ('auto', 'None', 'null'):
         downloader = None
-    settings = dict(excluded_urls=excluded_urls)
+    settings = dict(excluded_urls=excluded_urls, destination=body.destination)
     if body.frequency:
         download_manager.recurring_download(urls[0], body.frequency, downloader=downloader,
                                             sub_downloader=body.sub_downloader, reset_attempts=True,

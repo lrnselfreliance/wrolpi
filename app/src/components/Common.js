@@ -2,7 +2,7 @@ import React, {useContext, useEffect, useState} from "react";
 import {Card, Container, IconGroup, Image, Input, Modal, Pagination, Responsive} from 'semantic-ui-react';
 import {Link, NavLink} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useDownloaders, useHotspot, useThrottle} from "../hooks/customHooks";
+import {useDirectories, useDownloaders, useHotspot, useSettings, useThrottle} from "../hooks/customHooks";
 import {StatusContext, ThemeContext} from "../contexts/contexts";
 import {Button, darkTheme, Form, Header, Icon, lightTheme, Menu, Popup, Statistic} from "./Theme";
 
@@ -701,4 +701,42 @@ export function useTitle(title) {
             document.title = originalTitle.current;
         }
     }, [title]);
+}
+
+export function DirectoryInput({disabled, error, placeholder, setInput, value, required, isDirectory}) {
+    const {directory, directories, setDirectory, isDir} = useDirectories(value);
+    const {settings} = useSettings();
+
+    if (!directories || !settings) {
+        return <></>;
+    }
+
+    const localSetInput = (e, {value}) => {
+        setInput(value);
+        setDirectory(value);
+    }
+
+    const {media_directory} = settings;
+    error = error || isDirectory && !isDir;
+
+    return (<div>
+        <Input
+            action={{
+                color: error ? 'red' : 'green',
+                labelPosition: 'left',
+                icon: 'folder',
+                content: media_directory,
+            }}
+            required={required}
+            disabled={disabled}
+            actionPosition='left'
+            value={directory}
+            onChange={localSetInput}
+            placeholder={placeholder}
+            list='directories'
+        />
+        <datalist id='directories'>
+            {directories.map(i => <option key={i} value={i}>{i}</option>)}
+        </datalist>
+    </div>);
 }

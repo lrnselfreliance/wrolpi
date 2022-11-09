@@ -1,10 +1,10 @@
 import React, {useContext, useState} from "react";
 import {getDownloaders, postDownload} from "../api";
-import {frequencyOptions, HelpPopup, rssFrequencyOptions, WROLModeMessage} from "./Common";
+import {DirectoryInput, frequencyOptions, HelpPopup, rssFrequencyOptions, WROLModeMessage} from "./Common";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {ThemeContext} from "../contexts/contexts";
-import {Accordion, Button, Form, FormInput, Header, Loader, TextArea} from "./Theme";
+import {Accordion, Button, Form, FormField, FormGroup, FormInput, Header, Loader, Segment, TextArea} from "./Theme";
 import {AccordionContent, AccordionTitle, FormDropdown} from "semantic-ui-react";
 
 const validUrl = /^(http|https):\/\/[^ "]+$/;
@@ -13,16 +13,27 @@ class Downloader extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            urls: '', valid: true, pending: false, downloader: props.downloader,
+            advancedOpen: false,
+            destination: '',
+            downloader: props.downloader,
+            pending: false,
+            urls: '',
+            valid: true,
         };
     }
 
     submitDownload = async () => {
-        let {urls, downloader} = this.state;
+        let {urls, downloader, destination} = this.state;
         if (urls) {
             this.setState({pending: true});
             try {
-                let response = await postDownload(urls, downloader);
+                let response = await postDownload(
+                    urls,
+                    downloader,
+                    null,
+                    null,
+                    null,
+                    destination);
                 if (response.status === 204) {
                     this.setState({urls: '', pending: false});
                 }
@@ -52,7 +63,29 @@ class Downloader extends React.Component {
 
     render() {
         let disabled = !this.state.urls || !this.state.valid || this.state.pending || !this.state.downloader;
-        const {header} = this.props;
+        const {advancedOpen, destination} = this.state;
+        const {header, withDestination} = this.props;
+
+        const advancedAccordion = <Accordion>
+            <AccordionTitle onClick={() => this.setState({advancedOpen: !advancedOpen})}>
+                <Icon name='dropdown'/>Advanced
+            </AccordionTitle>
+            <AccordionContent active={advancedOpen}>
+                <Segment>
+                    <FormGroup>
+                        <FormField width={16}>
+                            <label>Destination</label>
+                            <DirectoryInput
+                                isDirectory={true}
+                                value={destination}
+                                setInput={value => this.handleInputChange('directory', value)}
+                                placeholder='download/into/custom/directory'
+                            />
+                        </FormField>
+                    </FormGroup>
+                </Segment>
+            </AccordionContent>
+        </Accordion>;
 
         return <ThemeContext.Consumer>
             {({i}) => (<Form onSubmit={this.submitDownload}>
@@ -64,6 +97,7 @@ class Downloader extends React.Component {
                           onChange={this.handleInputChange}
                           value={this.state.urls}
                 />
+                {withDestination && advancedAccordion}
                 <Button content='Cancel' onClick={this.props.clearSelected}/>
                 <Button primary style={{marginTop: '1em'}} disabled={disabled}>Download</Button>
             </Form>)}
@@ -333,7 +367,7 @@ export function DownloadMenu({onOpen}) {
         'archive': <Downloader clearSelected={clearSelected} header={<><Icon name='file alternate'/> Archive</>}
                                downloader='archive'/>,
         'video': <Downloader clearSelected={clearSelected} header={<><Icon name='video'/> Videos</>}
-                             downloader='video'/>,
+                             downloader='video' withDestination={true}/>,
         'video_channel': <ChannelDownload clearSelected={clearSelected}/>,
         'rss': <RSSDownload clearSelected={clearSelected} header={<><Icon name='rss square'/> RSS</>}/>,
     };

@@ -396,3 +396,33 @@ def test_glob_shared_stem(make_files_structure):
 
     check(vid2, ['video2 [name].mp4', 'video2 [name].info.json'])
     check(vid2j, ['video2 [name].mp4', 'video2 [name].info.json'])
+
+
+def test_matching_directories(make_files_structure, test_directory):
+    make_files_structure([
+        'foo/qux/',
+        'Bar/',
+        'baz/baz'
+        'barr',
+        'bazz',
+    ])
+
+    # No directories have c
+    matches = lib.get_matching_directories(test_directory / 'c')
+    assert matches == []
+
+    # Get all directories starting with f
+    matches = lib.get_matching_directories(test_directory / 'f')
+    assert matches == [str(test_directory / 'foo')]
+
+    # Get all directories starting with b, ignore case
+    matches = lib.get_matching_directories(test_directory / 'b')
+    assert matches == [str(test_directory / 'Bar'), str(test_directory / 'baz')]
+
+    # baz matches, but it has no subdirectories
+    matches = lib.get_matching_directories(test_directory / 'baz')
+    assert matches == [str(test_directory / 'baz')]
+
+    # foo is an exact match, return subdirectories
+    matches = lib.get_matching_directories(test_directory / 'foo')
+    assert matches == [str(test_directory / 'foo/qux')]

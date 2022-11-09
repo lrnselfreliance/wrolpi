@@ -206,3 +206,28 @@ def test_associated_files(test_session, test_client, make_files_structure):
             {'path': 'video.mp4'},
         ]
     )
+
+
+def test_directory_search(test_client, make_files_structure):
+    """Test that directories can be searched."""
+    make_files_structure([
+        'foo/',
+        'fool/',
+        'not a directory',
+    ])
+
+    def assert_directories(search_str, expected):
+        body = dict(search_str=search_str)
+        request, response = test_client.post('/api/files/directories', content=json.dumps(body))
+        assert response.status_code == HTTPStatus.OK
+        assert response.json['directories'] == expected
+
+    # All directories are returned.
+    assert_directories(None, ['foo', 'fool'])
+    assert_directories('', ['foo', 'fool'])
+    # Matches both directories.
+    assert_directories('fo', ['foo', 'fool'])
+    # Matches the one directory exactly.
+    assert_directories('foo', ['foo'])
+    # Does not exist.
+    assert_directories('food', [])

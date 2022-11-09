@@ -158,16 +158,6 @@ class PaginationQuery:
 
 
 @dataclass
-class DirectoriesRequest:
-    search_str: Optional[str] = ''
-
-
-@dataclass
-class DirectoriesResponse:
-    directories: List[str]
-
-
-@dataclass
 class FavoriteRequest:
     video_id: int
     favorite: bool

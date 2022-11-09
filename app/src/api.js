@@ -171,9 +171,9 @@ export async function deleteVideos(videoIds) {
 
 export async function getDirectories(search_str) {
     let form_data = {'search_str': search_str || null};
-    let response = await apiPost(`${VIDEOS_API}/directories`, form_data);
+    let response = await apiPost(`${API_URI}/files/directories`, form_data);
     if (response.status === 200) {
-        return (await response.json())['directories'];
+        return await response.json();
     }
     return [];
 }
@@ -461,8 +461,14 @@ export async function getArchive(archiveId) {
     }
 }
 
-export async function postDownload(urls, downloader, frequency, sub_downloader, excludedURLs) {
-    let body = {urls: urls, downloader: downloader, frequency: frequency || null, excluded_urls: excludedURLs};
+export async function postDownload(urls, downloader, frequency, sub_downloader, excludedURLs, destination) {
+    let body = {
+        urls: urls,
+        downloader: downloader,
+        frequency: frequency || null,
+        excluded_urls: excludedURLs,
+        destination: destination || null,
+    };
     if (sub_downloader) {
         body['sub_downloader'] = sub_downloader;
     }

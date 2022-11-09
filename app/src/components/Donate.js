@@ -55,7 +55,7 @@ function CoinRow({header, qrCodeValue, address, buttonColor}) {
 export function Donate() {
     useTitle('Donate');
 
-    return (<PageContainer>
+    return <PageContainer>
         <Segment>
             <Header as='h1'>Donate</Header>
             <Header as='h3'>We appreciate any support you can provide to WROLPi!</Header>
@@ -64,5 +64,5 @@ export function Donate() {
             <CoinRow header='Ethereum' qrCodeValue={ethereumContent} address={ethereumAddress} buttonColor='blue'/>
             <CoinRow header='Bitcoin' qrCodeValue={bitcoinContent} address={bitcoinAddress} buttonColor='yellow'/>
         </Segment>
-    </PageContainer>);
+    </PageContainer>;
 }

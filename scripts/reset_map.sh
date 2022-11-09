@@ -81,9 +81,7 @@ sudo -u postgres psql -d wrolpi -c "UPDATE map_file SET imported=false"
 
 bash /opt/wrolpi/scripts/initialize_map.sh
 
-echo "Map has been reset.
+systemctl enable renderd
+systemctl start renderd
 
-Restart renderd with:
-
- # sudo systemctl restart renderd
-"
+echo "Map has been reset."

@@ -308,7 +308,7 @@ def apply_info_json(channel_id: int):
     Mark any videos not in the info_json as "censored".
     """
     with get_db_session() as session:
-        channel = session.query(Channel).filter_by(id=channel_id).one()
+        channel: Channel = session.query(Channel).filter_by(id=channel_id).one()
         channel_name = channel.name
         info = channel.info_json
 

@@ -11,7 +11,8 @@ import pytest
 
 from wrolpi.dates import local_timezone, Seconds
 from wrolpi.db import get_db_context
-from wrolpi.downloader import Downloader, Download, DownloadFrequency, DownloadResult, import_downloads_config
+from wrolpi.downloader import Downloader, Download, DownloadFrequency, DownloadResult, import_downloads_config, \
+    RSSDownloader
 from wrolpi.errors import UnrecoverableDownloadError, InvalidDownload, WROLModeEnabled
 from wrolpi.test.common import assert_dict_contains
 
@@ -481,3 +482,37 @@ async def test_downloads_config(test_client, test_session, test_download_manager
     # Import again, no duplicates.
     await import_downloads_config()
     assert_downloads(expected)
+
+
+@pytest.mark.asyncio
+async def test_download_excluded_urls(test_client, test_session, test_download_manager):
+    """Test that URLs that have been excluded are ignored by the download worker."""
+    http_downloader = HTTPDownloader()
+    http_downloader.already_downloaded = lambda *i, **kw: []
+    http_downloader.do_download = lambda *i, **kw: DownloadResult(success=True)
+    test_download_manager.register_downloader(http_downloader)
+    rss_downloader = RSSDownloader()
+    test_download_manager.register_downloader(rss_downloader)
+
+    with mock.patch('wrolpi.downloader.parse_feed') as mock_parse_feed:
+        mock_parse_feed.return_value = dict(
+            bozo=0,
+            entries=[
+                dict(link='https://example.com/a'),
+                dict(link='https://example.org/b'),  # this should be ignored
+                dict(link='https://example.com/c'),
+                dict(link='https://example.gov/d'),
+            ]
+        )
+        settings = dict(excluded_urls=['example.org', 'example.gov'])
+        feed_download: Download = test_download_manager.create_download('https://example.com/feed',
+                                                                        test_session, sub_downloader='http',
+                                                                        downloader=RSSDownloader.name,
+                                                                        settings=settings)
+        await test_download_manager.wait_for_all_downloads()
+
+    downloads = list(test_download_manager.get_downloads(test_session))
+    assert not feed_download.error, f'Feed download had error {feed_download.error}'
+    assert len(downloads) == 3, 'Domain was not ignored'
+    assert [i.url for i in downloads] == \
+           ['https://example.com/feed', 'https://example.com/a', 'https://example.com/c'], f'Domain was not ignored'

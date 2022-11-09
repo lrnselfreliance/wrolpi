@@ -153,8 +153,8 @@ class TestVideosDownloaders(TestAPI):
 
 
 @pytest.mark.asyncio
-async def test_video_download_no_channel(test_session, video_download_manager, video_factory, test_directory,
-                                         mock_video_extract_info, mock_video_process_runner):
+async def test_download_no_channel(test_session, video_download_manager, video_factory, test_directory,
+                                   mock_video_extract_info, mock_video_process_runner):
     """A video can be downloaded even if it does not have a Channel."""
     channel_dir = test_directory / 'NO CHANNEL'
     channel_dir.mkdir(parents=True)
@@ -216,12 +216,16 @@ async def test_download_channel(test_session, simple_channel, video_download_man
         await video_download_manager.wait_for_all_downloads()
     downloads = video_download_manager.get_once_downloads(test_session)
     assert [i.url for i in downloads] == ['https://youtube.com/watch?v=video_2_url']
+    assert downloads[0].settings == {
+        'channel_id': 1,
+        'channel_url': 'https://www.youtube.com/c/LearningSelfReliance/videos',
+    }
 
 
 def test_get_or_create_channel(test_session):
-    """
-    A Channel may need to be created for an arbitrary download.  Attempt to use an existing Channel if we can
-    match it.
+    """A Channel may need to be created for an arbitrary download.
+
+    Attempt to use an existing Channel if we can match it.
     """
     c1 = Channel(name='foo', source_id='foo', url='foo')
     c2 = Channel(name='bar', source_id='bar')
@@ -376,8 +380,8 @@ async def test_invalid_download_url(test_session, test_download_manager, mock_vi
 
 
 @pytest.mark.asyncio
-async def test_video_download_1(test_session, test_directory, simple_channel, video_download_manager,
-                                mock_video_process_runner, image_file):
+async def test_video_download(test_session, test_directory, simple_channel, video_download_manager,
+                              mock_video_process_runner, image_file):
     """A video download is performed, files are associated."""
     simple_channel.source_id = example_video_json['channel_id']
     simple_channel.directory = test_directory / 'videos/channel name'

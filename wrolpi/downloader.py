@@ -50,6 +50,7 @@ class DownloadResult:
     info_json: dict = field(default_factory=dict)
     location: str = None
     success: bool = False
+    settings: dict = field(default_factory=dict)
 
 
 class Download(ModelHelper, Base):  # noqa
@@ -402,7 +403,10 @@ class DownloadManager:
                     if result.downloads:
                         worker_logger.info(f'Adding {len(result.downloads)} downloads from result of {download.url}')
                         urls = download.filter_excluded(result.downloads)
-                        self.create_downloads(urls, session, downloader=download.sub_downloader)
+                        downloads = self.create_downloads(urls, session,
+                                                          downloader=download.sub_downloader,
+                                                          settings=result.settings,
+                                                          )
 
                     if try_again is False and not download.frequency:
                         # Only once-downloads can fail.
@@ -534,16 +538,8 @@ class DownloadManager:
         return download
 
     @optional_session
-    def create_download(self, url: str, session: Session = None, downloader: str = None, reset_attempts: bool = False,
-                        sub_downloader: str = None, excluded_urls: List[str] = None) -> Download:
-        """Schedule a URL for download.  If the URL failed previously, it may be retried."""
-        downloads = self.create_downloads([url], session=session, downloader=downloader, excluded_urls=excluded_urls,
-                                          reset_attempts=reset_attempts, sub_downloader=sub_downloader)
-        return downloads[0]
-
-    @optional_session
     def create_downloads(self, urls: List[str], session: Session = None, downloader: str = None,
-                         reset_attempts: bool = False, sub_downloader: str = None, excluded_urls: List[str] = None) \
+                         reset_attempts: bool = False, sub_downloader: str = None, settings: dict = None) \
             -> List[Download]:
         """Schedule all URLs for download.  If one cannot be downloaded, none will be added."""
         if not all(urls):
@@ -577,7 +573,7 @@ class DownloadManager:
                 download.downloader = local_downloader.name
                 download.info_json = info_json or download.info_json
                 download.sub_downloader = sub_downloader
-                download.settings = {'excluded_urls': excluded_urls}
+                download.settings = settings
                 downloads.append(download)
 
         try:
@@ -592,17 +588,24 @@ class DownloadManager:
 
         return downloads
 
+    @optional_session
+    def create_download(self, url: str, session: Session = None, downloader: str = None, reset_attempts: bool = False,
+                        sub_downloader: str = None, settings: Dict = None) -> Download:
+        """Schedule a URL for download.  If the URL failed previously, it may be retried."""
+        downloads = self.create_downloads([url], session=session, downloader=downloader, settings=settings,
+                                          reset_attempts=reset_attempts, sub_downloader=sub_downloader)
+        return downloads[0]
+
     def recurring_download(self, url: str, frequency: int, downloader: str = None,
                            sub_downloader: str = None, reset_attempts: bool = False,
-                           excluded_urls: List[str] = None) -> Download:
+                           settings: Dict = None) -> Download:
         """Schedule a recurring download."""
         if not frequency:
             raise ValueError('Recurring download must have a frequency!')
 
         with get_db_session(commit=True) as session:
-            download, = self.create_downloads([url, ], session=session, downloader=downloader,
-                                              sub_downloader=sub_downloader, reset_attempts=reset_attempts,
-                                              excluded_urls=excluded_urls)
+            download, = self.create_downloads([url, ], session=session, downloader=downloader, settings=settings,
+                                              sub_downloader=sub_downloader, reset_attempts=reset_attempts)
             download.frequency = frequency
 
         return download

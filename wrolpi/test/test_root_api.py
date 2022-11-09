@@ -2,17 +2,15 @@ import json
 from http import HTTPStatus
 from itertools import zip_longest
 
-import pytest
 from mock import mock
 
 from wrolpi.admin import HotspotStatus
 from wrolpi.common import get_config
 from wrolpi.dates import strptime
 from wrolpi.db import get_db_session
-from wrolpi.downloader import Download, RSSDownloader, DownloadResult
+from wrolpi.downloader import Download
 from wrolpi.root_api import api_app
 from wrolpi.test.common import TestAPI, wrap_test_db, skip_circleci
-from wrolpi.test.test_downloader import HTTPDownloader
 
 
 class TestRootAPI(TestAPI):
@@ -353,36 +351,3 @@ def test_get_downloaders(test_client):
     assert 'downloaders' in response.json, 'Downloaders not returned'
     assert isinstance(response.json['downloaders'], list) and len(response.json['downloaders']), \
         'No downloaders returned'
-
-
-@pytest.mark.asyncio
-async def test_download_excluded_urls(test_client, test_session, test_download_manager):
-    """Test that URLs that have been excluded are ignored by the download worker."""
-    http_downloader = HTTPDownloader()
-    http_downloader.already_downloaded = lambda *i, **kw: []
-    http_downloader.do_download = lambda *i, **kw: DownloadResult(success=True)
-    test_download_manager.register_downloader(http_downloader)
-    rss_downloader = RSSDownloader()
-    test_download_manager.register_downloader(rss_downloader)
-
-    with mock.patch('wrolpi.downloader.parse_feed') as mock_parse_feed:
-        mock_parse_feed.return_value = dict(
-            bozo=0,
-            entries=[
-                dict(link='https://example.com/a'),
-                dict(link='https://example.org/b'),  # this should be ignored
-                dict(link='https://example.com/c'),
-                dict(link='https://example.gov/d'),
-            ]
-        )
-        feed_download: Download = test_download_manager.create_download('https://example.com/feed',
-                                                                        test_session, sub_downloader='http',
-                                                                        downloader=RSSDownloader.name,
-                                                                        excluded_urls=['example.org', 'example.gov'])
-        await test_download_manager.wait_for_all_downloads()
-
-    downloads = list(test_download_manager.get_downloads(test_session))
-    assert not feed_download.error, f'Feed download had error {feed_download.error}'
-    assert len(downloads) == 3, 'Domain was not ignored'
-    assert [i.url for i in downloads] == \
-           ['https://example.com/feed', 'https://example.com/a', 'https://example.com/c'], f'Domain was not ignored'

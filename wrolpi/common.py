@@ -187,7 +187,7 @@ class ConfigFile:
             raise ValueError(f'Refusing to save config file while testing: {config_file}')
 
         # Only one process can write to the file.
-        self.file_lock.acquire(block=True, timeout=5.0)
+        acquired = self.file_lock.acquire(block=True, timeout=5.0)
 
         try:
             # Config directory may not exist.
@@ -206,7 +206,8 @@ class ConfigFile:
             with config_file.open('wt') as fh:
                 yaml.dump(config, fh)
         finally:
-            self.file_lock.release()
+            if acquired:
+                self.file_lock.release()
 
     def get_file(self) -> Path:
         if not self.file_name:

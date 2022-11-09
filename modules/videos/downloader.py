@@ -45,6 +45,8 @@ PREFERRED_VIDEO_FORMAT = ','.join([
     'res:720',  # Use the best 720p available first
     '136+140',  # 130=720p video-only, 140= high quality audio only
     '22',  # 720p video with audio
+    'mp4-480p',
+    'mp4-360p',
     '18',  # 360p video with audio
     'bestvideo+bestaudio',  # Download the highest resolution as a last resort (1080p is quite large).
 ])
@@ -79,7 +81,9 @@ class ChannelDownloader(Downloader, ABC):
 
     @staticmethod
     def is_a_playlist(info: dict):
-        # A playlist will have an id different from its channel.
+        if '_type' in info:
+            return info['_type'] == 'playlist'
+        # A playlist may have an id different from its channel.
         return info['id'] != info['channel_id']
 
     async def do_download(self, download: Download) -> DownloadResult:
@@ -92,12 +96,15 @@ class ChannelDownloader(Downloader, ABC):
             # May not have a session during testing.
             session.commit()
 
-        kind = info['uploader']
-        channel_source_id = info['channel_id']
-        channel = get_or_create_channel(channel_source_id, download.url, kind)
+        name = info.get('uploader') or info.get('webpage_url_basename')
+        if not name:
+            raise ValueError(f'Could not find name')
+        channel_source_id = info.get('channel_id') or info.get('id')
+        channel = get_or_create_channel(channel_source_id, download.url, name)
         channel.dict()  # get all attributes while we have the session.
 
         location = f'/videos/channel/{channel.id}/video' if channel and channel.id else None
+        settings = dict(channel_id=channel.id, channel_url=download.url) if channel else None
 
         is_a_playlist = self.is_a_playlist(info)
         try:
@@ -105,13 +112,23 @@ class ChannelDownloader(Downloader, ABC):
                 await self.prepare_channel_for_downloads(download, channel)
 
             downloads = self.get_missing_videos(download, channel)
-            return DownloadResult(success=True, location=location, downloads=downloads)
+            return DownloadResult(
+                success=True,
+                location=location,
+                downloads=downloads,
+                settings=settings,
+            )
         except Exception:
             if PYTEST:
                 raise
             kind = 'playlist' if is_a_playlist else 'channel'
             logger.warning(f'Failed to update catalog of {kind} {download.url}')
-            return DownloadResult(success=False, location=location, error=str(traceback.format_exc()))
+            return DownloadResult(
+                success=False,
+                location=location,
+                error=str(traceback.format_exc()),
+                settings=settings,
+            )
 
     @classmethod
     async def prepare_channel_for_downloads(cls, download: Download, channel: Channel):
@@ -209,12 +226,34 @@ class VideoDownloader(Downloader, ABC):
             download.info_json = info
             session.commit()
 
+        found_channel = None
+
         channel_name = info.get('channel')
-        channel_id = info.get('channel_id')
+        source_channel_id = info.get('channel_id')
+        channel_url = info.get('channel_url')
         channel = None
-        if channel_name or channel_id:
-            channel_url = info.get('channel_url')
-            channel = get_or_create_channel(source_id=channel_id, url=channel_url, name=channel_name)
+        if channel_name or source_channel_id:
+            # Try to find the channel via info_json from yt-dlp.
+            channel = get_or_create_channel(source_id=source_channel_id, url=channel_url, name=channel_name)
+            if channel:
+                found_channel = 'yt_dlp'
+
+        settings = download.settings or dict()
+        local_channel_id = settings.get('channel_id')
+        channel_url = settings.get('channel_url')
+        if not channel and (local_channel_id or channel_url):
+            # Could not find channel via yt-dlp info_json, use info from ChannelDownloader if it created this Download.
+            logger.info(f'Using download.settings to find channel')
+            channel = get_channel(channel_id=local_channel_id, url=channel_url, return_dict=False)
+            if channel:
+                found_channel = 'download_settings'
+
+        if found_channel == 'yt_dlp':
+            logger.debug('Found channel using yt_dlp')
+        elif found_channel == 'download_settings':
+            logger.info('Found channel using Download.settings')
+        else:
+            logger.info('Could not find channel')
 
         # Use the default directory if this video has no channel.
         out_dir = get_no_channel_directory()
@@ -321,8 +360,7 @@ class VideoDownloader(Downloader, ABC):
         options = get_downloader_config().dict()
         options['outtmpl'] = f'{out_dir}/{options["file_name_format"]}'
         options['merge_output_format'] = PREFERRED_VIDEO_EXTENSION
-
-        logger.debug(f'Downloading {url} to {out_dir}')
+        options['format'] = PREFERRED_VIDEO_FORMAT
 
         # Create a new YoutubeDL for the output directory.
         ydl = YoutubeDL(options)
@@ -334,6 +372,8 @@ class VideoDownloader(Downloader, ABC):
         final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
         if final_filename.suffix.lower() != f'.{PREFERRED_VIDEO_EXTENSION}':
             raise DownloadError(f'Cannot download video {url} because yt-dlp filename is invalid.')
+
+        logger.debug(f'Downloading {url} to {out_dir}')
         return final_filename, entry
 
 
@@ -410,7 +450,7 @@ def update_channel_catalog(channel: Channel, info: dict):
 
     with get_db_session(commit=True) as session:
         # Get the channel in this new context.
-        channel = session.query(Channel).filter_by(id=channel.id).one()
+        channel: Channel = session.query(Channel).filter_by(id=channel.id).one()
 
         channel.info_json = info
         channel.info_date = now()

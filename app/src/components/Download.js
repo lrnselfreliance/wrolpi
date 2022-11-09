@@ -13,12 +13,7 @@ class Downloader extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            advancedOpen: false,
-            destination: '',
-            downloader: props.downloader,
-            pending: false,
-            urls: '',
-            valid: true,
+            advancedOpen: false, destination: '', downloader: props.downloader, pending: false, urls: '', valid: true,
         };
     }
 
@@ -27,13 +22,7 @@ class Downloader extends React.Component {
         if (urls) {
             this.setState({pending: true});
             try {
-                let response = await postDownload(
-                    urls,
-                    downloader,
-                    null,
-                    null,
-                    null,
-                    destination);
+                let response = await postDownload(urls, downloader, null, null, null, destination);
                 if (response.status === 204) {
                     this.setState({urls: '', pending: false});
                 }
@@ -44,7 +33,12 @@ class Downloader extends React.Component {
     }
 
     handleInputChange = async (event, {name, value}) => {
+        console.log(name, value);
         this.setState({[name]: value}, this.validateUrls);
+    }
+
+    handleDestinationChange = (value) => {
+        this.setState({destination: value});
     }
 
     validateUrls = async () => {
@@ -78,7 +72,7 @@ class Downloader extends React.Component {
                             <DirectoryInput
                                 isDirectory={true}
                                 value={destination}
-                                setInput={value => this.handleInputChange('directory', value)}
+                                setInput={this.handleDestinationChange}
                                 placeholder='download/into/custom/directory'
                             />
                         </FormField>

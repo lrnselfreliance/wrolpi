@@ -39,7 +39,8 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
 
     const handleDeleteVideo = async (video_id) => {
         try {
-            await deleteVideos(video_id)
+            await deleteVideos([video_id])
+            setDeleteOpen(false);
         } catch (e) {
             setDeleteOpen(false);
             throw e;

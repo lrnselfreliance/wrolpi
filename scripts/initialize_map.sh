@@ -8,8 +8,8 @@ fi
 set -x
 
 # Use D.C. to initialized DB because it is so small.
-wget --continue https://download.geofabrik.de/north-america/us/district-of-columbia-latest.osm.pbf \
-  -O /tmp/district-of-columbia-latest.osm.pbf || :
+DC_MAP=district-of-columbia-221105.osm.pbf
+wget --continue https://download.geofabrik.de/north-america/us/${DC_MAP} -O /tmp/${DC_MAP} || :
 
 cd /opt/openstreetmap-carto || exit 2
 
@@ -27,7 +27,7 @@ while [ "${COUNT}" -lt "${MAX_TRIES}" ]; do
       -d gis -U wrolpi &&
     external_data=true
   [[ "${dc_import}" = false ]] &&
-    sudo -u wrolpi nice -n 18 /opt/wrolpi/scripts/import_map.sh /tmp/district-of-columbia-latest.osm.pbf &&
+    sudo -u wrolpi nice -n 18 /opt/wrolpi/scripts/import_map.sh /tmp/${DC_MAP} &&
     dc_import=true
   [[ "${indexes}" = false ]] &&
     sudo -u wrolpi psql -d gis -f /opt/openstreetmap-carto/indexes.sql &&
@@ -43,3 +43,5 @@ if [[ "${SUCCESS}" == false ]]; then
   echo "Could not initialize map data.  Try running reset_map.sh, or install.sh."
   exit 3
 fi
+
+echo "Map has successfully been initialized"

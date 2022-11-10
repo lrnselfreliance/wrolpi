@@ -235,6 +235,7 @@ class Video(ModelHelper, Base):
 
         d = dict(
             caption_path=self.caption_path,
+            censored=self.censored,
             channel=self.channel,
             channel_id=self.channel_id,
             modification_datetime=self.modification_datetime,

@@ -43,7 +43,7 @@ class File(ModelHelper, Base):
             setweight(to_tsvector('english'::regconfig, COALESCE(d_text, '')), 'D'::"char")
             ''')))
 
-    prefetched_model = None  # This may be filled with record matching `model.
+    prefetched_model = None  # This may be filled with record matching `model`.
 
     def __repr__(self):
         path = str(self.path.relative_to(get_media_directory()))

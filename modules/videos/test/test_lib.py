@@ -35,12 +35,14 @@ def test_search_censored_videos(test_session, simple_channel, video_factory):
     set_entries(map(str, range(5, 50)))
     videos, total = search_videos(filters=['censored'], order_by='id', limit=20)
     assert [i['video']['source_id'] for i in videos] == [str(i) for i in range(5)]
+    assert all(i['video']['censored'] for i in videos)
     assert total == 5
 
     # First 25 are censored.
     set_entries(map(str, range(25, 50)))
     videos, total = search_videos(filters=['censored'], order_by='id', limit=20)
     assert [i['video']['source_id'] for i in videos] == [str(i) for i in range(20)]
+    assert all(i['video']['censored'] for i in videos)
     assert total == 25
 
 

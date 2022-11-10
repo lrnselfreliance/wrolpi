@@ -84,6 +84,7 @@ def search_videos(
         order_by: str = None,
         filters: List[str] = None,
 ) -> Tuple[List[dict], int]:
+    filters = filters or []
     wheres = ['v.video_path IS NOT NULL']
 
     params = dict(search_str=search_str, offset=offset)
@@ -91,11 +92,10 @@ def search_videos(
         wheres.append('v.channel_id = %(channel_id)s')
         params['channel_id'] = channel_id
 
-    # Filter for/against favorites, if it was provided
-    if isinstance(filters, list) and 'favorite' in filters:
+    # Apply filters.
+    if 'favorite' in filters:
         wheres.append('v.favorite IS NOT NULL')
-
-    if isinstance(filters, list) and 'censored' in filters:
+    if 'censored' in filters:
         wheres.append('v.censored = true')
 
     if search_str:

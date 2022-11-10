@@ -399,6 +399,8 @@ def get_or_create_channel(source_id: str = None, url: str = None, name: str = No
     """
     try:
         channel = get_channel(source_id=source_id, url=url, name=name, return_dict=False)
+        # Get all properties while we have the session.
+        channel.dict()
         return channel
     except UnknownChannel:
         pass
@@ -419,6 +421,8 @@ def get_or_create_channel(source_id: str = None, url: str = None, name: str = No
     channel = create_channel(data=data, return_dict=False)
     # Create the directory now that the channel is approved.
     channel_directory.mkdir(exist_ok=True)
+    # Get all properties while we have the session.
+    channel.dict()
 
     return channel
 

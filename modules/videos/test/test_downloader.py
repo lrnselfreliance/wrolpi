@@ -447,14 +447,24 @@ async def test_download_result(test_session, test_directory, video_download_mana
 async def test_download_destination(test_session, test_directory, video_download_manager,
                                     mock_video_process_runner, mock_video_extract_info, mock_video_prepare_filename):
     """A Video can be downloaded to a directory other than it's Channel's directory."""
+    # yt-dlp would return the video json.
     mock_video_extract_info.return_value = example_video_json
+    # Download process is successful with no logs.
+    mock_video_process_runner.return_value = (0, {'stdout': '', 'stderr': ''})
+    # This result will be ignored during the test, we just need some value so the download does not fail.
+    mock_video_prepare_filename.return_value = str(test_directory / 'test video.mp4')
+
+    video_download_manager.create_download('https://example.com/1', downloader=VideoDownloader.name)
+    await video_download_manager.wait_for_all_downloads()
+    # Output directory matches the channel directory.
+    assert mock_video_prepare_filename.call_args_list[0].kwargs['ydl'].params['outtmpl']['default']\
+        .startswith(f'{test_directory}/videos/channel name/%(uploader)s')
+
+    mock_video_prepare_filename.reset_mock()
 
     settings = dict(destination=f'{test_directory}/custom')
-    video_download_manager.create_download('https://example.com', downloader=VideoDownloader.name, settings=settings)
-    mock_video_process_runner.return_value = (0, {'stdout': '', 'stderr': ''})
-    mock_video_prepare_filename.return_value = str(test_directory / 'test video.mp4')
+    video_download_manager.create_download('https://example.com/2', downloader=VideoDownloader.name, settings=settings)
     await video_download_manager.wait_for_all_downloads()
-
     # Output directory matches the custom directory specified.
     assert mock_video_prepare_filename.call_args_list[0].kwargs['ydl'].params['outtmpl']['default']\
         .startswith(f'{test_directory}/custom/%(uploader)s')

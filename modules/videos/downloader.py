@@ -257,13 +257,17 @@ class VideoDownloader(Downloader, ABC):
         else:
             logger.info('Could not find channel')
 
-        # Use the default directory if this video has no channel.
         if destination:
+            # Download to the directory specified in the settings.
             out_dir = pathlib.Path(settings['destination'])
+            logger.debug(f'Downloading {url} to destination from settings')
+        elif channel:
+            out_dir = channel.directory
+            logger.debug(f'Downloading {url} to channel directory')
         else:
+            # Download to the default directory if this video has no channel.
             out_dir = get_no_channel_directory()
-            if channel:
-                out_dir = channel.directory
+            logger.debug(f'Downloading {url} to default directory')
         out_dir.mkdir(exist_ok=True, parents=True)
 
         logs = None  # noqa

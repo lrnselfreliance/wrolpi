@@ -443,7 +443,7 @@ class Channel(ModelHelper, Base):
 
     def dict(self, with_statistics: bool = False):
         d = super(Channel, self).dict()
-        d['directory'] = self.directory.relative_to(get_media_directory())
+        d['directory'] = self.directory.relative_to(get_media_directory()) if self.directory else None
         if with_statistics:
             d['statistics'] = self.get_statistics()
         return d

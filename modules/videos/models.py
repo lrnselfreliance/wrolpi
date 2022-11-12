@@ -142,6 +142,13 @@ class Video(ModelHelper, Base):
         try:
             with info_json_path.open('rb') as fh:
                 return json.load(fh)
+        except FileNotFoundError:
+            logger.warning(f'Unable to find info json file!  {info_json_path}')
+            if self.video_path.is_file():
+                # Clear out the info_json only if the video file exists.  We don't want to clear out the info_json if
+                # the drive hasn't been mounted.
+                self.info_json_file = self.info_json_path = None
+            return None
         except Exception as e:
             logger.warning(f'Unable to parse info json {self.info_json_path}', exc_info=e)
             return None

@@ -242,7 +242,7 @@ class VideoDownloader(Downloader, ABC):
         local_channel_id = settings.get('channel_id')
         channel_url = settings.get('channel_url')
         destination = settings.get('destination')
-        if not channel and (local_channel_id or channel_url):
+        if not channel and (local_channel_id or channel_url or destination):
             # Could not find channel via yt-dlp info_json, use info from ChannelDownloader if it created this Download.
             logger.info(f'Using download.settings to find channel')
             channel = get_channel(channel_id=local_channel_id, url=channel_url, directory=destination,
@@ -250,19 +250,22 @@ class VideoDownloader(Downloader, ABC):
             if channel:
                 found_channel = 'download_settings'
 
+        channel_id = channel.id if channel else None
+        channel_directory = channel.directory if channel else None
+
         if found_channel == 'yt_dlp':
             logger.debug('Found channel using yt_dlp')
         elif found_channel == 'download_settings':
             logger.info('Found channel using Download.settings')
         else:
-            logger.info('Could not find channel')
+            logger.warning('Could not find channel')
 
         if destination:
             # Download to the directory specified in the settings.
             out_dir = pathlib.Path(settings['destination'])
             logger.debug(f'Downloading {url} to destination from settings')
         elif channel:
-            out_dir = channel.directory
+            out_dir = channel_directory
             logger.debug(f'Downloading {url} to channel directory')
         else:
             # Download to the default directory if this video has no channel.
@@ -314,8 +317,7 @@ class VideoDownloader(Downloader, ABC):
                 video_file = File.upsert(video_path, session)
                 video: Video = Video.upsert(video_file, session)
                 video.source_id = entry['id']
-                if channel:
-                    video.channel_id = channel.id
+                video.channel_id = channel_id
                 video.video_file.do_index()
                 video.validate(session)
                 session.flush([video])
@@ -334,7 +336,7 @@ class VideoDownloader(Downloader, ABC):
                                    f'attempt to download it again.')
 
                     with get_db_session(commit=True) as session:
-                        c = session.query(Channel).filter_by(id=channel.id).one()
+                        c = session.query(Channel).filter_by(id=channel_id).one()
                         c.add_video_to_skip_list(source_id)
                 except Exception:
                     # Could not skip this video, it may not have a channel.
@@ -349,8 +351,8 @@ class VideoDownloader(Downloader, ABC):
                 error = str(traceback.format_exc())
             return DownloadResult(success=False, error=error)
 
-        if channel:
-            location = f'/videos/channel/{channel.id}/video/{video_id}'
+        if channel_id:
+            location = f'/videos/channel/{channel_id}/video/{video_id}'
         else:
             location = f'/videos/video/{video_id}'
         result = DownloadResult(

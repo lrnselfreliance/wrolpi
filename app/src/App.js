@@ -26,6 +26,10 @@ function PageNotFound() {
     </Container>)
 }
 
+function Dot() {
+    return <>&nbsp;•&nbsp;</>
+}
+
 function Footer() {
     const {t} = useContext(ThemeContext);
     const {status} = useContext(StatusContext);
@@ -33,10 +37,10 @@ function Footer() {
     version = version ? `v${version}` : null;
     return <Container textAlign='center' style={{marginTop: '1.5em', marginBottom: '1em', ...t}}>
         <span {...t}>
-            WROLPi {version} &nbsp;•&nbsp;
-            <Link to='/donate'>Donate</Link> &nbsp;•&nbsp;
-            <a href='https://github.com/lrnselfreliance/wrolpi'>GitHub</a> &nbsp;•&nbsp;
-            <a href='https://discord.gg/HrwFk7nqA2'>Discord</a>
+            WROLPi {version} <Dot/>
+            <a href='https://discord.gg/HrwFk7nqA2'>Discord</a> <Dot/>
+            <a href='https://github.com/lrnselfreliance/wrolpi'>GitHub</a> <Dot/>
+            <Link to='/donate'>Donate</Link>
             </span>
     </Container>
 }

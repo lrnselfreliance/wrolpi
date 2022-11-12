@@ -40,8 +40,6 @@ import {ThemeContext} from "../contexts/contexts";
 import {Button, CardIcon, Header, Loader, Placeholder, Segment, Table} from "./Theme";
 
 function ArchivePage() {
-    const {s} = useContext(ThemeContext);
-
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [syncOpen, setSyncOpen] = useState(false);
     const navigate = useNavigate();

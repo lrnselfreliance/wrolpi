@@ -394,8 +394,16 @@ def test_crud_download(test_client, test_session, test_download_manager):
     assert 'recurring_downloads' in response.json
     assert [i['url'] for i in response.json['recurring_downloads']] == ['https://example.com']
 
+    request, response = test_client.delete('/api/download/123')
+    assert response.status_code == HTTPStatus.NOT_FOUND
+    assert test_session.query(Download).count() == 1
+
     request, response = test_client.delete(f'/api/download/{download.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
+    assert test_session.query(Download).count() == 0
+
+    request, response = test_client.delete(f'/api/download/{download.id}')
+    assert response.status_code == HTTPStatus.NOT_FOUND
     assert test_session.query(Download).count() == 0
 
 

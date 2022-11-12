@@ -79,8 +79,6 @@ def get_or_create_map_file(pbf_path: Path, session: Session) -> MapFile:
 
 import_logger = logger.getChild('import')
 
-OSMIUM_BIN = which('osmium', '/usr/bin/osmium')
-
 
 async def import_files(paths: List[str]):
     if IMPORT_EVENT.is_set():

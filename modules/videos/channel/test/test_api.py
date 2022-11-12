@@ -110,7 +110,8 @@ def test_channel_frequency_update(download_channel, test_client, test_session, t
     assert len(list(downloads)) == 1
 
 
-def test_channel_download_crud(test_session, simple_channel):
+@pytest.mark.asyncio
+async def test_channel_download_crud(test_session, simple_channel, test_downloader_config):
     """Modifying a Channel modifies it's Download."""
     assert simple_channel.url
     assert simple_channel.download_frequency is None

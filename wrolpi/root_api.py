@@ -275,7 +275,7 @@ async def clear_failed(_: Request):
     return response.empty()
 
 
-@api_bp.delete('/download/<download_id:[0-9]+>')
+@api_bp.delete('/download/<download_id:[0-9,]+>')
 @openapi.description('Delete a download')
 @wrol_mode_check
 async def delete_download(_: Request, download_id: int):

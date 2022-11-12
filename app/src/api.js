@@ -8,16 +8,13 @@ function timeoutPromise(ms, promise) {
         const timeoutId = setTimeout(() => {
             reject(new Error("promise timeout"))
         }, ms);
-        promise.then(
-            (res) => {
-                clearTimeout(timeoutId);
-                resolve(res);
-            },
-            (err) => {
-                clearTimeout(timeoutId);
-                reject(err);
-            }
-        );
+        promise.then((res) => {
+            clearTimeout(timeoutId);
+            resolve(res);
+        }, (err) => {
+            clearTimeout(timeoutId);
+            reject(err);
+        });
     })
 }
 
@@ -60,10 +57,7 @@ async function apiCall(url, method, body, ms = 20000) {
             });
         } else {
             toast({
-                type: 'error',
-                title: 'Error!',
-                description: 'See client logs',
-                time: 5000,
+                type: 'error', title: 'Error!', description: 'See client logs', time: 5000,
             });
         }
         throw e;
@@ -184,10 +178,7 @@ export async function getStatus() {
         return await response.json();
     } else {
         toast({
-            type: 'error',
-            title: 'Unexpected server response',
-            description: 'Could not get server status',
-            time: 5000,
+            type: 'error', title: 'Unexpected server response', description: 'Could not get server status', time: 5000,
         });
     }
 }
@@ -198,10 +189,7 @@ export async function getSettings() {
         return await response.json();
     } else {
         toast({
-            type: 'error',
-            title: 'Unexpected server response',
-            description: 'Could not get settings',
-            time: 5000,
+            type: 'error', title: 'Unexpected server response', description: 'Could not get settings', time: 5000,
         });
     }
 }
@@ -216,10 +204,7 @@ export async function getDownloads() {
         return await response.json();
     } else {
         toast({
-            type: 'error',
-            title: 'Unexpected server response',
-            description: 'Could not get downloads',
-            time: 5000,
+            type: 'error', title: 'Unexpected server response', description: 'Could not get downloads', time: 5000,
         });
     }
 }
@@ -241,10 +226,7 @@ export async function getStatistics() {
         return (await response.json())['statistics'];
     } else {
         toast({
-            type: 'error',
-            title: 'Unexpected server response',
-            description: 'Could not get statistics',
-            time: 5000,
+            type: 'error', title: 'Unexpected server response', description: 'Could not get statistics', time: 5000,
         });
     }
 }
@@ -275,10 +257,7 @@ export async function encryptOTP(otp, plaintext) {
         return await response.json();
     } else {
         toast({
-            type: 'error',
-            title: 'Error!',
-            description: 'Failed to encrypt OTP',
-            time: 5000,
+            type: 'error', title: 'Error!', description: 'Failed to encrypt OTP', time: 5000,
         });
     }
 }
@@ -290,10 +269,7 @@ export async function decryptOTP(otp, ciphertext) {
         return await response.json();
     } else {
         toast({
-            type: 'error',
-            title: 'Error!',
-            description: 'Failed to decrypt OTP',
-            time: 5000,
+            type: 'error', title: 'Error!', description: 'Failed to decrypt OTP', time: 5000,
         });
     }
 }
@@ -304,10 +280,7 @@ export async function getCategories() {
         return (await response.json())['categories'];
     } else {
         toast({
-            type: 'error',
-            title: 'Unexpected server response',
-            description: 'Could not get categories',
-            time: 5000,
+            type: 'error', title: 'Unexpected server response', description: 'Could not get categories', time: 5000,
         });
     }
 }
@@ -318,10 +291,7 @@ export async function getBrands() {
         return (await response.json())['brands'];
     } else {
         toast({
-            type: 'error',
-            title: 'Unexpected server response',
-            description: 'Could not get brands',
-            time: 5000,
+            type: 'error', title: 'Unexpected server response', description: 'Could not get brands', time: 5000,
         });
     }
 }
@@ -332,10 +302,7 @@ export async function getInventories() {
         return (await response.json())['inventories'];
     } else {
         toast({
-            type: 'error',
-            title: 'Unexpected server response',
-            description: 'Could not get inventories',
-            time: 5000,
+            type: 'error', title: 'Unexpected server response', description: 'Could not get inventories', time: 5000,
         });
     }
 }
@@ -346,10 +313,7 @@ export async function getInventory(inventoryId) {
         return await response.json();
     } else {
         toast({
-            type: 'error',
-            title: 'Unexpected server response',
-            description: 'Could not get inventory',
-            time: 5000,
+            type: 'error', title: 'Unexpected server response', description: 'Could not get inventory', time: 5000,
         });
     }
 }
@@ -393,10 +357,7 @@ export async function deleteArchives(archiveIds) {
     } catch (e) {
         console.error(e);
         toast({
-            type: 'error',
-            title: 'Unexpected server response',
-            description: 'Unable to delete archives',
-            time: 5000,
+            type: 'error', title: 'Unexpected server response', description: 'Unable to delete archives', time: 5000,
         });
     }
 }
@@ -453,10 +414,7 @@ export async function getArchive(archiveId) {
         return [data['file'], data['alternatives']];
     } else {
         toast({
-            type: 'error',
-            title: 'Archive Error',
-            description: 'Unable to get Archive.  See server logs.',
-            time: 5000,
+            type: 'error', title: 'Archive Error', description: 'Unable to get Archive.  See server logs.', time: 5000,
         });
     }
 }
@@ -497,6 +455,22 @@ export async function getDownloaders() {
         return await response.json();
     } catch (e) {
         return {downloaders: []};
+    }
+}
+
+export async function deleteDownload(downloadId) {
+    try {
+        let response = await apiDelete(`${API_URI}/download/${downloadId}`);
+        if (response.status !== 204) {
+            toast({
+                type: 'error',
+                title: 'Unable to delete',
+                description: 'Unable to delete the download.  See server logs.',
+                time: 5000,
+            });
+        }
+    } catch (e) {
+        return null;
     }
 }
 
@@ -595,10 +569,7 @@ export async function setHotspot(on) {
             });
         } else {
             toast({
-                type: 'error',
-                title: 'Error!',
-                description: 'Could not modify hotspot.  See server logs.',
-                time: 5000,
+                type: 'error', title: 'Error!', description: 'Could not modify hotspot.  See server logs.', time: 5000,
             });
         }
     }
@@ -629,10 +600,7 @@ export async function setThrottle(on) {
             });
         } else {
             toast({
-                type: 'error',
-                title: 'Error!',
-                description: 'Could not modify throttle.  See server logs.',
-                time: 5000,
+                type: 'error', title: 'Error!', description: 'Could not modify throttle.  See server logs.', time: 5000,
             });
         }
     }
@@ -644,10 +612,7 @@ export async function getMapImportStatus() {
         return await response.json();
     } else {
         toast({
-            type: 'error',
-            title: 'Unexpected server response',
-            description: 'Could not get import status',
-            time: 5000,
+            type: 'error', title: 'Unexpected server response', description: 'Could not get import status', time: 5000,
         });
     }
 }
@@ -659,10 +624,7 @@ export async function importMapFiles(paths) {
         return null;
     } else {
         toast({
-            type: 'error',
-            title: 'Error!',
-            description: 'Could not start import!  See server logs.',
-            time: 5000,
+            type: 'error', title: 'Error!', description: 'Could not start import!  See server logs.', time: 5000,
         });
     }
 }

@@ -1,8 +1,9 @@
 import React, {useContext} from "react";
-import {clearCompletedDownloads, clearFailedDownloads, killDownload, postDownload} from "../../api";
+import {clearCompletedDownloads, clearFailedDownloads, deleteDownload, killDownload, postDownload} from "../../api";
 import {Link} from "react-router-dom";
 import {
-    DisableDownloadsToggle, isEmpty,
+    DisableDownloadsToggle,
+    isEmpty,
     secondsToElapsedPopup,
     secondsToFrequency,
     textEllipsis,
@@ -87,13 +88,39 @@ class DownloadRow extends React.Component {
         super(props);
         this.state = {
             errorModalOpen: false,
+            deleteOpen: false,
         }
     }
 
+    openDelete = (e) => {
+        if (e) {
+            e.preventDefault();
+        }
+        this.setState({deleteOpen: true});
+    }
+
+    closeDelete = (e) => {
+        if (e) {
+            e.preventDefault();
+        }
+        this.setState({deleteOpen: false});
+    }
+
+    handleDelete = async (e) => {
+        if (e) {
+            e.preventDefault();
+        }
+        const {id} = this.props;
+        try {
+            await deleteDownload(id);
+        } finally {
+            this.closeDelete();
+        }
+    }
 
     render() {
         let {url, frequency, last_successful_download, status, location, next_download, error} = this.props;
-        const {errorModalOpen} = this.state;
+        const {errorModalOpen, deleteOpen} = this.state;
 
         const link = location ?
             (text) => <Link to={location}>{text}</Link> :
@@ -104,7 +131,7 @@ class DownloadRow extends React.Component {
             onClose={() => this.setState({errorModalOpen: false})}
             onOpen={() => this.setState({errorModalOpen: true})}
             open={errorModalOpen}
-            trigger={<Button icon='exclamation circle' color='red'/>}
+            trigger={<Button icon='exclamation circle' color='orange'/>}
         >
             <Modal.Header>Download Error</Modal.Header>
             <Modal.Content>
@@ -114,6 +141,17 @@ class DownloadRow extends React.Component {
                 <SemanticButton onClick={() => this.setState({errorModalOpen: false})}>Close</SemanticButton>
             </Modal.Actions>
         </Modal>;
+
+        const deleteButton = <>
+            <Button icon='trash' onClick={this.openDelete} color='red'/>
+            <Confirm
+                open={deleteOpen}
+                content='Are you sure you want to delete this download?'
+                confirmButton='Delete'
+                onCancel={this.closeDelete}
+                onConfirm={this.handleDelete}
+            />
+        </>;
 
         return <TableRow>
             <TableCell>
@@ -125,7 +163,10 @@ class DownloadRow extends React.Component {
                 {status === 'pending' ? <Loader active inline size='tiny'/> : null}
             </TableCell>
             <TableCell>{secondsToElapsedPopup(next_download)}</TableCell>
-            <TableCell>{error && errorModal}{link('View')}</TableCell>
+            <TableCell>
+                {error && errorModal}
+                {deleteButton}
+            </TableCell>
         </TableRow>
     }
 }
@@ -295,7 +336,7 @@ export function Downloads() {
                 <TableHeaderCell>Download Frequency</TableHeaderCell>
                 <TableHeaderCell>Completed At</TableHeaderCell>
                 <TableHeaderCell>Next</TableHeaderCell>
-                <TableHeaderCell>View</TableHeaderCell>
+                <TableHeaderCell>Control</TableHeaderCell>
             </TableRow>
         </TableHeader>
     );

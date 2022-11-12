@@ -785,6 +785,8 @@ class DownloadManager:
         if download:
             session.delete(download)
             session.commit()
+            # Save the config because a download was deleted.
+            background_task(save_downloads_config())
             return True
         return False
 

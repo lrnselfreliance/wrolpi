@@ -115,6 +115,9 @@ class DownloadRow extends React.Component {
             await deleteDownload(id);
         } finally {
             this.closeDelete();
+            if (this.props.fetchDownloads) {
+                this.props.fetchDownloads();
+            }
         }
     }
 
@@ -367,7 +370,7 @@ export function Downloads() {
         recurringTable = <Table>
             {nonStoppableHeader}
             <TableBody>
-                {recurringDownloads.map((i) => <DownloadRow key={i.id} {...i}/>)}
+                {recurringDownloads.map((i) => <DownloadRow key={i.id} fetchDownloads={fetchDownloads} {...i}/>)}
             </TableBody>
         </Table>;
     }

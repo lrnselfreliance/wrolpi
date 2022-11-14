@@ -9,9 +9,10 @@ set -x
 
 # Use D.C. to initialized DB because it is so small.
 DC_MAP=district-of-columbia-latest.osm.pbf
-wget --continue https://download.geofabrik.de/north-america/us/${DC_MAP} -O /tmp/${DC_MAP} || :
+DC_MAP_PATH=/tmp/${DC_MAP}
+wget --continue https://download.geofabrik.de/north-america/us/${DC_MAP} -O ${DC_MAP_PATH} || :
 
-if [ ! -f "/tmp/${DC_MAP}" ]; then
+if [ ! -f "${DC_MAP_PATH}" ]; then
   echo "Could not download D.C. map"
   exit 2
 fi
@@ -32,7 +33,7 @@ while [ "${COUNT}" -lt "${MAX_TRIES}" ]; do
       -d gis -U wrolpi &&
     external_data=true
   [[ "${dc_import}" = false ]] &&
-    sudo -u wrolpi nice -n 18 /opt/wrolpi/scripts/import_map.sh /tmp/${DC_MAP} &&
+    sudo -u wrolpi nice -n 18 /opt/wrolpi/scripts/import_map.sh ${DC_MAP_PATH} &&
     dc_import=true
   [[ "${indexes}" = false ]] &&
     sudo -u wrolpi psql -d gis -f /opt/openstreetmap-carto/indexes.sql &&

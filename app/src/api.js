@@ -411,7 +411,7 @@ export async function getArchive(archiveId) {
     const response = await apiGet(`${ARCHIVES_API}/${archiveId}`);
     if (response.status === 200) {
         const data = await response.json();
-        return [data['file'], data['alternatives']];
+        return [data['file'], data['history']];
     } else {
         toast({
             type: 'error', title: 'Archive Error', description: 'Unable to get Archive.  See server logs.', time: 5000,

@@ -118,17 +118,17 @@ def test_archive_and_domain_crud(test_session, test_client, archive_factory):
     archive2 = archive_factory(domain='example.com', url='https://example.com/1')
     test_session.commit()
 
-    # Archive1 has Archive2 as alternative.
+    # Archive1 has Archive2 as history.
     request, response = test_client.get(f'/api/archive/{archive1.id}')
     assert response.status_code == HTTPStatus.OK
     assert response.json['file']['archive']['id'] == archive1.id
-    assert response.json['alternatives'][0]['archive']['id'] == archive2.id
+    assert response.json['history'][0]['archive']['id'] == archive2.id
 
-    # Archive2 has Archive1 as alternative.
+    # Archive2 has Archive1 as history.
     request, response = test_client.get(f'/api/archive/{archive2.id}')
     assert response.status_code == HTTPStatus.OK
     assert archive2.id == response.json['file']['archive']['id']
-    assert response.json['alternatives'][0]['archive']['id'] == archive1.id
+    assert response.json['history'][0]['archive']['id'] == archive1.id
 
     # Only one domain.
     request, response = test_client.get(f'/api/archive/domains')
@@ -147,11 +147,11 @@ def test_archive_and_domain_crud(test_session, test_client, archive_factory):
     request, response = test_client.get(f'/api/archive/{archive1.id}')
     assert response.status_code == HTTPStatus.NOT_FOUND
 
-    # Archive2 no longer has alternatives.
+    # Archive2 no longer has history.
     request, response = test_client.get(f'/api/archive/{archive2.id}')
     assert response.status_code == HTTPStatus.OK
     assert response.json['file']['archive']['id'] == archive2.id
-    assert response.json['alternatives'] == []
+    assert response.json['history'] == []
 
     # No Archives, no Domains.
     request, response = test_client.delete(f'/api/archive/{archive2.id}')

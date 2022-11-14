@@ -129,17 +129,15 @@ class Archive(Base, ModelHelper):
                 self.domain.delete()
 
     @property
-    def alternatives(self) -> Iterable[Base]:
-        """
-        Get a list of Archives that share my URL.
-        """
+    def history(self) -> Iterable[Base]:
+        """Get a list of Archives that share my URL."""
         session = Session.object_session(self)
-        alternatives = list(session.query(Archive).filter(
+        history = list(session.query(Archive).filter(
             Archive.id != self.id,
             Archive.url == self.url,
-            Archive.url != None,
+            Archive.url != None,  # noqa
         ).order_by(Archive.archive_datetime))
-        return alternatives
+        return history
 
     def read_singlefile_data(self):
         """

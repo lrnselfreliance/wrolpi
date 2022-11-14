@@ -23,8 +23,8 @@ logger = logger.getChild(__name__)
 async def get_archive(_: Request, archive_id: int):
     archive = lib.get_archive(archive_id=archive_id)
     archive_file = archive.singlefile_file.__json__()
-    alternatives = [i.singlefile_file.__json__() for i in archive.alternatives]
-    return json_response({'file': archive_file, 'alternatives': alternatives})
+    history = [i.singlefile_file.__json__() for i in archive.history]
+    return json_response({'file': archive_file, 'history': history})
 
 
 @bp.delete('/<archive_ids:int>')

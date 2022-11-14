@@ -81,13 +81,13 @@ export const useDomains = () => {
 
 export const useArchive = (archiveId) => {
     const [archiveFile, setArchiveFile] = useState(null);
-    const [alternatives, setAlternatives] = useState(null);
+    const [history, setHistory] = useState(null);
 
     const fetchArchive = async () => {
         try {
-            const [file, alt] = await getArchive(archiveId);
+            const [file, history] = await getArchive(archiveId);
             setArchiveFile(file);
-            setAlternatives(alt);
+            setHistory(history);
         } catch (e) {
             console.error(e);
             setArchiveFile(undefined);
@@ -98,7 +98,7 @@ export const useArchive = (archiveId) => {
         fetchArchive();
     }, [archiveId]);
 
-    return {archiveFile, alternatives};
+    return {archiveFile, history};
 }
 
 export const useQuery = () => {

@@ -41,10 +41,10 @@ import {Button, CardIcon, Header, Loader, Placeholder, Segment, Table} from "./T
 
 function ArchivePage() {
     const [deleteOpen, setDeleteOpen] = useState(false);
-    const [syncOpen, setSyncOpen] = useState(false);
+    const [updateOpen, setUpdateOpen] = useState(false);
     const navigate = useNavigate();
     const {archiveId} = useParams();
-    const {archiveFile, alternatives} = useArchive(archiveId);
+    const {archiveFile, history} = useArchive(archiveId);
 
     let title;
     if (archiveFile && archiveFile.archive) {
@@ -85,19 +85,19 @@ function ArchivePage() {
         await deleteArchives([archive.id]);
         navigate(-1);
     }
-    const localSyncArchive = async () => {
-        setSyncOpen(false);
+    const localUpdateArchive = async () => {
+        setUpdateOpen(false);
         await postDownload(archive.url, 'archive');
     }
 
-    const syncButton = (<>
-        <Button color='yellow' onClick={() => setSyncOpen(true)} content='Sync'/>
+    const updateButton = (<>
+        <Button color='yellow' onClick={() => setUpdateOpen(true)} content='Update'/>
         <Confirm
-            open={syncOpen}
+            open={updateOpen}
             content='Download the latest version of this URL?'
-            confirmButton='Sync'
-            onCancel={() => setSyncOpen(false)}
-            onConfirm={localSyncArchive}
+            confirmButton='Update'
+            onCancel={() => setUpdateOpen(false)}
+            onConfirm={localUpdateArchive}
         />
     </>);
     const deleteButton = (<>
@@ -111,11 +111,11 @@ function ArchivePage() {
         />
     </>);
 
-    let alternativesList = <Loader active/>;
-    if (!isEmpty(alternatives)) {
-        alternativesList = <FileCards files={alternatives}/>;
-    } else if (isEmpty(alternatives)) {
-        alternativesList = <p>No alternatives available</p>;
+    let historyList = <Loader active/>;
+    if (!isEmpty(history)) {
+        historyList = <FileCards files={history}/>;
+    } else if (isEmpty(history)) {
+        historyList = <p>No history available</p>;
     }
 
     const domain = archive.domain ? archive.domain.domain : null;
@@ -153,16 +153,16 @@ function ArchivePage() {
 
                 {singlefileButton}
                 {readabilityLink}
-                {syncButton}
+                {updateButton}
                 {deleteButton}
             </Segment>
 
             <Segment>
                 <HelpHeader
-                    headerContent='Alternatives'
-                    popupContent='Alternative archives are archives that have the same URL.'
+                    headerContent='History'
+                    popupContent='Other archives of this URL created at different times.'
                 />
-                {alternativesList}
+                {historyList}
             </Segment>
         </>
     )

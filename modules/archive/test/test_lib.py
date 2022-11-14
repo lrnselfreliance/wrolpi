@@ -688,8 +688,8 @@ async def test_archive_download_index(test_session, test_directory, image_file):
            and archive.screenshot_file.associated, 'Archive files must be associated'
 
 
-def test_archive_alternatives(test_session, archive_factory):
-    """Archive's that share a URL are alternatives.
+def test_archive_history(test_session, archive_factory):
+    """Archive's can have a history of other archives.
 
     Archive's with an empty URL are not associated."""
     archive1 = archive_factory(url='https://example.com/1')
@@ -698,18 +698,18 @@ def test_archive_alternatives(test_session, archive_factory):
     archive4 = archive_factory()
     archive5 = archive_factory()
 
-    assert archive1 in archive2.alternatives, 'archive1 is an alternative for archive2'
-    assert archive2 in archive1.alternatives, 'archive2 is an alternative for archive2'
-    assert archive3 not in archive1.alternatives and archive3 not in archive2.alternatives, 'archive3 is unique'
-    assert not archive3.alternatives, 'archive3 has no alternatives'
-    assert not archive4.alternatives, 'archive4 has no alternatives'
-    assert not archive5.alternatives, 'archive5 has no alternatives'
+    assert archive1 in archive2.history, 'archive1 is a history for archive2'
+    assert archive2 in archive1.history, 'archive2 is a history for archive2'
+    assert archive3 not in archive1.history and archive3 not in archive2.history, 'archive3 is unique'
+    assert not archive3.history, 'archive3 has no history'
+    assert not archive4.history, 'archive4 has no history'
+    assert not archive5.history, 'archive5 has no history'
 
     test_session.commit()
 
-    assert archive1 in archive2.alternatives, 'archive1 is an alternative for archive2'
-    assert archive2 in archive1.alternatives, 'archive2 is an alternative for archive2'
-    assert archive3 not in archive1.alternatives and archive3 not in archive2.alternatives, 'archive3 is unique'
-    assert not archive3.alternatives, 'archive3 has no alternatives'
-    assert not archive4.alternatives, 'archive4 has no alternatives'
-    assert not archive5.alternatives, 'archive5 has no alternatives'
+    assert archive1 in archive2.history, 'archive1 is a history for archive2'
+    assert archive2 in archive1.history, 'archive2 is a history for archive2'
+    assert archive3 not in archive1.history and archive3 not in archive2.history, 'archive3 is unique'
+    assert not archive3.history, 'archive3 has no history'
+    assert not archive4.history, 'archive4 has no history'
+    assert not archive5.history, 'archive5 has no history'

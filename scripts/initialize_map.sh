@@ -8,10 +8,15 @@ fi
 set -x
 
 # Use D.C. to initialized DB because it is so small.
-DC_MAP=district-of-columbia-221105.osm.pbf
+DC_MAP=district-of-columbia-latest.osm.pbf
 wget --continue https://download.geofabrik.de/north-america/us/${DC_MAP} -O /tmp/${DC_MAP} || :
 
-cd /opt/openstreetmap-carto || exit 2
+if [ ! -f "/tmp/${DC_MAP}" ]; then
+  echo "Could not download D.C. map"
+  exit 2
+fi
+
+cd /opt/openstreetmap-carto || exit 3
 
 # Initialize indexes and global polygons.   This may take multiple tries.
 MAX_TRIES=3
@@ -41,7 +46,7 @@ done
 
 if [[ "${SUCCESS}" == false ]]; then
   echo "Could not initialize map data.  Try running reset_map.sh, or install.sh."
-  exit 3
+  exit 4
 fi
 
 echo "Map has successfully been initialized"

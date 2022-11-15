@@ -1,7 +1,8 @@
 import React, {useContext, useState} from 'react';
 import {deleteVideos} from "../api";
 import {Link, useNavigate, useParams} from "react-router-dom";
-import {humanFileSize, humanNumber, PageContainer, secondsToTimestamp, uploadDate, useTitle} from "./Common";
+import _ from "lodash";
+import {API_URI, humanFileSize, humanNumber, PageContainer, secondsToTimestamp, uploadDate, useTitle} from "./Common";
 import {Confirm} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
@@ -18,12 +19,18 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
     const {theme} = useContext(ThemeContext);
 
     const navigate = useNavigate();
+    const videoRef = React.useRef();
     let [deleteOpen, setDeleteOpen] = useState(false);
 
     useTitle(videoFile === null || videoFile === undefined ? null : videoFile.video.title);
     let video;
     if (videoFile) {
         video = videoFile.video;
+    }
+
+    // Seeks to the `seconds` on video player.
+    const setVideoTime = (seconds) => {
+        videoRef.current.currentTime = seconds;
     }
 
     // Get the Video's channel, fallback to the URL's channel id.
@@ -67,20 +74,19 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
             setFavorite(!favorite);
         }
     }
-    const favorite_button = (
-        <Button
-            color='green'
-            style={{'margin': '0.5em'}}
-            onClick={handleFavorite}
-        >
-            <Icon name='heart'/>
-            {favorite ? 'Unfavorite' : 'Favorite'}
-        </Button>);
+    const favorite_button = (<Button
+        color='green'
+        style={{'margin': '0.5em'}}
+        onClick={handleFavorite}
+    >
+        <Icon name='heart'/>
+        {favorite ? 'Unfavorite' : 'Favorite'}
+    </Button>);
 
     let descriptionPane = {
         menuItem: 'Description', render: () => <TabPane>
             <pre className="wrap-text">
-                {description || 'No description'}
+                {description ? chaptersInDescription(description, setVideoTime) : 'No description'}
             </pre>
         </TabPane>
     };
@@ -133,6 +139,7 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
                id="player"
                playsInline={true}
                style={{maxWidth: '100%'}}
+               ref={videoRef}
         >
             <source src={videoUrl} type="video/mp4"/>
             <track kind="captions" label="English captions" src={captionsUrl} srcLang="en" default/>
@@ -189,3 +196,43 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
 }
 
 export default VideoPage;
+
+const chapterRegex = new RegExp('^(\\(?(?:((\\d?\\d):)?(?:(\\d?\\d):(\\d\\d)))\\)?)\\s+(.*)$', 'i');
+
+function chaptersInDescription(description, setVideoTime) {
+    if (description && description.length > 0) {
+        try {
+            const lines = _.split(description, '\n');
+            let newLines = [];
+            for (let i = 0; i <= lines.length; i++) {
+                const line = lines[i];
+                const match = line ? line.match(chapterRegex) : null;
+                let link;
+                if (match) {
+                    try {
+                        const timestamp = match[1];
+                        const title = match[6];
+                        const [hour, minute, second] = match.slice(3, 6).map(i => parseInt(i) || 0);
+                        const seconds = (((hour * 60) + minute) * 60) + second;
+                        link = <>
+                            <a href='#' onClick={() => setVideoTime(seconds)}>{timestamp}</a>
+                            &nbsp;{title}
+                        </>;
+                    } catch (e) {
+                        console.error(e);
+                    }
+
+                    newLines = [...newLines, link || line];
+                } else if (line !== undefined) {
+                    newLines = [...newLines, line];
+                }
+            }
+            return <>
+                {newLines.map((i, idx) => <div key={idx}>{i}<br/></div>)}
+            </>;
+        } catch (e) {
+            console.error(e);
+        }
+    }
+    return description;
+}

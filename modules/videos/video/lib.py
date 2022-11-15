@@ -160,5 +160,7 @@ def delete_videos(*video_ids: int, session: Session = None):
     if not videos:
         raise UnknownVideo('Could not find videos to delete')
 
+    logger.warning(f'Deleting {len(videos)} videos')
     for video in videos:
         video.delete()
+    session.commit()

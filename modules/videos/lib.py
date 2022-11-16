@@ -146,7 +146,7 @@ def convert_or_generate_poster(video: Video) -> Tuple[Optional[pathlib.Path], Op
                 logger.error(f'Failed to convert invalid poster {old} to {new}', exc_info=e)
                 return None, None
 
-    if not video.poster_path or not video.poster_file:
+    if not video.poster_path and not video.poster_file:
         # Video poster was not discovered, or converted.  Let's generate it.
         try:
             poster_path, duration = generate_video_poster(video_path)

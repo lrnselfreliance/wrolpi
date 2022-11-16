@@ -209,30 +209,39 @@ function chaptersInDescription(description, setVideoTime) {
                 const match = line ? line.match(chapterRegex) : null;
                 let link;
                 if (match) {
+                    // This line in the description starts with a chapter timestamp, parse it and create a link.
                     try {
                         const timestamp = match[1];
                         const title = match[6];
+                        // Assume 0 if no part of timestamp could be found.
                         const [hour, minute, second] = match.slice(3, 6).map(i => parseInt(i) || 0);
+                        // Convert timestamp to seconds.
                         const seconds = (((hour * 60) + minute) * 60) + second;
                         link = <>
                             <a href='#' onClick={() => setVideoTime(seconds)}>{timestamp}</a>
                             &nbsp;{title}
                         </>;
                     } catch (e) {
+                        // Report an error while creating timestamp link.
                         console.error(e);
                     }
 
+                    // Use the link if we could create it, otherwise fallback to the original `line`.
                     newLines = [...newLines, link || line];
                 } else if (line !== undefined) {
+                    // Line does not start with a timestamp.
                     newLines = [...newLines, line];
                 }
             }
+            // Map all lines and links with a break between.
             return <>
                 {newLines.map((i, idx) => <div key={idx}>{i}<br/></div>)}
             </>;
         } catch (e) {
+            // Some error happened while parsing description.  Report it but don't fail.
             console.error(e);
         }
     }
+    // Error occurred, or no description, don't fail.
     return description;
 }

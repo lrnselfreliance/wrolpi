@@ -46,9 +46,7 @@ PREFERRED_VIDEO_FORMAT = ','.join([
     '136+140',  # 130=720p video-only, 140= high quality audio only
     '22',  # 720p video with audio
     'mp4-480p',
-    'mp4-360p',
-    '18',  # 360p video with audio
-    'bestvideo+bestaudio',  # Download the highest resolution as a last resort (1080p is quite large).
+    'bestvideo*+bestaudio/best',  # Download the highest resolution as a last resort (can be quite large).
 ])
 
 

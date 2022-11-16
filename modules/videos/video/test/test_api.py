@@ -83,6 +83,8 @@ def test_video_delete(test_client, test_session, test_directory, channel_factory
     vid2 = video_factory(channel_id=channel2.id, with_video_file=True, with_info_json=True)
     test_session.commit()
 
+    assert test_session.query(Video).count() == 2
+
     vid1_video_path, vid1_caption_path = vid1.video_path, vid1.caption_path
     vid2_video_path, vid2_info_json_path = vid2.video_path, vid2.info_json_path
 
@@ -97,15 +99,15 @@ def test_video_delete(test_client, test_session, test_directory, channel_factory
 
     # Video was added to skip list.
     assert len(channel1.skip_download_videos) == 1
-    # Deleting a video leaves it's entry in the DB, but its files are deleted.
-    assert test_session.query(Video).count() == 2
+    # Video was deleted.
+    assert test_session.query(Video).count() == 1
     assert vid1_video_path.is_file() is False and vid1_caption_path.is_file() is False
     assert vid2_video_path.is_file() and vid2_info_json_path.is_file()
 
     request, response = test_client.delete(f'/api/videos/video/{vid2.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    assert test_session.query(Video).count() == 2
+    assert test_session.query(Video).count() == 0
     assert vid1_video_path.is_file() is False and vid1_caption_path.is_file() is False
     assert vid2_video_path.is_file() is False and vid2_info_json_path.is_file() is False
 

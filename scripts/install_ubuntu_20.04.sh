@@ -22,7 +22,7 @@ if [ "$(single-file --version)" != "${SF_VERSION}" ]; then
     cd /tmp
     tar xf SingleFile.git.tar.gz
     cd SingleFile-${SF_VERSION}
-    npm install
+    npm install -g
   ) &  # Install in background.
 fi
 readability-extractor --version || npm install -g 'git+https://github.com/pirate/readability-extractor'

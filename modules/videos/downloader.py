@@ -286,6 +286,7 @@ class VideoDownloader(Downloader, ABC):
                 '--write-thumbnail',
                 '--write-info-json',
                 '--merge-output-format', PREFERRED_VIDEO_EXTENSION,
+                '--remux-video', PREFERRED_VIDEO_EXTENSION,
                 '-o', file_name_format,
                 '--no-cache-dir',
                 '--compat-options', 'no-live-chat',
@@ -302,6 +303,13 @@ class VideoDownloader(Downloader, ABC):
                     success=False,
                     error=error,
                 )
+
+            preferred_path = video_path.with_suffix(f'.{PREFERRED_VIDEO_EXTENSION}')
+            if not video_path.is_file() and preferred_path.is_file():
+                # Prepared filename does not exist, but video with preferred video extension does, it was probably
+                # remuxed by yt-dlp.
+                video_path = preferred_path
+                logger.info(f'Using preferred video file which exists: {preferred_path}')
 
             if not video_path.is_file():
                 error = f'{stdout}\n\n\n{stderr}\n\n' \
@@ -369,6 +377,7 @@ class VideoDownloader(Downloader, ABC):
         options = get_downloader_config().dict()
         options['outtmpl'] = f'{out_dir}/{options["file_name_format"]}'
         options['merge_output_format'] = PREFERRED_VIDEO_EXTENSION
+        options['remuxvideo'] = PREFERRED_VIDEO_EXTENSION
         options['format'] = PREFERRED_VIDEO_FORMAT
 
         # Create a new YoutubeDL for the output directory.
@@ -379,8 +388,6 @@ class VideoDownloader(Downloader, ABC):
         # Get the path where the video will be saved.
         entry = extract_info(url, ydl=ydl, process=True)
         final_filename = pathlib.Path(prepare_filename(entry, ydl=ydl)).absolute()
-        if final_filename.suffix.lower() != f'.{PREFERRED_VIDEO_EXTENSION}':
-            raise DownloadError(f'Cannot download video {url} because yt-dlp filename is invalid.')
 
         logger.debug(f'Downloading {url} to {out_dir}')
         return final_filename, entry

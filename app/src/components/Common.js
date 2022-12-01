@@ -345,12 +345,12 @@ export function SearchInput({
 
     return <Form onSubmit={localOnSubmit} {...props}>
         <Input fluid
-            placeholder={placeholder}
-            type='text'
-            onChange={(e) => setValue(e.target.value)}
-            value={value}
-            size={size}
-            action={action}
+               placeholder={placeholder}
+               type='text'
+               onChange={(e) => setValue(e.target.value)}
+               value={value}
+               size={size}
+               action={action}
         />
     </Form>
 }
@@ -744,4 +744,22 @@ export function DirectoryInput({disabled, error, placeholder, setInput, value, r
 export const BackButton = () => {
     const navigate = useNavigate();
     return <Button icon='arrow left' content='Back' onClick={() => navigate(-1)}/>;
+}
+
+export const ColorToSemanticHexColor = (color) => {
+    const colorMap = {
+        red: '#db2828',
+        orange: '#f2711c',
+        yellow: '#fbbd08',
+        olive: '#b5cc18',
+        green: '#21ba45',
+        teal: '#00b5ad',
+        blue: '#2185d0',
+        violet: '#6435c9',
+        purple: '#a333c8',
+        pink: '#e03997',
+        brown: '#a5673f',
+        grey: '#767676',
+    }
+    return colorMap[color] || null;
 }

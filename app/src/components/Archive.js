@@ -1,6 +1,9 @@
 import React, {useContext, useState} from "react";
 import {
-    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardMeta,
     Confirm,
     Container,
     Image,
@@ -38,7 +41,7 @@ import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
 import _ from "lodash";
 import {ThemeContext} from "../contexts/contexts";
-import {Button, CardIcon, Header, Loader, Placeholder, Segment, Table} from "./Theme";
+import {Button, Card, CardIcon, Header, Loader, Placeholder, Segment, Table} from "./Theme";
 
 function ArchivePage() {
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -185,37 +188,37 @@ export function ArchiveCard({file}) {
     const domainUrl = `/archive?domain=${domain}`;
 
     return (
-        <Card color={mimetypeColor(file.mimetype)} {...s}>
+        <Card color={mimetypeColor(file.mimetype)}>
             <div>
                 <ExternalCardLink to={singlefileUrl}>
                     {screenshot}
                 </ExternalCardLink>
             </div>
-            <Card.Content>
-                <Card.Header>
+            <CardContent {...s}>
+                <CardHeader>
                     <Container textAlign='left'>
                         <ExternalCardLink to={singlefileUrl}>
                             {textEllipsis(archive.title || archive.url, 100)}
                         </ExternalCardLink>
                     </Container>
-                </Card.Header>
+                </CardHeader>
                 {domain &&
                     <CardLink to={domainUrl}>
                         <p {...s}>{domain}</p>
                     </CardLink>}
-                <Card.Meta {...s}>
+                <CardMeta {...s}>
                     <p>
                         {uploadDate(archive.archive_datetime)}
                     </p>
-                </Card.Meta>
-                <Card.Description>
+                </CardMeta>
+                <CardDescription>
                     <Link to={`/archive/${archive.id}`}>
                         <Button icon='file alternate' content='Details'
                                 labelPosition='left'/>
                     </Link>
                     <Button icon='external' href={archive.url} target='_blank' rel='noopener noreferrer'/>
-                </Card.Description>
-            </Card.Content>
+                </CardDescription>
+            </CardContent>
         </Card>
     )
 }

@@ -3,6 +3,7 @@ import {ThemeContext} from "../contexts/contexts";
 import {
     Accordion as ACCORDION,
     Button as BUTTON,
+    Card as CARD,
     Form as FORM,
     FormField as FORM_FIELD,
     FormGroup as FORM_GROUP,
@@ -22,7 +23,7 @@ import {
     TabPane as TAB_PANE,
     TextArea as TEXTAREA
 } from "semantic-ui-react";
-import {isEmpty} from "./Common";
+import {isEmpty, ColorToSemanticHexColor} from "./Common";
 
 export const darkTheme = 'dark';
 export const lightTheme = 'light';
@@ -289,4 +290,14 @@ export function TextArea(props) {
 export function CardIcon(props) {
     const {inverted} = useContext(ThemeContext);
     return <center className={`card-icon ${inverted}`} {...props}/>
+}
+
+export function Card({color, ...props}) {
+    props['style'] = props['style'] || {};
+    let hexColor = ColorToSemanticHexColor(color);
+    if (hexColor) {
+        // Increase drop shadow to emphasize color.
+        props['style']['boxShadow'] = `0 0 0 2px #d4d4d5, 0 5px 0 0 ${hexColor}, 0 0px 3px 0 #d4d4d5`;
+    }
+    return <CARD {...props}/>
 }

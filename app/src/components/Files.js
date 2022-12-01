@@ -1,6 +1,16 @@
 import React, {useContext} from "react";
 import FileBrowser from 'react-keyed-file-browser';
-import {Card, Confirm, Divider, Dropdown, Image, PlaceholderLine, TableCell, TableHeaderCell,} from "semantic-ui-react";
+import {
+    CardContent,
+    CardHeader,
+    Confirm,
+    Divider,
+    Dropdown,
+    Image,
+    PlaceholderLine,
+    TableCell,
+    TableHeaderCell,
+} from "semantic-ui-react";
 import 'react-keyed-file-browser/dist/react-keyed-file-browser.css';
 import {deleteFile, refreshDirectoryFiles, refreshFiles} from "../api";
 import {
@@ -22,7 +32,7 @@ import {CardPlacholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {ThemeContext} from "../contexts/contexts";
-import {Button, CardIcon, Header, Icon, Placeholder, Segment} from "./Theme";
+import {Button, Card, CardIcon, Header, Icon, Placeholder, Segment} from "./Theme";
 import {SelectableTable} from "./Tables";
 import {VideoCard, VideoRowCells} from "./Videos";
 
@@ -185,15 +195,15 @@ function FileCard({file}) {
                 <FileIcon file={file}/>
             </CardIcon>
         </ExternalCardLink>
-        <Card.Content {...s}>
-            <Card.Header>
+        <CardContent {...s}>
+            <CardHeader>
                 <ExternalCardLink to={url}>
                     {textEllipsis(file.title || file.stem || file.path)}
                 </ExternalCardLink>
-            </Card.Header>
+            </CardHeader>
             <p>{uploadDate(file.modified / 1000)}</p>
             <p>{size}</p>
-        </Card.Content>
+        </CardContent>
     </Card>
 }
 

@@ -19,7 +19,9 @@ import {
 } from "./Common"
 import VideoPage from "./VideoPlayer";
 import {
-    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
     Confirm,
     Container,
     Dropdown,
@@ -35,7 +37,7 @@ import {useChannel, useQuery, useSearchVideos, useVideo, useVideoStatistics} fro
 import {FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {Button, CardIcon, Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
+import {Button, Card, CardIcon, Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
 import {deleteVideos} from "../api";
 import {ThemeContext} from "../contexts/contexts";
 
@@ -323,27 +325,28 @@ export function VideoCard({file}) {
         poster = <CardPosterLink to={video_url} poster_url={poster_url} imageLabel={imageLabel}/>;
     }
 
-    return (<Card color={mimetypeColor(file.mimetype)}>
+    const color = mimetypeColor(file.mimetype);
+    return <Card color={color}>
         {poster}
         <Duration video={video}/>
-        <Card.Content {...s}>
-            <Card.Header>
+        <CardContent {...s}>
+            <CardHeader>
                 <Container textAlign='left'>
                     <Link to={video_url} className="no-link-underscore card-link">
                         <p {...s}>{textEllipsis(video.title || video.stem || video.video_path, 100)}</p>
                     </Link>
                 </Container>
-            </Card.Header>
-            <Card.Description>
+            </CardHeader>
+            <CardDescription>
                 <Container textAlign='left'>
                     {channel && <Link to={channel_url} className="no-link-underscore card-link">
                         <b {...s}>{channel.name}</b>
                     </Link>}
                     <p {...s}>{upload_date}</p>
                 </Container>
-            </Card.Description>
-        </Card.Content>
-    </Card>)
+            </CardDescription>
+        </CardContent>
+    </Card>
 }
 
 export function VideoRowCells({file}) {

@@ -9,6 +9,7 @@ import {Link} from "react-router-dom";
 import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
 import {ProgressPlaceholder} from "./components/Placeholder";
 import {Divider} from "semantic-ui-react";
+import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
 export function Dashboard() {
     useTitle('Dashboard');
@@ -35,14 +36,20 @@ export function Dashboard() {
     }
 
     return (<PageContainer>
-        <SearchInput clearable
-                     searchStr={searchStr}
-                     onSubmit={setSearchStr}
-                     size='large'
-                     placeholder='Search Everywhere...'
-                     actionIcon='search'
-                     style={{marginBottom: '2em'}}
-        />
+        <Grid>
+            <Grid.Row>
+                <Grid.Column mobile={16} computer={8}>
+                    <SearchInput clearable
+                                 searchStr={searchStr}
+                                 onSubmit={setSearchStr}
+                                 size='large'
+                                 placeholder='Search Everywhere...'
+                                 actionIcon='search'
+                                 style={{marginBottom: '2em'}}
+                    />
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
         {body}
     </PageContainer>)
 }

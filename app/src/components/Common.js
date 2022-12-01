@@ -1,6 +1,6 @@
 import React, {useContext, useEffect, useState} from "react";
 import {Card, Container, IconGroup, Image, Input, Modal, Pagination, Responsive} from 'semantic-ui-react';
-import {Link, NavLink} from "react-router-dom";
+import {Link, NavLink, useNavigate} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDirectories, useDownloaders, useHotspot, useSettings, useThrottle} from "../hooks/customHooks";
 import {StatusContext, ThemeContext} from "../contexts/contexts";
@@ -344,7 +344,7 @@ export function SearchInput({
     }
 
     return <Form onSubmit={localOnSubmit} {...props}>
-        <Input
+        <Input fluid
             placeholder={placeholder}
             type='text'
             onChange={(e) => setValue(e.target.value)}
@@ -739,4 +739,9 @@ export function DirectoryInput({disabled, error, placeholder, setInput, value, r
             {directories.map(i => <option key={i} value={i}>{i}</option>)}
         </datalist>
     </div>);
+}
+
+export const BackButton = () => {
+    const navigate = useNavigate();
+    return <Button icon='arrow left' content='Back' onClick={() => navigate(-1)}/>;
 }

@@ -14,6 +14,7 @@ import {
     TableRow
 } from "semantic-ui-react";
 import {
+    BackButton,
     CardLink,
     defaultSearchOrder,
     ExternalCardLink,
@@ -140,7 +141,7 @@ function ArchivePage() {
 
     return (
         <>
-            <Button icon='arrow left' content='Back' onClick={() => navigate(-1)}/>
+            <BackButton/>
 
             <Segment>
                 {screenshot}

@@ -1,4 +1,4 @@
-import React, {useContext, useEffect, useState} from 'react';
+import React, {Fragment, useContext, useEffect, useState} from 'react';
 import {Link, Route, Routes, useParams} from "react-router-dom";
 import {
     CardLink,
@@ -50,7 +50,7 @@ export function VideoWrapper() {
                       setFavorite={setFavorite} autoplay={true}/>
 }
 
-function Videos({filter}) {
+function VideosPage({filter}) {
     let title = 'Videos';
     if (filter && filter.indexOf('favorite') >= 0) {
         title = 'Favorite Videos';
@@ -105,7 +105,7 @@ function Videos({filter}) {
         videoOrders = [{key: 'rank', value: 'rank', text: 'Search Rank'}, ...videoOrders];
     }
 
-    const menuColumns = <>
+    const menuColumns = <Fragment>
         <Grid.Column mobile={8} computer={5}>
             <SearchInput clearable searchStr={searchStr} onSubmit={setSearchStr} actionIcon='search'/>
         </Grid.Column>
@@ -118,7 +118,7 @@ function Videos({filter}) {
                       onChange={(e, {value}) => setOrderBy(value)}
             />
         </Grid.Column>
-    </>;
+    </Fragment>;
 
     let header;
     if (channel && channel.name) {
@@ -287,13 +287,13 @@ export function VideosRoute(props) {
         <PageContainer>
             <TabLinks links={links}/>
             <Routes>
-                <Route path='/' exact element={<Videos/>}/>
-                <Route path='favorites' exact element={<Videos filter='favorite' header='Favorite Videos'/>}/>
+                <Route path='/' exact element={<VideosPage/>}/>
+                <Route path='favorites' exact element={<VideosPage filter='favorite' header='Favorite Videos'/>}/>
                 <Route path='channel' exact element={<Channels/>}/>
                 <Route path='statistics' exact element={<Statistics/>}/>
                 <Route path='channel/new' exact element={<NewChannel/>}/>
                 <Route path='channel/:channelId/edit' exact element={<EditChannel/>}/>
-                <Route path='channel/:channelId/video' exact element={<Videos/>}/>
+                <Route path='channel/:channelId/video' exact element={<VideosPage/>}/>
             </Routes>
         </PageContainer>
     )

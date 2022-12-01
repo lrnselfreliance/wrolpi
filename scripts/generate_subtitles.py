@@ -1,6 +1,6 @@
 #! /usr/bin/env python3
 """
-Transcribes video files, then creates an SRT file next to each.
+Transcribes video files, then creates an vtt file next to each.
 
 # ls
 video1.mp4
@@ -10,9 +10,9 @@ video2.mp4
 
 # ls
 video1.mp4
-video1.en.srt
+video1.en.vtt
 video2.mp4
-video2.en.srt
+video2.en.vtt
 """
 import argparse
 import logging
@@ -26,7 +26,7 @@ try:
 except ImportError:
     whisper = None
 
-__all__ = ['video_speech_to_srt_file', 'video_speech_to_srt']
+__all__ = ['video_speech_to_vtt_file', 'video_speech_to_vtt']
 
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
@@ -38,7 +38,7 @@ HOUR = MINUTE * 60
 
 
 def format_timestamp(seconds: float):
-    """Convert seconds to the expected SRT timestamp format."""
+    """Convert seconds to the expected vtt timestamp format."""
     seconds, milliseconds = divmod(seconds, 1)
     hours, seconds = divmod(seconds, HOUR)
     minutes, seconds = divmod(seconds, MINUTE)
@@ -46,30 +46,33 @@ def format_timestamp(seconds: float):
     milliseconds *= 1000
     hours, minutes, seconds, milliseconds = int(hours), int(minutes), int(seconds), int(milliseconds)
 
-    timestamp = f'{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}'
+    timestamp = f'{hours:02d}:{minutes:02d}:{seconds:02d}.{milliseconds:03d}'
     return timestamp
 
 
-def video_speech_to_srt(file: pathlib.Path, model, language):
-    """Transcribe a video file.  Return the text of the SRT file."""
+def video_speech_to_vtt(file: pathlib.Path, model, language):
+    """Transcribe a video file.  Return the text of the vtt file."""
     logger.info(f'Transcribing: {file}')
     transcription = model.transcribe(str(file), language=language)
     segments = transcription['segments']
 
-    srt_lines = []
+    vtt_lines = []
     for segment in segments:
         start, end, id_, text = segment['start'], segment['end'], segment['id'], segment['text']
-        logger.debug(f'{file} --- {start} --> {end} {text}')
+        logger.debug(f'{file} === {start} --> {end} {text}')
         start, end = format_timestamp(start), format_timestamp(end)
-        srt_lines.append(f'{id_ + 1}\n{start} --> {end}\n{text}\n')
+        vtt_lines.append(f'{id_ + 1}\n{start} --> {end}\n{text}\n')
 
-    return '\n'.join(srt_lines)
+    contents = '\n'.join(vtt_lines)
+    contents = f'WEBVTT Kind: captions; Language: {language}\n' \
+               f'{contents}'
+    return contents
 
 
-def video_speech_to_srt_file(video_path: pathlib.Path, srt_path: pathlib.Path, model, language: str):
-    """Transcribe a video, save the resulting transcription in the SRT file."""
-    srt = video_speech_to_srt(video_path, model, language)
-    srt_path.write_text(srt, encoding='utf-8')
+def video_speech_to_vtt_file(video_path: pathlib.Path, vtt_path: pathlib.Path, model, language: str):
+    """Transcribe a video, save the resulting transcription in the vtt file."""
+    vtt = video_speech_to_vtt(video_path, model, language)
+    vtt_path.write_text(vtt, encoding='utf-8')
 
 
 def main(video_files: List[str], model: str, language: str):
@@ -81,23 +84,23 @@ def main(video_files: List[str], model: str, language: str):
             print(f'{video_file} is not a video file', file=sys.stderr)
             sys.exit(2)
 
-    srt_suffix = f'.{language}.srt' if language else '.srt'
+    vtt_suffix = f'.{language}.vtt' if language else '.vtt'
 
     logger.info(f'Loading model {model}...')
     model = whisper.load_model(model)
     logger.debug('Model loading complete.')
 
     for video_file in video_files:
-        srt_path = video_file.with_suffix(srt_suffix)
-        if srt_path.exists():
-            logger.warning(f'{srt_path} already exists, skipping...')
+        vtt_path = video_file.with_suffix(vtt_suffix)
+        if vtt_path.exists():
+            logger.warning(f'{vtt_path} already exists, skipping...')
             continue
 
-        video_speech_to_srt_file(video_file, srt_path, model, args.language)
+        video_speech_to_vtt_file(video_file, vtt_path, model, args.language)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('Transcribes video files, then creates an SRT file next to each.')
+    parser = argparse.ArgumentParser('Transcribes video files, then creates an vtt file next to each.')
     parser.add_argument('files', nargs='+')
     parser.add_argument('--model', default='small')
     parser.add_argument('--language', default='en')

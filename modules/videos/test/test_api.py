@@ -37,6 +37,15 @@ async def test_refresh_videos_index(test_session, test_directory, video_factory)
         assert not video.caption_file.indexed
         assert not video.info_json_file.indexed
 
+    # Delete caption file, the video should be indexed again.
+    video: Video = test_session.query(Video).one()
+    video.caption_path.unlink()
+
+    await refresh_files()
+    assert video.video_file.indexed is True, 'Video was not indexed'
+    assert video.video_file.a_text, 'Video title was not indexed'
+    assert not video.video_file.d_text, 'Video captions were not removed'
+
 
 def test_refresh_videos(test_client, test_session, test_directory, simple_channel, video_factory):
     subdir = test_directory / 'subdir'

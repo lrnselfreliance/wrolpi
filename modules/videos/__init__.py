@@ -50,10 +50,20 @@ def video_modeler(groups: Dict[str, List[File]], session: Session):
         if not video:
             video = Video(video_file=video_file)
             session.add(video)
+
+        size = video_file.path.stat().st_size
+
+        if poster_file != video.poster_file or \
+                caption_file != video.caption_file or \
+                info_json_file != video.info_json_file or \
+                video.size != size:
+            # Files were changed.  Re-index.
+            video.video_file.indexed = False
+
         video.poster_file = poster_file
         video.caption_file = caption_file
         video.info_json_file = info_json_file
-        video.size = video_file.path.stat().st_size
+        video.size = size
         video_file.model = Video.__tablename__
 
         videos.append(video)

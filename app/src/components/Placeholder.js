@@ -1,4 +1,4 @@
-import {CardContent, PlaceholderImage, PlaceholderLine} from "semantic-ui-react";
+import {CardContent, CardGroup, PlaceholderImage, PlaceholderLine} from "semantic-ui-react";
 import React, {useContext} from "react";
 import {ThemeContext} from "../contexts/contexts";
 import {Card, Placeholder} from "./Theme";
@@ -22,9 +22,9 @@ export function CardPlacholder() {
 
 export function VideoPlaceholder() {
     return (
-        <Card.Group doubling stackable>
+        <CardGroup doubling stackable>
             <CardPlacholder/>
-        </Card.Group>
+        </CardGroup>
     )
 }
 

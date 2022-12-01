@@ -73,7 +73,7 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
 
     let posterUrl = video.poster_path ? `${MEDIA_PATH}/${encodeURIComponent(video.poster_path)}` : null;
     let captionsUrl = video.caption_path ? `${MEDIA_PATH}/${encodeURIComponent(video.caption_path)}` : null;
-    let vttCaptions = video.caption_path.endsWith('.vtt');
+    let vttCaptions = video.caption_path && video.caption_path.endsWith('.vtt');
 
     let description = 'No description available.';
     let viewCount = video.view_count;

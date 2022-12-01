@@ -23,7 +23,7 @@ import {
     TabPane as TAB_PANE,
     TextArea as TEXTAREA
 } from "semantic-ui-react";
-import {isEmpty, ColorToSemanticHexColor} from "./Common";
+import {ColorToSemanticHexColor, isEmpty} from "./Common";
 
 export const darkTheme = 'dark';
 export const lightTheme = 'light';
@@ -293,11 +293,14 @@ export function CardIcon(props) {
 }
 
 export function Card({color, ...props}) {
+    const {inverted} = useContext(ThemeContext);
+
     props['style'] = props['style'] || {};
-    let hexColor = ColorToSemanticHexColor(color);
-    if (hexColor) {
+    let emphasisColor = ColorToSemanticHexColor(color);
+    if (emphasisColor) {
         // Increase drop shadow to emphasize color.
-        props['style']['boxShadow'] = `0 0 0 2px #d4d4d5, 0 5px 0 0 ${hexColor}, 0 0px 3px 0 #d4d4d5`;
+        const borderColor = inverted ? '#888' : '#ddd';
+        props['style']['boxShadow'] = `0 0 0 2px ${borderColor}, 0 5px 0 0 ${emphasisColor}, 0 0px 3px 0 #d4d4d5`;
     }
     return <CARD {...props}/>
 }

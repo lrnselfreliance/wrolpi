@@ -53,11 +53,6 @@ export function VideoWrapper() {
 }
 
 function VideosPage({filter}) {
-    let title = 'Videos';
-    if (filter && filter.indexOf('favorite') >= 0) {
-        title = 'Favorite Videos';
-    }
-    useTitle(title);
 
     const {channelId} = useParams();
     const {searchParams, updateQuery} = useQuery();
@@ -82,6 +77,15 @@ function VideosPage({filter}) {
     const view = searchParams.get('view');
 
     const {channel} = useChannel(channelId);
+
+    let title = 'Videos';
+    if (filter && filter.indexOf('favorite') >= 0) {
+        title = 'Favorite Videos';
+    }
+    if (channel && channel.name) {
+        title = `${channel.name} Videos`;
+    }
+    useTitle(title);
 
     const filterOptions = [
         {text: 'Favorites', key: 'favorite', value: 'favorite'},

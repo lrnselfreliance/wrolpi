@@ -2,7 +2,7 @@ import React, {useContext, useState} from 'react';
 import {deleteVideos} from "../api";
 import {Link, useNavigate, useParams} from "react-router-dom";
 import _ from "lodash";
-import {API_URI, humanFileSize, humanNumber, PageContainer, secondsToTimestamp, uploadDate, useTitle} from "./Common";
+import {humanFileSize, humanNumber, PageContainer, uploadDate, useTitle} from "./Common";
 import {Confirm} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
@@ -14,6 +14,20 @@ import {VideoCard} from "./Videos";
 
 const MEDIA_PATH = '/media';
 
+
+function videoFileLink(video, name, directory = false) {
+    const path = video[name];
+    if (path) {
+        const href = directory ?
+            `${MEDIA_PATH}/${encodeURIComponent(path)}/` :
+            `${MEDIA_PATH}/${encodeURIComponent(path)}`;
+        return <a href={href}>
+            <pre>{path}</pre>
+        </a>
+    } else {
+        return 'Unknown'
+    }
+}
 
 function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
     const {theme} = useContext(ThemeContext);
@@ -59,11 +73,14 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
 
     let posterUrl = video.poster_path ? `${MEDIA_PATH}/${encodeURIComponent(video.poster_path)}` : null;
     let captionsUrl = video.caption_path ? `${MEDIA_PATH}/${encodeURIComponent(video.caption_path)}` : null;
+    let vttCaptions = video.caption_path.endsWith('.vtt');
 
     let description = 'No description available.';
     let viewCount = video.view_count;
-    if (video.info_json) {
+    if (video.info_json && video.info_json['description']) {
+        // Only replace empty description if there is one available.
         description = video.info_json['description'];
+        description = chaptersInDescription(description, setVideoTime)
         viewCount = viewCount || video.info_json['view_count'];
     }
 
@@ -86,7 +103,7 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
     let descriptionPane = {
         menuItem: 'Description', render: () => <TabPane>
             <pre className="wrap-text">
-                {description ? chaptersInDescription(description, setVideoTime) : 'No description'}
+                {description}
             </pre>
         </TabPane>
     };
@@ -104,12 +121,6 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
 
             <h3>Censored</h3>
             <p>{video.censored ? 'Yes' : 'No'}</p>
-
-            <h3>File Name</h3>
-            <pre style={{backgroundColor: '#ccc', padding: '0.4em'}}>{video.video_path}</pre>
-
-            <h3>File Modification Time</h3>
-            <p>{video.modification_datetime ? secondsToTimestamp(video.modification_datetime) : null}</p>
         </TabPane>
     }
 
@@ -119,7 +130,26 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
         </TabPane>
     };
 
-    let tabPanes = [descriptionPane, aboutPane, captionsPane];
+    let filesPane = {
+        menuItem: 'Files', render: () => <TabPane>
+            <h3>Video File</h3>
+            {videoFileLink(video, 'video_path')}
+
+            <h4>Info JSON File</h4>
+            {videoFileLink(video, 'info_json_path')}
+
+            <h4>Caption File</h4>
+            {videoFileLink(video, 'caption_path')}
+
+            <h4>Poster File</h4>
+            {videoFileLink(video, 'poster_path')}
+
+            <h4>Directory</h4>
+            {videoFileLink(video, 'directory', true)}
+        </TabPane>
+    }
+
+    let tabPanes = [descriptionPane, aboutPane, filesPane, captionsPane];
     const tabMenu = theme === darkTheme ? {inverted: true, attached: true} : {attached: true};
 
     return (<>
@@ -142,7 +172,9 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
                ref={videoRef}
         >
             <source src={videoUrl} type="video/mp4"/>
-            <track kind="captions" label="English captions" src={captionsUrl} srcLang="en" default/>
+            {/* Only WebVTT captions can be displayed. */}
+            {vttCaptions &&
+                <track kind="captions" label="English" src={captionsUrl} srcLang="en" default/>}
         </video>
 
         <Container style={{marginTop: '1em'}}>
@@ -181,16 +213,18 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
 
             <Tab menu={tabMenu} panes={tabPanes}/>
 
-            <Grid columns={2} stackable>
-                <Grid.Row>
-                    <Grid.Column textAlign='left'>
-                        {prevFile && <><Header as='h3'>Older</Header><VideoCard file={prevFile}/></>}
-                    </Grid.Column>
-                    <Grid.Column textAlign='left'>
-                        {nextFile && <><Header as='h3'>Newer</Header><VideoCard file={nextFile}/></>}
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
+            <Segment>
+                <Grid columns={2} stackable>
+                    <Grid.Row>
+                        <Grid.Column textAlign='left'>
+                            {prevFile && <><Header as='h3'>Older</Header><VideoCard file={prevFile}/></>}
+                        </Grid.Column>
+                        <Grid.Column textAlign='left'>
+                            {nextFile && <><Header as='h3'>Newer</Header><VideoCard file={nextFile}/></>}
+                        </Grid.Column>
+                    </Grid.Row>
+                </Grid>
+            </Segment>
         </Container>
     </>)
 }

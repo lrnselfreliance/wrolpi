@@ -1,4 +1,4 @@
-import {Header, Progress, Statistic, StatisticGroup} from "../Theme";
+import {Header, Progress, Segment, Statistic, StatisticGroup} from "../Theme";
 import React, {useContext} from "react";
 import {humanBandwidth, humanFileSize, LoadStatistic, useTitle} from "../Common";
 import {Divider, Responsive} from "semantic-ui-react";
@@ -195,8 +195,6 @@ export function Status() {
                 <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
                 <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
             </StatisticGroup>
-
-            <Divider/>
 
             <Header as='h1'>Network Bandwidth</Header>
             {bandwidth ?

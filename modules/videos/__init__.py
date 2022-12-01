@@ -118,11 +118,16 @@ class VideoIndexer(Indexer, ABC):
         a = cls.get_title(file)
         c = cls.get_description(file)
 
-        # Detect the associated caption file.
-        caption_path = file.path.with_suffix('.en.vtt')
+        # Detect the associated caption files.
         d = None
-        if caption_path.is_file():
-            d = read_captions(caption_path)
+        if (en_vtt := file.path.with_suffix('.en.vtt')).is_file():
+            d = read_captions(en_vtt)
+        elif (vtt := file.path.with_suffix('.vtt')).is_file():
+            d = read_captions(vtt)
+        elif (en_srt := file.path.with_suffix('.en.srt')).is_file():
+            d = read_captions(en_srt)
+        elif (srt := file.path.with_suffix('.srt')).is_file():
+            d = read_captions(srt)
         elif EXTRACT_SUBTITLES:
             d = extract_captions(file.path) or ''
 

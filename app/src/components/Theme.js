@@ -37,9 +37,11 @@ export function ThemeWrapper({children, ...props}) {
     }
 
     // Properties to manipulate elements with theme.
-    // Example <p {...s}>This paragraph changes style</p>
+    // Invert when Semantic supports it.  Example: <Menu {...i}>
     const [i, setI] = useState({});
+    // Invert style when Semantic does not support it.  Example: <p {...s}>This paragraph changes style</p>
     const [s, setS] = useState({});
+    // Invert text when Semantic does not support it.
     const [t, setT] = useState({});
     const [inverted, setInverted] = useState('');
 
@@ -55,7 +57,7 @@ export function ThemeWrapper({children, ...props}) {
         setT({style: {color: '#dddddd'}});
         setInverted('inverted');
         setTheme(darkTheme);
-        document.body.style.background = '#1B1C1D';
+        document.body.style.background = '#171616';
         if (save) {
             saveTheme(darkTheme);
         }
@@ -130,8 +132,8 @@ export function ThemeWrapper({children, ...props}) {
 
     const themeValue = {
         i, // Used for Semantic elements which support "inverted".
-        t, // Used to invert text.
         s, // Used to invert the style some elements.
+        t, // Used to invert text.
         inverted, // Used to add "invert" to className.
         theme,
         savedTheme,
@@ -256,6 +258,7 @@ export function Statistic(props) {
 export function StatisticGroup(props) {
     const {i} = useContext(ThemeContext);
     props = {...i, ...props};
+    props['style'] = {...props['style'], marginLeft: 0, marginRight: 0};
     return <STATISTIC_GROUP {...props}/>
 }
 

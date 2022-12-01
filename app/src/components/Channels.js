@@ -413,9 +413,9 @@ function ChannelPage({create, header}) {
                         <Button color='blue' onClick={handleRefreshChannel}>
                             Refresh
                         </Button>
-                        <Button onClick={() => navigate(`/videos/channel/${channel.id}/video`)}>
-                            Videos
-                        </Button>
+                        <Link to={`/videos/channel/${channel.id}/video`}>
+                            <Button>Videos</Button>
+                        </Link>
                     </>
                 }
             </Container>

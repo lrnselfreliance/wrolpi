@@ -2,7 +2,9 @@ import React, {useContext} from "react";
 import FileBrowser from 'react-keyed-file-browser';
 import {
     CardContent,
+    CardDescription,
     CardHeader,
+    CardMeta,
     Confirm,
     Divider,
     Dropdown,
@@ -157,19 +159,19 @@ function ImageCard({file}) {
         <ExternalCardLink to={url}>
             {poster}
         </ExternalCardLink>
-        <Card.Content {...s}>
-            <Card.Header>
+        <CardContent {...s}>
+            <CardHeader>
                 <ExternalCardLink to={url} className='no-link-underscore card-link'>
                     <p>{textEllipsis(file.title || file.stem || file.path, 100)}</p>
                 </ExternalCardLink>
-            </Card.Header>
-            <Card.Meta {...s}>
+            </CardHeader>
+            <CardMeta {...s}>
                 <p>{uploadDate(file.modified / 1000)}</p>
-            </Card.Meta>
-            <Card.Description {...s}>
+            </CardMeta>
+            <CardDescription {...s}>
                 <p>{humanFileSize(file.size)}</p>
-            </Card.Description>
-        </Card.Content>
+            </CardDescription>
+        </CardContent>
     </Card>
 }
 

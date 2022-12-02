@@ -1,7 +1,7 @@
 import React from "react";
 import {getSettings, saveSettings} from "../../api";
-import {Button, Form, FormField, FormGroup, FormInput, Header, Loader} from "../Theme";
-import {Container, Dimmer, Divider, Icon, Modal} from "semantic-ui-react";
+import {Button, Form, FormField, FormGroup, FormInput, Header, Loader, Segment} from "../Theme";
+import {Container, Dimmer, Icon, Modal} from "semantic-ui-react";
 import {ThemeContext} from "../../contexts/contexts";
 import {HelpPopup, HotspotToggle, ThrottleToggle, Toggle, WROLModeMessage} from "../Common";
 import QRCode from "react-qr-code";
@@ -127,112 +127,115 @@ export class Settings extends React.Component {
             {({i, t}) => <Container fluid>
                 <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
 
-                <HotspotToggle/>
-                <ThrottleToggle/>
-                <Divider/>
+                <Segment>
+                    <HotspotToggle/>
+                    <ThrottleToggle/>
+                </Segment>
 
-                <Header as='h3'>
-                    The settings for your WROLPi.
-                </Header>
-                <p {...t}>
-                    Any changes will be written to <i>config/wrolpi.yaml</i>.
-                </p>
+                <Segment>
+                    <Header as='h2'>
+                        Settings
+                    </Header>
+                    <p {...t}>
+                        Any changes will be written to <i>config/wrolpi.yaml</i>.
+                    </p>
 
-                <Form id="settings" onSubmit={this.handleSubmit}>
-                    <div style={{margin: '0.5em'}}>
-                        <Toggle
-                            label='Download on Startup'
-                            disabled={disabled || download_on_startup === null}
-                            checked={download_on_startup === true}
-                            onChange={checked => this.handleInputChange(null, 'download_on_startup', checked)}
-                        />
-                    </div>
+                    <Form id="settings" onSubmit={this.handleSubmit}>
+                        <div style={{margin: '0.5em'}}>
+                            <Toggle
+                                label='Download on Startup'
+                                disabled={disabled || download_on_startup === null}
+                                checked={download_on_startup === true}
+                                onChange={checked => this.handleInputChange(null, 'download_on_startup', checked)}
+                            />
+                        </div>
 
-                    <div style={{margin: '0.5em'}}>
-                        <Toggle
-                            label='WiFi Hotspot on Startup'
-                            disabled={disabled || hotspot_on_startup === null}
-                            checked={hotspot_on_startup === true}
-                            onChange={checked => this.handleInputChange(null, 'hotspot_on_startup', checked)}
-                        />
-                    </div>
+                        <div style={{margin: '0.5em'}}>
+                            <Toggle
+                                label='WiFi Hotspot on Startup'
+                                disabled={disabled || hotspot_on_startup === null}
+                                checked={hotspot_on_startup === true}
+                                onChange={checked => this.handleInputChange(null, 'hotspot_on_startup', checked)}
+                            />
+                        </div>
 
-                    <div style={{margin: '0.5em'}}>
-                        <Toggle
-                            label='CPU Power-save on Startup'
-                            disabled={disabled || throttle_on_startup === null}
-                            checked={throttle_on_startup === true}
-                            onChange={checked => this.handleInputChange(null, 'throttle_on_startup', checked)}
-                        />
-                    </div>
+                        <div style={{margin: '0.5em'}}>
+                            <Toggle
+                                label='CPU Power-save on Startup'
+                                disabled={disabled || throttle_on_startup === null}
+                                checked={throttle_on_startup === true}
+                                onChange={checked => this.handleInputChange(null, 'throttle_on_startup', checked)}
+                            />
+                        </div>
 
-                    <FormGroup inline>
-                        <FormInput
-                            label={<>
-                                <b {...t}>Download Timeout</b>
-                                <HelpPopup content='Downloads will be stopped after this many seconds have elapsed.
+                        <FormGroup inline>
+                            <FormInput
+                                label={<>
+                                    <b {...t}>Download Timeout</b>
+                                    <HelpPopup content='Downloads will be stopped after this many seconds have elapsed.
                                 Downloads will never timeout if this is empty.'/>
-                            </>}
-                            value={download_timeout}
-                            disabled={disabled || download_timeout === null}
-                            onChange={(e, d) => this.handleTimeoutChange(e, 'download_timeout', d.value)}
-                        />
-                    </FormGroup>
+                                </>}
+                                value={download_timeout}
+                                disabled={disabled || download_timeout === null}
+                                onChange={(e, d) => this.handleTimeoutChange(e, 'download_timeout', d.value)}
+                            />
+                        </FormGroup>
 
-                    <FormGroup inline>
-                        <FormInput
-                            label='Hotspot SSID'
-                            value={hotspot_ssid}
-                            disabled={disabled || hotspot_ssid === null}
-                            onChange={(e, d) =>
-                                this.setState({hotspot_ssid: d.value}, this.handleHotspotChange)}
-                        />
-                        <FormInput
-                            label='Hotspot Password'
-                            disabled={disabled || hotspot_password === null}
-                            value={hotspot_password}
-                            onChange={(e, d) =>
-                                this.setState({hotspot_password: d.value}, this.handleHotspotChange)}
-                        />
-                        <FormInput
-                            label='Hotspot Device'
-                            disabled={disabled || hotspot_password === null}
-                            value={hotspot_device}
-                            onChange={(e, d) => this.handleInputChange(e, 'hotspot_device', d.value)}
-                        />
-                    </FormGroup>
+                        <FormGroup inline>
+                            <FormInput
+                                label='Hotspot SSID'
+                                value={hotspot_ssid}
+                                disabled={disabled || hotspot_ssid === null}
+                                onChange={(e, d) =>
+                                    this.setState({hotspot_ssid: d.value}, this.handleHotspotChange)}
+                            />
+                            <FormInput
+                                label='Hotspot Password'
+                                disabled={disabled || hotspot_password === null}
+                                value={hotspot_password}
+                                onChange={(e, d) =>
+                                    this.setState({hotspot_password: d.value}, this.handleHotspotChange)}
+                            />
+                            <FormInput
+                                label='Hotspot Device'
+                                disabled={disabled || hotspot_password === null}
+                                value={hotspot_device}
+                                onChange={(e, d) => this.handleInputChange(e, 'hotspot_device', d.value)}
+                            />
+                        </FormGroup>
 
-                    <Modal closeIcon
-                           onClose={() => this.setState({qrOpen: false})}
-                           onOpen={this.handleQrOpen}
-                           open={this.state.qrOpen}
-                           trigger={qrButton}
-                    >
-                        <Modal.Header>
-                            Scan this code to join the hotspot
-                        </Modal.Header>
-                        <Modal.Content>
-                            <QRCode value={qrCodeValue} size={300}/>
-                        </Modal.Content>
-                    </Modal>
+                        <Modal closeIcon
+                               onClose={() => this.setState({qrOpen: false})}
+                               onOpen={this.handleQrOpen}
+                               open={this.state.qrOpen}
+                               trigger={qrButton}
+                        >
+                            <Modal.Header>
+                                Scan this code to join the hotspot
+                            </Modal.Header>
+                            <Modal.Content>
+                                <QRCode value={qrCodeValue} size={300}/>
+                            </Modal.Content>
+                        </Modal>
 
-                    <FormField>
-                        <label>Timezone</label>
-                        <TimezoneSelect
-                            value={timezone}
-                            onChange={i => this.handleInputChange(null, 'timezone', i)}
-                        />
-                    </FormField>
+                        <FormField>
+                            <label>Timezone</label>
+                            <TimezoneSelect
+                                value={timezone}
+                                onChange={i => this.handleInputChange(null, 'timezone', i)}
+                            />
+                        </FormField>
 
-                    <Button color="blue" type="submit" disabled={disabled}>
-                        Save
-                    </Button>
+                        <Button color="blue" type="submit" disabled={disabled}>
+                            Save
+                        </Button>
 
-                    <Dimmer active={pending}>
-                        <Loader active={pending} size='large'/>
-                    </Dimmer>
+                        <Dimmer active={pending}>
+                            <Loader active={pending} size='large'/>
+                        </Dimmer>
 
-                </Form>
+                    </Form>
+                </Segment>
             </Container>
             }
         </ThemeContext.Consumer>

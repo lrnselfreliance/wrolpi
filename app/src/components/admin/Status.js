@@ -1,7 +1,7 @@
 import {Header, Progress, Segment, Statistic, StatisticGroup} from "../Theme";
 import React, {useContext} from "react";
 import {humanBandwidth, humanFileSize, LoadStatistic, useTitle} from "../Common";
-import {Divider, Responsive} from "semantic-ui-react";
+import {Responsive} from "semantic-ui-react";
 import {ProgressPlaceholder} from "../Placeholder";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {StatusContext} from "../../contexts/contexts";
@@ -182,56 +182,68 @@ export function Status() {
     }
 
     return <>
-        <CPUUsageProgress value={percent} label='CPU Usage'/>
-
         <Responsive minWidth={770}>
-            <StatisticGroup>
-                <CPUTemperatureStatistic
-                    value={temperature}
-                    high_temperature={high_temperature}
-                    critical_temperature={critical_temperature}
-                />
-                <LoadStatistic label='1 Minute Load' value={minute_1} cores={cores}/>
-                <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
-                <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
-            </StatisticGroup>
+            <Segment>
+                <CPUUsageProgress value={percent} label='CPU Usage'/>
+                <StatisticGroup>
+                    <CPUTemperatureStatistic
+                        value={temperature}
+                        high_temperature={high_temperature}
+                        critical_temperature={critical_temperature}
+                    />
+                    <LoadStatistic label='1 Minute Load' value={minute_1} cores={cores}/>
+                    <LoadStatistic label='5 Minute Load' value={minute_5} cores={cores}/>
+                    <LoadStatistic label='15 Minute Load' value={minute_15} cores={cores}/>
+                </StatisticGroup>
+            </Segment>
 
-            <Header as='h1'>Network Bandwidth</Header>
-            {bandwidth ?
-                bandwidth.map(i => <BandwidthProgressGroup key={i['name']} bandwidth={i}/>) :
-                <ProgressPlaceholder/>}
+            <Segment>
+                <Header as='h1'>Network Bandwidth</Header>
+                {bandwidth ? bandwidth.map(i => <BandwidthProgressGroup key={i['name']} bandwidth={i}/>) :
+                    <ProgressPlaceholder/>}
+            </Segment>
 
-            <Divider/>
+            <Segment>
+                <Header as='h1'>Drive Usage</Header>
+                {drives.map((drive) => <DriveInfo key={drive['mount']} {...drive}/>)}
+            </Segment>
 
-            <Header as='h1'>Drive Usage</Header>
-            {drives.map((drive) => <DriveInfo key={drive['mount']} {...drive}/>)}
-
-            <Header as='h1'>Drive Bandwidth</Header>
-            {disk_bandwidth.map((disk) => <DiskBandwidth key={disk['name']} {...disk}/>)}
+            <Segment>
+                <Header as='h1'>Drive Bandwidth</Header>
+                {disk_bandwidth.map((disk) => <DiskBandwidth key={disk['name']} {...disk}/>)}
+            </Segment>
         </Responsive>
         <Responsive maxWidth={769}>
-            <StatisticGroup size='mini'>
-                <CPUTemperatureStatistic
-                    value={temperature}
-                    high_temperature={high_temperature}
-                    critical_temperature={critical_temperature}
-                    style={{marginRight: 0}}
-                />
-                <LoadStatistic label='1 Min. Load' value={minute_1} cores={cores}/>
-                <LoadStatistic label='5 Min.' value={minute_5} cores={cores}/>
-                <LoadStatistic label='15 Min.' value={minute_15} cores={cores}/>
-            </StatisticGroup>
+            <Segment>
+                <CPUUsageProgress value={percent} label='CPU Usage'/>
+                <StatisticGroup size='mini'>
+                    <CPUTemperatureStatistic
+                        value={temperature}
+                        high_temperature={high_temperature}
+                        critical_temperature={critical_temperature}
+                        style={{marginRight: 0}}
+                    />
+                    <LoadStatistic label='1 Min. Load' value={minute_1} cores={cores}/>
+                    <LoadStatistic label='5 Min.' value={minute_5} cores={cores}/>
+                    <LoadStatistic label='15 Min.' value={minute_15} cores={cores}/>
+                </StatisticGroup>
+            </Segment>
 
-            <Header as='h2'>Network Bandwidth</Header>
-            {bandwidth ?
-                bandwidth.map(i => <BandwidthProgressGroup key={i['name']} bandwidth={i}/>) :
-                <ProgressPlaceholder/>}
+            <Segment>
+                <Header as='h2'>Network Bandwidth</Header>
+                {bandwidth ? bandwidth.map(i => <BandwidthProgressGroup key={i['name']} bandwidth={i}/>) :
+                    <ProgressPlaceholder/>}
+            </Segment>
 
-            <Header as='h2'>Drive Usage</Header>
-            {drives.map((drive) => <DriveInfo key={drive['mount']} {...drive}/>)}
+            <Segment>
+                <Header as='h2'>Drive Usage</Header>
+                {drives.map((drive) => <DriveInfo key={drive['mount']} {...drive}/>)}
+            </Segment>
 
-            <Header as='h2'>Drive Bandwidth</Header>
-            {disk_bandwidth.map((disk) => <DiskBandwidth key={disk['name']} {...disk}/>)}
+            <Segment>
+                <Header as='h2'>Drive Bandwidth</Header>
+                {disk_bandwidth.map((disk) => <DiskBandwidth key={disk['name']} {...disk}/>)}
+            </Segment>
         </Responsive>
     </>
 }

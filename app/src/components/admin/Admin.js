@@ -1,10 +1,10 @@
 import React from 'react';
 import {Container} from "semantic-ui-react";
 import {getStatus, saveSettings} from "../../api";
-import {PageContainer, TabLinks, Toggle, useTitle} from "../Common";
+import {PageContainer, TabLinks, Toggle} from "../Common";
 import {Route, Routes} from "react-router-dom";
 import {ThemeContext} from "../../contexts/contexts";
-import {Header, Loader} from "../Theme";
+import {Header, Loader, Segment} from "../Theme";
 import {Downloads} from "./Downloads";
 import {Settings} from "./Settings";
 import {Status} from "./Status";
@@ -44,19 +44,21 @@ class WROLMode extends React.Component {
         return <ThemeContext.Consumer>
             {({t}) => <Container fluid>
 
-                <Header as="h1">WROL Mode</Header>
-                <Header as='h4'>
-                    Enable read-only mode. No content can be deleted or modified. Enable this when the SHTF and you
-                    want to prevent any potential loss of data.
-                </Header>
-                <p {...t}>
-                    Note: User settings and favorites can still be modified.
-                </p>
-                <Toggle
-                    checked={this.state.WROLMode}
-                    onChange={this.toggleWROLMode}
-                    label={this.state.WROLMode ? 'WROL Mode Enabled' : 'WROL Mode Disabled'}
-                />
+                <Segment>
+                    <Header as="h1">WROL Mode</Header>
+                    <Header as='h4'>
+                        Enable read-only mode. No content can be deleted or modified. Enable this when the SHTF and you
+                        want to prevent any potential loss of data.
+                    </Header>
+                    <p {...t}>
+                        Note: User settings and favorites can still be modified.
+                    </p>
+                    <Toggle
+                        checked={this.state.WROLMode}
+                        onChange={this.toggleWROLMode}
+                        label={this.state.WROLMode ? 'WROL Mode Enabled' : 'WROL Mode Disabled'}
+                    />
+                </Segment>
 
             </Container>}
         </ThemeContext.Consumer>

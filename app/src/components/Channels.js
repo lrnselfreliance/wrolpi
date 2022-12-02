@@ -256,173 +256,175 @@ function ChannelPage({create, header}) {
                 <Button>Videos</Button>
             </Link>}
 
-        <Header as="h1">{header}</Header>
-        <WROLModeMessage content='Channel page is disabled while WROL Mode is enabled.'/>
-        <Form
-            id="editChannel"
-            onSubmit={handleSubmit}
-            error={error}
-            success={success}
-            autoComplete="off"
-        >
-            <FormGroup>
-                <FormField width={8}>
-                    <FormInput required
-                               label="Channel Name"
-                               name="name"
-                               type="text"
-                               placeholder="Short Channel Name"
-                               disabled={disabled}
-                               error={errors.name}
-                               value={channel.name}
-                               onChange={(e, {value}) => changeValue('name', value)}
-                    />
-                </FormField>
-                <FormField width={8}>
-                    <label>
-                        Directory <RequiredAsterisk/>
-                    </label>
-                    <DirectoryInput required
-                                    disabled={create === undefined}
-                                    value={channel.directory}
-                                    setInput={value => changeValue('directory', value)}
-                                    placeholder='videos/channel directory'
-                    />
-                </FormField>
-            </FormGroup>
-            {
-                create !== undefined &&
+        <Segment>
+            <Header as="h1">{header}</Header>
+            <WROLModeMessage content='Channel page is disabled while WROL Mode is enabled.'/>
+            <Form
+                id="editChannel"
+                onSubmit={handleSubmit}
+                error={error}
+                success={success}
+                autoComplete="off"
+            >
                 <FormGroup>
-                    <FormField width={8}/>{/* Empty field*/}
                     <FormField width={8}>
-                        <FormField>
-                            <Toggle
-                                toggle
-                                label="Create this directory, if it doesn't exist."
-                                name="mkdir"
-                                disabled={disabled}
-                                error={errors.mkdir}
-                                checked={channel.mkdir}
-                                onChange={i => {
-                                    handleCheckbox(null, {name: 'mkdir', checked: i})
-                                }}
-                            />
-                        </FormField>
+                        <FormInput required
+                                   label="Channel Name"
+                                   name="name"
+                                   type="text"
+                                   placeholder="Short Channel Name"
+                                   disabled={disabled}
+                                   error={errors.name}
+                                   value={channel.name}
+                                   onChange={(e, {value}) => changeValue('name', value)}
+                        />
+                    </FormField>
+                    <FormField width={8}>
+                        <label>
+                            Directory <RequiredAsterisk/>
+                        </label>
+                        <DirectoryInput required
+                                        disabled={create === undefined}
+                                        value={channel.directory}
+                                        setInput={value => changeValue('directory', value)}
+                                        placeholder='videos/channel directory'
+                        />
                     </FormField>
                 </FormGroup>
-            }
-            <FormGroup>
-                <FormField width={16}>
-                    <FormInput
-                        label="URL"
-                        name="url"
-                        type="url"
-                        disabled={disabled}
-                        placeholder='https://example.com/channel/videos'
-                        error={errors.url}
-                        value={channel.url}
-                        onChange={handleInputChange}
-                    />
-                </FormField>
-            </FormGroup>
-
-            <FormGroup>
-                <FormField>
-                    <label>Download Frequency</label>
-                    <Dropdown selection
-                              name='download_frequency'
-                              placeholder='Frequency'
-                              error={errors.download_frequency}
-                              value={channel.download_frequency}
-                              disabled={disabled || !channel.url}
-                              options={frequencyOptions}
-                              onChange={handleInputChange}
-                    />
-                </FormField>
-            </FormGroup>
-
-            <Accordion style={{marginBottom: '1em'}}>
-                <AccordionTitle
-                    onClick={handleAdvancedClick}
-                    index={0}
-                    active={activeIndex === 0}
-                >
-                    <Icon name='dropdown'/>
-                    Advanced Settings
-                </AccordionTitle>
-                <AccordionContent active={activeIndex === 0}>
-                    <Segment secondary>
-                        <Header as="h4">
-                            The following settings are encouraged by default, modify them at your own risk.
-                        </Header>
-                        <FormField>
-                            <FormInput
-                                label="Title Match Regex"
-                                name="match_regex"
-                                type="text"
-                                disabled={disabled}
-                                error={!validRegex}
-                                placeholder='.*([Nn]ame Matching).*'
-                                value={channel.match_regex}
-                                onChange={checkRegex}
-                            />
-                        </FormField>
-                    </Segment>
-                </AccordionContent>
-            </Accordion>
-
-            <Message error
-                     header={messageHeader}
-                     content={messageContent}
-            />
-            <Message success
-                     header={messageHeader}
-                     content={messageContent}
-            />
-
-            <Grid stackable columns={2}>
-                <Grid.Row>
-                    <Grid.Column>
-                        {!create &&
-                            <>
-                                <Button color='red' onClick={handleDeleteButton} size='small'>
-                                    Delete
-                                </Button>
-                                <Confirm
-                                    open={deleteOpen}
-                                    content='Are you sure you want to delete this channel?  No video files will be deleted.'
-                                    confirmButton='Delete'
-                                    onCancel={() => setDeleteOpen(false)}
-                                    onConfirm={handleDeleteConfirm}
+                {
+                    create !== undefined &&
+                    <FormGroup>
+                        <FormField width={8}/>{/* Empty field*/}
+                        <FormField width={8}>
+                            <FormField>
+                                <Toggle
+                                    toggle
+                                    label="Create this directory, if it doesn't exist."
+                                    name="mkdir"
+                                    disabled={disabled}
+                                    error={errors.mkdir}
+                                    checked={channel.mkdir}
+                                    onChange={i => {
+                                        handleCheckbox(null, {name: 'mkdir', checked: i})
+                                    }}
                                 />
-                                <Button
-                                    color='violet'
-                                    size='small'
-                                    onClick={handleDownloadChannel}
-                                    disabled={!channel.url || !channel.download_frequency}
-                                >
-                                    Download
-                                </Button>
-                                <Button color='blue' size='small' onClick={handleRefreshChannel}>
-                                    Refresh
-                                </Button>
-                            </>
-                        }
-                    </Grid.Column>
-                    <Grid.Column>
-                        <Button
-                            color="green"
-                            size='big'
-                            type="submit"
-                            floated='right'
-                        >
-                            {disabled ? <Loader active inline/> : 'Save'}
-                        </Button>
-                    </Grid.Column>
-                </Grid.Row>
-            </Grid>
+                            </FormField>
+                        </FormField>
+                    </FormGroup>
+                }
+                <FormGroup>
+                    <FormField width={16}>
+                        <FormInput
+                            label="URL"
+                            name="url"
+                            type="url"
+                            disabled={disabled}
+                            placeholder='https://example.com/channel/videos'
+                            error={errors.url}
+                            value={channel.url}
+                            onChange={handleInputChange}
+                        />
+                    </FormField>
+                </FormGroup>
 
-        </Form>
+                <FormGroup>
+                    <FormField>
+                        <label>Download Frequency</label>
+                        <Dropdown selection
+                                  name='download_frequency'
+                                  placeholder='Frequency'
+                                  error={errors.download_frequency}
+                                  value={channel.download_frequency}
+                                  disabled={disabled || !channel.url}
+                                  options={frequencyOptions}
+                                  onChange={handleInputChange}
+                        />
+                    </FormField>
+                </FormGroup>
+
+                <Accordion style={{marginBottom: '1em'}}>
+                    <AccordionTitle
+                        onClick={handleAdvancedClick}
+                        index={0}
+                        active={activeIndex === 0}
+                    >
+                        <Icon name='dropdown'/>
+                        Advanced Settings
+                    </AccordionTitle>
+                    <AccordionContent active={activeIndex === 0}>
+                        <Segment secondary>
+                            <Header as="h4">
+                                The following settings are encouraged by default, modify them at your own risk.
+                            </Header>
+                            <FormField>
+                                <FormInput
+                                    label="Title Match Regex"
+                                    name="match_regex"
+                                    type="text"
+                                    disabled={disabled}
+                                    error={!validRegex}
+                                    placeholder='.*([Nn]ame Matching).*'
+                                    value={channel.match_regex}
+                                    onChange={checkRegex}
+                                />
+                            </FormField>
+                        </Segment>
+                    </AccordionContent>
+                </Accordion>
+
+                <Message error
+                         header={messageHeader}
+                         content={messageContent}
+                />
+                <Message success
+                         header={messageHeader}
+                         content={messageContent}
+                />
+
+                <Grid stackable columns={2}>
+                    <Grid.Row>
+                        <Grid.Column>
+                            {!create &&
+                                <>
+                                    <Button color='red' onClick={handleDeleteButton} size='small'>
+                                        Delete
+                                    </Button>
+                                    <Confirm
+                                        open={deleteOpen}
+                                        content='Are you sure you want to delete this channel?  No video files will be deleted.'
+                                        confirmButton='Delete'
+                                        onCancel={() => setDeleteOpen(false)}
+                                        onConfirm={handleDeleteConfirm}
+                                    />
+                                    <Button
+                                        color='violet'
+                                        size='small'
+                                        onClick={handleDownloadChannel}
+                                        disabled={!channel.url || !channel.download_frequency}
+                                    >
+                                        Download
+                                    </Button>
+                                    <Button color='blue' size='small' onClick={handleRefreshChannel}>
+                                        Refresh
+                                    </Button>
+                                </>
+                            }
+                        </Grid.Column>
+                        <Grid.Column>
+                            <Button
+                                color="green"
+                                size='big'
+                                type="submit"
+                                floated='right'
+                            >
+                                {disabled ? <Loader active inline/> : 'Save'}
+                            </Button>
+                        </Grid.Column>
+                    </Grid.Row>
+                </Grid>
+
+            </Form>
+        </Segment>
 
         <div style={{marginTop: '2em'}}>
             {channel.statistics && <ChannelStatistics statistics={channel.statistics}/>}

@@ -21,7 +21,7 @@ export function Dashboard() {
 
     const [downloadOpen, setDownloadOpen] = useState(false);
     const onDownloadOpen = (name) => setDownloadOpen(!!name);
-    const downloads = <DownloadMenu onOpen={onDownloadOpen}/>;
+    const downloads = <Segment><DownloadMenu onOpen={onDownloadOpen}/></Segment>;
 
     // Only show dashboard parts if not searching.
     let body;

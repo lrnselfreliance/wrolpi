@@ -249,7 +249,7 @@ function ChannelPage({create, header}) {
         setDeleteOpen(true);
     }
 
-    return <Container fluid>
+    return <>
         <BackButton/>
         {!create &&
             <Link to={`/videos/channel/${channel.id}/video`}>
@@ -429,7 +429,7 @@ function ChannelPage({create, header}) {
         <div style={{marginTop: '2em'}}>
             {channel.statistics && <ChannelStatistics statistics={channel.statistics}/>}
         </div>
-    </Container>
+    </>
 }
 
 export function EditChannel(props) {

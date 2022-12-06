@@ -1,14 +1,21 @@
+import json
 import pathlib
+import shutil
 
 import pytest
 import sqlalchemy
 
+from modules.videos import lib
 from modules.videos.common import apply_info_json
 from modules.videos.lib import parse_video_file_name, validate_video, get_statistics
 from modules.videos.models import Video
 from modules.videos.video.lib import search_videos
+from wrolpi.dates import strptime
 from wrolpi.files import lib as files_lib
+from wrolpi.files.lib import refresh_files
 from wrolpi.files.models import File
+from wrolpi.test.common import skip_circleci
+from wrolpi.vars import PROJECT_DIR
 
 
 def test_search_censored_videos(test_session, simple_channel, video_factory):
@@ -188,3 +195,80 @@ async def test_get_statistics(test_session, video_factory, channel_factory):
     assert 'videos' in result['statistics']
     assert 'channels' in result['statistics']
     assert 'historical' in result['statistics']
+
+
+@skip_circleci
+@pytest.mark.asyncio
+async def test_video_epoch(test_session, test_directory, video_file):
+    """The epoch in a Video's info_json is more precise and should be used when available.
+
+    Fallback to the upload_date in the Video file's name.
+    """
+    # The date from a video file's name is assumed to be midnight in UTC.
+    upload_date = '20221206'
+
+    destination = test_directory / f'test channel_{upload_date}_the title.mp4'
+    video_file.rename(destination)
+    video_file = destination
+
+    await refresh_files()
+    assert test_session.query(File).count() == 1
+    assert test_session.query(Video).count() == 1
+
+    video: Video = test_session.query(Video).one()
+    # Upload date is converted to local time.
+    assert video.title == 'the title'
+    assert video.upload_date == strptime('2022-12-05 17:00:00'), \
+        'Video upload_date should be the date from the file name.'
+    assert not video.info_json_file, 'Video should not have info json file'
+
+    # Write info_json with more precise epoch.
+    info_json_path = video_file.with_suffix('.info.json')
+    info_json = {'epoch': 1656783193}
+    info_json_path.write_text(json.dumps(info_json))
+    # Invalidate video so the JSON will be processed again.
+    video.validated = False
+    test_session.commit()
+
+    # Epoch should replace file upload_date.
+    await refresh_files()
+    assert test_session.query(File).count() == 2
+    assert video.info_json_file, 'Video info json was not discovered.'
+    assert video.upload_date == strptime('2022-07-02 11:33:13'), 'Epoch from info_json did not replace file upload_date'
+    assert video_file.is_file() and info_json_path.is_file(), 'Files should contain the old date.'
+
+
+@pytest.mark.asyncio
+async def test_orphaned_files(test_session, make_files_structure, test_directory, video_factory):
+    # A Video without associated files is not orphaned.
+    vid1 = video_factory(with_video_file=True)
+    # The video files will be removed...
+    vid2 = video_factory(with_video_file=True, with_caption_file=True, with_poster_ext='jpeg', with_info_json=True)
+    vid3 = video_factory(with_video_file=True, with_poster_ext='jpg')
+    # This will be ignored because it is not in the "videos" subdirectory.
+    shutil.copy(PROJECT_DIR / 'test/example1.en.vtt', test_directory / 'video4.en.vtt')
+    test_session.commit()
+
+    # Remove vid2 video. Caption, poster, info_json are now orphaned.
+    vid2.video_path.unlink()
+    vid2_caption_path, vid2_poster_path, vid2_info_json_path = vid2.caption_path, vid2.poster_path, vid2.info_json_path
+    # Remove vid3 video.  Poster is now orphaned.
+    vid3.video_path.unlink()
+    vid3_poster_path = vid3.poster_path
+    await refresh_files()
+    test_session.commit()
+
+    # 6 files when two video files are deleted.
+    # (vid1, vid2[caption,poster,json], vid3 poster, vid4)
+    assert test_session.query(File).count() == 6
+    assert test_session.query(Video).count() == 1
+
+    videos_directory = test_directory / 'videos'
+    results = lib.find_orphaned_video_files(videos_directory)
+
+    assert sorted(list(results)) == sorted([
+        vid2_caption_path,
+        vid2_info_json_path,
+        vid2_poster_path,
+        vid3_poster_path,
+    ])

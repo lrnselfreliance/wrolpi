@@ -3,16 +3,17 @@ import html
 import pathlib
 import re
 from collections import defaultdict
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional, Union, Generator
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 
 from wrolpi import before_startup
-from wrolpi.common import ConfigFile, get_media_directory, sanitize_link, after_refresh, register_after_refresh
+from wrolpi.common import ConfigFile, get_media_directory, sanitize_link, register_after_refresh
 from wrolpi.dates import from_timestamp, Seconds
 from wrolpi.db import get_db_curs, get_db_session, optional_session
+from wrolpi.errors import UnknownDirectory
 from wrolpi.files.models import File
 from wrolpi.vars import PYTEST
 from .common import is_valid_poster, convert_image, \
@@ -27,10 +28,11 @@ DEFAULT_DOWNLOAD_FREQUENCY = Seconds.week
 
 class VideoInfoJSON(object):
     channel_source_id = None
-    title = None
     duration = None
-    view_count = None
+    epoch = None
+    title = None
     url = None
+    view_count = None
 
 
 def process_video_info_json(video: Video) -> VideoInfoJSON:
@@ -42,10 +44,18 @@ def process_video_info_json(video: Video) -> VideoInfoJSON:
         title = info_json.get('fulltitle') or info_json.get('title')
         video_info_json.title = html.unescape(title) if title else None
 
-        video_info_json.duration = info_json.get('duration')
-        video_info_json.view_count = info_json.get('view_count')
-        video_info_json.url = info_json.get('webpage_url') or info_json.get('url')
-        video_info_json.channel_source_id = info_json.get('channel_id')
+        video_info_json.duration = info_json.get('duration') or None
+        video_info_json.view_count = info_json.get('view_count') or None
+        video_info_json.url = info_json.get('webpage_url') or info_json.get('url') or None
+        video_info_json.channel_source_id = info_json.get('channel_id') or None
+
+        # Get `epoch` from top of JSON.  Convert to datetime.
+        if epoch := info_json.get('epoch'):
+            if '.' in str(epoch):
+                epoch = float(epoch)
+            else:
+                epoch = int(epoch)
+        video_info_json.epoch = from_timestamp(epoch) if epoch else None
 
     return video_info_json
 
@@ -71,12 +81,16 @@ def validate_video(video: Video, channel_generate_poster: bool, session: Session
     found, it will be generated from the video file.
     """
     info_json_path = video.info_json_file.path if video.info_json_file else video.info_json_path
-    if info_json_path and (not video.title or not video.duration or not video.view_count or not video.url):
+    json_data_missing = bool(video.title) and bool(video.duration) and bool(video.view_count) and bool(video.url) \
+                        and bool(video.upload_date)
+    if info_json_path and json_data_missing is False:
         # These properties can be found in the info json.
         video_info_json = process_video_info_json(video)
         video.title = video_info_json.title
         video.duration = video_info_json.duration
         video.url = video_info_json.url
+        # Epoch is more precise than upload_date.
+        video.upload_date = video_info_json.epoch
         # View count will probably be overwritten by more recent data when this Video's Channel is
         # updated.
         video.view_count = video.view_count or video_info_json.view_count
@@ -91,6 +105,7 @@ def validate_video(video: Video, channel_generate_poster: bool, session: Session
         # These are the least trusted, so anything already on the video should be trusted.
         _, upload_date, source_id, title = parse_video_file_name(video_path)
         video.title = video.title or html.unescape(title)
+        # Prefer epoch over upload_date from file.
         video.upload_date = video.upload_date or upload_date
         video.source_id = video.source_id or source_id
 
@@ -572,3 +587,34 @@ def parse_video_file_name(video_path: pathlib.Path) -> \
     # Return the stem as a last resort
     title = pathlib.Path(video_path).stem.strip()
     return None, None, None, title
+
+
+def find_orphaned_video_files(directory: pathlib.Path) -> Generator[pathlib.Path, None, None]:
+    """Finds all files which should be associated with a video file, but a video file does not match their stem.
+
+    Example:
+        video1.mp4, video1.info.json  # Video file with info json.
+        video2.info.json  # Orphaned video json.
+    """
+    with get_db_curs() as curs:
+        if not directory.is_dir():
+            raise UnknownDirectory()
+
+        directory = str(directory).rstrip('/')
+
+        curs.execute(f'''
+        SELECT f1.path
+        FROM (
+                 -- Get array of mimetypes for each full_stem group.
+                 select f2.full_stem, array_agg(f2.mimetype) as mimetypes
+                 from file f2
+                 where f2.full_stem like '{directory}/%'
+                 group by 1) AS stem_groups
+                 -- Get all files that match the full_stem.
+                 LEFT JOIN file f1 ON stem_groups.full_stem = f1.full_stem
+        -- Get all groups which DO NOT contain one of the video mimetypes.
+        WHERE NOT (select array_agg(f3.mimetype) from file f3 where f3.mimetype like 'video/%') && stem_groups.mimetypes
+        ''')
+        results = map(lambda i: pathlib.Path(i[0]), curs.fetchall())
+        results = filter(lambda i: i.is_file(), results)
+        yield from results

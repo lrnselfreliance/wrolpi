@@ -22,14 +22,17 @@ class File(ModelHelper, Base):
     path: pathlib.Path = Column(MediaPathType, primary_key=True)
 
     associated = Column(Boolean, default=False)
+    directory: pathlib.Path = Column(MediaPathType)  # aka the parent.
+    full_stem = Column(String)  # f'{directory}/{stem}'
     idempotency = Column(TZDateTime, default=lambda: now())
     indexed = Column(Boolean, default=False)
-    mimetype = Column(String)
-    model = Column(String)
+    mimetype = Column(String)  # Gotten by python-magic or file command.
+    model = Column(String)  # Filled out by the modeler.  Will be the table name (video, archive, etc.).
     modification_datetime = Column(TZDateTime)
     size = Column(Integer)
-    suffix = Column(String)
-    title = Column(String)
+    stem = Column(String)  # The file name, but without the suffix (aka extension).  See: split_path_stem_and_suffix
+    suffix = Column(String)  # aka the extension.
+    title = Column(String)  # Provided by the modeler, or it will be the entire file name (with suffix).
 
     a_text = deferred(Column(String))
     b_text = deferred(Column(String))
@@ -53,12 +56,15 @@ class File(ModelHelper, Base):
         path = self.path.relative_to(get_media_directory())
         d = dict(
             associated=self.associated,
+            directory=self.directory,
+            full_stem=self.full_stem,
             key=path,  # React browser expects this.
             mimetype=self.mimetype,
             model=self.model,
             modified=self.modification_datetime,  # React browser expects this.
             path=path,
             size=self.size,
+            stem=self.stem,
             suffix=self.suffix,
             title=self.title,
         )
@@ -122,11 +128,13 @@ class File(ModelHelper, Base):
         if not self.mimetype:
             from wrolpi.files.lib import get_mimetype
             self.mimetype = get_mimetype(self.path)
+        self.stem, self.suffix = split_path_stem_and_suffix(self.path)
+        self.directory = self.path.parent
+        self.full_stem = f'{self.directory}/{self.stem}'
         self.title = self.title or self.path.name
         stat = self.path.stat()
         self.size = stat.st_size
         self.modification_datetime = from_timestamp(stat.st_mtime)
-        name, self.suffix = split_path_stem_and_suffix(self.path)
 
         changed = old_mimetype != self.mimetype \
                   or old_size != self.size \
@@ -135,7 +143,7 @@ class File(ModelHelper, Base):
         if changed:
             self.indexed = False
             # Use title as the a_text temporarily, this may be overwritten by indexer.
-            self.a_text = self.a_text or name
+            self.a_text = self.a_text or self.stem
         return changed
 
     @validates('path')

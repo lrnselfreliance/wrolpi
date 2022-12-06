@@ -32,9 +32,10 @@ def video_modeler(groups: Dict[str, List[File]], session: Session):
 
         session.flush(group)
         poster_file = next((i for i in group if i.mimetype.split('/')[0] == 'image'), None)
-        caption_file = next((i for i in group if i.path.name.endswith('.en.vtt') or i.path.name.endswith('.en.srt')),
-                            None)
         info_json_file = next((i for i in group if i.path.name.endswith('.info.json')), None)
+        # Prefer WebVTT over SRT.  (SRT cannot be displayed for HTML video).
+        caption_file = next((i for i in group if i.path.name.endswith('.en.vtt')), None)
+        caption_file = caption_file or next((i for i in group if i.path.name.endswith('.en.srt')), None)
 
         if poster_file:
             poster_file.associated = True
@@ -57,7 +58,7 @@ def video_modeler(groups: Dict[str, List[File]], session: Session):
                 caption_file != video.caption_file or \
                 info_json_file != video.info_json_file or \
                 video.size != size:
-            # Files were changed.  Re-index.
+            # Files might have been changed.  Re-index.
             video.video_file.indexed = False
 
         video.poster_file = poster_file

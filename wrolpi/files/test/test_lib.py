@@ -275,7 +275,7 @@ async def test_mime_type(test_session, make_files_structure, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_files_indexer(test_session, make_files_structure):
+async def test_files_indexer(test_session, make_files_structure, test_directory):
     """An Indexer is provided for each file based on it's mimetype or contents."""
     source_files: List[str] = [
         'a bzip file.bzip',
@@ -318,15 +318,18 @@ async def test_files_indexer(test_session, make_files_structure):
     assert info_json_file.path.suffix == '.json' and info_json_file.indexer == indexers.DefaultIndexer
     assert video_file.path.suffix == '.mp4' and video_file.indexer == videos.VideoIndexer
 
-    # Path suffix is copied to File.suffix.
-    assert bzip_file.suffix == '.bzip'
-    assert gzip_file.suffix == '.gzip'
-    assert text_file.suffix == '.txt'
-    assert zip_file.suffix == '.zip'
-    assert image_file.suffix == '.jpeg'
-    assert unknown_file.suffix == ''
-    assert info_json_file.suffix == '.info.json'
-    assert video_file.suffix == '.mp4'
+    # Suffix, directory and name are correct.
+    def assert_file_properties(file: File, suffix, directory, stem):
+        assert file.suffix == suffix and file.directory == directory and file.stem == stem
+
+    assert_file_properties(bzip_file, '.bzip', test_directory, 'a bzip file')
+    assert_file_properties(gzip_file, '.gzip', test_directory, 'a gzip file')
+    assert_file_properties(text_file, '.txt', test_directory, 'a text file')
+    assert_file_properties(zip_file, '.zip', test_directory, 'a zip file')
+    assert_file_properties(image_file, '.jpeg', test_directory / 'images', 'an image file')
+    assert_file_properties(unknown_file, '', test_directory, 'unknown file')
+    assert_file_properties(info_json_file, '.info.json', test_directory / 'videos', 'a video file')
+    assert_file_properties(video_file, '.mp4', test_directory / 'videos', 'a video file')
 
     # File are indexed by their titles and contents.
     files, total = lib.search_files('file', 10, 0)

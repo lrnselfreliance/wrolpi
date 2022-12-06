@@ -290,6 +290,8 @@ class VideoDownloader(Downloader, ABC):
                 '-o', file_name_format,
                 '--no-cache-dir',
                 '--compat-options', 'no-live-chat',
+                # Use experimental feature to merge files.
+                '--ppa', 'Merger+ffmpeg_o1:-strict -2',
                 url,
             )
             return_code, logs = await self.process_runner(url, cmd, out_dir)

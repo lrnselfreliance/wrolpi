@@ -19,7 +19,6 @@ async def test_refresh_videos_index(test_session, test_directory, video_factory)
     video_factory(with_video_file=True, with_caption_file=True, with_poster_ext='jpg', with_info_json=True)
     test_session.commit()
 
-    test_session.query(Video).delete()
     test_session.query(File).delete()
     test_session.commit()
 

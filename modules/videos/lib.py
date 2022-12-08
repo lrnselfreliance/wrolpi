@@ -29,7 +29,6 @@ DEFAULT_DOWNLOAD_FREQUENCY = Seconds.week
 class VideoInfoJSON(object):
     channel_source_id = None
     duration = None
-    epoch = None
     title = None
     url = None
     view_count = None
@@ -48,14 +47,6 @@ def process_video_info_json(video: Video) -> VideoInfoJSON:
         video_info_json.view_count = info_json.get('view_count') or None
         video_info_json.url = info_json.get('webpage_url') or info_json.get('url') or None
         video_info_json.channel_source_id = info_json.get('channel_id') or None
-
-        # Get `epoch` from top of JSON.  Convert to datetime.
-        if epoch := info_json.get('epoch'):
-            if '.' in str(epoch):
-                epoch = float(epoch)
-            else:
-                epoch = int(epoch)
-        video_info_json.epoch = from_timestamp(epoch) if epoch else None
 
     return video_info_json
 
@@ -89,8 +80,6 @@ def validate_video(video: Video, channel_generate_poster: bool, session: Session
         video.title = video_info_json.title
         video.duration = video_info_json.duration
         video.url = video_info_json.url
-        # Epoch is more precise than upload_date.
-        video.upload_date = video_info_json.epoch
         # View count will probably be overwritten by more recent data when this Video's Channel is
         # updated.
         video.view_count = video.view_count or video_info_json.view_count
@@ -105,7 +94,6 @@ def validate_video(video: Video, channel_generate_poster: bool, session: Session
         # These are the least trusted, so anything already on the video should be trusted.
         _, upload_date, source_id, title = parse_video_file_name(video_path)
         video.title = video.title or html.unescape(title)
-        # Prefer epoch over upload_date from file.
         video.upload_date = video.upload_date or upload_date
         video.source_id = video.source_id or source_id
 

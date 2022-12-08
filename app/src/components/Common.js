@@ -106,14 +106,14 @@ export function Duration({video}) {
     }
 }
 
-export function uploadDate(d) {
+export function epochToDateString(date) {
     // Convert a date integer to a human-readable date format.
-    let upload_date = <></>;
-    if (d) {
-        upload_date = new Date(d * 1000);
-        upload_date = `${upload_date.getFullYear()}-${upload_date.getMonth() + 1}-${upload_date.getDate()}`;
+    let d = <></>;
+    if (date) {
+        d = new Date(date * 1000);
+        d = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
     }
-    return upload_date;
+    return d;
 }
 
 export function CardLink({to, newTab = false, ...props}) {

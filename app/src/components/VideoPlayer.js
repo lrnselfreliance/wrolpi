@@ -2,7 +2,7 @@ import React, {useContext, useState} from 'react';
 import {deleteVideos} from "../api";
 import {Link, useNavigate, useParams} from "react-router-dom";
 import _ from "lodash";
-import {BackButton, humanFileSize, humanNumber, PageContainer, uploadDate, useTitle} from "./Common";
+import {BackButton, epochToDateString, humanFileSize, humanNumber, PageContainer, useTitle} from "./Common";
 import {Confirm} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
@@ -175,7 +175,7 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
             <Segment>
 
                 <Header as='h2'>{video.title || video.video_path}</Header>
-                {video.upload_date && <h3>{uploadDate(video.upload_date)}</h3>}
+                {video.upload_date && <h3>{epochToDateString(video.upload_date)}</h3>}
                 <h3>
                     {channel && <Link to={`/videos/channel/${channel.id}/video`}>
                         {channel.name}

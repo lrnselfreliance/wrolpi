@@ -197,47 +197,6 @@ async def test_get_statistics(test_session, video_factory, channel_factory):
     assert 'historical' in result['statistics']
 
 
-@skip_circleci
-@pytest.mark.asyncio
-async def test_video_epoch(test_session, test_directory, video_file):
-    """The epoch in a Video's info_json is more precise and should be used when available.
-
-    Fallback to the upload_date in the Video file's name.
-    """
-    # The date from a video file's name is assumed to be midnight in UTC.
-    upload_date = '20221206'
-
-    destination = test_directory / f'test channel_{upload_date}_the title.mp4'
-    video_file.rename(destination)
-    video_file = destination
-
-    await refresh_files()
-    assert test_session.query(File).count() == 1
-    assert test_session.query(Video).count() == 1
-
-    video: Video = test_session.query(Video).one()
-    # Upload date is converted to local time.
-    assert video.title == 'the title'
-    assert video.upload_date == strptime('2022-12-05 17:00:00'), \
-        'Video upload_date should be the date from the file name.'
-    assert not video.info_json_file, 'Video should not have info json file'
-
-    # Write info_json with more precise epoch.
-    info_json_path = video_file.with_suffix('.info.json')
-    info_json = {'epoch': 1656783193}
-    info_json_path.write_text(json.dumps(info_json))
-    # Invalidate video so the JSON will be processed again.
-    video.validated = False
-    test_session.commit()
-
-    # Epoch should replace file upload_date.
-    await refresh_files()
-    assert test_session.query(File).count() == 2
-    assert video.info_json_file, 'Video info json was not discovered.'
-    assert video.upload_date == strptime('2022-07-02 11:33:13'), 'Epoch from info_json did not replace file upload_date'
-    assert video_file.is_file() and info_json_path.is_file(), 'Files should contain the old date.'
-
-
 @pytest.mark.asyncio
 async def test_orphaned_files(test_session, make_files_structure, test_directory, video_factory):
     # A Video without associated files is not orphaned.

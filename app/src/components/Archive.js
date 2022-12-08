@@ -29,7 +29,7 @@ import {
     SearchInput,
     TabLinks,
     textEllipsis,
-    uploadDate,
+    epochToDateString,
     useTitle
 } from "./Common";
 import {deleteArchives, postDownload} from "../api";
@@ -151,7 +151,7 @@ function ArchivePage() {
                 <ExternalCardLink to={singlefileUrl}>
                     <Header as='h2'>{textEllipsis(archive.title || archive.url, 100)}</Header>
                 </ExternalCardLink>
-                <Header as='h3'>{uploadDate(archive.archive_datetime)}</Header>
+                <Header as='h3'>{epochToDateString(archive.archive_datetime)}</Header>
                 {domainHeader}
                 {urlHeader}
 
@@ -208,7 +208,7 @@ export function ArchiveCard({file}) {
                     </CardLink>}
                 <CardMeta {...s}>
                     <p>
-                        {uploadDate(archive.archive_datetime)}
+                        {epochToDateString(archive.archive_datetime)}
                     </p>
                 </CardMeta>
                 <CardDescription>

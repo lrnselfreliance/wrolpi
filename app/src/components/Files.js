@@ -25,7 +25,7 @@ import {
     PageContainer,
     Paginator,
     textEllipsis,
-    uploadDate,
+    epochToDateString,
     useTitle
 } from "./Common";
 import {useBrowseFiles, useQuery, useSearchFiles} from "../hooks/customHooks";
@@ -166,7 +166,7 @@ function ImageCard({file}) {
                 </ExternalCardLink>
             </CardHeader>
             <CardMeta {...s}>
-                <p>{uploadDate(file.modified / 1000)}</p>
+                <p>{epochToDateString(file.modified / 1000)}</p>
             </CardMeta>
             <CardDescription {...s}>
                 <p>{humanFileSize(file.size)}</p>
@@ -203,7 +203,7 @@ function FileCard({file}) {
                     {textEllipsis(file.title || file.stem || file.path)}
                 </ExternalCardLink>
             </CardHeader>
-            <p>{uploadDate(file.modified / 1000)}</p>
+            <p>{epochToDateString(file.modified / 1000)}</p>
             <p>{size}</p>
         </CardContent>
     </Card>

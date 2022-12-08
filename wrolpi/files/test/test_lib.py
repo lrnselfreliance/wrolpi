@@ -200,6 +200,46 @@ async def test_refresh_many_files(test_session, make_files_structure):
 
 
 @pytest.mark.asyncio
+async def test_refresh_files_list(test_session, make_files_structure, test_directory):
+    make_files_structure(['foo.txt', 'bar.txt'])
+
+    # Only foo.txt should have been refreshed.
+    await lib.refresh_files_list(['foo.txt'])
+    assert_files(test_session, ['foo.txt'])
+
+    # Both files should be found
+    await lib.refresh_files_list(['bar.txt'])
+    assert_files(test_session, ['foo.txt', 'bar.txt'])
+
+    # Both files should be unchanged.
+    await lib.refresh_files_list(['foo.txt', 'bar.txt'])
+    assert_files(test_session, ['foo.txt', 'bar.txt'])
+
+    with pytest.raises(FileNotFoundError):
+        # Some files must be refreshed.
+        await lib.refresh_files_list([])
+
+    # Files that share the stem can also be refreshed.
+    (test_directory / 'foo.mp4').touch()
+    await lib.refresh_files_list(['foo.txt', 'bar.txt'])
+    assert_files(test_session, ['foo.txt', 'foo.mp4', 'bar.txt'])
+
+    # Files that share the stem can also be ignored.
+    (test_directory / 'bar.mp4').touch()
+    await lib.refresh_files_list(['bar.txt'], include_files_near=False)
+    assert_files(test_session, ['foo.txt', 'foo.mp4', 'bar.txt'])
+
+    # Deleted files are removed.
+    (test_directory / 'foo.mp4').unlink()
+    (test_directory / 'bar.txt').unlink()
+    await lib.refresh_files_list(['foo.txt', 'bar.txt'], include_files_near=False)
+    assert_files(test_session, ['foo.txt', ])
+    # bar.mp4 is discovered near non-existent bar.txt.
+    await lib.refresh_files_list(['foo.txt', 'bar.txt'])
+    assert_files(test_session, ['foo.txt', 'bar.mp4'])
+
+
+@pytest.mark.asyncio
 async def test_refresh_cancel(test_session, make_files_structure, test_directory):
     """Refresh tasks can be canceled."""
     # Creat a lot of files so the refresh will take too long.

@@ -93,6 +93,21 @@ async def refresh_directory(_: Request, body: schema.DirectoryRefreshRequest):
     return response.empty()
 
 
+@bp.post('/refresh/list')
+@openapi.definition(
+    summary='Index all files in the provided list',
+    body=schema.FilesRefreshListRequest,
+)
+@validate(schema.FilesRefreshListRequest)
+@wrol_mode_check
+async def refresh_files_list(_: Request, body: schema.FilesRefreshListRequest):
+    if PYTEST:
+        await lib.refresh_files_list(body.files, body.include_files_near)
+    else:
+        background_task(lib.refresh_files_list(body.files, body.include_files_near))
+    return response.empty()
+
+
 @bp.post('/search')
 @openapi.definition(
     summary='Search Files',

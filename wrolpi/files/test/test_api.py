@@ -231,3 +231,14 @@ def test_directory_search(test_client, make_files_structure):
     assert_directories('foo', ['foo'])
     # Does not exist.
     assert_directories('food', [])
+
+
+def test_refresh_files_list(test_session, test_client, make_files_structure):
+    """The user can request to refresh specific files."""
+    make_files_structure(['bar.txt', 'bar.mp4'])
+
+    # Video file near `bar.txt` can be ignored.
+    content = json.dumps({'files': ['bar.txt'], 'include_files_near': False})
+    request, response = test_client.post('/api/files/refresh/list', content=content)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert test_session.query(File).count() == 1

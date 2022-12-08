@@ -27,6 +27,12 @@ class DirectoryRefreshRequest:
 
 
 @dataclass
+class FilesRefreshListRequest:
+    files: List[str] = None
+    include_files_near: bool = True
+
+
+@dataclass
 class DirectoriesRequest:
     search_str: Optional[str] = ''
 

@@ -1,5 +1,6 @@
 import asyncio
 import datetime
+import functools
 import glob
 import os
 import pathlib
@@ -16,7 +17,7 @@ from sqlalchemy.orm import Session
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
     get_files_and_directories, apply_modelers, apply_after_refresh, get_model_by_table_name, chunks_by_name, \
-    background_task
+    background_task, partition
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidFile
@@ -118,6 +119,7 @@ SUFFIXES = {
 }
 
 
+@functools.lru_cache()
 def split_path_stem_and_suffix(path: Union[pathlib.Path, str]) -> Tuple[str, str]:
     """Get the path's stem and suffix.
 
@@ -209,6 +211,55 @@ def cancelable_wrapper(func: callable):
         REFRESH_TASKS.append(task)
 
     return wrapped
+
+
+@wrol_mode_check
+async def refresh_files_list(paths: List[str], include_files_near: bool = True):
+    """Refresh a list of files.  Will not refresh directories or subdirectories.
+
+    Parameters:
+        paths: A list of files that need to be refreshed.  If not absolute, they are assumed to be relative to the
+               media directory.
+        include_files_near: If true, will also refresh files that share the stem of the provided files.
+    """
+    refresh_logger.info(f'Refreshing {len(paths)} files')
+
+    media_directory = get_media_directory()
+
+    # Convert all paths to absolute paths in the media directory.
+    paths = [pathlib.Path(i) for i in paths]
+    paths = [media_directory / i if not i.is_absolute() else i for i in paths]
+
+    if not paths:
+        raise FileNotFoundError('No files to refresh')
+
+    if include_files_near:
+        new_paths = []
+        for path in paths:
+            new_paths.extend(glob_shared_stem(path))
+        paths.extend(new_paths)
+
+    paths, deleted_paths = partition(lambda i: i.exists(), paths)
+
+    idempotency = now()
+    await _refresh_files_list(paths, idempotency)
+
+    # Delete any files near the paths that no longer exist.
+    paths_stems = [split_path_stem_and_suffix(i)[0] for i in paths]
+    paths_stems = [str(media_directory / i) for i in paths_stems]
+    with get_db_curs(commit=True) as curs:
+        # Get all paths that match the stems of these refreshed files.
+        params = dict(paths_stems=paths_stems, idempotency=idempotency)
+        curs.execute('''
+            UPDATE file SET idempotency = %(idempotency)s
+            WHERE full_stem = ANY (%(paths_stems)s)
+            RETURNING path
+        ''', params)
+        existing_paths = [pathlib.Path(i[0]) for i in curs.fetchall()]
+        # Delete any files which no longer exist.
+        deleted_paths.extend([i for i in existing_paths if not i.exists()])
+        deleted_paths = list(map(str, deleted_paths))
+        curs.execute('DELETE FROM file WHERE path = ANY(%(deleted_paths)s)', dict(deleted_paths=deleted_paths))
 
 
 @limit_concurrent(1)  # Only one refresh at a time.

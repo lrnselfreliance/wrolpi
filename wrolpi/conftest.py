@@ -232,6 +232,27 @@ def bad_vtt_file(test_directory) -> pathlib.Path:
 
 
 @pytest.fixture
+def example_pdf(test_directory) -> pathlib.Path:
+    destination = test_directory / 'example.pdf'
+    shutil.copy(PROJECT_DIR / 'test/example.pdf', destination)
+    yield destination
+
+
+@pytest.fixture
+def example_epub(test_directory) -> pathlib.Path:
+    destination = test_directory / 'example.epub'
+    shutil.copy(PROJECT_DIR / 'test/example.epub', destination)
+    yield destination
+
+
+@pytest.fixture
+def example_mobi(test_directory) -> pathlib.Path:
+    destination = test_directory / 'example.mobi'
+    shutil.copy(PROJECT_DIR / 'test/example.mobi', destination)
+    yield destination
+
+
+@pytest.fixture
 def make_files_structure(test_directory) -> Callable[[Union[List, Dict]], List[pathlib.Path]]:
     def create_files(paths: List) -> List[pathlib.Path]:
         files = []
@@ -277,7 +298,7 @@ def wrol_mode_fixture(test_config, test_download_manager):
 
 @pytest.fixture
 def mock_create_subprocess_shell():
-    def mocker(communicate_return=None, return_code=None, communicate_side_effect = None):
+    def mocker(communicate_return=None, return_code=None, communicate_side_effect=None):
         async def communicate(*a, **kw):
             if communicate_side_effect:
                 return communicate_side_effect()

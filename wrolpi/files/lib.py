@@ -28,11 +28,10 @@ try:
     import magic
 
     mime = magic.Magic(mime=True)
-
-    no_magic = False
 except ImportError:
     # Magic is not installed
-    no_magic = True
+    magic = None
+    mime = None
 
 logger = logger.getChild(__name__)
 
@@ -95,9 +94,20 @@ FILE_NAME_REGEX = re.compile(r'[_ .]')
 FILE_BIN = which('file', '/usr/bin/file')
 
 
+def _mimetype_suffix_map(path: Path, mimetype: str):
+    """Special handling for mimetypes.  Python Magic may not return the correct mimetype."""
+    from wrolpi.files.ebooks import MOBI_MIMETYPE
+    suffix = path.suffix.lower()
+    if mimetype == 'application/octet-stream' and suffix.endswith('.mobi'):
+        return MOBI_MIMETYPE
+    if mimetype == 'text/plain' and suffix.endswith('.json'):
+        return 'application/json'
+    return mimetype
+
+
 def get_mimetype(path: Path) -> str:
     """Get the mimetype of a file, prefer using `magic`, fallback to builtin `file` command."""
-    if no_magic:
+    if magic is None:
         # This method is slow, prefer the speedier `magic` module.
         cmd = (FILE_BIN, '--mime-type', str(path.absolute()))
         output = subprocess.check_output(cmd)
@@ -105,7 +115,9 @@ def get_mimetype(path: Path) -> str:
         mimetype = output.split(' ')[-1].strip()
         return mimetype
     else:
-        return mime.from_file(path)
+        mimetype = mime.from_file(path)
+    mimetype = _mimetype_suffix_map(path, mimetype)
+    return mimetype
 
 
 # Special suffixes within WROLPi.
@@ -328,17 +340,18 @@ async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str
     refresh_logger.info(f'Done refreshing files in {directory}')
 
 
-def search_files(search_str: str, limit: int, offset: int, mimetype: str = None, model: str = None) -> \
+def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None) -> \
         Tuple[List[dict], int]:
-    """
-    Search the Files table.  Order the returned Files by their rank if `search_str` is provided.  Return all files if
+    """Search the Files table.
+
+    Order the returned Files by their rank if `search_str` is provided.  Return all files if
     `search_str` is empty.
 
     Parameters:
         search_str: Search the ts_vector of the file.  Returns all files if this is empty.
         limit: Return only this many files.
         offset: Offset the query.
-        mimetype: Only return files that match this mimetype.
+        mimetypes: Only return files that match these mimetypes.
         model: Only return files that match this model.
     """
     params = dict(offset=offset, limit=limit)
@@ -352,12 +365,17 @@ def search_files(search_str: str, limit: int, offset: int, mimetype: str = None,
         selects.append('ts_rank(textsearch, websearch_to_tsquery(%(search_str)s))')
         order_by = '2 DESC'
 
-    if mimetype and len(mimetype.split('/')) == 1:
-        params['mimetype'] = f'{mimetype}/%'
-        wheres.append('mimetype LIKE %(mimetype)s')
-    elif mimetype:
-        wheres.append('mimetype = %(mimetype)s')
-        params['mimetype'] = mimetype
+    if mimetypes:
+        mimetype_wheres = []
+        for idx, mimetype in enumerate(mimetypes):
+            key = f'mimetype{idx}'
+            if len(mimetype.split('/')) == 1:
+                params[key] = f'{mimetype}/%'
+            else:
+                params[key] = f'{mimetype}%'
+            mimetype_wheres.append(f'mimetype LIKE %({key})s')
+        mimetype_wheres = ' OR '.join(mimetype_wheres)
+        wheres.append(f'({mimetype_wheres})')
 
     if model:
         params['model'] = model

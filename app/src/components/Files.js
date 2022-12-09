@@ -6,6 +6,7 @@ import {
     CardHeader,
     CardMeta,
     Confirm,
+    Container,
     Divider,
     Dropdown,
     Image,
@@ -17,6 +18,8 @@ import 'react-keyed-file-browser/dist/react-keyed-file-browser.css';
 import {deleteFile, refreshDirectoryFiles, refreshFiles} from "../api";
 import {
     CardGroupCentered,
+    CardPosterLink,
+    epochToDateString,
     ExternalCardLink,
     FileIcon,
     humanFileSize,
@@ -25,7 +28,6 @@ import {
     PageContainer,
     Paginator,
     textEllipsis,
-    epochToDateString,
     useTitle
 } from "./Common";
 import {useBrowseFiles, useQuery, useSearchFiles} from "../hooks/customHooks";
@@ -37,6 +39,7 @@ import {ThemeContext} from "../contexts/contexts";
 import {Button, Card, CardIcon, Header, Icon, Placeholder, Segment} from "./Theme";
 import {SelectableTable} from "./Tables";
 import {VideoCard, VideoRowCells} from "./Videos";
+import _ from 'lodash';
 
 const icons = {
     File: <Icon name='file'/>,
@@ -142,6 +145,42 @@ export function Files() {
     </>
 }
 
+function EbookCard({file}) {
+    const {s} = useContext(ThemeContext);
+    const url = `/media/${encodeURIComponent(file.path)}`;
+    let {ebook, suffix} = file;
+    const coverSrc = ebook && ebook.cover_path ? `/media/${encodeURIComponent(ebook.cover_path)}` : null;
+
+    let cover = <CardIcon><FileIcon file={file}/></CardIcon>;
+    if (coverSrc) {
+        cover = <CardPosterLink to={url} poster_url={coverSrc} external={true}/>;
+    }
+
+    suffix = suffix ? _.trimStart(suffix, '.').toUpperCase() : null;
+
+    const color = mimetypeColor(file.mimetype);
+    return <Card color={color}>
+        {cover}
+        <CardContent {...s}>
+            <CardHeader>
+                <Container textAlign='left'>
+                    <ExternalCardLink to={url}>{ebook ? ebook.title : file.title}</ExternalCardLink>
+                </Container>
+            </CardHeader>
+            <CardDescription>
+                <Container textAlign='left'>
+                    <b {...s}>{ebook ? ebook.creator : null}</b>
+                </Container>
+            </CardDescription>
+            <CardMeta>
+                <p {...s}>{ebook ? humanFileSize(ebook.size) : null}</p>
+                <pre {...s}>{suffix}</pre>
+            </CardMeta>
+        </CardContent>
+    </Card>
+
+}
+
 function ImageCard({file}) {
     const {s} = useContext(ThemeContext);
     const url = `/media/${encodeURIComponent(file.path)}`;
@@ -184,6 +223,10 @@ function FileCard({file}) {
         return <ArchiveCard key={file['path']} file={file}/>;
     } else if (file.mimetype && file.mimetype.startsWith('image/')) {
         return <ImageCard key={file['path']} file={file}/>;
+    } else if (file.mimetype && (
+        file.mimetype.startsWith('application/epub') || file.mimetype.startsWith('application/x-mobipocket-ebook')
+    )) {
+        return <EbookCard key={file['path']} file={file}/>;
     }
 
     const url = `/media/${encodeURIComponent(file.path)}`;
@@ -399,26 +442,27 @@ export function FilesSearchView({
                                     showSelect = false,
                                     emptySearch = false,
                                     filterOptions,
-                                    mimetype,
                                     model,
                                     onSelect,
                                     setFilters,
                                 }) {
-    const {searchFiles, limit, setLimit, totalPages, activePage, setPage} =
-        useSearchFiles(24, emptySearch, mimetype, model);
+    filterOptions = filterOptions || [
+        {key: 'video', text: 'Video', value: 'video'},
+        {key: 'archive', text: 'Archive', value: 'archive'},
+        {key: 'pdf', text: 'PDF', value: 'pdf'},
+        {key: 'ebook', text: 'eBook', value: 'ebook'},
+        {key: 'image', text: 'Image', value: 'image'},
+        {key: 'zip', text: 'ZIP', value: 'zip'},
+    ];
+
+    const {searchFiles, limit, setLimit, totalPages, activePage, setPage, filter} =
+        useSearchFiles(24, emptySearch, model);
 
     const {searchParams, updateQuery} = useQuery();
     const setView = (value) => updateQuery({view: value});
     const view = searchParams.get('view');
 
-    const setMimetype = (value) => updateQuery({'mimetype': value});
-    filterOptions = filterOptions || [
-        {key: 'video', text: 'Video', value: 'video'},
-        {key: 'archive', text: 'Archive', value: 'text/html'},
-        {key: 'pdf', text: 'PDF', value: 'application/pdf'},
-        {key: 'zip', text: 'ZIP', value: 'application/zip'},
-        {key: 'image', text: 'Image', value: 'image'},
-    ];
+    const setFilter = (value) => updateQuery({'filter': value});
 
     return <FilesView
         files={searchFiles}
@@ -434,7 +478,7 @@ export function FilesSearchView({
         onSelect={onSelect}
         setPage={setPage}
         filterOptions={filterOptions}
-        setFilters={setFilters || setMimetype}
+        setFilters={setFilters || setFilter}
     />
 }
 

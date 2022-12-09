@@ -25,7 +25,7 @@ import {
 } from "../api";
 import {createSearchParams, useSearchParams} from "react-router-dom";
 import {toast} from "react-semantic-toasts";
-import {enumerate, humanFileSize, secondsToFullDuration} from "../components/Common";
+import {enumerate, filterToMimetypes, humanFileSize, secondsToFullDuration} from "../components/Common";
 import {StatusContext} from "../contexts/contexts";
 
 const calculatePage = (offset, limit) => {
@@ -386,12 +386,12 @@ export const useChannels = () => {
     return {channels, fetchChannels}
 }
 
-export const useSearchFiles = (defaultLimit = 48, emptySearch = false, mimetype, model) => {
+export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) => {
     const {searchParams, updateQuery} = useQuery();
     const limit = searchParams.get('l') || defaultLimit;
     const offset = searchParams.get('o') || 0;
     const searchStr = searchParams.get('q');
-    const mimetype_ = searchParams.get('mimetype');
+    const filter = searchParams.get('filter');
     const model_ = searchParams.get('model');
 
     const [searchFiles, setSearchFiles] = useState(null);
@@ -402,11 +402,12 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, mimetype,
         if (!emptySearch && !searchStr) {
             return;
         }
+        const mimetypes = filterToMimetypes(filter);
         setSearchFiles(null);
         setTotalPages(0);
         try {
             let [files, total] = await filesSearch(
-                offset, limit, searchStr, mimetype || mimetype_, model || model_);
+                offset, limit, searchStr, mimetypes, model || model_);
             setSearchFiles(files);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
@@ -422,7 +423,7 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, mimetype,
 
     useEffect(() => {
         localSearchFiles();
-    }, [searchStr, limit, offset, activePage, mimetype, mimetype_, model, model_]);
+    }, [searchStr, limit, offset, activePage, filter, model, model_]);
 
     const setPage = (i) => {
         i = parseInt(i);
@@ -440,7 +441,7 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, mimetype,
         updateQuery({l: value, o: 0});
     }
 
-    return {searchFiles, totalPages, limit, searchStr, mimetype, setSearchStr, activePage, setPage, setLimit};
+    return {searchFiles, totalPages, limit, searchStr, filter, setSearchStr, activePage, setPage, setLimit};
 }
 
 export const useBrowseFiles = () => {

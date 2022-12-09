@@ -115,7 +115,7 @@ async def refresh_files_list(_: Request, body: schema.FilesRefreshListRequest):
 )
 @validate(schema.FilesSearchRequest)
 async def post_search_files(_: Request, body: schema.FilesSearchRequest):
-    files, total = lib.search_files(body.search_str, body.limit, body.offset, body.mimetype, body.model)
+    files, total = lib.search_files(body.search_str, body.limit, body.offset, body.mimetypes, body.model)
     return json_response(dict(files=files, totals=dict(files=total)))
 
 

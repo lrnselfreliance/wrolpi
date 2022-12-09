@@ -423,16 +423,24 @@ export function CardGroupCentered(props) {
     </div>)
 }
 
-export function CardPosterLink({to, poster_url, imageLabel}) {
+export function CardPosterLink({to, poster_url, imageLabel, external = false}) {
     const {s} = useContext(ThemeContext);
     const style = {display: 'flex', justifyContent: 'center', ...s['style']};
-    return <Link to={to} style={style}>
-        <Image fluid
-               src={poster_url}
-               label={imageLabel}
-               style={{maxHeight: '163px', width: 'auto'}}
-        />
-    </Link>
+    const image = <Image fluid
+                         src={poster_url}
+                         label={imageLabel}
+                         style={{maxHeight: '163px', width: 'auto'}}
+    />;
+    if (external === true) {
+        return <a href={to} target='_blank' style={style}>
+            {image}
+        </a>
+    } else {
+        // Link using React Router.
+        return <Link to={to} style={style}>
+            {image}
+        </Link>
+    }
 }
 
 export function HelpPopup({icon, size, content, position}) {
@@ -567,6 +575,9 @@ export function mimetypeColor(mimetype) {
             return 'green'
         } else if (mimetype && mimetype.startsWith('application/zip')) {
             return 'purple'
+        } else if (mimetype && (
+            mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook'))) {
+            return 'yellow'
         }
     } catch (e) {
         console.error(e);
@@ -595,6 +606,8 @@ export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
             props['name'] = 'file archive';
         } else if (mimetype.startsWith('application/x-iso9660-image')) {
             props['name'] = 'dot circle';
+        } else if (mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook')) {
+            props['name'] = 'book';
         }
     }
     return <Icon disabled={disabled} size={size} {...props}/>
@@ -762,4 +775,20 @@ export const ColorToSemanticHexColor = (color) => {
         grey: '#767676',
     }
     return colorMap[color] || null;
+}
+
+export const filterToMimetypes = (filter) => {
+    if (filter === 'video') {
+        return ['video'];
+    } else if (filter === 'archive') {
+        return ['text/html'];
+    } else if (filter === 'pdf') {
+        return ['application/pdf'];
+    } else if (filter === 'ebook') {
+        return ['application/epub+zip', 'application/x-mobipocket-ebook'];
+    } else if (filter === 'image') {
+        return ['image'];
+    } else if (filter === 'zip') {
+        return ['application/zip'];
+    }
 }

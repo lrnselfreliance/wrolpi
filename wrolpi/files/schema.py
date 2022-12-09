@@ -17,7 +17,7 @@ class FilesSearchRequest:
     search_str: Optional[str] = None
     limit: Optional[int] = 20
     offset: Optional[int] = 0
-    mimetype: Optional[str] = None
+    mimetypes: List[str] = field(default_factory=list)
     model: Optional[str] = None
 
 

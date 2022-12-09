@@ -484,10 +484,10 @@ const replaceFileDatetimes = (files) => {
     return files;
 }
 
-export async function filesSearch(offset, limit, searchStr, mimetype, model) {
+export async function filesSearch(offset, limit, searchStr, mimetypes, model) {
     const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit)};
-    if (mimetype) {
-        body['mimetype'] = mimetype;
+    if (mimetypes) {
+        body['mimetypes'] = mimetypes;
     }
     if (model) {
         body['model'] = model;

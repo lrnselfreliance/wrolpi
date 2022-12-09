@@ -469,3 +469,25 @@ def test_matching_directories(make_files_structure, test_directory):
     # foo is an exact match, return subdirectories
     matches = lib.get_matching_directories(test_directory / 'foo')
     assert matches == [str(test_directory / 'foo/qux')]
+
+
+def test_pdf_indexer(example_pdf):
+    """PDFs can be indexed by PDFIndexer."""
+    file = File(path=example_pdf)
+
+    a_text, b_text, c_text, d_text = indexers.PDFIndexer.create_index(file)
+
+    # The file name.
+    assert a_text == ('example', '.pdf')
+    assert b_text is None
+    assert c_text is None
+    # Both pages of the example PDF are extracted.
+    assert d_text == 'Page one\nPage two'
+
+
+def test_get_mimetype(example_epub, example_mobi, example_pdf, image_file, video_file):
+    assert lib.get_mimetype(example_epub) == 'application/epub+zip'
+    assert lib.get_mimetype(example_mobi) == 'application/x-mobipocket-ebook'
+    assert lib.get_mimetype(example_pdf) == 'application/pdf'
+    assert lib.get_mimetype(image_file) == 'image/jpeg'
+    assert lib.get_mimetype(video_file) == 'video/mp4'

@@ -48,7 +48,7 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 
 # Demo
 
-<a href="https://www.youtube.com/watch?v=g0Do_mlQcBU"> ![YouTube Demo Video](https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/demo_link.jpg)</a>
+<a href="https://www.youtube.com/watch?v=Qz-FuenRylQ"> ![YouTube Demo Video](https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/demo_link.jpg)</a>
 
 # Try WROLPi!
 

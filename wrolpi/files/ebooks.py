@@ -198,9 +198,7 @@ class EBook(ModelHelper, Base):
 
 
 def model_ebook(session: Session, ebook_file: File, files: List[File]) -> EBook:
-    """
-    Creates an EBook model based off a File.  Searches for it's cover in the provided `files`.
-    """
+    """Creates an EBook model based off a File.  Searches for it's cover in the provided `files`."""
     # Multiple formats may share this cover.
     cover_file = next((i for i in files if i.mimetype.split('/')[0] == 'image'), None)
 
@@ -213,8 +211,9 @@ def model_ebook(session: Session, ebook_file: File, files: List[File]) -> EBook:
 
     ebook.ebook_file.do_index()
 
-    index = size != ebook.size or cover_file != ebook.cover_file or not ebook.title
-    if not ebook.ebook_file.indexed or index:
+    # Only index if it hasn't been done, or if the file has changed.
+    changed = size != ebook.size or cover_file != ebook.cover_file or not ebook.title
+    if not ebook.ebook_file.indexed or changed:
         try:
             # Only read the contents of the file if it has changed.
             data = extract_ebook_data(ebook_file.path, ebook_file.mimetype)

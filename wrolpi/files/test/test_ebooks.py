@@ -1,6 +1,7 @@
 import json
 import shutil
 from http import HTTPStatus
+from unittest import mock
 
 import pytest
 
@@ -43,6 +44,11 @@ async def test_index(test_session, test_directory, example_epub, example_mobi):
     example_epub.unlink()
     await refresh_files()
     assert test_session.query(EBook).count() == 0
+
+    # Extract/index should only be done once.
+    with mock.patch('wrolpi.files.ebooks.extract_ebook_data') as mock_extract_ebook_data:
+        mock_extract_ebook_data.side_effect = Exception('extract_ebook_data should not be called again')
+        await refresh_files()
 
 
 def test_search(test_session, test_client, example_epub):

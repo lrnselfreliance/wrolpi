@@ -102,6 +102,8 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
         return MOBI_MIMETYPE
     if mimetype == 'text/plain' and suffix.endswith('.json'):
         return 'application/json'
+    if mimetype == 'text/plain' and suffix.endswith('.vtt'):
+        return 'text/vtt'
     return mimetype
 
 
@@ -177,7 +179,7 @@ async def _refresh_files_list(paths: List[pathlib.Path], idempotency: datetime.d
 
         if idx > 0:
             parent = all_files[0].path.parent
-            refresh_logger.debug(f'Committed chunk of {len(chunk)} files in {parent}')
+            refresh_logger.debug(f'Committed chunk of {len(chunk)} files.  Refreshing near {parent}')
 
         # Sleep between chunks to catch cancel.
         await asyncio.sleep(0)
@@ -234,7 +236,7 @@ async def refresh_files_list(paths: List[str], include_files_near: bool = True):
                media directory.
         include_files_near: If true, will also refresh files that share the stem of the provided files.
     """
-    refresh_logger.info(f'Refreshing {len(paths)} files')
+    refresh_logger.info(f'Refreshing {len(paths)} files list')
 
     media_directory = get_media_directory()
 
@@ -272,6 +274,10 @@ async def refresh_files_list(paths: List[str], include_files_near: bool = True):
         deleted_paths.extend([i for i in existing_paths if not i.exists()])
         deleted_paths = list(map(str, deleted_paths))
         curs.execute('DELETE FROM file WHERE path = ANY(%(deleted_paths)s)', dict(deleted_paths=deleted_paths))
+
+    apply_after_refresh()
+
+    refresh_logger.info('Done refreshing files list')
 
 
 @limit_concurrent(1)  # Only one refresh at a time.

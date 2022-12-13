@@ -95,7 +95,7 @@ async def refresh_directory(_: Request, body: schema.DirectoryRefreshRequest):
 
 @bp.post('/refresh/list')
 @openapi.definition(
-    summary='Index all files in the provided list',
+    summary='Refresh and index all files in the provided list',
     body=schema.FilesRefreshListRequest,
 )
 @validate(schema.FilesRefreshListRequest)

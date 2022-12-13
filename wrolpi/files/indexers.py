@@ -22,9 +22,10 @@ class Indexer(object):
 
     @staticmethod
     def get_title(file):
-        from wrolpi.files.lib import split_path_stem_and_suffix
+        from wrolpi.files.lib import split_file_name_words
         path = file.path.path if hasattr(file.path, 'path') else file.path
-        return split_path_stem_and_suffix(path)
+        words = split_file_name_words(path.name)
+        return words
 
     @classmethod
     def create_index(cls, file) -> Tuple:
@@ -141,17 +142,18 @@ class PDFIndexer(Indexer, ABC):
     def create_index(cls, file):
         path = file.path.path if hasattr(file.path, 'path') else file.path
         a = cls.get_title(file)
+        words = ''
         try:
             # PDFs are complex, don't fail to create title index if text extraction fails.
             words = cls.get_words(path)
         except Exception as e:
             logger.error(f'Failed to index {path}', exc_info=e)
-            words = ''
         return a, None, None, words
 
     @classmethod
     def get_words(cls, path: pathlib.Path) -> str:
         if PdfReader is None:
+            logger.error(f'Cannot index {path} PyPDF2 is not installed.')
             return ''
 
         reader = PdfReader(path)

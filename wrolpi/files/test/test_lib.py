@@ -397,6 +397,17 @@ async def test_files_indexer(test_session, make_files_structure, test_directory)
     assert total == 1
 
 
+@pytest.mark.parametrize('name,expected', [
+    ('this.txt', ['this', 'txt']),
+    ('name', ['name']),
+    ('name two', ['name', 'two']),
+    ('this self-reliance_split.txt', ['this', 'self', 'reliance', 'self-reliance', 'split', 'txt']),
+    ('-be_split!.txt', ['-be', 'split!', 'txt']),
+])
+def test_split_file_name_words(name, expected):
+    assert lib.split_file_name_words(name) == expected
+
+
 @pytest.mark.asyncio
 async def test_large_text_indexer(test_session, make_files_structure):
     """
@@ -478,7 +489,7 @@ def test_pdf_indexer(example_pdf):
     a_text, b_text, c_text, d_text = indexers.PDFIndexer.create_index(file)
 
     # The file name.
-    assert a_text == ('example', '.pdf')
+    assert a_text == ['example', 'pdf']
     assert b_text is None
     assert c_text is None
     # Both pages of the example PDF are extracted.

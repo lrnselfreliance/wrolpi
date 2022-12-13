@@ -1026,3 +1026,8 @@ def get_warn_once(message: str, logger_: logging.Logger, level=logging.ERROR):
             event.set()
 
     return warn_once
+
+
+def ordered_unique_list(lst: Iterable) -> List:
+    """Return a new list that contains only the first occurrence of each item."""
+    return list(dict.fromkeys(lst))

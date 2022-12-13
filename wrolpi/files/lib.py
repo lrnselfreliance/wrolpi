@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
     get_files_and_directories, apply_modelers, apply_after_refresh, get_model_by_table_name, chunks_by_name, \
-    background_task, partition
+    background_task, partition, ordered_unique_list
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidFile
@@ -35,7 +35,8 @@ except ImportError:
 
 logger = logger.getChild(__name__)
 
-__all__ = ['list_files', 'delete_file', 'split_path_stem_and_suffix', 'refresh_files', 'search_files', 'get_mimetype']
+__all__ = ['list_files', 'delete_file', 'split_path_stem_and_suffix', 'refresh_files', 'search_files', 'get_mimetype',
+           'split_file_name_words']
 
 
 def filter_parent_directories(directories: List[Path]) -> List[Path]:
@@ -526,3 +527,36 @@ def get_matching_directories(path: Union[str, Path]) -> List[str]:
         i for i in paths if os.path.isdir(i) and i.lower().startswith(pattern) and i not in ignored_directories)
 
     return paths
+
+
+WHITESPACE = re.compile(r'[\s_]')
+
+
+def split_file_name_words(name: str) -> List[str]:
+    """Split words in a filename.
+
+    Words are assumed to be separated by underscore, dash, or space.  Words with a dash are included as a group, and
+    individually ('self-reliance' -> ['self', 'reliance', 'self-reliance']).
+
+    >>> split_file_name_words('this self-reliance_split.txt')
+    ['this', 'self', 'reliance', 'self-reliance', 'split', 'txt']
+    """
+    if not name:
+        raise ValueError(f'Invalid filename: {name}')
+
+    try:
+        name2, suffix = split_path_stem_and_suffix(name)
+        words = []
+        for word1 in WHITESPACE.split(name2):
+            if '-' in word1[1:]:
+                words.extend(word1.split('-'))
+            words.append(word1)
+        # Include the suffix so the user can search without the "."
+        if suffix:
+            words.append(suffix.lstrip('.'))
+
+        words = ordered_unique_list(words)
+        return words
+    except Exception as e:
+        logger.error(f'Failed to split filename into words: {name}', exc_info=e)
+        return [name]

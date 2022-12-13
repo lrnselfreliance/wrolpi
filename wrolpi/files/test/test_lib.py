@@ -318,8 +318,6 @@ async def test_mime_type(test_session, make_files_structure, test_directory):
 async def test_files_indexer(test_session, make_files_structure, test_directory):
     """An Indexer is provided for each file based on it's mimetype or contents."""
     source_files: List[str] = [
-        'a bzip file.bzip',
-        'a gzip file.gzip',
         'a text file.txt',
         'a zip file.zip',
         'images/an image file.jpeg',
@@ -327,17 +325,13 @@ async def test_files_indexer(test_session, make_files_structure, test_directory)
         'videos/a video file.info.json',  # This is "associated" and will be hidden.
         'videos/a video file.mp4',
     ]
-    bzip_path, gzip_path, text_path, zip_path, image_path, unknown_path, info_json_path, video_path \
+    text_path, zip_path, image_path, unknown_path, info_json_path, video_path \
         = make_files_structure(source_files)
     text_path.write_text('text file contents')
     Image.new('RGB', (25, 25), color='grey').save(image_path)
     shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', video_path)
     with zipfile.ZipFile(zip_path, 'w') as zip_file:
         zip_file.write(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4')
-    with zipfile.ZipFile(bzip_path, 'w') as bzip_file:
-        bzip_file.write(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4')
-    with zipfile.ZipFile(gzip_path, 'w') as gzip_file:
-        gzip_file.write(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4')
     info_json_path.write_text(json.dumps({'description': 'the video description'}))
 
     # Enable slow feature for testing.
@@ -345,12 +339,10 @@ async def test_files_indexer(test_session, make_files_structure, test_directory)
     with mock.patch('modules.videos.EXTRACT_SUBTITLES', True):
         await lib.refresh_files()
 
-    bzip_file, gzip_file, text_file, zip_file, image_file, unknown_file, info_json_file, video_file \
+    text_file, zip_file, image_file, unknown_file, info_json_file, video_file \
         = test_session.query(File).order_by(File.path)
 
     # Indexers are detected correctly.
-    assert bzip_file.path.suffix == '.bzip' and bzip_file.indexer == indexers.ZipIndexer
-    assert gzip_file.path.suffix == '.gzip' and gzip_file.indexer == indexers.ZipIndexer
     assert text_file.path.suffix == '.txt' and text_file.indexer == indexers.TextIndexer
     assert zip_file.path.suffix == '.zip' and zip_file.indexer == indexers.ZipIndexer
     assert image_file.path.suffix == '.jpeg' and image_file.indexer == indexers.DefaultIndexer
@@ -362,8 +354,6 @@ async def test_files_indexer(test_session, make_files_structure, test_directory)
     def assert_file_properties(file: File, suffix, directory, stem):
         assert file.suffix == suffix and file.directory == directory and file.stem == stem
 
-    assert_file_properties(bzip_file, '.bzip', test_directory, 'a bzip file')
-    assert_file_properties(gzip_file, '.gzip', test_directory, 'a gzip file')
     assert_file_properties(text_file, '.txt', test_directory, 'a text file')
     assert_file_properties(zip_file, '.zip', test_directory, 'a zip file')
     assert_file_properties(image_file, '.jpeg', test_directory / 'images', 'an image file')
@@ -373,7 +363,7 @@ async def test_files_indexer(test_session, make_files_structure, test_directory)
 
     # File are indexed by their titles and contents.
     files, total = lib.search_files('file', 10, 0)
-    assert total == 7, 'All files contain "file" in their file name.  The associated video file is hidden.'
+    assert total == 5, 'All files contain "file" in their file name.  The associated video file is hidden.'
     files, total = lib.search_files('image', 10, 0)
     assert total == 1 and files[0]['title'] == 'an image file.jpeg', 'The image file title contains "image".'
     files, total = lib.search_files('contents', 10, 0)
@@ -383,8 +373,8 @@ async def test_files_indexer(test_session, make_files_structure, test_directory)
     files, total = lib.search_files('yawn', 10, 0)
     assert total == 1 and files[0]['title'] == 'a video file.mp4', 'The video file captions contain "yawn".'
     files, total = lib.search_files('bunny', 10, 0)
-    assert total == 3 and {i['title'] for i in files} == {'a zip file.zip', 'a bzip file.bzip', 'a gzip file.gzip'}, \
-        'The zip files contain a file with "bunny" in the title.'
+    assert total == 1 and {i['title'] for i in files} == {'a zip file.zip'}, \
+        'The zip file contains a file with "bunny" in the title.'
 
     with mock.patch('modules.videos.VideoIndexer.create_index') as mock_create_index:
         mock_create_index.side_effect = Exception('This should not be called twice')

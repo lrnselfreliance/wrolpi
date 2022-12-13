@@ -77,9 +77,9 @@ def register_indexer(*mimetypes: str):
     return wrapper
 
 
-@register_indexer('application/gzip', 'application/x-bzip2', 'application/zip')
+@register_indexer('application/zip')
 class ZipIndexer(Indexer, ABC):
-    """Handles archive files lik zip/gzip/bzip."""
+    """Handles archive files lik zip."""
 
     @classmethod
     def create_index(cls, file):
@@ -91,9 +91,10 @@ class ZipIndexer(Indexer, ABC):
     def get_file_names(cls, file) -> List[str]:
         """Return all the names of the files in the zip file."""
         path = file.path.path if hasattr(file.path, 'path') else file.path
+        from wrolpi.files.lib import split_file_name_words
         try:
             with ZipFile(path, 'r') as zip_:
-                file_names = [pathlib.Path(name).name for name in zip_.namelist()]
+                file_names = [' '.join(split_file_name_words(pathlib.Path(name).name)) for name in zip_.namelist()]
                 return file_names
         except Exception as e:
             logger.error(f'Unable to get information from zip: {path}', exc_info=e)

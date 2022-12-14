@@ -9,6 +9,7 @@ from wrolpi.common import Base, ModelHelper, get_media_directory, tsvector, logg
 from wrolpi.dates import TZDateTime, from_timestamp, now
 from wrolpi.files.indexers import MAX_TEXT_FILE_BYTES
 from wrolpi.media_path import MediaPathType
+from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
@@ -104,15 +105,20 @@ class File(ModelHelper, Base):
                 # Get the indexer on a separate line for debugging.
                 indexer = self.indexer
                 # Only read the contents of the file once.
+                start = now()
                 a_text, b_text, c_text, d_text = indexer.create_index(self)
                 self.a_text = truncate_object_bytes(a_text, MAX_TEXT_FILE_BYTES)
                 self.b_text = truncate_object_bytes(b_text, MAX_TEXT_FILE_BYTES)
                 self.c_text = truncate_object_bytes(c_text, MAX_TEXT_FILE_BYTES)
                 self.d_text = truncate_object_bytes(d_text, MAX_TEXT_FILE_BYTES)
+                if (total_seconds := (now() - start).total_seconds()) > 1:
+                    logger.info(f'Indexing {self.path} took {total_seconds} seconds')
 
             self.indexed = True
         except Exception as e:
             logger.error(f'Failed to index {self.path}', exc_info=e)
+            if PYTEST:
+                raise
 
     def do_stats(self) -> bool:
         """Assign the mimetype, title, size, modification_time of this file.

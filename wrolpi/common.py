@@ -39,6 +39,8 @@ formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(messag
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
+logger_ = logger.getChild(__name__)
+
 __all__ = [
     'logger',
     'Base',
@@ -364,7 +366,7 @@ def enable_wrol_mode(download_manager=None):
 
     Stop downloads and Download Manager.
     """
-    logger.warning('ENABLING WROL MODE')
+    logger_.warning('ENABLING WROL MODE')
     get_config().wrol_mode = True
     if not download_manager:
         from wrolpi.downloader import download_manager
@@ -380,7 +382,7 @@ def disable_wrol_mode(download_manager=None):
 
     Start downloads and Download Manager.
     """
-    logger.warning('DISABLING WROL MODE')
+    logger_.warning('DISABLING WROL MODE')
     get_config().wrol_mode = False
     if not download_manager:
         from wrolpi.downloader import download_manager
@@ -511,16 +513,16 @@ def check_media_directory():
     result = True
     media_directory = get_media_directory()
     if not media_directory.is_dir():
-        logger.error(f'Media directory does not exist: {media_directory}')
+        logger_.error(f'Media directory does not exist: {media_directory}')
         result = False
 
     permissions = media_directory.stat().st_mode
     if permissions != MEDIA_DIRECTORY_PERMISSIONS:
-        logger.error(f'Media directory has the wrong permissions: {oct(permissions)}')
+        logger_.error(f'Media directory has the wrong permissions: {oct(permissions)}')
         result = False
 
     if not media_directory.is_mount():
-        logger.warning('Media directory is not a mount.')
+        logger_.warning('Media directory is not a mount.')
 
     try:
         # Write a file into the media directory, log an error if this is not possible.  This file should be cleaned up
@@ -528,7 +530,7 @@ def check_media_directory():
         with tempfile.NamedTemporaryFile(dir=media_directory) as tf:
             tf.write(b'test')
     except Exception as e:
-        logger.error(f'Could not write to media directory: {media_directory}', exc_info=e)
+        logger_.error(f'Could not write to media directory: {media_directory}', exc_info=e)
         result = False
 
     return result
@@ -605,12 +607,12 @@ def import_modules():
     imported = []
     for module_name in modules:
         module = f'modules.{module_name}.api'
-        logger.debug(f'Importing {module}')
+        logger_.debug(f'Importing {module}')
         try:
             __import__(module, globals(), locals(), [], 0)
             imported.append(module_name)
         except ImportError as e:
-            logger.fatal(f'Unable to import {module}', exc_info=e)
+            logger_.fatal(f'Unable to import {module}', exc_info=e)
     return imported
 
 
@@ -802,6 +804,7 @@ def register_modeler(modeler: callable):
 
 def apply_modelers(files, session: Session):
     from wrolpi.files.lib import split_path_stem_and_suffix, get_mimetype
+    from wrolpi.files.models import File
 
     if not files:
         return
@@ -821,9 +824,13 @@ def apply_modelers(files, session: Session):
         modeler(groups, session)
 
     for stem, group in groups.items():
-        # Index any files that were not claimed by modelers.
+        # Re-index files that have changed size.
         for file in group:
-            file.do_index()
+            file: File
+
+            if file.size != (size := file.path.stat().st_size):
+                file.size = size
+                file.indexed = False
 
 
 after_refresh = []
@@ -836,7 +843,7 @@ def register_after_refresh(func: callable):
 
 def apply_after_refresh():
     for func in after_refresh:
-        logger.info(f'Applying after-refresh {func.__name__}')
+        logger_.info(f'Applying after-refresh {func.__name__}')
         func()
 
 
@@ -912,7 +919,7 @@ def timer(name):
     try:
         yield
     finally:
-        logger.warning(f'{name} elapsed {(datetime.now() - before).total_seconds()} seconds')
+        logger_.warning(f'{name} elapsed {(datetime.now() - before).total_seconds()} seconds')
 
 
 TIMERS = dict()
@@ -1000,6 +1007,18 @@ def truncate_object_bytes(obj: Union[List[str], str, None], maximum_bytes: int) 
     return truncate_object_bytes(obj, maximum_bytes)
 
 
+def truncate_generator_bytes(gen: Generator, maximum_bytes: int) -> Generator:
+    """Yield from a generator until the chunk sizes go over the maximum_bytes."""
+    total_size = 0
+    while total_size < maximum_bytes:
+        try:
+            chunk = next(gen)
+            total_size += sys.getsizeof(chunk)
+            yield chunk
+        except StopIteration:
+            return
+
+
 BACKGROUND_TASKS = set()
 
 
@@ -1014,7 +1033,7 @@ def background_task(coro) -> Task:
     return task
 
 
-def get_warn_once(message: str, logger_: logging.Logger, level=logging.ERROR):
+def get_warn_once(message: str, logger__: logging.Logger, level=logging.ERROR):
     """Create a function that will report an error only once.
 
     This is used when a function will be called many times, but the error is not important."""
@@ -1022,7 +1041,7 @@ def get_warn_once(message: str, logger_: logging.Logger, level=logging.ERROR):
 
     def warn_once(exception: Exception):
         if not event.is_set():
-            logger_.log(level, message, exc_info=exception)
+            logger__.log(level, message, exc_info=exception)
             event.set()
 
     return warn_once

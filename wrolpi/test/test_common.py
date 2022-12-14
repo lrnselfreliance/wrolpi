@@ -349,6 +349,18 @@ def test_truncate_object_bytes():
     assert common.truncate_object_bytes('foo' * 100, 0) == ''
 
 
+def test_truncate_generator_bytes():
+    """A generator can be truncated."""
+
+    def generator():
+        for _ in range(5):
+            yield 'foo'
+        raise ValueError('Truncate should not get here')
+
+    assert list(common.truncate_generator_bytes(generator(), 80)) == ['foo', 'foo']
+    assert list(common.truncate_generator_bytes(generator(), 200)) == ['foo', 'foo', 'foo', 'foo']
+
+
 def test_check_media_directory(test_directory):
     """The directory provided by the test_directory fixture is a valid media directory."""
     assert common.check_media_directory() is True

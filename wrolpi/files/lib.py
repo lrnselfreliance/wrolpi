@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
     get_files_and_directories, apply_modelers, apply_after_refresh, get_model_by_table_name, chunks_by_stem, \
-    background_task, partition, ordered_unique_list
+    background_task, partition, ordered_unique_list, chunks
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidFile
@@ -217,6 +217,7 @@ async def cancel_refresh_tasks():
 
 
 def cancelable_wrapper(func: callable):
+    """Wraps an async function so that it will be canceled by `cancel_refresh_tasks`."""
     @wraps(func)
     async def wrapped(*args, **kwargs):
         if PYTEST:
@@ -226,6 +227,45 @@ def cancelable_wrapper(func: callable):
         REFRESH_TASKS.append(task)
 
     return wrapped
+
+
+@cancelable_wrapper
+async def apply_indexers():
+    """Finds all Files that have not been indexed and indexes them."""
+    from wrolpi.files.models import File
+    from wrolpi.db import get_db_session, get_db_curs
+
+    with get_db_curs() as curs:
+        curs.execute('SELECT path FROM file WHERE indexed = false AND associated = false')
+        missing_index = [pathlib.Path(i[0]) for i in curs.fetchall()]
+
+    refresh_logger.info(f'Indexing {len(missing_index)} files')
+
+    # Indexing can be slow, commit when its been too long.
+    last_commit = now()
+    max_seconds_between_commits = 30
+
+    for chunk in chunks(missing_index, 100):
+        with get_db_session(commit=True) as session:
+            files = session.query(File).filter(File.path.in_(chunk))
+            for file in files:
+                try:
+                    file.do_index()
+                except Exception as e:
+                    refresh_logger.error(f'Failed to index {file=}', exc_info=e)
+                    if PYTEST:
+                        raise
+
+                if (now() - last_commit).total_seconds() > max_seconds_between_commits:
+                    refresh_logger.debug('Committing because its been too long.')
+                    session.commit()
+                    last_commit = now()
+
+                # Sleep to catch cancel.
+                await asyncio.sleep(0)
+        last_commit = now()
+
+        refresh_logger.info(f'Indexed {len(chunk)} chunk of files')
 
 
 @wrol_mode_check
@@ -277,6 +317,7 @@ async def refresh_files_list(paths: List[str], include_files_near: bool = True):
         curs.execute('DELETE FROM file WHERE path = ANY(%(deleted_paths)s)', dict(deleted_paths=deleted_paths))
 
     apply_after_refresh()
+    await apply_indexers()
 
     refresh_logger.info('Done refreshing files list')
 
@@ -305,6 +346,7 @@ async def refresh_files():
         logger.warning(f'Removed {len(deleted)} missing files')
 
     apply_after_refresh()
+    await apply_indexers()
 
     refresh_logger.warning('Done refreshing Files')
 

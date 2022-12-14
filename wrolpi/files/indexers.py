@@ -2,15 +2,17 @@ import pathlib
 import re
 from abc import ABC
 from collections import defaultdict
-from typing import List, Type, Tuple
+from typing import List, Type, Tuple, Generator
 from zipfile import ZipFile
+
+from wrolpi.vars import PYTEST
 
 try:
     from PyPDF2 import PdfReader
 except ImportError:
     PdfReader = None
 
-from wrolpi.common import logger, timer
+from wrolpi.common import logger, truncate_generator_bytes
 
 logger = logger.getChild(__name__)
 
@@ -110,7 +112,7 @@ class TextIndexer(Indexer, ABC):
 
     Detects VTT (caption) files and forwards them on."""
 
-    _ignored_suffixes = ('.json', '.vtt', '.srt', '.csv')
+    _ignored_suffixes = ('.json', '.vtt', '.srt', '.csv', '.hgt')
 
     @classmethod
     def create_index(cls, file):
@@ -146,25 +148,30 @@ class PDFIndexer(Indexer, ABC):
         words = ''
         try:
             # PDFs are complex, don't fail to create title index if text extraction fails.
-            with timer(f'get words {path=}'):
-                words = cls.get_words(path)
+            words = '\n'.join(truncate_generator_bytes(cls.get_words(path), MAX_TEXT_FILE_BYTES))
         except Exception as e:
             logger.error(f'Failed to index {path}', exc_info=e)
+            if PYTEST:
+                raise
         return a, None, None, words
 
     @classmethod
-    def get_words(cls, path: pathlib.Path) -> str:
+    def get_words(cls, path: pathlib.Path) -> Generator[str, None, None]:
+        """
+        Reads all text facing up in a PDF.
+
+        Note, may return more than can be stored in Postgres.  See: truncate_generator_bytes
+        """
         if PdfReader is None:
             logger.error(f'Cannot index {path} PyPDF2 is not installed.')
-            return ''
+            yield ''
+            return
 
         reader = PdfReader(path)
-        words = []
         for page in reader.pages:
             # Get all text facing up.
             text = page.extract_text(0)
-            words.append(text)
-        words = '\n'.join(words)
-        # Postgres does not allow null characters.
-        words = words.replace('\x00', '\uFFFD')
-        return words
+            # Postgres does not allow null characters.
+            text = text.replace('\x00', '\uFFFD').strip()
+            if text:
+                yield text

@@ -361,13 +361,13 @@ def test_bad_check_media_directory():
         assert common.check_media_directory() is False
 
 
-def test_chunks_by_name(test_directory, make_files_structure):
-    """`chunks_by_name` breaks a list of paths on the name change close to the size."""
+def test_chunks_by_stem(test_directory, make_files_structure):
+    """`chunks_by_stem` breaks a list of paths on the name change close to the size."""
     with pytest.raises(ValueError):
-        assert list(common.chunks_by_name([], 0)) == [[]]
+        assert list(common.chunks_by_stem([], 0)) == [[]]
 
-    assert list(common.chunks_by_name([], 5)) == [[]]
-    assert list(common.chunks_by_name([1, 2, 3], 5)) == [[1, 2, 3]]
+    assert list(common.chunks_by_stem([], 5)) == [[]]
+    assert list(common.chunks_by_stem([1, 2, 3], 5)) == [[1, 2, 3]]
 
     files = make_files_structure([
         'foo.mp4', 'foo.txt', 'foo.png', 'foo.info.json',
@@ -377,7 +377,7 @@ def test_chunks_by_name(test_directory, make_files_structure):
     ])
 
     def assert_chunks(size, files_, expected):
-        for chunk, expected_chunk in zip_longest(list(common.chunks_by_name(files_, size)), expected):
+        for chunk, expected_chunk in zip_longest(list(common.chunks_by_stem(files_, size)), expected):
             assert chunk == [test_directory / i for i in expected_chunk]
 
     assert_chunks(8, files, [

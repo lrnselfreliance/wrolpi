@@ -58,50 +58,6 @@ def get_no_channel_directory() -> pathlib.Path:
     return directory
 
 
-@iterify(set)
-def remove_duplicate_video_paths(paths: Iterable[Path]) -> Set[Path]:
-    """
-    Remove any duplicate paths from a given list.
-
-    Duplicate is defined as any file that shares the EXACT same name as another file, but with a different extension.
-    If a duplicate is found, only yield one of the paths.  The path that will be yielded will be whichever is first in
-    the VIDEO_EXTESIONS tuple.
-
-    i.e.
-    >>> remove_duplicate_video_paths([Path('one.mp4'), Path('two.mp4'), Path('one.ogg')])
-    {'one.mp4, 'two.mp4'}
-    """
-    new_paths = {}
-
-    # Group all paths by their name, but without their extension.
-    for path in set(paths):
-        name, _, _ = path.name.rpartition(path.suffix)
-        try:
-            new_paths[name].append(path)
-        except KeyError:
-            new_paths[name] = [path]
-
-    # Yield back the first occurrence of the preferred format for each video.
-    for name, paths in new_paths.items():
-        if len(paths) == 1:
-            # This should be the most common case.  Most videos will only have one format.
-            yield paths[0]
-        else:
-            path_strings = [i.name for i in paths]
-            for ext in VIDEO_EXTENSIONS:
-                try:
-                    index = path_strings.index(f'{name}.{ext}')
-                    yield paths[index]
-                    break
-                except ValueError:
-                    # That extension is not in the paths.
-                    pass
-            else:
-                # Somehow no format was found, yield back the first one.  This is probably caused by an unexpected video
-                # format in the paths.
-                yield sorted(paths)[0]
-
-
 def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None, directory=None,
                                 source_id=None):
     """

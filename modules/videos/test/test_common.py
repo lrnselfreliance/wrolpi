@@ -14,8 +14,7 @@ from wrolpi.dates import local_timezone, now
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.vars import PROJECT_DIR
 from .. import common
-from ..common import convert_image, remove_duplicate_video_paths, \
-    apply_info_json, get_video_duration, generate_video_poster, is_valid_poster
+from ..common import convert_image, apply_info_json, get_video_duration, generate_video_poster, is_valid_poster
 from ..lib import save_channels_config, get_channels_config, import_channels_config
 
 
@@ -38,20 +37,6 @@ def test_get_video_duration(test_directory):
         empty_file = test_directory / 'empty.mp4'
         empty_file.touch()
         get_video_duration(empty_file)
-
-
-@pytest.mark.parametrize(
-    'paths,expected',
-    (
-            (['1.mp4', ], ['1.mp4', ]),
-            (['1.mp4', '2.mp4'], ['1.mp4', '2.mp4']),
-            (['1.mp4', '1.ogg'], ['1.mp4']),
-            (['1.bad_ext', '1.other_ext'], ['1.bad_ext']),
-    )
-)
-def test_remove_duplicate_video_paths(paths, expected):
-    result = remove_duplicate_video_paths(map(pathlib.Path, paths))
-    assert sorted(result) == sorted(map(pathlib.Path, expected))
 
 
 def test_convert_image():

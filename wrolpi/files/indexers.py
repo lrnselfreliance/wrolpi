@@ -10,7 +10,7 @@ try:
 except ImportError:
     PdfReader = None
 
-from wrolpi.common import logger
+from wrolpi.common import logger, timer
 
 logger = logger.getChild(__name__)
 
@@ -79,7 +79,7 @@ def register_indexer(*mimetypes: str):
 
 @register_indexer('application/zip')
 class ZipIndexer(Indexer, ABC):
-    """Handles archive files lik zip."""
+    """Handles archive files like zip."""
 
     @classmethod
     def create_index(cls, file):
@@ -146,7 +146,8 @@ class PDFIndexer(Indexer, ABC):
         words = ''
         try:
             # PDFs are complex, don't fail to create title index if text extraction fails.
-            words = cls.get_words(path)
+            with timer(f'get words {path=}'):
+                words = cls.get_words(path)
         except Exception as e:
             logger.error(f'Failed to index {path}', exc_info=e)
         return a, None, None, words

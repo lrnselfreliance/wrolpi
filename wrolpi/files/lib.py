@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
-    get_files_and_directories, apply_modelers, apply_after_refresh, get_model_by_table_name, chunks_by_name, \
+    get_files_and_directories, apply_modelers, apply_after_refresh, get_model_by_table_name, chunks_by_stem, \
     background_task, partition, ordered_unique_list
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
@@ -160,7 +160,7 @@ async def _refresh_files_list(paths: List[pathlib.Path], idempotency: datetime.d
     if not paths:
         return
 
-    for idx, chunk in enumerate(map(set, chunks_by_name(paths, FILE_REFRESH_CHUNK_SIZE))):
+    for idx, chunk in enumerate(map(set, chunks_by_stem(paths, FILE_REFRESH_CHUNK_SIZE))):
         with get_db_session(commit=True) as session:
             existing_files = list(session.query(File).filter(File.path.in_(chunk)))
             existing_paths = {i.path for i in existing_files}

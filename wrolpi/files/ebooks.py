@@ -229,8 +229,8 @@ def model_ebook(session: Session, ebook_file: File, files: List[File]) -> EBook:
 
     if not ebook.title:
         # Book was not indexed above (probably a MOBI), use the file data.
-        name, _ = split_path_stem_and_suffix(ebook.ebook_file.path)
-        ebook.title = ebook.ebook_file.a_text = name
+        stem, _ = split_path_stem_and_suffix(ebook.ebook_file.path)
+        ebook.title = ebook.ebook_file.a_text = stem
 
     if cover_file:
         cover_file.associated = True

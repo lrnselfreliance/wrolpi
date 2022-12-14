@@ -85,7 +85,7 @@ __all__ = [
     'apply_after_refresh',
     'match_paths_to_suffixes',
     'chunks',
-    'chunks_by_name',
+    'chunks_by_stem',
     'timer',
     'cum_timer',
     'limit_concurrent',
@@ -861,15 +861,15 @@ def chunks(it: Iterable, size: int):
     return iter(lambda: tuple(islice(it, size)), ())
 
 
-def chunks_by_name(it: List[Union[pathlib.Path, str]], size: int) -> Generator[List[pathlib.Path], None, None]:
+def chunks_by_stem(it: List[Union[pathlib.Path, str]], size: int) -> Generator[List[pathlib.Path], None, None]:
     """
     Attempt to split a list of paths near the defined size.  Keep groups of files together when they share
     matching names.
 
     >>> files = ['1.mp4', '1.txt', '2.mp4', '2.txt', '2.png', '3.mp4']
-    >>> chunks_by_name(files, 2)
+    >>> chunks_by_stem(files, 2)
     [['1.mp4', '1.txt'], ['2.mp4', '2.txt', '2.png'], ['3.mp4']]
-    >>> chunks_by_name(files, 3)
+    >>> chunks_by_stem(files, 3)
     [['1.mp4', '1.txt', '2.mp4', '2.txt', '2.png'], ['3.mp4']]
     """
     if not isinstance(size, int) or size < 1:
@@ -885,23 +885,23 @@ def chunks_by_name(it: List[Union[pathlib.Path, str]], size: int) -> Generator[L
     from wrolpi.files.lib import split_path_stem_and_suffix
     it = sorted(it.copy())
     index = size
-    last_name = None
+    last_stem = None
     while it:
         if index >= len(it):
             # Ran out of items, yield what is left.
             yield it
             return
         path = it[index]
-        name, _ = split_path_stem_and_suffix(path)
-        if last_name and name != last_name:
+        stem, _ = split_path_stem_and_suffix(path)
+        if last_stem and stem != last_stem:
             # Found a break in the path names, yield and reset.
             chunk, it = it[:index], it[index:]
             index = size
-            last_name = None
+            last_stem = None
             yield chunk
             continue
         # Didn't find a name change, try again.
-        last_name = name
+        last_stem = stem
         index += 1
 
 

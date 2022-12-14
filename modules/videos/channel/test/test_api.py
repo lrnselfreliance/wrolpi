@@ -280,7 +280,8 @@ async def test_download_channel_no_refresh(test_session, download_channel, video
         return DownloadResult(success=True)
 
     with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info, \
-            mock.patch('modules.videos.downloader.VideoDownloader.do_download', do_download):
+            mock.patch('modules.videos.downloader.VideoDownloader.do_download', do_download), \
+            mock.patch('wrolpi.files.lib.apply_indexers'):  # TODO why does apply_indexers break this test?
         entries = [
             dict(id=vid.source_id, view_count=0, webpage_url='https://example.com/1'),  # Already downloaded.
             dict(id='not downloaded', view_count=0, webpage_url='https://example.com/2'),

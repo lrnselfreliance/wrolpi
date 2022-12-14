@@ -385,6 +385,7 @@ async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str
         curs.execute(stmt, params)
 
     apply_after_refresh()
+    await apply_indexers()
 
     refresh_logger.info(f'Done refreshing files in {directory}')
 

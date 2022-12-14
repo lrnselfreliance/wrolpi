@@ -507,7 +507,7 @@ def is_singlefile_file(path: pathlib.Path) -> bool:
         return True
     with path.open('rt') as fh:
         # Lastly, try to read the header of this HTML file.
-        header = fh.read(500)
+        header = fh.read(1000)
         if SINGLEFILE_HEADER in header:
             return True
     return False

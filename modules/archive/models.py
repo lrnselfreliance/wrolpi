@@ -149,7 +149,7 @@ class Archive(Base, ModelHelper):
             raise ValueError('Cannot read singlefile data when this has no files')
 
         with path.open('rt') as fh:
-            head = fh.read(500)
+            head = fh.read(1000)
             if 'Page saved with SingleFile' not in head:
                 return
             try:

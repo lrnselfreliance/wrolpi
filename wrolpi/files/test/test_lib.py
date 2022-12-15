@@ -186,6 +186,17 @@ async def test_refresh_files(test_session, make_files_structure, test_directory)
 
 
 @pytest.mark.asyncio
+async def test_refresh_a_text_no_indexer(test_session, make_files_structure):
+    """File.a_text is filled even if the file does not match an Indexer."""
+    make_files_structure(['foo', 'bar-bar'])
+
+    await lib.refresh_files()
+
+    files = {i.a_text for i in test_session.query(File).all()}
+    assert files == {'{bar,bar-bar}', '{foo}'}
+
+
+@pytest.mark.asyncio
 async def test_refresh_many_files(test_session, make_files_structure):
     """Used to profile file refreshing"""
     count = 1_000

@@ -1,6 +1,6 @@
 import React, {useContext} from 'react';
 import {Divider, SegmentGroup, StatisticLabel, StatisticValue} from "semantic-ui-react";
-import {Route, Routes} from "react-router-dom";
+import {Link, Route, Routes} from "react-router-dom";
 import "../static/wrolpi.css";
 import {decryptOTP, encryptOTP} from "../api";
 import {mimetypeColor, PageContainer, toLocaleString, useTitle} from "./Common";
@@ -181,10 +181,12 @@ function FileStatistics() {
             </Segment>
             <Segment>
                 <StatisticGroup size='small'>
-                    <Statistic color={mimetypeColor('video/')}>
-                        <StatisticValue>{toLocaleString(video_count)}</StatisticValue>
-                        <StatisticLabel>Videos</StatisticLabel>
-                    </Statistic>
+                    <Link to={'/videos/statistics'}>
+                        <Statistic color={mimetypeColor('video/')}>
+                            <StatisticValue>{toLocaleString(video_count)}</StatisticValue>
+                            <StatisticLabel>Videos</StatisticLabel>
+                        </Statistic>
+                    </Link>
                     <Statistic color={mimetypeColor('application/pdf')}>
                         <StatisticValue>{toLocaleString(pdf_count)}</StatisticValue>
                         <StatisticLabel>PDFs</StatisticLabel>

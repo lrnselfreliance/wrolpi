@@ -100,7 +100,7 @@ def video_modeler(groups: Dict[str, List[File]], session: Session):
 @register_after_refresh
 @limit_concurrent(1)
 def video_cleanup():
-    # Claim all Videos in a Channel's directory for that Channel.
+    # Claim all Videos in a Channel's directory for that Channel.  But, only if they have not yet been claimed.
     logger.info('Claiming Videos for their Channels')
     with get_db_curs(commit=True) as curs:
         curs.execute('''

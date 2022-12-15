@@ -8,7 +8,7 @@ from datetime import timedelta
 from decimal import Decimal
 from functools import partial
 from pathlib import Path
-from typing import List, Set, Iterable, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import PIL
 from PIL import Image

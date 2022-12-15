@@ -457,7 +457,7 @@ async def test_download_destination(test_session, test_directory, video_download
     video_download_manager.create_download('https://example.com/1', downloader=VideoDownloader.name)
     await video_download_manager.wait_for_all_downloads()
     # Output directory matches the channel directory.
-    assert mock_video_prepare_filename.call_args_list[0].kwargs['ydl'].params['outtmpl']['default']\
+    assert mock_video_prepare_filename.call_args_list[0].kwargs['ydl'].params['outtmpl']['default'] \
         .startswith(f'{test_directory}/videos/channel name/%(uploader)s')
 
     mock_video_prepare_filename.reset_mock()
@@ -466,8 +466,9 @@ async def test_download_destination(test_session, test_directory, video_download
     video_download_manager.create_download('https://example.com/2', downloader=VideoDownloader.name, settings=settings)
     await video_download_manager.wait_for_all_downloads()
     # Output directory matches the custom directory specified.
-    assert mock_video_prepare_filename.call_args_list[0].kwargs['ydl'].params['outtmpl']['default']\
+    assert mock_video_prepare_filename.call_args_list[0].kwargs['ydl'].params['outtmpl']['default'] \
         .startswith(f'{test_directory}/custom/%(uploader)s')
+
 
 example_playlist_json = {
     '_type': 'playlist',

@@ -5,10 +5,10 @@ from sanic.request import Request
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
+from modules.inventory import common, inventory, schema
 from wrolpi.common import run_after, recursive_map
 from wrolpi.errors import ValidationError
 from wrolpi.root_api import get_blueprint, json_response
-from modules.inventory import common, inventory, schema
 
 NAME = 'inventory'
 

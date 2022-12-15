@@ -9,7 +9,7 @@ from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import logger, wrol_mode_check, make_media_directory, \
     get_media_directory, run_after
-from wrolpi.errors import UnknownDirectory, UnknownChannel
+from wrolpi.errors import UnknownChannel
 from wrolpi.root_api import json_response
 from wrolpi.schema import JSONErrorResponse
 from wrolpi.vars import PYTEST

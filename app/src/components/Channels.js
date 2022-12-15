@@ -14,7 +14,6 @@ import {
     TableRow,
 } from "semantic-ui-react";
 import {createChannel, deleteChannel, downloadChannel, refreshChannel, updateChannel, validateRegex} from "../api";
-import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {
     BackButton,
     DirectoryInput,

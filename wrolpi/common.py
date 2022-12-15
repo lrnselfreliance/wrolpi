@@ -94,6 +94,7 @@ __all__ = [
     'truncate_object_bytes',
     'background_task',
     'get_warn_once',
+    'ordered_unique_list',
 ]
 
 # Base is used for all SQLAlchemy models.

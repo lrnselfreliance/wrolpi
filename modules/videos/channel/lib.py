@@ -1,6 +1,5 @@
-import functools
 from pathlib import Path
-from typing import List, Dict, Union, Optional
+from typing import List, Dict, Union
 
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound

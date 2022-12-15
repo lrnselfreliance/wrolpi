@@ -218,6 +218,7 @@ async def cancel_refresh_tasks():
 
 def cancelable_wrapper(func: callable):
     """Wraps an async function so that it will be canceled by `cancel_refresh_tasks`."""
+
     @wraps(func)
     async def wrapped(*args, **kwargs):
         if PYTEST:

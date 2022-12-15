@@ -77,7 +77,7 @@ function InventorySummary() {
             </TableRow>
         }
 
-        if (!isEmpty(bySubcategory )) {
+        if (!isEmpty(bySubcategory)) {
             return <Table>
                 <TableHeader>
                     <TableRow>

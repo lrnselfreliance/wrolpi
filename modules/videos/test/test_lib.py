@@ -1,4 +1,3 @@
-import json
 import pathlib
 import shutil
 
@@ -10,11 +9,9 @@ from modules.videos.common import apply_info_json
 from modules.videos.lib import parse_video_file_name, validate_video, get_statistics
 from modules.videos.models import Video
 from modules.videos.video.lib import search_videos
-from wrolpi.dates import strptime
 from wrolpi.files import lib as files_lib
 from wrolpi.files.lib import refresh_files
 from wrolpi.files.models import File
-from wrolpi.test.common import skip_circleci
 from wrolpi.vars import PROJECT_DIR
 
 

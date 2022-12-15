@@ -3,7 +3,7 @@ import {Divider, SegmentGroup, StatisticLabel, StatisticValue} from "semantic-ui
 import {Route, Routes} from "react-router-dom";
 import "../static/wrolpi.css";
 import {decryptOTP, encryptOTP} from "../api";
-import {mimetypeColor, PageContainer, useTitle} from "./Common";
+import {mimetypeColor, PageContainer, toLocaleString, useTitle} from "./Common";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, Header, Loader, Segment, Statistic, StatisticGroup, TextArea} from "./Theme";
 import {useFileStatistics} from "../hooks/customHooks";
@@ -174,7 +174,7 @@ function FileStatistics() {
             <Segment>
                 <StatisticGroup>
                     <Statistic>
-                        <StatisticValue>{total_count}</StatisticValue>
+                        <StatisticValue>{toLocaleString(total_count)}</StatisticValue>
                         <StatisticLabel>All Files</StatisticLabel>
                     </Statistic>
                 </StatisticGroup>
@@ -182,23 +182,23 @@ function FileStatistics() {
             <Segment>
                 <StatisticGroup size='small'>
                     <Statistic color={mimetypeColor('video/')}>
-                        <StatisticValue>{video_count}</StatisticValue>
+                        <StatisticValue>{toLocaleString(video_count)}</StatisticValue>
                         <StatisticLabel>Videos</StatisticLabel>
                     </Statistic>
                     <Statistic color={mimetypeColor('application/pdf')}>
-                        <StatisticValue>{pdf_count}</StatisticValue>
+                        <StatisticValue>{toLocaleString(pdf_count)}</StatisticValue>
                         <StatisticLabel>PDFs</StatisticLabel>
                     </Statistic>
                     <Statistic color={mimetypeColor('application/epub')}>
-                        <StatisticValue>{ebook_count}</StatisticValue>
+                        <StatisticValue>{toLocaleString(ebook_count)}</StatisticValue>
                         <StatisticLabel>eBooks</StatisticLabel>
                     </Statistic>
                     <Statistic color={mimetypeColor('text/html')}>
-                        <StatisticValue>{archive_count}</StatisticValue>
+                        <StatisticValue>{toLocaleString(archive_count)}</StatisticValue>
                         <StatisticLabel>Archives</StatisticLabel>
                     </Statistic>
                     <Statistic color={mimetypeColor('image/')}>
-                        <StatisticValue>{image_count}</StatisticValue>
+                        <StatisticValue>{toLocaleString(image_count)}</StatisticValue>
                         <StatisticLabel>Images</StatisticLabel>
                     </Statistic>
                 </StatisticGroup>
@@ -206,11 +206,11 @@ function FileStatistics() {
             <Segment>
                 <StatisticGroup size='tiny'>
                     <Statistic>
-                        <StatisticValue>{zip_count}</StatisticValue>
+                        <StatisticValue>{toLocaleString(zip_count)}</StatisticValue>
                         <StatisticLabel>ZIP</StatisticLabel>
                     </Statistic>
                     <Statistic>
-                        <StatisticValue>{audio_count}</StatisticValue>
+                        <StatisticValue>{toLocaleString(audio_count)}</StatisticValue>
                         <StatisticLabel>Audio</StatisticLabel>
                     </Statistic>
                 </StatisticGroup>

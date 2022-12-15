@@ -729,10 +729,12 @@ export const useFileStatistics = () => {
             setStatistics(statistics || undefined);
         } catch (e) {
             console.error(e);
+            setStatistics(undefined);
         }
     }
 
     useEffect(() => {
+        setStatistics(null);
         fetchFileStatistics();
     }, []);
 

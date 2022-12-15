@@ -792,3 +792,7 @@ export const filterToMimetypes = (filter) => {
         return ['application/zip'];
     }
 }
+
+export const toLocaleString = (num, locale = 'en-US') => {
+    return num.toLocaleString(locale);
+}

@@ -114,6 +114,12 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
             return 'application/sta'
         if suffix.endswith('.scad'):
             return 'application/x-openscad'
+        if suffix.endswith('.js'):
+            return 'application/javascript'
+        if suffix.endswith('.css'):
+            return 'text/css'
+        if suffix.endswith('.srt'):
+            return 'text/srt'
         if suffix.endswith('.yaml') or suffix.endswith('.yml'):
             return 'text/yaml'
     return mimetype

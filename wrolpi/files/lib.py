@@ -112,6 +112,8 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
             return 'text/html'
         if suffix.endswith('.stl'):
             return 'application/sta'
+        if suffix.endswith('.yaml') or suffix.endswith('.yml'):
+            return 'text/yaml'
     return mimetype
 
 

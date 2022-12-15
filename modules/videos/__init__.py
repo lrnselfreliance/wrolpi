@@ -20,22 +20,39 @@ logger = logger.getChild(__name__)
 __all__ = ['video_modeler', 'VideoIndexer']
 
 
+def find_video_file_in_group(group: List[File]):
+    return next((i for i in group if i.mimetype.startswith('video/') and i.path.suffix != '.part'), None)
+
+
 @register_modeler
 def video_modeler(groups: Dict[str, List[File]], session: Session):
-    local_groups = groups.copy()
-    videos = []
-    for stem, group in local_groups.items():
-        video_file = next((i for i in group if i.mimetype.startswith('video/') and i.path.suffix != '.part'), None)
-        if not video_file:
-            # Not a video group.
-            continue
+    new_videos = []
+
+    # Search all groups for video files.
+    video_files = {stem: video_file for stem, group in groups.items() if
+                   (video_file := find_video_file_in_group(group))}
+    if not video_files:
+        # No videos in these groups.
+        return
+    # Get all matching Video records (if any) in one query.
+    video_paths = [i.path for i in video_files.values()]
+    video_records = {i.video_path: i for i in session.query(Video).filter(Video.video_path.in_(video_paths))}
+
+    for stem, video_file in video_files.items():
+        group = groups[stem]
 
         session.flush(group)
-        poster_file = next((i for i in group if i.mimetype.split('/')[0] == 'image'), None)
-        info_json_file = next((i for i in group if i.path.name.endswith('.info.json')), None)
-        # Prefer WebVTT over SRT.  (SRT cannot be displayed for HTML video).
-        caption_file = next((i for i in group if i.path.name.endswith('.en.vtt')), None)
-        caption_file = caption_file or next((i for i in group if i.path.name.endswith('.en.srt')), None)
+        poster_file = info_json_file = caption_file = None
+        for file in group:
+            if file.mimetype.startswith('image/'):
+                poster_file = file
+            elif file.path.name.endswith('.info.json'):
+                info_json_file = file
+            # Prefer WebVTT over SRT.  (SRT cannot be displayed for HTML video).
+            elif file.path.name.endswith('.en.vtt'):
+                caption_file = file
+            elif file.path.name.endswith('.en.srt'):
+                caption_file = caption_file or file
 
         if poster_file:
             poster_file.associated = True
@@ -47,7 +64,7 @@ def video_modeler(groups: Dict[str, List[File]], session: Session):
             info_json_file.associated = True
             info_json_file.do_stats()
 
-        video = session.query(Video).filter_by(video_file=video_file).one_or_none()
+        video: Video = video_records.get(video_file.path)
         if not video:
             video = Video(video_file=video_file)
             session.add(video)
@@ -67,11 +84,11 @@ def video_modeler(groups: Dict[str, List[File]], session: Session):
         video.size = size
         video_file.model = Video.__tablename__
 
-        videos.append(video)
+        new_videos.append(video)
 
-    if videos:
-        session.flush(videos)
-        for video in videos:
+    if new_videos:
+        session.flush(new_videos)
+        for video in new_videos:
             video.video_file.do_index()
             video.validate(session)
 

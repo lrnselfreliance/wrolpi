@@ -55,18 +55,30 @@ class ArchiveDownloader(Downloader, ABC):
 archive_downloader = ArchiveDownloader(priority=100)
 
 
+def find_archive_file_in_group(group: List[File]):
+    for file in group:
+        if lib.is_singlefile_file(file.path):
+            return file
+
+
 @register_modeler
 def archive_modeler(groups: Dict[str, List[File]], session: Session):
-    archive_groups = {}
-    for stem, group in groups.items():
-        if any(lib.is_singlefile_file(i.path) for i in group):
-            archive_groups[stem] = group
+    archive_files = {stem: file for stem, group in groups.items() if (file := find_archive_file_in_group(group))}
+    if not archive_files:
+        # No archives in these groups.
+        return
+    # Get all matching Archive records (if any) in one query.
+    archive_paths = [i.path for i in archive_files.values()]
+    archive_records = {i.singlefile_path: i for i in
+                       session.query(Archive).filter(Archive.singlefile_path.in_(archive_paths))}
 
-    for stem, group in archive_groups.items():
+    for stem, archive_file in archive_files.items():
+        group = groups[stem]
+
         readability_file, singlefile_file, readability_json_file, readability_txt_file, screenshot_file = \
             match_archive_files(group)
 
-        archive: Archive = Archive.find_by_path(singlefile_file.path, session)
+        archive: Archive = archive_records.get(archive_file.path)
         if not archive:
             archive = Archive(singlefile_file=singlefile_file)
             session.add(archive)

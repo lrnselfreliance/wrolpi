@@ -350,16 +350,15 @@ async def test_files_indexer(test_session, make_files_structure, test_directory)
     assert info_json_file.path.suffix == '.json' and info_json_file.indexer == indexers.DefaultIndexer
     assert video_file.path.suffix == '.mp4' and video_file.indexer == videos.VideoIndexer
 
-    # Suffix, directory and name are correct.
-    def assert_file_properties(file: File, suffix, directory, stem):
-        assert file.suffix == suffix and file.directory == directory and file.stem == stem
+    def assert_file_properties(file: File, suffix):
+        assert file.suffix == suffix
 
-    assert_file_properties(text_file, '.txt', test_directory, 'a text file')
-    assert_file_properties(zip_file, '.zip', test_directory, 'a zip file')
-    assert_file_properties(image_file, '.jpeg', test_directory / 'images', 'an image file')
-    assert_file_properties(unknown_file, '', test_directory, 'unknown file')
-    assert_file_properties(info_json_file, '.info.json', test_directory / 'videos', 'a video file')
-    assert_file_properties(video_file, '.mp4', test_directory / 'videos', 'a video file')
+    assert_file_properties(text_file, '.txt')
+    assert_file_properties(zip_file, '.zip')
+    assert_file_properties(image_file, '.jpeg')
+    assert_file_properties(unknown_file, '')
+    assert_file_properties(info_json_file, '.info.json')
+    assert_file_properties(video_file, '.mp4')
 
     # File are indexed by their titles and contents.
     files, total = lib.search_files('file', 10, 0)

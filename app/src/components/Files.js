@@ -147,13 +147,13 @@ export function Files() {
 
 function EbookCard({file}) {
     const {s} = useContext(ThemeContext);
-    const url = `/media/${encodeURIComponent(file.path)}`;
+    const downloadUrl = `/download/${encodeURIComponent(file.path)}`;
     let {ebook, suffix} = file;
     const coverSrc = ebook && ebook.cover_path ? `/media/${encodeURIComponent(ebook.cover_path)}` : null;
 
     let cover = <CardIcon><FileIcon file={file}/></CardIcon>;
     if (coverSrc) {
-        cover = <CardPosterLink to={url} poster_url={coverSrc} external={true}/>;
+        cover = <CardPosterLink to={downloadUrl} poster_url={coverSrc} external={true}/>;
     }
 
     suffix = suffix ? _.trimStart(suffix, '.').toUpperCase() : null;
@@ -164,7 +164,7 @@ function EbookCard({file}) {
         <CardContent {...s}>
             <CardHeader>
                 <Container textAlign='left'>
-                    <ExternalCardLink to={url}>{ebook ? ebook.title : file.title}</ExternalCardLink>
+                    <ExternalCardLink to={downloadUrl}>{ebook ? ebook.title : file.title}</ExternalCardLink>
                 </Container>
             </CardHeader>
             <CardDescription>
@@ -217,21 +217,22 @@ function ImageCard({file}) {
 function FileCard({file}) {
     const {s} = useContext(ThemeContext);
 
+    const isEbookType = file.mimetype && (
+        file.mimetype.startsWith('application/epub') || file.mimetype.startsWith('application/x-mobipocket-ebook')
+    );
+
     if (file.model === 'video' && file['video']) {
         return <VideoCard key={file['path']} file={file}/>;
     } else if (file.model === 'archive' && file['archive']) {
         return <ArchiveCard key={file['path']} file={file}/>;
     } else if (file.mimetype && file.mimetype.startsWith('image/')) {
         return <ImageCard key={file['path']} file={file}/>;
-    } else if (file.mimetype && (
-        file.mimetype.startsWith('application/epub') || file.mimetype.startsWith('application/x-mobipocket-ebook')
-    )) {
+    } else if (isEbookType) {
         return <EbookCard key={file['path']} file={file}/>;
     }
 
-    const url = `/media/${encodeURIComponent(file.path)}`;
+    const url = `/download/${encodeURIComponent(file.path)}`;
     const color = mimetypeColor(file.mimetype);
-
     const size = file.size !== null && file.size !== undefined ? humanFileSize(file.size) : null;
 
     return <Card color={color}>

@@ -70,6 +70,7 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
     }
 
     let videoUrl = `${MEDIA_PATH}/${encodeURIComponent(video.video_path)}`;
+    let downloadUrl = `/download/${encodeURIComponent(video.video_path)}`;
 
     let posterUrl = video.poster_path ? `${MEDIA_PATH}/${encodeURIComponent(video.poster_path)}` : null;
     let captionsUrl = video.caption_path ? `${MEDIA_PATH}/${encodeURIComponent(video.caption_path)}` : null;
@@ -184,7 +185,7 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
 
                 <p>
                     {favorite_button}
-                    <a href={videoUrl}>
+                    <a href={downloadUrl} target='_blank' rel='noopener noreferrer'>
                         <Button style={{margin: '0.5em'}}>
                             <Icon name='download'/>
                             Download

@@ -101,10 +101,13 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
     suffix = path.suffix.lower()
     if mimetype == 'application/octet-stream' and suffix.endswith('.mobi'):
         return MOBI_MIMETYPE
-    if mimetype == 'text/plain' and suffix.endswith('.json'):
-        return 'application/json'
-    if mimetype == 'text/plain' and suffix.endswith('.vtt'):
-        return 'text/vtt'
+    if mimetype == 'text/plain':
+        if suffix.endswith('.json'):
+            return 'application/json'
+        if suffix.endswith('.vtt'):
+            return 'text/vtt'
+        if suffix.endswith('.csv'):
+            return 'text/csv'
     return mimetype
 
 

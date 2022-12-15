@@ -3,7 +3,7 @@ import {Divider, SegmentGroup, StatisticLabel, StatisticValue} from "semantic-ui
 import {Route, Routes} from "react-router-dom";
 import "../static/wrolpi.css";
 import {decryptOTP, encryptOTP} from "../api";
-import {PageContainer, useTitle} from "./Common";
+import {mimetypeColor, PageContainer, useTitle} from "./Common";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, Header, Loader, Segment, Statistic, StatisticGroup, TextArea} from "./Theme";
 import {useFileStatistics} from "../hooks/customHooks";
@@ -153,57 +153,74 @@ function FileStatistics() {
 
     const {statistics} = useFileStatistics();
 
-    let body = <Loader inline active/>;
+    let body = <Segment><Loader inline active/></Segment>;
 
     if (statistics === undefined) {
-        body = <p {...s}>Failed to fetch statistics</p>;
+        body = <Segment><p {...s}>Failed to fetch statistics</p></Segment>;
     }
 
     if (statistics !== undefined && statistics !== null) {
-        const {total_count, video_count, pdf_count, ebook_count, archive_count, image_count, zip_count} = statistics;
+        const {
+            archive_count,
+            audio_count,
+            ebook_count,
+            image_count,
+            pdf_count,
+            total_count,
+            video_count,
+            zip_count,
+        } = statistics;
         body = <>
-            <StatisticGroup>
-                <Statistic>
-                    <StatisticValue>{total_count}</StatisticValue>
-                    <StatisticLabel>All Files</StatisticLabel>
-                </Statistic>
-            </StatisticGroup>
-            <StatisticGroup size='small'>
-                <Statistic color='blue'>
-                    <StatisticValue>{video_count}</StatisticValue>
-                    <StatisticLabel>Videos</StatisticLabel>
-                </Statistic>
-                <Statistic color='red'>
-                    <StatisticValue>{pdf_count}</StatisticValue>
-                    <StatisticLabel>PDFs</StatisticLabel>
-                </Statistic>
-                <Statistic color='yellow'>
-                    <StatisticValue>{ebook_count}</StatisticValue>
-                    <StatisticLabel>eBooks</StatisticLabel>
-                </Statistic>
-                <Statistic color='green'>
-                    <StatisticValue>{archive_count}</StatisticValue>
-                    <StatisticLabel>Archives</StatisticLabel>
-                </Statistic>
-                <Statistic color='pink'>
-                    <StatisticValue>{image_count}</StatisticValue>
-                    <StatisticLabel>Images</StatisticLabel>
-                </Statistic>
-            </StatisticGroup>
-            <StatisticGroup>
-                <Statistic color='grey'>
-                    <StatisticValue>{zip_count}</StatisticValue>
-                    <StatisticLabel>ZIP</StatisticLabel>
-                </Statistic>
-            </StatisticGroup>
+            <Segment>
+                <StatisticGroup>
+                    <Statistic>
+                        <StatisticValue>{total_count}</StatisticValue>
+                        <StatisticLabel>All Files</StatisticLabel>
+                    </Statistic>
+                </StatisticGroup>
+            </Segment>
+            <Segment>
+                <StatisticGroup size='small'>
+                    <Statistic color={mimetypeColor('video/')}>
+                        <StatisticValue>{video_count}</StatisticValue>
+                        <StatisticLabel>Videos</StatisticLabel>
+                    </Statistic>
+                    <Statistic color={mimetypeColor('application/pdf')}>
+                        <StatisticValue>{pdf_count}</StatisticValue>
+                        <StatisticLabel>PDFs</StatisticLabel>
+                    </Statistic>
+                    <Statistic color={mimetypeColor('application/epub')}>
+                        <StatisticValue>{ebook_count}</StatisticValue>
+                        <StatisticLabel>eBooks</StatisticLabel>
+                    </Statistic>
+                    <Statistic color={mimetypeColor('text/html')}>
+                        <StatisticValue>{archive_count}</StatisticValue>
+                        <StatisticLabel>Archives</StatisticLabel>
+                    </Statistic>
+                    <Statistic color={mimetypeColor('image/')}>
+                        <StatisticValue>{image_count}</StatisticValue>
+                        <StatisticLabel>Images</StatisticLabel>
+                    </Statistic>
+                </StatisticGroup>
+            </Segment>
+            <Segment>
+                <StatisticGroup size='tiny'>
+                    <Statistic>
+                        <StatisticValue>{zip_count}</StatisticValue>
+                        <StatisticLabel>ZIP</StatisticLabel>
+                    </Statistic>
+                    <Statistic>
+                        <StatisticValue>{audio_count}</StatisticValue>
+                        <StatisticLabel>Audio</StatisticLabel>
+                    </Statistic>
+                </StatisticGroup>
+            </Segment>
         </>;
     }
 
     return <>
         <Header as='h1'>File Statistics</Header>
-        <Segment>
-            {body}
-        </Segment>
+        {body}
     </>
 }
 

@@ -631,7 +631,8 @@ async def get_file_statistics():
             COUNT(path) FILTER (WHERE file.mimetype LIKE 'video/%') AS "video_count",
             COUNT(path) FILTER (WHERE file.mimetype = 'application/pdf') AS "pdf_count",
             COUNT(path) FILTER (WHERE file.mimetype LIKE 'image/%' AND file.associated = FALSE) AS "image_count",
-            COUNT(path) FILTER (WHERE file.mimetype = 'application/zip') AS "zip_count"
+            COUNT(path) FILTER (WHERE file.mimetype = 'application/zip') AS "zip_count",
+            COUNT(path) FILTER (WHERE file.mimetype LIKE 'audio/%' AND file.associated = FALSE) AS "audio_count"
         FROM
             file
         ''')

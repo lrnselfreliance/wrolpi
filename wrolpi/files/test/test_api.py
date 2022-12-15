@@ -252,6 +252,7 @@ def test_file_statistics(test_session, test_client, example_pdf, example_mobi, e
     assert response.json == {
         'statistics': {
             'archive_count': 0,
+            'audio_count': 0,
             'ebook_count': 0,
             'image_count': 0,
             'pdf_count': 0,
@@ -267,6 +268,7 @@ def test_file_statistics(test_session, test_client, example_pdf, example_mobi, e
     assert response.json == {
         'statistics': {
             'archive_count': 0,
+            'audio_count': 0,
             'ebook_count': 2,
             'image_count': 0,
             'pdf_count': 1,

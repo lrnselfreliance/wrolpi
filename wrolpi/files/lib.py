@@ -108,6 +108,10 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
             return 'text/vtt'
         if suffix.endswith('.csv'):
             return 'text/csv'
+        if suffix.endswith('.html') or suffix.endswith('.htm'):
+            return 'text/html'
+        if suffix.endswith('.stl'):
+            return 'application/sta'
     return mimetype
 
 

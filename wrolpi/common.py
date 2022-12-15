@@ -813,8 +813,7 @@ def apply_modelers(files, session: Session):
     # Group all files by their common name (without the suffix).
     groups = {}
     for file in files:
-        if not file.mimetype:
-            file.mimetype = get_mimetype(file.path)
+        file.mimetype = get_mimetype(file.path)
         stem, _ = split_path_stem_and_suffix(file.path)
         try:
             groups[stem].append(file)

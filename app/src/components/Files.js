@@ -106,7 +106,7 @@ export function Files() {
     let buttons;
     if (selectedFile) {
         buttons = <>
-            <ExternalCardLink to={`/media/${selectedFile.key}`}>
+            <ExternalCardLink to={`/download/${selectedFile.key}`}>
                 <Button primary>Open</Button>
             </ExternalCardLink>
             <Confirm

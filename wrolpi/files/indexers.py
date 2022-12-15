@@ -112,7 +112,7 @@ class TextIndexer(Indexer, ABC):
 
     Detects VTT (caption) files and forwards them on."""
 
-    _ignored_suffixes = ('.json', '.vtt', '.srt', '.csv', '.hgt')
+    _ignored_suffixes = ('.json', '.vtt', '.srt', '.csv', '.hgt', '.scad')
 
     @classmethod
     def create_index(cls, file):

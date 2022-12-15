@@ -242,3 +242,35 @@ def test_refresh_files_list(test_session, test_client, make_files_structure):
     request, response = test_client.post('/api/files/refresh/list', content=content)
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert test_session.query(File).count() == 1
+
+
+def test_file_statistics(test_session, test_client, example_pdf, example_mobi, example_epub, video_file):
+    """A summary of File statistics can be fetched."""
+    # Statistics can be fetched while empty.
+    request, response = test_client.get('/api/files/statistics')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json == {
+        'statistics': {
+            'archive_count': 0,
+            'ebook_count': 0,
+            'image_count': 0,
+            'pdf_count': 0,
+            'total_count': 0,
+            'video_count': 0,
+            'zip_count': 0},
+    }
+
+    test_client.post('/api/files/refresh')
+
+    request, response = test_client.get('/api/files/statistics')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json == {
+        'statistics': {
+            'archive_count': 0,
+            'ebook_count': 2,
+            'image_count': 0,
+            'pdf_count': 1,
+            'total_count': 5,
+            'video_count': 1,
+            'zip_count': 0},
+    }

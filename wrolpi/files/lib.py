@@ -621,3 +621,26 @@ def split_file_name_words(name: str) -> List[str]:
     except Exception as e:
         logger.error(f'Failed to split filename into words: {name}', exc_info=e)
         return [name]
+
+
+async def get_file_statistics():
+    with get_db_curs() as curs:
+        curs.execute('''
+        SELECT
+            COUNT(path) AS "total_count",
+            COUNT(path) FILTER (WHERE file.mimetype LIKE 'video/%') AS "video_count",
+            COUNT(path) FILTER (WHERE file.mimetype = 'application/pdf') AS "pdf_count",
+            COUNT(path) FILTER (WHERE file.mimetype LIKE 'image/%' AND file.associated = FALSE) AS "image_count",
+            COUNT(path) FILTER (WHERE file.mimetype = 'application/zip') AS "zip_count"
+        FROM
+            file
+        ''')
+        statistics = dict(curs.fetchall()[0])
+
+        curs.execute('SELECT COUNT(*) FROM archive')
+        statistics['archive_count'] = curs.fetchall()[0][0]
+
+        curs.execute('SELECT COUNT(*) FROM ebook')
+        statistics['ebook_count'] = curs.fetchall()[0][0]
+
+        return statistics

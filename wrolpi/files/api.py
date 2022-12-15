@@ -135,3 +135,12 @@ def directories(_, body: schema.DirectoriesRequest):
 
     body = {'directories': dirs, 'exists': path.exists(), 'is_dir': path.is_dir(), 'is_file': path.is_file()}
     return response.json(body)
+
+
+@bp.get('/statistics')
+@openapi.definition(
+    summary='Get summary statistics of all files',
+)
+async def get_statistics(_):
+    statistics = await lib.get_file_statistics()
+    return json_response({'statistics': statistics})

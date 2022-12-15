@@ -661,3 +661,18 @@ export async function getAPIStatus() {
     let response = await apiGet(`${API_URI}/echo`);
     return response.status === 200;
 }
+
+export async function getFileStatistics() {
+    let response = await apiGet(`${API_URI}/files/statistics`);
+    if (response.status === 200) {
+        const contents = await response.json();
+        return contents['statistics'];
+    } else {
+        toast({
+            type: 'error',
+            title: 'Error!',
+            description: 'Unable to get file statistics',
+            time: 5000,
+        })
+    }
+}

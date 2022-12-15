@@ -10,6 +10,7 @@ import {
     getDownloaders,
     getDownloads,
     getFiles,
+    getFileStatistics,
     getInventory,
     getSettings,
     getStatistics,
@@ -717,4 +718,23 @@ export const useInventory = (inventoryId) => {
     }, [inventoryId]);
 
     return {byCategory, bySubcategory, byName, fetchInventory}
+}
+
+export const useFileStatistics = () => {
+    const [statistics, setStatistics] = useState();
+
+    const fetchFileStatistics = async () => {
+        try {
+            const statistics = await getFileStatistics();
+            setStatistics(statistics || undefined);
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    useEffect(() => {
+        fetchFileStatistics();
+    }, []);
+
+    return {statistics};
 }

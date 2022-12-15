@@ -197,15 +197,12 @@ class EBook(ModelHelper, Base):
         return session.query(EBook).filter(EBook.ebook_path == path).one_or_none()
 
 
-def model_ebook(session: Session, ebook_file: File, ebook: EBook, files: List[File]) -> EBook:
+def model_ebook(ebook: EBook, files: List[File]) -> EBook:
     """Creates an EBook model based off a File.  Searches for it's cover in the provided `files`."""
     # Multiple formats may share this cover.
     cover_file = next((i for i in files if i.mimetype.split('/')[0] == 'image'), None)
 
-    if not ebook:
-        ebook = EBook(ebook_file=ebook_file)
-        session.add(ebook)
-
+    ebook_file = ebook.ebook_file
     size = ebook_file.path.stat().st_size
 
     ebook.ebook_file.do_index()
@@ -241,32 +238,36 @@ def model_ebook(session: Session, ebook_file: File, ebook: EBook, files: List[Fi
     return ebook
 
 
+def find_ebook_files_in_group(group: List[File]):
+    """Returns a list of any File records if they are an ebook."""
+    return list(filter(lambda i: mimetype_is_ebook(i.mimetype), group))
+
+
 @register_modeler
 def ebook_modeler(groups: Dict[str, List[File]], session: Session):
     """Searches for ebook files and models them into the ebook table."""
-    ebook_files = dict()
-    for stem, group in groups.items():
-        for file in group:
-            if mimetype_is_ebook(file.mimetype):
-                try:
-                    ebook_files[stem].append(file)
-                except KeyError:
-                    ebook_files[stem] = [file, ]
+    # Get all ebook files.
+    ebook_files = {stem: files for stem, group in groups.items() if (files := find_ebook_files_in_group(group))}
     if not ebook_files:
         # No ebooks in these groups.
         return
-    # Get all ebooks (if any) in one query.
+    # Get all ebooks records (if any) in one query.
     ebook_paths = [j.path for i in ebook_files.values() for j in i]
     ebook_records = {i.ebook_path: i for i in session.query(EBook).filter(EBook.ebook_path.in_(ebook_paths))}
 
     for stem, ebook_files in ebook_files.items():
         group = groups[stem]
+        session.flush(group)
+        # Process each ebook file in the group.  There may be more than one format in each group, and they may all
+        # share a cover.
         for ebook_file in ebook_files:
-            session.flush(group)
-            ebook = ebook_records.get(ebook_file.path)
-            model_ebook(session, ebook_file, ebook, group)
+            ebook: EBook = ebook_records.get(ebook_file.path)
+            if not ebook:
+                ebook = EBook(ebook_file=ebook_file)
+                session.add(ebook)
+            model_ebook(ebook, group)
 
-        # Claim this group for this ebook.
+        # Remove this group, it will not be processed by other modelers.
         del groups[stem]
 
 

@@ -606,9 +606,9 @@ def split_file_name_words(name: str) -> List[str]:
         raise ValueError(f'Invalid filename: {name}')
 
     try:
-        name2, suffix = split_path_stem_and_suffix(name)
+        stem, suffix = split_path_stem_and_suffix(name)
         words = []
-        for word1 in WHITESPACE.split(name2):
+        for word1 in WHITESPACE.split(stem):
             if '-' in word1[1:]:
                 words.extend(word1.split('-'))
             words.append(word1)

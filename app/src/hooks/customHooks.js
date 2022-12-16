@@ -10,10 +10,10 @@ import {
     getDownloaders,
     getDownloads,
     getFiles,
-    getFileStatistics,
+    getStatistics,
     getInventory,
     getSettings,
-    getStatistics,
+    getVideosStatistics,
     getStatus,
     getThrottleStatus,
     getVideo,
@@ -675,7 +675,7 @@ export const useVideoStatistics = () => {
 
     const fetchStatistics = async () => {
         try {
-            let stats = await getStatistics();
+            let stats = await getVideosStatistics();
             stats.videos.sum_duration = secondsToFullDuration(stats.videos.sum_duration);
             stats.videos.sum_size = humanFileSize(stats.videos.sum_size);
             stats.videos.max_size = humanFileSize(stats.videos.max_size);
@@ -720,13 +720,13 @@ export const useInventory = (inventoryId) => {
     return {byCategory, bySubcategory, byName, fetchInventory}
 }
 
-export const useFileStatistics = () => {
+export const useStatistics = () => {
     const [statistics, setStatistics] = useState();
 
     const fetchFileStatistics = async () => {
         try {
-            const statistics = await getFileStatistics();
-            setStatistics(statistics || undefined);
+            const s = await getStatistics();
+            setStatistics(s);
         } catch (e) {
             console.error(e);
             setStatistics(undefined);
@@ -734,7 +734,7 @@ export const useFileStatistics = () => {
     }
 
     useEffect(() => {
-        setStatistics(null);
+        setStatistics({});
         fetchFileStatistics();
     }, []);
 

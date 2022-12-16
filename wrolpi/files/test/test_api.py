@@ -247,10 +247,9 @@ def test_refresh_files_list(test_session, test_client, make_files_structure):
 def test_file_statistics(test_session, test_client, example_pdf, example_mobi, example_epub, video_file):
     """A summary of File statistics can be fetched."""
     # Statistics can be fetched while empty.
-    request, response = test_client.get('/api/files/statistics')
+    request, response = test_client.get('/api/statistics')
     assert response.status_code == HTTPStatus.OK
-    assert response.json == {
-        'statistics': {
+    assert response.json['file_statistics'] == {
             'archive_count': 0,
             'audio_count': 0,
             'ebook_count': 0,
@@ -258,15 +257,14 @@ def test_file_statistics(test_session, test_client, example_pdf, example_mobi, e
             'pdf_count': 0,
             'total_count': 0,
             'video_count': 0,
-            'zip_count': 0},
+            'zip_count': 0,
     }
 
     test_client.post('/api/files/refresh')
 
-    request, response = test_client.get('/api/files/statistics')
+    request, response = test_client.get('/api/statistics')
     assert response.status_code == HTTPStatus.OK
-    assert response.json == {
-        'statistics': {
+    assert response.json['file_statistics'] == {
             'archive_count': 0,
             'audio_count': 0,
             'ebook_count': 2,
@@ -274,5 +272,5 @@ def test_file_statistics(test_session, test_client, example_pdf, example_mobi, e
             'pdf_count': 1,
             'total_count': 5,
             'video_count': 1,
-            'zip_count': 0},
+            'zip_count': 0,
     }

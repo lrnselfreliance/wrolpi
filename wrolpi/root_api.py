@@ -19,10 +19,11 @@ from sanic_ext.extensions.openapi import openapi
 from wrolpi import admin, status
 from wrolpi.admin import HotspotStatus
 from wrolpi.common import logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
-    wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode
+    wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics
 from wrolpi.dates import set_timezone
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, InvalidTimezone, API_ERRORS, APIError, ValidationError, HotspotError
+from wrolpi.files.lib import get_file_statistics
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, DownloadRequest, EchoResponse
 from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
     truthy_arg
@@ -357,6 +358,19 @@ async def get_status(_: Request):
         wrol_mode=wrol_mode_enabled(),
     )
     return json_response(ret)
+
+
+@api_bp.get('/statistics')
+@openapi.definition(
+    summary='Get summary statistics of all files',
+)
+async def get_statistics(_):
+    file_statistics = get_file_statistics()
+    global_statistics = get_global_statistics()
+    return json_response({
+        'file_statistics': file_statistics,
+        'global_statistics': global_statistics,
+    })
 
 
 class CustomJSONEncoder(json.JSONEncoder):

@@ -220,7 +220,7 @@ export async function favoriteVideo(video_id, favorite) {
     return (await response.json())['favorite'];
 }
 
-export async function getStatistics() {
+export async function getVideosStatistics() {
     let response = await apiGet(`${VIDEOS_API}/statistics`);
     if (response.status === 200) {
         return (await response.json())['statistics'];
@@ -662,11 +662,11 @@ export async function getAPIStatus() {
     return response.status === 200;
 }
 
-export async function getFileStatistics() {
-    let response = await apiGet(`${API_URI}/files/statistics`);
+export async function getStatistics() {
+    let response = await apiGet(`${API_URI}/statistics`);
     if (response.status === 200) {
         const contents = await response.json();
-        return contents['statistics'];
+        return contents;
     } else {
         toast({
             type: 'error',

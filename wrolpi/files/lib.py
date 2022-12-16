@@ -622,7 +622,7 @@ def split_file_name_words(name: str) -> List[str]:
         return [name]
 
 
-async def get_file_statistics():
+def get_file_statistics():
     with get_db_curs() as curs:
         curs.execute('''
         SELECT
@@ -631,7 +631,8 @@ async def get_file_statistics():
             COUNT(path) FILTER (WHERE file.mimetype = 'application/pdf') AS "pdf_count",
             COUNT(path) FILTER (WHERE file.mimetype LIKE 'image/%' AND file.associated = FALSE) AS "image_count",
             COUNT(path) FILTER (WHERE file.mimetype = 'application/zip') AS "zip_count",
-            COUNT(path) FILTER (WHERE file.mimetype LIKE 'audio/%' AND file.associated = FALSE) AS "audio_count"
+            COUNT(path) FILTER (WHERE file.mimetype LIKE 'audio/%' AND file.associated = FALSE) AS "audio_count",
+            SUM(size)::BIGINT AS "total_size"
         FROM
             file
         ''')

@@ -16,7 +16,7 @@ const links = [
     {
         key: 'apps', text: 'Apps', links: [
             {to: '/apps/otp', text: 'One Time Pad', end: true},
-            {to: '/apps/file_statistics', text: 'File Statistics', end: true},
+            {to: '/apps/statistics', text: 'Statistics', end: true},
         ]
     },
 ];

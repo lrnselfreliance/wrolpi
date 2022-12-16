@@ -351,3 +351,8 @@ def test_get_downloaders(test_client):
     assert 'downloaders' in response.json, 'Downloaders not returned'
     assert isinstance(response.json['downloaders'], list) and len(response.json['downloaders']), \
         'No downloaders returned'
+
+
+def test_get_global_statistics(test_session, test_client):
+    request, response = test_client.get('/api/statistics')
+    assert response.json['global_statistics']['db_size'] > 1

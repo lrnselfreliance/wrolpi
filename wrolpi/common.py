@@ -1044,3 +1044,14 @@ def get_warn_once(message: str, logger__: logging.Logger, level=logging.ERROR):
 def ordered_unique_list(lst: Iterable) -> List:
     """Return a new list that contains only the first occurrence of each item."""
     return list(dict.fromkeys(lst))
+
+
+def get_global_statistics():
+    from wrolpi.db import get_db_curs
+    with get_db_curs() as curs:
+        curs.execute('select pg_database_size(current_database())')
+        db_size = curs.fetchall()[0][0]
+
+    return dict(
+        db_size=db_size,
+    )

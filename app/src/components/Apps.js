@@ -3,10 +3,10 @@ import {Divider, SegmentGroup, StatisticLabel, StatisticValue} from "semantic-ui
 import {Link, Route, Routes} from "react-router-dom";
 import "../static/wrolpi.css";
 import {decryptOTP, encryptOTP} from "../api";
-import {mimetypeColor, PageContainer, toLocaleString, useTitle} from "./Common";
+import {humanFileSize, mimetypeColor, PageContainer, toLocaleString, useTitle} from "./Common";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, Header, Loader, Segment, Statistic, StatisticGroup, TextArea} from "./Theme";
-import {useFileStatistics} from "../hooks/customHooks";
+import {useStatistics} from "../hooks/customHooks";
 
 class Encrypt extends React.Component {
     constructor(props) {
@@ -146,20 +146,22 @@ function OTP() {
     </>
 }
 
-function FileStatistics() {
-    useTitle('File Statistics');
+function StatisticsPage() {
+    useTitle('Statistics');
 
     const {s} = useContext(ThemeContext);
 
-    const {statistics} = useFileStatistics();
-
-    let body = <Segment><Loader inline active/></Segment>;
+    const {statistics} = useStatistics();
 
     if (statistics === undefined) {
-        body = <Segment><p {...s}>Failed to fetch statistics</p></Segment>;
+        return <>
+            <Header as='h1'>Statistics</Header>
+            <Segment><p {...s}>Failed to fetch statistics</p></Segment>
+        </>;
     }
 
-    if (statistics !== undefined && statistics !== null) {
+    if (statistics['global_statistics']) {
+        let {global_statistics, file_statistics} = statistics;
         const {
             archive_count,
             audio_count,
@@ -169,13 +171,21 @@ function FileStatistics() {
             total_count,
             video_count,
             zip_count,
-        } = statistics;
-        body = <>
+            total_size,
+        } = file_statistics;
+        const {db_size} = global_statistics;
+        return <>
+            <Header as='h1'>Statistics</Header>
+            <Header as='h2'>Files</Header>
             <Segment>
                 <StatisticGroup>
                     <Statistic>
                         <StatisticValue>{toLocaleString(total_count)}</StatisticValue>
                         <StatisticLabel>All Files</StatisticLabel>
+                    </Statistic>
+                    <Statistic>
+                        <StatisticValue>{humanFileSize(total_size)}</StatisticValue>
+                        <StatisticLabel>Total Size</StatisticLabel>
                     </Statistic>
                 </StatisticGroup>
             </Segment>
@@ -217,20 +227,31 @@ function FileStatistics() {
                     </Statistic>
                 </StatisticGroup>
             </Segment>
+
+            <Header as='h2'>Database</Header>
+            <Segment>
+                <StatisticGroup>
+                    <Statistic>
+                        <StatisticValue>{humanFileSize(db_size)}</StatisticValue>
+                        <StatisticLabel>Size</StatisticLabel>
+                    </Statistic>
+                </StatisticGroup>
+            </Segment>
         </>;
     }
 
     return <>
-        <Header as='h1'>File Statistics</Header>
-        {body}
-    </>
+        <Header as='h1'>Statistics</Header>
+        <Segment><Loader inline active/></Segment>
+    </>;
+
 }
 
 export function AppsRoute(props) {
     return (<PageContainer>
         <Routes>
             <Route path='otp' exact element={<OTP/>}/>
-            <Route path='file_statistics' exact element={<FileStatistics/>}/>
+            <Route path='statistics' exact element={<StatisticsPage/>}/>
         </Routes>
     </PageContainer>)
 }

@@ -282,7 +282,7 @@ async def apply_indexers():
                 await asyncio.sleep(0)
         last_commit = now()
 
-        refresh_logger.info(f'Indexed {len(chunk)} chunk of files')
+        refresh_logger.info(f'Indexed chunk of {len(chunk)} files')
 
 
 @wrol_mode_check

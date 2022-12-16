@@ -627,16 +627,17 @@ def get_file_statistics():
         curs.execute('''
         SELECT
             COUNT(path) AS "total_count",
-            COUNT(path) FILTER (WHERE file.mimetype LIKE 'video/%') AS "video_count",
             COUNT(path) FILTER (WHERE file.mimetype = 'application/pdf') AS "pdf_count",
-            COUNT(path) FILTER (WHERE file.mimetype LIKE 'image/%' AND file.associated = FALSE) AS "image_count",
             COUNT(path) FILTER (WHERE file.mimetype = 'application/zip') AS "zip_count",
+            COUNT(path) FILTER (WHERE file.mimetype LIKE 'video/%') AS "video_count",
+            COUNT(path) FILTER (WHERE file.mimetype LIKE 'image/%' AND file.associated = FALSE) AS "image_count",
             COUNT(path) FILTER (WHERE file.mimetype LIKE 'audio/%' AND file.associated = FALSE) AS "audio_count",
             SUM(size)::BIGINT AS "total_size"
         FROM
             file
         ''')
         statistics = dict(curs.fetchall()[0])
+        statistics['total_size'] = statistics['total_size'] or 0
 
         curs.execute('SELECT COUNT(*) FROM archive')
         statistics['archive_count'] = curs.fetchall()[0][0]

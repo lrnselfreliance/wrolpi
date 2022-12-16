@@ -251,6 +251,7 @@ def test_file_statistics(test_session, test_client, example_pdf, example_mobi, e
     assert response.status_code == HTTPStatus.OK
     assert response.json['file_statistics'] == {
             'archive_count': 0,
+            'total_size': 0,
             'audio_count': 0,
             'ebook_count': 0,
             'image_count': 0,
@@ -264,7 +265,9 @@ def test_file_statistics(test_session, test_client, example_pdf, example_mobi, e
 
     request, response = test_client.get('/api/statistics')
     assert response.status_code == HTTPStatus.OK
-    assert response.json['file_statistics'] == {
+    stats = response.json['file_statistics']
+    stats.pop('total_size')
+    assert stats == {
             'archive_count': 0,
             'audio_count': 0,
             'ebook_count': 2,

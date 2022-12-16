@@ -25,7 +25,7 @@ class File(ModelHelper, Base):
     full_stem = Column(String)  # f'{directory}/{stem}'
     idempotency = Column(TZDateTime, default=lambda: now())
     indexed = Column(Boolean, default=False)
-    mimetype = Column(String)  # Gotten by python-magic or file command.
+    mimetype = Column(String)  # wrolpi.files.lib.get_mimetype
     model = Column(String)  # Filled out by the modeler.  Will be the table name (video, archive, etc.).
     modification_datetime = Column(TZDateTime)
     size = Column(Integer)

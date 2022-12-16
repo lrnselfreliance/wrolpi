@@ -163,6 +163,15 @@ class EBook(ModelHelper, Base):
         if self.cover_file:
             yield self.cover_file
 
+    @staticmethod
+    def find_by_path(path, session) -> Base:
+        return session.query(EBook).filter(EBook.ebook_path == path).one_or_none()
+
+    @staticmethod
+    def find_by_paths(paths: List[pathlib.Path], session) -> List:
+        ebooks = list(session.query(EBook).filter(EBook.ebook_path.in_(paths)))
+        return ebooks
+
     def __json__(self):
         d = dict(
             cover_path=self.cover_path,
@@ -191,10 +200,6 @@ class EBook(ModelHelper, Base):
             return cover_path
 
         logger.warning(f'Unable to generate cover for {self.ebook_path}')
-
-    @staticmethod
-    def find_by_path(path, session) -> Base:
-        return session.query(EBook).filter(EBook.ebook_path == path).one_or_none()
 
 
 def model_ebook(ebook: EBook, files: List[File]) -> EBook:

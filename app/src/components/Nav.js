@@ -5,7 +5,7 @@ import {StatusContext, ThemeContext} from "../contexts/contexts";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {DarkModeToggle, HotspotStatusIcon, NAME} from "./Common";
 
-const responsiveWidth = 500;
+const responsiveWidth = 700;
 
 const links = [
     {text: 'Videos', to: '/videos', key: 'videos'},

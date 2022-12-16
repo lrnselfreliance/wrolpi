@@ -127,7 +127,7 @@ async def post_search_files(_: Request, body: schema.FilesSearchRequest):
 @openapi.response(HTTPStatus.OK, schema.DirectoriesResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @validate(schema.DirectoriesRequest)
-def directories(_, body: schema.DirectoriesRequest):
+def post_directories(_, body: schema.DirectoriesRequest):
     path = get_media_directory() / (body.search_str or '')
     search_str = str(path)
     dirs = lib.get_matching_directories(search_str)

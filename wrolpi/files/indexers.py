@@ -5,7 +5,7 @@ from collections import defaultdict
 from typing import List, Type, Tuple, Generator
 from zipfile import ZipFile
 
-from wrolpi.vars import PYTEST
+from wrolpi.vars import PYTEST, FILE_MAX_PDF_SIZE, FILE_MAX_TEXT_SIZE
 
 try:
     from PyPDF2 import PdfReader
@@ -16,8 +16,7 @@ from wrolpi.common import logger, truncate_generator_bytes
 
 logger = logger.getChild(__name__)
 
-__all__ = ['Indexer', 'DefaultIndexer', 'ZipIndexer', 'TextIndexer', 'find_indexer', 'register_indexer',
-           'MAX_TEXT_FILE_BYTES']
+__all__ = ['Indexer', 'DefaultIndexer', 'ZipIndexer', 'TextIndexer', 'find_indexer', 'register_indexer']
 
 
 class Indexer(object):
@@ -103,7 +102,6 @@ class ZipIndexer(Indexer, ABC):
 
 
 WORD_SPLITTER = re.compile(r"([\w’'-]+)")
-MAX_TEXT_FILE_BYTES = 100_000
 
 
 @register_indexer('text/plain')
@@ -143,12 +141,17 @@ class PDFIndexer(Indexer, ABC):
 
     @classmethod
     def create_index(cls, file):
-        path = file.path.path if hasattr(file.path, 'path') else file.path
+        path: pathlib.Path = file.path.path if hasattr(file.path, 'path') else file.path
         a = cls.get_title(file)
+
+        if path.stat().st_size > FILE_MAX_PDF_SIZE:
+            logger.warning(f'PDF too large to fully index: {path}')
+            return a, None, None, None
+
         words = ''
         try:
             # PDFs are complex, don't fail to create title index if text extraction fails.
-            words = '\n'.join(truncate_generator_bytes(cls.get_words(path), MAX_TEXT_FILE_BYTES))
+            words = '\n'.join(truncate_generator_bytes(cls.get_words(path), FILE_MAX_TEXT_SIZE))
         except Exception as e:
             logger.error(f'Failed to index {path}', exc_info=e)
             if PYTEST:

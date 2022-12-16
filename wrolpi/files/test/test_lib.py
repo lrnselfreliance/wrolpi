@@ -496,6 +496,19 @@ def test_pdf_indexer(example_pdf):
     assert d_text == 'Page one\nPage two'
 
 
+def test_pdf_indexer_max_size(example_pdf):
+    """The contents of a large PDF are not indexed."""
+    example_pdf.write_bytes(example_pdf.read_bytes() * 5000)
+
+    file = File(path=example_pdf)
+
+    a_text, b_text, c_text, d_text = indexers.PDFIndexer.create_index(file)
+
+    # The file name is still indexed.
+    assert a_text == ['example', 'pdf']
+    assert d_text is None
+
+
 def test_get_mimetype(example_epub, example_mobi, example_pdf, image_file, video_file):
     assert lib.get_mimetype(example_epub) == 'application/epub+zip'
     assert lib.get_mimetype(example_mobi) == 'application/x-mobipocket-ebook'

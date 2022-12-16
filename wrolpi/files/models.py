@@ -7,9 +7,8 @@ import wrolpi.files.indexers
 from wrolpi.common import Base, ModelHelper, get_media_directory, tsvector, logger, get_model_by_table_name, \
     truncate_object_bytes
 from wrolpi.dates import TZDateTime, from_timestamp, now
-from wrolpi.files.indexers import MAX_TEXT_FILE_BYTES
 from wrolpi.media_path import MediaPathType
-from wrolpi.vars import PYTEST
+from wrolpi.vars import PYTEST, FILE_MAX_TEXT_SIZE
 
 logger = logger.getChild(__name__)
 
@@ -103,10 +102,10 @@ class File(ModelHelper, Base):
                 # Only read the contents of the file once.
                 start = now()
                 a_text, b_text, c_text, d_text = indexer.create_index(self)
-                self.a_text = truncate_object_bytes(a_text, MAX_TEXT_FILE_BYTES)
-                self.b_text = truncate_object_bytes(b_text, MAX_TEXT_FILE_BYTES)
-                self.c_text = truncate_object_bytes(c_text, MAX_TEXT_FILE_BYTES)
-                self.d_text = truncate_object_bytes(d_text, MAX_TEXT_FILE_BYTES)
+                self.a_text = truncate_object_bytes(a_text, FILE_MAX_TEXT_SIZE)
+                self.b_text = truncate_object_bytes(b_text, FILE_MAX_TEXT_SIZE)
+                self.c_text = truncate_object_bytes(c_text, FILE_MAX_TEXT_SIZE)
+                self.d_text = truncate_object_bytes(d_text, FILE_MAX_TEXT_SIZE)
                 if (total_seconds := (now() - start).total_seconds()) > 1:
                     logger.info(f'Indexing {self.path} took {total_seconds} seconds')
 

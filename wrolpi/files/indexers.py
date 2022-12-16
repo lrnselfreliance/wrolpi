@@ -34,10 +34,6 @@ class Indexer(object):
         a = cls.get_title(file)
         return a, None, None, None
 
-    @classmethod
-    def detect_special_indexer(cls, file):
-        return cls
-
 
 class DefaultIndexer(Indexer, ABC):
     """If this Indexer is used, it is because we could not match the file to a more specific Indexer."""
@@ -58,8 +54,6 @@ def find_indexer(file) -> Type[Indexer]:
     if not indexer:
         # Use the broad indexer.
         indexer = indexer_map[file.mimetype.split('/')[0]]
-
-    indexer = indexer.detect_special_indexer(file)
 
     return indexer
 
@@ -110,8 +104,6 @@ class TextIndexer(Indexer, ABC):
 
     Detects VTT (caption) files and forwards them on."""
 
-    _ignored_suffixes = ('.json', '.vtt', '.srt', '.csv', '.hgt', '.scad')
-
     @classmethod
     def create_index(cls, file):
         path = file.path.path if hasattr(file.path, 'path') else file.path
@@ -126,13 +118,6 @@ class TextIndexer(Indexer, ABC):
         contents = path.read_text()
         words = WORD_SPLITTER.findall(contents)
         return words
-
-    @classmethod
-    def detect_special_indexer(cls, file):
-        if any(file.path.name.endswith(i) for i in cls._ignored_suffixes):
-            # Some text files aren't for humans.
-            return DefaultIndexer
-        return cls
 
 
 @register_indexer('application/pdf')

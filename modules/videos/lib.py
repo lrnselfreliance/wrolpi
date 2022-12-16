@@ -382,7 +382,7 @@ def save_channels_config(session=None, preserve_favorites: bool = True):
 def import_channels_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
     if PYTEST and not TEST_CHANNELS_CONFIG:
-        logger.warning(f'Not importing channels during this test.  Use `test_channels_config` fixture if you would'
+        logger.warning(f'Not importing channels during this test.  Use `test_channels_config` fixture if you would '
                        f'like to call this.')
         return
 

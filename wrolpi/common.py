@@ -805,8 +805,10 @@ def register_modeler(modeler: callable):
 
 
 def apply_modelers(files, session: Session):
-    from wrolpi.files.lib import split_path_stem_and_suffix, get_mimetype
-    from wrolpi.files.models import File
+    """
+    Group Files by stem, send those groups to the modelers.  Each modeler will model what Files are valid.
+    """
+    from wrolpi.files.lib import split_path_stem_and_suffix
 
     if not files:
         return

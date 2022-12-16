@@ -814,7 +814,7 @@ def apply_modelers(files, session: Session):
     # Group all files by their common name (without the suffix).
     groups = {}
     for file in files:
-        file.mimetype = get_mimetype(file.path)
+        file.do_stats()
         stem, _ = split_path_stem_and_suffix(file.path)
         try:
             groups[stem].append(file)
@@ -823,15 +823,6 @@ def apply_modelers(files, session: Session):
 
     for modeler in modelers:
         modeler(groups, session)
-
-    for stem, group in groups.items():
-        # Re-index files that have changed size.
-        for file in group:
-            file: File
-
-            if file.size != (size := file.path.stat().st_size):
-                file.size = size
-                file.indexed = False
 
 
 after_refresh = []

@@ -120,15 +120,14 @@ class File(ModelHelper, Base):
 
         Returns True if the file has changed since last index.  Change is detected by comparing old size, mimetype
         modification datetime."""
-        from wrolpi.files.lib import split_path_stem_and_suffix
+        from wrolpi.files.lib import split_path_stem_and_suffix, split_file_name_words
+        from wrolpi.files.lib import get_mimetype
 
         old_mimetype = self.mimetype
         old_size = self.size
         old_modification_datetime = self.modification_datetime
 
-        if not self.mimetype:
-            from wrolpi.files.lib import get_mimetype
-            self.mimetype = get_mimetype(self.path)
+        self.mimetype = get_mimetype(self.path)
         stem, self.suffix = split_path_stem_and_suffix(self.path)
         self.full_stem = f'{self.path.parent}/{stem}'
         self.title = self.title or self.path.name
@@ -142,8 +141,10 @@ class File(ModelHelper, Base):
 
         if changed:
             self.indexed = False
-            # Use title as the a_text temporarily, this may be overwritten by indexer.
-            self.a_text = self.a_text or stem
+            # Use file stem as a_text.  This may be overwritten by the correct indexer.
+            self.a_text = self.a_text or split_file_name_words(stem)
+            # Clear old indexes, this file has changed and must be re-indexed.
+            self.b_text = self.c_text = self.d_text = None
         return changed
 
     @validates('path')

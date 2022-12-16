@@ -93,6 +93,8 @@ class ZipIndexer(Indexer, ABC):
                 return file_names
         except Exception as e:
             logger.error(f'Unable to get information from zip: {path}', exc_info=e)
+            if PYTEST:
+                raise
 
 
 WORD_SPLITTER = re.compile(r"([\w’'-]+)")

@@ -377,7 +377,7 @@ async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str
     Any records of the files that are no longer in the directory will be removed."""
     if isinstance(directory, str):
         directory = pathlib.Path(directory)
-    if not directory.is_dir():
+    if directory.is_file():
         raise ValueError(f'Cannot refresh files of a file: {directory=}')
 
     # All Files older than this will be removed.

@@ -184,7 +184,7 @@ async def _refresh_files_list(paths: List[pathlib.Path], idempotency: datetime.d
             # Add any new files into the database.
             new_files = []
             if new_paths := (chunk - existing_paths):
-                new_files = [File(path=i, idempotency=idempotency, mimetype=get_mimetype(i)) for i in new_paths]
+                new_files = [File(path=i, idempotency=idempotency) for i in new_paths]
                 session.add_all(new_files)
             # Apply models to all files.  Many files will have no model.
             all_files = existing_files + new_files

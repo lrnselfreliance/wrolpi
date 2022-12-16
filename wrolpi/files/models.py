@@ -93,7 +93,8 @@ class File(ModelHelper, Base):
 
     def do_index(self, force_index: bool = False):
         """Gather any missing information about this file.  Index the contents of this file using an Indexer."""
-        self.do_stats()
+        if not self.mimetype:
+            self.do_stats()
 
         try:
             if force_index or self.indexed is not True:
@@ -120,8 +121,7 @@ class File(ModelHelper, Base):
 
         Returns True if the file has changed since last index.  Change is detected by comparing old size, mimetype
         modification datetime."""
-        from wrolpi.files.lib import split_path_stem_and_suffix, split_file_name_words
-        from wrolpi.files.lib import get_mimetype
+        from wrolpi.files.lib import split_path_stem_and_suffix, split_file_name_words, get_mimetype
 
         old_mimetype = self.mimetype
         old_size = self.size

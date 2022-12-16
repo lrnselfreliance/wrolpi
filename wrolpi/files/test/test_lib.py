@@ -199,7 +199,7 @@ async def test_refresh_a_text_no_indexer(test_session, make_files_structure):
 @pytest.mark.asyncio
 async def test_refresh_many_files(test_session, make_files_structure):
     """Used to profile file refreshing"""
-    count = 1_000
+    count = 10_000
     make_files_structure([f'{uuid4()}.txt' for _ in range(count)])
     with timer('first refresh'):
         await lib.refresh_files()

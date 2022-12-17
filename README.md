@@ -33,6 +33,18 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 
 # Features
 
+- [x] Videos
+- [x] Web Archive
+- [x] Maps
+- [x] Wi-Fi Hotspot
+- [x] Universal search
+- [x] Food Inventory management
+- [x] One-Time pad generator, encrypter/decrypter
+- [ ] Synchronizer and/or duplicator
+- [ ] Food storage calculator
+
+## Feature Matrix
+
 | **Module**    | **Search** | **View** | **Download** |
 |---------------|:-----------|----------|--------------|
 | Videos        | yes        | yes      | yes          |
@@ -42,13 +54,6 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 | Wikis         | planned    | planned  | planned      |
 | Podcasts      | planned    | planned  | planned      |
 | Audios        | planned    | planned  | planned      |
-
-- [x] Wi-Fi Hotspot
-- [x] Universal search
-- [x] Food Inventory management
-- [x] One-Time pad generator, encrypter/decrypter
-- [ ] Synchronizer and/or duplicator
-- [ ] Food storage calculator
 
 # Demo
 

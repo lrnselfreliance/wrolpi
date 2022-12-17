@@ -147,12 +147,15 @@ export function Files() {
 
 function EbookCard({file}) {
     const {s} = useContext(ThemeContext);
-    const downloadUrl = `/download/${encodeURIComponent(file.path)}`;
     let {ebook, suffix} = file;
-    const coverSrc = ebook && ebook.cover_path ? `/media/${encodeURIComponent(ebook.cover_path)}` : null;
+
+    const downloadUrl = `/download/${encodeURIComponent(file.path)}`;
+    const viewerUrl = `/epub.html?url=${downloadUrl}`;
+    const isEpub = file['mimetype'].startsWith('application/epub');
 
     let cover = <CardIcon><FileIcon file={file}/></CardIcon>;
-    if (coverSrc) {
+    if (ebook && ebook.cover_path) {
+        const coverSrc = `/media/${encodeURIComponent(ebook.cover_path)}`;
         cover = <CardPosterLink to={downloadUrl} poster_url={coverSrc} external={true}/>;
     }
 
@@ -167,14 +170,9 @@ function EbookCard({file}) {
                     <ExternalCardLink to={downloadUrl}>{ebook ? ebook.title : file.title}</ExternalCardLink>
                 </Container>
             </CardHeader>
-            <CardDescription>
-                <Container textAlign='left'>
-                    <b {...s}>{ebook ? ebook.creator : null}</b>
-                </Container>
-            </CardDescription>
             <CardMeta>
-                <p {...s}>{ebook ? humanFileSize(ebook.size) : null}</p>
                 <pre {...s}>{suffix}</pre>
+                {isEpub && <ExternalCardLink to={viewerUrl}><Button content='View'/></ExternalCardLink>}
             </CardMeta>
         </CardContent>
     </Card>

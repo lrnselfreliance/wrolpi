@@ -29,7 +29,8 @@ def model_pdf(groups: Dict[str, List[File]], _: Session):
         logger.warning(f'Cannot get title from PDF without PyPDF2')
         return
 
-    pdf_files = (file for group in groups.values() for file in group if file.mimetype == 'application/pdf')
+    pdf_files = (file for group in groups.values() for file in group if
+                 file.indexed is not True and file.mimetype == 'application/pdf')
 
     for file in pdf_files:
         path: pathlib.Path = file.path.path if hasattr(file.path, 'path') else file.path

@@ -1,3 +1,4 @@
+import dataclasses
 import pathlib
 import re
 from abc import ABC
@@ -122,6 +123,12 @@ class TextIndexer(Indexer, ABC):
         return words
 
 
+@dataclasses.dataclass
+class PDFMetadata:
+    title: str = None
+    author: str = None
+
+
 @register_indexer('application/pdf')
 class PDFIndexer(Indexer, ABC):
     """Uses PyPDF2 to extract text from a PDF."""
@@ -129,24 +136,47 @@ class PDFIndexer(Indexer, ABC):
     @classmethod
     def create_index(cls, file):
         path: pathlib.Path = file.path.path if hasattr(file.path, 'path') else file.path
-        a = cls.get_title(file)
+
+        file_title = super().get_title(file)
+
+        reader = None
+        if PdfReader is not None:
+            reader = PdfReader(path)
+
+        data = cls.get_pdf_metadata(reader, file)
 
         if path.stat().st_size > FILE_MAX_PDF_SIZE:
             logger.warning(f'PDF too large to fully index: {path}')
-            return a, None, None, None
+            return data.title, data.author, file_title, None
 
         words = ''
         try:
             # PDFs are complex, don't fail to create title index if text extraction fails.
-            words = '\n'.join(truncate_generator_bytes(cls.get_words(path), FILE_MAX_TEXT_SIZE))
+            words = '\n'.join(truncate_generator_bytes(cls.get_words(reader, path), FILE_MAX_TEXT_SIZE))
         except Exception as e:
             logger.error(f'Failed to index {path}', exc_info=e)
             if PYTEST:
                 raise
-        return a, None, None, words
+        return data.title, data.author, file_title, words
 
     @classmethod
-    def get_words(cls, path: pathlib.Path) -> Generator[str, None, None]:
+    def get_pdf_metadata(cls, reader: PdfReader, file) -> PDFMetadata:
+        """Extract title/author from the PDF metadata."""
+        path = file.path.path if hasattr(file.path, 'path') else file.path
+
+        data = PDFMetadata()
+
+        if PdfReader is None:
+            logger.error(f'Cannot get title of {path} PyPDF2 is not installed.')
+            data.title = super().get_title(file)
+            return data
+
+        data.title = reader.metadata.title
+        data.author = reader.metadata.author
+        return data
+
+    @classmethod
+    def get_words(cls, reader: PdfReader, path: pathlib.Path) -> Generator[str, None, None]:
         """
         Reads all text facing up in a PDF.
 
@@ -157,7 +187,6 @@ class PDFIndexer(Indexer, ABC):
             yield ''
             return
 
-        reader = PdfReader(path)
         for page in reader.pages:
             # Get all text facing up.
             text = page.extract_text(0)

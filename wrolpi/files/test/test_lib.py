@@ -488,10 +488,12 @@ def test_pdf_indexer(example_pdf):
 
     a_text, b_text, c_text, d_text = indexers.PDFIndexer.create_index(file)
 
-    # The file name.
-    assert a_text == ['example', 'pdf']
-    assert b_text is None
-    assert c_text is None
+    # The title extracted from the PDF.
+    assert a_text == 'WROLPi Test PDF'
+    # The author.
+    assert b_text == 'roland'
+    # The parsed file name.
+    assert c_text == ['example', 'pdf']
     # Both pages of the example PDF are extracted.
     assert d_text == 'Page one\nPage two'
 
@@ -505,7 +507,7 @@ def test_pdf_indexer_max_size(example_pdf):
     a_text, b_text, c_text, d_text = indexers.PDFIndexer.create_index(file)
 
     # The file name is still indexed.
-    assert a_text == ['example', 'pdf']
+    assert a_text == 'WROLPi Test PDF'
     assert d_text is None
 
 

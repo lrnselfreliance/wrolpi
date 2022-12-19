@@ -15,13 +15,12 @@ import {VideoCard} from "./Videos";
 const MEDIA_PATH = '/media';
 
 
-function videoFileLink(video, name, directory = false) {
-    const path = video[name];
+function videoFileLink(path, directory = false) {
     if (path) {
         const href = directory ?
             `${MEDIA_PATH}/${encodeURIComponent(path)}/` :
             `${MEDIA_PATH}/${encodeURIComponent(path)}`;
-        return <a href={href}>
+        return <a href={href} target='_blank' rel='noopener noreferrer'>
             <pre>{path}</pre>
         </a>
     } else {
@@ -134,19 +133,19 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
     let filesPane = {
         menuItem: 'Files', render: () => <TabPane>
             <h3>Video File</h3>
-            {videoFileLink(video, 'video_path')}
+            {videoFileLink(video['video_path'])}
 
             <h4>Info JSON File</h4>
-            {videoFileLink(video, 'info_json_path')}
+            {videoFileLink(video['info_json_path'])}
 
             <h4>Caption File</h4>
-            {videoFileLink(video, 'caption_path')}
+            {videoFileLink(video['caption_path'])}
 
             <h4>Poster File</h4>
-            {videoFileLink(video, 'poster_path')}
+            {videoFileLink(video['poster_path'])}
 
             <h4>Directory</h4>
-            {videoFileLink(video, 'directory', true)}
+            {videoFileLink(videoFile['directory'], true)}
         </TabPane>
     }
 

@@ -54,6 +54,7 @@ class File(ModelHelper, Base):
         path = self.path.relative_to(get_media_directory())
         d = dict(
             associated=self.associated,
+            directory=self.path.parent,
             full_stem=self.full_stem,
             key=path,  # React browser expects this.
             mimetype=self.mimetype,

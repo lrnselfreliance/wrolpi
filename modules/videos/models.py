@@ -245,7 +245,6 @@ class Video(ModelHelper, Base):
             censored=self.censored,
             channel=self.channel,
             channel_id=self.channel_id,
-            directory=self.video_path.parent if self.video_path else None,
             modification_datetime=self.modification_datetime,
             duration=self.duration,
             favorite=self.favorite,

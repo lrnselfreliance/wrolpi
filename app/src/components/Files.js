@@ -1,6 +1,7 @@
 import React, {useContext} from "react";
 import FileBrowser from 'react-keyed-file-browser';
 import {
+    Button as SButton,
     CardContent,
     CardDescription,
     CardHeader,
@@ -9,7 +10,9 @@ import {
     Container,
     Divider,
     Dropdown,
+    Header as SHeader,
     Image,
+    Modal,
     PlaceholderLine,
     TableCell,
     TableHeaderCell,
@@ -150,16 +153,50 @@ function EbookCard({file}) {
     let {ebook, suffix} = file;
 
     const downloadUrl = `/download/${encodeURIComponent(file.path)}`;
-    const viewerUrl = `/epub.html?url=${downloadUrl}`;
     const isEpub = file['mimetype'].startsWith('application/epub');
+    const viewerUrl = isEpub ? `/epub.html?url=${downloadUrl}` : null;
 
     let cover = <CardIcon><FileIcon file={file}/></CardIcon>;
     if (ebook && ebook.cover_path) {
         const coverSrc = `/media/${encodeURIComponent(ebook.cover_path)}`;
-        cover = <CardPosterLink to={downloadUrl} poster_url={coverSrc} external={true}/>;
+        cover = <CardPosterLink to={viewerUrl || downloadUrl} poster_url={coverSrc} external={true}/>;
     }
 
     suffix = suffix ? _.trimStart(suffix, '.').toUpperCase() : null;
+
+    const downloadButton = <ExternalCardLink to={downloadUrl}>
+        <SButton
+            icon='download'
+            content='Download'
+            labelPosition='left'/>
+    </ExternalCardLink>;
+
+    const detailsButton = <Button
+        icon='file alternate'
+        content='Details'
+        labelPosition='left'
+        disabled={!ebook}
+        onClick={() => setDetailsOpen(true)}
+    />;
+    const [detailsOpen, setDetailsOpen] = React.useState(false);
+    const detailsModal = <Modal closeIcon
+                                open={detailsOpen}
+                                onClose={() => setDetailsOpen(false)}
+                                trigger={detailsButton}
+    >
+        <Modal.Header><SHeader as='h1'>{ebook.title || file.title}</SHeader></Modal.Header>
+        <Modal.Content>
+            <SHeader as='h3'>Author: {ebook.creator}</SHeader>
+            <p>{humanFileSize(ebook.size)}</p>
+            <SHeader as='h5'>eBook Path</SHeader>
+            <pre>{ebook ? ebook.ebook_path : file.path}</pre>
+            <SHeader as='h5'>Cover Path</SHeader>
+            <pre>{ebook && ebook.cover_path ? ebook.cover_path : 'N/A'}</pre>
+        </Modal.Content>
+        <Modal.Actions>
+            {downloadButton}
+        </Modal.Actions>
+    </Modal>;
 
     const color = mimetypeColor(file.mimetype);
     return <Card color={color}>
@@ -167,12 +204,14 @@ function EbookCard({file}) {
         <CardContent {...s}>
             <CardHeader>
                 <Container textAlign='left'>
-                    <ExternalCardLink to={downloadUrl}>{ebook ? ebook.title : file.title}</ExternalCardLink>
+                    <ExternalCardLink to={viewerUrl || downloadUrl}>
+                        {ebook ? ebook.title : file.title}
+                    </ExternalCardLink>
                 </Container>
             </CardHeader>
             <CardMeta>
                 <pre {...s}>{suffix}</pre>
-                {isEpub && <ExternalCardLink to={viewerUrl}><Button content='View'/></ExternalCardLink>}
+                {detailsModal}
             </CardMeta>
         </CardContent>
     </Card>

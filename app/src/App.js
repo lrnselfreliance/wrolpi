@@ -20,10 +20,10 @@ import {Dashboard} from "./Dashboard";
 import {Donate} from "./components/Donate";
 
 function PageNotFound() {
-    return (<Container fluid>
+    return <Container fluid>
         <h1 className="display-4">Page Not Found!</h1>
         <p>The page you requested cannot be found</p>
-    </Container>)
+    </Container>
 }
 
 function Dot() {

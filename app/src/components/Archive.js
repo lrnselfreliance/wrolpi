@@ -18,7 +18,7 @@ import {
 } from "semantic-ui-react";
 import {
     BackButton,
-    CardLink,
+    CardLink, cardTitleWrapper,
     defaultSearchOrder,
     epochToDateString,
     ExternalCardLink,
@@ -137,7 +137,7 @@ function ArchivePage() {
     if (archive.url) {
         urlHeader = <Header as='h5'>
             <ExternalCardLink to={archive.url}>
-                {textEllipsis(archive.url, 100)}
+                {textEllipsis(archive.url)}
             </ExternalCardLink>
         </Header>;
     }
@@ -149,7 +149,7 @@ function ArchivePage() {
             <Segment>
                 {screenshot}
                 <ExternalCardLink to={singlefileUrl}>
-                    <Header as='h2'>{textEllipsis(archive.title || archive.url, 100)}</Header>
+                    <Header as='h2'>{textEllipsis(archive.title || archive.url)}</Header>
                 </ExternalCardLink>
                 <Header as='h3'>{epochToDateString(archive.archive_datetime)}</Header>
                 {domainHeader}
@@ -198,7 +198,7 @@ export function ArchiveCard({file}) {
                 <CardHeader>
                     <Container textAlign='left'>
                         <ExternalCardLink to={singlefileUrl}>
-                            {textEllipsis(archive.title || archive.url, 100)}
+                            {cardTitleWrapper(archive.title || archive.url)}
                         </ExternalCardLink>
                     </Container>
                 </CardHeader>
@@ -453,7 +453,7 @@ export function ArchiveRowCells({file}) {
         </TableCell>
         <TableCell>
             <CardLink to={archiveUrl}>
-                {textEllipsis(archive.title || archive.stem, 100)}
+                {textEllipsis(archive.title || archive.stem)}
             </CardLink>
         </TableCell>
     </React.Fragment>)

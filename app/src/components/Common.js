@@ -796,3 +796,8 @@ export const filterToMimetypes = (filter) => {
 export const toLocaleString = (num, locale = 'en-US') => {
     return num.toLocaleString(locale);
 }
+
+export const cardTitleWrapper = (title, maxLength = 100, breakWord = true) => {
+    const style = breakWord ? {overflowWrap: 'break-word'} : null;
+    return <span style={style}>{textEllipsis(title, maxLength)}</span>
+}

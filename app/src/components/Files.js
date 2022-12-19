@@ -21,7 +21,7 @@ import 'react-keyed-file-browser/dist/react-keyed-file-browser.css';
 import {deleteFile, refreshDirectoryFiles, refreshFiles} from "../api";
 import {
     CardGroupCentered,
-    CardPosterLink,
+    CardPosterLink, cardTitleWrapper,
     epochToDateString,
     ExternalCardLink,
     FileIcon,
@@ -238,7 +238,7 @@ function ImageCard({file}) {
         <CardContent {...s}>
             <CardHeader>
                 <ExternalCardLink to={url} className='no-link-underscore card-link'>
-                    <p>{textEllipsis(file.title || file.stem || file.path, 100)}</p>
+                    <p>{textEllipsis(file.title || file.stem || file.path)}</p>
                 </ExternalCardLink>
             </CardHeader>
             <CardMeta {...s}>
@@ -281,7 +281,7 @@ function FileCard({file}) {
         <CardContent {...s}>
             <CardHeader>
                 <ExternalCardLink to={url}>
-                    {textEllipsis(file.title || file.stem || file.path)}
+                    {cardTitleWrapper(file.title || file.stem || file.path)}
                 </ExternalCardLink>
             </CardHeader>
             <p>{epochToDateString(file.modified / 1000)}</p>
@@ -320,7 +320,7 @@ function ImageRowCells({file}) {
         </TableCell>
         <TableCell>
             <ExternalCardLink to={url}>
-                <p>{textEllipsis(file.title || file.stem || file.path, 100)}</p>
+                <p>{textEllipsis(file.title || file.stem || file.path)}</p>
             </ExternalCardLink>
         </TableCell>
     </React.Fragment>)

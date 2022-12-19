@@ -2,7 +2,7 @@ import React, {Fragment, useContext, useEffect, useState} from 'react';
 import {Link, Route, Routes, useParams} from "react-router-dom";
 import {
     CardLink,
-    CardPosterLink,
+    CardPosterLink, cardTitleWrapper,
     defaultSearchOrder,
     defaultVideoOrder,
     Duration,
@@ -337,7 +337,7 @@ export function VideoCard({file}) {
             <CardHeader>
                 <Container textAlign='left'>
                     <Link to={video_url} className="no-link-underscore card-link">
-                        <p {...s}>{textEllipsis(video.title || video.stem || video.video_path, 100)}</p>
+                        <p {...s}>{cardTitleWrapper(video.title || video.stem || video.video_path)}</p>
                     </Link>
                 </Container>
             </CardHeader>
@@ -382,7 +382,7 @@ export function VideoRowCells({file}) {
         </TableCell>
         <TableCell>
             <CardLink to={video_url}>
-                {textEllipsis(video.title || video.stem || video.video_path, 100)}
+                {textEllipsis(video.title || video.stem || video.video_path)}
             </CardLink>
         </TableCell>
     </React.Fragment>

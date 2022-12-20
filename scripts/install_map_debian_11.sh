@@ -1,4 +1,4 @@
-#! /usr/usr/bin/env bash
+#! /usr/bin/env bash
 # This script installs OpenStreetMap tile server.
 # This server uses Apache2, renderd, and mod_tile to render and display map tiles.
 

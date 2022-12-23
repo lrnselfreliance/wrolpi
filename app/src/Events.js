@@ -58,7 +58,7 @@ export function useEventsInterval() {
     useRecurringTimeout(fetchEvents, 1000 * 5);
 
     useEffect(() => {
-        if (events && events.length > 1) {
+        if (events && events.length >= 1) {
             handleEvents(events);
         }
     }, [JSON.stringify(events)]);

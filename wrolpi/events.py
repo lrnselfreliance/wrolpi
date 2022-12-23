@@ -49,14 +49,6 @@ class Events:
     def send_directory_refresh_completed(message: str):
         send_event('directory_refresh_completed', message, subject='refresh_directory')
 
-    @staticmethod
-    def send_refresh_required(message: str = None):
-        send_event('refresh_required', message, subject='refresh_required')
-
-    @staticmethod
-    def send_singlefile_missing():
-        send_event('singlefile_missing', subject='install')
-
 
 def send_event(event: str, message: str = None, action: str = None, subject: str = None):
     EVENTS_LOCK.acquire()

@@ -9,14 +9,14 @@ function eventToast(title, description, type = 'success', time = 5000) {
 }
 
 function handleEvents(events) {
-    let processedSubjects = [];
+    const newestEvents = {};
 
     events.forEach(e => {
-        const {event, message, subject} = e;
+        const {event, message, subject, dt} = e;
         console.debug('event', e);
 
-        if (subject && processedSubjects.indexOf(subject) >= 0) {
-            console.debug(`Already handled subject "${subject}" this batch.`);
+        if (subject && newestEvents[subject] && newestEvents[subject] > dt) {
+            console.debug(`Already handled newer event of "${subject}".`);
             return;
         } else if (event === 'global_refresh_completed') {
             eventToast('Refresh completed', 'All files have been refreshed.');
@@ -29,7 +29,7 @@ function handleEvents(events) {
         }
 
         if (subject) {
-            processedSubjects = [...processedSubjects, subject];
+            newestEvents[subject] = dt;
         }
     })
 }

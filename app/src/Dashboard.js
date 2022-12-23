@@ -36,7 +36,7 @@ function FlagsMessages({flags}) {
             <Icon name='hand point right'/>
             <Message.Content>
                 <Message.Header>Refresh required</Message.Header>
-                Click here to refresh all your files.
+                <a href='#'>Click here</a> to refresh all your files.
             </Message.Content>
         </Message>;
     }

@@ -8,8 +8,9 @@ from unittest import mock
 from unittest.mock import MagicMock
 
 import pytest
+import pytz
 
-from wrolpi.dates import local_timezone, Seconds
+from wrolpi.dates import Seconds
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download, DownloadFrequency, DownloadResult, import_downloads_config, \
     RSSDownloader
@@ -63,7 +64,7 @@ def test_register_downloader(test_session, test_download_manager):
 async def test_delete_old_once_downloads(test_session, test_download_manager):
     """Once-downloads over a month old should be deleted."""
     with mock.patch('wrolpi.downloader.now') as mock_now:
-        mock_now.return_value = local_timezone(datetime(2020, 6, 5, 0, 0))
+        mock_now.return_value = datetime(2020, 6, 5, 0, 0, tzinfo=pytz.UTC)
         permissive_downloader = PermissiveDownloader(priority=0)
         test_download_manager.register_downloader(permissive_downloader)
 
@@ -78,14 +79,14 @@ async def test_delete_old_once_downloads(test_session, test_download_manager):
         d4 = test_download_manager.create_download('https://example.com/4')
         d3.complete()
         d4.complete()
-        d3.last_successful_download = local_timezone(datetime(2020, 1, 1, 0, 0, 0))
-        d4.last_successful_download = local_timezone(datetime(2020, 5, 1, 0, 0, 0))
+        d3.last_successful_download = datetime(2020, 1, 1, 0, 0, 0, tzinfo=pytz.UTC)
+        d4.last_successful_download = datetime(2020, 5, 1, 0, 0, 0, tzinfo=pytz.UTC)
         # Not a month old.
         d5 = test_download_manager.create_download('https://example.com/5')
-        d5.last_successful_download = local_timezone(datetime(2020, 6, 1, 0, 0, 0))
+        d5.last_successful_download = datetime(2020, 6, 1, 0, 0, 0, tzinfo=pytz.UTC)
         # An old, but pending download should not be deleted.
         d6 = test_download_manager.create_download('https://example.com/6')
-        d6.last_successful_download = local_timezone(datetime(2020, 4, 1, 0, 0, 0))
+        d6.last_successful_download = datetime(2020, 4, 1, 0, 0, 0, tzinfo=pytz.UTC)
         d6.started()
 
         test_download_manager.delete_old_once_downloads()
@@ -189,13 +190,13 @@ def test_calculate_next_download(test_session, test_download_manager, fake_now):
 
     # next_download slowly increases as we accumulate attempts.  Largest gap is the download frequency.
     attempts_expected = [
-        (0, local_timezone(datetime(2000, 1, 1, 3))),
-        (1, local_timezone(datetime(2000, 1, 1, 3))),
-        (2, local_timezone(datetime(2000, 1, 1, 9))),
-        (3, local_timezone(datetime(2000, 1, 2, 3))),
-        (4, local_timezone(datetime(2000, 1, 4, 9))),
-        (5, local_timezone(datetime(2000, 1, 8))),
-        (6, local_timezone(datetime(2000, 1, 8))),
+        (0, datetime(2000, 1, 1, 3, tzinfo=pytz.UTC)),
+        (1, datetime(2000, 1, 1, 3, tzinfo=pytz.UTC)),
+        (2, datetime(2000, 1, 1, 9, tzinfo=pytz.UTC)),
+        (3, datetime(2000, 1, 2, 3, tzinfo=pytz.UTC)),
+        (4, datetime(2000, 1, 4, 9, tzinfo=pytz.UTC)),
+        (5, datetime(2000, 1, 8, tzinfo=pytz.UTC)),
+        (6, datetime(2000, 1, 8, tzinfo=pytz.UTC)),
     ]
     for attempts, expected in attempts_expected:
         download.attempts = attempts
@@ -208,9 +209,9 @@ def test_calculate_next_download(test_session, test_download_manager, fake_now):
     test_session.add_all([d1, d2, d3])
     test_session.commit()
     # Downloads are spread out over the next week.
-    assert test_download_manager.calculate_next_download(d1) == local_timezone(datetime(2000, 1, 8))
-    assert test_download_manager.calculate_next_download(d2) == local_timezone(datetime(2000, 1, 11, 12))
-    assert test_download_manager.calculate_next_download(d3) == local_timezone(datetime(2000, 1, 9, 18))
+    assert test_download_manager.calculate_next_download(d1) == datetime(2000, 1, 8, tzinfo=pytz.UTC)
+    assert test_download_manager.calculate_next_download(d2) == datetime(2000, 1, 11, 12, tzinfo=pytz.UTC)
+    assert test_download_manager.calculate_next_download(d3) == datetime(2000, 1, 9, 18, tzinfo=pytz.UTC)
 
 
 @pytest.mark.asyncio
@@ -228,7 +229,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     downloads = test_download_manager.get_new_downloads(test_session)
     assert [(i.url, i.frequency) for i in downloads] == [('https://example.com', Seconds.hour)]
 
-    now_ = fake_now(datetime(2020, 1, 1, 0, 0, 0))
+    now_ = fake_now(datetime(2020, 1, 1, 0, 0, 0, tzinfo=pytz.UTC))
 
     # Download is processed and successful, no longer "new".
     await test_download_manager.wait_for_all_downloads()
@@ -237,7 +238,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     downloads = list(test_download_manager.get_recurring_downloads(test_session))
     assert len(downloads) == 1
     download = downloads[0]
-    expected = local_timezone(datetime(2020, 1, 1, 1, 0, 0))
+    expected = datetime(2020, 1, 1, 1, 0, 0, tzinfo=pytz.UTC)
     assert download.next_download == expected
     assert download.last_successful_download == now_
 
@@ -248,7 +249,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     assert download.last_successful_download == now_
 
     # Download is due an hour later.
-    fake_now(datetime(2020, 1, 1, 2, 0, 1))
+    fake_now(datetime(2020, 1, 1, 2, 0, 1, tzinfo=pytz.UTC))
     test_download_manager.renew_recurring_downloads(test_session)
     (download,) = list(test_download_manager.get_new_downloads(test_session))
     # Download is "new" but has not been downloaded a second time.
@@ -266,12 +267,12 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     assert download.status == 'deferred'
     assert download.last_successful_download == now_
     # Download should be retried after the DEFAULT_RETRY_FREQUENCY.
-    expected = local_timezone(datetime(2020, 1, 1, 3, 0, 0, 997200))
+    expected = datetime(2020, 1, 1, 3, 0, 0, 997200, tzinfo=pytz.UTC)
     assert download.next_download == expected
 
     # Try the download again, it finally succeeds.
     http_downloader.do_download.reset_mock()
-    now_ = fake_now(datetime(2020, 1, 1, 4, 0, 1))
+    now_ = fake_now(datetime(2020, 1, 1, 4, 0, 1, tzinfo=pytz.UTC))
     http_downloader.do_download.return_value = DownloadResult(success=True)
     test_download_manager.renew_recurring_downloads(test_session)
     await test_download_manager.wait_for_all_downloads()
@@ -280,7 +281,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     assert download.status == 'complete'
     assert download.last_successful_download == now_
     # Floats cause slightly wrong date.
-    assert download.next_download == local_timezone(datetime(2020, 1, 1, 5, 0, 0, 997200))
+    assert download.next_download == datetime(2020, 1, 1, 5, 0, 0, 997200, tzinfo=pytz.UTC)
 
 
 @pytest.mark.asyncio
@@ -435,9 +436,9 @@ async def test_downloads_config(test_client, test_session, test_download_manager
         frequency=DownloadFrequency.weekly,
         downloader=HTTPDownloader.name,
     )
-    download2.next_download = local_timezone(datetime(2000, 1, 2, 0, 0, 0))
+    download2.next_download = datetime(2000, 1, 2, 0, 0, 0, tzinfo=pytz.UTC)
     # Completed once-downloads should be ignored.
-    download1.last_successful_download = local_timezone(datetime(2000, 1, 1, 0, 0, 0))
+    download1.last_successful_download = datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.UTC)
     test_session.commit()
 
     # Allow background tasks to run.
@@ -450,7 +451,7 @@ async def test_downloads_config(test_client, test_session, test_download_manager
         dict(
             url='https://example.com/2',
             frequency=None,
-            next_download=local_timezone(datetime(2000, 1, 2, 0, 0, 0)),
+            next_download=datetime(2000, 1, 2, 0, 0, 0, tzinfo=pytz.UTC),
             downloader='http',
             sub_downloader=None,
         ),
@@ -474,7 +475,7 @@ async def test_downloads_config(test_client, test_session, test_download_manager
         dict(
             url='https://example.com/2',
             frequency=None,
-            next_download=local_timezone(datetime(2000, 1, 2, 0, 0, 0)),
+            next_download=datetime(2000, 1, 2, 0, 0, 0, tzinfo=pytz.UTC),
             downloader='http',
             sub_downloader=None,
         ),

@@ -211,6 +211,11 @@ async def test_refresh_many_files(test_session, make_files_structure):
 
 
 @pytest.mark.asyncio
+async def test_refresh_files_flags(test_session):
+    pass
+
+
+@pytest.mark.asyncio
 async def test_refresh_files_list(test_session, make_files_structure, test_directory):
     make_files_structure(['foo.txt', 'bar.txt'])
 

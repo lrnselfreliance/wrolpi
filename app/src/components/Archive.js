@@ -20,7 +20,7 @@ import {
     BackButton,
     CardLink, cardTitleWrapper,
     defaultSearchOrder,
-    epochToDateString,
+    isoDatetimeToString,
     ExternalCardLink,
     FileIcon,
     HelpHeader,
@@ -151,7 +151,7 @@ function ArchivePage() {
                 <ExternalCardLink to={singlefileUrl}>
                     <Header as='h2'>{textEllipsis(archive.title || archive.url)}</Header>
                 </ExternalCardLink>
-                <Header as='h3'>{epochToDateString(archive.archive_datetime)}</Header>
+                <Header as='h3'>{isoDatetimeToString(archive.archive_datetime)}</Header>
                 {domainHeader}
                 {urlHeader}
 
@@ -208,7 +208,7 @@ export function ArchiveCard({file}) {
                     </CardLink>}
                 <CardMeta {...s}>
                     <p>
-                        {epochToDateString(archive.archive_datetime)}
+                        {isoDatetimeToString(archive.archive_datetime)}
                     </p>
                 </CardMeta>
                 <CardDescription>

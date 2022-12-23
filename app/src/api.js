@@ -676,3 +676,14 @@ export async function getStatistics() {
         })
     }
 }
+
+export async function getEvents(after) {
+    let uri = `${API_URI}/events/feed`;
+    if (after) {
+        uri = `${uri}?after=${after}`
+    }
+    let response = await apiGet(uri);
+    if (response.status === 200) {
+        return await response.json();
+    }
+}

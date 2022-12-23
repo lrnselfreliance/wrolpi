@@ -24,7 +24,6 @@ class SettingsRequest:
     media_directory: Optional[str] = None
     throttle_on: Optional[bool] = None
     throttle_on_startup: Optional[bool] = None
-    timezone: Optional[str] = None
     wrol_mode: Optional[bool] = None
 
 
@@ -60,3 +59,8 @@ class DownloadRequest:
 @dataclass
 class JSONErrorResponse:
     error: str
+
+
+@dataclass
+class EventsRequest:
+    after: Optional[str] = None

@@ -66,7 +66,7 @@ def test_item_api(test_session, init_test_inventory, test_client):
     # assert item == response.json['items'][0]
     item = response.json['items'][0]
 
-    expiration_dates = (12345.12345, None)
+    expiration_dates = ('1969-12-31T20:25:45.123450', None)
     for expiration_date in expiration_dates:
         item['expiration_date'] = expiration_date
         request, response = test_client.put(f'/api/inventory/item/{item["id"]}', content=json.dumps(item))

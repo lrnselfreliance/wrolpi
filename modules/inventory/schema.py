@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from typing import Union, Optional
 
@@ -19,7 +20,7 @@ class ItemPostRequest:
     def __post_init__(self):
         self.item_size = Decimal(self.item_size) if self.item_size else None
         self.count = Decimal(self.count) if self.count else None
-        self.expiration_date = from_timestamp(float(self.expiration_date)) if self.expiration_date else None
+        self.expiration_date = datetime.fromisoformat(self.expiration_date) if self.expiration_date else None
 
 
 @dataclass
@@ -33,19 +34,19 @@ class ItemPutRequest:
     serving: Union[str, Decimal, None]
     category: Optional[str]
     subcategory: Optional[str]
-    expiration_date: Optional[float]
+    expiration_date: Optional[str]
     purchase_date: Optional[float]
     inventory_id: int
-    created_at: Optional[float]
-    deleted_at: Optional[float]
+    created_at: Optional[str]
+    deleted_at: Optional[str]
 
     def __post_init__(self):
         self.item_size = Decimal(self.item_size) if self.item_size else None
         self.count = Decimal(self.count) if self.count else None
         self.serving = Decimal(self.serving) if self.serving else None
-        self.expiration_date = from_timestamp(self.expiration_date) if self.expiration_date else None
-        self.created_at = from_timestamp(self.created_at) if self.created_at else None
-        self.deleted_at = from_timestamp(self.deleted_at) if self.deleted_at else None
+        self.expiration_date = datetime.fromisoformat(self.expiration_date) if self.expiration_date else None
+        self.created_at = datetime.fromisoformat(self.created_at) if self.created_at else None
+        self.deleted_at = datetime.fromisoformat(self.deleted_at) if self.deleted_at else None
 
 
 @dataclass

@@ -28,7 +28,7 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
-from wrolpi.dates import DEFAULT_TIMEZONE, now
+from wrolpi.dates import now, from_timestamp
 from wrolpi.errors import WROLModeEnabled, NativeOnly
 from wrolpi.vars import PYTEST, MODULES_DIR, \
     DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY
@@ -96,6 +96,8 @@ __all__ = [
     'get_warn_once',
     'ordered_unique_list',
     'truncate_generator_bytes',
+    'cancel_refresh_tasks',
+    'cancelable_wrapper',
 ]
 
 # Base is used for all SQLAlchemy models.
@@ -246,7 +248,6 @@ class WROLPiConfig(ConfigFile):
         hotspot_password='wrolpi hotspot',
         hotspot_ssid='WROLPi',
         throttle_on_startup=False,
-        timezone=str(DEFAULT_TIMEZONE),
         wrol_mode=False,
     )
 
@@ -305,14 +306,6 @@ class WROLPiConfig(ConfigFile):
     @throttle_on_startup.setter
     def throttle_on_startup(self, value: bool):
         self.update({'throttle_on_startup': value})
-
-    @property
-    def timezone(self) -> str:
-        return self._config['timezone']
-
-    @timezone.setter
-    def timezone(self, value: str):
-        self.update({'timezone': value})
 
     @property
     def wrol_mode(self) -> bool:
@@ -710,7 +703,7 @@ def zig_zag(low: ZIG_TYPE, high: ZIG_TYPE) -> Generator[ZIG_TYPE, None, None]:
         raise ValueError(f'high and low must be same type')
     if isinstance(low, datetime) and isinstance(high, datetime):
         low, high = low.timestamp(), high.timestamp()
-        output_type = datetime.fromtimestamp
+        output_type = from_timestamp
 
     # Special thanks to my wife for helping me solve this! :*
     results = set()
@@ -1021,7 +1014,14 @@ def background_task(coro) -> Task:
 
     The task is stored in a global set of background tasks so the task will not be discarded by the garbage collector.
     """
-    task = asyncio.create_task(coro)
+
+    async def error_logger():
+        try:
+            await coro
+        except Exception as e:
+            logger.error('Background task had error', exc_info=e)
+
+    task = asyncio.create_task(error_logger())
     BACKGROUND_TASKS.add(task)
     task.add_done_callback(BACKGROUND_TASKS.discard)
     return task
@@ -1055,3 +1055,30 @@ def get_global_statistics():
     return dict(
         db_size=db_size,
     )
+
+
+REFRESH_TASKS: List[Task] = []
+
+
+async def cancel_refresh_tasks():
+    """Cancel all refresh tasks, if any."""
+    if REFRESH_TASKS:
+        logger.warning(f'Canceling {len(REFRESH_TASKS)} refreshes')
+        for task in REFRESH_TASKS:
+            task.cancel()
+        await asyncio.gather(*REFRESH_TASKS)
+
+
+def cancelable_wrapper(func: callable):
+    """Wraps an async function so that it will be canceled by `cancel_refresh_tasks`."""
+
+    @wraps(func)
+    async def wrapped(*args, **kwargs):
+        if PYTEST:
+            return await func(*args, **kwargs)
+
+        task = background_task(func(*args, **kwargs))
+        REFRESH_TASKS.append(task)
+
+    return wrapped
+

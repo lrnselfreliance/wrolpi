@@ -8,7 +8,7 @@ from typing import Generator, Union, Optional
 import srt
 import webvtt
 
-from wrolpi.cmd import which
+from wrolpi.cmd import FFMPEG_BIN
 from wrolpi.common import logger
 
 __all__ = ['read_captions', 'extract_captions']
@@ -58,9 +58,6 @@ def read_captions(caption_path: Path):
         pass
 
     logger.debug(f'Failed to parse caption file {caption_path}')
-
-
-FFMPEG_BIN = which('ffmpeg', '/usr/bin/ffmpeg')
 
 
 def extract_captions(path: pathlib.Path) -> Optional[str]:

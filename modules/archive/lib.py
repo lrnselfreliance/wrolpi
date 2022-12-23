@@ -15,10 +15,10 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 
 from modules.archive.models import Domain, Archive
-from wrolpi.cmd import which
+from wrolpi.cmd import READABILITY_BIN, SINGLE_FILE_BIN, CHROMIUM
 from wrolpi.common import get_media_directory, logger, extract_domain, chdir, escape_file_name, walk, \
     aiohttp_post, match_paths_to_suffixes, iterify
-from wrolpi.dates import now, Seconds, local_timezone
+from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import UnknownArchive, InvalidOrderBy
 from wrolpi.files.lib import handle_search_results
@@ -146,21 +146,10 @@ async def request_archive(url: str) -> Tuple[str, Optional[str], Optional[str]]:
     return singlefile, readability, screenshot
 
 
-SINGLE_FILE_BIN = which('single-file',
-                        '/usr/bin/single-file',  # rpi ubuntu
-                        '/usr/local/bin/single-file',  # debian
-                        warn=True)
-CHROMIUM = which('chromium-browser', 'chromium',
-                 '/usr/bin/chromium-browser',  # rpi ubuntu
-                 '/usr/bin/chromium',  # debian
-                 warn=True
-                 )
-
-
 def local_singlefile(url: str):
     """Run the single-file executable to create an HTML file archive."""
-    if not SINGLE_FILE_BIN.is_file():
-        raise FileNotFoundError(f'single-file not found')
+    if not SINGLE_FILE_BIN or not SINGLE_FILE_BIN.is_file():
+        raise FileNotFoundError(f'single-file not found.  Is it installed?')
 
     cmd = (str(SINGLE_FILE_BIN),
            url,
@@ -191,12 +180,6 @@ def local_screenshot(url: str) -> bytes:
         logger.warning(f'Failed to screenshot {url}', exc_info=e)
         return b''
     return png
-
-
-READABILITY_BIN = which('readability-extractor',
-                        '/usr/bin/readability-extractor',  # rpi ubuntu
-                        '/usr/local/bin/readability-extractor',  # debian
-                        warn=True)
 
 
 def local_extract_readability(path: str, url: str) -> dict:
@@ -364,9 +347,9 @@ def delete_archives(*archive_ids: List[int]):
 
 def archive_strptime(dt: str) -> datetime:
     try:
-        return local_timezone(datetime.strptime(dt, '%Y-%m-%d-%H-%M-%S'))
+        return datetime.strptime(dt, '%Y-%m-%d-%H-%M-%S')
     except ValueError:
-        return local_timezone(datetime.strptime(dt, '%Y-%m-%d %H:%M:%S'))
+        return datetime.strptime(dt, '%Y-%m-%d %H:%M:%S')
 
 
 def archive_strftime(dt: datetime) -> str:

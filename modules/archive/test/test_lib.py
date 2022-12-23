@@ -10,7 +10,6 @@ from modules.archive import lib
 from modules.archive.lib import get_or_create_domain, get_new_archive_files, delete_archives, do_archive, get_domains, \
     group_archive_files, ArchiveFiles
 from modules.archive.models import Archive, Domain
-from wrolpi.dates import local_timezone
 from wrolpi.db import get_db_session
 from wrolpi.files.lib import refresh_files
 from wrolpi.files.models import File
@@ -533,8 +532,8 @@ def test_group_archive_files(test_directory):
         readability_json=pathlib.Path('2021-10-05 16:20:10.346823.readability.json'),
     )
     assert list(group_archive_files(files)) == [
-        (local_timezone(datetime(2000, 1, 1, 0, 0, 0)), group1),
-        (local_timezone(datetime(2021, 10, 5, 16, 20, 10)), group2),
+        (datetime(2000, 1, 1, 0, 0, 0), group1),
+        (datetime(2021, 10, 5, 16, 20, 10), group2),
     ]
 
 

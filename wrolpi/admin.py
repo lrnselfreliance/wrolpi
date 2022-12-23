@@ -1,16 +1,11 @@
 import enum
 import subprocess
 
-from wrolpi.cmd import which
+from wrolpi.cmd import NMCLI_BIN, CPUFREQ_INFO_BIN, SUDO_BIN, CPUFREQ_SET_BIN
 from wrolpi.common import logger, WROLPI_CONFIG, get_warn_once
 from wrolpi.vars import DEFAULT_CPU_FREQUENCY, DOCKERIZED
 
 logger = logger.getChild(__name__)
-
-SUDO_BIN = which('sudo', '/usr/bin/sudo')
-NMCLI_BIN = which('nmcli', '/usr/bin/nmcli')
-CPUFREQ_INFO_BIN = which('cpufreq-info', '/usr/bin/cpufreq-info')
-CPUFREQ_SET_BIN = which('cpufreq-set', '/usr/bin/cpufreq-set')
 
 POWER_SAVE_FREQ = 'powersave'  # noqa
 

@@ -22,7 +22,7 @@ import {deleteFile, refreshDirectoryFiles, refreshFiles} from "../api";
 import {
     CardGroupCentered,
     CardPosterLink, cardTitleWrapper,
-    epochToDateString,
+    isoDatetimeToString,
     ExternalCardLink,
     FileIcon,
     humanFileSize,
@@ -242,7 +242,7 @@ function ImageCard({file}) {
                 </ExternalCardLink>
             </CardHeader>
             <CardMeta {...s}>
-                <p>{epochToDateString(file.modified / 1000)}</p>
+                <p>{isoDatetimeToString(file.modified / 1000)}</p>
             </CardMeta>
             <CardDescription {...s}>
                 <p>{humanFileSize(file.size)}</p>
@@ -284,7 +284,7 @@ function FileCard({file}) {
                     {cardTitleWrapper(file.title || file.stem || file.path)}
                 </ExternalCardLink>
             </CardHeader>
-            <p>{epochToDateString(file.modified / 1000)}</p>
+            <p>{isoDatetimeToString(file.modified / 1000)}</p>
             <p>{size}</p>
         </CardContent>
     </Card>

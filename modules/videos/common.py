@@ -14,7 +14,8 @@ import PIL
 from PIL import Image
 from sqlalchemy.orm import Session
 
-from wrolpi.cmd import which
+from wrolpi.captions import FFMPEG_BIN
+from wrolpi.cmd import FFPROBE_BIN
 from wrolpi.common import logger, iterify, get_media_directory, \
     minimize_dict, match_paths_to_suffixes
 from wrolpi.db import get_db_session, get_db_curs
@@ -34,8 +35,6 @@ MINIMUM_VIDEO_KEYS = {'id', 'title', 'upload_date', 'duration', 'channel', 'chan
                       'view_count'}
 # These are the supported video formats.  These are in order of their preference.
 VIDEO_EXTENSIONS = ('mp4', 'ogg', 'webm', 'flv')
-
-FFMPEG_BIN = which('ffmpeg', '/usr/bin/ffmpeg', warn=True)
 
 
 class ConfigError(Exception):
@@ -168,9 +167,6 @@ def is_valid_poster(poster_path: Path) -> bool:
             pass
 
     return False
-
-
-FFPROBE_BIN = which('ffprobe', '/usr/bin/ffprobe', warn=True)
 
 
 def get_video_duration(video_path: Path) -> int:

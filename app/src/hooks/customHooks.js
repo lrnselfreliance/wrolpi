@@ -10,13 +10,13 @@ import {
     getDownloaders,
     getDownloads,
     getFiles,
-    getStatistics,
     getInventory,
     getSettings,
-    getVideosStatistics,
+    getStatistics,
     getStatus,
     getThrottleStatus,
     getVideo,
+    getVideosStatistics,
     killDownloads,
     searchArchives,
     searchVideos,
@@ -669,6 +669,7 @@ export const useStatusInterval = () => {
 
     return {status, fetchStatus};
 }
+
 
 export const useVideoStatistics = () => {
     const [statistics, setStatistics] = useState({});

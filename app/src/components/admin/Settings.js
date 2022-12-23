@@ -28,7 +28,6 @@ export class Settings extends React.Component {
             hotspot_status: null,
             throttle_on_startup: null,
             throttle_status: null,
-            timezone: {timezone: null},
         }
 
         this.handleSubmit = this.handleSubmit.bind(this);
@@ -50,7 +49,6 @@ export class Settings extends React.Component {
                 hotspot_status: settings.hotspot_status,
                 throttle_on_startup: settings.throttle_on_startup,
                 throttle_status: settings.throttle_status,
-                timezone: {value: settings.timezone, label: settings.timezone},
             }, this.handleHotspotChange);
         } catch (e) {
             console.error(e);
@@ -68,7 +66,6 @@ export class Settings extends React.Component {
             hotspot_password: this.state.hotspot_password,
             hotspot_ssid: this.state.hotspot_ssid,
             throttle_on_startup: this.state.throttle_on_startup,
-            timezone: this.state.timezone.value,
         }
         await saveSettings(settings);
         this.setState({disabled: false, pending: false});

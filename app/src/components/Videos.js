@@ -6,7 +6,7 @@ import {
     defaultSearchOrder,
     defaultVideoOrder,
     Duration,
-    epochToDateString,
+    isoDatetimeToString,
     FileIcon,
     isEmpty,
     mimetypeColor,
@@ -310,7 +310,7 @@ export function VideoCard({file}) {
     const {s} = useContext(ThemeContext);
 
     let video_url = `/videos/video/${video.id}`;
-    const upload_date = epochToDateString(video.upload_date);
+    const upload_date = isoDatetimeToString(video.upload_date);
     // A video may not have a channel.
     const channel = video.channel ? video.channel : null;
     let channel_url = null;

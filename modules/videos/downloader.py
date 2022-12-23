@@ -12,7 +12,7 @@ from yt_dlp import YoutubeDL
 from yt_dlp.extractor import YoutubeTabIE  # noqa
 from yt_dlp.utils import UnsupportedError, DownloadError
 
-from wrolpi.cmd import which
+from wrolpi.cmd import YT_DLP_BIN
 from wrolpi.common import logger, get_media_directory, escape_file_name
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs
@@ -161,14 +161,6 @@ class ChannelDownloader(Downloader, ABC):
         already_downloaded = [i.url for i in video_downloader.already_downloaded(*downloads)]
         downloads = [i for i in downloads if i not in already_downloaded]
         return downloads
-
-
-YT_DLP_BIN = which(
-    'yt-dlp',
-    '/usr/local/bin/yt-dlp',  # Location in docker container
-    '/opt/wrolpi/venv/bin/yt-dlp',  # Use virtual environment location
-    warn=True,
-)
 
 
 class VideoDownloader(Downloader, ABC):

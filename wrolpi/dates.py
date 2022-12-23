@@ -1,17 +1,15 @@
 import logging
-from datetime import datetime, date, timezone, timedelta
+from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import Union
 
 import pytz
 from sqlalchemy import types
 
-from wrolpi.errors import InvalidTimezone
-from wrolpi.vars import DATETIME_FORMAT, DATETIME_FORMAT_MS, DEFAULT_TIMEZONE_STR
+from wrolpi.vars import DATETIME_FORMAT_MS
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TIMEZONE = pytz.timezone(DEFAULT_TIMEZONE_STR)
 TEST_DATETIME: datetime = None
 
 
@@ -23,55 +21,28 @@ class Seconds(int, Enum):
 
 
 def set_test_now(dt: datetime):
-    if dt and not dt.tzinfo:
-        dt = local_timezone(dt)
     global TEST_DATETIME
+    if dt and not dt.tzinfo:
+        # Assume any datetime is UTC during testing.
+        dt = dt.replace(tzinfo=pytz.UTC)
     TEST_DATETIME = dt
     return dt
 
 
-def set_timezone(tz: pytz.timezone):
-    """Change the global timezone for WROLPi.  This does NOT save the config."""
-    global DEFAULT_TIMEZONE
-
-    if not tz:
-        raise InvalidTimezone('Timezone cannot be blank!')
-
-    if isinstance(tz, str):
-        tz = pytz.timezone(tz)
-
-    logger.info(f'Setting timezone: {tz}')
-    DEFAULT_TIMEZONE = tz
-
-
-def utc_now() -> datetime:
-    """Get the current DateTime in UTC.  Timezone aware."""
+def now() -> datetime:
+    """Get the current DateTime in the provided timezone.  Timezone aware."""
+    global TEST_DATETIME
+    if TEST_DATETIME:
+        return TEST_DATETIME
     return datetime.now(tz=timezone.utc)
 
 
-def now(tz: pytz.timezone = None) -> datetime:
-    """Get the current DateTime in the provided timezone.  Timezone aware."""
-    if TEST_DATETIME:
-        return TEST_DATETIME
-    return datetime.now(tz=tz or DEFAULT_TIMEZONE)
-
-
-def local_timezone(dt: datetime) -> datetime:
-    """Convert the DateTime provided to the local Timezone.  Timezone aware."""
-    return dt.astimezone(DEFAULT_TIMEZONE)
-
-
-def today() -> date:
-    """Return today's date."""
-    return now().date()
-
-
 def strftime(dt: datetime) -> str:
-    return dt.strftime(DATETIME_FORMAT)
+    return dt.isoformat()
 
 
 def strptime(dt: str) -> datetime:
-    return local_timezone(datetime.strptime(dt, DATETIME_FORMAT))
+    return datetime.fromisoformat(dt).astimezone(pytz.UTC)
 
 
 def strftime_ms(dt: datetime) -> str:
@@ -79,11 +50,11 @@ def strftime_ms(dt: datetime) -> str:
 
 
 def strptime_ms(dt: str) -> datetime:
-    return local_timezone(datetime.strptime(dt, DATETIME_FORMAT_MS))
+    return datetime.fromisoformat(dt).astimezone(pytz.UTC)
 
 
 def from_timestamp(timestamp: float) -> datetime:
-    return local_timezone(datetime.fromtimestamp(timestamp))
+    return datetime.fromtimestamp(timestamp).astimezone(pytz.UTC)
 
 
 def seconds_to_timestamp(seconds: Union[int, float]) -> str:
@@ -114,13 +85,8 @@ def timedelta_to_timestamp(delta: timedelta) -> str:
     return seconds_to_timestamp(delta.total_seconds())
 
 
-def recursive_replace_tz(obj, tz=pytz.utc):
-    """Recursively replace the timezone of any datetimes."""
-    from wrolpi.common import recursive_map
-    return recursive_map(obj, lambda i: i.replace(tzinfo=tz) if isinstance(i, datetime) else i)
-
-
 class TZDateTime(types.TypeDecorator):
+    """Forces all datetime to have a timezone.  Stores all datetime in DB as UTC."""
     impl = types.DateTime
     cache_ok = True
 
@@ -132,12 +98,10 @@ class TZDateTime(types.TypeDecorator):
             value = value.astimezone(timezone.utc)
         elif isinstance(value, str) and '-' in value:
             value = datetime.fromisoformat(value)
-            value = value.astimezone(timezone.utc)
         return value
 
     def process_result_value(self, value: datetime, dialect):
         if value is not None:
-            # Assume the DB timestamp is UTC if not specified.
+            # Assume the DB timestamp is UTC.
             value = value.replace(tzinfo=pytz.utc) if not value.tzinfo else value
-            value = local_timezone(value)
         return value

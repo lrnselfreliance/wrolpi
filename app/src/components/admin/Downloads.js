@@ -4,7 +4,7 @@ import {Link} from "react-router-dom";
 import {
     DisableDownloadsToggle,
     isEmpty,
-    secondsToElapsedPopup,
+    isoDatetimeToElapsedPopup,
     secondsToFrequency,
     textEllipsis,
     useTitle,
@@ -162,10 +162,10 @@ class DownloadRow extends React.Component {
             </TableCell>
             <TableCell>{secondsToFrequency(frequency)}</TableCell>
             <TableCell>
-                {last_successful_download ? secondsToElapsedPopup(last_successful_download) : null}
+                {last_successful_download ? isoDatetimeToElapsedPopup(last_successful_download) : null}
                 {status === 'pending' ? <Loader active inline size='tiny'/> : null}
             </TableCell>
-            <TableCell>{secondsToElapsedPopup(next_download)}</TableCell>
+            <TableCell>{next_download ? isoDatetimeToElapsedPopup(next_download) : null}</TableCell>
             <TableCell>
                 {error && errorModal}
                 {deleteButton}
@@ -223,7 +223,7 @@ class StoppableRow extends React.Component {
             (text) => <Link to={location}>{text}</Link> :
             (text) => <a href={url} target='_blank' rel='noopener noreferrer'>{text}</a>;
 
-        let completedAtCell = last_successful_download ? secondsToElapsedPopup(last_successful_download) : null;
+        let completedAtCell = last_successful_download ? isoDatetimeToElapsedPopup(last_successful_download) : null;
         let buttonCell = <TableCell/>;
         if (status === 'pending' || status === 'new') {
             buttonCell = (

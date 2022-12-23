@@ -17,6 +17,7 @@ from typing import Tuple, Optional
 from urllib.parse import urlparse
 
 import feedparser
+import pytz
 from feedparser import FeedParserDict
 from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -24,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, WROLPI_CONFIG, \
     background_task, limit_concurrent
-from wrolpi.dates import TZDateTime, now, Seconds, local_timezone, recursive_replace_tz
+from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST
@@ -884,7 +885,6 @@ class DownloadManager:
             '''
             curs.execute(stmt)
             recurring_downloads = list(map(dict, curs.fetchall()))
-            recurring_downloads = recursive_replace_tz(recurring_downloads)
 
             stmt = f'''
                 SELECT
@@ -907,7 +907,6 @@ class DownloadManager:
             '''
             curs.execute(stmt)
             once_downloads = list(map(dict, curs.fetchall()))
-            once_downloads = recursive_replace_tz(once_downloads)
 
         data = dict(
             recurring_downloads=recurring_downloads,
@@ -974,7 +973,7 @@ class DownloadManager:
         index = downloads.index(download.id)
 
         # Download was successful.  Spread the same-frequency downloads out over their iteration.
-        start_date = local_timezone(datetime(2000, 1, 1))
+        start_date = datetime(2000, 1, 1).replace(tzinfo=pytz.UTC)
         # Weeks/months/etc. since start_date.
         iterations = ((now() - start_date) // freq).total_seconds()
         # Download slots start the next nearest iteration since 2000-01-01.
@@ -986,7 +985,7 @@ class DownloadManager:
         # it will be downloaded the 3rd slot of next week.
         zagger = zig_zag(start_date, end_date)
         next_download = [i for i, j in zip(zagger, range(len(downloads)))][index]
-        next_download = local_timezone(next_download)
+        next_download = next_download
         return next_download
 
     @optional_session

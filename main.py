@@ -3,15 +3,16 @@ import argparse
 import logging
 import sys
 
-import pytz
 from sanic import Sanic
 from sanic.signals import Event
 
+from wrolpi import flags
 from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, admin
-from wrolpi.common import logger, get_config, import_modules, check_media_directory, limit_concurrent, wrol_mode_enabled
-from wrolpi.dates import set_timezone
+from wrolpi.common import logger, get_config, import_modules, check_media_directory, limit_concurrent, \
+    wrol_mode_enabled, cancel_refresh_tasks
 from wrolpi.downloader import download_manager, import_downloads_config
-from wrolpi.files.lib import cancel_refresh_tasks
+from wrolpi.events import Events
+from wrolpi import flags
 from wrolpi.root_api import api_app
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, PYTEST
 from wrolpi.version import get_version_string
@@ -121,11 +122,7 @@ def main():
     if args.sub_commands == 'db':
         return db_main(args)
 
-    # Set the Timezone
     config = get_config()
-    if config.timezone:
-        tz = pytz.timezone(config.timezone)
-        set_timezone(tz)
 
     # Hotspot/throttle are not supported in Docker containers.
     if not DOCKERIZED and config.hotspot_on_startup:
@@ -171,8 +168,14 @@ def set_log_level(args):
 
 
 @api_app.before_server_start
-async def download_startup(app: Sanic):
+async def startup(app: Sanic):
+    flags.init_flags()
     await import_downloads_config()
+
+
+@api_app.after_server_start
+async def ready(app: Sanic):
+    Events.send_ready()
 
 
 @api_app.after_server_start
@@ -182,6 +185,10 @@ async def periodic_downloads(app: Sanic):
 
     Limited to only one process.
     """
+    if not flags.refresh_complete:
+        logger.warning('Refusing to download without refresh')
+        return
+
     # Set all downloads to new.
     download_manager.reset_downloads()
 

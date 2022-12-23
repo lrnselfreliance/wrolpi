@@ -18,6 +18,7 @@ import {StatusContext, ThemeContext} from "./contexts/contexts";
 import {ThemeWrapper} from "./components/Theme";
 import {Dashboard} from "./Dashboard";
 import {Donate} from "./components/Donate";
+import {useEventsInterval} from "./Events";
 
 function PageNotFound() {
     return <Container fluid>
@@ -47,6 +48,7 @@ function Footer() {
 
 export default function App() {
     const status = useStatusInterval();
+    useEventsInterval();
 
     return (<ThemeWrapper>
         <StatusContext.Provider value={status}>

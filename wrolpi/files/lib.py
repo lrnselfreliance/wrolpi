@@ -6,22 +6,23 @@ import os
 import pathlib
 import re
 import subprocess
-from asyncio import Task
-from functools import wraps
 from pathlib import Path
 from typing import List, Tuple, Union
 
 import psycopg2
 from sqlalchemy.orm import Session
 
+from wrolpi import flags
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
     get_files_and_directories, apply_modelers, apply_after_refresh, get_model_by_table_name, chunks_by_stem, \
-    background_task, partition, ordered_unique_list, chunks
+    partition, ordered_unique_list, chunks, cancelable_wrapper
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidFile
+from wrolpi.events import Events
 from wrolpi.files.models import File
+from wrolpi import flags
 from wrolpi.vars import PYTEST, FILE_REFRESH_CHUNK_SIZE
 
 try:
@@ -220,32 +221,6 @@ async def _refresh_directory_files_recursively(directory: pathlib.Path, idempote
             raise
 
 
-REFRESH_TASKS: List[Task] = []
-
-
-async def cancel_refresh_tasks():
-    """Cancel all refresh tasks, if any."""
-    if REFRESH_TASKS:
-        refresh_logger.warning(f'Canceling {len(REFRESH_TASKS)} refreshes')
-        for task in REFRESH_TASKS:
-            task.cancel()
-        await asyncio.gather(*REFRESH_TASKS)
-
-
-def cancelable_wrapper(func: callable):
-    """Wraps an async function so that it will be canceled by `cancel_refresh_tasks`."""
-
-    @wraps(func)
-    async def wrapped(*args, **kwargs):
-        if PYTEST:
-            return await func(*args, **kwargs)
-
-        task = background_task(func(*args, **kwargs))
-        REFRESH_TASKS.append(task)
-
-    return wrapped
-
-
 @cancelable_wrapper
 async def apply_indexers():
     """Finds all Files that have not been indexed and indexes them."""
@@ -344,28 +319,39 @@ async def refresh_files_list(paths: List[str], include_files_near: bool = True):
 @cancelable_wrapper
 async def refresh_files():
     """Find, model, and index all files in the media directory."""
-    refresh_logger.warning('Refreshing all files')
+    with flags.refreshing:
+        refresh_logger.warning('Refreshing all files')
+        Events.send_global_refresh_started()
 
-    # TODO remove this later when everyone has migrated their files.
-    from modules.archive.lib import migrate_archive_files
-    migrate_archive_files()
+        # TODO remove this later when everyone has migrated their files.
+        from modules.archive.lib import migrate_archive_files
+        migrate_archive_files()
 
-    idempotency = now()
+        idempotency = now()
 
-    # Add all files in the media directory to the DB.
-    await _refresh_directory_files_recursively(get_media_directory(), idempotency)
+        # Add all files in the media directory to the DB.
+        await _refresh_directory_files_recursively(get_media_directory(), idempotency)
 
-    # Remove any records where the file no longer exists.
-    with get_db_curs(commit=True) as curs:
-        curs.execute('DELETE FROM file WHERE idempotency < %s OR idempotency is null RETURNING path', (idempotency,))
-        deleted = list(curs.fetchall())
-        logger.debug(f'{deleted=}')
-        logger.warning(f'Removed {len(deleted)} missing files')
+        Events.send_global_refresh_modeling_completed()
 
-    apply_after_refresh()
-    await apply_indexers()
+        # Remove any records where the file no longer exists.
+        with get_db_curs(commit=True) as curs:
+            curs.execute('DELETE FROM file WHERE idempotency < %s OR idempotency is null RETURNING path',
+                         (idempotency,))
+            deleted = list(curs.fetchall())
+            logger.debug(f'{deleted=}')
+            logger.warning(f'Removed {len(deleted)} missing files')
 
-    refresh_logger.warning('Done refreshing Files')
+        Events.send_global_refresh_delete_completed()
+
+        apply_after_refresh()
+        await apply_indexers()
+        Events.send_global_refresh_indexing_completed()
+
+        Events.send_global_refresh_completed()
+        refresh_logger.warning('Done refreshing Files')
+
+        flags.refresh_complete.set()
 
 
 @limit_concurrent(1)
@@ -379,6 +365,8 @@ async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str
         directory = pathlib.Path(directory)
     if directory.is_file():
         raise ValueError(f'Cannot refresh files of a file: {directory=}')
+
+    Events.send_directory_refresh_started(f'Refresh of {repr(directory.name)} has started.')
 
     # All Files older than this will be removed.
     idempotency = now()
@@ -404,6 +392,7 @@ async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str
     apply_after_refresh()
     await apply_indexers()
 
+    Events.send_directory_refresh_completed(f'Refresh of {repr(directory.name)} has completed.')
     refresh_logger.info(f'Done refreshing files in {directory}')
 
 

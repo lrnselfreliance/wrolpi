@@ -5,10 +5,10 @@ import pathlib
 from uuid import uuid4
 
 import pytest
+import pytz
 
 from modules.archive.lib import archive_strftime
 from modules.archive.models import Archive, Domain
-from wrolpi.dates import local_timezone
 from wrolpi.files.models import File
 
 
@@ -22,7 +22,7 @@ def archive_directory(test_directory) -> pathlib.Path:
 @pytest.fixture
 def archive_factory(test_session, archive_directory, make_files_structure):
     def time_generator():
-        timestamp = datetime.datetime(2000, 1, 1, 0, 0, 0)
+        timestamp = datetime.datetime(2000, 1, 1, 0, 0, 0).astimezone(pytz.UTC)
         while True:
             timestamp += datetime.timedelta(seconds=1)
             yield timestamp
@@ -39,7 +39,7 @@ def archive_factory(test_session, archive_directory, make_files_structure):
         domain_dir = archive_directory / domain_dir
         domain_dir.mkdir(exist_ok=True)
 
-        archive_datetime = local_timezone(next(now))
+        archive_datetime = next(now)
         timestamp = archive_strftime(archive_datetime)
 
         json_contents = {}

@@ -8,8 +8,44 @@ import {Header, Segment, Statistic, StatisticGroup} from "./components/Theme";
 import {Link} from "react-router-dom";
 import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
 import {ProgressPlaceholder} from "./components/Placeholder";
-import {Divider} from "semantic-ui-react";
+import {Divider, Icon, Message} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import {refreshFiles} from "./api";
+
+function FlagsMessages({flags}) {
+    if (!flags) {
+        return <></>
+    }
+
+    let refreshing;
+    let refreshComplete;
+
+    // Do not tell the maintainer to refresh the files if they are already refreshing.
+    if (flags.indexOf('refreshing') >= 0) {
+        // Actively refreshing.
+        refreshing = <Message icon>
+            <Icon name='circle notched' loading/>
+            <Message.Content>
+                <Message.Header>Refreshing</Message.Header>
+                Your files are being refreshed.
+            </Message.Content>
+        </Message>;
+    } else if (flags.indexOf('refresh_complete') === -1) {
+        // `refresh_complete` flag is not set.  Tell the maintainer to refresh the files.
+        refreshComplete = <Message icon warning onClick={refreshFiles}>
+            <Icon name='hand point right'/>
+            <Message.Content>
+                <Message.Header>Refresh required</Message.Header>
+                Click here to refresh all your files.
+            </Message.Content>
+        </Message>;
+    }
+
+    return <>
+        {refreshing}
+        {refreshComplete}
+    </>
+}
 
 export function Dashboard() {
     useTitle('Dashboard');
@@ -21,7 +57,8 @@ export function Dashboard() {
 
     const [downloadOpen, setDownloadOpen] = useState(false);
     const onDownloadOpen = (name) => setDownloadOpen(!!name);
-    const downloads = <Segment><DownloadMenu onOpen={onDownloadOpen}/></Segment>;
+    const downloadsDisabled = status?.flags?.indexOf('refresh_complete') === -1;
+    const downloads = <Segment><DownloadMenu onOpen={onDownloadOpen} disabled={downloadsDisabled}/></Segment>;
 
     // Only show dashboard parts if not searching.
     let body;
@@ -35,7 +72,7 @@ export function Dashboard() {
         </>;
     }
 
-    return (<PageContainer>
+    return <PageContainer>
         <Grid>
             <Grid.Row>
                 <Grid.Column mobile={16} computer={8}>
@@ -50,8 +87,9 @@ export function Dashboard() {
                 </Grid.Column>
             </Grid.Row>
         </Grid>
+        {!searchStr && <FlagsMessages flags={status['flags']}/>}
         {body}
-    </PageContainer>)
+    </PageContainer>
 }
 
 function DashboardStatus() {

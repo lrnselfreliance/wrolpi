@@ -12,11 +12,12 @@ from time import sleep
 from unittest import mock
 
 import pytest
+import pytz
 
 import wrolpi.vars
 from wrolpi import common
 from wrolpi.common import cum_timer, TIMERS, print_timer, limit_concurrent, run_after
-from wrolpi.dates import set_timezone, now
+from wrolpi.dates import now
 from wrolpi.errors import InvalidTimezone
 from wrolpi.test.common import build_test_directories
 
@@ -186,22 +187,6 @@ class TestCommon(unittest.TestCase):
             date(1970, 1, 6),
         ]
 
-    def test_set_timezone(self):
-        """
-        The global timezone can be changed.  Invalid timezones are rejected.
-        """
-        original_timezone = now().tzinfo
-
-        try:
-            self.assertRaises(InvalidTimezone, set_timezone, '')
-            self.assertEqual(now().tzinfo, original_timezone)
-
-            set_timezone('US/Pacific')
-            self.assertNotEqual(now().tzinfo, original_timezone)
-        finally:
-            # Restore the timezone before the test.
-            set_timezone(original_timezone)
-
 
 @pytest.mark.parametrize(
     'i,expected', [
@@ -271,9 +256,10 @@ def test_chdir():
         Decimal('81.25'), Decimal('93.75'), Decimal('53.125'), Decimal('59.375'), Decimal('65.625')
     ]),
     # Datetimes are supported.
-    (datetime(2000, 1, 1), datetime(2000, 1, 8), [
-        datetime(2000, 1, 1), datetime(2000, 1, 4, 12), datetime(2000, 1, 2, 18), datetime(2000, 1, 6, 6),
-        datetime(2000, 1, 1, 21), datetime(2000, 1, 3, 15),
+    (datetime(2000, 1, 1, tzinfo=pytz.UTC), datetime(2000, 1, 8, tzinfo=pytz.UTC), [
+        datetime(2000, 1, 1, tzinfo=pytz.UTC), datetime(2000, 1, 4, 12, tzinfo=pytz.UTC),
+        datetime(2000, 1, 2, 18, tzinfo=pytz.UTC), datetime(2000, 1, 6, 6, tzinfo=pytz.UTC),
+        datetime(2000, 1, 1, 21, tzinfo=pytz.UTC), datetime(2000, 1, 3, 15, tzinfo=pytz.UTC),
     ])
 ])
 def test_zig_zag(low, high, expected):

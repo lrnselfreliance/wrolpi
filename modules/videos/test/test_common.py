@@ -6,11 +6,12 @@ from typing import List
 from unittest import mock
 
 import pytest
+import pytz
 from PIL import Image
 
 from modules.videos.models import Channel, Video
 from wrolpi.common import get_absolute_media_path, sanitize_link
-from wrolpi.dates import local_timezone, now
+from wrolpi.dates import  now
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.vars import PROJECT_DIR
 from .. import common
@@ -203,7 +204,7 @@ def test_import_favorites(test_session, test_directory, simple_channel, video_fa
     video_factory(channel_id=simple_channel.id)  # never favorited
     vid2 = video_factory(channel_id=None)  # has no channel
     vid3 = video_factory(channel_id=simple_channel.id)
-    favorite = vid3.favorite = vid2.favorite = local_timezone(datetime(2000, 1, 1, 0, 0, 0))
+    favorite = vid3.favorite = vid2.favorite = datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.UTC)
     test_session.commit()
     vid2_video_path = vid2.video_path
 

@@ -7,7 +7,7 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from modules.map.models import MapFile
-from wrolpi.cmd import which
+from wrolpi.cmd import BASH_BIN
 from wrolpi.common import get_media_directory, walk, logger, wrol_mode_check
 from wrolpi.dates import now, timedelta_to_timestamp
 from wrolpi.db import optional_session, get_db_session
@@ -156,9 +156,6 @@ async def import_files(paths: List[str]):
             # A map was imported, remove the tile cache files.
             await clear_mod_tile()
         IMPORT_EVENT.clear()
-
-
-BASH_BIN = which('bash', '/bin/bash', warn=True)
 
 
 async def run_import_command(*paths: Path):

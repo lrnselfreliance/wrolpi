@@ -2,6 +2,7 @@
 Fixtures for Pytest tests.
 """
 import asyncio
+import multiprocessing
 import pathlib
 import shutil
 import tempfile
@@ -17,6 +18,7 @@ from sanic_testing.testing import SanicTestClient
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from wrolpi import flags
 from wrolpi.common import iterify
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.dates import set_test_now
@@ -116,7 +118,7 @@ def test_client() -> SanicTestClient:
             api_app.blueprint(bp)
         ROUTES_ATTACHED = True
 
-    return api_app.test_client
+    yield api_app.test_client
 
 
 @pytest.fixture
@@ -313,3 +315,25 @@ def mock_create_subprocess_shell():
         return create_subprocess_shell
 
     return mocker
+
+
+@pytest.fixture(autouse=True)
+def events_history():
+    """Give each test it's own Events history."""
+    with mock.patch('wrolpi.events.EVENTS_HISTORY', list()):
+        yield
+
+
+FLAGS_LOCK = multiprocessing.Lock()
+
+
+@pytest.fixture()
+def flags_lock():
+    """Wait for exclusive access to flags before testing."""
+    try:
+        FLAGS_LOCK.acquire(timeout=60)
+        flags.TESTING_LOCK.set()
+        yield
+    finally:
+        flags.TESTING_LOCK.clear()
+        FLAGS_LOCK.release()

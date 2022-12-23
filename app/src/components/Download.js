@@ -13,7 +13,13 @@ class Downloader extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            advancedOpen: false, destination: '', downloader: props.downloader, pending: false, urls: '', valid: true,
+            advancedOpen: false,
+            destination: '',
+            disabled: this.props.disabled,
+            downloader: props.downloader,
+            pending: false,
+            urls: '',
+            valid: true,
         };
     }
 
@@ -336,7 +342,7 @@ class RSSDownload extends ChannelDownload {
     }
 }
 
-export function DownloadMenu({onOpen}) {
+export function DownloadMenu({onOpen, disabled}) {
     const [downloader, setDownloader] = useState();
 
     const localOnOpen = (name) => {
@@ -345,11 +351,33 @@ export function DownloadMenu({onOpen}) {
     }
 
     let body = (<>
-        <Button color='blue' content='Videos' onClick={() => localOnOpen('video')} style={{marginBottom: '1em'}}/>
-        <Button color='green' content='Archive' onClick={() => localOnOpen('archive')} style={{marginBottom: '1em'}}/>
-        <Button color='blue' content='Channel/Playlist' onClick={() => localOnOpen('video_channel')}
-                style={{marginBottom: '1em'}}/>
-        <Button content='RSS Feed' onClick={() => localOnOpen('rss')} style={{marginBottom: '1em'}}/>
+        <Button
+            color='blue'
+            content='Videos'
+            disabled={disabled}
+            onClick={() => localOnOpen('video')}
+            style={{marginBottom: '1em'}}
+        />
+        <Button
+            color='green'
+            content='Archive'
+            disabled={disabled}
+            onClick={() => localOnOpen('archive')}
+            style={{marginBottom: '1em'}}
+        />
+        <Button
+            color='blue'
+            content='Channel/Playlist'
+            disabled={disabled}
+            onClick={() => localOnOpen('video_channel')}
+            style={{marginBottom: '1em'}}
+        />
+        <Button
+            content='RSS Feed'
+            disabled={disabled}
+            onClick={() => localOnOpen('rss')}
+            style={{marginBottom: '1em'}}
+        />
     </>);
 
     function clearSelected() {
@@ -358,12 +386,19 @@ export function DownloadMenu({onOpen}) {
     }
 
     const downloaders = {
-        'archive': <Downloader clearSelected={clearSelected} header={<><Icon name='file alternate'/> Archive</>}
-                               downloader='archive'/>,
-        'video': <Downloader clearSelected={clearSelected} header={<><Icon name='video'/> Videos</>}
-                             downloader='video' withDestination={true}/>,
-        'video_channel': <ChannelDownload clearSelected={clearSelected}/>,
-        'rss': <RSSDownload clearSelected={clearSelected} header={<><Icon name='rss square'/> RSS</>}/>,
+        archive: <Downloader
+            clearSelected={clearSelected}
+            header={<><Icon name='file alternate'/> Archive</>}
+            downloader='archive'/>,
+        video: <Downloader
+            clearSelected={clearSelected}
+            header={<><Icon name='video'/> Videos</>}
+            downloader='video'
+            withDestination={true}/>,
+        video_channel: <ChannelDownload clearSelected={clearSelected}/>,
+        rss: <RSSDownload
+            clearSelected={clearSelected}
+            header={<><Icon name='rss square'/> RSS</>}/>,
     };
 
     body = downloader in downloaders ? downloaders[downloader] : body;

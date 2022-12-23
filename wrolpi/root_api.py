@@ -1,14 +1,12 @@
 import json
-import json
 import re
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal
 from functools import wraps
 from http import HTTPStatus
 from pathlib import Path
 from typing import Union
 
-from pytz import UnknownTimeZoneError
 from sanic import Sanic, response, Blueprint, __version__ as sanic_version
 from sanic.blueprint_group import BlueprintGroup
 from sanic.request import Request
@@ -20,11 +18,14 @@ from wrolpi import admin, status
 from wrolpi.admin import HotspotStatus
 from wrolpi.common import logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics
-from wrolpi.dates import set_timezone
+from wrolpi.dates import now, strptime
 from wrolpi.downloader import download_manager
-from wrolpi.errors import WROLModeEnabled, InvalidTimezone, API_ERRORS, APIError, ValidationError, HotspotError
+from wrolpi.errors import WROLModeEnabled, API_ERRORS, APIError, ValidationError, HotspotError
+from wrolpi.events import get_events
 from wrolpi.files.lib import get_file_statistics
-from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, DownloadRequest, EchoResponse
+from wrolpi.flags import get_flags
+from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, DownloadRequest, EchoResponse, \
+    EventsRequest
 from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
     truthy_arg
 from wrolpi.version import __version__
@@ -147,7 +148,6 @@ def get_settings(_: Request):
         'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.
         'throttle_on_startup': config.throttle_on_startup,
         'throttle_status': admin.throttle_status().name,
-        'timezone': config.timezone,
         'version': __version__,
         'wrol_mode': config.wrol_mode,
     }
@@ -170,12 +170,6 @@ def update_settings(_: Request, body: SettingsRequest):
         # Enable WROL Mode
         enable_wrol_mode()
         return response.empty()
-
-    try:
-        if body.timezone:
-            set_timezone(body.timezone)
-    except UnknownTimeZoneError:
-        raise InvalidTimezone(f'Invalid timezone: {body.timezone}')
 
     # Remove any keys with None values, then save the config.
     config = {k: v for k, v in body.__dict__.items() if v is not None}
@@ -343,6 +337,8 @@ async def get_status(_: Request):
         logger.error('Unable to get download status', exc_info=e)
         downloads = dict()
 
+    flags = get_flags()
+
     ret = dict(
         bandwidth=s.bandwidth,
         cpu_info=s.cpu_info,
@@ -350,6 +346,7 @@ async def get_status(_: Request):
         dockerized=DOCKERIZED,
         downloads=downloads,
         drives=s.drives,
+        flags=flags,
         hotspot_status=admin.hotspot_status().name,
         load=s.load,
         memory_stats=s.memory_stats,
@@ -373,6 +370,15 @@ async def get_statistics(_):
     })
 
 
+@api_bp.get('/events/feed')
+@validate(query=EventsRequest)
+async def feed(_: Request, query: EventsRequest):
+    start = now()
+    after = None if query.after == 'None' else strptime(query.after)
+    events = get_events(after)
+    return json_response(dict(events=events, now=start))
+
+
 class CustomJSONEncoder(json.JSONEncoder):
 
     def default(self, obj):
@@ -381,9 +387,11 @@ class CustomJSONEncoder(json.JSONEncoder):
                 # Get __json__ before others.
                 return obj.__json__()
             elif isinstance(obj, datetime):
-                return obj.timestamp()
+                if obj.tzinfo == timezone.utc:
+                    obj = obj.replace(tzinfo=None)
+                return obj.isoformat()
             elif isinstance(obj, date):
-                return datetime(obj.year, obj.month, obj.day).timestamp()
+                return datetime(obj.year, obj.month, obj.day).isoformat()
             elif isinstance(obj, Decimal):
                 return str(obj)
             elif isinstance(obj, Base):

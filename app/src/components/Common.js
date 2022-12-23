@@ -80,6 +80,11 @@ export function secondsToElapsedPopup(seconds) {
     />
 }
 
+export function isoDatetimeToElapsedPopup(dt) {
+    const d = new Date(`${dt}+00:00`);
+    return secondsToElapsedPopup(d.getTime() / 1000);
+}
+
 export function secondsToDuration(video) {
     let duration = video.duration;
     let hours = Math.floor(duration / 3600);
@@ -106,11 +111,11 @@ export function Duration({video}) {
     }
 }
 
-export function epochToDateString(date) {
-    // Convert a date integer to a human-readable date format.
+export function isoDatetimeToString(dt) {
+    // Convert a datetime to a human-readable date format.
     let d = <></>;
-    if (date) {
-        d = new Date(date * 1000);
+    if (dt) {
+        d = new Date(`${dt}+00:00`);
         d = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
     }
     return d;

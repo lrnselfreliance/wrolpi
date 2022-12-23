@@ -34,5 +34,8 @@ def pdf_modeler(groups: Dict[str, List[File]], _: Session):
 
     for file in pdf_files:
         path: pathlib.Path = file.path.path if hasattr(file.path, 'path') else file.path
-        if title := get_pdf_title(path):
-            file.title = title
+        try:
+            if title := get_pdf_title(path):
+                file.title = title
+        except Exception as e:
+            logger.error(f'Unable to get title of {file.path}', exc_info=e)

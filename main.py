@@ -11,8 +11,6 @@ from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, admin
 from wrolpi.common import logger, get_config, import_modules, check_media_directory, limit_concurrent, \
     wrol_mode_enabled, cancel_refresh_tasks
 from wrolpi.downloader import download_manager, import_downloads_config
-from wrolpi.events import Events
-from wrolpi import flags
 from wrolpi.root_api import api_app
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, PYTEST
 from wrolpi.version import get_version_string
@@ -171,11 +169,6 @@ def set_log_level(args):
 async def startup(app: Sanic):
     flags.init_flags()
     await import_downloads_config()
-
-
-@api_app.after_server_start
-async def ready(app: Sanic):
-    Events.send_ready()
 
 
 @api_app.after_server_start

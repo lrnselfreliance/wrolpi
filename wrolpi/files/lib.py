@@ -16,7 +16,7 @@ from wrolpi import flags
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
     get_files_and_directories, apply_modelers, apply_after_refresh, get_model_by_table_name, chunks_by_stem, \
-    partition, ordered_unique_list, chunks, cancelable_wrapper
+    partition, ordered_unique_list, chunks, cancelable_wrapper, get_relative_to_media_directory
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidFile
@@ -366,7 +366,8 @@ async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str
     if directory.is_file():
         raise ValueError(f'Cannot refresh files of a file: {directory=}')
 
-    Events.send_directory_refresh_started(f'Refresh of {repr(directory.name)} has started.')
+    relative_path = str(get_relative_to_media_directory(directory))
+    Events.send_directory_refresh_started(f'Refresh of {repr(relative_path)} has started.')
 
     # All Files older than this will be removed.
     idempotency = now()
@@ -392,7 +393,7 @@ async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str
     apply_after_refresh()
     await apply_indexers()
 
-    Events.send_directory_refresh_completed(f'Refresh of {repr(directory.name)} has completed.')
+    Events.send_directory_refresh_completed(f'Refresh of {repr(relative_path)} has completed.')
     refresh_logger.info(f'Done refreshing files in {directory}')
 
 

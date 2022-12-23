@@ -43,11 +43,11 @@ class Events:
 
     @staticmethod
     def send_directory_refresh_started(message: str):
-        send_event('global_directory_refresh_started', message, subject='refresh_directory')
+        send_event('directory_refresh_started', message, subject='refresh_directory')
 
     @staticmethod
     def send_directory_refresh_completed(message: str):
-        send_event('global_directory_refresh_completed', message, subject='refresh_directory')
+        send_event('directory_refresh_completed', message, subject='refresh_directory')
 
     @staticmethod
     def send_refresh_required(message: str = None):

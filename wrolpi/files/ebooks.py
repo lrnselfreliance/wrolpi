@@ -202,7 +202,7 @@ class EBook(ModelHelper, Base):
         logger.warning(f'Unable to generate cover for {self.ebook_path}')
 
 
-def model_ebook(ebook: EBook, files: List[File]) -> EBook:
+def _model_ebook(ebook: EBook, files: List[File]) -> EBook:
     """Creates an EBook model based off a File.  Searches for it's cover in the provided `files`."""
     # Multiple formats may share this cover.
     cover_file = next((i for i in files if i.mimetype.split('/')[0] == 'image'), None)
@@ -270,7 +270,7 @@ def ebook_modeler(groups: Dict[str, List[File]], session: Session):
             if not ebook:
                 ebook = EBook(ebook_file=ebook_file)
                 session.add(ebook)
-            model_ebook(ebook, group)
+            _model_ebook(ebook, group)
 
         # Remove this group, it will not be processed by other modelers.
         del groups[stem]

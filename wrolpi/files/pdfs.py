@@ -21,7 +21,7 @@ def get_pdf_title(path: pathlib.Path) -> Optional[str]:
 
 
 @register_modeler
-def model_pdf(groups: Dict[str, List[File]], _: Session):
+def pdf_modeler(groups: Dict[str, List[File]], _: Session):
     """Reads the contents of a PDF and extracts the title, attaches the title to the File.
 
     This modeler does not claim any groups passed to it.  Does NOT mark the PDFs as indexed."""

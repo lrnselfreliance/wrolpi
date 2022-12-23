@@ -185,7 +185,7 @@ async def periodic_downloads(app: Sanic):
 
     Limited to only one process.
     """
-    if not flags.refresh_complete:
+    if not flags.refresh_complete.is_set():
         logger.warning('Refusing to download without refresh')
         return
 

@@ -166,7 +166,7 @@ class PDFIndexer(Indexer, ABC):
 
         data = PDFMetadata()
 
-        if PdfReader is None:
+        if reader is None:
             logger.error(f'Cannot get title of {path} PyPDF2 is not installed.')
             data.title = super().get_title(file)
             return data

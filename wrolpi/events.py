@@ -50,6 +50,17 @@ class Events:
         send_event('directory_refresh_completed', message, subject='refresh_directory')
 
 
+def log_event(event: str, message: str = None, action: str = None, subject: str = None):
+    log = f'{event=}'
+    if subject:
+        log = f'{log} {subject=}'
+    if action:
+        log = f'{log} {action=}'
+    if message:
+        log = f'{log} {message=}'
+    logger.debug(log)
+
+
 def send_event(event: str, message: str = None, action: str = None, subject: str = None):
     EVENTS_LOCK.acquire()
     try:
@@ -71,7 +82,7 @@ def send_event(event: str, message: str = None, action: str = None, subject: str
     finally:
         EVENTS_LOCK.release()
 
-    logger.debug(f'Sent event {event}')
+    log_event(event, message, action, subject)
 
 
 @iterify(list)

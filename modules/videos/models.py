@@ -480,5 +480,7 @@ class Channel(ModelHelper, Base):
 
     async def refresh_files(self):
         """Refresh all files within this Channel's directory.  Mark this channel as refreshed."""
+        from modules.videos.common import apply_info_json
         await refresh_directory_files_recursively(self.directory)
+        apply_info_json(self.id)
         self.refreshed = True

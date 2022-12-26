@@ -372,7 +372,7 @@ async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str
     # All Files older than this will be removed.
     idempotency = now()
 
-    refresh_logger.warning(f'Recursively refreshing all files in {directory}')
+    refresh_logger.info(f'Recursively refreshing all files in {directory}')
 
     await _refresh_directory_files_recursively(directory, idempotency)
 

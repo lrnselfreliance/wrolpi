@@ -975,7 +975,7 @@ def limit_concurrent(limit: int, throw: bool = False):
     return wrapper
 
 
-def truncate_object_bytes(obj: Union[List[str], str, None], maximum_bytes: int) -> List[str]:
+def truncate_object_bytes(obj: Union[List[str], str, None], maximum_bytes: int) -> Union[List[str], str]:
     """
     Shorten an object.  This is useful when inserting something into a tsvector.
 
@@ -1082,3 +1082,41 @@ def cancelable_wrapper(func: callable):
 
     return wrapped
 
+
+WHITESPACE_SPLITTER = re.compile(r'\s+')
+TAB = re.compile(r'\t+')
+
+
+def split_lines_by_length(text: str, max_line_length: int = 38) -> str:
+    """
+    Break up any long lines along word boundaries.
+
+    Newlines are preserved, but whitspace (spaces/tabs) is replaced with one space.
+
+    @param max_line_length: The most amount of characters a line will contain.  38 is default for mobile vertical.
+
+    >>> split_lines_by_length('Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do')
+    'Lorem ipsum dolor sit amet,\nconsectetur adipiscing elit, sed do'
+    """
+    if not text:
+        return text
+
+    text = TAB.sub(' ', text)
+    new_text = ''
+    for line in text.splitlines():
+        if len(line) > max_line_length:
+            # This line is too long, break it up.
+            new_line = ''
+            words = WHITESPACE_SPLITTER.split(line)
+            while words:
+                word = words.pop(0)
+                if len(possible_line := f'{new_line} {word}') <= max_line_length:
+                    new_line = possible_line
+                else:
+                    # New word makes the line too long, start a new line.
+                    new_text += f'\n{new_line.strip()}'
+                    new_line = word
+            new_text += f'\n{new_line}'
+        else:
+            new_text += f'\n{line}'
+    return new_text.lstrip('\n')

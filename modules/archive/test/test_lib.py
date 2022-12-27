@@ -675,7 +675,7 @@ async def test_archive_download_index(test_session, test_directory, image_file):
     assert archive.readability_path and archive.readability_path.exists()
     assert archive.readability_json_path
     assert archive.readability_txt_path and archive.readability_txt_path.exists()
-    assert archive.readability_txt_file.d_text == '{the,readability}', 'Readability text was not indexed'
+    assert archive.readability_txt_file.d_text == 'the readability', 'Readability text was not indexed'
     assert archive.title == 'the singlefile', 'Did not get the title from the singlefile'
     assert archive.screenshot_path and archive.screenshot_file and archive.screenshot_path.is_file(), \
         'Did not store the screenshot'

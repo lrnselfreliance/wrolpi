@@ -17,8 +17,6 @@ import pytz
 import wrolpi.vars
 from wrolpi import common
 from wrolpi.common import cum_timer, TIMERS, print_timer, limit_concurrent, run_after
-from wrolpi.dates import now
-from wrolpi.errors import InvalidTimezone
 from wrolpi.test.common import build_test_directories
 
 
@@ -567,3 +565,34 @@ async def test_run_after():
     # Sleep so "after" will run.
     await asyncio.sleep(0)
     assert count.value == 2, 'Counter did not run after'
+
+
+@pytest.mark.parametrize(
+    'max_line_length,text,expected', [
+        (38, '', ''),
+        (38, 'Lorem', 'Lorem'),
+        (
+                38,
+                'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do',
+                'Lorem ipsum dolor sit amet,\nconsectetur adipiscing elit, sed do'
+        ),
+        (
+                10,
+                'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do',
+                'Lorem\nipsum\ndolor sit\namet,\nconsectetur\nadipiscing\nelit, sed\ndo'
+        ),
+        (
+                20,
+                'Lorem\nipsum\ndolor   sit amet,\t\tconsectetur\n\nadipiscing elit, sed do',
+                'Lorem\nipsum\ndolor sit amet,\nconsectetur\n\nadipiscing elit,\nsed do'
+        ),
+        (
+                38,
+                'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.',
+                'Lorem ipsum dolor sit amet,\nconsectetur adipiscing elit, sed do\neiusmod tempor incididunt ut labore et\ndolore magna aliqua.'
+        ),
+        (38, 'long-word-which-should-not-be-split-up', 'long-word-which-should-not-be-split-up'),
+    ]
+)
+def test_split_lines_by_length(max_line_length, text, expected):
+    assert common.split_lines_by_length(text, max_line_length=max_line_length) == expected

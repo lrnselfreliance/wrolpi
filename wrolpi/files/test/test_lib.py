@@ -428,7 +428,7 @@ async def test_large_text_indexer(test_session, make_files_structure):
 
     large_file: File = test_session.query(File).one()
     assert len(large_file.d_text) < large.stat().st_size
-    assert len(large_file.d_text) == 46_117
+    assert len(large_file.d_text) == 90_072
 
 
 def test_glob_shared_stem(make_files_structure):
@@ -499,8 +499,23 @@ def test_pdf_indexer(example_pdf):
     assert b_text == 'roland'
     # The parsed file name.
     assert c_text == ['example', 'pdf']
-    # Both pages of the example PDF are extracted.
-    assert d_text == 'Page one\nPage two'
+    # All pages are extracted.  Text is formatted to fit on vertical screen.
+    assert d_text == 'Page one\n' \
+                     'Page two\n' \
+                     'Lorem ipsum dolor sit amet,\n' \
+                     'consectetur adipiscing elit, sed do\n' \
+                     'eiusmod tempor incididunt ut labore et\n' \
+                     '\n' \
+                     'dolore magna aliqua. Ut enim ad minim\n' \
+                     'veniam, quis nostrud exercitation\n' \
+                     'ullamco laboris nisi ut \n' \
+                     'aliquip ex ea commodo consequat. Duis\n' \
+                     'aute irure dolor in reprehenderit in\n' \
+                     'voluptate velit esse cillum \n' \
+                     'dolore eu fugiat nulla pariatur.\n' \
+                     'Excepteur sint occaecat cupidatat non\n' \
+                     'proident, sunt in culpa qui officia \n' \
+                     'deserunt mollit anim id est laborum.'
 
 
 def test_pdf_indexer_max_size(example_pdf):

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from modules.videos.models import Video, Channel
 from wrolpi.captions import read_captions, extract_captions
-from wrolpi.common import logger, register_modeler, register_after_refresh, limit_concurrent
+from wrolpi.common import logger, register_modeler, register_after_refresh, limit_concurrent, split_lines_by_length
 from wrolpi.db import get_db_curs
 from wrolpi.files.indexers import Indexer, register_indexer
 from wrolpi.files.lib import split_path_stem_and_suffix
@@ -159,4 +159,5 @@ class VideoIndexer(Indexer, ABC):
         elif EXTRACT_SUBTITLES:
             d = extract_captions(file.path) or ''
 
+        d = split_lines_by_length(d)
         return a, None, c, d

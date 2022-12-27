@@ -1,6 +1,5 @@
 import dataclasses
 import pathlib
-import re
 from abc import ABC
 from collections import defaultdict
 from typing import List, Type, Tuple, Generator
@@ -13,7 +12,7 @@ try:
 except ImportError:
     PdfReader = None
 
-from wrolpi.common import logger, truncate_generator_bytes
+from wrolpi.common import logger, truncate_generator_bytes, split_lines_by_length, truncate_object_bytes
 
 logger = logger.getChild(__name__)
 
@@ -91,14 +90,12 @@ class ZipIndexer(Indexer, ABC):
         try:
             with ZipFile(path, 'r') as zip_:
                 file_names = [' '.join(split_file_name_words(pathlib.Path(name).name)) for name in zip_.namelist()]
+                file_names = truncate_object_bytes(file_names, FILE_MAX_TEXT_SIZE)
                 return file_names
         except Exception as e:
             logger.error(f'Unable to get information from zip: {path}', exc_info=e)
             if PYTEST:
                 raise
-
-
-WORD_SPLITTER = re.compile(r"([\w’'-]+)")
 
 
 @register_indexer('text/plain')
@@ -115,11 +112,12 @@ class TextIndexer(Indexer, ABC):
         return a, None, None, words
 
     @staticmethod
-    def get_words(path: pathlib.Path) -> List[str]:
+    def get_words(path: pathlib.Path) -> str:
         """Read the words from a file."""
         # TODO this only supports English.
         contents = path.read_text()
-        words = WORD_SPLITTER.findall(contents)
+        contents = truncate_object_bytes(contents, FILE_MAX_TEXT_SIZE)
+        words = split_lines_by_length(contents)
         return words
 
 
@@ -153,6 +151,8 @@ class PDFIndexer(Indexer, ABC):
         try:
             # PDFs are complex, don't fail to create title index if text extraction fails.
             words = '\n'.join(truncate_generator_bytes(cls.get_words(reader, path), FILE_MAX_TEXT_SIZE))
+            words = truncate_object_bytes(words, FILE_MAX_TEXT_SIZE)
+            words = split_lines_by_length(words)
         except Exception as e:
             logger.error(f'Failed to index {path}', exc_info=e)
             if PYTEST:

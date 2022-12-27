@@ -5,7 +5,7 @@ from typing import Tuple, Dict, List
 
 from sqlalchemy.orm import Session
 
-from wrolpi.common import logger, register_modeler, register_after_refresh, limit_concurrent
+from wrolpi.common import logger, register_modeler, register_after_refresh, limit_concurrent, split_lines_by_length
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
@@ -182,4 +182,5 @@ class ArchiveIndexer(Indexer, ABC):
             return None, None, None, None
         a = cls.get_title(file)
         d = cls.get_article(file)
+        d = split_lines_by_length(d)
         return a, None, None, d

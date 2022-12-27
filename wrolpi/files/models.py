@@ -103,11 +103,7 @@ class File(ModelHelper, Base):
                 indexer = self.indexer
                 # Only read the contents of the file once.
                 start = now()
-                a_text, b_text, c_text, d_text = indexer.create_index(self)
-                self.a_text = truncate_object_bytes(a_text, FILE_MAX_TEXT_SIZE)
-                self.b_text = truncate_object_bytes(b_text, FILE_MAX_TEXT_SIZE)
-                self.c_text = truncate_object_bytes(c_text, FILE_MAX_TEXT_SIZE)
-                self.d_text = truncate_object_bytes(d_text, FILE_MAX_TEXT_SIZE)
+                self.a_text, self.b_text, self.c_text, self.d_text = indexer.create_index(self)
                 if (total_seconds := (now() - start).total_seconds()) > 1:
                     logger.info(f'Indexing {self.path} took {total_seconds} seconds')
 

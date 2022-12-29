@@ -255,7 +255,8 @@ def test_channel_empty_url_doesnt_conflict(test_client, test_session, test_direc
 
 
 @pytest.mark.asyncio
-async def test_download_channel_no_refresh(test_session, download_channel, video_download_manager, video_factory):
+async def test_channel_download_requires_refresh(test_session, download_channel, video_download_manager, video_factory,
+                                                 events_history):
     """A Channel cannot be downloaded until it has been refreshed.
 
     Videos already downloaded are not downloaded again."""
@@ -300,6 +301,9 @@ async def test_download_channel_no_refresh(test_session, download_channel, video
     assert d.next_download
     # Only the missing video was downloaded.
     assert downloaded_urls == ['https://example.com/2']
+
+    # Should not send refresh events because downloads are automated.
+    assert events_history == []
 
 
 def test_channel_post_directory(test_session, test_client, test_directory):

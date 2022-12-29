@@ -479,14 +479,14 @@ class Channel(ModelHelper, Base):
         )
         return statistics
 
-    async def refresh_files(self):
+    async def refresh_files(self, send_events: bool = True):
         """Refresh all files within this Channel's directory.  Mark this channel as refreshed."""
         logger.debug('Channel.refresh_files refresh_files')
         # Get this Channel's ID for later.  Refresh may take a long time.
         self_id = self.id
 
         # Refresh all files within this channel's directory first.
-        await refresh_directory_files_recursively(self.directory)
+        await refresh_directory_files_recursively(self.directory, send_events=send_events)
 
         # Apply any info_json (discover censored videos, etc.) second.
         from modules.videos.common import apply_info_json

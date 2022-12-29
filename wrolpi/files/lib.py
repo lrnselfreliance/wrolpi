@@ -22,7 +22,6 @@ from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
 from wrolpi.errors import InvalidFile
 from wrolpi.events import Events
 from wrolpi.files.models import File
-from wrolpi import flags
 from wrolpi.vars import PYTEST, FILE_REFRESH_CHUNK_SIZE
 
 try:
@@ -359,7 +358,7 @@ async def refresh_files():
 @limit_concurrent(1)
 @wrol_mode_check
 @cancelable_wrapper
-async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str]):
+async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str], send_events: bool = True):
     """Upsert and index all files within a directory (recursively).
 
     Any records of the files that are no longer in the directory will be removed."""
@@ -369,7 +368,8 @@ async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str
         raise ValueError(f'Cannot refresh files of a file: {directory=}')
 
     relative_path = str(get_relative_to_media_directory(directory))
-    Events.send_directory_refresh_started(f'Refresh of {repr(relative_path)} has started.')
+    if send_events:
+        Events.send_directory_refresh_started(f'Refresh of {repr(relative_path)} has started.')
 
     # All Files older than this will be removed.
     idempotency = now()
@@ -395,7 +395,8 @@ async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str
     apply_after_refresh()
     await apply_indexers()
 
-    Events.send_directory_refresh_completed(f'Refresh of {repr(relative_path)} has completed.')
+    if send_events:
+        Events.send_directory_refresh_completed(f'Refresh of {repr(relative_path)} has completed.')
     refresh_logger.info(f'Done refreshing files in {directory}')
 
 

@@ -321,7 +321,8 @@ def mock_create_subprocess_shell():
 def events_history():
     """Give each test it's own Events history."""
     with mock.patch('wrolpi.events.EVENTS_HISTORY', list()):
-        yield
+        from wrolpi.events import EVENTS_HISTORY
+        yield EVENTS_HISTORY
 
 
 FLAGS_LOCK = multiprocessing.Lock()

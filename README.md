@@ -36,6 +36,7 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 - [x] Videos
 - [x] Web Archive
 - [x] Maps
+- [x] File search
 - [x] Wi-Fi Hotspot
 - [x] Universal search
 - [x] Food Inventory management

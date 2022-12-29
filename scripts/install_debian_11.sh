@@ -10,27 +10,25 @@ apt install -y apt-transport-https ca-certificates curl gnupg-agent gcc libpq-de
   postgresql-13 nginx-full nginx-doc python3-full python3-dev python3-doc python3-venv htop vim ffmpeg hostapd \
   chromium chromium-driver cpufrequtils network-manager npm
 
-# Install Archiving tools.
-SF_VERSION="1.0.15"
-if [ "$(single-file --version)" != "${SF_VERSION}" ]; then
-  sudo npm i -g single-file-cli@1.0.15 &  # Install in background.
-fi
-readability-extractor --version || npm install -g 'git+https://github.com/pirate/readability-extractor'
+# Install serve, and archiving tools.
+sudo npm i -g serve single-file-cli@1.0.15 'git+https://github.com/pirate/readability-extractor' &
 
 # Setup the virtual environment that main.py expects
 pip3 --version || (
   # If no pip, install pip
   curl https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py &&
-    python3 /tmp/get-pip.py
+    python3 /tmp/get-pip.py &
 )
 
+# Wait for npm and pip3.
+wait $(jobs -p)
+
 # Build React app in background job.
-[[ ! -f /usr/local/bin/serve || ! -f /usr/bin/serve ]] && npm -g install serve
 cd /opt/wrolpi/app || exit 5
 npm install || npm install || npm install || npm install # try install multiple times  :(
 npm run build &
 
-# Install python requirements files in background job.
+# Install python requirements in background job.
 pip3 install -r /opt/wrolpi/requirements.txt &
 
 wait $(jobs -p)

@@ -37,6 +37,7 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 - [x] Web Archive
 - [x] Maps
 - [x] File search
+- [x] eBooks (EPUB / PDFs)
 - [x] Wi-Fi Hotspot
 - [x] Universal search
 - [x] Food Inventory management
@@ -46,14 +47,14 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 
 ## Feature Matrix
 
-| **Module**     | **Search** | **View** | **Download** |
-|----------------|:-----------|----------|--------------|
-| Videos         | yes        | yes      | yes          |
-| Web Archives   | yes        | yes      | yes          |
-| eBooks (epub)  | yes        | yes      | planned      |
-| Map            | planned    | yes      | planned      |
-| Wikis          | planned    | planned  | planned      |
-| Podcasts/Audio | planned    | planned  | planned      |
+| **Module**         | **Search** | **View** | **Download** |
+|--------------------|:-----------|----------|--------------|
+| Videos             | yes        | yes      | yes          |
+| Web Archives       | yes        | yes      | yes          |
+| eBooks (EPUB/PDFs) | yes        | yes      | planned      |
+| Map                | planned    | yes      | planned      |
+| Wikis              | planned    | planned  | planned      |
+| Podcasts/Audio     | planned    | planned  | planned      |
 
 # Demo
 

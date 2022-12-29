@@ -102,6 +102,8 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
     suffix = path.suffix.lower()
     if mimetype == 'application/octet-stream' and suffix.endswith('.mobi'):
         return MOBI_MIMETYPE
+    if suffix.endswith('.hgt'):
+        return 'application/octet-stream'
     if mimetype == 'text/plain':
         if suffix.endswith('.json'):
             return 'application/json'
@@ -123,8 +125,6 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
             return 'text/srt'
         if suffix.endswith('.yaml') or suffix.endswith('.yml'):
             return 'text/yaml'
-        if suffix.endswith('.hgt'):
-            return 'application/octet-stream'
     return mimetype
 
 

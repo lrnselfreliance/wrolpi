@@ -20,8 +20,8 @@ import {
     frequencyOptions,
     humanFileSize,
     isEmpty,
+    isoDatetimeToString,
     RequiredAsterisk,
-    secondsToDate,
     secondsToFrequency,
     Toggle,
     useTitle,
@@ -454,7 +454,7 @@ function ChannelRow({channel}) {
             {channel.video_count}
         </TableCell>
         <TableCell>
-            {channel.url && channel.info_date ? secondsToDate(channel.info_date) : null}
+            {channel.url && channel.info_date ? isoDatetimeToString(channel.info_date) : null}
         </TableCell>
         <TableCell>
             {channel.url && channel.download_frequency ? secondsToFrequency(channel.download_frequency) : null}

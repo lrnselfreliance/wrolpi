@@ -458,9 +458,7 @@ class Channel(ModelHelper, Base):
         return d
 
     def get_statistics(self):
-        """
-        Get statistics about this channel.
-        """
+        """Get statistics about this channel."""
         with get_db_curs() as curs:
             stmt = '''
                 SELECT

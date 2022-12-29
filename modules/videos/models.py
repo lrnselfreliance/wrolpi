@@ -8,14 +8,15 @@ from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, Fore
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import Base, ModelHelper, logger, get_media_directory
+from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task
 from wrolpi.dates import now, TZDateTime
-from wrolpi.db import get_db_curs
+from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.downloader import Download, download_manager
 from wrolpi.errors import UnknownVideo
 from wrolpi.files.lib import refresh_directory_files_recursively, glob_shared_stem, split_path_stem_and_suffix
 from wrolpi.files.models import File
 from wrolpi.media_path import MediaPathType
+from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
@@ -480,7 +481,25 @@ class Channel(ModelHelper, Base):
 
     async def refresh_files(self):
         """Refresh all files within this Channel's directory.  Mark this channel as refreshed."""
-        from modules.videos.common import apply_info_json
+        logger.debug('Channel.refresh_files refresh_files')
+        # Get this Channel's ID for later.  Refresh may take a long time.
+        self_id = self.id
+
+        # Refresh all files within this channel's directory first.
         await refresh_directory_files_recursively(self.directory)
-        apply_info_json(self.id)
-        self.refreshed = True
+
+        # Apply any info_json (discover censored videos, etc.) second.
+        from modules.videos.common import apply_info_json
+        if PYTEST:
+            apply_info_json(self_id)
+            self.refreshed = True
+        else:
+
+            # Perform info_json in background task.  Channel will be marked as refreshed after this completes.
+            async def _():
+                apply_info_json(self_id)
+                with get_db_session(commit=True) as session:
+                    channel: Channel = session.query(Channel).filter(Channel.id == self_id).one()
+                    channel.refreshed = True
+
+            background_task(_())

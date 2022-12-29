@@ -194,6 +194,9 @@ async def test_download_channel(test_session, simple_channel, video_download_man
     with mock.patch('modules.videos.downloader.get_channel') as mock_get_channel:
         mock_get_channel.return_value = simple_channel
         video_download_manager.create_download(url)
+        # Download channel.
+        await video_download_manager.wait_for_all_downloads()
+        # Download videos.
         await video_download_manager.wait_for_all_downloads()
 
     # Let background tasks run.

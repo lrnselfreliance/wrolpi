@@ -266,8 +266,12 @@ async def test_download_channel_no_refresh(test_session, download_channel, video
     assert not d.next_download
 
     def assert_refreshed(expected: bool):
-        channel = test_session.query(Channel).one()
+        channel: Channel = test_session.query(Channel).one()
         assert channel.refreshed == expected
+        if expected:
+            assert channel.info_json
+        else:
+            assert not channel.info_json
 
     assert_refreshed(False)
     test_session.commit()

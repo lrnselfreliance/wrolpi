@@ -1,5 +1,7 @@
 import pytest
 
+from modules.videos import Channel
+
 
 def test_delete_channel_no_url(test_session, test_client, channel_factory):
     """
@@ -29,12 +31,16 @@ async def test_channel_refresh_censored(test_session, channel_factory, video_fac
     vid3 = video_factory(channel_id=channel.id, source_id='three')
     test_session.commit()
 
+    assert channel.refreshed is False
     assert vid1.censored is False and vid1.view_count is None
     assert vid2.censored is False and vid1.view_count is None
     assert vid3.censored is False and vid1.view_count is None
 
     await channel.refresh_files()
 
+    channel = test_session.query(Channel).one()
+
+    assert channel.refreshed is True
     assert vid1.censored is False and vid1.view_count == 100
     assert vid2.censored is False and vid2.view_count == 200
     assert vid3.censored is True and vid3.view_count is None

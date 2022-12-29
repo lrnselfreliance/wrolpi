@@ -79,8 +79,6 @@ class ChannelDownloader(Downloader, ABC):
 
     @staticmethod
     def is_a_playlist(info: dict):
-        if '_type' in info:
-            return info['_type'] == 'playlist'
         # A playlist may have an id different from its channel.
         return info['id'] != info['channel_id']
 

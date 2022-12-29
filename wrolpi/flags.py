@@ -105,6 +105,7 @@ ffmpeg_installed = Flag('ffmpeg_installed')
 ffprobe_installed = Flag('ffprobe_installed')
 nmcli_installed = Flag('nmcli_installed')
 readability_installed = Flag('readability_installed')
+singlefile_installed = Flag('singlefile_installed')
 yt_dlp_installed = Flag('yt_dlp_installed')
 
 
@@ -125,6 +126,8 @@ def get_flags() -> List[str]:
         flags.append('nmcli_installed')
     if readability_installed.is_set():
         flags.append('readability_installed')
+    if singlefile_installed.is_set():
+        flags.append('singlefile_installed')
     if yt_dlp_installed.is_set():
         flags.append('yt_dlp_installed')
     return flags

@@ -13,14 +13,7 @@ apt install -y apt-transport-https ca-certificates curl gnupg-agent gcc libpq-de
 # Install Archiving tools.
 SF_VERSION="1.0.15"
 if [ "$(single-file --version)" != "${SF_VERSION}" ]; then
-  (
-    wget --continue https://github.com/gildas-lormeau/SingleFile/archive/refs/tags/v${SF_VERSION}.tar.gz -O \
-      /tmp/SingleFile.git.tar.gz
-    cd /tmp
-    tar xf SingleFile.git.tar.gz
-    cd SingleFile-${SF_VERSION}
-    npm install -g
-  ) &  # Install in background.
+  sudo npm i -g single-file-cli@1.0.15 &  # Install in background.
 fi
 readability-extractor --version || npm install -g 'git+https://github.com/pirate/readability-extractor'
 

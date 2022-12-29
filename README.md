@@ -45,15 +45,14 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 
 ## Feature Matrix
 
-| **Module**    | **Search** | **View** | **Download** |
-|---------------|:-----------|----------|--------------|
-| Videos        | yes        | yes      | yes          |
-| Web Archives  | yes        | yes      | yes          |
-| eBooks (epub) | yes        | yes      | planned      |
-| Map           | planned    | yes      | planned      |
-| Wikis         | planned    | planned  | planned      |
-| Podcasts      | planned    | planned  | planned      |
-| Audios        | planned    | planned  | planned      |
+| **Module**     | **Search** | **View** | **Download** |
+|----------------|:-----------|----------|--------------|
+| Videos         | yes        | yes      | yes          |
+| Web Archives   | yes        | yes      | yes          |
+| eBooks (epub)  | yes        | yes      | planned      |
+| Map            | planned    | yes      | planned      |
+| Wikis          | planned    | planned  | planned      |
+| Podcasts/Audio | planned    | planned  | planned      |
 
 # Demo
 

@@ -31,7 +31,7 @@ import {
     PageContainer,
     Paginator,
     textEllipsis,
-    useTitle
+    useTitle, CardLink
 } from "./Common";
 import {useBrowseFiles, useQuery, useSearchFiles} from "../hooks/customHooks";
 import {Route, Routes} from "react-router-dom";
@@ -326,13 +326,44 @@ function ImageRowCells({file}) {
     </React.Fragment>)
 }
 
+export function EbookRowCells({file}) {
+    const {ebook} = file;
+
+    const downloadUrl = `/download/${encodeURIComponent(file.path)}`;
+    const viewerUrl = file['mimetype'].startsWith('application/epub') ? `/epub.html?url=${downloadUrl}` : null;
+
+    let cover = <CardIcon><FileIcon file={file}/></CardIcon>;
+    if (ebook && ebook.cover_path) {
+        const coverSrc = `/media/${encodeURIComponent(ebook.cover_path)}`;
+        cover = <Image wrapped src={coverSrc} width='50px'/>;
+    }
+
+    // Fragment for SelectableRow
+    return (<React.Fragment>
+        <TableCell>
+            <center>{cover}</center>
+        </TableCell>
+        <TableCell>
+            <CardLink to={viewerUrl || downloadUrl} newTab={true}>
+                {textEllipsis(ebook.title || file.title)}
+            </CardLink>
+        </TableCell>
+    </React.Fragment>)
+}
+
 function FileRow({file}) {
+    const isEbookType = file.mimetype && (
+        file.mimetype.startsWith('application/epub') || file.mimetype.startsWith('application/x-mobipocket-ebook')
+    );
+
     if (file.model === 'video' && 'video' in file) {
         return <VideoRowCells file={file}/>;
     } else if (file.model === 'archive' && 'archive' in file) {
         return <ArchiveRowCells file={file}/>;
     } else if (file.mimetype && file.mimetype.startsWith('image/')) {
         return <ImageRowCells file={file}/>;
+    } else if (isEbookType) {
+        return <EbookRowCells key={file['path']} file={file}/>;
     }
     const onDownloadFile = async () => window.open(`/media/${file.key}`);
 

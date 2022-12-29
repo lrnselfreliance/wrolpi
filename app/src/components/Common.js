@@ -81,7 +81,7 @@ export function secondsToElapsedPopup(seconds) {
 }
 
 export function isoDatetimeToElapsedPopup(dt) {
-    const d = new Date(`${dt}+00:00`);
+    const d = new Date(dt);
     return secondsToElapsedPopup(d.getTime() / 1000);
 }
 
@@ -115,7 +115,7 @@ export function isoDatetimeToString(dt) {
     // Convert a datetime to a human-readable date format.
     let d = <></>;
     if (dt) {
-        d = new Date(`${dt}+00:00`);
+        d = new Date(dt);
         d = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
     }
     return d;

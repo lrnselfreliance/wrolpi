@@ -14,7 +14,7 @@ apt install -y apt-transport-https ca-certificates curl gnupg-agent gcc libpq-de
   ffmpeg hostapd nodejs chromium-browser chromium-chromedriver cpufrequtils network-manager
 
 # Install serve, and archiving tools.
-sudo npm i -g serve single-file-cli@1.0.15 'git+https://github.com/pirate/readability-extractor' &
+sudo npm i -g serve@12.0.1 single-file-cli@1.0.15 'git+https://github.com/pirate/readability-extractor' &
 
 # Setup the virtual environment that main.py expects
 pip3 --version || (

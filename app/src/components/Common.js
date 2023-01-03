@@ -41,12 +41,16 @@ export function secondsElapsed(seconds) {
         return null;
     }
 
+    // Get seconds elapsed between now and `seconds` which is a UTC epoch.
+    const now = new Date();
+    const localNow = now.getTime() - (now.getTimezoneOffset() * 60000);
+
     let years;
     let days;
     let hours;
     let minutes;
 
-    seconds = Math.abs((new Date().getTime() / 1000) - seconds);
+    seconds = Math.abs((localNow / 1000) - seconds);
     [years, seconds] = divmod(seconds, secondsToYears);
     [days, seconds] = divmod(seconds, secondsToDays);
     [hours, seconds] = divmod(seconds, secondsToHours);
@@ -81,7 +85,7 @@ export function secondsToElapsedPopup(seconds) {
 }
 
 export function isoDatetimeToElapsedPopup(dt) {
-    const d = new Date(dt);
+    let d = new Date(dt);
     return secondsToElapsedPopup(d.getTime() / 1000);
 }
 
@@ -173,6 +177,10 @@ const secondsToYears = 31536000;
 const secondsToDays = 86400;
 const secondsToHours = 3600;
 const secondsToMinutes = 60;
+const msToYears = secondsToYears * 1000;
+const msToDays = secondsToDays * 1000;
+const msToHours = secondsToHours * 1000;
+const msToMinutes = secondsToMinutes * 1000;
 
 export function secondsToFullDuration(seconds) {
     let s = '';
@@ -202,12 +210,14 @@ export function secondsToDate(seconds) {
 }
 
 export function secondsToTimestamp(seconds) {
-    let d = new Date(seconds * 1000);
+    const offset = (new Date()).getTimezoneOffset() * 60000;
+    let d = new Date((seconds * 1000) + offset);
+    const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     const hours = String(d.getHours()).padStart(2, '0');
     const minutes = String(d.getMinutes()).padStart(2, '0');
     const sec = String(d.getSeconds()).padStart(2, '0');
-    return `${d.getFullYear()}-${d.getMonth() + 1}-${day} ${hours}:${minutes}:${sec}`;
+    return `${d.getFullYear()}-${month}-${day} ${hours}:${minutes}:${sec}`;
 }
 
 export function humanFileSize(bytes, dp = 1) {

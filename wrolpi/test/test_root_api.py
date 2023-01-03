@@ -105,29 +105,29 @@ class TestRootAPI(TestAPI):
     def test_downloads_sorter(self):
         with get_db_session(commit=True) as session:
             downloads = [
-                dict(status='complete', last_successful_download='2020-01-01T00:00:01'),
-                dict(status='complete', last_successful_download='2020-01-01T00:00:03'),
-                dict(status='complete', last_successful_download='2020-01-01T00:00:02'),
+                dict(status='complete', last_successful_download='2020-01-01T00:00:01+00:00'),
+                dict(status='complete', last_successful_download='2020-01-01T00:00:03+00:00'),
+                dict(status='complete', last_successful_download='2020-01-01T00:00:02+00:00'),
                 # last_successful_download are equal, so id is used next.
-                dict(status='pending', last_successful_download='2020-01-01T00:00:01', url='1'),
-                dict(status='pending', last_successful_download='2020-01-01T00:00:01', url='2'),
+                dict(status='pending', last_successful_download='2020-01-01T00:00:01+00:00', url='1'),
+                dict(status='pending', last_successful_download='2020-01-01T00:00:01+00:00', url='2'),
 
-                dict(status='pending', last_successful_download='2020-01-01T00:00:04'),
+                dict(status='pending', last_successful_download='2020-01-01T00:00:04+00:00'),
                 dict(status='failed'),
-                dict(status='failed', last_successful_download='2020-01-01T00:00:01'),
+                dict(status='failed', last_successful_download='2020-01-01T00:00:01+00:00'),
             ]
             for download in downloads:
                 session.add(Download(url=download.pop('url', 'https://example.com'), **download))
 
         expected = [
-            dict(status='pending', last_successful_download='2020-01-01T00:00:04'),
-            dict(status='pending', last_successful_download='2020-01-01T00:00:01', url='1'),
-            dict(status='pending', last_successful_download='2020-01-01T00:00:01', url='2'),
+            dict(status='pending', last_successful_download='2020-01-01T00:00:04+00:00'),
+            dict(status='pending', last_successful_download='2020-01-01T00:00:01+00:00', url='1'),
+            dict(status='pending', last_successful_download='2020-01-01T00:00:01+00:00', url='2'),
             dict(status='failed'),
-            dict(status='failed', last_successful_download='2020-01-01T00:00:01'),
-            dict(status='complete', last_successful_download='2020-01-01T00:00:03'),
-            dict(status='complete', last_successful_download='2020-01-01T00:00:02'),
-            dict(status='complete', last_successful_download='2020-01-01T00:00:01'),
+            dict(status='failed', last_successful_download='2020-01-01T00:00:01+00:00'),
+            dict(status='complete', last_successful_download='2020-01-01T00:00:03+00:00'),
+            dict(status='complete', last_successful_download='2020-01-01T00:00:02+00:00'),
+            dict(status='complete', last_successful_download='2020-01-01T00:00:01+00:00'),
         ]
         request, response = api_app.test_client.get('/api/download')
         once_downloads = response.json['once_downloads']
@@ -139,8 +139,8 @@ class TestRootAPI(TestAPI):
         with get_db_session(commit=True) as session:
             downloads = [
                 dict(status='complete', frequency=1),
-                dict(status='complete', frequency=2, next_download='2020-01-01T00:00:01'),
-                dict(status='complete', frequency=2, next_download='2020-01-01T00:00:02'),
+                dict(status='complete', frequency=2, next_download='2020-01-01T00:00:01+00:00'),
+                dict(status='complete', frequency=2, next_download='2020-01-01T00:00:02+00:00'),
                 dict(status='pending', frequency=1),
                 dict(status='pending', frequency=4),
                 dict(status='failed', frequency=1),
@@ -154,8 +154,8 @@ class TestRootAPI(TestAPI):
             dict(status='pending', frequency=4),
             dict(status='failed', frequency=1),
             dict(status='failed'),
-            dict(status='complete', frequency=2, next_download='2020-01-01T00:00:01'),
-            dict(status='complete', frequency=2, next_download='2020-01-01T00:00:02'),
+            dict(status='complete', frequency=2, next_download='2020-01-01T00:00:01+00:00'),
+            dict(status='complete', frequency=2, next_download='2020-01-01T00:00:02+00:00'),
             dict(status='complete', frequency=1),
         ]
         request, response = api_app.test_client.get('/api/download')

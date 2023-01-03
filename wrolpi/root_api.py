@@ -387,11 +387,17 @@ class CustomJSONEncoder(json.JSONEncoder):
                 # Get __json__ before others.
                 return obj.__json__()
             elif isinstance(obj, datetime):
-                if obj.tzinfo == timezone.utc:
-                    obj = obj.replace(tzinfo=None)
+                # API always returns dates in UTC.
+                if obj.tzinfo:
+                    obj = obj.astimezone(timezone.utc)
+                else:
+                    # A datetime with no timezone is UTC.
+                    obj = obj.replace(tzinfo=timezone.utc)
                 return obj.isoformat()
             elif isinstance(obj, date):
-                return datetime(obj.year, obj.month, obj.day).isoformat()
+                # API always returns dates in UTC.
+                obj = datetime(obj.year, obj.month, obj.day, tzinfo=timezone.utc)
+                return obj.isoformat()
             elif isinstance(obj, Decimal):
                 return str(obj)
             elif isinstance(obj, Base):

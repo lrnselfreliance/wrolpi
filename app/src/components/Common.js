@@ -42,8 +42,7 @@ export function secondsElapsed(seconds) {
     }
 
     // Get seconds elapsed between now and `seconds` which is a UTC epoch.
-    const now = new Date();
-    const localNow = now.getTime() - (now.getTimezoneOffset() * 60000);
+    const localNow = (new Date()).getTime();
 
     let years;
     let days;
@@ -210,8 +209,7 @@ export function secondsToDate(seconds) {
 }
 
 export function secondsToTimestamp(seconds) {
-    const offset = (new Date()).getTimezoneOffset() * 60000;
-    let d = new Date((seconds * 1000) + offset);
+    let d = new Date(seconds * 1000);
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     const hours = String(d.getHours()).padStart(2, '0');

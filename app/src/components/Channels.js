@@ -19,7 +19,6 @@ import {
     DirectoryInput,
     frequencyOptions,
     humanFileSize,
-    isEmpty,
     isoDatetimeToString,
     RequiredAsterisk,
     secondsToFrequency,
@@ -547,7 +546,7 @@ export function Channels() {
                 </TableBody>
             </Table>
         </>
-    } else if (isEmpty(channels)) {
+    } else if (_.isEmpty(channels)) {
         return <>
             {header}
             <Message>

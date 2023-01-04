@@ -153,7 +153,7 @@ export const useSearchArchives = (defaultLimit, domain, order_by) => {
     const searchStr = searchParams.get('q') || '';
     const order = searchParams.get('order') || order_by;
 
-    const [archives, setArchives] = useState();
+    const [archives, setArchives] = useState(null);
     const [totalPages, setTotalPages] = useState(0);
 
     const localSearchArchives = async () => {
@@ -446,7 +446,7 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
 }
 
 export const useBrowseFiles = () => {
-    const [browseFiles, setBrowseFiles] = useState([]);
+    const [browseFiles, setBrowseFiles] = useState(null);
     const [openFolders, setOpenFolders] = useState([]);
 
     const fetchFiles = async () => {

@@ -1,5 +1,5 @@
 import React, {useContext} from "react";
-import {HelpPopup, humanFileSize, isEmpty, PageContainer, TabLinks, useTitle, WROLModeMessage} from "./Common";
+import {HelpPopup, humanFileSize, PageContainer, TabLinks, useTitle, WROLModeMessage} from "./Common";
 import {Route, Routes} from "react-router-dom";
 import {getMapImportStatus, importMapFiles} from "../api";
 import {
@@ -18,6 +18,7 @@ import {
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {Button, Loader, Placeholder, Table} from "./Theme";
 import {StatusContext} from "../contexts/contexts";
+import _ from "lodash";
 
 function DockerMapImportWarning() {
     const {status} = useContext(StatusContext);
@@ -137,7 +138,7 @@ class ManageMap extends React.Component {
 
         this.setState({'ready': false});
         const {files, selectedPaths} = this.state;
-        if (isEmpty(selectedPaths)) {
+        if (_.isEmpty(selectedPaths)) {
             // No files are selected, import all.
             let paths = [];
             for (let i = 0; i < files.length; i++) {
@@ -198,13 +199,13 @@ class ManageMap extends React.Component {
             pending.length > 1 ? 'Importing...' : `Importing ${pending[0]}`
             : null;
 
-        let disabled = dockerized || isEmpty(files) || import_running;
+        let disabled = dockerized || _.isEmpty(files) || import_running;
         let importButton = <Button
             primary
             disabled={disabled}
             onClick={this.import}
         >
-            {!isEmpty(selectedPaths) ? 'Import Selected' : 'Import All'}
+            {!_.isEmpty(selectedPaths) ? 'Import Selected' : 'Import All'}
         </Button>;
 
         let rows;
@@ -219,7 +220,7 @@ class ManageMap extends React.Component {
                     </Placeholder>
                 </TableCell>
             </TableRow>;
-        } else if (isEmpty(files)) {
+        } else if (_.isEmpty(files)) {
             rows = <TableRow>
                 <TableCell/><TableCell colSpan={5}>No PBF map files were found in <b>map/pbf</b></TableCell>
             </TableRow>;

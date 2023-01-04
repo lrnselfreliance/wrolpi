@@ -307,16 +307,6 @@ export function arraysEqual(a, b) {
     return true;
 }
 
-export function isEmpty(i) {
-    const str = Object.prototype.toString.call(i);
-    if (str === '[object Object]') {
-        return Object.keys(i).length === 0;
-    } else if (str === '[object Array]') {
-        return i.length === 0;
-    }
-    return !i;
-}
-
 export function scrollToTop() {
     window.scrollTo({
         top: 0, behavior: "auto"
@@ -588,8 +578,7 @@ export function mimetypeColor(mimetype) {
             return 'green'
         } else if (mimetype && mimetype.startsWith('application/zip')) {
             return 'purple'
-        } else if (mimetype && (
-            mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook'))) {
+        } else if (mimetype && (mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook'))) {
             return 'yellow'
         }
     } catch (e) {
@@ -748,10 +737,7 @@ export function DirectoryInput({disabled, error, placeholder, setInput, value, r
     return (<div>
         <Input
             action={{
-                color: error ? 'red' : 'green',
-                labelPosition: 'left',
-                icon: 'folder',
-                content: media_directory,
+                color: error ? 'red' : 'green', labelPosition: 'left', icon: 'folder', content: media_directory,
             }}
             required={required}
             disabled={disabled}

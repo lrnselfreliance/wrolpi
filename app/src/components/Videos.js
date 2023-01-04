@@ -2,13 +2,13 @@ import React, {Fragment, useContext, useEffect, useState} from 'react';
 import {Link, Route, Routes, useParams} from "react-router-dom";
 import {
     CardLink,
-    CardPosterLink, cardTitleWrapper,
+    CardPosterLink,
+    cardTitleWrapper,
     defaultSearchOrder,
     defaultVideoOrder,
     Duration,
-    isoDatetimeToString,
     FileIcon,
-    isEmpty,
+    isoDatetimeToString,
     mimetypeColor,
     PageContainer,
     scrollToTop,
@@ -40,6 +40,7 @@ import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {Button, Card, CardIcon, Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
 import {deleteVideos} from "../api";
 import {ThemeContext} from "../contexts/contexts";
+import _ from "lodash";
 
 export function VideoWrapper() {
     const {videoId} = useParams();
@@ -175,7 +176,7 @@ function VideosPage({filter}) {
     const selectElm = <div style={{marginTop: '0.5em'}}>
         <Button
             color='red'
-            disabled={isEmpty(selectedVideos)}
+            disabled={_.isEmpty(selectedVideos)}
             onClick={() => setDeleteOpen(true)}
         >Delete</Button>
         <Confirm
@@ -188,14 +189,14 @@ function VideosPage({filter}) {
         <Button
             color='grey'
             onClick={() => invertSelection()}
-            disabled={isEmpty(videos)}
+            disabled={_.isEmpty(videos)}
         >
             Invert
         </Button>
         <Button
             color='yellow'
             onClick={() => clearSelection()}
-            disabled={isEmpty(videos) || isEmpty(selectedVideos)}
+            disabled={_.isEmpty(videos) || _.isEmpty(selectedVideos)}
         >
             Clear
         </Button>

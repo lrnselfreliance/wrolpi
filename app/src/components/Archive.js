@@ -18,13 +18,13 @@ import {
 } from "semantic-ui-react";
 import {
     BackButton,
-    CardLink, cardTitleWrapper,
+    CardLink,
+    cardTitleWrapper,
     defaultSearchOrder,
-    isoDatetimeToString,
     ExternalCardLink,
     FileIcon,
     HelpHeader,
-    isEmpty,
+    isoDatetimeToString,
     mimetypeColor,
     PageContainer,
     SearchInput,
@@ -116,10 +116,10 @@ function ArchivePage() {
     </>);
 
     let historyList = <Loader active/>;
-    if (!isEmpty(history)) {
-        historyList = <FileCards files={history}/>;
-    } else if (isEmpty(history)) {
+    if (history && history.length === 0) {
         historyList = <p>No history available</p>;
+    } else if (history) {
+        historyList = <FileCards files={history}/>;
     }
 
     const domain = archive.domain ? archive.domain.domain : null;
@@ -229,16 +229,16 @@ export function Domains() {
     const [domains] = useDomains();
     const [searchStr, setSearchStr] = useState('');
 
-    if (domains === null) {
-        return (<>
+    if (!domains) {
+        return <>
             <Placeholder>
                 <PlaceholderHeader>
                     <PlaceholderLine/>
                     <PlaceholderLine/>
                 </PlaceholderHeader>
             </Placeholder>
-        </>)
-    } else if (isEmpty(domains)) {
+        </>;
+    } else if (_.isEmpty(domains)) {
         return <Message>
             <Message.Header>No domains yet.</Message.Header>
             <Message.Content>Archive some webpages!</Message.Content>
@@ -292,7 +292,7 @@ function Archives() {
     useTitle('Archives');
 
     let filterOptions = [];
-    if (!isEmpty(domains)) {
+    if (!_.isEmpty(domains)) {
         domains.forEach(i => {
             filterOptions = [...filterOptions, {text: i['domain'], key: i['domain'], value: i['domain']}]
         });
@@ -382,7 +382,7 @@ function Archives() {
     const selectElm = <div style={{marginTop: '0.5em'}}>
         <Button
             color='red'
-            disabled={isEmpty(selectedArchives)}
+            disabled={_.isEmpty(selectedArchives)}
             onClick={() => setDeleteOpen(true)}
         >Delete</Button>
         <Confirm
@@ -395,14 +395,14 @@ function Archives() {
         <Button
             color='grey'
             onClick={() => invertSelection()}
-            disabled={isEmpty(archives)}
+            disabled={_.isEmpty(archives)}
         >
             Invert
         </Button>
         <Button
             color='yellow'
             onClick={() => clearSelection()}
-            disabled={isEmpty(archives) || isEmpty(selectedArchives)}
+            disabled={_.isEmpty(archives) || _.isEmpty(selectedArchives)}
         >
             Clear
         </Button>

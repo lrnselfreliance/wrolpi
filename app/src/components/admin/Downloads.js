@@ -3,7 +3,6 @@ import {clearCompletedDownloads, clearFailedDownloads, deleteDownload, killDownl
 import {Link} from "react-router-dom";
 import {
     DisableDownloadsToggle,
-    isEmpty,
     isoDatetimeToElapsedPopup,
     secondsToFrequency,
     textEllipsis,
@@ -22,9 +21,10 @@ import {
     TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
-import {Button, Header, Placeholder, Table} from "../Theme";
+import {Button, Header, Placeholder, Segment, Table} from "../Theme";
 import {ThemeContext} from "../../contexts/contexts";
 import {useDownloads} from "../../hooks/customHooks";
+import _ from "lodash";
 
 function ClearCompleteDownloads({callback}) {
     const [disabled, setDisabled] = React.useState(false);
@@ -345,8 +345,8 @@ export function Downloads() {
     );
 
     let onceTable = tablePlaceholder;
-    if (isEmpty(onceDownloads)) {
-        onceTable = <p {...t}>No downloads are scheduled.</p>
+    if (_.isEmpty(onceDownloads)) {
+        onceTable = <Segment>No downloads are scheduled.</Segment>
     } else if (onceDownloads) {
         onceTable = (
             <>
@@ -364,8 +364,8 @@ export function Downloads() {
     }
 
     let recurringTable = tablePlaceholder;
-    if (isEmpty(recurringDownloads)) {
-        recurringTable = <p {...t}>No recurring downloads are scheduled.</p>
+    if (_.isEmpty(recurringDownloads)) {
+        recurringTable = <Segment>No recurring downloads are scheduled.</Segment>
     } else if (recurringDownloads) {
         recurringTable = <Table>
             {nonStoppableHeader}

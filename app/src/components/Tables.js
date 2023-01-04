@@ -5,7 +5,6 @@ import React from "react";
 export function SelectableTable({headerContents, selectOn, onSelect, selectedKeys, footer, rows}) {
     footer = footer ? <TableFooter>
         <TableRow>
-            {selectOn && <TableHeaderCell/>}
             {footer}
         </TableRow>
     </TableFooter> : null;

@@ -23,7 +23,8 @@ import {
     TabPane as TAB_PANE,
     TextArea as TEXTAREA
 } from "semantic-ui-react";
-import {ColorToSemanticHexColor, isEmpty} from "./Common";
+import {ColorToSemanticHexColor} from "./Common";
+import _ from "lodash";
 
 export const darkTheme = 'dark';
 export const lightTheme = 'light';
@@ -32,7 +33,7 @@ export const systemTheme = 'system';
 export const themeSessionKey = 'color-scheme';
 
 export function ThemeWrapper({children, ...props}) {
-    if (!isEmpty(props)) {
+    if (!_.isEmpty(props)) {
         console.log(props);
         console.error('ThemeWrapper does not support props!');
     }

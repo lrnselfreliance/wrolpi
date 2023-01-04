@@ -21,17 +21,18 @@ import 'react-keyed-file-browser/dist/react-keyed-file-browser.css';
 import {deleteFile, refreshDirectoryFiles, refreshFiles} from "../api";
 import {
     CardGroupCentered,
-    CardPosterLink, cardTitleWrapper,
-    isoDatetimeToString,
+    CardLink,
+    CardPosterLink,
+    cardTitleWrapper,
     ExternalCardLink,
     FileIcon,
     humanFileSize,
-    isEmpty,
+    isoDatetimeToString,
     mimetypeColor,
     PageContainer,
     Paginator,
     textEllipsis,
-    useTitle, CardLink
+    useTitle
 } from "./Common";
 import {useBrowseFiles, useQuery, useSearchFiles} from "../hooks/customHooks";
 import {Route, Routes} from "react-router-dom";
@@ -129,21 +130,29 @@ export function Files() {
         buttons = <FilesRefreshButton/>;
     }
 
+    let body = <Placeholder>
+        <PlaceholderLine/>
+        <PlaceholderLine/>
+    </Placeholder>;
+    if (_.isArray(browseFiles)) {
+        body = <FileBrowser
+            showActionBar={false}
+            canFilter={false}
+            files={browseFiles}
+            icons={icons}
+            onFolderOpen={handleFolderChange}
+            onFolderClose={handleFolderChange}
+            onSelect={onSelect}
+            detailRenderer={() => <></>} // Hide the preview that the 3rd party provided.
+        />;
+    }
+
     return <>
         {clearButton}
         {buttons}
         <Divider/>
         <div {...t}>
-            <FileBrowser
-                showActionBar={false}
-                canFilter={false}
-                files={browseFiles}
-                icons={icons}
-                onFolderOpen={handleFolderChange}
-                onFolderClose={handleFolderChange}
-                onSelect={onSelect}
-                detailRenderer={() => <></>} // Hide the preview that the 3rd party provided.
-            />
+            {body}
         </div>
     </>
 }
@@ -291,12 +300,12 @@ function FileCard({file}) {
 }
 
 export function FileCards({files}) {
-    if (!isEmpty(files)) {
+    if (!_.isEmpty(files)) {
         return <CardGroupCentered>
             {files.map(i => <FileCard key={i['path']} file={i}/>)}
         </CardGroupCentered>
     } else if (files && files.length === 0) {
-        return <Header as='h4'>No files found.</Header>
+        return <Segment>No results!</Segment>
     } else {
         return <CardGroupCentered><CardPlacholder/></CardGroupCentered>
     }
@@ -379,7 +388,13 @@ function FileRow({file}) {
 }
 
 export function FileTable({files, selectOn, onSelect, footer, selectedKeys}) {
-    if (!isEmpty(files)) {
+    if (!files) {
+        return <Placeholder>
+            <PlaceholderLine/>
+            <PlaceholderLine/>
+            <PlaceholderLine/>
+        </Placeholder>
+    } else if (files && files.length > 0) {
         const headerContents = ['Poster', 'Title'];
         const rows = files.map(i => <FileRow key={i['key']} file={i}/>);
         return <SelectableTable
@@ -390,14 +405,8 @@ export function FileTable({files, selectOn, onSelect, footer, selectedKeys}) {
             footer={footer}
             rows={rows}
         />;
-    } else if (isEmpty(files)) {
-        return <Segment><p>No results!</p></Segment>
     } else {
-        return <Placeholder>
-            <PlaceholderLine/>
-            <PlaceholderLine/>
-            <PlaceholderLine/>
-        </Placeholder>
+        return <Segment><p>No results!</p></Segment>
     }
 }
 
@@ -472,8 +481,7 @@ export function FilesView({
     if (view === 'list') {
         const footer = selectOn && selectElem ?
             <>
-                <TableHeaderCell/>
-                <TableHeaderCell>{selectElem}</TableHeaderCell>
+                <TableHeaderCell colSpan='3'>{selectElem}</TableHeaderCell>
             </> : null;
         body = <FileTable files={files} selectOn={selectOn}
                           onSelect={onSelect} footer={footer} selectedKeys={selectedKeys}/>;

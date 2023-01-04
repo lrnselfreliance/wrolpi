@@ -394,14 +394,14 @@ function Archives() {
         />
         <Button
             color='grey'
-            onClick={() => invertSelection()}
+            onClick={invertSelection}
             disabled={_.isEmpty(archives)}
         >
             Invert
         </Button>
         <Button
             color='yellow'
-            onClick={() => clearSelection()}
+            onClick={clearSelection}
             disabled={_.isEmpty(archives) || _.isEmpty(selectedArchives)}
         >
             Clear

@@ -3,6 +3,7 @@ import {toast} from "react-semantic-toasts";
 import {useRecurringTimeout} from "./hooks/customHooks";
 import {getEvents} from "./api";
 
+const apiEventName = 'apiEvent';
 
 function eventToast(title, description, type = 'success', time = 5000) {
     toast({type: type, title: title, description: description, time: time});
@@ -13,7 +14,7 @@ function handleEvents(events) {
 
     events.forEach(e => {
         const {event, message, subject, dt} = e;
-        console.debug('event', e);
+        document.dispatchEvent(new CustomEvent(apiEventName, {detail: e}));
 
         if (subject && newestEvents[subject] && newestEvents[subject] > dt) {
             console.debug(`Already handled newer event of "${subject}".`);
@@ -64,4 +65,25 @@ export function useEventsInterval() {
     }, [JSON.stringify(events)]);
 
     return {events, fetchEvents}
+}
+
+export function useSubscribeEvents(listener) {
+    // Subscribe to all API sent events.
+    document.addEventListener(apiEventName, listener);
+    const unsubscribe = () => document.removeEventListener(apiEventName, listener);
+
+    useEffect(() => {
+        return unsubscribe;
+    }, []);
+}
+
+export function useSubscribeEventName(name, listener) {
+    // Subscribe to only API sent events that match `name`.
+    const localListener = (event) => {
+        if (event && event.detail['event'] === name) {
+            listener(event);
+        }
+    }
+
+    useSubscribeEvents(localListener);
 }

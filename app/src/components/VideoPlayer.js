@@ -126,7 +126,7 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
 
     let captionsPane = {
         menuItem: 'Captions', render: () => <TabPane>
-            <pre>{video.caption || 'No captions available'}</pre>
+            <pre>{video.caption || 'No captions available.'}</pre>
         </TabPane>
     };
 

@@ -39,11 +39,12 @@ import {Route, Routes} from "react-router-dom";
 import {CardPlacholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {ThemeContext} from "../contexts/contexts";
-import {Button, Card, CardIcon, Header, Icon, Placeholder, Segment} from "./Theme";
+import {StatusContext, ThemeContext} from "../contexts/contexts";
+import {Button, Card, CardIcon, Icon, Placeholder, Segment} from "./Theme";
 import {SelectableTable} from "./Tables";
 import {VideoCard, VideoRowCells} from "./Videos";
 import _ from 'lodash';
+import {useSubscribeEvents, useSubscribeEventName} from "../Events";
 
 const icons = {
     File: <Icon name='file'/>,
@@ -561,24 +562,27 @@ export function FilesSearchView({
 
 function FilesRefreshButton() {
     const {t} = useContext(ThemeContext);
+    const {status} = useContext(StatusContext);
+    const refreshing = status && status['flags'] && status['flags'].indexOf('refreshing') >= 0;
 
     const [loading, setLoading] = React.useState(false);
-    const [name, setName] = React.useState('refresh');
 
     const handleClick = async () => {
         setLoading(true);
         await refreshFiles();
-        setLoading(false);
-        setName('check');
     }
+
+    // Clear loading when global refresh event completes.
+    useSubscribeEventName('global_refresh_completed', () => setLoading(false));
 
     return <>
         <Button icon
                 labelPosition='left'
-                loading={loading}
+                loading={loading || refreshing}
                 id='refresh_files'
-                onClick={handleClick}>
-            <Icon name={name}/>
+                onClick={handleClick}
+                disabled={loading || refreshing}>
+            <Icon name='refresh'/>
             Refresh Files
         </Button>
         <label htmlFor='refresh_files' {...t}>
@@ -589,24 +593,27 @@ function FilesRefreshButton() {
 
 function DirectoryFilesRefreshButton({directory}) {
     const {t} = useContext(ThemeContext);
+    const {status} = useContext(StatusContext);
+    const refreshing = status && status['flags'] && status['flags'].indexOf('refreshing') >= 0;
 
     const [loading, setLoading] = React.useState(false);
-    const [name, setName] = React.useState('refresh');
 
     const handleClick = async () => {
         setLoading(true);
         await refreshDirectoryFiles(directory);
-        setLoading(false);
-        setName('check');
     }
+
+    // Clear loading when directory refresh event completes.
+    useSubscribeEventName('directory_refresh_completed', () => setLoading(false));
 
     return <>
         <Button icon primary
                 labelPosition='left'
-                loading={loading}
+                loading={loading || refreshing}
                 id='refresh_files'
-                onClick={handleClick}>
-            <Icon name={name}/>
+                onClick={handleClick}
+                disabled={loading || refreshing}>
+            <Icon name='refresh'/>
             Refresh Directory
         </Button>
         <label htmlFor='refresh_files' {...t}>

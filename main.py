@@ -180,6 +180,7 @@ async def periodic_downloads(app: Sanic):
     """
     if not flags.refresh_complete.is_set():
         logger.warning('Refusing to download without refresh')
+        download_manager.disable()
         return
 
     # Set all downloads to new.

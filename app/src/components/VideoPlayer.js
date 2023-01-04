@@ -111,7 +111,7 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
     let aboutPane = {
         menuItem: 'About', render: () => <TabPane>
             <h3>Size</h3>
-            <p>{video.size ? humanFileSize(video.size) : '???'}</p>
+            <p>{video.size ? humanFileSize(video.size) : 'Unknown'}</p>
 
             <h3>Source URL</h3>
             <p>{video.url ? <a href={video.url}>{video.url}</a> : 'N/A'}</p>
@@ -126,7 +126,7 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
 
     let captionsPane = {
         menuItem: 'Captions', render: () => <TabPane>
-            <pre>{video.caption}</pre>
+            <pre>{video.caption || 'No captions available'}</pre>
         </TabPane>
     };
 

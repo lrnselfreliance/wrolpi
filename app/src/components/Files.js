@@ -407,7 +407,7 @@ export function FileTable({files, selectOn, onSelect, footer, selectedKeys}) {
             rows={rows}
         />;
     } else {
-        return <Segment><p>No results!</p></Segment>
+        return <Segment>No results!</Segment>
     }
 }
 

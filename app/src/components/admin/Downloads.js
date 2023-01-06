@@ -313,8 +313,6 @@ class StoppableRow extends React.Component {
 export function Downloads() {
     useTitle('Downloads');
 
-    const {t} = useContext(ThemeContext);
-
     const {onceDownloads, recurringDownloads, fetchDownloads} = useDownloads();
 
     const tablePlaceholder = <Placeholder>
@@ -345,7 +343,7 @@ export function Downloads() {
     );
 
     let onceTable = tablePlaceholder;
-    if (_.isEmpty(onceDownloads)) {
+    if (onceDownloads && _.isEmpty(onceDownloads)) {
         onceTable = <Segment>No downloads are scheduled.</Segment>
     } else if (onceDownloads) {
         onceTable = (
@@ -364,7 +362,7 @@ export function Downloads() {
     }
 
     let recurringTable = tablePlaceholder;
-    if (_.isEmpty(recurringDownloads)) {
+    if (recurringDownloads && _.isEmpty(recurringDownloads)) {
         recurringTable = <Segment>No recurring downloads are scheduled.</Segment>
     } else if (recurringDownloads) {
         recurringTable = <Table>

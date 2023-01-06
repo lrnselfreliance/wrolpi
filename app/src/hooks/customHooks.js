@@ -494,8 +494,8 @@ export const useHotspot = () => {
 }
 
 export const useDownloads = () => {
-    const [onceDownloads, setOnceDownloads] = useState();
-    const [recurringDownloads, setRecurringDownloads] = useState();
+    const [onceDownloads, setOnceDownloads] = useState(null);
+    const [recurringDownloads, setRecurringDownloads] = useState(null);
 
     const fetchDownloads = async () => {
         try {

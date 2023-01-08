@@ -5,6 +5,17 @@ version: 2.1
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/2.0/configuration-reference/#jobs
 jobs:
+  app-tests:
+    docker:
+      - image: cimg/node:14.20.0
+    steps:
+      - checkout
+      - run:
+          name: install dependencies
+          command: npm install
+      - run:
+          name: run tests
+          command: npm run test
   api-tests-eight:
     docker:
       - image: cimg/python:3.8

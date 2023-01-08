@@ -114,7 +114,6 @@ export class Settings extends React.Component {
             pending,
             qrCodeValue,
             throttle_on_startup,
-            timezone,
         } = this.state;
 
         const qrButton = <Button icon style={{marginBottom: '1em'}}><Icon name='qrcode' size='big'/></Button>;

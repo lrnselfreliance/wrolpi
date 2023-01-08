@@ -4,8 +4,9 @@
   "private": true,
   "dependencies": {
     "@artsy/fresnel": "^6.1.0",
+    "@testing-library/jest-dom": "^5.16.5",
+    "@testing-library/react": "^13.4.0",
     "lodash": "^4.17.19",
-    "npm": "^6.14.7",
     "query-string": "^6.13.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

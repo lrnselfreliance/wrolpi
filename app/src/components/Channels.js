@@ -76,7 +76,6 @@ function ChannelStatistics({statistics}) {
 
 
 function ChannelPage({create, header}) {
-    const [loading, setLoading] = useState(false);
     const [disabled, setDisabled] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [validRegex, setValidRegex] = useState(true);
@@ -147,7 +146,6 @@ function ChannelPage({create, header}) {
         };
 
         setDisabled(true);
-        setLoading(true);
 
         let response = null;
         try {
@@ -167,7 +165,6 @@ function ChannelPage({create, header}) {
             return;
         } finally {
             setDisabled(false);
-            setLoading(false);
         }
 
         if (response && response.status >= 200 && response.status < 300) {

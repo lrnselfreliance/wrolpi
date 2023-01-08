@@ -1,10 +1,9 @@
 import {Header, Progress, Segment, Statistic, StatisticGroup} from "../Theme";
 import React, {useContext} from "react";
 import {humanBandwidth, humanFileSize, LoadStatistic, useTitle} from "../Common";
-import {Responsive} from "semantic-ui-react";
 import {ProgressPlaceholder} from "../Placeholder";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {StatusContext} from "../../contexts/contexts";
+import {Media, StatusContext} from "../../contexts/contexts";
 
 function DriveInfo({used, size, percent, mount}) {
     let color;
@@ -182,7 +181,7 @@ export function Status() {
     }
 
     return <>
-        <Responsive minWidth={770}>
+        <Media at='mobile'>
             <Segment>
                 <CPUUsageProgress value={percent} label='CPU Usage'/>
                 <StatisticGroup>
@@ -212,8 +211,8 @@ export function Status() {
                 <Header as='h1'>Drive Bandwidth</Header>
                 {disk_bandwidth.map((disk) => <DiskBandwidth key={disk['name']} {...disk}/>)}
             </Segment>
-        </Responsive>
-        <Responsive maxWidth={769}>
+        </Media>
+        <Media greaterThanOrEqual='tablet'>
             <Segment>
                 <CPUUsageProgress value={percent} label='CPU Usage'/>
                 <StatisticGroup size='mini'>
@@ -244,6 +243,6 @@ export function Status() {
                 <Header as='h2'>Drive Bandwidth</Header>
                 {disk_bandwidth.map((disk) => <DiskBandwidth key={disk['name']} {...disk}/>)}
             </Segment>
-        </Responsive>
+        </Media>
     </>
 }

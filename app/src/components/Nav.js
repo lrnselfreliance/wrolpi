@@ -1,42 +1,32 @@
 import React, {useContext} from "react";
 import {NavLink} from "react-router-dom";
-import {Dropdown, Menu, Responsive} from "semantic-ui-react";
-import {StatusContext, ThemeContext} from "../contexts/contexts";
+import {Dropdown, Menu} from "semantic-ui-react";
+import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {DarkModeToggle, HotspotStatusIcon, NAME} from "./Common";
 
-const responsiveWidth = 700;
-
-const links = [
-    {text: 'Videos', to: '/videos', key: 'videos'},
-    {text: 'Archive', to: '/archive', key: 'archive'},
-    {text: 'Map', to: '/map', key: 'map'},
-    {text: 'Files', to: '/files', key: 'files'},
-    {text: 'Inventory', to: '/inventory', key: 'inventory'},
-    {
-        key: 'apps', text: 'Apps', links: [
-            {to: '/apps/otp', text: 'One Time Pad', end: true},
-            {to: '/apps/statistics', text: 'Statistics', end: true},
-        ]
-    },
-];
+const links = [{text: 'Videos', to: '/videos', key: 'videos'}, {
+    text: 'Archive', to: '/archive', key: 'archive'
+}, {text: 'Map', to: '/map', key: 'map'}, {text: 'Files', to: '/files', key: 'files'}, {
+    text: 'Inventory', to: '/inventory', key: 'inventory'
+}, {
+    key: 'apps', text: 'Apps', links: [{to: '/apps/otp', text: 'One Time Pad', end: true}, {
+        to: '/apps/statistics', text: 'Statistics', end: true
+    },]
+},];
 const admin = {to: '/admin', text: 'Admin', key: 'admin'};
 const rightLinks = [admin,];
 
 const collapsedLinks = links.concat([admin,]);
 
 function DropdownLinks(props) {
-    return (
-        <Dropdown item text={props.link.text}>
-            <Dropdown.Menu>
-                {props.link.links.map((l) => {
-                    return (
-                        <MenuLink key={l.to} link={l}/>
-                    )
-                })}
-            </Dropdown.Menu>
-        </Dropdown>
-    )
+    return (<Dropdown item text={props.link.text}>
+        <Dropdown.Menu>
+            {props.link.links.map((l) => {
+                return (<MenuLink key={l.to} link={l}/>)
+            })}
+        </Dropdown.Menu>
+    </Dropdown>)
 }
 
 function MenuLink({link}) {
@@ -45,19 +35,15 @@ function MenuLink({link}) {
 
     if (!link.links) {
         const end = link.end ? {end: true} : {end: undefined};
-        return (
-            <NavLink
-                className={classes}
-                to={link.to}
-                {...end}
-            >
-                {link.text}
-            </NavLink>
-        )
+        return (<NavLink
+            className={classes}
+            to={link.to}
+            {...end}
+        >
+            {link.text}
+        </NavLink>)
     } else {
-        return (
-            <DropdownLinks link={link}/>
-        )
+        return (<DropdownLinks link={link}/>)
     }
 }
 
@@ -72,35 +58,36 @@ export function NavBar() {
     const topNavText = wrol_mode ? <>{name}&nbsp; <Icon name='lock'/></> : name;
     const {i} = useContext(ThemeContext);
 
-    return (
-        <Menu {...i}>
-            {/*Always show WROLPi home button*/}
-            <MenuLink link={{to: '/', text: topNavText, end: true}}/>
+    const homeLink = <MenuLink link={{to: '/', text: topNavText, end: true}}/>;
+    const icons = <React.Fragment>
+        <NavIcon><HotspotStatusIcon/></NavIcon>
+        <NavIcon><DarkModeToggle/></NavIcon>
+    </React.Fragment>;
 
-            {/*Show the links in a menu when on desktop*/}
-            {links.map((link) => {
-                return (
-                    <Responsive minWidth={responsiveWidth} as={MenuLink} link={link} key={link.key}/>
-                )
-            })}
-            <Responsive minWidth={responsiveWidth} as={Menu.Menu} position="right">
-                <NavIcon><HotspotStatusIcon/></NavIcon>
-                <NavIcon><DarkModeToggle/></NavIcon>
-                {rightLinks.map((link) => <MenuLink link={link} key={link.key}/>)}
-            </Responsive>
+    return <>
+        <Media at='mobile'>
+            <Menu {...i}>
+                {homeLink}
+                <Menu.Menu position='right'>
+                    {icons}
+                    <Dropdown item icon="bars">
+                        <Dropdown.Menu>
+                            {collapsedLinks.map(i =><MenuLink link={i} key={i.key}/>)}
+                        </Dropdown.Menu>
+                    </Dropdown>
+                </Menu.Menu>
+            </Menu>
+        </Media>
+        <Media greaterThanOrEqual='tablet'>
+            <Menu {...i}>
+                {homeLink}
+                {links.map(i => <MenuLink link={i} key={i.key}/>)}
 
-            {/*Show the menu items in a dropdown when on mobile*/}
-            <Responsive as={Menu.Menu} maxWidth={responsiveWidth - 1} position='right'>
-                <NavIcon><HotspotStatusIcon/></NavIcon>
-                <NavIcon><DarkModeToggle/></NavIcon>
-                <Dropdown item icon="bars">
-                    <Dropdown.Menu>
-                        {collapsedLinks.map((link) =>
-                            <MenuLink link={link} key={link.key}/>
-                        )}
-                    </Dropdown.Menu>
-                </Dropdown>
-            </Responsive>
-        </Menu>
-    )
+                <Menu.Menu position='right'>
+                    {icons}
+                    {rightLinks.map(i => <MenuLink link={i} key={i.key}/>)}
+                </Menu.Menu>
+            </Menu>
+        </Media>
+    </>
 }

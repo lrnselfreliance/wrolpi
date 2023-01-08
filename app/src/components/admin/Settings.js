@@ -1,11 +1,10 @@
 import React from "react";
 import {getSettings, saveSettings} from "../../api";
-import {Button, Form, FormField, FormGroup, FormInput, Header, Loader, Segment} from "../Theme";
+import {Button, Form, FormGroup, FormInput, Header, Loader, Segment} from "../Theme";
 import {Container, Dimmer, Icon, Modal} from "semantic-ui-react";
 import {ThemeContext} from "../../contexts/contexts";
 import {HelpPopup, HotspotToggle, ThrottleToggle, Toggle, WROLModeMessage} from "../Common";
 import QRCode from "react-qr-code";
-import TimezoneSelect from "react-timezone-select";
 
 export class Settings extends React.Component {
 
@@ -183,15 +182,13 @@ export class Settings extends React.Component {
                                 label='Hotspot SSID'
                                 value={hotspot_ssid}
                                 disabled={disabled || hotspot_ssid === null}
-                                onChange={(e, d) =>
-                                    this.setState({hotspot_ssid: d.value}, this.handleHotspotChange)}
+                                onChange={(e, d) => this.setState({hotspot_ssid: d.value}, this.handleHotspotChange)}
                             />
                             <FormInput
                                 label='Hotspot Password'
                                 disabled={disabled || hotspot_password === null}
                                 value={hotspot_password}
-                                onChange={(e, d) =>
-                                    this.setState({hotspot_password: d.value}, this.handleHotspotChange)}
+                                onChange={(e, d) => this.setState({hotspot_password: d.value}, this.handleHotspotChange)}
                             />
                             <FormInput
                                 label='Hotspot Device'
@@ -215,15 +212,9 @@ export class Settings extends React.Component {
                             </Modal.Content>
                         </Modal>
 
-                        <FormField>
-                            <label>Timezone</label>
-                            <TimezoneSelect
-                                value={timezone}
-                                onChange={i => this.handleInputChange(null, 'timezone', i)}
-                            />
-                        </FormField>
+                        <br/>
 
-                        <Button color="blue" type="submit" disabled={disabled}>
+                        <Button color="blue" type="submit" disabled={disabled} size='large'>
                             Save
                         </Button>
 
@@ -233,8 +224,7 @@ export class Settings extends React.Component {
 
                     </Form>
                 </Segment>
-            </Container>
-            }
+            </Container>}
         </ThemeContext.Consumer>
     }
 }

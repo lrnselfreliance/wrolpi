@@ -1,9 +1,9 @@
 import React, {useContext, useEffect, useState} from "react";
-import {Card, Container, IconGroup, Image, Input, Modal, Pagination, Responsive} from 'semantic-ui-react';
+import {Card, Container, IconGroup, Image, Input, Modal, Pagination} from 'semantic-ui-react';
 import {Link, NavLink, useNavigate} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDirectories, useDownloaders, useHotspot, useSettings, useThrottle} from "../hooks/customHooks";
-import {StatusContext, ThemeContext} from "../contexts/contexts";
+import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
 import {Button, darkTheme, Form, Header, Icon, lightTheme, Menu, Popup, Statistic} from "./Theme";
 
 export const API_URI = `http://${window.location.host}/api`;
@@ -321,6 +321,7 @@ export function SearchInput({
                                 action,
                                 actionIcon,
                                 clearable,
+                                autoFocus = false,
                                 ...props
                             }) {
     let [value, setValue] = useState(searchStr || '');
@@ -397,32 +398,32 @@ export function TabLinks({links}) {
 }
 
 export function PageContainer(props) {
-    return (<>
-        <Responsive minWidth={770}>
-            <Container fluid style={{marginTop: '1em', padding: '1em'}}>
-                {props.children}
-            </Container>
-        </Responsive>
-        <Responsive maxWidth={769}>
+    return <>
+        <Media at='mobile'>
             <Container style={{marginTop: '1em', padding: 0}}>
                 {props.children}
             </Container>
-        </Responsive>
-    </>)
+        </Media>
+        <Media greaterThanOrEqual='tablet'>
+            <Container fluid style={{marginTop: '1em', padding: '1em'}}>
+                {props.children}
+            </Container>
+        </Media>
+    </>;
 }
 
 export function CardGroupCentered(props) {
     return (<div style={{marginTop: '1em'}}>
-        <Responsive minWidth={770}>
-            <Card.Group>
-                {props.children}
-            </Card.Group>
-        </Responsive>
-        <Responsive maxWidth={769}>
+        <Media at='mobile'>
             <Card.Group centered>
                 {props.children}
             </Card.Group>
-        </Responsive>
+        </Media>
+        <Media greaterThanOrEqual='tablet'>
+            <Card.Group>
+                {props.children}
+            </Card.Group>
+        </Media>
     </div>)
 }
 

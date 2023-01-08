@@ -14,7 +14,7 @@ import {ArchiveRoute} from "./components/Archive";
 import {FilesRoute} from "./components/Files";
 import {useStatusInterval} from "./hooks/customHooks";
 import {MapRoute} from "./components/Map";
-import {StatusContext, ThemeContext} from "./contexts/contexts";
+import {MediaContextProvider, mediaStyles, StatusContext, ThemeContext} from "./contexts/contexts";
 import {Header, ThemeWrapper} from "./components/Theme";
 import {Dashboard} from "./Dashboard";
 import {Donate} from "./components/Donate";
@@ -83,8 +83,12 @@ export default function App() {
     useEventsInterval();
 
     return <ThemeWrapper>
-        <StatusContext.Provider value={status}>
-            <RouterProvider router={router}/>
-        </StatusContext.Provider>
-    </ThemeWrapper>;
+        {/* Context and style to handle switching between mobile/computer. */}
+        <style>{mediaStyles}</style>
+        <MediaContextProvider>
+            <StatusContext.Provider value={status}>
+                <RouterProvider router={router}/>
+            </StatusContext.Provider>
+        </MediaContextProvider>
+    </ThemeWrapper>
 }

@@ -4,7 +4,6 @@ import {
     AccordionTitle,
     Grid,
     Input,
-    Responsive,
     StatisticLabel,
     StatisticValue,
     TableBody,
@@ -48,6 +47,7 @@ import {
     Table
 } from "./Theme";
 import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
+import {Media} from "../contexts/contexts";
 
 
 function ChannelStatistics({statistics}) {
@@ -564,20 +564,20 @@ export function Channels() {
 
     return <>
         {header}
-        <Responsive minWidth={770}>
-            <Table compact striped size='large'>
-                {tableHeader}
-                <TableBody>
-                    {filteredChannels.map(channel => <ChannelRow key={channel.id} channel={channel}/>)}
-                </TableBody>
-            </Table>
-        </Responsive>
-        <Responsive maxWidth={769}>
+        <Media at='mobile'>
             <Table striped unstackable size='small'>
                 <TableBody>
                     {filteredChannels.map(channel => <MobileChannelRow key={channel.id} channel={channel}/>)}
                 </TableBody>
             </Table>
-        </Responsive>
+        </Media>
+        <Media greaterThanOrEqual='tablet'>
+            <Table compact unstackable striped size='large'>
+                {tableHeader}
+                <TableBody>
+                    {filteredChannels.map(channel => <ChannelRow key={channel.id} channel={channel}/>)}
+                </TableBody>
+            </Table>
+        </Media>
     </>
 }

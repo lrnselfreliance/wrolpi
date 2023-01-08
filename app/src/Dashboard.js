@@ -80,7 +80,7 @@ export function Dashboard() {
                                  searchStr={searchStr}
                                  onSubmit={setSearchStr}
                                  size='large'
-                                 placeholder='Search Everywhere...'
+                                 placeholder='Search everywhere...'
                                  actionIcon='search'
                                  style={{marginBottom: '2em'}}
                     />

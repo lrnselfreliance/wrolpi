@@ -83,3 +83,6 @@ workflows:
       - api-tests-eight
       - api-tests-nine
       - api-tests-ten
+  wrolpi-app-test:
+    jobs:
+      - app-tests

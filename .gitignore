@@ -113,7 +113,6 @@ test/map
 # docker configs
 test/config
 
-app/package-lock.json
 modules/node_modules/
 docker/archive/node_modules/
 docker/archive/package-lock.json

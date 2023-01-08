@@ -5,18 +5,59 @@ version: 2.1
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/2.0/configuration-reference/#jobs
 jobs:
-  app-tests:
+  app-tests-12:
     docker:
-      - image: cimg/node:14.20.0
+      - image: cimg/node:12.13
     steps:
       - checkout
-      - run:
-          name: install dependencies
-          command: npm install
-      - run:
-          name: run tests
-          command: npm run test
-  api-tests-eight:
+      - restore_cache:
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+      - run: cd app && npm install
+      - save_cache:
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+          paths:
+            - ./app/node_modules
+      - run: cd app && npm run test
+  app-tests-14:
+    docker:
+      - image: cimg/node:14.21
+    steps:
+      - checkout
+      - restore_cache:
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+      - run: cd app && npm install
+      - save_cache:
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+          paths:
+            - ./app/node_modules
+      - run: cd app && npm run test
+  app-tests-16:
+    docker:
+      - image: cimg/node:16.19
+    steps:
+      - checkout
+      - restore_cache:
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+      - run: cd app && npm install --legacy-peer-deps
+      - save_cache:
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+          paths:
+            - ./app/node_modules
+      - run: cd app && npm run test
+  app-tests-18:
+    docker:
+      - image: cimg/node:18.12
+    steps:
+      - checkout
+      - restore_cache:
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+      - run: cd app && npm install --legacy-peer-deps
+      - save_cache:
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+          paths:
+            - ./app/node_modules
+      - run: cd app && npm run test
+  api-tests-3-8:
     docker:
       - image: cimg/python:3.8
       - image: cimg/postgres:12.9
@@ -28,15 +69,21 @@ jobs:
       - checkout
       - run: sudo apt-get update
       - run: sudo apt-get install -y ffmpeg
+      - restore_cache:
+          key: deps-{{ .Branch }}-3-8-{{ checksum "requirements.txt" }}
       - run:
           name: Install Requirements
           command: |
             python3 -m venv venv
             . venv/bin/activate
             pip install -r requirements.txt
+      - save_cache:
+          key: deps-{{ .Branch }}-3-8-{{ checksum "requirements.txt" }}
+          paths:
+            - "venv"
       - run:
           command: './venv/bin/pytest -svv wrolpi modules'
-  api-tests-nine:
+  api-tests-3-9:
     docker:
       - image: cimg/python:3.9
       - image: cimg/postgres:13.5
@@ -48,15 +95,21 @@ jobs:
       - checkout
       - run: sudo apt-get update
       - run: sudo apt-get install -y ffmpeg
+      - restore_cache:
+          key: deps-{{ .Branch }}-3-9-{{ checksum "requirements.txt" }}
       - run:
           name: Install Requirements
           command: |
             python3 -m venv venv
             . venv/bin/activate
             pip install -r requirements.txt
+      - save_cache:
+          key: deps-{{ .Branch }}-3-9-{{ checksum "requirements.txt" }}
+          paths:
+            - "venv"
       - run:
           command: './venv/bin/pytest -svv wrolpi modules'
-  api-tests-ten:
+  api-tests-3-10:
     docker:
       - image: cimg/python:3.10
       - image: cimg/postgres:14.1
@@ -68,21 +121,30 @@ jobs:
       - checkout
       - run: sudo apt-get update
       - run: sudo apt-get install -y ffmpeg
+      - restore_cache:
+          key: deps-{{ .Branch }}-3-10-{{ checksum "requirements.txt" }}
       - run:
           name: Install Requirements
           command: |
             python3 -m venv venv
             . venv/bin/activate
             pip install -r requirements.txt
+      - save_cache:
+          key: deps-{{ .Branch }}-3-10-{{ checksum "requirements.txt" }}
+          paths:
+            - "venv"
       - run:
           command: './venv/bin/pytest -svv wrolpi modules'
 
 workflows:
   wrolpi-api-tests:
     jobs:
-      - api-tests-eight
-      - api-tests-nine
-      - api-tests-ten
+      - api-tests-3-8
+      - api-tests-3-9
+      - api-tests-3-10
   wrolpi-app-test:
     jobs:
-      - app-tests
+      - app-tests-12
+      - app-tests-14
+      - app-tests-16
+      - app-tests-18

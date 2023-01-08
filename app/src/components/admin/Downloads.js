@@ -1,4 +1,4 @@
-import React, {useContext} from "react";
+import React from "react";
 import {clearCompletedDownloads, clearFailedDownloads, deleteDownload, killDownload, postDownload} from "../../api";
 import {Link} from "react-router-dom";
 import {
@@ -22,7 +22,6 @@ import {
     TableRow
 } from "semantic-ui-react";
 import {Button, Header, Placeholder, Segment, Table} from "../Theme";
-import {ThemeContext} from "../../contexts/contexts";
 import {useDownloads} from "../../hooks/customHooks";
 import _ from "lodash";
 
@@ -310,76 +309,73 @@ class StoppableRow extends React.Component {
     }
 }
 
+export function OnceDownloadsTable({downloads, fetchDownloads}) {
+    if (downloads && _.isEmpty(downloads)) {
+        return <Segment>No downloads are scheduled.</Segment>;
+    } else if (downloads) {
+        return <>
+            <ClearCompleteDownloads callback={fetchDownloads}/>
+            <ClearFailedDownloads callback={fetchDownloads}/>
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHeaderCell>URL</TableHeaderCell>
+                        <TableHeaderCell>Completed At</TableHeaderCell>
+                        <TableHeaderCell>Control</TableHeaderCell>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {downloads.map(i => <StoppableRow fetchDownloads={fetchDownloads} key={i.id} {...i}/>)}
+                </TableBody>
+            </Table>
+        </>;
+    } else {
+        return <Placeholder>
+            <PlaceholderLine/>
+            <PlaceholderLine/>
+        </Placeholder>;
+    }
+}
+
+export function RecurringDownloadsTable({downloads, fetchDownloads}) {
+    if (downloads && _.isEmpty(downloads)) {
+        return <Segment>No downloads are scheduled.</Segment>;
+    } else if (downloads) {
+        return <Table>
+            <TableHeader>
+                <TableRow>
+                    <TableHeaderCell>URL</TableHeaderCell>
+                    <TableHeaderCell>Download Frequency</TableHeaderCell>
+                    <TableHeaderCell>Completed At</TableHeaderCell>
+                    <TableHeaderCell>Next</TableHeaderCell>
+                    <TableHeaderCell>Control</TableHeaderCell>
+                </TableRow>
+            </TableHeader>
+            <TableBody>
+                {downloads.map(i => <DownloadRow key={i.id} fetchDownloads={fetchDownloads} {...i}/>)}
+            </TableBody>
+        </Table>;
+    } else {
+        return <Placeholder>
+            <PlaceholderLine/>
+            <PlaceholderLine/>
+        </Placeholder>;
+    }
+}
+
 export function Downloads() {
     useTitle('Downloads');
 
     const {onceDownloads, recurringDownloads, fetchDownloads} = useDownloads();
 
-    const tablePlaceholder = <Placeholder>
-        <PlaceholderLine/>
-        <PlaceholderLine/>
-    </Placeholder>;
-
-    const stoppableHeader = (
-        <TableHeader>
-            <TableRow>
-                <TableHeaderCell>URL</TableHeaderCell>
-                <TableHeaderCell>Completed At</TableHeaderCell>
-                <TableHeaderCell>Control</TableHeaderCell>
-            </TableRow>
-        </TableHeader>
-    );
-
-    const nonStoppableHeader = (
-        <TableHeader>
-            <TableRow>
-                <TableHeaderCell>URL</TableHeaderCell>
-                <TableHeaderCell>Download Frequency</TableHeaderCell>
-                <TableHeaderCell>Completed At</TableHeaderCell>
-                <TableHeaderCell>Next</TableHeaderCell>
-                <TableHeaderCell>Control</TableHeaderCell>
-            </TableRow>
-        </TableHeader>
-    );
-
-    let onceTable = tablePlaceholder;
-    if (onceDownloads && _.isEmpty(onceDownloads)) {
-        onceTable = <Segment>No downloads are scheduled.</Segment>
-    } else if (onceDownloads) {
-        onceTable = (
-            <>
-                <ClearCompleteDownloads callback={fetchDownloads}/>
-                <ClearFailedDownloads callback={fetchDownloads}/>
-                <Table>
-                    {stoppableHeader}
-                    <TableBody>
-                        {onceDownloads.map((i) =>
-                            <StoppableRow fetchDownloads={fetchDownloads} key={i.id} {...i}/>
-                        )}
-                    </TableBody>
-                </Table>
-            </>);
-    }
-
-    let recurringTable = tablePlaceholder;
-    if (recurringDownloads && _.isEmpty(recurringDownloads)) {
-        recurringTable = <Segment>No recurring downloads are scheduled.</Segment>
-    } else if (recurringDownloads) {
-        recurringTable = <Table>
-            {nonStoppableHeader}
-            <TableBody>
-                {recurringDownloads.map((i) => <DownloadRow key={i.id} fetchDownloads={fetchDownloads} {...i}/>)}
-            </TableBody>
-        </Table>;
-    }
-
     return <>
         <WROLModeMessage content='Downloads are disabled because WROL Mode is enabled.'/>
         <DisableDownloadsToggle/>
+
         <Header as='h1'>Downloads</Header>
-        {onceTable}
+        <OnceDownloadsTable downloads={onceDownloads} fetchDownloads={fetchDownloads}/>
 
         <Header as='h1'>Recurring Downloads</Header>
-        {recurringTable}
+        <RecurringDownloadsTable downloads={recurringDownloads} fetchDownloads={fetchDownloads}/>
     </>
 }

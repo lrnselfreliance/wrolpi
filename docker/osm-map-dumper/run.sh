@@ -44,7 +44,7 @@ if [ ! -f /data/database/postgres/PG_VERSION ]; then
 fi
 
 # Initialize PostgreSQL
-echo >&2 "Initializing map DB"
+echo >&2 "Initializing map tables"
 createPostgresConfig
 service postgresql start >/dev/null
 sudo -u postgres createuser renderer >/dev/null
@@ -62,7 +62,7 @@ if [ -f /data/region.poly ]; then
 fi
 
 # Import data
-echo >&2 "Importing your map"
+echo >&2 "Importing your map data"
 sudo -u renderer osm2pgsql -d gis --create --slim -G --hstore \
   --tag-transform-script /data/style/${NAME_LUA:-openstreetmap-carto.lua} \
   --number-processes ${THREADS:-4} \
@@ -77,6 +77,7 @@ if [ -f /data/style/${NAME_SQL:-indexes.sql} ]; then
 fi
 
 # Import external data
+echo >&2 "Importing planetary data"
 chown -R renderer: /home/renderer/src/ /data/style/
 if [ -f /data/style/scripts/get-external-data.py ] && [ -f /data/style/external-data.yml ]; then
   sudo -E -u renderer python3 /data/style/scripts/get-external-data.py \

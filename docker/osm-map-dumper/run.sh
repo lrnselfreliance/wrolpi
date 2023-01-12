@@ -87,8 +87,10 @@ fi
 echo >&2 "Dumping the DB"
 sudo -u postgres pg_dump \
   --create \
+  --clean \
+  --format tar \
+  --no-owner \
   --encoding UTF-8 \
-  --dbname gis \
-  --compress 6
+  --dbname gis
 
 service postgresql stop

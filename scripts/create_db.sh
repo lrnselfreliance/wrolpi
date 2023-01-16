@@ -12,11 +12,12 @@ sudo -u wrolpi /bin/bash -c 'cd /opt/wrolpi && ./main.py db upgrade'
 
 # Create gis (map) database.
 sudo -u postgres psql -c '\l' | grep gis || (
-  sudo -u postgres createdb -E UTF8 -O wrolpi gis
+  sudo -u postgres createuser _renderd
+  sudo -u postgres createdb -E UTF8 -O _renderd gis
   sudo -u postgres psql -d gis -c "CREATE EXTENSION postgis"
   sudo -u postgres psql -d gis -c "CREATE EXTENSION hstore"
-  sudo -u postgres psql -d gis -c "ALTER TABLE geometry_columns OWNER TO wrolpi"
-  sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO wrolpi"
+  sudo -u postgres psql -d gis -c "ALTER TABLE geometry_columns OWNER TO _renderd"
+  sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO _renderd"
   echo "Created gis database"
 )
 zcat /opt/wrolpi-blobs/gis-map.dump.gz | sudo -u postgres pg_restore --clean --no-owner -d gis

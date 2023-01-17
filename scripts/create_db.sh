@@ -20,4 +20,6 @@ sudo -u postgres psql -c '\l' | grep gis || (
   sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO _renderd"
   echo "Created gis database"
 )
-zcat /opt/wrolpi-blobs/gis-map.dump.gz | sudo -u postgres pg_restore --clean --no-owner -d gis
+# Restore initial dump.
+zcat /opt/wrolpi-blobs/gis-map.dump.gz | sudo -u _renderd pg_restore --no-owner --role=_renderd -d gis
+sudo -u postgres psql gis -c 'ALTER TABLE geography_columns OWNER TO _renderd'

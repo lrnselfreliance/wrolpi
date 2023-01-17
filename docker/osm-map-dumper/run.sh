@@ -90,6 +90,7 @@ sudo -u postgres pg_dump \
   --clean \
   --format tar \
   --no-owner \
+  --no-comments \
   --encoding UTF-8 \
   --dbname gis
 

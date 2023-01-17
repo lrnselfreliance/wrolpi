@@ -40,6 +40,7 @@ libmemcached-dev
 libpq-dev
 libproj-dev
 librados-dev
+libsensors-dev
 libssl-dev
 libtiff5-dev
 libtool

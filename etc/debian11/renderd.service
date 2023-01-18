@@ -5,7 +5,7 @@ After=network.target auditd.service
 
 [Service]
 ExecStart=/usr/bin/renderd -f -c /etc/renderd.conf
-User=wrolpi
+User=_renderd
 
 [Install]
 WantedBy=multi-user.target

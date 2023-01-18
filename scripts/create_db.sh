@@ -12,17 +12,16 @@ sudo -u wrolpi /bin/bash -c 'cd /opt/wrolpi && ./main.py db upgrade'
 
 # Create gis (map) database.
 sudo -u postgres psql -c '\l' | grep gis || (
-  sudo -u postgres createuser wrolpi
-  sudo -u postgres createdb -E UTF8 -O wrolpi gis
+  sudo -u postgres createuser _renderd
+  sudo -u postgres psql -c "alter user _renderd password 'wrolpi'"
+  sudo -u postgres createdb -E UTF8 -O _renderd gis
   sudo -u postgres psql -d gis -c "CREATE EXTENSION postgis"
   sudo -u postgres psql -d gis -c "CREATE EXTENSION hstore"
   echo "Created gis database"
 )
 # Restore initial dump.
-zcat /opt/wrolpi-blobs/gis-map.dump.gz | sudo -u wrolpi pg_restore --no-owner --role=wrolpi -d gis
-sudo -u postgres psql gis -c 'ALTER TABLE geography_columns OWNER TO wrolpi'
-sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO wrolpi"
-# Restore ownership of map files.
-sudo chown -R wrolpi:wrolpi /var/lib/mod_tile /run/renderd
+zcat /opt/wrolpi-blobs/gis-map.dump.gz | sudo -u postgres pg_restore --no-owner --role=_renderd -d gis
+sudo -u postgres psql -d gis -c 'ALTER TABLE geography_columns OWNER TO _renderd'
+sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO _renderd"
 # Clear map tile cache files.
 [ -d /var/lib/mod_tile/ajt ] && sudo rm -r /var/lib/mod_tile/ajt

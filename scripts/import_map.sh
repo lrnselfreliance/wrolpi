@@ -20,7 +20,7 @@ fi
 HAS_ICE_SHEET=false
 psql gis wrolpi -c '\d' | grep icesheet_polygons && HAS_ICE_SHEET=true
 if [ ${HAS_ICE_SHEET} = false ]; then
-  echo "Missing icesheet_polygons.  Run reset_map.sh"
+  echo "WROLPi: Missing icesheet_polygons.  Run reset_map.sh"
   exit 4
 fi
 
@@ -37,11 +37,11 @@ if [[ ${1} == *.osm.pbf ]]; then
   # Import PBF files.
   for i in "$@"; do
     if [[ $i != *.osm.pbf ]]; then
-      echo "Cannot mix file types"
+      echo "WROLPi: Cannot mix file types"
       exit 5
     fi
     if [ ! -f "${i}" ]; then
-      echo "File does not exist! ${i}"
+      echo "WROLPi: File does not exist! ${i}"
       exit 6
     fi
   done
@@ -66,12 +66,12 @@ if [[ ${1} == *.osm.pbf ]]; then
     "${pbf_path}"
 elif [[ ${1} == *.dump ]]; then
   if [ ! -f "${1}" ]; then
-    echo "File does not exist! ${1}"
+    echo "WROLPi: File does not exist! ${1}"
     exit 7
   fi
   # Import a Postgresql dump.
   nice -n 18 pg_restore -j3 --no-owner -d gis "${1}"
 else
-  echo "Cannot import unknown map file"
+  echo "WROLPi: Cannot import unknown map file"
   exit 8
 fi

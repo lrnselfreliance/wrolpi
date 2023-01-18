@@ -1,0 +1,11 @@
+[Unit]
+Description=Daemon that renders map tiles using mapnik
+Documentation=man:renderd
+After=network.target auditd.service
+
+[Service]
+ExecStart=/usr/bin/renderd -f -c /etc/renderd.conf
+User=wrolpi
+
+[Install]
+WantedBy=multi-user.target

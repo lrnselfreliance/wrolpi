@@ -32,3 +32,6 @@ cp /opt/wrolpi/etc/debian11/index.html \
   /opt/wrolpi/modules/map/leaflet.js \
   /opt/wrolpi/modules/map/leaflet.css /var/www/html/
 chmod 644 /var/www/html/*
+
+mkdir /var/lib/mod_tile
+chown -R _renderd:_renderd /var/lib/mod_tile

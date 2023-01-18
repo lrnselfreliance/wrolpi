@@ -2,6 +2,10 @@
 set -e
 set -x
 
+# Use Network Manager for Hotspot.
+apt purge -y hostapd
+apt autoremove -y
+
 cat >> /etc/profile << 'EOF'
 alias ll='ls -lh'
 alias la='ll -a'
@@ -34,6 +38,12 @@ cat >/etc/sudoers.d/90-wrolpi <<'EOF'
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart renderd.service
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop renderd.service
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl start renderd.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart wrolpi-api.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-api.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-api.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart wrolpi-app.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-app.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-app.service
 EOF
 chmod 660 /etc/sudoers.d/90-wrolpi
 
@@ -46,4 +56,7 @@ cp /opt/wrolpi/etc/ubuntu20.04/wrolpi.target /etc/systemd/system/
 
 systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service
+
+# NetworkManager for the hotspot.
+systemctl enable NetworkManager
 

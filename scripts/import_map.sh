@@ -58,7 +58,7 @@ if [[ ${1} == *.osm.pbf ]]; then
     pbf_path=${MERGED_TMP_FILE}
   fi
 
-  nice -n 18 osm2pgsql -d gis --create --slim -G --hstore \
+  nice -n 18 osm2pgsql -d gis --create --slim -G --hstore -U _renderd -H 127.0.0.1 \
     --tag-transform-script /opt/openstreetmap-carto/openstreetmap-carto.lua \
     -C ${MAX_CACHE} \
     --number-processes 3 \
@@ -70,7 +70,7 @@ elif [[ ${1} == *.dump ]]; then
     exit 7
   fi
   # Import a Postgresql dump.
-  nice -n 18 pg_restore -j3 --no-owner -d gis "${1}"
+  nice -n 18 pg_restore -j3 --no-owner -d gis -U _renderd -h 127.0.0.1 "${1}"
 else
   echo "WROLPi: Cannot import unknown map file"
   exit 8

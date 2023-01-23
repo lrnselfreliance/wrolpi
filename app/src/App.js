@@ -40,8 +40,7 @@ function Footer() {
     return <Container textAlign='center' style={{marginTop: '1.5em', marginBottom: '1em', ...t}}>
         <span {...t}>
             WROLPi {version} <Dot/>
-            <a href='https://discord.gg/HrwFk7nqA2'>Discord</a> <Dot/>
-            <a href='https://github.com/lrnselfreliance/wrolpi'>GitHub</a> <Dot/>
+            <a href='https://wrolpi.org' target='_blank' rel='nofollow noreferrer'>WROLPi.org</a> <Dot/>
             <Link to='/donate'>Donate</Link>
             </span>
     </Container>

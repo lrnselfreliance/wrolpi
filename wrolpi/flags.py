@@ -193,3 +193,5 @@ def init_flags():
                 refresh_complete.set()
             else:
                 refresh_complete.clear()
+
+    FLAGS_INITIALIZED.set()

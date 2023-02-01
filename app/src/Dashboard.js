@@ -11,6 +11,7 @@ import {ProgressPlaceholder} from "./components/Placeholder";
 import {Divider, Icon, Message} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {refreshFiles} from "./api";
+import _ from "lodash";
 
 function FlagsMessages({flags}) {
     if (!flags) {
@@ -18,7 +19,8 @@ function FlagsMessages({flags}) {
     }
 
     let refreshing;
-    let refreshComplete;
+    let refreshRequired;
+    let dbDown;
 
     // Do not tell the maintainer to refresh the files if they are already refreshing.
     if (flags.indexOf('refreshing') >= 0) {
@@ -32,7 +34,7 @@ function FlagsMessages({flags}) {
         </Message>;
     } else if (flags.indexOf('refresh_complete') === -1) {
         // `refresh_complete` flag is not set.  Tell the maintainer to refresh the files.
-        refreshComplete = <Message icon warning onClick={refreshFiles}>
+        refreshRequired = <Message icon warning onClick={refreshFiles}>
             <Icon name='hand point right'/>
             <Message.Content>
                 <Message.Header>Refresh required</Message.Header>
@@ -41,9 +43,19 @@ function FlagsMessages({flags}) {
         </Message>;
     }
 
+    if (flags.indexOf('db_up') === -1) {
+        dbDown = <Message icon error>
+            <Icon name='exclamation'/>
+            <Message.Content>
+                <Message.Header>Database is down</Message.Header>
+                API is unable to connect to the database. Check the server logs.
+            </Message.Content>
+        </Message>
+    }
+
     return <>
         {refreshing}
-        {refreshComplete}
+        {dbDown || refreshRequired}
     </>
 }
 
@@ -106,8 +118,8 @@ function DashboardStatus() {
     }
 
     const {downloads} = status;
-    if (downloads) {
-        pending_downloads = downloads['disabled'] ? 'x' : downloads['pending'];
+    if (!_.isEmpty(downloads)) {
+        pending_downloads = downloads && downloads['disabled'] ? 'x' : downloads['pending'];
     }
 
     let bandwidths = <ProgressPlaceholder/>;

@@ -14,7 +14,7 @@ from sanic.response import HTTPResponse
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi import admin, status
+from wrolpi import admin, status, flags
 from wrolpi.admin import HotspotStatus
 from wrolpi.common import logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics
@@ -23,7 +23,6 @@ from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, API_ERRORS, APIError, ValidationError, HotspotError
 from wrolpi.events import get_events
 from wrolpi.files.lib import get_file_statistics
-from wrolpi.flags import get_flags
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, DownloadRequest, EchoResponse, \
     EventsRequest
 from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
@@ -331,13 +330,12 @@ async def throttle_off(_: Request):
 @openapi.description('Get the status of CPU/load/etc.')
 async def get_status(_: Request):
     s = await status.get_status()
-    try:
-        downloads = download_manager.get_summary()
-    except Exception as e:
-        logger.error('Unable to get download status', exc_info=e)
-        downloads = dict()
-
-    flags = get_flags()
+    downloads = dict()
+    if flags.db_up.is_set():
+        try:
+            downloads = download_manager.get_summary()
+        except Exception as e:
+            logger.debug('Unable to get download status', exc_info=e)
 
     ret = dict(
         bandwidth=s.bandwidth,
@@ -346,7 +344,7 @@ async def get_status(_: Request):
         dockerized=DOCKERIZED,
         downloads=downloads,
         drives=s.drives,
-        flags=flags,
+        flags=flags.get_flags(),
         hotspot_status=admin.hotspot_status().name,
         load=s.load,
         memory_stats=s.memory_stats,

@@ -48,18 +48,7 @@ async function apiCall(url, method, body, ms = 20000) {
         return response;
     } catch (e) {
         // Timeout, or some other exception.
-        if (e.message === 'promise timeout') {
-            toast({
-                type: 'error',
-                title: 'Server failed to respond!',
-                description: 'Timeout while waiting for server response.  See server logs.',
-                time: 5000,
-            });
-        } else {
-            toast({
-                type: 'error', title: 'Error!', description: 'See client logs', time: 5000,
-            });
-        }
+        console.error(e);
         throw e;
     }
 }

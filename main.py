@@ -1,5 +1,6 @@
 #! /usr/bin/env python3
 import argparse
+import asyncio
 import logging
 import sys
 
@@ -7,7 +8,7 @@ from sanic import Sanic
 from sanic.signals import Event
 
 from wrolpi import flags
-from wrolpi import root_api, BEFORE_STARTUP_FUNCTIONS, admin
+from wrolpi import root_api, admin
 from wrolpi.common import logger, get_config, import_modules, check_media_directory, limit_concurrent, \
     wrol_mode_enabled, cancel_refresh_tasks
 from wrolpi.downloader import download_manager, import_downloads_config
@@ -109,6 +110,10 @@ def main():
         print('Media directory is correct.')
         return 0
 
+    if not args.sub_commands:
+        parser.print_help()
+        return 1
+
     logger.warning(f'Starting with: {sys.argv}')
     set_log_level(args)
     logger.debug(get_version_string())
@@ -133,16 +138,17 @@ def main():
     # Import the API in every module.  Each API should attach itself to `root_api`.
     import_modules()
 
-    # Run the startup functions
-    for func in BEFORE_STARTUP_FUNCTIONS:
-        try:
-            logger.debug(f'Calling {func} before startup.')
-            func()
-        except Exception as e:
-            logger.warning(f'Startup {func} failed!', exc_info=e)
+    # # Run the startup functions
+    # for func in BEFORE_STARTUP_FUNCTIONS:
+    #     try:
+    #         logger.debug(f'Calling {func} before startup.')
+    #         func()
+    #     except Exception as e:
+    #         logger.warning(f'Startup {func} failed!', exc_info=e)
 
     # Run the API.
-    return root_api.main(args)
+    if args.sub_commands == 'api':
+        return root_api.main(args)
 
 
 def set_log_level(args):
@@ -166,9 +172,22 @@ def set_log_level(args):
 
 
 @api_app.before_server_start
+@limit_concurrent(1)
 async def startup(app: Sanic):
+    # Check database status first.  Many function will reference flags.db_up.
+    flags.check_db_is_up()
+
     flags.init_flags()
     await import_downloads_config()
+
+
+@api_app.after_server_start
+@limit_concurrent(1)
+async def periodic_check_db_is_up(app: Sanic):
+    while True:
+        flags.check_db_is_up()
+        flags.init_flags()
+        await asyncio.sleep(10)
 
 
 @api_app.after_server_start
@@ -178,6 +197,10 @@ async def periodic_downloads(app: Sanic):
 
     Limited to only one process.
     """
+    if not flags.db_up.is_set():
+        logger.warning(f'Refusing to download when DB is not up.')
+        return
+
     if not flags.refresh_complete.is_set():
         logger.warning('Refusing to download without refresh')
         download_manager.disable()

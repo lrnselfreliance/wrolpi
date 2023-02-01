@@ -1,4 +1,5 @@
 import multiprocessing
+import subprocess
 import threading
 from typing import List
 
@@ -95,6 +96,8 @@ class Flag:
                 logger.critical(f'Unable to save flag! {repr(self)}', exc_info=e)
 
 
+# Set by `check_db_is_up`.
+db_up = Flag('db_up')
 # The global refresh is running.
 refreshing = Flag('refreshing')
 # The global refresh has been performed.  This is False on a fresh instance of WROLPi.
@@ -112,6 +115,8 @@ yt_dlp_installed = Flag('yt_dlp_installed')
 def get_flags() -> List[str]:
     """Return a list of all Flags which are set."""
     flags = []
+    if db_up.is_set():
+        flags.append('db_up')
     if refreshing.is_set():
         flags.append('refreshing')
     if refresh_complete.is_set():
@@ -142,8 +147,44 @@ class WROLPiFlag(Base):
         return f'<WROLPiFlag refresh_complete={self.refresh_complete}>'
 
 
+def check_db_is_up():
+    """Attempts to connect to the database, sets flags.db_up if successful."""
+    from wrolpi.db import get_db_curs, get_db_args
+
+    db_args = get_db_args()
+    db_host = db_args['host']
+    if db_host != '127.0.0.1':
+        # Check if database host is up before attempting connection.  This will fail faster than SQLAlchemy timeout.
+        try:
+            cmd = ['ping', '-w', '1', '-c', '1', db_host]
+            subprocess.check_call(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+        except Exception as e:
+            logger.debug(f'Unable to resolve database host {db_host}')
+            db_up.clear()
+            return
+
+    try:
+        with get_db_curs() as curs:
+            curs.execute('SELECT * FROM alembic_version')
+            # If we get here, the database is up!
+            db_up.set()
+    except Exception as e:
+        logger.debug(f'DB is not up', exc_info=e)
+        db_up.clear()
+
+
+FLAGS_INITIALIZED = multiprocessing.Event()
+
+
 def init_flags():
     """Set flags to match their DB values."""
+    if FLAGS_INITIALIZED.is_set():
+        return
+
+    if not db_up.is_set():
+        logger.error(f'Refusing to initialize flags when DB is not up.')
+        return
+
     from wrolpi.db import get_db_session
     with get_db_session() as session:
         flags: WROLPiFlag = session.query(WROLPiFlag).one_or_none()

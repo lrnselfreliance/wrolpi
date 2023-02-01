@@ -409,7 +409,7 @@ def test_crud_download(test_client, test_session, test_download_manager):
 
 
 @pytest.mark.asyncio
-async def test_downloads_config(test_client, test_session, test_download_manager, test_download_manager_config):
+async def test_downloads_config(test_session, test_client, test_download_manager, test_download_manager_config):
     from wrolpi.downloader import DOWNLOAD_MANAGER_CONFIG
 
     def assert_downloads(expected_):

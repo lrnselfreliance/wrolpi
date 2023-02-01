@@ -43,9 +43,7 @@ def get_test_db_engine():
 
 
 def test_db() -> Tuple[Engine, Session]:
-    """
-    Create a unique SQLAlchemy engine/session for a test.
-    """
+    """Create a unique SQLAlchemy engine/session for a test."""
     test_engine = get_test_db_engine()
     if test_engine.engine.url.database == 'wrolpi':
         raise ValueError('Refusing the test on wrolpi database!')
@@ -58,9 +56,7 @@ def test_db() -> Tuple[Engine, Session]:
 
 @pytest.fixture()
 def test_session() -> Session:
-    """
-    Pytest Fixture to get a test database session.
-    """
+    """Pytest Fixture to get a test database session."""
     test_engine, session = test_db()
 
     def fake_get_db_session():

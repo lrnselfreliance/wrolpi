@@ -509,7 +509,7 @@ def check_media_directory():
     media_directory = get_media_directory()
     if not media_directory.is_dir():
         logger_.error(f'Media directory does not exist: {media_directory}')
-        result = False
+        return False
 
     permissions = media_directory.stat().st_mode
     if permissions != MEDIA_DIRECTORY_PERMISSIONS:

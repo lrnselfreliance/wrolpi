@@ -23,6 +23,7 @@ from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
 
+from wrolpi import flags
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, WROLPI_CONFIG, \
     background_task, limit_concurrent
 from wrolpi.dates import TZDateTime, now, Seconds
@@ -807,8 +808,10 @@ class DownloadManager:
         self.disabled.set()
         for downloader in self.instances:
             downloader.kill()
-        for download in self.get_pending_downloads():
-            download.defer()
+        if flags.db_up.is_set():
+            # Only defer downloads if the DB is up.
+            for download in self.get_pending_downloads():
+                download.defer()
         self.cancel_workers()
 
     def stop(self):
@@ -1092,7 +1095,8 @@ async def import_downloads_config(session: Session):
     """Upsert all Downloads in the Download Manager Config into the DB.
 
     The config is the source of truth."""
-    if not DOWNLOAD_MANAGER_CONFIG.downloads:
+    if not PYTEST and not flags.db_up.is_set():
+        logger.warning(f'Refusing to import downloads config when DB is not up.')
         return
 
     try:

@@ -10,8 +10,8 @@ const links = [{text: 'Videos', to: '/videos', key: 'videos'}, {
 }, {text: 'Map', to: '/map', key: 'map'}, {text: 'Files', to: '/files', key: 'files'}, {
     text: 'Inventory', to: '/inventory', key: 'inventory'
 }, {
-    key: 'apps', text: 'Apps', links: [{to: '/apps/otp', text: 'One Time Pad', end: true}, {
-        to: '/apps/statistics', text: 'Statistics', end: true
+    key: 'more', text: 'More', links: [{to: '/more/otp', text: 'One Time Pad', end: true}, {
+        to: '/more/statistics', text: 'Statistics', end: true
     },]
 },];
 const admin = {to: '/admin', text: 'Admin', key: 'admin'};
@@ -72,7 +72,7 @@ export function NavBar() {
                     {icons}
                     <Dropdown item icon="bars">
                         <Dropdown.Menu>
-                            {collapsedLinks.map(i =><MenuLink link={i} key={i.key}/>)}
+                            {collapsedLinks.map(i => <MenuLink link={i} key={i.key}/>)}
                         </Dropdown.Menu>
                     </Dropdown>
                 </Menu.Menu>

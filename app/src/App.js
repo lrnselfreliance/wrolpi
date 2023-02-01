@@ -8,7 +8,7 @@ import {Container} from "semantic-ui-react";
 import 'semantic-ui-offline/semantic.min.css';
 import {SemanticToastContainer} from 'react-semantic-toasts';
 import 'react-semantic-toasts/styles/react-semantic-alert.css';
-import {AppsRoute} from "./components/Apps";
+import {MoreRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/Inventory";
 import {ArchiveRoute} from "./components/Archive";
 import {FilesRoute} from "./components/Files";
@@ -69,7 +69,7 @@ const router = createBrowserRouter(createRoutesFromElements(
         <Route path='videos/channel/:channelId/video/:videoId' exact element={<VideoWrapper/>}/>
         <Route path="videos/*" element={<VideosRoute/>}/>
         <Route path="admin/*" element={<Admin/>}/>
-        <Route path="apps/*" element={<AppsRoute/>}/>
+        <Route path="more/*" element={<MoreRoute/>}/>
         <Route path="inventory/*" element={<InventoryRoute/>}/>
         <Route path='archive/*' element={<ArchiveRoute/>}/>
         <Route path='map/*' element={<MapRoute/>}/>

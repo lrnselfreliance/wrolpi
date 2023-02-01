@@ -247,7 +247,7 @@ function StatisticsPage() {
 
 }
 
-export function AppsRoute(props) {
+export function MoreRoute(props) {
     return (<PageContainer>
         <Routes>
             <Route path='otp' exact element={<OTP/>}/>

@@ -10,10 +10,7 @@ import {
     Input,
     PlaceholderHeader,
     PlaceholderLine,
-    TableBody,
     TableCell,
-    TableHeader,
-    TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
 import {
@@ -41,7 +38,8 @@ import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
 import _ from "lodash";
 import {ThemeContext} from "../contexts/contexts";
-import {Button, Card, CardIcon, Header, Loader, Placeholder, Segment, Table} from "./Theme";
+import {Button, Card, CardIcon, Header, Loader, Placeholder, Segment} from "./Theme";
+import {SortableTable} from "./SortableTable";
 
 function ArchivePage() {
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -262,6 +260,11 @@ export function Domains() {
         </TableRow>
     }
 
+    const headers = [
+        {key: 'domain', text: 'Domain', sortBy: 'domain', width: 12},
+        {key: 'archives', text: 'Archives', sortBy: 'url_count', width: 2},
+    ];
+
     return <>
         <Input
             icon='search'
@@ -269,18 +272,13 @@ export function Domains() {
             placeholder='Search...'
             onChange={(e, {value}) => setSearchStr(value)}
         />
-        <Table celled>
-            <TableHeader>
-                <TableRow>
-                    <TableHeaderCell>Domain</TableHeaderCell>
-                    <TableHeaderCell>Archives</TableHeaderCell>
-                </TableRow>
-            </TableHeader>
-
-            <TableBody>
-                {filteredDomains.map(row)}
-            </TableBody>
-        </Table>
+        <SortableTable
+            tableProps={{unstackable: true}}
+            data={filteredDomains}
+            rowFunc={(i, sortData) => row(i)}
+            rowKey='domain'
+            tableHeaders={headers}
+        />
     </>;
 }
 

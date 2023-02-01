@@ -17,34 +17,6 @@ from ..vars import PYTEST
 bp = get_blueprint('Files', '/api/files')
 
 
-def paths_to_files(paths: List[pathlib.Path]):
-    """Convert Paths to what the React UI expects."""
-    media_directory = get_media_directory()
-    new_files = []
-    for path in paths:
-        stat = path.stat()
-        key = path.relative_to(media_directory)
-        modified = stat.st_mtime
-        if path.is_dir():
-            key = f'{key}/'
-            new_files.append(dict(
-                key=key,
-                modified=modified,
-                url=key,
-                name=path.name,
-            ))
-        else:
-            # A File should know it's size.
-            new_files.append(dict(
-                key=key,
-                modified=modified,
-                size=stat.st_size,
-                url=key,
-                name=path.name,
-            ))
-    return new_files
-
-
 @bp.post('/')
 @openapi.definition(
     summary='List files in a directory',
@@ -54,8 +26,7 @@ def paths_to_files(paths: List[pathlib.Path]):
 async def get_files(_: Request, body: schema.FilesRequest):
     directories = body.directories or []
 
-    files = lib.list_files(directories)
-    files = paths_to_files(files)
+    files = lib.list_directories_contents(directories)
     return json_response({'files': files})
 
 

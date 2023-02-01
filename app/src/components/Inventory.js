@@ -25,12 +25,12 @@ import {
     TableRow
 } from "semantic-ui-react";
 import {Route, Routes} from "react-router-dom";
-import {toast} from 'react-semantic-toasts';
 import {arraysEqual, enumerate, PageContainer, replaceNullValues, TabLinks, useTitle} from './Common';
 import _ from 'lodash';
 import {ThemeContext} from "../contexts/contexts";
 import {useInventory} from "../hooks/customHooks";
 import {Button, FormGroup, FormInput, Header, Segment, Table} from "./Theme";
+import {toast} from "react-semantic-toasts-2";
 
 function InventorySummary() {
     const {t} = useContext(ThemeContext);

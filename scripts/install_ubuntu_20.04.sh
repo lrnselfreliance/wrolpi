@@ -5,7 +5,8 @@ set -x
 set -e
 
 # Install npm repos.
-npm --version || curl -fsSL https://deb.nodesource.com/setup_14.x | bash -
+npm --version || curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+
 # Update if we haven't updated in the last day.
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
 # Install dependencies
@@ -14,7 +15,7 @@ apt install -y apt-transport-https ca-certificates curl gnupg-agent gcc libpq-de
   ffmpeg hostapd nodejs chromium-browser chromium-chromedriver cpufrequtils network-manager
 
 # Install serve, and archiving tools.
-sudo npm i -g serve@12.0.1 single-file-cli@1.0.15 'git+https://github.com/pirate/readability-extractor' &
+sudo npm i -g serve single-file-cli@1.0.33 'git+https://github.com/lrnselfreliance/readability-extractor' &
 
 # Setup the virtual environment that main.py expects
 pip3 --version || (

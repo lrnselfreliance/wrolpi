@@ -7,7 +7,7 @@ import pathlib
 import re
 import subprocess
 from pathlib import Path
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Dict
 
 import psycopg2
 from sqlalchemy.orm import Session
@@ -35,7 +35,8 @@ except ImportError:
 
 logger = logger.getChild(__name__)
 
-__all__ = ['list_files', 'delete_file', 'split_path_stem_and_suffix', 'refresh_files', 'search_files', 'get_mimetype',
+__all__ = ['list_directories_contents', 'delete_file', 'split_path_stem_and_suffix', 'refresh_files', 'search_files',
+           'get_mimetype',
            'split_file_name_words']
 
 
@@ -59,24 +60,54 @@ def filter_parent_directories(directories: List[Path]) -> List[Path]:
     return new_directories
 
 
-def list_files(directories: List[str]) -> List[Path]:
-    """List all files down to the directories provided.  This includes all parent directories of the directories."""
+def _get_file_dict(file: pathlib.Path) -> Dict:
     media_directory = get_media_directory()
+    return dict(
+        path=file.relative_to(media_directory),
+        size=file.stat().st_size,
+        mimetype=get_mimetype(file),
+    )
 
-    # Always display the media_directory files.
-    paths = list(media_directory.iterdir())
 
-    if directories:
-        directories = [media_directory / i for i in directories if i]
-        directories = filter_parent_directories(directories)
-        for directory in directories:
-            directory = media_directory / directory
-            for parent in directory.parents:
-                is_relative_to = str(media_directory).startswith(str(parent))
-                if parent == Path('') or is_relative_to:
-                    continue
-                paths.extend(parent.iterdir())
-            paths.extend(directory.iterdir())
+def _get_directory_dict(directory: pathlib.Path, directories: List[pathlib.Path]) -> Dict:
+    media_directory = get_media_directory()
+    d = dict(
+        path=f'{directory.relative_to(media_directory)}/',
+    )
+    if directory in directories:
+        children = dict()
+        for path in directory.iterdir():
+            if path.is_dir() and path in directories:
+                children[f'{path.name}/'] = _get_directory_dict(path, directories)
+            elif path.is_dir():
+                children[f'{path.name}/'] = dict(path=f'{path.relative_to(media_directory)}/')
+            else:
+                children[path.name] = _get_file_dict(path)
+        d['children'] = children
+    return d
+
+
+def list_directories_contents(directories_: List[str]) -> Dict:
+    """List all files down to (and within) the directories provided.
+
+    This should only be used by the frontend for it's FileBrowser."""
+    media_directory = get_media_directory()
+    # Convert all directories to pathlib.Path.
+    directories = {media_directory / i for i in directories_}
+    if invalid_directories := [i for i in directories if not i.is_dir()]:
+        raise FileNotFoundError(f'Invalid directories: {invalid_directories}')
+
+    # Get all unique parents for each directory, but not if they are above the media directory.
+    parents = {j for i in directories for j in i.parents if j not in media_directory.parents}
+    # Add unique parents onto the requested directories.
+    directories = list(directories | parents)
+
+    paths = dict()
+    for path in media_directory.iterdir():
+        if path.is_dir():
+            paths[f'{path.name}/'] = _get_directory_dict(path, directories)
+        else:
+            paths[path.name] = _get_file_dict(path)
 
     return paths
 
@@ -127,6 +158,7 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
     return mimetype
 
 
+@functools.lru_cache(maxsize=1000)
 def get_mimetype(path: Path) -> str:
     """Get the mimetype of a file, prefer using `magic`, fallback to builtin `file` command."""
     if magic is None:
@@ -367,37 +399,38 @@ async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str
     if directory.is_file():
         raise ValueError(f'Cannot refresh files of a file: {directory=}')
 
-    relative_path = str(get_relative_to_media_directory(directory))
-    if send_events:
-        Events.send_directory_refresh_started(f'Refresh of {repr(relative_path)} has started.')
+    with flags.refreshing_directory:
+        relative_path = str(get_relative_to_media_directory(directory))
+        if send_events:
+            Events.send_directory_refresh_started(f'Refresh of {repr(relative_path)} has started.')
 
-    # All Files older than this will be removed.
-    idempotency = now()
+        # All Files older than this will be removed.
+        idempotency = now()
 
-    refresh_logger.info(f'Recursively refreshing all files in {directory}')
+        refresh_logger.info(f'Recursively refreshing all files in {directory}')
 
-    await _refresh_directory_files_recursively(directory, idempotency)
+        await _refresh_directory_files_recursively(directory, idempotency)
 
-    # Remove any records where the file no longer exists.
-    with get_db_curs(commit=True) as curs:
-        refresh_logger.debug(f'Deleting files no longer in {directory}')
-        params = dict(
-            directory=f'{directory}/%',  # trailing / is important!
-            idempotency=idempotency,
-        )
-        stmt = '''
-        DELETE FROM file
-        WHERE
-         (idempotency < %(idempotency)s OR idempotency IS NULL)
-         AND path LIKE %(directory)s'''
-        curs.execute(stmt, params)
+        # Remove any records where the file no longer exists.
+        with get_db_curs(commit=True) as curs:
+            refresh_logger.debug(f'Deleting files no longer in {directory}')
+            params = dict(
+                directory=f'{directory}/%',  # trailing / is important!
+                idempotency=idempotency,
+            )
+            stmt = '''
+            DELETE FROM file
+            WHERE
+             (idempotency < %(idempotency)s OR idempotency IS NULL)
+             AND path LIKE %(directory)s'''
+            curs.execute(stmt, params)
 
-    apply_after_refresh()
-    await apply_indexers()
+        apply_after_refresh()
+        await apply_indexers()
 
-    if send_events:
-        Events.send_directory_refresh_completed(f'Refresh of {repr(relative_path)} has completed.')
-    refresh_logger.info(f'Done refreshing files in {directory}')
+        if send_events:
+            Events.send_directory_refresh_completed(f'Refresh of {repr(relative_path)} has completed.')
+        refresh_logger.info(f'Done refreshing files in {directory}')
 
 
 def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None) -> \

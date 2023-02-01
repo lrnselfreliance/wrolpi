@@ -1,7 +1,7 @@
 import React, {useEffect} from 'react';
-import {toast} from "react-semantic-toasts";
 import {useRecurringTimeout} from "./hooks/customHooks";
 import {getEvents} from "./api";
+import {toast} from "react-semantic-toasts-2";
 
 const apiEventName = 'apiEvent';
 

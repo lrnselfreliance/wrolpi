@@ -1,5 +1,5 @@
 import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, emptyToNull, OTP_API, VIDEOS_API} from "./components/Common";
-import {toast} from 'react-semantic-toasts';
+import {toast} from "react-semantic-toasts-2";
 
 function timeoutPromise(ms, promise) {
     // Create a timeout wrapper around a promise.  If the timeout is reached, throw an error.  Otherwise, return

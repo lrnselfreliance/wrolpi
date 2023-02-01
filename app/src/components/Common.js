@@ -148,9 +148,9 @@ export function RequiredAsterisk() {
 export let defaultVideoOrder = '-upload_date';
 export let defaultSearchOrder = 'rank';
 
-export const frequencyOptions = [{key: 'daily', text: 'Daily', value: 86400}, {
-    key: 'weekly', text: 'Weekly', value: 604800
-}, {key: 'biweekly', text: 'Biweekly', value: 1209600}, {
+export const frequencyOptions = [{key: null, text: '', value: null}, {
+    key: 'daily', text: 'Daily', value: 86400
+}, {key: 'weekly', text: 'Weekly', value: 604800}, {key: 'biweekly', text: 'Biweekly', value: 1209600}, {
     key: '30days', text: '30 Days', value: 2592000
 }, {key: '90days', text: '90 Days', value: 7776000},];
 
@@ -515,7 +515,8 @@ export function Toggle({label, checked, disabled, onChange, icon}) {
         style['color'] = '#888888';
     }
 
-    let onMouseUp;
+    let onMouseUp = () => {
+    };
     if (onChange) {
         onMouseUp = (e) => {
             if (disabled) {
@@ -534,10 +535,11 @@ export function Toggle({label, checked, disabled, onChange, icon}) {
 
     return <>
         <div className='toggle' onMouseUp={onMouseUp}>
-            <input type="checkbox" className={inputClassName} checked={checked} onChange={onMouseUp}/>
+            <input type="checkbox" className={inputClassName} checked={checked} onChange={onMouseUp}
+                   data-testid='toggle'/>
             <span className={sliderClassName}></span>
         </div>
-        <span style={style}>
+        <span style={style} data-testid='toggle-label'>
             {icon}
             {label}
         </span>
@@ -547,11 +549,11 @@ export function Toggle({label, checked, disabled, onChange, icon}) {
 export function DisableDownloadsToggle() {
     let {on, setDownloads} = useDownloaders();
     return <Form>
-        <Toggle toggle
-                label={on ? 'Downloading Enabled' : 'Downloading Disabled'}
-                disabled={on === null}
-                checked={on === true}
-                onChange={setDownloads}
+        <Toggle
+            label={on ? 'Downloading Enabled' : 'Downloading Disabled'}
+            disabled={on === null}
+            checked={on === true}
+            onChange={setDownloads}
         />
     </Form>;
 }
@@ -568,18 +570,21 @@ export function emptyToNull(obj) {
 }
 
 export function mimetypeColor(mimetype) {
+    if (!mimetype) {
+        return 'grey';
+    }
     try {
         if (mimetype === 'application/pdf') {
             return 'red'
-        } else if (mimetype && mimetype.startsWith('video/')) {
+        } else if (mimetype.startsWith('video/')) {
             return 'blue'
-        } else if (mimetype && mimetype.startsWith('image/')) {
+        } else if (mimetype.startsWith('image/')) {
             return 'pink'
-        } else if (mimetype && mimetype.startsWith('text/html')) {
+        } else if (mimetype.startsWith('text/html')) {
             return 'green'
-        } else if (mimetype && mimetype.startsWith('application/zip')) {
+        } else if (mimetype.startsWith('application/zip') || mimetype.startsWith('application/zlib') || mimetype.startsWith('application/x-7z-compressed') || mimetype.startsWith('application/x-bzip2') || mimetype.startsWith('application/x-xz')) {
             return 'purple'
-        } else if (mimetype && (mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook'))) {
+        } else if (mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook')) {
             return 'yellow'
         }
     } catch (e) {
@@ -591,7 +596,8 @@ export function mimetypeColor(mimetype) {
 
 export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
     // Default to a grey file icon.
-    const {mimetype} = file;
+    const {mimetype, path} = file;
+    const lowerPath = path.toLowerCase();
     props['name'] = 'file';
     props['color'] = mimetypeColor(mimetype);
     if (mimetype) {
@@ -605,12 +611,16 @@ export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
             props['name'] = 'image';
         } else if (mimetype.startsWith('video/')) {
             props['name'] = 'film';
-        } else if (mimetype.startsWith('application/zip')) {
+        } else if (mimetype.startsWith('application/zip') || mimetype.startsWith('application/zlib') || mimetype.startsWith('application/x-7z-compressed') || mimetype.startsWith('application/x-bzip2') || mimetype.startsWith('application/x-xz')) {
             props['name'] = 'file archive';
         } else if (mimetype.startsWith('application/x-iso9660-image')) {
             props['name'] = 'dot circle';
         } else if (mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook')) {
             props['name'] = 'book';
+        } else if (mimetype.startsWith('text/vtt') || mimetype.startsWith('text/srt')) {
+            props['name'] = 'closed captioning';
+        } else if (mimetype.startsWith('application/octet-stream') && (lowerPath.endsWith('.stl') || lowerPath.endsWith('.blend'))) {
+            props['name'] = 'cube';
         }
     }
     return <Icon disabled={disabled} size={size} {...props}/>

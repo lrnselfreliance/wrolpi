@@ -27,54 +27,83 @@ def test_list_files_api(test_client, make_files_structure, test_directory):
     def check_get_files(directories, expected_files):
         request, response = test_client.post('/api/files', content=json.dumps({'directories': directories}))
         assert not response.json.get('errors')
-        results = sorted(response.json['files'], key=lambda i: i['key'])
-        for f1, f2 in zip_longest(results, expected_files):
-            for key in f2.keys():
-                assert f1[key] == f2[key], f'{f1} != {f2}'
+        # The first dict is the media directory.
+        children = response.json['files']
+        assert children == expected_files
 
     # Requesting no directories results in the top-level results.
-    expected = [dict(key='archives/'), dict(key='empty directory/'), dict(key='videos/')]
+    expected = {
+        'archives/': {'path': 'archives/'},
+        'empty directory/': {'path': 'empty directory/'},
+        'videos/': {'path': 'videos/'}
+    }
     check_get_files([], expected)
     # empty directory is empty
+    expected = {
+        'archives/': {'path': 'archives/'},
+        'empty directory/': {'path': 'empty directory/', 'children': {}},
+        'videos/': {'path': 'videos/'}
+    }
     check_get_files(['empty directory'], expected)
 
-    expected = [
-        dict(key='archives/'),
-        dict(key='archives/bar.txt', size=12),
-        dict(key='archives/baz/'),
-        dict(key='archives/foo.txt'),
-        dict(key='empty directory/'),
-        dict(key='videos/'),
-    ]
+    expected = {
+        'archives/': {
+            'path': 'archives/',
+            'children': {
+                'foo.txt': {'path': 'archives/foo.txt', 'size': 0, 'mimetype': 'inode/x-empty'},
+                'bar.txt': {'path': 'archives/bar.txt', 'size': 12, 'mimetype': 'text/plain'},
+                'baz/': {'path': 'archives/baz/'},
+            }
+        },
+        'empty directory/': {'path': 'empty directory/'},
+        'videos/': {'path': 'videos/'}
+    }
     check_get_files(['archives'], expected)
 
     # Sub-directories are supported.
-    expected = [
-        dict(key='archives/'),
-        dict(key='archives/bar.txt', size=12),
-        dict(key='archives/baz/'),
-        dict(key='archives/baz/bar.txt'),
-        dict(key='archives/baz/foo.txt'),
-        dict(key='archives/foo.txt'),
-        dict(key='empty directory/'),
-        dict(key='videos/'),
-    ]
+    expected = {
+        'archives/': {
+            'path': 'archives/',
+            'children': {
+                'foo.txt': {'path': 'archives/foo.txt', 'size': 0, 'mimetype': 'inode/x-empty'},
+                'bar.txt': {'path': 'archives/bar.txt', 'size': 12, 'mimetype': 'text/plain'},
+                'baz/': {
+                    'path': 'archives/baz/',
+                    'children': {
+                        'bar.txt': {'path': 'archives/baz/bar.txt', 'size': 0, 'mimetype': 'inode/x-empty'},
+                        'foo.txt': {'path': 'archives/baz/foo.txt', 'size': 0, 'mimetype': 'inode/x-empty'},
+                    }
+                }
+            }
+        },
+        'empty directory/': {'path': 'empty directory/'},
+        'videos/': {'path': 'videos/'},
+    }
+    check_get_files(['archives', 'archives/baz'], expected)
+    # Requesting only a subdirectory also returns `archives` contents.
     check_get_files(['archives/baz'], expected)
 
-    expected = [
-        dict(key='archives/'),
-        dict(key='archives/bar.txt', size=12),
-        dict(key='archives/baz/'),
-        dict(key='archives/foo.txt'),
-        dict(key='empty directory/'),
-        dict(key='videos/'),
-        dict(key='videos/other video.mp4'),
-        dict(key='videos/some video.mp4'),
-    ]
+    expected = {
+        'archives/': {
+            'path': 'archives/',
+            'children': {
+                'foo.txt': {'path': 'archives/foo.txt', 'size': 0, 'mimetype': 'inode/x-empty'},
+                'bar.txt': {'path': 'archives/bar.txt', 'size': 12, 'mimetype': 'text/plain'},
+                'baz/': {'path': 'archives/baz/'},
+            }
+        },
+        'empty directory/': {'path': 'empty directory/'},
+        'videos/': {
+            'path': 'videos/',
+            'children': {
+                'other video.mp4': {'path': 'videos/other video.mp4', 'size': 0, 'mimetype': 'inode/x-empty'},
+                'some video.mp4': {'path': 'videos/some video.mp4', 'size': 0, 'mimetype': 'inode/x-empty'},
+            }
+        }
+    }
     check_get_files(['archives', 'videos'], expected)
     # Order does not matter.
-    check_get_files(['archives', 'videos', 'empty directory'], expected)
-    check_get_files(['archives', 'empty directory', 'videos'], expected)
+    check_get_files(['videos', 'archives'], expected)
 
 
 def test_delete_file(test_client, make_files_structure, test_directory):
@@ -250,15 +279,15 @@ def test_file_statistics(test_session, test_client, example_pdf, example_mobi, e
     request, response = test_client.get('/api/statistics')
     assert response.status_code == HTTPStatus.OK
     assert response.json['file_statistics'] == {
-            'archive_count': 0,
-            'total_size': 0,
-            'audio_count': 0,
-            'ebook_count': 0,
-            'image_count': 0,
-            'pdf_count': 0,
-            'total_count': 0,
-            'video_count': 0,
-            'zip_count': 0,
+        'archive_count': 0,
+        'total_size': 0,
+        'audio_count': 0,
+        'ebook_count': 0,
+        'image_count': 0,
+        'pdf_count': 0,
+        'total_count': 0,
+        'video_count': 0,
+        'zip_count': 0,
     }
 
     test_client.post('/api/files/refresh')
@@ -268,12 +297,12 @@ def test_file_statistics(test_session, test_client, example_pdf, example_mobi, e
     stats = response.json['file_statistics']
     stats.pop('total_size')
     assert stats == {
-            'archive_count': 0,
-            'audio_count': 0,
-            'ebook_count': 2,
-            'image_count': 0,
-            'pdf_count': 1,
-            'total_count': 5,
-            'video_count': 1,
-            'zip_count': 0,
+        'archive_count': 0,
+        'audio_count': 0,
+        'ebook_count': 2,
+        'image_count': 0,
+        'pdf_count': 1,
+        'total_count': 5,
+        'video_count': 1,
+        'zip_count': 0,
     }

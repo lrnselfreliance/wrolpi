@@ -25,16 +25,16 @@ import {
     startDownloads
 } from "../api";
 import {createSearchParams, useSearchParams} from "react-router-dom";
-import {toast} from "react-semantic-toasts";
 import {enumerate, filterToMimetypes, humanFileSize, secondsToFullDuration} from "../components/Common";
 import {StatusContext} from "../contexts/contexts";
+import {toast} from "react-semantic-toasts-2";
 
 const calculatePage = (offset, limit) => {
     return offset && limit ? Math.round((offset / limit) + 1) : 1;
 }
 
 const calculateTotalPages = (total, limit) => {
-    return total && limit ? Math.round(total / limit) + 1 : 1;
+    return total && limit ? Math.round(total / limit) : 1;
 }
 
 export const useRecurringTimeout = (callback, delay) => {

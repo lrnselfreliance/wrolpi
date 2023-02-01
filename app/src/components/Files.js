@@ -1,14 +1,11 @@
 import React, {useContext} from "react";
-import FileBrowser from 'react-keyed-file-browser';
 import {
     Button as SButton,
     CardContent,
     CardDescription,
     CardHeader,
     CardMeta,
-    Confirm,
     Container,
-    Divider,
     Dropdown,
     Header as SHeader,
     Image,
@@ -17,8 +14,6 @@ import {
     TableCell,
     TableHeaderCell,
 } from "semantic-ui-react";
-import 'react-keyed-file-browser/dist/react-keyed-file-browser.css';
-import {deleteFile, refreshDirectoryFiles, refreshFiles} from "../api";
 import {
     CardGroupCentered,
     CardLink,
@@ -34,7 +29,7 @@ import {
     textEllipsis,
     useTitle
 } from "./Common";
-import {useBrowseFiles, useQuery, useSearchFiles} from "../hooks/customHooks";
+import {useQuery, useSearchFiles} from "../hooks/customHooks";
 import {Route, Routes} from "react-router-dom";
 import {CardPlacholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
@@ -44,118 +39,15 @@ import {Button, Card, CardIcon, Icon, Placeholder, Segment} from "./Theme";
 import {SelectableTable} from "./Tables";
 import {VideoCard, VideoRowCells} from "./Videos";
 import _ from 'lodash';
-import {useSubscribeEvents, useSubscribeEventName} from "../Events";
+import {FileBrowser} from "./FileBrowser";
+import {refreshDirectoryFiles, refreshFiles} from "../api";
+import {useSubscribeEventName} from "../Events";
 
-const icons = {
-    File: <Icon name='file'/>,
-    Folder: <Icon name='folder'/>,
-    FolderOpen: <Icon name='folder open'/>,
-    Image: <Icon name='file image'/>,
-    PDF: <Icon name='file pdf'/>,
-};
 
-export function Files() {
+export function FilesPage() {
     useTitle('Files');
 
-    const {t} = useContext(ThemeContext);
-
-    const {browseFiles, setOpenFolders, fetchFiles} = useBrowseFiles();
-
-    const [deleteOpen, setDeleteOpen] = React.useState(false);
-    const [selectedFile, setSelectedFile] = React.useState(null);
-    const [selectedDirectory, setSelectedDirectory] = React.useState(null);
-
-    const handleFolderChange = async (file, browserProps) => {
-        let openFolders = Object.keys(browserProps.openFolders);
-        setOpenFolders(openFolders);
-    }
-
-    const onSelect = async (file) => {
-        // A user can only select one file or one directory.
-        if (file.key.endsWith('/')) {
-            setSelectedFile(null);
-            setSelectedDirectory(file);
-        } else {
-            setSelectedDirectory(null);
-            setSelectedFile(file);
-        }
-    }
-
-    const onDeleteFile = async () => {
-        await deleteFile(selectedFile.key);
-        await fetchFiles();
-    }
-
-    const openDelete = () => {
-        setDeleteOpen(true);
-    }
-
-    const closeDelete = () => {
-        setDeleteOpen(false);
-    }
-
-    const clearSelection = async (e) => {
-        e.preventDefault();
-        setOpenFolders(null);
-        setSelectedDirectory(null);
-        setSelectedFile(null);
-        await fetchFiles();
-    }
-
-    let clearButton = <Button
-        onClick={clearSelection}
-        disabled={!!!selectedFile && !!!selectedDirectory}>
-        Clear
-    </Button>;
-
-    let buttons;
-    if (selectedFile) {
-        buttons = <>
-            <ExternalCardLink to={`/download/${selectedFile.key}`}>
-                <Button primary>Open</Button>
-            </ExternalCardLink>
-            <Confirm
-                open={deleteOpen}
-                onCancel={closeDelete}
-                onConfirm={onDeleteFile}
-                content={`Are you sure you want to delete: ${selectedFile.key}`}
-                confirmButton='Delete'
-            />
-            <Button floated='right' color='red' onClick={openDelete}>Delete</Button>
-        </>;
-    } else if (selectedDirectory) {
-        buttons = <>
-            <DirectoryFilesRefreshButton directory={selectedDirectory.key}/>
-        </>;
-    } else {
-        buttons = <FilesRefreshButton/>;
-    }
-
-    let body = <Placeholder>
-        <PlaceholderLine/>
-        <PlaceholderLine/>
-    </Placeholder>;
-    if (_.isArray(browseFiles)) {
-        body = <FileBrowser
-            showActionBar={false}
-            canFilter={false}
-            files={browseFiles}
-            icons={icons}
-            onFolderOpen={handleFolderChange}
-            onFolderClose={handleFolderChange}
-            onSelect={onSelect}
-            detailRenderer={() => <></>} // Hide the preview that the 3rd party provided.
-        />;
-    }
-
-    return <>
-        {clearButton}
-        {buttons}
-        <Divider/>
-        <div {...t}>
-            {body}
-        </div>
-    </>
+    return <FileBrowser/>;
 }
 
 function EbookCard({file}) {
@@ -560,10 +452,18 @@ export function FilesSearchView({
     />
 }
 
-function FilesRefreshButton() {
-    const {t} = useContext(ThemeContext);
+export function FilesRoute() {
+    return <PageContainer>
+        <Routes>
+            <Route path='/' exact element={<FilesPage/>}/>
+        </Routes>
+    </PageContainer>;
+}
+
+export function FilesRefreshButton() {
     const {status} = useContext(StatusContext);
     const refreshing = status && status['flags'] && status['flags'].indexOf('refreshing') >= 0;
+    const refreshingDirectory = status && status['flags'] && status['flags'].indexOf('refreshing_directory') >= 0;
 
     const [loading, setLoading] = React.useState(false);
 
@@ -575,26 +475,20 @@ function FilesRefreshButton() {
     // Clear loading when global refresh event completes.
     useSubscribeEventName('global_refresh_completed', () => setLoading(false));
 
-    return <>
-        <Button icon
-                labelPosition='left'
-                loading={loading || refreshing}
-                id='refresh_files'
-                onClick={handleClick}
-                disabled={loading || refreshing}>
-            <Icon name='refresh'/>
-            Refresh Files
-        </Button>
-        <label htmlFor='refresh_files' {...t}>
-            Find and index all files in the media directory.
-        </label>
-    </>;
+    return <Button icon
+                   labelPosition='left'
+                   loading={loading || refreshing || refreshingDirectory}
+                   onClick={handleClick}
+                   disabled={loading || refreshing}>
+        <Icon name='refresh'/>
+        Refresh All
+    </Button>;
 }
 
-function DirectoryFilesRefreshButton({directory}) {
-    const {t} = useContext(ThemeContext);
+export function DirectoryRefreshButton({directory}) {
     const {status} = useContext(StatusContext);
     const refreshing = status && status['flags'] && status['flags'].indexOf('refreshing') >= 0;
+    const refreshingDirectory = status && status['flags'] && status['flags'].indexOf('refreshing_directory') >= 0;
 
     const [loading, setLoading] = React.useState(false);
 
@@ -603,29 +497,17 @@ function DirectoryFilesRefreshButton({directory}) {
         await refreshDirectoryFiles(directory);
     }
 
-    // Clear loading when directory refresh event completes.
+    // Clear loading when global refresh event completes.
+    useSubscribeEventName('global_refresh_completed', () => setLoading(false));
     useSubscribeEventName('directory_refresh_completed', () => setLoading(false));
 
-    return <>
-        <Button icon primary
-                labelPosition='left'
-                loading={loading || refreshing}
-                id='refresh_files'
-                onClick={handleClick}
-                disabled={loading || refreshing}>
-            <Icon name='refresh'/>
-            Refresh Directory
-        </Button>
-        <label htmlFor='refresh_files' {...t}>
-            Find and index all files in the directory.
-        </label>
-    </>;
-}
-
-export function FilesRoute() {
-    return (<PageContainer>
-        <Routes>
-            <Route path='/' exact element={<Files/>}/>
-        </Routes>
-    </PageContainer>);
+    return <Button icon
+                   labelPosition='left'
+                   loading={loading || refreshing || refreshingDirectory}
+                   onClick={handleClick}
+                   disabled={loading || refreshing || refreshingDirectory}
+    >
+        <Icon name='refresh'/>
+        Refresh Directory
+    </Button>
 }

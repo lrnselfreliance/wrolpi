@@ -60,6 +60,9 @@ services:
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:3000' ]
     user: '${UID-1000}:${GID-1000}'
+    environment:
+      # Force React to use nginx port to connect to it's websocket.
+      - WDS_SOCKET_PORT=0
 
   map:
     # https://github.com/Overv/openstreetmap-tile-server

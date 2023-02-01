@@ -28,10 +28,8 @@ import {
 import {Link, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
-import {ChannelPlaceholder} from "./Placeholder";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {useChannel, useChannels} from "../hooks/customHooks";
-import {toast} from "react-semantic-toasts";
 import _ from "lodash";
 import {
     Accordion,
@@ -48,6 +46,9 @@ import {
 } from "./Theme";
 import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
 import {Media} from "../contexts/contexts";
+import {SortableTable} from "./SortableTable";
+import {ChannelPlaceholder} from "./Placeholder";
+import {toast} from "react-semantic-toasts-2";
 
 
 function ChannelStatistics({statistics}) {
@@ -325,7 +326,7 @@ function ChannelPage({create, header}) {
                 <FormGroup>
                     <FormField>
                         <label>Download Frequency</label>
-                        <Dropdown selection
+                        <Dropdown selection clearable
                                   name='download_frequency'
                                   placeholder='Frequency'
                                   error={errors.download_frequency}
@@ -517,28 +518,32 @@ export function Channels() {
         </Grid>
     </div>;
 
-    let tableHeader = <TableHeader>
-        <TableRow>
-            <TableHeaderCell width={8}>Name</TableHeaderCell>
-            <TableHeaderCell width={2}>Videos</TableHeaderCell>
-            <TableHeaderCell width={2}>Last Update</TableHeaderCell>
-            <TableHeaderCell width={2}>Frequency</TableHeaderCell>
-            <TableHeaderCell width={2} colSpan={3} textAlign='center'>Manage</TableHeaderCell>
-        </TableRow>
-    </TableHeader>;
+    const headers = [
+        {key: 'name', text: 'Name', sortBy: 'name', width: 8},
+        {key: 'video_count', text: 'Videos', sortBy: 'video_count', width: 2},
+        {key: 'last_update', text: 'Last Update', sortBy: 'info_date', width: 2},
+        {key: 'download_frequency', text: 'Download Frequency', sortBy: 'download_frequency', width: 2},
+        {key: 'manage', text: 'Manage', width: 2},
+    ];
+    const mobileHeaders = [
+        {key: 'name', text: 'Name', sortBy: 'name'},
+        {key: 'video_count', text: 'Videos', sortBy: 'video_count'},
+        {key: 'manage', text: 'Manage'},
+    ];
 
     if (channels === null) {
         // Placeholders while fetching
         return <>
             {header}
-            <Table compact striped basic size='large'>
-                {tableHeader}
+            <Table compact striped basic sortable size='large'>
+                <TableHeader>
+                    <TableRow>
+                        {headers.map(i => <TableHeaderCell key={i['key']}>{i['text']}</TableHeaderCell>)}
+                    </TableRow>
+                </TableHeader>
                 <TableBody>
                     <TableRow>
-                        <TableCell><ChannelPlaceholder/></TableCell>
-                        <TableCell/>
-                        <TableCell/>
-                        <TableCell/>
+                        <TableCell colSpan={5}><ChannelPlaceholder/></TableCell>
                     </TableRow>
                 </TableBody>
             </Table>
@@ -562,19 +567,24 @@ export function Channels() {
     return <>
         {header}
         <Media at='mobile'>
-            <Table striped unstackable size='small'>
-                <TableBody>
-                    {filteredChannels.map(channel => <MobileChannelRow key={channel.id} channel={channel}/>)}
-                </TableBody>
-            </Table>
+            <SortableTable
+                tableProps={{striped: true, size: 'small', unstackable: true}}
+                data={filteredChannels}
+                tableHeaders={mobileHeaders}
+                defaultSortColumn='name'
+                rowKey='id'
+                rowFunc={(i, sortData) => <MobileChannelRow key={i.id} channel={i} sortData={sortData}/>}
+            />
         </Media>
         <Media greaterThanOrEqual='tablet'>
-            <Table compact unstackable striped size='large'>
-                {tableHeader}
-                <TableBody>
-                    {filteredChannels.map(channel => <ChannelRow key={channel.id} channel={channel}/>)}
-                </TableBody>
-            </Table>
+            <SortableTable
+                tableProps={{striped: true, size: 'large', unstackable: true, compact: true}}
+                data={filteredChannels}
+                tableHeaders={headers}
+                defaultSortColumn='name'
+                rowKey='id'
+                rowFunc={(i, sortData) => <ChannelRow key={i.id} channel={i} sortData={sortData}/>}
+            />
         </Media>
     </>
 }

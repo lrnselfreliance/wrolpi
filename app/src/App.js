@@ -6,8 +6,6 @@ import {VideosRoute, VideoWrapper} from "./components/Videos";
 import Admin from "./components/admin/Admin";
 import {Container} from "semantic-ui-react";
 import 'semantic-ui-offline/semantic.min.css';
-import {SemanticToastContainer} from 'react-semantic-toasts';
-import 'react-semantic-toasts/styles/react-semantic-alert.css';
 import {MoreRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/Inventory";
 import {ArchiveRoute} from "./components/Archive";
@@ -19,6 +17,7 @@ import {Header, ThemeWrapper} from "./components/Theme";
 import {Dashboard} from "./Dashboard";
 import {Donate} from "./components/Donate";
 import {useEventsInterval} from "./Events";
+import {SemanticToastContainer} from "react-semantic-toasts-2";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);
@@ -53,29 +52,26 @@ function Root() {
         </header>
         <Outlet/>
         <Footer/>
-        <SemanticToastContainer position="top-right"/>
     </>
 }
 
-const router = createBrowserRouter(createRoutesFromElements(
-    <Route
-        path='/'
-        element={<Root/>}
-        errorElement={<PageNotFound/>}
-    >
-        <Route index element={<Dashboard/>}/>
-        <Route path='donate' element={<Donate/>}/>
-        <Route path='videos/video/:videoId' exact element={<VideoWrapper/>}/>
-        <Route path='videos/channel/:channelId/video/:videoId' exact element={<VideoWrapper/>}/>
-        <Route path="videos/*" element={<VideosRoute/>}/>
-        <Route path="admin/*" element={<Admin/>}/>
-        <Route path="more/*" element={<MoreRoute/>}/>
-        <Route path="inventory/*" element={<InventoryRoute/>}/>
-        <Route path='archive/*' element={<ArchiveRoute/>}/>
-        <Route path='map/*' element={<MapRoute/>}/>
-        <Route path='files/*' element={<FilesRoute/>}/>
-    </Route>
-));
+const router = createBrowserRouter(createRoutesFromElements(<Route
+    path='/'
+    element={<Root/>}
+    errorElement={<PageNotFound/>}
+>
+    <Route index element={<Dashboard/>}/>
+    <Route path='donate' element={<Donate/>}/>
+    <Route path='videos/video/:videoId' exact element={<VideoWrapper/>}/>
+    <Route path='videos/channel/:channelId/video/:videoId' exact element={<VideoWrapper/>}/>
+    <Route path="videos/*" element={<VideosRoute/>}/>
+    <Route path="admin/*" element={<Admin/>}/>
+    <Route path="more/*" element={<MoreRoute/>}/>
+    <Route path="inventory/*" element={<InventoryRoute/>}/>
+    <Route path='archive/*' element={<ArchiveRoute/>}/>
+    <Route path='map/*' element={<MapRoute/>}/>
+    <Route path='files/*' element={<FilesRoute/>}/>
+</Route>));
 
 export default function App() {
     const status = useStatusInterval();
@@ -84,6 +80,7 @@ export default function App() {
     return <ThemeWrapper>
         {/* Context and style to handle switching between mobile/computer. */}
         <style>{mediaStyles}</style>
+        <SemanticToastContainer position='top-right'/>
         <MediaContextProvider>
             <StatusContext.Provider value={status}>
                 <RouterProvider router={router}/>

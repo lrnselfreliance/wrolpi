@@ -111,7 +111,7 @@ class ChannelDownload extends React.Component {
         this.state = {
             url: '', frequency: 604800, pending: false, disabled: false, ready: false, error: null, success: null,
         };
-        this.freqOptions = [{key: 'once', text: 'Once', value: 0}, ...frequencyOptions,];
+        this.freqOptions = [{key: 'once', text: 'Once', value: 0}, ...frequencyOptions.slice(1),];
         this.handleUrlChange = this.handleUrlChange.bind(this);
         this.handleSubmit = this.handleSubmit.bind(this);
         this.handleFrequencyChange = this.handleFrequencyChange.bind(this);

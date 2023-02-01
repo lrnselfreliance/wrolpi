@@ -111,3 +111,25 @@ input:checked + .slider:before {
     -ms-transform: translateX(26px);
     transform: translateX(26px);
 }
+
+div.full-height {
+    overflow: hidden;
+    padding-top: 100%;
+    position: relative;
+}
+
+td.file-path {
+    cursor: pointer;
+}
+
+/* Necessary until react-semantic-toasts is upgraded to Node 18 */
+.ui-alerts {
+    position: fixed;
+    z-index: 2060;
+    padding: 24px;
+}
+
+.ui-alerts.top-right {
+    top: 20px;
+    right: 20px;
+}

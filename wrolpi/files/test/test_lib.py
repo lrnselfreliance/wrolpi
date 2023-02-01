@@ -25,82 +25,6 @@ def assert_files(session: Session, expected):
     assert files == set(expected)
 
 
-def test_list_files(make_files_structure, test_directory):
-    files = [
-        'archives/bar.txt',
-        'archives/baz/bar.txt',
-        'archives/baz/foo.txt',
-        'archives/foo.txt',
-        'empty directory/',
-        'videos/other video.mp4',
-        'videos/some video.mp4',
-    ]
-    make_files_structure(files)
-
-    def check_list_files(path, expected):
-        result = lib.list_files(path)
-        result = sorted(result)
-        assert [str(i.relative_to(test_directory)) for i in result] == expected
-
-    check_list_files([], ['archives', 'empty directory', 'videos'])
-    # Falsey directories are ignored.
-    check_list_files([None, ''], ['archives', 'empty directory', 'videos'])
-    check_list_files(['empty directory'], ['archives', 'empty directory', 'videos'])
-    check_list_files(['empty directory'], ['archives', 'empty directory', 'videos'])
-    # Trailing slash is ignored.
-    check_list_files(['empty directory/'], ['archives', 'empty directory', 'videos'])
-
-    check_list_files(['archives'], [
-        'archives',
-        'archives/bar.txt',
-        'archives/baz',
-        'archives/foo.txt',
-        'empty directory',
-        'videos',
-    ])
-    check_list_files(['archives/baz'], [
-        'archives',
-        'archives/bar.txt',
-        'archives/baz',
-        'archives/baz/bar.txt',
-        'archives/baz/foo.txt',
-        'archives/foo.txt',
-        'empty directory',
-        'videos',
-    ])
-    # Including duplicate directories does not change results.
-    check_list_files(['archives/baz', 'archives'], [
-        'archives',
-        'archives/bar.txt',
-        'archives/baz',
-        'archives/baz/bar.txt',
-        'archives/baz/foo.txt',
-        'archives/foo.txt',
-        'empty directory',
-        'videos',
-    ])
-    check_list_files(['videos'], [
-        'archives',
-        'empty directory',
-        'videos',
-        'videos/other video.mp4',
-        'videos/some video.mp4',
-    ])
-    # All files and directories are listed.
-    check_list_files(['videos', 'archives/baz'], [
-        'archives',
-        'archives/bar.txt',
-        'archives/baz',
-        'archives/baz/bar.txt',
-        'archives/baz/foo.txt',
-        'archives/foo.txt',
-        'empty directory',
-        'videos',
-        'videos/other video.mp4',
-        'videos/some video.mp4',
-    ])
-
-
 @pytest.mark.parametrize(
     'directories,expected', [
         ([Path('foo')], [Path('foo')]),
@@ -208,11 +132,6 @@ async def test_refresh_many_files(test_session, make_files_structure):
     with timer('second refresh'):
         await lib.refresh_files()
     assert test_session.query(File).count() == count
-
-
-@pytest.mark.asyncio
-async def test_refresh_files_flags(test_session):
-    pass
 
 
 @pytest.mark.asyncio

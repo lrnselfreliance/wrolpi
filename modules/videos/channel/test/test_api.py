@@ -332,7 +332,7 @@ def test_channel_by_id(test_session, test_client, simple_channel, simple_video):
     assert response.status_code == HTTPStatus.OK
 
 
-def test_channel_crud(test_session, test_client, test_directory):
+def test_channel_crud(test_session, test_client, test_directory, test_download_manager):
     channel_directory = test_directory / 'channel directory'
     channel_directory.mkdir()
 
@@ -372,19 +372,35 @@ def test_channel_crud(test_session, test_client, test_directory):
     request, response = test_client.post('/api/videos/channels', content=json.dumps(new_channel))
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
+    def put_and_fetch(new_channel_):
+        request, response = test_client.put(location, content=json.dumps(new_channel))
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
+        request, response = test_client.get(location)
+        assert response.status_code == HTTPStatus.OK
+        channel = response.json['channel']
+        return channel
+
     # Update it
     new_channel['name'] = 'Example Channel 2'
     new_channel['directory'] = str(new_channel['directory'])  # noqa
-    request, response = test_client.put(location, content=json.dumps(new_channel))
-    assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
-    request, response = test_client.get(location)
-    assert response.status_code == HTTPStatus.OK
-    channel = response.json['channel']
+    new_channel['download_frequency'] = 60
+    channel = put_and_fetch(new_channel)
     assert channel['id'] == 1
     assert channel['name'] == 'Example Channel 2'
     assert channel['directory'] == channel_directory.name
     assert channel['match_regex'] == 'asdf'
     assert channel['url'] == 'https://example.com/channel1'
+    # Download was created.
+    assert channel['download_frequency']
+    assert (downloads := test_download_manager.get_downloads(test_session)) and len(downloads) == 1 and downloads[
+        0].url == new_channel['url']
+
+    # Update with no download frequency.
+    new_channel['download_frequency'] = None
+    channel = put_and_fetch(new_channel)
+    assert channel['download_frequency'] is None
+    # Download was deleted.
+    assert len(test_download_manager.get_downloads(test_session)) == 0
 
     # Can't update channel that doesn't exist
     request, response = test_client.put('/api/videos/channels/doesnt_exist',

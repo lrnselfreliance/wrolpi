@@ -4,14 +4,18 @@ echo "Debian 11 install start: $(date '+%Y-%m-%d %H:%M:%S')"
 set -x
 set -e
 
+# Install npm repos.
+npm --version || curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+
+# Update if we haven't updated in the last day.
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
 # Install dependencies
 apt install -y apt-transport-https ca-certificates curl gnupg-agent gcc libpq-dev software-properties-common \
   postgresql-13 nginx-full nginx-doc python3-full python3-dev python3-doc python3-venv htop vim ffmpeg hostapd \
-  chromium chromium-driver cpufrequtils network-manager npm
+  chromium chromium-driver cpufrequtils network-manager nodejs
 
 # Install serve, and archiving tools.
-sudo npm i -g serve@12.0.1 single-file-cli@1.0.15 'git+https://github.com/pirate/readability-extractor' &
+sudo npm i -g serve single-file-cli@1.0.33 'git+https://github.com/lrnselfreliance/readability-extractor' &
 
 # Setup the virtual environment that main.py expects
 pip3 --version || (

@@ -6,7 +6,7 @@ import {useDirectories, useDownloaders, useHotspot, useSettings, useThrottle} fr
 import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
 import {Button, darkTheme, Form, Header, Icon, lightTheme, Menu, Popup, Statistic} from "./Theme";
 
-export const API_URI = process.env && process.env.REACT_APP_API_URI ? process.env.REACT_APP_API_URI : `http://${window.location.host}/api`;
+export const API_URI = process.env && process.env.REACT_APP_API_URI ? process.env.REACT_APP_API_URI : `${window.location.protocol}//${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
 export const ARCHIVES_API = `${API_URI}/archive`;
 export const OTP_API = `${API_URI}/otp`;

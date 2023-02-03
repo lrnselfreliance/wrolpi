@@ -103,6 +103,11 @@ Install WROLPi onto a fresh Debian 11 system.
 
 # RaspberryPi Install
 
+## Download
+
+* Download the latest image at [wrolpi.org](https://wrolpi.org)
+
+## Manual install
 Install WROLPi onto a fresh Raspberry Pi.
 
 **Warning: this will clobber anything else on the Raspberry Pi!  Do not run this installation script elsewhere!**

@@ -366,16 +366,7 @@ class DiskBandwidthInfo:
 
 IGNORED_DISK_NAMES = (
     'loop',
-    'ram0',
-    'ram1',
-    'ram2',
-    'ram3',
-    'ram4',
-    'ram5',
-    'ram6',
-    'ram7',
-    'ram8',
-    'ram9',
+    'ram',
 )
 DISKS_BANDWIDTH = multiprocessing.Manager().dict()
 

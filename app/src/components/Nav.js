@@ -54,11 +54,14 @@ function NavIcon(props) {
 export function NavBar() {
     const {status} = useContext(StatusContext);
     const wrol_mode = status ? status['wrol_mode'] : null;
-    const name = NAME || 'WROLPi';
+    const wrolpiIcon = <img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/>;
+    const name = NAME || wrolpiIcon;
     const topNavText = wrol_mode ? <>{name}&nbsp; <Icon name='lock'/></> : name;
     const {i} = useContext(ThemeContext);
 
-    const homeLink = <MenuLink link={{to: '/', text: topNavText, end: true}}/>;
+    const homeLink = <NavLink className='item' to='/' style={{paddingTop: 0, paddingBottom: 0}}>
+        {topNavText}
+    </NavLink>;
     const icons = <React.Fragment>
         <NavIcon><HotspotStatusIcon/></NavIcon>
         <NavIcon><DarkModeToggle/></NavIcon>
@@ -66,7 +69,7 @@ export function NavBar() {
 
     return <>
         <Media at='mobile'>
-            <Menu {...i}>
+            <Menu {...i} attached='top'>
                 {homeLink}
                 <Menu.Menu position='right'>
                     {icons}
@@ -79,7 +82,7 @@ export function NavBar() {
             </Menu>
         </Media>
         <Media greaterThanOrEqual='tablet'>
-            <Menu {...i}>
+            <Menu {...i} attached='top'>
                 {homeLink}
                 {links.map(i => <MenuLink link={i} key={i.key}/>)}
 

@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import List, Tuple, Union, Dict
 
+import cachetools.func
 import psycopg2
 from sqlalchemy.orm import Session
 
@@ -69,11 +70,16 @@ def _get_file_dict(file: pathlib.Path) -> Dict:
     )
 
 
+@cachetools.func.ttl_cache(maxsize=1000, ttl=30)
+def _get_directory_child_count(directory: pathlib.Path) -> int:
+    return len(list(directory.iterdir()))
+
+
 def _get_directory_dict(directory: pathlib.Path, directories: List[pathlib.Path]) -> Dict:
     media_directory = get_media_directory()
     d = dict(
         path=f'{directory.relative_to(media_directory)}/',
-        child_count=len(list(directory.iterdir())),
+        child_count=_get_directory_child_count(directory),
     )
     if directory in directories:
         children = dict()
@@ -83,7 +89,7 @@ def _get_directory_dict(directory: pathlib.Path, directories: List[pathlib.Path]
             elif path.is_dir():
                 children[f'{path.name}/'] = dict(
                     path=f'{path.relative_to(media_directory)}/',
-                    child_count=len(list(path.iterdir())),
+                    child_count=_get_directory_child_count(path),
                 )
             else:
                 children[path.name] = _get_file_dict(path)

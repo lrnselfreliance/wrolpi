@@ -11,6 +11,9 @@ alias ll='ls -lh'
 alias la='ll -a'
 EOF
 
+# Change default postgresql port to 5432.
+sed -i 's/port = 5433/port = 5432/' /etc/postgresql/13/main/postgresql.conf
+
 # Install Node console commands.
 single-file --version || npm i -g serve@12.0.1 single-file-cli@1.0.15 'git+https://github.com/lrnselfreliance/readability-extractor' carto@1.2.0
 

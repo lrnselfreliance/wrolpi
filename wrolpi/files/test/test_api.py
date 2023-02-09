@@ -20,6 +20,7 @@ def test_list_files_api(test_client, make_files_structure, test_directory):
         'empty directory/',
         'videos/other video.mp4',
         'videos/some video.mp4',
+        'lost+found/', # Should always be ignored.
     ]
     files = make_files_structure(files)
     files[0].write_text('bar contents')

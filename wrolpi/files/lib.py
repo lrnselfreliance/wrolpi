@@ -87,6 +87,9 @@ def _get_directory_dict(directory: pathlib.Path, directories: List[pathlib.Path]
     return d
 
 
+IGNORED_DIRECTORIES = ('lost+found',)
+
+
 def list_directories_contents(directories_: List[str]) -> Dict:
     """List all files down to (and within) the directories provided.
 
@@ -104,6 +107,9 @@ def list_directories_contents(directories_: List[str]) -> Dict:
 
     paths = dict()
     for path in media_directory.iterdir():
+        if path.is_dir() and path.name in IGNORED_DIRECTORIES:
+            # Never show ignored directories.
+            continue
         if path.is_dir():
             paths[f'{path.name}/'] = _get_directory_dict(path, directories)
         else:

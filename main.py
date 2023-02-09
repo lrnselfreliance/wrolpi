@@ -7,7 +7,7 @@ import sys
 from sanic import Sanic
 from sanic.signals import Event
 
-from wrolpi import flags
+from wrolpi import flags, BEFORE_STARTUP_FUNCTIONS
 from wrolpi import root_api, admin
 from wrolpi.common import logger, get_config, import_modules, check_media_directory, limit_concurrent, \
     wrol_mode_enabled, cancel_refresh_tasks
@@ -138,13 +138,13 @@ def main():
     # Import the API in every module.  Each API should attach itself to `root_api`.
     import_modules()
 
-    # # Run the startup functions
-    # for func in BEFORE_STARTUP_FUNCTIONS:
-    #     try:
-    #         logger.debug(f'Calling {func} before startup.')
-    #         func()
-    #     except Exception as e:
-    #         logger.warning(f'Startup {func} failed!', exc_info=e)
+    # Run the startup functions
+    for func in BEFORE_STARTUP_FUNCTIONS:
+        try:
+            logger.debug(f'Calling {func} before startup.')
+            func()
+        except Exception as e:
+            logger.warning(f'Startup {func} failed!', exc_info=e)
 
     # Run the API.
     if args.sub_commands == 'api':

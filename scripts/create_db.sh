@@ -22,6 +22,7 @@ sudo -u postgres psql -c '\l' | grep gis || (
 # Restore initial dump.
 zcat /opt/wrolpi-blobs/gis-map.dump.gz | sudo -u postgres pg_restore --no-owner --role=_renderd -d gis
 sudo -u postgres psql -d gis -c 'ALTER TABLE geography_columns OWNER TO _renderd'
+sudo -u postgres psql -d gis -c 'ALTER TABLE geometry_columns OWNER TO _renderd'
 sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO _renderd"
 # Clear map tile cache files.
 [ -d /var/lib/mod_tile/ajt ] && sudo rm -r /var/lib/mod_tile/ajt

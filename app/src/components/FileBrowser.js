@@ -41,7 +41,7 @@ function Folder({folder, onFolderClick, sortData, selectedPath, onFileClick, onS
             <Icon name='folder'/>
             {name}
         </TableCell>
-        <TableCell/>
+        <TableCell>({folder['child_count']})</TableCell>
     </TableRow>;
     if (children && !_.isEmpty(children)) {
         // Folder has children, recursively display them.

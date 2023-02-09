@@ -73,6 +73,7 @@ def _get_directory_dict(directory: pathlib.Path, directories: List[pathlib.Path]
     media_directory = get_media_directory()
     d = dict(
         path=f'{directory.relative_to(media_directory)}/',
+        child_count=len(list(directory.iterdir())),
     )
     if directory in directories:
         children = dict()
@@ -80,7 +81,10 @@ def _get_directory_dict(directory: pathlib.Path, directories: List[pathlib.Path]
             if path.is_dir() and path in directories:
                 children[f'{path.name}/'] = _get_directory_dict(path, directories)
             elif path.is_dir():
-                children[f'{path.name}/'] = dict(path=f'{path.relative_to(media_directory)}/')
+                children[f'{path.name}/'] = dict(
+                    path=f'{path.relative_to(media_directory)}/',
+                    child_count=len(list(path.iterdir())),
+                )
             else:
                 children[path.name] = _get_file_dict(path)
         d['children'] = children

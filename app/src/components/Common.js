@@ -601,7 +601,7 @@ export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
     props['name'] = 'file';
     props['color'] = mimetypeColor(mimetype);
     if (mimetype) {
-        if (mimetype.startsWith('text/html') || mimetype.startsWith('application/json')) {
+        if (mimetype.startsWith('text/html') || mimetype.startsWith('application/json') || mimetype.startsWith('text/yaml')) {
             props['name'] = 'file code';
         } else if (mimetype.startsWith('application/pdf')) {
             props['name'] = 'file pdf';

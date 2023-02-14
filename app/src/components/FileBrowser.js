@@ -36,12 +36,11 @@ function Folder({folder, onFolderClick, sortData, selectedPath, onFileClick, onS
         <TableCell collapsing>
             <Checkbox checked={selectedPath === folder['path']} onChange={() => onSelect(folder['path'])}/>
         </TableCell>
-        <TableCell onClick={() => onFolderClick(path)} className='file-path'>
+        <TableCell onClick={() => onFolderClick(path)} className='file-path' colSpan={2}>
             {depthIndentation(pathWithNoTrailingSlash)}
             {is_empty ? <Icon name='folder outline'/> : <Icon name='folder'/>}
             {name}
         </TableCell>
-        <TableCell/>
     </TableRow>;
     if (children && !_.isEmpty(children)) {
         // Folder has children, recursively display them.

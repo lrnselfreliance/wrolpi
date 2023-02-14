@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import List, Tuple, Union, Dict
 
+import cachetools.func
 import psycopg2
 from sqlalchemy.orm import Session
 
@@ -40,6 +41,7 @@ __all__ = ['list_directories_contents', 'delete_file', 'split_path_stem_and_suff
            'split_file_name_words']
 
 
+@cachetools.func.ttl_cache(1000, 30.0)
 def _get_file_dict(file: pathlib.Path) -> Dict:
     media_directory = get_media_directory()
     return dict(
@@ -49,7 +51,8 @@ def _get_file_dict(file: pathlib.Path) -> Dict:
     )
 
 
-def __get_directory_dict(directory: pathlib.Path) -> Dict:
+@cachetools.func.ttl_cache(1000, 30.0)
+def _get_directory_dict(directory: pathlib.Path) -> Dict:
     media_directory = get_media_directory()
     return dict(
         path=f'{directory.relative_to(media_directory)}/',
@@ -58,14 +61,14 @@ def __get_directory_dict(directory: pathlib.Path) -> Dict:
 
 
 def _get_recursive_directory_dict(directory: pathlib.Path, directories: List[pathlib.Path]) -> Dict:
-    d = __get_directory_dict(directory)
+    d = _get_directory_dict(directory)
     if directory in directories:
         children = dict()
         for path in directory.iterdir():
             if path.is_dir() and path in directories:
                 children[f'{path.name}/'] = _get_recursive_directory_dict(path, directories)
             elif path.is_dir():
-                children[f'{path.name}/'] = __get_directory_dict(path)
+                children[f'{path.name}/'] = _get_directory_dict(path)
             else:
                 children[path.name] = _get_file_dict(path)
         d['children'] = children

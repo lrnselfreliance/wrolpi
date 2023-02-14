@@ -9,6 +9,7 @@ from wrolpi.errors import API_ERRORS, WROLModeEnabled
 from wrolpi.files.models import File
 from wrolpi.test.common import assert_dict_contains
 from wrolpi.vars import PROJECT_DIR
+from wrolpi.files import lib as files_lib
 
 
 def test_list_files_api(test_client, make_files_structure, test_directory):
@@ -31,6 +32,9 @@ def test_list_files_api(test_client, make_files_structure, test_directory):
         # The first dict is the media directory.
         children = response.json['files']
         assert children == expected_files
+        # Clear caches before next call.
+        files_lib._get_file_dict.cache_clear()
+        files_lib._get_directory_dict.cache_clear()
 
     # Requesting no directories results in the top-level results.
     expected = {

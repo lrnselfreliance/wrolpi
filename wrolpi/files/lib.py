@@ -9,7 +9,6 @@ import subprocess
 from pathlib import Path
 from typing import List, Tuple, Union, Dict
 
-import cachetools.func
 import psycopg2
 from sqlalchemy.orm import Session
 
@@ -41,26 +40,6 @@ __all__ = ['list_directories_contents', 'delete_file', 'split_path_stem_and_suff
            'split_file_name_words']
 
 
-def filter_parent_directories(directories: List[Path]) -> List[Path]:
-    """
-    Remove parent directories if their children are in the list.
-
-    >>> filter_parent_directories([Path('foo'), Path('foo/bar'), Path('baz')])
-    [Path('foo/bar'), Path('baz')]
-    """
-    unique_children = set()
-    for directory in sorted(directories):
-        for parent in directory.parents:
-            # Remove any parent of this child.
-            if parent in unique_children:
-                unique_children.remove(parent)
-        unique_children.add(directory)
-
-    # Restore the original order.
-    new_directories = [i for i in directories if i in unique_children]
-    return new_directories
-
-
 def _get_file_dict(file: pathlib.Path) -> Dict:
     media_directory = get_media_directory()
     return dict(
@@ -70,27 +49,23 @@ def _get_file_dict(file: pathlib.Path) -> Dict:
     )
 
 
-@cachetools.func.ttl_cache(maxsize=1000, ttl=30)
-def _get_directory_child_count(directory: pathlib.Path) -> int:
-    return len(list(directory.iterdir()))
-
-
-def _get_directory_dict(directory: pathlib.Path, directories: List[pathlib.Path]) -> Dict:
+def __get_directory_dict(directory: pathlib.Path) -> Dict:
     media_directory = get_media_directory()
-    d = dict(
+    return dict(
         path=f'{directory.relative_to(media_directory)}/',
-        child_count=_get_directory_child_count(directory),
+        is_empty=not next(directory.iterdir(), False),
     )
+
+
+def _get_recursive_directory_dict(directory: pathlib.Path, directories: List[pathlib.Path]) -> Dict:
+    d = __get_directory_dict(directory)
     if directory in directories:
         children = dict()
         for path in directory.iterdir():
             if path.is_dir() and path in directories:
-                children[f'{path.name}/'] = _get_directory_dict(path, directories)
+                children[f'{path.name}/'] = _get_recursive_directory_dict(path, directories)
             elif path.is_dir():
-                children[f'{path.name}/'] = dict(
-                    path=f'{path.relative_to(media_directory)}/',
-                    child_count=_get_directory_child_count(path),
-                )
+                children[f'{path.name}/'] = __get_directory_dict(path)
             else:
                 children[path.name] = _get_file_dict(path)
         d['children'] = children
@@ -121,7 +96,7 @@ def list_directories_contents(directories_: List[str]) -> Dict:
             # Never show ignored directories.
             continue
         if path.is_dir():
-            paths[f'{path.name}/'] = _get_directory_dict(path, directories)
+            paths[f'{path.name}/'] = _get_recursive_directory_dict(path, directories)
         else:
             paths[path.name] = _get_file_dict(path)
 

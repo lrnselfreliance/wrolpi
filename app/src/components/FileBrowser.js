@@ -29,7 +29,7 @@ function depthIndentation(path) {
 
 function Folder({folder, onFolderClick, sortData, selectedPath, onFileClick, onSelect}) {
     // Creates a single table row for a folder, or a row for itself and indented rows for its children.
-    let {path, children} = folder;
+    let {path, children, is_empty} = folder;
     const pathWithNoTrailingSlash = path.substring(0, path.length - 1);
     const name = path.substring(pathWithNoTrailingSlash.lastIndexOf('/') + 1);
     const f = <TableRow key={path}>
@@ -38,10 +38,10 @@ function Folder({folder, onFolderClick, sortData, selectedPath, onFileClick, onS
         </TableCell>
         <TableCell onClick={() => onFolderClick(path)} className='file-path'>
             {depthIndentation(pathWithNoTrailingSlash)}
-            <Icon name='folder'/>
+            {is_empty ? <Icon name='folder outline'/> : <Icon name='folder'/>}
             {name}
         </TableCell>
-        <TableCell>({folder['child_count']})</TableCell>
+        <TableCell/>
     </TableRow>;
     if (children && !_.isEmpty(children)) {
         // Folder has children, recursively display them.

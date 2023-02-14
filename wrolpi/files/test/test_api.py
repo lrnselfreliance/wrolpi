@@ -34,16 +34,16 @@ def test_list_files_api(test_client, make_files_structure, test_directory):
 
     # Requesting no directories results in the top-level results.
     expected = {
-        'archives/': {'path': 'archives/'},
-        'empty directory/': {'path': 'empty directory/'},
-        'videos/': {'path': 'videos/'}
+        'archives/': {'path': 'archives/', 'is_empty': False},
+        'empty directory/': {'path': 'empty directory/', 'is_empty': True},
+        'videos/': {'path': 'videos/', 'is_empty': False}
     }
     check_get_files([], expected)
     # empty directory is empty
     expected = {
-        'archives/': {'path': 'archives/'},
-        'empty directory/': {'path': 'empty directory/', 'children': {}},
-        'videos/': {'path': 'videos/'}
+        'archives/': {'path': 'archives/', 'is_empty': False},
+        'empty directory/': {'path': 'empty directory/', 'children': {}, 'is_empty': True},
+        'videos/': {'path': 'videos/', 'is_empty': False}
     }
     check_get_files(['empty directory'], expected)
 
@@ -53,11 +53,12 @@ def test_list_files_api(test_client, make_files_structure, test_directory):
             'children': {
                 'foo.txt': {'path': 'archives/foo.txt', 'size': 0, 'mimetype': 'inode/x-empty'},
                 'bar.txt': {'path': 'archives/bar.txt', 'size': 12, 'mimetype': 'text/plain'},
-                'baz/': {'path': 'archives/baz/'},
-            }
+                'baz/': {'path': 'archives/baz/', 'is_empty': False},
+            },
+            'is_empty': False,
         },
-        'empty directory/': {'path': 'empty directory/'},
-        'videos/': {'path': 'videos/'}
+        'empty directory/': {'path': 'empty directory/', 'is_empty': True},
+        'videos/': {'path': 'videos/', 'is_empty': False}
     }
     check_get_files(['archives'], expected)
 
@@ -73,12 +74,14 @@ def test_list_files_api(test_client, make_files_structure, test_directory):
                     'children': {
                         'bar.txt': {'path': 'archives/baz/bar.txt', 'size': 0, 'mimetype': 'inode/x-empty'},
                         'foo.txt': {'path': 'archives/baz/foo.txt', 'size': 0, 'mimetype': 'inode/x-empty'},
-                    }
+                    },
+                    'is_empty': False,
                 }
-            }
+            },
+            'is_empty': False
         },
-        'empty directory/': {'path': 'empty directory/'},
-        'videos/': {'path': 'videos/'},
+        'empty directory/': {'path': 'empty directory/', 'is_empty': True},
+        'videos/': {'path': 'videos/', 'is_empty': False},
     }
     check_get_files(['archives', 'archives/baz'], expected)
     # Requesting only a subdirectory also returns `archives` contents.
@@ -90,16 +93,17 @@ def test_list_files_api(test_client, make_files_structure, test_directory):
             'children': {
                 'foo.txt': {'path': 'archives/foo.txt', 'size': 0, 'mimetype': 'inode/x-empty'},
                 'bar.txt': {'path': 'archives/bar.txt', 'size': 12, 'mimetype': 'text/plain'},
-                'baz/': {'path': 'archives/baz/'},
-            }
+                'baz/': {'path': 'archives/baz/', 'is_empty': False},
+            }, 'is_empty': False
         },
-        'empty directory/': {'path': 'empty directory/'},
+        'empty directory/': {'path': 'empty directory/', 'is_empty': True},
         'videos/': {
             'path': 'videos/',
             'children': {
                 'other video.mp4': {'path': 'videos/other video.mp4', 'size': 0, 'mimetype': 'inode/x-empty'},
                 'some video.mp4': {'path': 'videos/some video.mp4', 'size': 0, 'mimetype': 'inode/x-empty'},
-            }
+            },
+            'is_empty': False
         }
     }
     check_get_files(['archives', 'videos'], expected)

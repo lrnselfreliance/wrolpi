@@ -25,20 +25,6 @@ def assert_files(session: Session, expected):
     assert files == set(expected)
 
 
-@pytest.mark.parametrize(
-    'directories,expected', [
-        ([Path('foo')], [Path('foo')]),
-        ([Path('foo'), Path('bar')], [Path('foo'), Path('bar')]),
-        ([Path('foo'), Path('foo/bar'), Path('baz')], [Path('foo/bar'), Path('baz')]),
-        ([Path('foo/bar'), Path('foo'), Path('baz')], [Path('foo/bar'), Path('baz')]),
-        ([Path('baz'), Path('foo/bar'), Path('foo')], [Path('baz'), Path('foo/bar')]),
-        ([Path('foo/bar'), Path('foo'), Path('foo/bar/baz')], [Path('foo/bar/baz')]),
-    ]
-)
-def test_filter_parent_directories(directories, expected):
-    assert lib.filter_parent_directories(directories) == expected
-
-
 def test_delete_file(make_files_structure, test_directory):
     """
     File in the media directory can be deleted.

@@ -41,7 +41,7 @@ __all__ = ['list_directories_contents', 'delete_file', 'split_path_stem_and_suff
            'split_file_name_words']
 
 
-@cachetools.func.ttl_cache(1000, 30.0)
+@cachetools.func.ttl_cache(10_000, 30.0)
 def _get_file_dict(file: pathlib.Path) -> Dict:
     media_directory = get_media_directory()
     return dict(
@@ -51,7 +51,7 @@ def _get_file_dict(file: pathlib.Path) -> Dict:
     )
 
 
-@cachetools.func.ttl_cache(1000, 30.0)
+@cachetools.func.ttl_cache(10_000, 30.0)
 def _get_directory_dict(directory: pathlib.Path) -> Dict:
     media_directory = get_media_directory()
     return dict(

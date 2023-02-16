@@ -158,7 +158,7 @@ class ChannelDownload extends React.Component {
 
         return <Form>
             <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
-            <Header as='h4'><Icon name='video'/> Channel / Playlist</Header>
+            <Header as='h4'><Icon name='film'/> Channel / Playlist</Header>
             <FormInput
                 required
                 label='URL'
@@ -392,7 +392,7 @@ export function DownloadMenu({onOpen, disabled}) {
             downloader='archive'/>,
         video: <Downloader
             clearSelected={clearSelected}
-            header={<><Icon name='video'/> Videos</>}
+            header={<><Icon name='film'/> Videos</>}
             downloader='video'
             withDestination={true}/>,
         video_channel: <ChannelDownload clearSelected={clearSelected}/>,

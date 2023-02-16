@@ -4,7 +4,7 @@ import React, {useContext, useState} from "react";
 import {StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
 import {FilesSearchView} from "./components/Files";
-import {Button, Header, Segment, Statistic, StatisticGroup} from "./components/Theme";
+import {Header, Segment, Statistic, StatisticGroup} from "./components/Theme";
 import {Link} from "react-router-dom";
 import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
 import {ProgressPlaceholder} from "./components/Placeholder";
@@ -12,7 +12,6 @@ import {Divider, Icon, Message} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {refreshFiles} from "./api";
 import _ from "lodash";
-import {toast} from "react-semantic-toasts-2";
 
 function FlagsMessages({flags}) {
     if (!flags) {

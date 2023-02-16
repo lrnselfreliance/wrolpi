@@ -88,7 +88,7 @@ function EbookCard({file}) {
 
 function ImageCard({file}) {
     const {s} = useContext(ThemeContext);
-    const {setPreviewPath} = React.useContext(FilePreviewContext);
+    const {setPreviewFile} = React.useContext(FilePreviewContext);
     const url = `/media/${encodeURIComponent(file.path)}`;
 
     let poster = <FileIcon file={file}/>;
@@ -97,7 +97,7 @@ function ImageCard({file}) {
         poster = <Image wrapped
                         src={url}
                         style={{position: 'relative', width: '100%'}}
-                        onClick={() => setPreviewPath(file)}
+                        onClick={() => setPreviewFile(file)}
         />
     }
 

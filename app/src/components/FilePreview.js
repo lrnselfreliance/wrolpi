@@ -63,15 +63,15 @@ function getVideoModal(path) {
 }
 
 export const FilePreviewContext = React.createContext({
-    previewPath: null, setPreviewPath: null, previewModal: null, setPreviewModal: null,
+    previewFile: null, setPreviewFile: null, previewModal: null, setPreviewModal: null,
 });
 
 export function FilePreviewWrapper({children}) {
-    const [previewPath, setPreviewPath] = React.useState(null);
+    const [previewFile, setPreviewFile] = React.useState(null);
     const [previewModal, setPreviewModal] = React.useState(null);
 
     const value = {
-        previewPath, setPreviewPath, previewModal, setPreviewModal,
+        previewFile, setPreviewFile, previewModal, setPreviewModal,
     };
 
     function setModalContent(content, url, downloadURL) {
@@ -85,38 +85,36 @@ export function FilePreviewWrapper({children}) {
                 {downloadURL &&
                     <SButton color='yellow' onClick={() => window.open(downloadURL)} floated='left'>Download</SButton>}
                 <SButton color='blue' onClick={() => window.open(url)}>Open</SButton>
-                <SButton onClick={() => setPreviewPath(null)}>Close</SButton>
+                <SButton onClick={() => setPreviewFile(null)}>Close</SButton>
             </ModalActions>
         </Modal>);
     }
 
     React.useEffect(() => {
         setPreviewModal(null);
-        if (previewPath && !_.isEmpty(previewPath)) {
-            const {mimetype, size} = previewPath;
-            console.debug(`useFilePreview path=${previewPath['path']} mimetype=${mimetype}`);
-            const url = getMediaPathURL(previewPath);
-            const downloadURL = getDownloadPathURL(previewPath);
+        if (previewFile && !_.isEmpty(previewFile)) {
+            const {mimetype, size} = previewFile;
+            console.debug(`useFilePreview path=${previewFile['path']} mimetype=${mimetype}`);
+            const url = getMediaPathURL(previewFile);
+            const downloadURL = getDownloadPathURL(previewFile);
             if (mimetype.startsWith('text/') && size >= 10000) {
                 // Large text files should be downloaded.
                 window.open(downloadURL);
             } else if (mimetype.startsWith('text/') || mimetype.startsWith('application/json')) {
-                setModalContent(getIframeModal(previewPath), url, downloadURL);
+                setModalContent(getIframeModal(previewFile), url, downloadURL);
             } else if (mimetype.startsWith('video/')) {
-                setModalContent(getVideoModal(previewPath), url, downloadURL);
+                setModalContent(getVideoModal(previewFile), url, downloadURL);
             } else if (mimetype.startsWith('application/epub')) {
-                const viewerURL = getEpubViewerURL(previewPath);
-                console.dir(previewPath);
-                console.log(viewerURL);
-                setModalContent(getEpubModal(previewPath), viewerURL, downloadURL);
+                const viewerURL = getEpubViewerURL(previewFile);
+                setModalContent(getEpubModal(previewFile), viewerURL, downloadURL);
             } else if (mimetype.startsWith('image/')) {
-                setModalContent(getImageModal(previewPath), url);
+                setModalContent(getImageModal(previewFile), url);
             } else {
                 // No special handler for this file type, just open it.
                 window.open(downloadURL);
             }
         }
-    }, [previewPath]);
+    }, [previewFile]);
 
     return <FilePreviewContext.Provider value={value}>
         {children}

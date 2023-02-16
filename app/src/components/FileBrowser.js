@@ -100,7 +100,7 @@ export function FileBrowser() {
         key: 'path', text: 'Path', sortBy: i => i['path'].toLowerCase()
     }, {key: 'size', text: 'Size', sortBy: 'size'},];
 
-    const {setPreviewPath} = React.useContext(FilePreviewContext);
+    const {setPreviewFile} = React.useContext(FilePreviewContext);
 
     const onSelect = (path) => {
         if (path.endsWith('/') && selectedPath === path) {
@@ -185,7 +185,7 @@ export function FileBrowser() {
                 key={i['key']}
                 path={i}
                 onFolderClick={onFolderClick}
-                onFileClick={(i) => setPreviewPath(i)}
+                onFileClick={(i) => setPreviewFile(i)}
                 sortData={sortData}
                 selectedPath={selectedPath}
                 onSelect={onSelect}

@@ -144,11 +144,11 @@ export function ExternalCardLink({to, ...props}) {
 
 export function PreviewLink({file, children, className, ...props}) {
     const {t} = useContext(ThemeContext);
-    const {setPreviewPath} = React.useContext(FilePreviewContext);
+    const {setPreviewFile} = React.useContext(FilePreviewContext);
     className = className ? `clickable ${className}` : `clickable `;
-    return <div className={className} onClick={() => setPreviewPath(file)} {...props} {...t}>
+    return <span className={className} onClick={() => setPreviewFile(file)} {...props} {...t}>
         {children}
-    </div>
+    </span>
 }
 
 export function RequiredAsterisk() {

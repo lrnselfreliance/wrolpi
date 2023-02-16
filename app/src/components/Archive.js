@@ -23,7 +23,8 @@ import {
     HelpHeader,
     isoDatetimeToString,
     mimetypeColor,
-    PageContainer, PreviewLink,
+    PageContainer,
+    PreviewLink,
     SearchInput,
     TabLinks,
     textEllipsis,
@@ -68,14 +69,14 @@ function ArchivePage() {
 
     const singlefileUrl = archive.singlefile_path ? `/media/${encodeURIComponent(archive.singlefile_path)}` : null;
     const screenshotUrl = archive.screenshot_path ? `/media/${encodeURIComponent(archive.screenshot_path)}` : null;
-    const readabilityUrl = archive.readability_path ? `/media/${encodeURIComponent(archive.readability_path)}` : null;
+    const readabilityUrl = archive.readability_path;
 
     const singlefileButton = <ExternalCardLink to={singlefileUrl}>
         <Button content='View' color='blue'/>
     </ExternalCardLink>;
 
     const readabilityLink = readabilityUrl ?
-        <ExternalCardLink to={readabilityUrl}><Button content='Article'/></ExternalCardLink> :
+        <PreviewLink file={{path: readabilityUrl, mimetype: 'text/html'}}><Button content='Article'/></PreviewLink> :
         <Button disabled content='Article'/>;
 
     const screenshot = screenshotUrl ?

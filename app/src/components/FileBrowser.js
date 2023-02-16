@@ -20,6 +20,7 @@ import _ from 'lodash';
 import {SortableTable} from "./SortableTable";
 import {useBrowseFiles} from "../hooks/customHooks";
 import {DirectoryRefreshButton, FilesRefreshButton} from "./Files";
+import {useFilePreview} from "./FilePreview";
 
 function depthIndentation(path) {
     // Repeated spaces for every folder a path is in.
@@ -36,13 +37,13 @@ function Folder({folder, onFolderClick, sortData, selectedPath, onFileClick, onS
         <TableCell collapsing>
             <Checkbox checked={selectedPath === folder['path']} onChange={() => onSelect(folder['path'])}/>
         </TableCell>
-        <TableCell onClick={() => onFolderClick(path)} className='file-path' colSpan={2}>
+        <TableCell onClick={() => onFolderClick(path)} className='file-path' colSpan={2} disabled={is_empty}>
             {depthIndentation(pathWithNoTrailingSlash)}
             {is_empty ? <Icon name='folder outline'/> : <Icon name='folder'/>}
             {name}
         </TableCell>
     </TableRow>;
-    if (children && !_.isEmpty(children)) {
+    if (children) {
         // Folder has children, recursively display them.
         children = sortData(children);
         let childPaths = [];
@@ -112,51 +113,7 @@ export function FileBrowser() {
         key: 'path', text: 'Path', sortBy: i => i['path'].toLowerCase()
     }, {key: 'size', text: 'Size', sortBy: 'size'},];
 
-    const [modal, setModal] = React.useState(null);
-    const onFileClick = (path) => {
-        const {mimetype} = path;
-        const url = `/media/${path['path']}`;
-        let modalBody;
-        if (mimetype === 'text/plain' || mimetype === 'text/html') {
-            modalBody = <ModalContent>
-                <div className='full-height'>
-                    <iframe title='textModal' src={url}
-                            style={{
-                                height: '100%',
-                                width: '100%',
-                                border: 'none',
-                                position: 'absolute',
-                                top: 0,
-                            }}/>
-                </div>
-            </ModalContent>;
-        } else if (mimetype.startsWith('image/')) {
-            modalBody = <ModalContent>
-                <a href={url}>
-                    <Image src={url}/>
-                </a>
-            </ModalContent>;
-        }
-
-        if (modalBody) {
-            // Create modal that will instantly display the file.
-            setModal(<Modal closeIcon
-                            size='fullscreen'
-                            open={true}
-                            onClose={() => setModal(null)}
-            >
-                {modalBody}
-                <ModalActions>
-                    <SButton color='blue' onClick={() => window.open(url)}>Open</SButton>
-                    <SButton onClick={() => setModal(null)}>Close</SButton>
-                </ModalActions>
-            </Modal>)
-        } else {
-            // No special handler for this file type, just open it.
-            setModal(null);
-            window.open(url);
-        }
-    }
+    const {modal, setPath} = useFilePreview();
 
     const onSelect = (path) => {
         if (path.endsWith('/') && selectedPath === path) {
@@ -241,7 +198,7 @@ export function FileBrowser() {
                 key={i['key']}
                 path={i}
                 onFolderClick={onFolderClick}
-                onFileClick={onFileClick}
+                onFileClick={(i) => setPath(i)}
                 sortData={sortData}
                 selectedPath={selectedPath}
                 onSelect={onSelect}

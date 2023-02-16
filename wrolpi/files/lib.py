@@ -37,12 +37,13 @@ except ImportError:
 logger = logger.getChild(__name__)
 
 __all__ = ['list_directories_contents', 'delete_file', 'split_path_stem_and_suffix', 'refresh_files', 'search_files',
-           'get_mimetype',
-           'split_file_name_words']
+           'get_mimetype', 'split_file_name_words']
 
 
 @cachetools.func.ttl_cache(10_000, 30.0)
-def _get_file_dict(file: pathlib.Path) -> Dict:
+def _get_file_dict(file: pathlib.Path,
+                   directories_cache: str,  # Used to cache by requested directories.
+                   ) -> Dict:
     media_directory = get_media_directory()
     return dict(
         path=file.relative_to(media_directory),
@@ -52,7 +53,9 @@ def _get_file_dict(file: pathlib.Path) -> Dict:
 
 
 @cachetools.func.ttl_cache(10_000, 30.0)
-def _get_directory_dict(directory: pathlib.Path) -> Dict:
+def _get_directory_dict(directory: pathlib.Path,
+                        directories_cache: str,  # Used to cache by requested directories.
+                        ) -> Dict:
     media_directory = get_media_directory()
     return dict(
         path=f'{directory.relative_to(media_directory)}/',
@@ -61,16 +64,17 @@ def _get_directory_dict(directory: pathlib.Path) -> Dict:
 
 
 def _get_recursive_directory_dict(directory: pathlib.Path, directories: List[pathlib.Path]) -> Dict:
-    d = _get_directory_dict(directory)
+    directories_cache = str(sorted(directories))
+    d = _get_directory_dict(directory, directories_cache)
     if directory in directories:
         children = dict()
         for path in directory.iterdir():
             if path.is_dir() and path in directories:
                 children[f'{path.name}/'] = _get_recursive_directory_dict(path, directories)
             elif path.is_dir():
-                children[f'{path.name}/'] = _get_directory_dict(path)
+                children[f'{path.name}/'] = _get_directory_dict(path, directories_cache)
             else:
-                children[path.name] = _get_file_dict(path)
+                children[path.name] = _get_file_dict(path, directories_cache)
         d['children'] = children
     return d
 
@@ -101,7 +105,7 @@ def list_directories_contents(directories_: List[str]) -> Dict:
         if path.is_dir():
             paths[f'{path.name}/'] = _get_recursive_directory_dict(path, directories)
         else:
-            paths[path.name] = _get_file_dict(path)
+            paths[path.name] = _get_file_dict(path, str(directories))
 
     return paths
 

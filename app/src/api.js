@@ -520,6 +520,7 @@ export async function refreshDirectoryFiles(directory) {
 }
 
 export async function getFiles(directories) {
+    console.debug(`getFiles ${directories}`);
     let body = {directories: directories || []};
     let response = await apiPost(`${API_URI}/files`, body);
     let {files} = await response.json();

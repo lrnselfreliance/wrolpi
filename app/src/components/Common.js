@@ -606,6 +606,16 @@ export function mimetypeColor(mimetype) {
     return 'grey'
 }
 
+export function isZipMimetype(mimetype) {
+    return mimetype.startsWith('application/zip')
+        || mimetype.startsWith('application/zlib')
+        || mimetype.startsWith('application/x-7z-compressed')
+        || mimetype.startsWith('application/x-bzip2')
+        || mimetype.startsWith('application/x-xz')
+        || mimetype.startsWith('application/gzip')
+        || mimetype.startsWith('application/x-rar');
+}
+
 export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
     // Default to a grey file icon.
     const {mimetype, path} = file;
@@ -623,7 +633,9 @@ export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
             props['name'] = 'image';
         } else if (mimetype.startsWith('video/')) {
             props['name'] = 'film';
-        } else if (mimetype.startsWith('application/zip') || mimetype.startsWith('application/zlib') || mimetype.startsWith('application/x-7z-compressed') || mimetype.startsWith('application/x-bzip2') || mimetype.startsWith('application/x-xz')) {
+        } else if (mimetype.startsWith('message/rfc822')) {
+            props['name'] = 'mail';
+        } else if (isZipMimetype(mimetype)) {
             props['name'] = 'file archive';
         } else if (mimetype.startsWith('application/x-iso9660-image')) {
             props['name'] = 'dot circle';
@@ -631,8 +643,12 @@ export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
             props['name'] = 'book';
         } else if (mimetype.startsWith('text/vtt') || mimetype.startsWith('text/srt')) {
             props['name'] = 'closed captioning';
+        } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.dmg')) {
+            props['name'] = 'apple';
         } else if (mimetype.startsWith('application/octet-stream') && (lowerPath.endsWith('.stl') || lowerPath.endsWith('.blend'))) {
             props['name'] = 'cube';
+        } else if (mimetype.startsWith('application/x-dosexec') || mimetype.startsWith('application/x-msi')) {
+            props['name'] = 'microsoft';
         }
     }
     return <Icon disabled={disabled} size={size} {...props}/>

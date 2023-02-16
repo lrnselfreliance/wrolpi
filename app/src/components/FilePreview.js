@@ -66,6 +66,8 @@ export const FilePreviewContext = React.createContext({
     previewFile: null, setPreviewFile: null, previewModal: null, setPreviewModal: null,
 });
 
+const MAXIMUM_TEXT_SIZE = 5_000_000;
+
 export function FilePreviewWrapper({children}) {
     const [previewFile, setPreviewFile] = React.useState(null);
     const [previewModal, setPreviewModal] = React.useState(null);
@@ -102,7 +104,7 @@ export function FilePreviewWrapper({children}) {
             console.debug(`useFilePreview path=${previewFile['path']} mimetype=${mimetype}`);
             const url = getMediaPathURL(previewFile);
             const downloadURL = getDownloadPathURL(previewFile);
-            if (mimetype.startsWith('text/') && size >= 10000) {
+            if (mimetype.startsWith('text/') && size > MAXIMUM_TEXT_SIZE) {
                 // Large text files should be downloaded.
                 window.open(downloadURL);
             } else if (mimetype.startsWith('text/') || mimetype.startsWith('application/json')) {

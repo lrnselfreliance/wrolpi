@@ -13,7 +13,6 @@ import {
 } from "semantic-ui-react";
 import {
     CardGroupCentered,
-    CardLink,
     CardPosterLink,
     cardTitleWrapper,
     ExternalCardLink,
@@ -182,25 +181,22 @@ function ImageRowCells({file}) {
     }
 
     // Fragment for SelectableRow
-    return (<React.Fragment>
+    return <React.Fragment>
         <TableCell>
             <center>
                 {poster}
             </center>
         </TableCell>
         <TableCell>
-            <ExternalCardLink to={url}>
+            <PreviewLink file={file}>
                 <p>{textEllipsis(file.title || file.stem || file.path)}</p>
-            </ExternalCardLink>
+            </PreviewLink>
         </TableCell>
-    </React.Fragment>)
+    </React.Fragment>
 }
 
 export function EbookRowCells({file}) {
     const {ebook} = file;
-
-    const downloadUrl = `/download/${encodeURIComponent(file.path)}`;
-    const viewerUrl = file['mimetype'].startsWith('application/epub') ? `/epub.html?url=${downloadUrl}` : null;
 
     let cover = <CardIcon><FileIcon file={file}/></CardIcon>;
     if (ebook && ebook.cover_path) {
@@ -209,16 +205,16 @@ export function EbookRowCells({file}) {
     }
 
     // Fragment for SelectableRow
-    return (<React.Fragment>
+    return <React.Fragment>
         <TableCell>
             <center>{cover}</center>
         </TableCell>
         <TableCell>
-            <CardLink to={viewerUrl || downloadUrl} newTab={true}>
+            <PreviewLink file={file}>
                 {textEllipsis(ebook.title || file.title)}
-            </CardLink>
+            </PreviewLink>
         </TableCell>
-    </React.Fragment>)
+    </React.Fragment>
 }
 
 function FileRow({file}) {
@@ -235,15 +231,14 @@ function FileRow({file}) {
     } else if (isEbookType) {
         return <EbookRowCells key={file['path']} file={file}/>;
     }
-    const onDownloadFile = async () => window.open(`/media/${file.key}`);
 
     // Fragment for SelectableRow
     return <React.Fragment>
         <TableCell>
             <center><FileIcon file={file} size='large'/></center>
         </TableCell>
-        <TableCell onClick={() => onDownloadFile()}>
-            {textEllipsis(file.title)}
+        <TableCell>
+            <PreviewLink file={file}>{textEllipsis(file.title)}</PreviewLink>
         </TableCell>
     </React.Fragment>
 }

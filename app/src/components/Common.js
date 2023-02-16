@@ -607,13 +607,7 @@ export function mimetypeColor(mimetype) {
 }
 
 export function isZipMimetype(mimetype) {
-    return mimetype.startsWith('application/zip')
-        || mimetype.startsWith('application/zlib')
-        || mimetype.startsWith('application/x-7z-compressed')
-        || mimetype.startsWith('application/x-bzip2')
-        || mimetype.startsWith('application/x-xz')
-        || mimetype.startsWith('application/gzip')
-        || mimetype.startsWith('application/x-rar');
+    return mimetype.startsWith('application/zip') || mimetype.startsWith('application/zlib') || mimetype.startsWith('application/x-7z-compressed') || mimetype.startsWith('application/x-bzip2') || mimetype.startsWith('application/x-xz') || mimetype.startsWith('application/gzip') || mimetype.startsWith('application/x-rar');
 }
 
 export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
@@ -645,7 +639,7 @@ export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
             props['name'] = 'closed captioning';
         } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.dmg')) {
             props['name'] = 'apple';
-        } else if (mimetype.startsWith('application/octet-stream') && (lowerPath.endsWith('.stl') || lowerPath.endsWith('.blend'))) {
+        } else if (mimetype.startsWith('application/x-openscad') || (mimetype.startsWith('application/octet-stream') && (lowerPath.endsWith('.stl') || lowerPath.endsWith('.blend')))) {
             props['name'] = 'cube';
         } else if (mimetype.startsWith('application/x-dosexec') || mimetype.startsWith('application/x-msi')) {
             props['name'] = 'microsoft';

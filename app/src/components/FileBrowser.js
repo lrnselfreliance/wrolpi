@@ -1,18 +1,5 @@
 import {Button, Icon, Placeholder} from "./Theme";
-import {
-    Button as SButton,
-    Checkbox,
-    Confirm,
-    Image,
-    Modal,
-    ModalActions,
-    ModalContent,
-    PlaceholderLine,
-    TableCell,
-    TableFooter,
-    TableHeaderCell,
-    TableRow
-} from "semantic-ui-react";
+import {Checkbox, Confirm, PlaceholderLine, TableCell, TableFooter, TableHeaderCell, TableRow} from "semantic-ui-react";
 import {FileIcon, humanFileSize} from "./Common";
 import React from "react";
 import {deleteFile} from "../api";
@@ -20,7 +7,7 @@ import _ from 'lodash';
 import {SortableTable} from "./SortableTable";
 import {useBrowseFiles} from "../hooks/customHooks";
 import {DirectoryRefreshButton, FilesRefreshButton} from "./Files";
-import {useFilePreview} from "./FilePreview";
+import {FilePreviewContext} from "./FilePreview";
 
 function depthIndentation(path) {
     // Repeated spaces for every folder a path is in.
@@ -113,7 +100,7 @@ export function FileBrowser() {
         key: 'path', text: 'Path', sortBy: i => i['path'].toLowerCase()
     }, {key: 'size', text: 'Size', sortBy: 'size'},];
 
-    const {modal, setPath} = useFilePreview();
+    const {setPreviewPath} = React.useContext(FilePreviewContext);
 
     const onSelect = (path) => {
         if (path.endsWith('/') && selectedPath === path) {
@@ -198,13 +185,12 @@ export function FileBrowser() {
                 key={i['key']}
                 path={i}
                 onFolderClick={onFolderClick}
-                onFileClick={(i) => setPath(i)}
+                onFileClick={(i) => setPreviewPath(i)}
                 sortData={sortData}
                 selectedPath={selectedPath}
                 onSelect={onSelect}
             />}
             footer={footer}
         />
-        {modal}
     </>
 }

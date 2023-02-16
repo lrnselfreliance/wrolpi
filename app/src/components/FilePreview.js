@@ -1,4 +1,4 @@
-import React, {useEffect} from "react";
+import React from "react";
 import _ from "lodash";
 import {Button as SButton, Image, Modal, ModalActions, ModalContent} from "semantic-ui-react";
 
@@ -11,7 +11,7 @@ function getDownloadPathURL(path) {
 }
 
 function getEpubViewerURL(path) {
-    return `/epub.html?url=${getDownloadPathURL(path)}`;
+    return `/epub.html?url=download/${encodeURIComponent(path['path'])}`;
 }
 
 function getIframeModal(path) {
@@ -62,51 +62,64 @@ function getVideoModal(path) {
     </ModalContent>
 }
 
-export function useFilePreview() {
-    const [path, setPath] = React.useState(null);
-    const [modal, setModal] = React.useState(null);
+export const FilePreviewContext = React.createContext({
+    previewPath: null, setPreviewPath: null, previewModal: null, setPreviewModal: null,
+});
+
+export function FilePreviewWrapper({children}) {
+    const [previewPath, setPreviewPath] = React.useState(null);
+    const [previewModal, setPreviewModal] = React.useState(null);
+
+    const value = {
+        previewPath, setPreviewPath, previewModal, setPreviewModal,
+    };
 
     function setModalContent(content, url, downloadURL) {
-        setModal(<Modal closeIcon
-                        size='fullscreen'
-                        open={true}
-                        onClose={() => setModal(null)}
+        setPreviewModal(<Modal closeIcon
+                               size='fullscreen'
+                               open={true}
+                               onClose={() => setPreviewModal(null)}
         >
             {content}
             <ModalActions>
                 {downloadURL &&
                     <SButton color='yellow' onClick={() => window.open(downloadURL)} floated='left'>Download</SButton>}
                 <SButton color='blue' onClick={() => window.open(url)}>Open</SButton>
-                <SButton onClick={() => setPath(null)}>Close</SButton>
+                <SButton onClick={() => setPreviewPath(null)}>Close</SButton>
             </ModalActions>
         </Modal>);
     }
 
-    useEffect(() => {
-        setModal(null);
-        if (path && !_.isEmpty(path)) {
-            const {mimetype, size} = path;
-            console.debug(`useFilePreview path=${path['path']} mimetype=${mimetype}`);
-            const url = getMediaPathURL(path);
-            const downloadURL = getDownloadPathURL(path);
+    React.useEffect(() => {
+        setPreviewModal(null);
+        if (previewPath && !_.isEmpty(previewPath)) {
+            const {mimetype, size} = previewPath;
+            console.debug(`useFilePreview path=${previewPath['path']} mimetype=${mimetype}`);
+            const url = getMediaPathURL(previewPath);
+            const downloadURL = getDownloadPathURL(previewPath);
             if (mimetype.startsWith('text/') && size >= 10000) {
                 // Large text files should be downloaded.
                 window.open(downloadURL);
             } else if (mimetype.startsWith('text/') || mimetype.startsWith('application/json')) {
-                setModalContent(getIframeModal(path), url, downloadURL);
+                setModalContent(getIframeModal(previewPath), url, downloadURL);
             } else if (mimetype.startsWith('video/')) {
-                setModalContent(getVideoModal(path), url, downloadURL);
+                setModalContent(getVideoModal(previewPath), url, downloadURL);
             } else if (mimetype.startsWith('application/epub')) {
-                const viewerURL = getEpubViewerURL(path);
-                setModalContent(getEpubModal(path), viewerURL, downloadURL);
+                const viewerURL = getEpubViewerURL(previewPath);
+                console.dir(previewPath);
+                console.log(viewerURL);
+                setModalContent(getEpubModal(previewPath), viewerURL, downloadURL);
             } else if (mimetype.startsWith('image/')) {
-                setModalContent(getImageModal(path), url);
+                setModalContent(getImageModal(previewPath), url);
             } else {
                 // No special handler for this file type, just open it.
                 window.open(downloadURL);
             }
         }
-    }, [path]);
+    }, [previewPath]);
 
-    return {modal, setPath};
+    return <FilePreviewContext.Provider value={value}>
+        {children}
+        {previewModal}
+    </FilePreviewContext.Provider>
 }

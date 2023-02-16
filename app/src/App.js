@@ -18,6 +18,7 @@ import {Dashboard} from "./Dashboard";
 import {Donate} from "./components/Donate";
 import {useEventsInterval} from "./Events";
 import {SemanticToastContainer} from "react-semantic-toasts-2";
+import {FilePreviewWrapper} from "./components/FilePreview";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);
@@ -78,13 +79,16 @@ export default function App() {
     useEventsInterval();
 
     return <ThemeWrapper>
-        {/* Context and style to handle switching between mobile/computer. */}
-        <style>{mediaStyles}</style>
-        <SemanticToastContainer position='top-right'/>
-        <MediaContextProvider>
-            <StatusContext.Provider value={status}>
-                <RouterProvider router={router}/>
-            </StatusContext.Provider>
-        </MediaContextProvider>
+        <FilePreviewWrapper>
+            {/* Context and style to handle switching between mobile/computer. */}
+            <style>{mediaStyles}</style>
+            {/* Toasts can be on any page. */}
+            <SemanticToastContainer position='top-right'/>
+            <MediaContextProvider>
+                <StatusContext.Provider value={status}>
+                    <RouterProvider router={router}/>
+                </StatusContext.Provider>
+            </MediaContextProvider>
+        </FilePreviewWrapper>
     </ThemeWrapper>
 }

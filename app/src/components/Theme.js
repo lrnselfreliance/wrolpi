@@ -78,11 +78,6 @@ export function ThemeWrapper({children, ...props}) {
         }
     }
 
-    const setSystemTheme = () => {
-        console.debug('setSystemTheme');
-        saveTheme(systemTheme);
-    }
-
     const saveTheme = (value) => {
         setSavedTheme(value);
         localStorage.setItem(themeSessionKey, value);
@@ -141,7 +136,6 @@ export function ThemeWrapper({children, ...props}) {
         savedTheme,
         setDarkTheme,
         setLightTheme,
-        setSystemTheme,
         cycleSavedTheme,
     };
 
@@ -288,9 +282,16 @@ export function TextArea(props) {
     return <TEXTAREA {...props}/>
 }
 
-export function CardIcon(props) {
+export function CardIcon({onClick, ...props}) {
     const {inverted} = useContext(ThemeContext);
-    return <center className={`card-icon ${inverted}`} {...props}/>
+    const cardIcon = <center className={`card-icon ${inverted}`} {...props}/>;
+    if (onClick) {
+        return <div onClick={onClick} className='clickable'>
+            {cardIcon}
+        </div>
+    } else {
+        return cardIcon;
+    }
 }
 
 export function Card({color, ...props}) {

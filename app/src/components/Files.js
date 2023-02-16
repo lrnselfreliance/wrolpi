@@ -1,15 +1,12 @@
 import React, {useContext} from "react";
 import {
-    Button as SButton,
     CardContent,
     CardDescription,
     CardHeader,
     CardMeta,
     Container,
     Dropdown,
-    Header as SHeader,
     Image,
-    Modal,
     PlaceholderLine,
     TableCell,
     TableHeaderCell,
@@ -26,6 +23,7 @@ import {
     mimetypeColor,
     PageContainer,
     Paginator,
+    PreviewLink,
     textEllipsis,
     useTitle
 } from "./Common";
@@ -42,6 +40,7 @@ import _ from 'lodash';
 import {FileBrowser} from "./FileBrowser";
 import {refreshDirectoryFiles, refreshFiles} from "../api";
 import {useSubscribeEventName} from "../Events";
+import {FilePreviewContext} from "./FilePreview";
 
 
 export function FilesPage() {
@@ -58,51 +57,19 @@ function EbookCard({file}) {
     const isEpub = file['mimetype'].startsWith('application/epub');
     const viewerUrl = isEpub ? `/epub.html?url=${downloadUrl}` : null;
 
-    let cover = <CardIcon><FileIcon file={file}/></CardIcon>;
+    let cover = <FileIcon file={file}/>;
     if (ebook && ebook.cover_path) {
         const coverSrc = `/media/${encodeURIComponent(ebook.cover_path)}`;
-        cover = <CardPosterLink to={viewerUrl || downloadUrl} poster_url={coverSrc} external={true}/>;
+        cover = <CardPosterLink poster_url={coverSrc}/>;
     }
 
     suffix = suffix ? _.trimStart(suffix, '.').toUpperCase() : null;
 
-    const downloadButton = <ExternalCardLink to={downloadUrl}>
-        <SButton
-            icon='download'
-            content='Download'
-            labelPosition='left'/>
-    </ExternalCardLink>;
-
-    const detailsButton = <Button
-        icon='file alternate'
-        content='Details'
-        labelPosition='left'
-        disabled={!ebook}
-        onClick={() => setDetailsOpen(true)}
-    />;
-    const [detailsOpen, setDetailsOpen] = React.useState(false);
-    const detailsModal = <Modal closeIcon
-                                open={detailsOpen}
-                                onClose={() => setDetailsOpen(false)}
-                                trigger={detailsButton}
-    >
-        <Modal.Header><SHeader as='h1'>{ebook.title || file.title}</SHeader></Modal.Header>
-        <Modal.Content>
-            <SHeader as='h3'>Author: {ebook.creator}</SHeader>
-            <p>{humanFileSize(ebook.size)}</p>
-            <SHeader as='h5'>eBook Path</SHeader>
-            <pre>{ebook ? ebook.ebook_path : file.path}</pre>
-            <SHeader as='h5'>Cover Path</SHeader>
-            <pre>{ebook && ebook.cover_path ? ebook.cover_path : 'N/A'}</pre>
-        </Modal.Content>
-        <Modal.Actions>
-            {downloadButton}
-        </Modal.Actions>
-    </Modal>;
-
     const color = mimetypeColor(file.mimetype);
     return <Card color={color}>
-        {cover}
+        <PreviewLink file={file}>
+            {cover}
+        </PreviewLink>
         <CardContent {...s}>
             <CardHeader>
                 <Container textAlign='left'>
@@ -113,7 +80,6 @@ function EbookCard({file}) {
             </CardHeader>
             <CardMeta>
                 <pre {...s}>{suffix}</pre>
-                {detailsModal}
             </CardMeta>
         </CardContent>
     </Card>
@@ -122,21 +88,23 @@ function EbookCard({file}) {
 
 function ImageCard({file}) {
     const {s} = useContext(ThemeContext);
+    const {setPreviewPath} = React.useContext(FilePreviewContext);
     const url = `/media/${encodeURIComponent(file.path)}`;
 
-    let poster = <CardIcon><FileIcon file={file}/></CardIcon>;
+    let poster = <FileIcon file={file}/>;
     if (file.size && file.size < 50000000) {
         // Image is less than 5mb, use it.
         poster = <Image wrapped
                         src={url}
                         style={{position: 'relative', width: '100%'}}
-        />;
+                        onClick={() => setPreviewPath(file)}
+        />
     }
 
     return <Card color={mimetypeColor(file.mimetype)}>
-        <ExternalCardLink to={url}>
+        <PreviewLink file={file}>
             {poster}
-        </ExternalCardLink>
+        </PreviewLink>
         <CardContent {...s}>
             <CardHeader>
                 <ExternalCardLink to={url} className='no-link-underscore card-link'>
@@ -170,19 +138,19 @@ function FileCard({file}) {
         return <EbookCard key={file['path']} file={file}/>;
     }
 
-    const url = `/download/${encodeURIComponent(file.path)}`;
+    const downloadUrl = `/download/${encodeURIComponent(file.path)}`;
     const color = mimetypeColor(file.mimetype);
     const size = file.size !== null && file.size !== undefined ? humanFileSize(file.size) : null;
 
     return <Card color={color}>
-        <ExternalCardLink to={url}>
+        <PreviewLink file={file}>
             <CardIcon>
                 <FileIcon file={file}/>
             </CardIcon>
-        </ExternalCardLink>
+        </PreviewLink>
         <CardContent {...s}>
             <CardHeader>
-                <ExternalCardLink to={url}>
+                <ExternalCardLink to={downloadUrl}>
                     {cardTitleWrapper(file.title || file.stem || file.path)}
                 </ExternalCardLink>
             </CardHeader>

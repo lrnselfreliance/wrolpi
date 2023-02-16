@@ -1,7 +1,6 @@
 import React, {useContext} from 'react';
 import {Divider, SegmentGroup, StatisticLabel, StatisticValue} from "semantic-ui-react";
 import {Link, Route, Routes} from "react-router-dom";
-import "../static/wrolpi.css";
 import {decryptOTP, encryptOTP} from "../api";
 import {humanFileSize, mimetypeColor, PageContainer, toLocaleString, useTitle} from "./Common";
 import {ThemeContext} from "../contexts/contexts";

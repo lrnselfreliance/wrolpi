@@ -5,6 +5,7 @@ import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDirectories, useDownloaders, useHotspot, useSettings, useThrottle} from "../hooks/customHooks";
 import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
 import {Button, darkTheme, Form, Header, Icon, lightTheme, Menu, Popup, Statistic} from "./Theme";
+import {FilePreviewContext} from "./FilePreview";
 
 export const API_URI = process.env && process.env.REACT_APP_API_URI ? process.env.REACT_APP_API_URI : `${window.location.protocol}//${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -139,6 +140,15 @@ export function ExternalCardLink({to, ...props}) {
     return <a href={to} target='_blank' rel='noopener noreferrer' className='no-link-underscore card-link' {...t}>
         {props.children}
     </a>
+}
+
+export function PreviewLink({file, children, className, ...props}) {
+    const {t} = useContext(ThemeContext);
+    const {setPreviewPath} = React.useContext(FilePreviewContext);
+    className = className ? `clickable ${className}` : `clickable `;
+    return <div className={className} onClick={() => setPreviewPath(file)} {...props} {...t}>
+        {children}
+    </div>
 }
 
 export function RequiredAsterisk() {
@@ -436,14 +446,16 @@ export function CardPosterLink({to, poster_url, imageLabel, external = false}) {
                          style={{maxHeight: '163px', width: 'auto'}}
     />;
     if (external === true) {
-        return <a href={to} target='_blank' style={style}>
+        return <a href={to} target='_blank' rel='noreferrer' style={style}>
             {image}
         </a>
-    } else {
+    } else if (to) {
         // Link using React Router.
         return <Link to={to} style={style}>
             {image}
         </Link>
+    } else {
+        return <div style={style}>{image}</div>;
     }
 }
 

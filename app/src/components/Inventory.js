@@ -1,5 +1,4 @@
 import React, {useContext, useState} from 'react';
-import "../static/wrolpi.css";
 import {
     deleteInventory,
     deleteItems,

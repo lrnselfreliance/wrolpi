@@ -92,6 +92,11 @@ export function FilePreviewWrapper({children}) {
 
     React.useEffect(() => {
         setPreviewModal(null);
+        if (previewFile && !_.isObject(previewFile)) {
+            console.error(`Unknown previewFile type: ${typeof previewFile}`);
+            return;
+        }
+
         if (previewFile && !_.isEmpty(previewFile)) {
             const {mimetype, size} = previewFile;
             console.debug(`useFilePreview path=${previewFile['path']} mimetype=${mimetype}`);

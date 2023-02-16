@@ -617,7 +617,7 @@ export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
     props['name'] = 'file';
     props['color'] = mimetypeColor(mimetype);
     if (mimetype) {
-        if (mimetype.startsWith('text/html') || mimetype.startsWith('application/json') || mimetype.startsWith('text/yaml')) {
+        if (mimetype.startsWith('text/html') || mimetype.startsWith('application/json') || mimetype.startsWith('text/yaml') || mimetype.startsWith('text/xml')) {
             props['name'] = 'file code';
         } else if (mimetype.startsWith('application/pdf')) {
             props['name'] = 'file pdf';
@@ -633,16 +633,22 @@ export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
             props['name'] = 'file archive';
         } else if (mimetype.startsWith('application/x-iso9660-image')) {
             props['name'] = 'dot circle';
-        } else if (mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook')) {
+        } else if (mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook') || mimetype.startsWith('application/vnd.amazon.mobi8-ebook')) {
             props['name'] = 'book';
         } else if (mimetype.startsWith('text/vtt') || mimetype.startsWith('text/srt')) {
             props['name'] = 'closed captioning';
-        } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.dmg')) {
-            props['name'] = 'apple';
-        } else if (mimetype.startsWith('application/x-openscad') || (mimetype.startsWith('application/octet-stream') && (lowerPath.endsWith('.stl') || lowerPath.endsWith('.blend')))) {
-            props['name'] = 'cube';
         } else if (mimetype.startsWith('application/x-dosexec') || mimetype.startsWith('application/x-msi')) {
             props['name'] = 'microsoft';
+        } else if (mimetype.startsWith('application/octet-stream')) {
+            if (lowerPath.endsWith('.stl')) {
+                props['name'] = 'cube';
+            } else if (lowerPath.endsWith('.blend')) {
+                props['name'] = 'cube';
+            } else if (lowerPath.endsWith('.dmg')) {
+                props['name'] = 'apple';
+            } else if (lowerPath.endsWith('.azw3')) {
+                props['name'] = 'book';
+            }
         }
     }
     return <Icon disabled={disabled} size={size} {...props}/>

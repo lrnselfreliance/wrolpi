@@ -153,6 +153,8 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
             return 'text/srt'
         if suffix.endswith('.yaml') or suffix.endswith('.yml'):
             return 'text/yaml'
+        if suffix.endswith('.azw3'):
+            return 'application/vnd.amazon.mobi8-ebook'
     return mimetype
 
 

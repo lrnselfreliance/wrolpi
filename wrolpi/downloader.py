@@ -344,7 +344,6 @@ class DownloadManager:
                 return
 
             if now() - last_heartbeat > self.worker_alive_frequency:
-                worker_logger.debug("I'm alive")
                 last_heartbeat = now()
 
             disabled = self.disabled.is_set()

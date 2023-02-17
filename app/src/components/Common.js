@@ -440,12 +440,10 @@ export function CardGroupCentered(props) {
 export function CardPosterLink({to, poster_url, imageLabel, external = false}) {
     const {s} = useContext(ThemeContext);
     const style = {display: 'flex', justifyContent: 'center', ...s['style']};
-    const image = <Image fluid
-                         src={poster_url}
-                         label={imageLabel}
+    const image = <img src={poster_url} alt={imageLabel}
                          style={{maxHeight: '163px', width: 'auto'}}
     />;
-    if (external === true) {
+    if (external === true && to) {
         return <a href={to} target='_blank' rel='noreferrer' style={style}>
             {image}
         </a>

@@ -94,6 +94,7 @@ export function FilePreviewWrapper({children}) {
 
     React.useEffect(() => {
         setPreviewModal(null);
+        console.log(previewFile);
         if (previewFile && !_.isObject(previewFile)) {
             console.error(`Unknown previewFile type: ${typeof previewFile}`);
             return;

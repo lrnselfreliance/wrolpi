@@ -2,7 +2,15 @@ import React, {useContext, useState} from 'react';
 import {deleteVideos} from "../api";
 import {Link, useNavigate, useParams} from "react-router-dom";
 import _ from "lodash";
-import {BackButton, humanFileSize, humanNumber, isoDatetimeToString, PageContainer, useTitle} from "./Common";
+import {
+    BackButton,
+    humanFileSize,
+    humanNumber,
+    isoDatetimeToString,
+    PageContainer,
+    PreviewPath,
+    useTitle
+} from "./Common";
 import {Confirm} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
@@ -136,13 +144,19 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
             {videoFileLink(video['video_path'])}
 
             <h4>Info JSON File</h4>
-            {videoFileLink(video['info_json_path'])}
+            <PreviewPath
+                path={video['info_json_path']}
+                mimetype='application/json'>{video['info_json_path']}</PreviewPath>
 
             <h4>Caption File</h4>
-            {videoFileLink(video['caption_path'])}
+            <PreviewPath
+                path={video['caption_path']}
+                mimetype='text/'>{video['caption_path']}</PreviewPath>
 
             <h4>Poster File</h4>
-            {videoFileLink(video['poster_path'])}
+            <PreviewPath
+                path={video['poster_path']}
+                mimetype='image/'>{video['poster_path']}</PreviewPath>
 
             <h4>Directory</h4>
             {videoFileLink(videoFile['directory'], true)}

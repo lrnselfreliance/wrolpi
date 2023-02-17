@@ -151,6 +151,10 @@ export function PreviewLink({file, children, className, ...props}) {
     </span>
 }
 
+export function PreviewPath({path, mimetype, ...props}) {
+    return <PreviewLink file={{path, mimetype}} {...props}/>
+}
+
 export function RequiredAsterisk() {
     return <span style={{color: '#db2828'}}> *</span>
 }

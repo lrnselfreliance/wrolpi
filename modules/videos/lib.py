@@ -377,20 +377,25 @@ def save_channels_config(session=None, preserve_favorites: bool = True):
     channels_config.update(config)
 
 
+channel_import_logger = logger.getChild('channel_import')
+
+
 @before_startup
 @register_after_refresh
 def import_channels_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
     if PYTEST and not TEST_CHANNELS_CONFIG:
-        logger.warning(f'Not importing channels during this test.  Use `test_channels_config` fixture if you would '
-                       f'like to call this.')
+        channel_import_logger.warning(
+            f'Not importing channels during this test.  Use `test_channels_config` fixture if you would '
+            f'like to call this.')
         return
 
-    logger.info('Importing videos config')
+    channel_import_logger.info('Importing videos config')
     try:
         config = get_channels_config()
         channels, favorites = config.channels, config.favorites
 
+        save_config = False
         with get_db_session(commit=True) as session:
             for data in channels:
                 if isinstance(data, str):
@@ -431,6 +436,20 @@ def import_channels_config():
                 if not channel.source_id and channel.url:
                     # If we can download from a channel, we must have its source_id.
                     channel.source_id = get_channel_source_id(channel.url)
+                    save_config = True
+                    if not channel.source_id:
+                        channel_import_logger.warning(f'Unable to fetch source_id for {channel.url}')
+
+                channel_import_logger.debug(f'Updated {repr(channel.name)}'
+                                            f' url={channel.url}'
+                                            f' source_id={channel.source_id}'
+                                            f' directory={channel.directory}'
+                                            f' download_frequency={channel.download_frequency}'
+                                            )
+
+        if save_config:
+            # Information about the channel was fetched, store it.
+            config.save()
 
         with get_db_session(commit=True) as session:
             channels_by_link = {sanitize_link(i.name): i for i in session.query(Channel)}
@@ -444,7 +463,7 @@ def import_channels_config():
                         # TODO remove these old favorites after beta.
                         channel = channels_by_link.get(directory_)
                     if not channel:
-                        logger.warning(f'Cannot find channel {directory=} for favorites!')
+                        channel_import_logger.warning(f'Cannot find channel {directory=} for favorites!')
                         continue
                     channel_dir = channel.directory
                 else:
@@ -460,9 +479,9 @@ def import_channels_config():
                     if video:
                         video.favorite = data['favorite']
                     else:
-                        logger.warning(f'Cannot find video to favorite: {video_path}')
+                        channel_import_logger.warning(f'Cannot find video to favorite: {video_path}')
     except Exception as e:
-        logger.warning('Failed to load channels config!', exc_info=e)
+        channel_import_logger.warning('Failed to load channels config!', exc_info=e)
         if PYTEST:
             # Do not interrupt startup, only raise during testing.
             raise

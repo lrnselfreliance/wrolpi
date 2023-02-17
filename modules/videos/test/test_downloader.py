@@ -1,5 +1,4 @@
 import asyncio
-import pathlib
 import shutil
 from copy import copy
 from unittest import mock
@@ -9,13 +8,12 @@ from yt_dlp.utils import UnsupportedError
 
 from modules.videos.channel.lib import download_channel
 from modules.videos.downloader import find_all_missing_videos, VideoDownloader, \
-    ChannelDownloader, get_or_create_channel, channel_downloader
+    get_or_create_channel, channel_downloader, video_downloader
 from modules.videos.models import Channel, Video
 from wrolpi.db import get_db_context
-from wrolpi.downloader import DownloadManager, Download, DownloadResult
+from wrolpi.downloader import Download, DownloadResult
 from wrolpi.errors import InvalidDownload
 from wrolpi.files.models import File
-from wrolpi.test.common import TestAPI
 from wrolpi.test.test_downloader import HTTPDownloader
 from wrolpi.vars import PROJECT_DIR
 
@@ -108,48 +106,44 @@ example_channel_json = {
 }
 
 
-class TestVideosDownloaders(TestAPI):
+def test_video_valid_url():
+    # A specific video can be downloaded.
+    assert video_downloader.valid_url('https://www.youtube.com/watch?v=31jPEBiAC3c')[0] is True
 
-    def setUp(self) -> None:
-        super().setUp()
-        self.vd = VideoDownloader()
-        self.cd = ChannelDownloader()
-        self.mgr = DownloadManager()
-        self.mgr.register_downloader(self.vd)
-        self.mgr.register_downloader(self.cd)
+    # A channel cannot be downloaded.
+    assert video_downloader.valid_url('https://www.youtube.com/c/LearningSelfReliance/videos')[0] is False
+    assert video_downloader.valid_url('https://www.youtube.com/c/LearningSelfReliance')[0] is False
 
-        self.videos_dir = pathlib.Path(self.tmp_dir.name) / 'videos'
-        self.videos_dir.mkdir()
 
-    def test_video_valid_url(self):
-        # A specific video can be downloaded.
-        self.assertTrue(self.vd.valid_url('https://www.youtube.com/watch?v=31jPEBiAC3c')[0])
+def test_channel_valid_url():
+    # An entire domain cannot be downloaded.
+    assert not channel_downloader.valid_url('https://example.com')[0]
+    assert not channel_downloader.valid_url('https://youtube.com')[0]
 
-        # A channel cannot be downloaded.
-        self.assertFalse(self.vd.valid_url('https://www.youtube.com/c/LearningSelfReliance/videos')[0])
-        self.assertFalse(self.vd.valid_url('https://www.youtube.com/c/LearningSelfReliance')[0])
+    # Cannot download a single video.
+    assert not channel_downloader.valid_url('https://www.youtube.com/watch?v=31jPEBiAC3c')[0]
 
-    def test_channel_valid_url(self):
-        # An entire domain cannot be downloaded.
-        self.assertFalse(self.cd.valid_url('https://example.com')[0])
-        self.assertFalse(self.cd.valid_url('https://youtube.com')[0])
+    # Can download entire channels.
+    assert channel_downloader.valid_url('https://www.youtube.com/c/LearningSelfReliance/videos')[0]
+    assert channel_downloader.valid_url('https://www.youtube.com/c/LearningSelfReliance')[0]
 
-        # Cannot download a single video.
-        self.assertFalse(self.cd.valid_url('https://www.youtube.com/watch?v=31jPEBiAC3c')[0])
+    # Can download entire playlists.
+    assert channel_downloader.valid_url('https://www.youtube.com/playlist?list=PLCdlMQeP-TbG12nkBCt0E96yr3EfwcH4E')[0]
 
-        # Can download entire channels.
-        self.assertTrue(self.cd.valid_url('https://www.youtube.com/c/LearningSelfReliance/videos')[0])
-        self.assertTrue(self.cd.valid_url('https://www.youtube.com/c/LearningSelfReliance')[0])
 
-        # Can download entire playlists.
-        self.assertTrue(
-            self.cd.valid_url('https://www.youtube.com/playlist?list=PLCdlMQeP-TbG12nkBCt0E96yr3EfwcH4E')[0])
-
-    def test_get_downloader(self):
-        # The correct Downloader is gotten.
-        self.assertEqual(self.mgr.get_downloader('https://www.youtube.com/c/LearningSelfReliance/videos')[0], self.cd)
-        self.assertEqual(self.mgr.get_downloader('https://www.youtube.com/c/LearningSelfReliance')[0], self.cd)
-        self.assertEqual(self.mgr.get_downloader('https://www.youtube.com/watch?v=31jPEBiAC3c')[0], self.vd)
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'url,expected', [
+        ('https://www.youtube.com/c/LearningSelfReliance/videos', channel_downloader),
+        ('https://www.youtube.com/c/LearningSelfReliance', channel_downloader),
+        ('https://www.youtube.com/watch?v=31jPEBiAC3c', video_downloader),
+    ]
+)
+async def test_get_downloader(test_session, test_download_manager, url, expected):
+    """The correct Downloader is gotten."""
+    test_download_manager.register_downloader(channel_downloader)
+    test_download_manager.register_downloader(video_downloader)
+    assert test_download_manager.get_downloader(url)[0] == expected
 
 
 @pytest.mark.asyncio

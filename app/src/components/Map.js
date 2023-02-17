@@ -268,17 +268,15 @@ class ManageMap extends React.Component {
 }
 
 function MapApp() {
-    return (
-        <iframe
-            title='map'
-            src={`http://${window.location.hostname}:8084/`}
-            style={{
-                position: 'fixed',
-                height: '100%',
-                width: '100%',
-                border: 'none',
-            }}/>
-    )
+    return <iframe
+        title='map'
+        src={`http://${window.location.hostname}:8084/`}
+        style={{
+            position: 'fixed',
+            height: '100%',
+            width: '100%',
+            border: 'none',
+        }}/>
 }
 
 export function MapRoute() {

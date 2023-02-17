@@ -56,23 +56,21 @@ function ChannelStatistics({statistics}) {
         return <></>
     }
 
-    return (
-        <Segment>
-            <Header as='h1'>Statistics</Header>
-            <Statistic>
-                <StatisticValue>{statistics.video_count}</StatisticValue>
-                <StatisticLabel>Videos</StatisticLabel>
-            </Statistic>
-            <Statistic>
-                <StatisticValue>{humanFileSize(statistics.size, true)}</StatisticValue>
-                <StatisticLabel>Total Size</StatisticLabel>
-            </Statistic>
-            <Statistic>
-                <StatisticValue>{humanFileSize(statistics.largest_video, true)}</StatisticValue>
-                <StatisticLabel>Largest Video</StatisticLabel>
-            </Statistic>
-        </Segment>
-    )
+    return <Segment>
+        <Header as='h1'>Statistics</Header>
+        <Statistic>
+            <StatisticValue>{statistics.video_count}</StatisticValue>
+            <StatisticLabel>Videos</StatisticLabel>
+        </Statistic>
+        <Statistic>
+            <StatisticValue>{humanFileSize(statistics.size, true)}</StatisticValue>
+            <StatisticLabel>Total Size</StatisticLabel>
+        </Statistic>
+        <Statistic>
+            <StatisticValue>{humanFileSize(statistics.largest_video, true)}</StatisticValue>
+            <StatisticLabel>Largest Video</StatisticLabel>
+        </Statistic>
+    </Segment>
 }
 
 

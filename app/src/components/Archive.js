@@ -141,34 +141,32 @@ function ArchivePage() {
         </Header>;
     }
 
-    return (
-        <>
-            <BackButton/>
+    return <>
+        <BackButton/>
 
-            <Segment>
-                {screenshot}
-                <ExternalCardLink to={singlefileUrl}>
-                    <Header as='h2'>{textEllipsis(archive.title || archive.url)}</Header>
-                </ExternalCardLink>
-                <Header as='h3'>{isoDatetimeToString(archive.archive_datetime)}</Header>
-                {domainHeader}
-                {urlHeader}
+        <Segment>
+            {screenshot}
+            <ExternalCardLink to={singlefileUrl}>
+                <Header as='h2'>{textEllipsis(archive.title || archive.url)}</Header>
+            </ExternalCardLink>
+            <Header as='h3'>{isoDatetimeToString(archive.archive_datetime)}</Header>
+            {domainHeader}
+            {urlHeader}
 
-                {singlefileButton}
-                {readabilityLink}
-                {updateButton}
-                {deleteButton}
-            </Segment>
+            {singlefileButton}
+            {readabilityLink}
+            {updateButton}
+            {deleteButton}
+        </Segment>
 
-            <Segment>
-                <HelpHeader
-                    headerContent='History'
-                    popupContent='Other archives of this URL created at different times.'
-                />
-                {historyList}
-            </Segment>
-        </>
-    )
+        <Segment>
+            <HelpHeader
+                headerContent='History'
+                popupContent='Other archives of this URL created at different times.'
+            />
+            {historyList}
+        </Segment>
+    </>
 }
 
 export function ArchiveCard({file}) {
@@ -186,40 +184,38 @@ export function ArchiveCard({file}) {
     const domain = archive.domain ? archive.domain.domain : null;
     const domainUrl = `/archive?domain=${domain}`;
 
-    return (
-        <Card color={mimetypeColor(file.mimetype)}>
-            <div>
-                <ExternalCardLink to={singlefileUrl}>
-                    {screenshot}
-                </ExternalCardLink>
-            </div>
-            <CardContent {...s}>
-                <CardHeader>
-                    <Container textAlign='left'>
-                        <ExternalCardLink to={singlefileUrl}>
-                            {cardTitleWrapper(archive.title || archive.url)}
-                        </ExternalCardLink>
-                    </Container>
-                </CardHeader>
-                {domain &&
-                    <CardLink to={domainUrl}>
-                        <p {...s}>{domain}</p>
-                    </CardLink>}
-                <CardMeta {...s}>
-                    <p>
-                        {isoDatetimeToString(archive.archive_datetime)}
-                    </p>
-                </CardMeta>
-                <CardDescription>
-                    <Link to={`/archive/${archive.id}`}>
-                        <Button icon='file alternate' content='Details'
-                                labelPosition='left'/>
-                    </Link>
-                    <Button icon='external' href={archive.url} target='_blank' rel='noopener noreferrer'/>
-                </CardDescription>
-            </CardContent>
-        </Card>
-    )
+    return <Card color={mimetypeColor(file.mimetype)}>
+        <div>
+            <ExternalCardLink to={singlefileUrl}>
+                {screenshot}
+            </ExternalCardLink>
+        </div>
+        <CardContent {...s}>
+            <CardHeader>
+                <Container textAlign='left'>
+                    <ExternalCardLink to={singlefileUrl}>
+                        {cardTitleWrapper(archive.title || archive.url)}
+                    </ExternalCardLink>
+                </Container>
+            </CardHeader>
+            {domain &&
+                <CardLink to={domainUrl}>
+                    <p {...s}>{domain}</p>
+                </CardLink>}
+            <CardMeta {...s}>
+                <p>
+                    {isoDatetimeToString(archive.archive_datetime)}
+                </p>
+            </CardMeta>
+            <CardDescription>
+                <Link to={`/archive/${archive.id}`}>
+                    <Button icon='file alternate' content='Details'
+                            labelPosition='left'/>
+                </Link>
+                <Button icon='external' href={archive.url} target='_blank' rel='noopener noreferrer'/>
+            </CardDescription>
+        </CardContent>
+    </Card>
 }
 
 export function Domains() {
@@ -446,7 +442,7 @@ export function ArchiveRowCells({file}) {
     }
 
     // Fragment for SelectableRow
-    return (<React.Fragment>
+    return <React.Fragment>
         <TableCell>
             <center>{poster}</center>
         </TableCell>
@@ -455,7 +451,7 @@ export function ArchiveRowCells({file}) {
                 {textEllipsis(archive.title || archive.stem)}
             </CardLink>
         </TableCell>
-    </React.Fragment>)
+    </React.Fragment>
 }
 
 export function ArchiveRoute() {

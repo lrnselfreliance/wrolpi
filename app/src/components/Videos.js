@@ -273,13 +273,11 @@ function Statistics() {
         </Segment>
     }
 
-    return (
-        <>
-            {buildSegment('Videos', videoNames, videos)}
-            {buildSegment('Historical Video', historicalNames, historical)}
-            {buildSegment('Channels', channelNames, channels)}
-        </>
-    )
+    return <>
+        {buildSegment('Videos', videoNames, videos)}
+        {buildSegment('Historical Video', historicalNames, historical)}
+        {buildSegment('Channels', channelNames, channels)}
+    </>
 }
 
 export function VideosRoute(props) {
@@ -290,20 +288,18 @@ export function VideosRoute(props) {
         {text: 'Statistics', to: '/videos/statistics', key: 'statistics'},
     ];
 
-    return (
-        <PageContainer>
-            <TabLinks links={links}/>
-            <Routes>
-                <Route path='/' exact element={<VideosPage/>}/>
-                <Route path='favorites' exact element={<VideosPage filter='favorite' header='Favorite Videos'/>}/>
-                <Route path='channel' exact element={<Channels/>}/>
-                <Route path='statistics' exact element={<Statistics/>}/>
-                <Route path='channel/new' exact element={<NewChannel/>}/>
-                <Route path='channel/:channelId/edit' exact element={<EditChannel/>}/>
-                <Route path='channel/:channelId/video' exact element={<VideosPage/>}/>
-            </Routes>
-        </PageContainer>
-    )
+    return <PageContainer>
+        <TabLinks links={links}/>
+        <Routes>
+            <Route path='/' exact element={<VideosPage/>}/>
+            <Route path='favorites' exact element={<VideosPage filter='favorite' header='Favorite Videos'/>}/>
+            <Route path='channel' exact element={<Channels/>}/>
+            <Route path='statistics' exact element={<Statistics/>}/>
+            <Route path='channel/new' exact element={<NewChannel/>}/>
+            <Route path='channel/:channelId/edit' exact element={<EditChannel/>}/>
+            <Route path='channel/:channelId/video' exact element={<VideosPage/>}/>
+        </Routes>
+    </PageContainer>
 }
 
 export function VideoCard({file}) {

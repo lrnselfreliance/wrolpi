@@ -214,35 +214,33 @@ class InventoryList extends React.Component {
 
         if (!editable) {
             // Show the user the non-editable version, until they check the checkbox.
-            return (
-                <TableRow key={item.id}>
-                    {checkboxCell}
-                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
-                        {item.brand}
-                    </TableCell>
-                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
-                        {item.name}
-                    </TableCell>
-                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
-                        {item.item_size}
-                    </TableCell>
-                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
-                        {item.unit}
-                    </TableCell>
-                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
-                        {item.count}
-                    </TableCell>
-                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>{
-                        item.subcategory}
-                    </TableCell>
-                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
-                        {item.category}
-                    </TableCell>
-                    <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
-                        {item.expiration_date}
-                    </TableCell>
-                </TableRow>
-            )
+            return <TableRow key={item.id}>
+                {checkboxCell}
+                <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    {item.brand}
+                </TableCell>
+                <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    {item.name}
+                </TableCell>
+                <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    {item.item_size}
+                </TableCell>
+                <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    {item.unit}
+                </TableCell>
+                <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    {item.count}
+                </TableCell>
+                <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>{
+                    item.subcategory}
+                </TableCell>
+                <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    {item.category}
+                </TableCell>
+                <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                    {item.expiration_date}
+                </TableCell>
+            </TableRow>
         } else {
             // Insert the modified table row so the user can edit this item.
             let editItem = this.state.editItems[item.id];
@@ -539,16 +537,14 @@ class EditInventory extends React.Component {
     }
 
     render() {
-        return (
-            <InventoryPortal
-                inventory={this.props.inventory}
-                header='Edit Inventory'
-                handleSubmit={this.handleSubmit}
-                handleDelete={this.handleDelete}
-                buttonProps={{icon: 'edit', color: 'yellow'}}
-                deleteButton={true}
-            />
-        )
+        return <InventoryPortal
+            inventory={this.props.inventory}
+            header='Edit Inventory'
+            handleSubmit={this.handleSubmit}
+            handleDelete={this.handleDelete}
+            buttonProps={{icon: 'edit', color: 'yellow'}}
+            deleteButton={true}
+        />
     }
 }
 
@@ -572,13 +568,11 @@ class NewInventory extends React.Component {
     }
 
     render() {
-        return (
-            <InventoryPortal
-                header='Create a new Inventory list'
-                handleSubmit={this.handleSubmit}
-                buttonProps={{icon: 'plus'}}
-            />
-        )
+        return <InventoryPortal
+            header='Create a new Inventory list'
+            handleSubmit={this.handleSubmit}
+            buttonProps={{icon: 'plus'}}
+        />
     }
 
 }
@@ -815,31 +809,29 @@ class CategoryInputs extends React.Component {
 
 class TableCategoryInputs extends CategoryInputs {
     render() {
-        return (
-            <>
-                <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
-                    <SuggestionInput
-                        ref={this.subcategoryRef}
-                        name='subcategory'
-                        fluid={true}
-                        list='subcategory'
-                        placeholder='Subcategory'
-                        value={this.state.subcategory}
-                        options={this.state.categories}
-                        handleInputChange={this.handleInputChange}
-                    />
-                </TableCell>
-                <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
-                    <FormInput
-                        fluid
-                        name="category"
-                        placeholder="Category"
-                        onChange={this.handleInputChange}
-                        value={this.state.category}
-                    />
-                </TableCell>
-            </>
-        )
+        return <>
+            <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                <SuggestionInput
+                    ref={this.subcategoryRef}
+                    name='subcategory'
+                    fluid={true}
+                    list='subcategory'
+                    placeholder='Subcategory'
+                    value={this.state.subcategory}
+                    options={this.state.categories}
+                    handleInputChange={this.handleInputChange}
+                />
+            </TableCell>
+            <TableCell style={{paddingTop: '1.5em', paddingBottom: '1.5em'}}>
+                <FormInput
+                    fluid
+                    name="category"
+                    placeholder="Category"
+                    onChange={this.handleInputChange}
+                    value={this.state.category}
+                />
+            </TableCell>
+        </>
     }
 }
 
@@ -882,18 +874,16 @@ class BrandInput extends React.Component {
     }
 
     render() {
-        return (
-            <SuggestionInput
-                name='brand'
-                fluid={true}
-                list='brand'
-                label={this.props.label}
-                placeholder='Brand'
-                value={this.state.brand}
-                options={this.state.options}
-                handleInputChange={this.handleInputChange}
-            />
-        )
+        return <SuggestionInput
+            name='brand'
+            fluid={true}
+            list='brand'
+            label={this.props.label}
+            placeholder='Brand'
+            value={this.state.brand}
+            options={this.state.options}
+            handleInputChange={this.handleInputChange}
+        />
     }
 }
 
@@ -1101,13 +1091,11 @@ export function InventoryRoute(props) {
         {text: 'List', to: '/inventory', key: 'inventory', end: true},
         {text: 'Summary', to: '/inventory/summary', key: 'summary'},
     ];
-    return (
-        <PageContainer>
-            <TabLinks links={links}/>
-            <Routes>
-                <Route path='/' exact element={<InventoryAddList/>}/>
-                <Route path='summary' exact element={<InventorySummary/>}/>
-            </Routes>
-        </PageContainer>
-    )
+    return <PageContainer>
+        <TabLinks links={links}/>
+        <Routes>
+            <Route path='/' exact element={<InventoryAddList/>}/>
+            <Route path='summary' exact element={<InventorySummary/>}/>
+        </Routes>
+    </PageContainer>
 }

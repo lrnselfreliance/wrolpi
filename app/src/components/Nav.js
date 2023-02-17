@@ -20,13 +20,11 @@ const rightLinks = [admin,];
 const collapsedLinks = links.concat([admin,]);
 
 function DropdownLinks(props) {
-    return (<Dropdown item text={props.link.text}>
+    return <Dropdown item text={props.link.text}>
         <Dropdown.Menu>
-            {props.link.links.map((l) => {
-                return (<MenuLink key={l.to} link={l}/>)
-            })}
+            {props.link.links.map(l => <MenuLink key={l.to} link={l}/>)}
         </Dropdown.Menu>
-    </Dropdown>)
+    </Dropdown>
 }
 
 function MenuLink({link}) {
@@ -35,15 +33,15 @@ function MenuLink({link}) {
 
     if (!link.links) {
         const end = link.end ? {end: true} : {end: undefined};
-        return (<NavLink
+        return <NavLink
             className={classes}
             to={link.to}
             {...end}
         >
             {link.text}
-        </NavLink>)
+        </NavLink>
     } else {
-        return (<DropdownLinks link={link}/>)
+        return <DropdownLinks link={link}/>
     }
 }
 

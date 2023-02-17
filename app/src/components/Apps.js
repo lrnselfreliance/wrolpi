@@ -247,10 +247,10 @@ function StatisticsPage() {
 }
 
 export function MoreRoute(props) {
-    return (<PageContainer>
+    return <PageContainer>
         <Routes>
             <Route path='otp' exact element={<OTP/>}/>
             <Route path='statistics' exact element={<StatisticsPage/>}/>
         </Routes>
-    </PageContainer>)
+    </PageContainer>
 }

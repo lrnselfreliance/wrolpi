@@ -294,18 +294,16 @@ class StoppableRow extends React.Component {
             )
         }
 
-        return (
-            <TableRow>
-                <TableCell>
-                    {link(textEllipsis(url, 50))}
-                </TableCell>
-                <TableCell>
-                    {completedAtCell}
-                    {status === 'pending' ? <Loader active inline size='tiny'/> : null}
-                </TableCell>
-                {buttonCell}
-            </TableRow>
-        );
+        return <TableRow>
+            <TableCell>
+                {link(textEllipsis(url, 50))}
+            </TableCell>
+            <TableCell>
+                {completedAtCell}
+                {status === 'pending' ? <Loader active inline size='tiny'/> : null}
+            </TableCell>
+            {buttonCell}
+        </TableRow>
     }
 }
 

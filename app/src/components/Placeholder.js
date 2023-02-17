@@ -21,20 +21,16 @@ export function CardPlacholder() {
 }
 
 export function VideoPlaceholder() {
-    return (
-        <CardGroup doubling stackable>
-            <CardPlacholder/>
-        </CardGroup>
-    )
+    return <CardGroup doubling stackable>
+        <CardPlacholder/>
+    </CardGroup>
 }
 
 export function ChannelPlaceholder() {
-    return (
-        <Placeholder>
-            <PlaceholderLine length='long'/>
-            <PlaceholderLine length='short'/>
-        </Placeholder>
-    )
+    return <Placeholder>
+        <PlaceholderLine length='long'/>
+        <PlaceholderLine length='short'/>
+    </Placeholder>
 }
 
 export function ProgressPlaceholder() {

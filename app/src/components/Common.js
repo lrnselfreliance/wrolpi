@@ -1,5 +1,5 @@
 import React, {useContext, useEffect, useState} from "react";
-import {Card, Container, IconGroup, Image, Input, Modal, Pagination} from 'semantic-ui-react';
+import {Card, Container, IconGroup, Input, Modal, Pagination} from 'semantic-ui-react';
 import {Link, NavLink, useNavigate} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDirectories, useDownloaders, useHotspot, useSettings, useThrottle} from "../hooks/customHooks";
@@ -19,7 +19,7 @@ export function Paginator({activePage, onPageChange, totalPages, showFirstAndLas
         onPageChange(activePage);
     }
 
-    return (<Pagination
+    return <Pagination
         activePage={activePage}
         boundaryRange={1}
         onPageChange={handlePageChange}
@@ -28,7 +28,7 @@ export function Paginator({activePage, onPageChange, totalPages, showFirstAndLas
         totalPages={totalPages}
         firstItem={showFirstAndLast ? undefined : null}
         lastItem={showFirstAndLast ? undefined : null}
-    />)
+    />
 }
 
 export function divmod(x, y) {
@@ -394,7 +394,7 @@ export function textEllipsis(str, maxLength = 100, {side = "end", ellipsis = "..
 }
 
 export function TabLinks({links}) {
-    return (<Menu tabular>
+    return <Menu tabular>
         {links.map((link) => <NavLink
             to={link.to}
             className='item'
@@ -404,7 +404,7 @@ export function TabLinks({links}) {
         >
             {link.text}
         </NavLink>)}
-    </Menu>)
+    </Menu>
 }
 
 export function PageContainer(props) {
@@ -423,7 +423,7 @@ export function PageContainer(props) {
 }
 
 export function CardGroupCentered(props) {
-    return (<div style={{marginTop: '1em'}}>
+    return <div style={{marginTop: '1em'}}>
         <Media at='mobile'>
             <Card.Group centered>
                 {props.children}
@@ -434,14 +434,14 @@ export function CardGroupCentered(props) {
                 {props.children}
             </Card.Group>
         </Media>
-    </div>)
+    </div>
 }
 
 export function CardPosterLink({to, poster_url, imageLabel, external = false}) {
     const {s} = useContext(ThemeContext);
     const style = {display: 'flex', justifyContent: 'center', ...s['style']};
     const image = <img src={poster_url} alt={imageLabel}
-                         style={{maxHeight: '163px', width: 'auto'}}
+                       style={{maxHeight: '163px', width: 'auto'}}
     />;
     if (external === true && to) {
         return <a href={to} target='_blank' rel='noreferrer' style={style}>
@@ -469,18 +469,18 @@ export function HelpPopup({icon, size, content, position}) {
 }
 
 export function HelpHeader({icon, headerSize, iconSize, headerContent, popupContent}) {
-    return (<div className='inline-header'>
+    return <div className='inline-header'>
         <Header as={headerSize || 'h2'}>{headerContent}</Header>
         <span>
                 <HelpPopup content={popupContent} size={iconSize} icon={icon}/>
             </span>
-    </div>)
+    </div>
 }
 
 export function HotspotToggle() {
     let {on, setHotspot} = useHotspot();
     const disabled = on === null;
-    return (<div style={{margin: '0.5em'}}>
+    return <div style={{margin: '0.5em'}}>
         <Toggle
             label='WiFi Hotspot'
             disabled={disabled}
@@ -488,13 +488,13 @@ export function HotspotToggle() {
             onChange={checked => setHotspot(checked)}
         />
         {disabled && <HelpPopup content='Hotspot is not supported on this server'/>}
-    </div>);
+    </div>;
 }
 
 export function ThrottleToggle() {
     let {on, setThrottle} = useThrottle();
     const disabled = on === null;
-    return (<div style={{margin: '0.5em'}}>
+    return <div style={{margin: '0.5em'}}>
         <Toggle
             label='CPU Power-save'
             disabled={disabled}
@@ -502,7 +502,7 @@ export function ThrottleToggle() {
             onChange={checked => setThrottle(checked)}
         />
         {disabled && <HelpPopup content='CPU Power-save is not supported on this server'/>}
-    </div>);
+    </div>;
 }
 
 export function Toggle({label, checked, disabled, onChange, icon}) {
@@ -771,7 +771,7 @@ export function DirectoryInput({disabled, error, placeholder, setInput, value, r
     const {media_directory} = settings;
     error = error || isDirectory && !isDir;
 
-    return (<div>
+    return <div>
         <Input
             action={{
                 color: error ? 'red' : 'green', labelPosition: 'left', icon: 'folder', content: media_directory,
@@ -787,7 +787,7 @@ export function DirectoryInput({disabled, error, placeholder, setInput, value, r
         <datalist id='directories'>
             {directories.map(i => <option key={i} value={i}>{i}</option>)}
         </datalist>
-    </div>);
+    </div>;
 }
 
 export const BackButton = () => {

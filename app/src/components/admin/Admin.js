@@ -74,16 +74,13 @@ export default function Admin() {
         {text: 'WROL Mode', to: '/admin/wrol', key: 'wrol'},
     ];
 
-    return (
-        <PageContainer>
-            <TabLinks links={links}/>
-            <Routes>
-                <Route path='/' exact element={<Downloads/>}/>
-                <Route path='settings' exact element={<Settings/>}/>
-                <Route path='status' exact element={<Status/>}/>
-                <Route path='wrol' exact element={<WROLMode/>}/>
-            </Routes>
-        </PageContainer>
-    )
-
+    return <PageContainer>
+        <TabLinks links={links}/>
+        <Routes>
+            <Route path='/' exact element={<Downloads/>}/>
+            <Route path='settings' exact element={<Settings/>}/>
+            <Route path='status' exact element={<Status/>}/>
+            <Route path='wrol' exact element={<WROLMode/>}/>
+        </Routes>
+    </PageContainer>
 }

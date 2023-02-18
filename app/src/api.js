@@ -223,14 +223,16 @@ export async function getVideosStatistics() {
 export async function downloadChannel(channelId) {
     let url = `${VIDEOS_API}/channels/download/${channelId}`;
     let response = await apiPost(url);
-    let json = await response.json();
-    if (response.status === 400 && json['code'] === 30) {
-        toast({
-            type: 'error',
-            title: 'Cannot Download!',
-            description: 'This channel does not have a download record.  Modify the frequency.',
-            time: 5000,
-        });
+    if (response.status === 400) {
+        const json = await response.json();
+        if (json['code'] === 30) {
+            toast({
+                type: 'error',
+                title: 'Cannot Download!',
+                description: 'This channel does not have a download record.  Modify the frequency.',
+                time: 5000,
+            });
+        }
     }
 }
 
@@ -659,10 +661,7 @@ export async function getStatistics() {
         return contents;
     } else {
         toast({
-            type: 'error',
-            title: 'Error!',
-            description: 'Unable to get file statistics',
-            time: 5000,
+            type: 'error', title: 'Error!', description: 'Unable to get file statistics', time: 5000,
         })
     }
 }

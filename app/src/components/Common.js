@@ -639,6 +639,8 @@ export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
             props['name'] = 'book';
         } else if (mimetype.startsWith('text/vtt') || mimetype.startsWith('text/srt')) {
             props['name'] = 'closed captioning';
+        } else if (mimetype.startsWith('application/x-openscad') || mimetype.startsWith('model/stl')) {
+            props['name'] = 'cube';
         } else if (mimetype.startsWith('application/x-dosexec') || mimetype.startsWith('application/x-msi')) {
             props['name'] = 'microsoft';
         } else if (mimetype.startsWith('application/octet-stream')) {

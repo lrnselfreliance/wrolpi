@@ -5,15 +5,19 @@ import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {DarkModeToggle, HotspotStatusIcon, NAME} from "./Common";
 
-const links = [{text: 'Videos', to: '/videos', key: 'videos'}, {
-    text: 'Archive', to: '/archive', key: 'archive'
-}, {text: 'Map', to: '/map', key: 'map'}, {text: 'Files', to: '/files', key: 'files'}, {
-    text: 'Inventory', to: '/inventory', key: 'inventory'
-}, {
-    key: 'more', text: 'More', links: [{to: '/more/otp', text: 'One Time Pad', end: true}, {
-        to: '/more/statistics', text: 'Statistics', end: true
-    },]
-},];
+const links = [
+    {text: 'Videos', to: '/videos', key: 'videos'},
+    {text: 'Archive', to: '/archive', key: 'archive'},
+    {text: 'Map', to: '/map', key: 'map'},
+    {text: 'Files', to: '/files', key: 'files'},
+    {text: 'Inventory', to: '/inventory', key: 'inventory'},
+    {text: 'More', key: 'more',
+        links: [
+            {to: '/more/otp', text: 'One Time Pad', end: true},
+            {to: '/more/statistics', text: 'Statistics', end: true},
+        ]
+    },
+];
 const admin = {to: '/admin', text: 'Admin', key: 'admin'};
 const rightLinks = [admin,];
 
@@ -29,19 +33,17 @@ function DropdownLinks({link}) {
 
 function MenuLink({link}) {
     // Wrapper around NavLink to handle Navlink/Dropdown change.
-    let classes = 'item';
-
-    if (!link.links) {
+    if (link.links) {
+        return <DropdownLinks link={link}/>
+    } else {
         const end = link.end ? {end: true} : {end: undefined};
         return <NavLink
-            className={classes}
+            className='item'
             to={link.to}
             {...end}
         >
             {link.text}
         </NavLink>
-    } else {
-        return <DropdownLinks link={link}/>
     }
 }
 

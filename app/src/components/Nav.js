@@ -19,10 +19,10 @@ const rightLinks = [admin,];
 
 const collapsedLinks = links.concat([admin,]);
 
-function DropdownLinks(props) {
-    return <Dropdown item text={props.link.text}>
+function DropdownLinks({link}) {
+    return <Dropdown item text={link.text} direction='left'>
         <Dropdown.Menu>
-            {props.link.links.map(l => <MenuLink key={l.to} link={l}/>)}
+            {link.links.map(l => <MenuLink key={l.to} link={l}/>)}
         </Dropdown.Menu>
     </Dropdown>
 }

@@ -390,7 +390,7 @@ class Channel(ModelHelper, Base):
             self.directory = get_media_directory() / self.directory
 
         # All channels with a URL and download_frequency should have a download.
-        session = Session.object_session(self)
+        session: Session = Session.object_session(self)
         if download and not self.download_frequency:
             download_manager.delete_download(download.id, session)
         elif download and self.download_frequency:

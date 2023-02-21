@@ -596,3 +596,46 @@ async def test_run_after():
 )
 def test_split_lines_by_length(max_line_length, text, expected):
     assert common.split_lines_by_length(text, max_line_length=max_line_length) == expected
+
+
+@pytest.mark.parametrize(
+    'obj,expected', [
+        ([0, ], [0, ]),
+        (range(1), [0, ]),
+        ({'a': 'b'}, {'a': 'b'}),
+        ({'a': range(1, 3)}, {'a': [1, 2]}),
+        ((1, 2, 3), (1, 2, 3)),
+        ({3, 4, 5}, {3, 4, 5}),
+    ]
+)
+def test_resolve_generators(obj, expected):
+    assert common.resolve_generators(obj) == expected
+
+
+def test_resolve_generators2():
+    def gen2():
+        yield {'hello': 'world'}
+        yield {'this': 'that'}
+
+    def gen1():
+        yield 'hello'
+        yield {
+            'entries': gen2(),
+        }
+
+    obj = {
+        'foo': 'bar',
+        'entries': gen1(),
+    }
+    assert common.resolve_generators(obj) == {
+        'foo': 'bar',
+        'entries': [
+            'hello',
+            {
+                'entries': [
+                    {'hello': 'world'},
+                    {'this': 'that'},
+                ]
+            }
+        ]
+    }

@@ -7,7 +7,8 @@ def before_startup(func: callable):
     """
     Run a callable before startup of the WROLPi API.  This will be called (and blocked on) once.
     """
-    BEFORE_STARTUP_FUNCTIONS.append(func)
+    if func not in BEFORE_STARTUP_FUNCTIONS:
+        BEFORE_STARTUP_FUNCTIONS.append(func)
     return func
 
 

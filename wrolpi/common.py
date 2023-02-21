@@ -18,7 +18,8 @@ from functools import wraps
 from itertools import islice, filterfalse, tee
 from multiprocessing import Lock, Manager
 from pathlib import Path
-from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any
+from types import GeneratorType
+from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any, Set
 from urllib.parse import urlparse
 
 import aiohttp
@@ -1120,3 +1121,22 @@ def split_lines_by_length(text: str, max_line_length: int = 38) -> str:
         else:
             new_text += f'\n{line}'
     return new_text.lstrip('\n')
+
+
+def resolve_generators(obj: Union[Dict, List]) -> Any:
+    """Recursively find generators within an object/list, resolve them.
+
+    Returns a new object/list without any generators."""
+    if isinstance(obj, str):
+        return obj
+    elif isinstance(obj, Tuple):
+        return tuple(resolve_generators(i) for i in obj)
+    elif isinstance(obj, Set):
+        return {resolve_generators(i) for i in obj}
+    elif isinstance(obj, Dict):
+        return {resolve_generators(i): resolve_generators(j) for i, j in obj.items()}
+    elif isinstance(obj, range):
+        return list(obj)
+    elif isinstance(obj, GeneratorType) or isinstance(obj, Iterable):
+        return [resolve_generators(i) for i in obj]
+    return obj

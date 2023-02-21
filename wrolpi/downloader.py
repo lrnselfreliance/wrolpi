@@ -787,7 +787,10 @@ class DownloadManager:
             session.delete(download)
             session.commit()
             # Save the config because a download was deleted.
-            background_task(save_downloads_config())
+            if PYTEST:
+                save_downloads_config()
+            else:
+                background_task(save_downloads_config())
             return True
         return False
 

@@ -416,6 +416,19 @@ def test_channel_crud(test_session, test_client, test_directory, test_download_m
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
+def test_change_channel_url(test_client, test_session, test_download_manager, download_channel,
+                            test_download_manager_config):
+    # Change the Channel's URL.
+    download_channel.update({'url': 'https://example.com/new-url'})
+    test_session.commit()
+
+    download = test_session.query(Download).one()
+    assert download.url == download_channel.url == 'https://example.com/new-url', "Channel's download URL was not changed."
+
+    download_channel.update({'download_frequency': None})
+    assert not list(test_session.query(Download).all())
+
+
 def test_search_videos_channel(test_client, test_session, video_factory):
     with get_db_session(commit=True) as session:
         channel1 = Channel(name='Foo')

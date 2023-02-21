@@ -4,7 +4,7 @@ import pathlib
 import re
 import traceback
 from abc import ABC
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Dict
 
 import yt_dlp.utils
 from sqlalchemy.orm import Session
@@ -13,7 +13,7 @@ from yt_dlp.extractor import YoutubeTabIE  # noqa
 from yt_dlp.utils import UnsupportedError, DownloadError
 
 from wrolpi.cmd import YT_DLP_BIN
-from wrolpi.common import logger, get_media_directory, escape_file_name
+from wrolpi.common import logger, get_media_directory, escape_file_name, resolve_generators
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.db import optional_session
@@ -86,7 +86,14 @@ class ChannelDownloader(Downloader, ABC):
         """Update a Channel's catalog, then schedule downloads of every missing video."""
         info = extract_info(download.url, process=False)
         # Resolve the "entries" generator.
-        info['entries'] = list(info['entries'])
+        info: Dict = resolve_generators(info)
+        entries = info.get('entries')
+        if entries and isinstance(entries[0], Dict) and entries[0].get('entries'):
+            # Entries contains more channels/playlist, tell the Maintainer to specify the URL.
+            raise UnrecoverableDownloadError(f'Unable to download {download.url} because the URL is ambiguous.'
+                                             f' Try requesting the videos only:'
+                                             f' https://example.com -> https://example.com/videos')
+
         download.info_json = info
         if session := Session.object_session(download):
             # May not have a session during testing.

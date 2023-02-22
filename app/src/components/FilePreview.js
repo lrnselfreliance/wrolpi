@@ -36,9 +36,10 @@ function getIframeModal(path) {
 
 function getImageModal(path) {
     const url = getMediaPathURL(path);
+    const name = path['path'].replace(/^.*[\\\/]/, '');
     return <React.Fragment>
         <ModalHeader>
-            {path['path']}
+            {name}
         </ModalHeader>
         <ModalContent>
             <a href={url}>
@@ -63,10 +64,11 @@ function getEpubModal(path) {
 
 function getVideoModal(path) {
     const url = getMediaPathURL(path);
+    const name = path['path'].replace(/^.*[\\\/]/, '');
     const type = path['mimetype'] ? path['mimetype'] : 'video/mp4';
     return <React.Fragment>
         <ModalHeader>
-            {path['path']}
+            {name}
         </ModalHeader>
         <ModalContent>
             <SHeader as='h5'>{path['path']}</SHeader>
@@ -84,10 +86,11 @@ function getVideoModal(path) {
 
 function getAudioModal(path) {
     const url = getMediaPathURL(path);
+    const name = path['path'].replace(/^.*[\\\/]/, '');
     const type = path['mimetype'] !== 'application/octet-stream' ? path['mimetype'] : 'audio/mpeg';
     return <React.Fragment>
         <ModalHeader>
-            {path['path']}
+            {name}
         </ModalHeader><ModalContent>
         <audio controls
                autoPlay={true}

@@ -84,7 +84,7 @@ function getVideoModal(path) {
 
 function getAudioModal(path) {
     const url = getMediaPathURL(path);
-    const type = path['mimetype'] ? path['mimetype'] : 'audio/mpeg';
+    const type = path['mimetype'] !== 'application/octet-stream' ? path['mimetype'] : 'audio/mpeg';
     return <React.Fragment>
         <ModalHeader>
             {path['path']}
@@ -140,7 +140,8 @@ export function FilePreviewWrapper({children}) {
         }
 
         if (previewFile && !_.isEmpty(previewFile)) {
-            const {mimetype, size} = previewFile;
+            const {mimetype, size, path} = previewFile;
+            const lowerPath = path.toLowerCase();
             console.debug(`useFilePreview path=${previewFile['path']} mimetype=${mimetype}`);
             const url = getMediaPathURL(previewFile);
             const downloadURL = getDownloadPathURL(previewFile);
@@ -158,6 +159,8 @@ export function FilePreviewWrapper({children}) {
                 setModalContent(getEpubModal(previewFile), viewerURL, downloadURL);
             } else if (mimetype.startsWith('image/')) {
                 setModalContent(getImageModal(previewFile), url);
+            } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.mp3')) {
+                setModalContent(getAudioModal(previewFile), url, downloadURL);
             } else {
                 // No special handler for this file type, just open it.
                 window.open(downloadURL);

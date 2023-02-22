@@ -384,11 +384,12 @@ export function FilesSearchView({
         {key: 'archive', text: 'Archive', value: 'archive'},
         {key: 'pdf', text: 'PDF', value: 'pdf'},
         {key: 'ebook', text: 'eBook', value: 'ebook'},
+        {key: 'audio', text: 'Audio', value: 'audio'},
         {key: 'image', text: 'Image', value: 'image'},
         {key: 'zip', text: 'ZIP', value: 'zip'},
     ];
 
-    const {searchFiles, limit, setLimit, totalPages, activePage, setPage, filter} =
+    const {searchFiles, limit, setLimit, totalPages, activePage, setPage} =
         useSearchFiles(24, emptySearch, model);
 
     const {searchParams, updateQuery} = useQuery();

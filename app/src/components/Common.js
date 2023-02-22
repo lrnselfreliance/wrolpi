@@ -600,6 +600,8 @@ export function mimetypeColor(mimetype) {
             return 'purple'
         } else if (mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook')) {
             return 'yellow'
+        } else if (mimetype.startsWith('audio/')) {
+            return 'violet'
         }
     } catch (e) {
         console.error(e);
@@ -646,7 +648,9 @@ export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
         } else if (mimetype.startsWith('audio/')) {
             props['name'] = 'file audio';
         } else if (mimetype.startsWith('application/octet-stream')) {
-            if (lowerPath.endsWith('.stl')) {
+            if (lowerPath.endsWith('.mp3')) {
+                props['name'] = 'file audio';
+            } else if (lowerPath.endsWith('.stl')) {
                 props['name'] = 'cube';
             } else if (lowerPath.endsWith('.blend')) {
                 props['name'] = 'cube';
@@ -828,6 +832,8 @@ export const filterToMimetypes = (filter) => {
         return ['text/html'];
     } else if (filter === 'pdf') {
         return ['application/pdf'];
+    } else if (filter === 'audio') {
+        return ['audio'];
     } else if (filter === 'ebook') {
         return ['application/epub+zip', 'application/x-mobipocket-ebook'];
     } else if (filter === 'image') {

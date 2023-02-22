@@ -220,7 +220,7 @@ function StatisticsPage() {
                         <StatisticValue>{toLocaleString(zip_count)}</StatisticValue>
                         <StatisticLabel>ZIP</StatisticLabel>
                     </Statistic>
-                    <Statistic>
+                    <Statistic color={mimetypeColor('audio/')}>
                         <StatisticValue>{toLocaleString(audio_count)}</StatisticValue>
                         <StatisticLabel>Audio</StatisticLabel>
                     </Statistic>

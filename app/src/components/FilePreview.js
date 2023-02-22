@@ -1,6 +1,14 @@
 import React from "react";
 import _ from "lodash";
-import {Button as SButton, Image, Modal, ModalActions, ModalContent} from "semantic-ui-react";
+import {
+    Button as SButton,
+    Header as SHeader,
+    Image,
+    Modal,
+    ModalActions,
+    ModalContent,
+    ModalHeader
+} from "semantic-ui-react";
 
 function getMediaPathURL(path) {
     return `/media/${encodeURIComponent(path['path'])}`;
@@ -28,11 +36,16 @@ function getIframeModal(path) {
 
 function getImageModal(path) {
     const url = getMediaPathURL(path);
-    return <ModalContent>
-        <a href={url}>
-            <Image src={url}/>
-        </a>
-    </ModalContent>
+    return <React.Fragment>
+        <ModalHeader>
+            {path['path']}
+        </ModalHeader>
+        <ModalContent>
+            <a href={url}>
+                <Image src={url}/>
+            </a>
+        </ModalContent>
+    </React.Fragment>
 }
 
 function getEpubModal(path) {
@@ -50,16 +63,42 @@ function getEpubModal(path) {
 
 function getVideoModal(path) {
     const url = getMediaPathURL(path);
-    return <ModalContent>
-        <video controls
+    const type = path['mimetype'] ? path['mimetype'] : 'video/mp4';
+    return <React.Fragment>
+        <ModalHeader>
+            {path['path']}
+        </ModalHeader>
+        <ModalContent>
+            <SHeader as='h5'>{path['path']}</SHeader>
+            <video controls
+                   autoPlay={true}
+                   id="player"
+                   playsInline={true}
+                   style={{maxWidth: '100%'}}
+            >
+                <source src={url} type={type}/>
+            </video>
+        </ModalContent>
+    </React.Fragment>
+}
+
+function getAudioModal(path) {
+    const url = getMediaPathURL(path);
+    const type = path['mimetype'] ? path['mimetype'] : 'audio/mpeg';
+    return <React.Fragment>
+        <ModalHeader>
+            {path['path']}
+        </ModalHeader><ModalContent>
+        <audio controls
                autoPlay={true}
                id="player"
                playsInline={true}
-               style={{maxWidth: '100%'}}
+               style={{width: '90%', maxWidth: '95%'}}
         >
-            <source src={url} type="video/mp4"/>
-        </video>
+            <source src={url} type={type}/>
+        </audio>
     </ModalContent>
+    </React.Fragment>
 }
 
 export const FilePreviewContext = React.createContext({
@@ -112,6 +151,8 @@ export function FilePreviewWrapper({children}) {
                 setModalContent(getIframeModal(previewFile), url, downloadURL);
             } else if (mimetype.startsWith('video/')) {
                 setModalContent(getVideoModal(previewFile), url, downloadURL);
+            } else if (mimetype.startsWith('audio/')) {
+                setModalContent(getAudioModal(previewFile), url, downloadURL);
             } else if (mimetype.startsWith('application/epub')) {
                 const viewerURL = getEpubViewerURL(previewFile);
                 setModalContent(getEpubModal(previewFile), viewerURL, downloadURL);

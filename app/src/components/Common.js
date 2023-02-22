@@ -643,6 +643,8 @@ export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
             props['name'] = 'cube';
         } else if (mimetype.startsWith('application/x-dosexec') || mimetype.startsWith('application/x-msi')) {
             props['name'] = 'microsoft';
+        } else if (mimetype.startsWith('audio/')) {
+            props['name'] = 'file audio';
         } else if (mimetype.startsWith('application/octet-stream')) {
             if (lowerPath.endsWith('.stl')) {
                 props['name'] = 'cube';

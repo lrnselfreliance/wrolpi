@@ -82,9 +82,6 @@ sudo -u postgres psql -c '\l' | grep wrolpi || (
 # Initialize/upgrade the WROLPi database.
 (cd /opt/wrolpi && /usr/bin/python3 /opt/wrolpi/main.py db upgrade)
 
-# Run the map installation script.
-/opt/wrolpi/scripts/install_map_debian_11.sh
-
 set +x
 
 ip=$(hostname -I | cut -d' ' -f1)

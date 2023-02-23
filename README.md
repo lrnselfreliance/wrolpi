@@ -92,20 +92,21 @@ Install WROLPi onto a fresh Debian 11 system.
 **Warning: this will clobber anything else on the system!  Do not run this installation script elsewhere!**
 
 1. Install [Debian 11](https://www.debian.org/) onto a laptop or other computer.
-2. Login to the new system.
-3. Get the WROLPi installation script
+2. Get the WROLPi installation script
     * `wget https://raw.githubusercontent.com/lrnselfreliance/wrolpi/release/install.sh -O /tmp/install.sh`
-4. Run the installation script
+3. Run the installation script
     * `sudo /bin/bash /tmp/install.sh`
-5. Start WROLPi
+4. Start WROLPi
     * `sudo systemctl start wrolpi.target`
-6. Browse to the IP address of your WROLPi!
+5. Browse to the IP address of your WROLPi!
+6. Run the map installation script (Optional)
+    * `sudo /bin/bash /opt/wrolpi/scripts/install_map_debian_11.sh`
 
 # RaspberryPi Install
 
 ## Download
 
-* Download the latest image at [wrolpi.org](https://wrolpi.org)
+* Download the latest image from [wrolpi.org](https://wrolpi.org)
 
 ## Manual install
 Install WROLPi onto a fresh Raspberry Pi.
@@ -113,14 +114,13 @@ Install WROLPi onto a fresh Raspberry Pi.
 **Warning: this will clobber anything else on the Raspberry Pi!  Do not run this installation script elsewhere!**
 
 1. Install [Ubuntu Server 20.04](https://cdimage.ubuntu.com/releases/20.04/release/) onto a RaspberryPi.
-2. Login to the new RaspberryPi.
-3. Get the WROLPi installation script
+2. Get the WROLPi installation script
     * `wget https://raw.githubusercontent.com/lrnselfreliance/wrolpi/release/install.sh -O /tmp/install.sh`
-4. Run the installation script
+3. Run the installation script
     * `sudo /bin/bash /tmp/install.sh`
-5. Start WROLPi
+4. Start WROLPi
     * `sudo systemctl start wrolpi.target`
-6. Join the Hotspot or browse to the IP address of your WROLPi!
+5. Join the Hotspot or browse to the IP address of your WROLPi!
 
 # Charter
 

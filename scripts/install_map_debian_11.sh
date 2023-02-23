@@ -12,7 +12,7 @@ apt install -y libapache2-mod-tile renderd tar unzip wget bzip2 apache2 lua5.1 m
   fonts-noto-cjk fonts-noto-hinted fonts-noto-unhinted ttf-unifont osmium-tool
 
 /usr/bin/npm install -g carto
-/usr/local/bin/carto -v
+/usr/bin/carto -v
 
 # Create `gis` database for map.
 sudo -u postgres psql -c '\l' | grep gis || sudo -u postgres createdb -E UTF8 -O wrolpi gis
@@ -39,7 +39,7 @@ chown -R wrolpi:wrolpi /opt/openstreetmap-carto
 sudo -u wrolpi /bin/bash -c '(cd /opt/openstreetmap-carto && git fetch && git checkout master && git reset --hard origin/master && git pull --ff)'
 cd /opt/openstreetmap-carto
 if [[ ! -f /opt/openstreetmap-carto/mapnik.xml || ! -s /opt/openstreetmap-carto/mapnik.xml ]]; then
-  /usr/local/bin/carto project.mml >/opt/openstreetmap-carto/mapnik.xml
+  /usr/bin/carto project.mml >/opt/openstreetmap-carto/mapnik.xml
 fi
 
 # Reset map.  Force it.

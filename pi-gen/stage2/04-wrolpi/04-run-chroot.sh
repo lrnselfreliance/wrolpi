@@ -36,3 +36,6 @@ chmod 644 /var/www/html/*
 
 mkdir /var/lib/mod_tile
 chown -R _renderd:_renderd /var/lib/mod_tile
+
+# Allow wrolpi user to delete map tiles.
+usermod -aG _renderd wrolpi

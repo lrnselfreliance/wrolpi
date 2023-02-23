@@ -66,11 +66,11 @@ if [ -d /var/lib/mod_tile ]; then
 else
   mkdir /var/lib/mod_tile
 fi
-chown -R wrolpi:wrolpi /var/lib/mod_tile
+chown -R _renderd:_renderd /var/lib/mod_tile
 
 sudo -u postgres dropdb gis || :
 
-sudo -u postgres createdb -E UTF8 -O wrolpi gis
+sudo -u postgres createdb -E UTF8 -O _renderd gis
 sudo -u postgres psql -d gis -c "CREATE EXTENSION postgis;" || :
 sudo -u postgres psql -d gis -c "CREATE EXTENSION hstore;" || :
 sudo -u postgres psql -d gis -c "ALTER TABLE geometry_columns OWNER TO wrolpi;"

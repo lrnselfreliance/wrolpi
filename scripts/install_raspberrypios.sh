@@ -1,31 +1,45 @@
 #!/usr/bin/env bash
-echo "Ubuntu 20.04 install start: $(date '+%Y-%m-%d %H:%M:%S')"
+echo "Raspberry Pi OS install start: $(date '+%Y-%m-%d %H:%M:%S')"
 
 set -x
 set -e
 
-# Install npm repos.
-npm --version || curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-
 # Update if we haven't updated in the last day.
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
 # Install dependencies
-apt install -y apt-transport-https ca-certificates curl gnupg-agent gcc libpq-dev software-properties-common \
-  postgresql-12 nginx-full nginx-doc python3.8-minimal python3.8-dev python3.8-doc python3.8-venv \
-  ffmpeg hostapd nodejs chromium-browser chromium-chromedriver cpufrequtils network-manager
+apt install -y \
+  apt-transport-https \
+  ca-certificates \
+  chromium \
+  chromium-driver \
+  cpufrequtils \
+  curl \
+  ffmpeg \
+  gcc \
+  gnupg-agent \
+  hostapd \
+  htop \
+  libpq-dev \
+  network-manager \
+  nginx-doc \
+  nginx-full \
+  postgresql-13 \
+  python3-dev \
+  python3-doc \
+  python3-full \
+  python3-pip \
+  python3-venv \
+  software-properties-common \
+  vim
+
+# Install npm.
+npm --version || curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
+apt install -y nodejs
+node -v
+npm -v
 
 # Install serve, and archiving tools.
-sudo npm i -g serve single-file-cli@1.0.33 'git+https://github.com/lrnselfreliance/readability-extractor' &
-
-# Setup the virtual environment that main.py expects
-pip3 --version || (
-  # If no pip, install pip
-  curl https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py &&
-    python3 /tmp/get-pip.py &
-)
-
-# Wait for npm and pip3.
-wait $(jobs -p)
+sudo npm i -g serve@12.0.1 single-file-cli@1.0.33 readability-extractor@0.0.6
 
 # Build React app in background job.
 cd /opt/wrolpi/app || exit 5
@@ -33,7 +47,8 @@ npm install || npm install || npm install || npm install # try install multiple 
 npm run build &
 
 # Install python requirements in background job.
-pip3 install -r /opt/wrolpi/requirements.txt &
+python3 -m venv /opt/wrolpi/venv
+/opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt &
 
 wait $(jobs -p)
 
@@ -62,9 +77,9 @@ visudo -c -f /etc/sudoers.d/90-wrolpi
 chown wrolpi:wrolpi /media/wrolpi
 
 # Install the systemd services
-cp /opt/wrolpi/etc/ubuntu20.04/wrolpi-api.service /etc/systemd/system/
-cp /opt/wrolpi/etc/debian11/wrolpi-app.service /etc/systemd/system/
-cp /opt/wrolpi/etc/ubuntu20.04/wrolpi.target /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-app.service /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 /usr/bin/systemctl daemon-reload
 systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service
@@ -74,13 +89,16 @@ systemctl stop wrolpi-app.service
 
 # Configure Postgresql.  Do this after the API is stopped.
 sudo -u postgres psql -c '\l' | grep wrolpi || (
-  sudo -u postgres createuser wrolpi &&
+  sudo -u postgres createuser -s wrolpi &&
     sudo -u postgres psql -c "alter user postgres password 'wrolpi'" &&
     sudo -u postgres psql -c "alter user wrolpi password 'wrolpi'" &&
     sudo -u postgres createdb -E UTF8 -O wrolpi wrolpi
 )
 # Initialize/upgrade the WROLPi database.
-(cd /opt/wrolpi && /usr/bin/python3 /opt/wrolpi/main.py db upgrade)
+(cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py db upgrade)
+
+# Install map only if that script hasn't finished.
+[ -f /var/www/html/leaflet.css ] || /opt/wrolpi/scripts/install_map_raspberrypios.sh
 
 set +x
 

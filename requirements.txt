@@ -1,7 +1,7 @@
 Pillow==9.3.0
 Pint==0.18
 PyPDF2[crypto]==2.11.2
-PyYAML==5.3.1  # this is the only version available on RPi
+PyYAML==6.0
 SQLAlchemy==1.3.22
 aiohttp==3.8.3
 alembic==1.7.5

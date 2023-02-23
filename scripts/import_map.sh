@@ -18,7 +18,7 @@ if [ "${1}" == "" ]; then
 fi
 
 HAS_ICE_SHEET=false
-psql gis wrolpi -c '\d' | grep icesheet_polygons && HAS_ICE_SHEET=true
+psql gis -c '\d' | grep icesheet_polygons && HAS_ICE_SHEET=true
 if [ ${HAS_ICE_SHEET} = false ]; then
   echo "WROLPi: Missing icesheet_polygons.  Run reset_map.sh"
   exit 4
@@ -58,12 +58,30 @@ if [[ ${1} == *.osm.pbf ]]; then
     pbf_path=${MERGED_TMP_FILE}
   fi
 
-  nice -n 18 osm2pgsql -d gis --create --slim -G --hstore -U _renderd -H 127.0.0.1 \
+  # Import as wrolpi user (the user running this script), then change ownership to _renderd.
+  nice -n 18 osm2pgsql -d gis --create --slim -G --hstore \
     --tag-transform-script /opt/openstreetmap-carto/openstreetmap-carto.lua \
     -C ${MAX_CACHE} \
     --number-processes 3 \
     -S /opt/openstreetmap-carto/openstreetmap-carto.style \
     "${pbf_path}"
+  # Assign all data to _renderd so the map can be rendered.
+  psql -d gis -c 'ALTER TABLE external_data OWNER TO _renderd'
+  psql -d gis -c 'ALTER TABLE geography_columns OWNER TO _renderd'
+  psql -d gis -c 'ALTER TABLE geometry_columns OWNER TO _renderd'
+  psql -d gis -c "ALTER TABLE icesheet_outlines OWNER TO _renderd"
+  psql -d gis -c "ALTER TABLE icesheet_polygons OWNER TO _renderd"
+  psql -d gis -c "ALTER TABLE ne_100m_admin_0_boundary_lines_land OWNER TO _renderd"
+  psql -d gis -c "ALTER TABLE planet_osm_line OWNER TO _renderd"
+  psql -d gis -c "ALTER TABLE planet_osm_nodes OWNER TO _renderd"
+  psql -d gis -c "ALTER TABLE planet_osm_point OWNER TO _renderd"
+  psql -d gis -c "ALTER TABLE planet_osm_polygon OWNER TO _renderd"
+  psql -d gis -c "ALTER TABLE planet_osm_rels OWNER TO _renderd"
+  psql -d gis -c "ALTER TABLE planet_osm_roads OWNER TO _renderd"
+  psql -d gis -c "ALTER TABLE planet_osm_ways OWNER TO _renderd"
+  psql -d gis -c "ALTER TABLE simplified_water_polygons OWNER TO _renderd"
+  psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO _renderd"
+  psql -d gis -c "ALTER TABLE water_polygons OWNER TO _renderd"
 elif [[ ${1} == *.dump ]]; then
   if [ ! -f "${1}" ]; then
     echo "WROLPi: File does not exist! ${1}"

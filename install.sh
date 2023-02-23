@@ -59,7 +59,7 @@ git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi || :
 (cd /opt/wrolpi && git fetch && git checkout "${BRANCH}" && git reset --hard origin/"${BRANCH}") || exit 4
 
 if [ ${rpi} == true ]; then
-  /opt/wrolpi/scripts/install_ubuntu_20.04.sh 2>&1 | tee /opt/wrolpi/install.log
+  /opt/wrolpi/scripts/install_raspberrypios.sh 2>&1 | tee /opt/wrolpi/install.log
   install_code=${PIPESTATUS[0]}
 elif [ ${debian11} == true ]; then
   /opt/wrolpi/scripts/install_debian_11.sh 2>&1 | tee /opt/wrolpi/install.log

@@ -8,9 +8,9 @@ fi
 set -x
 
 # Use D.C. to initialized DB because it is so small.
-DC_MAP=district-of-columbia-latest.osm.pbf
+DC_MAP=district-of-columbia-230222.osm.pbf
 DC_MAP_PATH=/tmp/${DC_MAP}
-wget --continue https://download.geofabrik.de/north-america/us/${DC_MAP} -O ${DC_MAP_PATH} || :
+[ -f "${DC_MAP_PATH}" ] || wget --continue https://wrolpi.org/downloads/${DC_MAP} -O ${DC_MAP_PATH}
 
 if [ ! -f "${DC_MAP_PATH}" ]; then
   echo "Could not download D.C. map"
@@ -28,15 +28,15 @@ dc_import=false
 indexes=false
 while [ "${COUNT}" -lt "${MAX_TRIES}" ]; do
   [[ "${external_data}" = false ]] &&
-    sudo -u wrolpi nice -n 18 /opt/openstreetmap-carto/scripts/get-external-data.py \
+    sudo -u _renderd nice -n 18 /opt/openstreetmap-carto/scripts/get-external-data.py \
       -C \
-      -d gis -U wrolpi &&
+      -d gis -U _renderd &&
     external_data=true
   [[ "${dc_import}" = false ]] &&
-    sudo -u wrolpi nice -n 18 /opt/wrolpi/scripts/import_map.sh ${DC_MAP_PATH} &&
+    sudo -u _renderd nice -n 18 /opt/wrolpi/scripts/import_map.sh ${DC_MAP_PATH} &&
     dc_import=true
   [[ "${indexes}" = false ]] &&
-    sudo -u wrolpi psql -d gis -f /opt/openstreetmap-carto/indexes.sql &&
+    sudo -u _renderd psql -d gis -f /opt/openstreetmap-carto/indexes.sql &&
     indexes=true
   if [[ "${external_data}" == true && "${dc_import}" == true && "${indexes}" == true ]]; then
     SUCCESS=true

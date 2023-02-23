@@ -6,7 +6,7 @@ set -x
 apt purge -y hostapd
 apt autoremove -y
 
-cat >> /etc/profile << 'EOF'
+cat >>/etc/profile <<'EOF'
 alias ll='ls -lh'
 alias la='ll -a'
 EOF
@@ -15,21 +15,23 @@ EOF
 sed -i 's/port = 5433/port = 5432/' /etc/postgresql/13/main/postgresql.conf
 
 # Install Node console commands.
-single-file --version || npm i -g serve@12.0.1 single-file-cli@1.0.15 'git+https://github.com/lrnselfreliance/readability-extractor' carto@1.2.0
+single-file --version || npm i -g serve@12.0.1 single-file-cli@1.0.15 readability-extractor@0.0.6 carto@1.2.0
 
 # Put the latest WROLPi release in /opt/wrolpi.
 rm -rf /opt/wrolpi
-git clone -b master https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
-chown -R ${FIRST_USER_NAME}:${FIRST_USER_NAME} /opt/wrolpi
+git clone -b release https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
 
 # Install Python requirements.
 pip3 install --upgrade pip
-pip3 install -r /opt/wrolpi/requirements.txt
+python3 -m venv /opt/wrolpi/venv
+/opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt
 
 # Install webapp.
 cd /opt/wrolpi/app
 npm install
 npm run build
+
+chown -R ${FIRST_USER_NAME}:${FIRST_USER_NAME} /opt/wrolpi
 
 # Configure nginx.
 cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
@@ -53,9 +55,9 @@ chmod 660 /etc/sudoers.d/90-wrolpi
 [ -d /media/wrolpi ] || mkdir /media/wrolpi
 chown ${FIRST_USER_NAME}:${FIRST_USER_NAME} /media/wrolpi
 
-cp /opt/wrolpi/etc/ubuntu20.04/wrolpi-api.service /etc/systemd/system/
-cp /opt/wrolpi/etc/ubuntu20.04/wrolpi-app.service /etc/systemd/system/
-cp /opt/wrolpi/etc/ubuntu20.04/wrolpi.target /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-app.service /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 
 systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service
@@ -63,3 +65,10 @@ systemctl enable wrolpi-app.service
 # NetworkManager for the hotspot.
 systemctl enable NetworkManager
 
+set +x
+
+echo
+echo "======================================================================"
+echo "03-run-chroot.sh completed"
+echo "======================================================================"
+echo

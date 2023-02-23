@@ -60,19 +60,19 @@ BASH_BIN = which('bash', '/bin/bash', warn=True)
 
 # Archive
 SINGLE_FILE_BIN = which('single-file',
-                        '/usr/bin/single-file',  # rpi ubuntu
+                        '/usr/bin/single-file',  # rpi os
                         '/usr/local/bin/single-file',  # debian
                         warn=True,
                         flag='singlefile_installed',
                         )
 CHROMIUM = which('chromium-browser', 'chromium',
-                 '/usr/bin/chromium-browser',  # rpi ubuntu
+                 '/usr/bin/chromium-browser',  # rpi os
                  '/usr/bin/chromium',  # debian
                  warn=True,
                  flag='chromium_installed',
                  )
 READABILITY_BIN = which('readability-extractor',
-                        '/usr/bin/readability-extractor',  # rpi ubuntu
+                        '/usr/bin/readability-extractor',  # rpi os
                         '/usr/local/bin/readability-extractor',  # debian
                         warn=True,
                         flag='readability_installed',

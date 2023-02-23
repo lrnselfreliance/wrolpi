@@ -25,6 +25,7 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 
 * [Features](#features)
 * [Demo](#demo)
+* [Download](#download)
 * [Try WROLPi](#try-wrolpi)
 * [Debian 11 Install](#debian-11-install)
 * [Raspberry Pi Install](#raspberrypi-install)
@@ -46,7 +47,7 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 - [ ] Synchronizer and/or duplicator
 - [ ] Food storage calculator
 
-## Feature Matrix
+## Module features matrix
 
 | **Module**         | **Search** | **View** | **Download** |
 |--------------------|:-----------|----------|--------------|
@@ -60,6 +61,10 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 # Demo
 
 <a href="https://www.youtube.com/watch?v=Qz-FuenRylQ"> ![YouTube Demo Video](https://raw.githubusercontent.com/lrnselfreliance/wrolpi/master/demo_link.jpg)</a>
+
+# Download
+
+Images are available on [wrolpi.org](https://wrolpi.org)
 
 # Try WROLPi!
 
@@ -99,21 +104,14 @@ Install WROLPi onto a fresh Debian 11 system.
 4. Start WROLPi
     * `sudo systemctl start wrolpi.target`
 5. Browse to the IP address of your WROLPi!
-6. Run the map installation script (Optional)
-    * `sudo /bin/bash /opt/wrolpi/scripts/install_map_debian_11.sh`
 
 # RaspberryPi Install
 
-## Download
-
-* Download the latest image from [wrolpi.org](https://wrolpi.org)
-
-## Manual install
 Install WROLPi onto a fresh Raspberry Pi.
 
 **Warning: this will clobber anything else on the Raspberry Pi!  Do not run this installation script elsewhere!**
 
-1. Install [Ubuntu Server 20.04](https://cdimage.ubuntu.com/releases/20.04/release/) onto a RaspberryPi.
+1. Install [Raspberry Pi OS](https://www.raspberrypi.com/software/operating-systems/) onto a RaspberryPi.
 2. Get the WROLPi installation script
     * `wget https://raw.githubusercontent.com/lrnselfreliance/wrolpi/release/install.sh -O /tmp/install.sh`
 3. Run the installation script
@@ -132,7 +130,7 @@ Install WROLPi onto a fresh Raspberry Pi.
     * External USB hard drive
     * Power supply and cables
     * WiFi USER device such as a phone, tablet, or laptop.
-1. A WROLPi instance should consume a minimal amount of electricity during WROL event. It is expected power will be
+2. A WROLPi instance should consume a minimal amount of electricity during WROL event. It is expected power will be
    scarce when WROLPi is needed most.
 
 ## User expectations
@@ -143,13 +141,13 @@ Install WROLPi onto a fresh Raspberry Pi.
 ## Software properties and capabilities
 
 1. A WROLPi instance should be able to "factory-reset" itself without any outside services.
-1. WROLPi should function completely without any internet services.
-1. A user should have easy access to their data if WROLPi fails:
+2. WROLPi should function completely without any internet services.
+3. A user should have easy access to their data if WROLPi fails:
     * For example, a user can watch their videos by navigating a short and intuitive directory structure and opening the
       video in their preferred video player.
-1. WROLPi should be self-documented. The UI should contain a tutorial for USERS as well as the MAINTAINER.
+4. WROLPi should be self-documented. The UI should contain a tutorial for USERS as well as the MAINTAINER.
     * If the UI isn't functional, the code should be documented such that a user can restore functionality.
-1. WROLPi should favor pre-processing, rather than processing during a WROL event. Such as re-encoding a video, or
+5. WROLPi should favor pre-processing, rather than processing during a WROL event. Such as re-encoding a video, or
    processing captions. This is to ensure that when a user adds content during non-WROL time, the processing for optimum
    performance is already done for a WROL event.
 

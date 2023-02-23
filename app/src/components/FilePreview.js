@@ -87,6 +87,7 @@ function getVideoModal(path) {
 function getAudioModal(path) {
     const url = getMediaPathURL(path);
     const name = path['path'].replace(/^.*[\\\/]/, '');
+    // Some audio files may not have the correct mimetype.  Trust the suffix identifies an audio file.
     const type = path['mimetype'] !== 'application/octet-stream' ? path['mimetype'] : 'audio/mpeg';
     return <React.Fragment>
         <ModalHeader>
@@ -136,7 +137,6 @@ export function FilePreviewWrapper({children}) {
 
     React.useEffect(() => {
         setPreviewModal(null);
-        console.log(previewFile);
         if (previewFile && !_.isObject(previewFile)) {
             console.error(`Unknown previewFile type: ${typeof previewFile}`);
             return;

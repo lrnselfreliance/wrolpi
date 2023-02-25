@@ -43,7 +43,7 @@ systemctl stop wrolpi-app
 # Pull the latest commit of the requested branch.
 (cd /opt/wrolpi && git fetch && git checkout "${BRANCH}" && git reset --hard origin/"${BRANCH}") || exit 4
 
-/opt/wrolpi/scripts/build_api_and_app.sh 2>&1 | tee /opt/wrolpi/upgrade.log
+/opt/wrolpi/scripts/upgrade.sh 2>&1 | tee /opt/wrolpi/upgrade.log
 
 set +x
 

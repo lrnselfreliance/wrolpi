@@ -94,6 +94,8 @@ sudo -u postgres psql -c '\l' | grep wrolpi || (
     sudo -u postgres psql -c "alter user wrolpi password 'wrolpi'" &&
     sudo -u postgres createdb -E UTF8 -O wrolpi wrolpi
 )
+# wrolpi user is superuser so they can import maps.
+sudo -u postgres psql -c "alter user wrolpi with superuser"
 # Initialize/upgrade the WROLPi database.
 (cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py db upgrade)
 

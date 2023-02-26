@@ -42,6 +42,9 @@ def strftime(dt: datetime) -> str:
 
 
 def strptime(dt: str) -> datetime:
+    if isinstance(dt, str) and dt.endswith(' 00:00'):
+        # URL decoding removed +
+        dt = f'{dt[:26]}+00:00'
     return datetime.fromisoformat(dt).astimezone(pytz.UTC)
 
 

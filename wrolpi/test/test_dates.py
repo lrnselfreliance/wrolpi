@@ -4,6 +4,7 @@ import pytest
 import pytz
 from sqlalchemy import Column, Integer
 
+from wrolpi import dates
 from wrolpi.common import Base
 from wrolpi.dates import TZDateTime, timedelta_to_timestamp
 from wrolpi.db import get_db_session, get_db_curs
@@ -70,3 +71,11 @@ def test_TZDateTime(test_session):
 ])
 def test_timedelta_to_timestamp(td, expected):
     assert timedelta_to_timestamp(td) == expected
+
+
+@pytest.mark.parametrize('dt,expected', [
+    ('2023-02-26T02:27:26.408944+00:00', datetime(2023, 2, 26, 2, 27, 26, 408944, tzinfo=pytz.UTC)),
+    ('2023-02-26T02:27:26.408944 00:00', datetime(2023, 2, 26, 2, 27, 26, 408944, tzinfo=pytz.UTC)),
+])
+def test_strptime(dt, expected):
+    assert dates.strptime(dt) == expected

@@ -59,7 +59,12 @@ cp /opt/wrolpi/50x.html /var/www/50x.html
 
 # Create the WROLPi user
 grep wrolpi /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
-chown -R wrolpi:wrolpi /opt/wrolpi
+cat >/home/wrolpi/.pgpass <<'EOF'
+127.0.0.1:5432:gis:_renderd:wrolpi
+127.0.0.1:5432:wrolpi:wrolpi:wrolpi
+EOF
+chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi
+chmod 0600 /home/wrolpi/.pgpass
 
 # Give WROLPi group a few privileged commands via sudo without password.
 cat >/etc/sudoers.d/90-wrolpi <<'EOF'

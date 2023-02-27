@@ -70,6 +70,9 @@ def get_domain_directory(url: str) -> pathlib.Path:
     return directory
 
 
+MAXIMUM_ARCHIVE_FILE_CHARACTER_LENGTH = 200
+
+
 def get_new_archive_files(url: str, title: Optional[str]) -> ArchiveFiles:
     """Create a list of archive files using a shared name schema.  Raise an error if any of them exist."""
     directory = get_domain_directory(url)
@@ -77,7 +80,7 @@ def get_new_archive_files(url: str, title: Optional[str]) -> ArchiveFiles:
     dt = archive_strftime(now())
 
     title = escape_file_name(title or 'NA')
-    title = title[:50]
+    title = title[:MAXIMUM_ARCHIVE_FILE_CHARACTER_LENGTH]
     prefix = f'{dt}_{title}'
     singlefile_path = directory / f'{prefix}.html'
     readability_path = directory / f'{prefix}.readability.html'

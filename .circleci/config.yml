@@ -142,6 +142,33 @@ jobs:
             - "venv"
       - run:
           command: './venv/bin/pytest -svv wrolpi modules'
+  api-tests-3-11:
+    docker:
+      - image: cimg/python:3.11
+      - image: cimg/postgres:14.1
+        environment:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: wrolpi
+          POSTGRES_PASSWORD: "wrolpi"
+    resource_class: small
+    steps:
+      - checkout
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y ffmpeg
+      - restore_cache:
+          key: deps-3.11-{{ checksum "requirements.txt" }}
+      - run:
+          name: Install Requirements
+          command: |
+            python3 -m venv venv
+            . venv/bin/activate
+            pip install -r requirements.txt
+      - save_cache:
+          key: deps-3.11-{{ checksum "requirements.txt" }}
+          paths:
+            - "venv"
+      - run:
+          command: './venv/bin/pytest -svv wrolpi modules'
 
 workflows:
   wrolpi-api-tests:
@@ -149,6 +176,7 @@ workflows:
       - api-tests-3-8
       - api-tests-3-9
       - api-tests-3-10
+      - api-tests-3-11
   wrolpi-app-test:
     jobs:
       - app-tests-12

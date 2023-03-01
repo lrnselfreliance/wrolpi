@@ -1,3 +1,4 @@
+import gc
 import pathlib
 from typing import List, Dict, Optional
 
@@ -17,7 +18,10 @@ logger = logger.getChild(__name__)
 def get_pdf_title(path: pathlib.Path) -> Optional[str]:
     reader = PdfReader(path)
     if reader.metadata and reader.metadata.title:
-        return reader.metadata.title.strip()
+        title = reader.metadata.title.strip()
+        # TODO collecting titles causes a memory leak.  Why?
+        gc.collect()
+        return title
 
 
 @register_modeler

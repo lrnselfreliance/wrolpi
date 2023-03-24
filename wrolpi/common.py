@@ -36,14 +36,40 @@ from wrolpi.vars import PYTEST, MODULES_DIR, \
 
 logger = logging.getLogger()
 ch = logging.StreamHandler()
-formatter = logging.Formatter('[%(asctime)s] [%(name)s] [%(levelname)s] %(message)s')
+formatter = logging.Formatter('[%(asctime)s] [%(name)s:%(lineno)d] [%(levelname)s] %(message)s')
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
 logger_ = logger.getChild(__name__)
 
+
+def set_log_level(level, warn_level: bool = True):
+    """Set the level of the root logger so all children that have been created (or will be created) share the same
+    level."""
+    logger.setLevel(level)
+    if level == logging.NOTSET:
+        # Custom maximum logging level which will include SQLAlchemy debugging.
+        sa_logger = logging.getLogger('sqlalchemy.engine')
+        sa_logger.setLevel(logging.DEBUG)
+
+    # Always warn about the log level, so we know what should have been logged.
+    effective_level = logger.getEffectiveLevel()
+    level_name = logging.getLevelName(effective_level)
+    if warn_level:
+        logger.warning(f'Logging level: {level_name}')
+
+
+@contextlib.contextmanager
+def log_level_context(level):
+    starting_level = logger.getEffectiveLevel()
+    set_log_level(level, warn_level=False)
+    yield
+    set_log_level(starting_level, warn_level=False)
+
+
 __all__ = [
     'logger',
+    'set_log_level',
     'Base',
     'ModelHelper',
     'get_model_by_table_name',
@@ -95,7 +121,6 @@ __all__ = [
     'truncate_object_bytes',
     'background_task',
     'get_warn_once',
-    'ordered_unique_list',
     'truncate_generator_bytes',
     'cancel_refresh_tasks',
     'cancelable_wrapper',
@@ -123,8 +148,8 @@ class ModelHelper:
     def find_by_paths(paths, session) -> List:
         raise NotImplementedError('This model has not defined this method.')
 
-    @property
-    def primary_path(self):
+    @staticmethod
+    def get_by_id(id_: int, session: Session = None) -> Optional[Base]:
         raise NotImplementedError('This model has not defined this method.')
 
 
@@ -622,7 +647,7 @@ def api_param_limiter(maximum: int, default: int = 20) -> callable:
     >>> limiter(100)
     100
     >>> limiter(150)
-    150
+    100
     """
 
     def limiter_(i: int) -> int:
@@ -732,12 +757,14 @@ def walk(path: Path) -> Generator[Path, None, None]:
             yield from walk(path)
 
 
-def get_files_and_directories(path: Path):
+def get_files_and_directories(directory: Path):
     """Walk a directory, return a tuple of all files and all directories within.  (Not recursive)."""
-    if not path.is_dir():
+    if not directory.exists():
+        raise ValueError(f'Directory does not exist: {directory}')
+    if not directory.is_dir():
         raise ValueError('Can only walk a directory.')
 
-    directories, files = partition(lambda i: i.is_dir(), path.iterdir())
+    directories, files = partition(lambda i: i.is_dir(), directory.iterdir())
     return files, directories
 
 
@@ -798,27 +825,11 @@ def register_modeler(modeler: callable):
     return modeler
 
 
-def apply_modelers(files, session: Session):
-    """
-    Group Files by stem, send those groups to the modelers.  Each modeler will model what Files are valid.
-    """
-    from wrolpi.files.lib import split_path_stem_and_suffix
-
-    if not files:
-        return
-
-    # Group all files by their common name (without the suffix).
-    groups = {}
-    for file in files:
-        file.do_stats()
-        stem, _ = split_path_stem_and_suffix(file.path)
-        try:
-            groups[stem].append(file)
-        except KeyError:
-            groups[stem] = [file, ]
-
+async def apply_modelers():
     for modeler in modelers:
-        modeler(groups, session)
+        await modeler()
+        # Sleep to catch cancel.
+        await asyncio.sleep(0)
 
 
 after_refresh = []
@@ -829,7 +840,7 @@ def register_after_refresh(func: callable):
     return func
 
 
-def apply_after_refresh():
+async def apply_after_refresh():
     for func in after_refresh:
         logger_.info(f'Applying after-refresh {func.__name__}')
         func()
@@ -871,7 +882,7 @@ def chunks_by_stem(it: List[Union[pathlib.Path, str]], size: int) -> Generator[L
         raise ValueError('size must be a positive integer')
 
     if not it or len(it) < size:
-        yield it
+        yield sorted(it)
         return
 
     if not isinstance(it, list):
@@ -1040,11 +1051,6 @@ def get_warn_once(message: str, logger__: logging.Logger, level=logging.ERROR):
             event.set()
 
     return warn_once
-
-
-def ordered_unique_list(lst: Iterable) -> List:
-    """Return a new list that contains only the first occurrence of each item."""
-    return list(dict.fromkeys(lst))
 
 
 def get_global_statistics():

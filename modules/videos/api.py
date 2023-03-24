@@ -36,18 +36,16 @@ def download(_, channel_id: int = None):
     return response.empty()
 
 
-@content_bp.post('/favorite')
+@content_bp.post('/tag')
 @openapi.definition(
-    description='Toggle the favorite flag on a video',
-    body=schema.FavoriteRequest,
+    description='Associate a Video with a Tag',
+    body=schema.TagRequest,
 )
-@validate(schema.FavoriteRequest)
-@openapi.response(HTTPStatus.OK, schema.FavoriteResponse)
+@validate(schema.TagRequest)
 @openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
-async def favorite(_: Request, body: schema.FavoriteRequest):
-    _favorite = video_lib.set_video_favorite(body.video_id, body.favorite)
-    ret = {'video_id': body.video_id, 'favorite': _favorite}
-    return json_response(ret, HTTPStatus.OK)
+async def tag(_: Request, body: schema.TagRequest):
+    video_lib.tag_video(body.video_id, body.tag_name)
+    return response.empty()
 
 
 @content_bp.get('/statistics')

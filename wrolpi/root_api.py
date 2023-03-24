@@ -15,6 +15,7 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi import admin, status, flags
+from wrolpi import tags
 from wrolpi.admin import HotspotStatus
 from wrolpi.common import logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics
@@ -24,7 +25,7 @@ from wrolpi.errors import WROLModeEnabled, API_ERRORS, APIError, ValidationError
 from wrolpi.events import get_events
 from wrolpi.files.lib import get_file_statistics
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, DownloadRequest, EchoResponse, \
-    EventsRequest
+    EventsRequest, NewTagRequest, DeleteTagRequest
 from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
     truthy_arg
 from wrolpi.version import __version__
@@ -32,6 +33,7 @@ from wrolpi.version import __version__
 logger = logger.getChild(__name__)
 
 api_app = Sanic(name='api_app')
+api_app.config.FALLBACK_ERROR_FORMAT = 'json'
 
 api_bp = Blueprint('RootAPI', url_prefix='/api')
 
@@ -377,6 +379,26 @@ async def feed(_: Request, query: EventsRequest):
     return json_response(dict(events=events, now=start))
 
 
+@api_bp.get('/tag')
+async def get_tags_request(_: Request):
+    tags_ = tags.get_tags()
+    return json_response(dict(tags=tags_))
+
+
+@api_bp.post('/tag/new')
+@validate(NewTagRequest)
+async def post_new_tag(_: Request, body: NewTagRequest):
+    tags.new_tag(body.name, body.color)
+    return response.empty(HTTPStatus.CREATED)
+
+
+@api_bp.post('/tag/delete')
+@validate(DeleteTagRequest)
+async def delete_tag_request(_: Request, body: DeleteTagRequest):
+    tags.delete_tag(body.name)
+    return response.empty(HTTPStatus.NO_CONTENT)
+
+
 class CustomJSONEncoder(json.JSONEncoder):
 
     def default(self, obj):
@@ -391,7 +413,8 @@ class CustomJSONEncoder(json.JSONEncoder):
                 else:
                     # A datetime with no timezone is UTC.
                     obj = obj.replace(tzinfo=timezone.utc)
-                return obj.isoformat()
+                obj = obj.isoformat()
+                return obj
             elif isinstance(obj, date):
                 # API always returns dates in UTC.
                 obj = datetime(obj.year, obj.month, obj.day, tzinfo=timezone.utc)

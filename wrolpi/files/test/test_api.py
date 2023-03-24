@@ -1,15 +1,13 @@
 import json
 from http import HTTPStatus
-from itertools import zip_longest
 from unittest import mock
 
 import pytest
 
 from wrolpi.errors import API_ERRORS, WROLModeEnabled
-from wrolpi.files.models import File
-from wrolpi.test.common import assert_dict_contains
-from wrolpi.vars import PROJECT_DIR
 from wrolpi.files import lib as files_lib
+from wrolpi.files.models import FileGroup
+from wrolpi.vars import PROJECT_DIR
 
 
 def test_list_files_api(test_client, make_files_structure, test_directory):
@@ -21,7 +19,7 @@ def test_list_files_api(test_client, make_files_structure, test_directory):
         'empty directory/',
         'videos/other video.mp4',
         'videos/some video.mp4',
-        'lost+found/', # Should always be ignored.
+        'lost+found/',  # Should always be ignored.
     ]
     files = make_files_structure(files)
     files[0].write_text('bar contents')
@@ -154,19 +152,9 @@ def test_delete_wrol_mode(test_client, wrol_mode_fixture):
     assert response.json['code'] == API_ERRORS[WROLModeEnabled]['code']
 
 
-def do_search(test_client, search_str, total, expected):
-    content = json.dumps({'search_str': search_str})
-    request, response = test_client.post('/api/files/search', content=content)
-    assert response.json['totals']['files'] == total
-    for file, expected in zip_longest(response.json['files'], expected):
-        assert_dict_contains(file, expected)
-        # FileBrowser in React requires a key.  We use the path.
-        assert file['path'] == file['key']
-
-
-def test_files_search(test_session, test_client, make_files_structure):
+def test_files_search(test_session, test_client, make_files_structure, assert_files_search):
     # You can search an empty directory.
-    do_search(test_client, 'nothing', 0, [])
+    assert_files_search('nothing', [])
 
     # Create files in the temporary directory.  Add some contents so the mimetype can be tested.
     files = [
@@ -185,65 +173,11 @@ def test_files_search(test_session, test_client, make_files_structure):
     request, response = test_client.post('/api/files/refresh')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    do_search(test_client, 'foo', 1, [dict(path='foo_is_the_name.txt', mimetype='text/plain', size=12)])
-    do_search(test_client, 'bar', 1, [dict(path='archives/bar.txt', mimetype='text/plain', size=16)])
-    do_search(test_client, 'baz', 2, [
-        dict(path='baz baz two.mp4', mimetype='video/mp4', size=1056318),
-        dict(path='baz.mp4', mimetype='video/mp4', size=1056318),
-    ])
-    do_search(test_client, 'two', 1, [dict(path='baz baz two.mp4', mimetype='video/mp4', size=1056318)])
-    do_search(test_client, 'nothing', 0, [])
-
-    # No search string returns all Files.
-    do_search(test_client, None, 4, [
-        dict(path='archives/bar.txt'),
-        dict(path='baz baz two.mp4'),
-        dict(path='baz.mp4'),
-        dict(path='foo_is_the_name.txt'),
-    ])
-
-
-def test_associated_files(test_session, test_client, make_files_structure):
-    mp4, png, j, txt = make_files_structure([
-        'video.mp4',
-        'video.png',
-        'video.info.json',
-        'not a video.txt',
-    ])
-    test_client.post('/api/files/refresh')
-    mp4_file = test_session.query(File).filter_by(path=mp4).one()
-    png_file = test_session.query(File).filter_by(path=png).one()
-    j_file = test_session.query(File).filter_by(path=j).one()
-    txt_file = test_session.query(File).filter_by(path=txt).one()
-
-    def check_files_search(content, expected):
-        request, response = test_client.post('/api/files/search', content=json.dumps(content))
-        assert response.status_code == HTTPStatus.OK
-        assert [{'path': i['path']} for i in response.json['files']] == expected
-
-    check_files_search(
-        {'search_str': 'video'},
-        [
-            {'path': 'not a video.txt'},
-            {'path': 'video.info.json'},
-            {'path': 'video.mp4'},
-            {'path': 'video.png'},
-        ]
-    )
-
-    mp4_file.associated = False  # the modeled file
-    png_file.associated = True
-    j_file.associated = True
-    test_session.commit()
-
-    # Associated files are last.
-    check_files_search(
-        {'search_str': 'video'},
-        [
-            {'path': 'not a video.txt'},
-            {'path': 'video.mp4'},
-        ]
-    )
+    assert_files_search('foo', [dict(full_stem='foo_is_the_name')])
+    assert_files_search('bar', [dict(full_stem='archives/bar')])
+    assert_files_search('baz', [dict(full_stem='baz baz two'), dict(full_stem='baz')])
+    assert_files_search('two', [dict(full_stem='baz baz two')])
+    assert_files_search('nothing', [])
 
 
 def test_directory_search(test_client, make_files_structure):
@@ -271,19 +205,33 @@ def test_directory_search(test_client, make_files_structure):
     assert_directories('food', [])
 
 
-def test_refresh_files_list(test_session, test_client, make_files_structure):
+def test_refresh_files_list(test_session, test_client, make_files_structure, test_directory):
     """The user can request to refresh specific files."""
     make_files_structure(['bar.txt', 'bar.mp4'])
 
-    # Video file near `bar.txt` can be ignored.
-    content = json.dumps({'files': ['bar.txt'], 'include_files_near': False})
-    request, response = test_client.post('/api/files/refresh/list', content=content)
+    # Only the single file that was refreshed is discovered.
+    content = json.dumps({'paths': ['bar.txt']})
+    request, response = test_client.post('/api/files/refresh', content=content)
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert test_session.query(File).count() == 1
+    assert test_session.query(FileGroup).count() == 1
+    group: FileGroup = test_session.query(FileGroup).one()
+    assert len(group.files) == 1
+
+    request, response = test_client.post('/api/files/refresh')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    group: FileGroup = test_session.query(FileGroup).one()
+    assert len(group.files) == 2
 
 
-def test_file_statistics(test_session, test_client, example_pdf, example_mobi, example_epub, video_file):
+def test_file_statistics(test_session, test_client, test_directory, example_pdf, example_mobi, example_epub,
+                         video_file):
     """A summary of File statistics can be fetched."""
+    # Give each file a unique stem.
+    video_file.rename(test_directory / 'video.mp4')
+    example_pdf.rename(test_directory / 'pdf.pdf')
+    example_mobi.rename(test_directory / 'mobi.mobi')
+    example_epub.rename(test_directory / 'epub.epub')
+
     # Statistics can be fetched while empty.
     request, response = test_client.get('/api/statistics')
     assert response.status_code == HTTPStatus.OK
@@ -311,7 +259,7 @@ def test_file_statistics(test_session, test_client, example_pdf, example_mobi, e
         'ebook_count': 2,
         'image_count': 0,
         'pdf_count': 1,
-        'total_count': 5,
+        'total_count': 4,
         'video_count': 1,
         'zip_count': 0,
     }

@@ -22,9 +22,9 @@ logger = logger.getChild(__name__)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 async def get_archive(_: Request, archive_id: int):
     archive = lib.get_archive(archive_id=archive_id)
-    archive_file = archive.singlefile_file.__json__()
-    history = [i.singlefile_file.__json__() for i in archive.history]
-    return json_response({'file': archive_file, 'history': history})
+    archive_file_group = archive.file_group.__json__()
+    history = [i.file_group.__json__() for i in archive.history]
+    return json_response({'file_group': archive_file_group, 'history': history})
 
 
 @bp.delete('/<archive_ids:int>')
@@ -52,7 +52,7 @@ archive_limit_limiter = api_param_limiter(100)
 
 @bp.post('/search')
 @openapi.definition(
-    summary='Search archive contents and titles',
+    summary='A File search with more filtering related to Archives',
     body=schema.ArchiveSearchRequest,
 )
 @openapi.response(HTTPStatus.OK, schema.ArchiveSearchResponse)
@@ -64,6 +64,6 @@ async def search_archives(_: Request, body: schema.ArchiveSearchRequest):
     limit = archive_limit_limiter(body.limit)
     offset = body.offset or 0
 
-    archives, total = lib.archive_search(search_str, domain, limit, offset, body.order_by)
-    ret = dict(archives=archives, totals=dict(archives=total))
+    file_groups, total = lib.search_archives(search_str, domain, limit, offset, body.order_by, body.tag_names)
+    ret = dict(file_groups=file_groups, totals=dict(file_groups=total))
     return json_response(ret)

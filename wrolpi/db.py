@@ -1,9 +1,13 @@
+import pathlib
+import types
 from contextlib import contextmanager
 from functools import wraps
-from typing import ContextManager, Tuple, List, Union, Type
+from typing import ContextManager, Tuple, List, Union, Type, Generator
 
 import psycopg2
+import psycopg2.extensions
 import sqlalchemy.exc
+from psycopg2._psycopg import cursor
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import NullPool
@@ -166,3 +170,12 @@ def get_ranked_models(ranked_primary_keys: List, model: Type[Base], session: Ses
     results = list(session.query(model).filter(pkey.in_(ranked_primary_keys)).all())
     results = sorted(results, key=lambda i: ranked_primary_keys.index(getattr(i, pkey_name)))
     return results
+
+
+def mogrify(curs: cursor, values: Union[List, Generator]) -> str:
+    values = list(values) if isinstance(values, types.GeneratorType) else values.copy()
+    count = len(values[0])
+    # If `count = 3`, then s = '(%s,%s,%s)'
+    s = '(' + ','.join("%s" for _ in range(count)) + ')'
+    result = ',\n'.join([curs.mogrify(s, i).decode() for i in values])
+    return result

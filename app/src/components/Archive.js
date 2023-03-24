@@ -34,20 +34,21 @@ import {deleteArchives, postDownload} from "../api";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useArchive, useDomains, useQuery, useSearchArchives} from "../hooks/customHooks";
-import {FileCards, FilesView} from "./Files";
+import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
 import _ from "lodash";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, Card, CardIcon, Header, Loader, Placeholder, Segment} from "./Theme";
 import {SortableTable} from "./SortableTable";
+import {taggedImageLabel, TagsDisplay} from "../Tags";
 
 function ArchivePage() {
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [updateOpen, setUpdateOpen] = useState(false);
     const navigate = useNavigate();
     const {archiveId} = useParams();
-    const {archiveFile, history} = useArchive(archiveId);
+    const {archiveFile, history, fetchArchive} = useArchive(archiveId);
 
     let title;
     if (archiveFile && archiveFile.archive) {
@@ -65,11 +66,11 @@ function ArchivePage() {
         </>
     }
 
-    const {archive} = archiveFile;
+    const {data} = archiveFile;
 
-    const singlefileUrl = archive.singlefile_path ? `/media/${encodeURIComponent(archive.singlefile_path)}` : null;
-    const screenshotUrl = archive.screenshot_path ? `/media/${encodeURIComponent(archive.screenshot_path)}` : null;
-    const readabilityUrl = archive.readability_path;
+    const singlefileUrl = data.singlefile_path ? `/media/${encodeURIComponent(data.singlefile_path)}` : null;
+    const screenshotUrl = data.screenshot_path ? `/media/${encodeURIComponent(data.screenshot_path)}` : null;
+    const readabilityUrl = data.readability_path;
 
     const singlefileButton = <ExternalCardLink to={singlefileUrl}>
         <Button content='View' color='blue'/>
@@ -85,12 +86,12 @@ function ArchivePage() {
 
     const localDeleteArchive = async () => {
         setDeleteOpen(false);
-        await deleteArchives([archive.id]);
+        await deleteArchives([data.id]);
         navigate(-1);
     }
     const localUpdateArchive = async () => {
         setUpdateOpen(false);
-        await postDownload(archive.url, 'archive');
+        await postDownload(data.url, 'archive');
     }
 
     const updateButton = (<>
@@ -121,7 +122,7 @@ function ArchivePage() {
         historyList = <FileCards files={history}/>;
     }
 
-    const domain = archive.domain ? archive.domain.domain : null;
+    const domain = data.domain ? data.domain.domain : null;
     let domainHeader;
     if (domain) {
         const domainUrl = `/archive?domain=${domain}`;
@@ -133,10 +134,10 @@ function ArchivePage() {
     }
 
     let urlHeader;
-    if (archive.url) {
+    if (data.url) {
         urlHeader = <Header as='h5'>
-            <ExternalCardLink to={archive.url}>
-                {textEllipsis(archive.url)}
+            <ExternalCardLink to={data.url}>
+                {textEllipsis(data.url)}
             </ExternalCardLink>
         </Header>;
     }
@@ -147,9 +148,9 @@ function ArchivePage() {
         <Segment>
             {screenshot}
             <ExternalCardLink to={singlefileUrl}>
-                <Header as='h2'>{textEllipsis(archive.title || archive.url)}</Header>
+                <Header as='h2'>{textEllipsis(data.title || data.url)}</Header>
             </ExternalCardLink>
-            <Header as='h3'>{isoDatetimeToString(archive.archive_datetime)}</Header>
+            <Header as='h3'>{isoDatetimeToString(data.archive_datetime)}</Header>
             {domainHeader}
             {urlHeader}
 
@@ -157,6 +158,10 @@ function ArchivePage() {
             {readabilityLink}
             {updateButton}
             {deleteButton}
+        </Segment>
+
+        <Segment>
+            <TagsDisplay fileGroup={archiveFile} onClick={fetchArchive}/>
         </Segment>
 
         <Segment>
@@ -171,17 +176,18 @@ function ArchivePage() {
 
 export function ArchiveCard({file}) {
     const {s} = useContext(ThemeContext);
-    const {archive} = file;
+    const {data} = file;
 
-    const imageSrc = archive.screenshot_path ? `/media/${encodeURIComponent(archive.screenshot_path)}` : null;
-    const singlefileUrl = archive.singlefile_path ? `/media/${encodeURIComponent(archive.singlefile_path)}` : null;
+    const imageSrc = data.screenshot_path ? `/media/${encodeURIComponent(data.screenshot_path)}` : null;
+    const singlefileUrl = data.singlefile_path ? `/media/${encodeURIComponent(data.singlefile_path)}` : null;
 
     let screenshot = <CardIcon><FileIcon file={file}/></CardIcon>;
+    const imageLabel = file.tags && file.tags.length ? taggedImageLabel : null;
     if (imageSrc) {
-        screenshot = <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}}/>;
+        screenshot = <Image src={imageSrc} wrapped style={{position: 'relative', width: '100%'}} label={imageLabel}/>;
     }
 
-    const domain = archive.domain ? archive.domain.domain : null;
+    const domain = data ? data.domain : null;
     const domainUrl = `/archive?domain=${domain}`;
 
     return <Card color={mimetypeColor(file.mimetype)}>
@@ -194,7 +200,7 @@ export function ArchiveCard({file}) {
             <CardHeader>
                 <Container textAlign='left'>
                     <ExternalCardLink to={singlefileUrl}>
-                        {cardTitleWrapper(archive.title || archive.url)}
+                        {cardTitleWrapper(file.title || data.url)}
                     </ExternalCardLink>
                 </Container>
             </CardHeader>
@@ -204,15 +210,15 @@ export function ArchiveCard({file}) {
                 </CardLink>}
             <CardMeta {...s}>
                 <p>
-                    {isoDatetimeToString(archive.archive_datetime)}
+                    {isoDatetimeToString(data.archive_datetime)}
                 </p>
             </CardMeta>
             <CardDescription>
-                <Link to={`/archive/${archive.id}`}>
+                <Link to={`/archive/${data.id}`}>
                     <Button icon='file alternate' content='Details'
                             labelPosition='left'/>
                 </Link>
-                <Button icon='external' href={archive.url} target='_blank' rel='noopener noreferrer'/>
+                <Button icon='external' href={data.url} target='_blank' rel='noopener noreferrer'/>
             </CardDescription>
         </CardContent>
     </Card>
@@ -427,10 +433,10 @@ function Archives() {
 }
 
 export function ArchiveRowCells({file}) {
-    const {archive} = file;
+    const {data} = file;
 
-    const archiveUrl = `/archive/${archive.id}`;
-    const posterUrl = archive.screenshot_path ? `/media/${encodeURIComponent(archive.screenshot_path)}` : null;
+    const archiveUrl = `/archive/${data.id}`;
+    const posterUrl = data.screenshot_path ? `/media/${encodeURIComponent(data.screenshot_path)}` : null;
 
     let poster;
     if (posterUrl) {
@@ -448,7 +454,8 @@ export function ArchiveRowCells({file}) {
         </TableCell>
         <TableCell>
             <CardLink to={archiveUrl}>
-                {textEllipsis(archive.title || archive.stem)}
+                <FileRowTagIcon file={file}/>
+                {textEllipsis(file.title || file.stem)}
             </CardLink>
         </TableCell>
     </React.Fragment>

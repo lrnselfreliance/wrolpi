@@ -17,7 +17,7 @@ def assert_events(expected: List[Dict], after=None):
         assert_dict_contains(event, expected)
 
 
-def test_events_api_feed(test_session, test_client):
+def test_events_api_feed(test_session, test_client, example_pdf):
     """Events can be gotten from the API."""
     # refresh_files() creates a few events.
     request, response = test_client.post('/api/files/refresh')
@@ -29,9 +29,10 @@ def test_events_api_feed(test_session, test_client):
 
     expected = [
         dict(event='global_refresh_completed', subject='refresh'),
+        dict(event='global_after_refresh_completed', subject='refresh'),
         dict(event='global_refresh_indexing_completed', subject='refresh'),
-        dict(event='global_refresh_delete_completed', subject='refresh'),
         dict(event='global_refresh_modeling_completed', subject='refresh'),
+        dict(event='global_refresh_discovery_completed', subject='refresh'),
         dict(event='global_refresh_started', subject='refresh'),
     ]
     for expected, event in zip_longest(expected, result):

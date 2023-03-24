@@ -64,3 +64,14 @@ class JSONErrorResponse:
 @dataclass
 class EventsRequest:
     after: Optional[str] = None
+
+
+@dataclass
+class NewTagRequest:
+    name: str
+    color: str
+
+
+@dataclass
+class DeleteTagRequest:
+    name: str

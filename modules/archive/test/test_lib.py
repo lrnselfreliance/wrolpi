@@ -1,31 +1,36 @@
 import json
 import pathlib
+import tempfile
 from datetime import datetime, timedelta
 from http import HTTPStatus
 
 import mock
 import pytest
+from PIL import Image
 
 from modules.archive import lib
-from modules.archive.lib import get_or_create_domain, get_new_archive_files, delete_archives, do_archive, get_domains, \
-    group_archive_files, ArchiveFiles
+from modules.archive.lib import get_or_create_domain, get_new_archive_files, delete_archives, do_archive, get_domains
 from modules.archive.models import Archive, Domain
 from wrolpi.db import get_db_session
 from wrolpi.files.lib import refresh_files
-from wrolpi.files.models import File
+from wrolpi.files.models import FileGroup
 from wrolpi.root_api import CustomJSONEncoder
 from wrolpi.test.common import skip_circleci
 
 
 def make_fake_request_archive(readability=True, screenshot=True, title=True):
     async def fake_request_archive(_):
-        singlefile = '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>'
+        with tempfile.NamedTemporaryFile(suffix='.png') as fh:
+            Image.new('RGB', (1, 1), color='grey').save(fh)
+            fh.seek(0)
+            image = fh.read()
+        singlefile = '<html><!--\n Page saved with SingleFile\ntest single-file\nジにてこちら\n<title>some title</title></html>'
         r = dict(
             content=f'<html>test readability content</html>',
-            textContent='<html>test readability textContent</html>',
+            textContent='test readability textContent',
             title='ジにてこちら' if title else None,
         ) if readability else None
-        s = b'screenshot data' if screenshot else None
+        s = image if screenshot else None
         return singlefile, r, s
 
     return fake_request_archive
@@ -61,13 +66,12 @@ async def test_dict(test_session):
 
 
 @pytest.mark.asyncio
-async def test_relationships(test_session, test_directory):
+async def test_relationships(test_session, test_directory, example_singlefile):
     with get_db_session(commit=True) as session:
         url = 'https://wrolpi.org:443'
         domain = get_or_create_domain(session, url)
         archive = Archive(
-            singlefile_file=File(path=test_directory / 'wrolpi.org:443/foo'),
-            title='bar',
+            file_group=FileGroup.from_paths(test_session, example_singlefile),
             url=url,
             domain_id=domain.id,
         )
@@ -75,6 +79,50 @@ async def test_relationships(test_session, test_directory):
         session.flush()
 
     assert archive.domain == domain
+
+
+@pytest.mark.asyncio
+async def test_archive_title(test_session, archive_factory, singlefile_contents_factory):
+    """An Archive's title can be fetched in multiple ways.  This tests from most to least reliable."""
+    # Create some test files, delete all records for a fresh refresh.
+    archive_factory(
+        domain='example.com',
+        url='https://example.com/json-url',
+        title='json title',
+        singlefile_contents=singlefile_contents_factory('singlefile title', 'https://example.com/singlefile-url'),
+    )
+    test_session.query(FileGroup).delete()
+    test_session.commit()
+
+    await refresh_files()
+
+    assert test_session.query(FileGroup).count() == 1
+    assert test_session.query(Archive).count() == 1
+
+    archive1: Archive = test_session.query(Archive).one()
+
+    # Readability JSON is trusted first.
+    assert archive1.url == 'https://example.com/json-url'
+    assert archive1.file_group.title == 'json title'
+
+    # Delete JSON file.
+    archive1.readability_json_path.unlink()
+    test_session.delete(archive1)
+    await refresh_files()
+
+    archive1: Archive = test_session.query(Archive).one()
+    assert archive1.url == 'https://example.com/singlefile-url'
+    assert archive1.file_group.title == 'singlefile title'
+
+    # Clear out title and URL from Singlefile.
+    archive1.singlefile_path.write_text(singlefile_contents_factory('', ''))
+    test_session.delete(archive1)
+    await refresh_files()
+
+    # No title/URL could be found.
+    archive1: Archive = test_session.query(Archive).one()
+    assert archive1.url is None
+    assert archive1.file_group.title is None
 
 
 def test_archive_refresh_deleted_archive(test_client, test_session, archive_directory, archive_factory):
@@ -125,17 +173,17 @@ def test_archive_refresh_deleted_archive(test_client, test_session, archive_dire
     check_counts(archive_count=0, domain_count=0)
 
 
-def test_fills_contents_with_refresh(test_client, test_session, archive_factory):
+@pytest.mark.asyncio
+async def test_fills_contents_with_refresh(test_client, test_session, archive_factory, singlefile_contents_factory):
     """Refreshing archives fills in any missing contents."""
     archive1 = archive_factory('example.com', 'https://example.com/one')
     archive2 = archive_factory('example.com', 'https://example.com/one')
     # Title can be found in archive3's singlefile
-    archive3 = archive_factory('example.org',
-                               singlefile_contents='<html> some stuff<title>last title</title> other stuff</html>')
+    archive3 = archive_factory('example.org', singlefile_contents=singlefile_contents_factory('last title'))
     archive4 = archive_factory('example.org')  # has no contents
 
     # Clear the title, this will be filled in.
-    archive1.title = archive2.title = archive3.title = archive4.title = None
+    archive1.file_group.title = archive2.file_group.title = archive3.file_group.title = archive4.file_group.title = None
 
     contents_title_archive = [
         ('foo bar qux', 'my archive', archive1),
@@ -143,31 +191,31 @@ def test_fills_contents_with_refresh(test_client, test_session, archive_factory)
         ('baz qux qux qux', None, archive3),
     ]
     for contents, json_title, archive in contents_title_archive:
-        with archive.readability_txt_path.open('wt') as fh:
+        archive: Archive
+        readability_txt_path = archive.singlefile_path.with_suffix('.readability.txt')
+        with readability_txt_path.open('wt') as fh:
             fh.write(contents)
         if json_title:
-            archive.readability_json_path.write_text(json.dumps({'title': json_title, 'url': archive.url}))
+            readability_json_path = archive.singlefile_path.with_suffix('.readability.json')
+            readability_json_path.write_text(json.dumps({'title': json_title, 'url': archive.url}))
     test_session.commit()
 
     # Contents are empty.  Archives are all missing the title.
-    assert not archive1.singlefile_file.d_text
-    assert not archive2.singlefile_file.d_text
-    assert not archive3.singlefile_file.d_text
-    assert not archive4.singlefile_file.d_text
+    assert not archive1.file_group.d_text
+    assert not archive2.file_group.d_text
+    assert not archive3.file_group.d_text
+    assert not archive4.file_group.d_text
 
     # Fill the contents.
-    test_client.post('/api/files/refresh')
+    await refresh_files()
     # The archives will be renamed with their title.
     archive1, archive2, archive3, archive4 = test_session.query(Archive).order_by(Archive.id)
-    assert archive1.singlefile_file.title
-    assert archive2.singlefile_file.title
-    assert archive3.singlefile_file.title
-    assert not archive4.singlefile_file.d_text
+    assert not archive4.file_group.d_text
 
-    # Missing title is filled.
-    assert archive1.title == 'my archive'
-    assert archive2.title == 'other archive'
-    assert archive3.title == 'last title'  # from json
+    # Missing titles are filled.
+    assert archive1.file_group.title == 'my archive'
+    assert archive2.file_group.title == 'other archive'
+    assert archive3.file_group.title == 'last title'  # from singlefile HTML
 
 
 def test_delete_archive(test_session, archive_factory):
@@ -183,12 +231,12 @@ def test_delete_archive(test_session, archive_factory):
     assert archive3.my_paths() and all(i.is_file() for i in archive3.my_paths())
 
     assert test_session.query(Archive).count() == 3
-    assert test_session.query(File).count() == 15
+    assert test_session.query(FileGroup).count() == 3
 
     # Delete the oldest.
     delete_archives(archive1.id, archive3.id)
     assert test_session.query(Archive).count() == 1
-    assert test_session.query(File).count() == 5
+    assert test_session.query(FileGroup).count() == 1
     # Files were deleted.
     assert archive1.my_paths() and not any(i.is_file() for i in archive1.my_paths())
     assert archive3.my_paths() and not any(i.is_file() for i in archive3.my_paths())
@@ -202,7 +250,7 @@ def test_delete_archive(test_session, archive_factory):
     assert domain is None
 
     # All Files were deleted.
-    assert test_session.query(File).count() == 0
+    assert test_session.query(FileGroup).count() == 0
     assert archive2.my_paths() and not any(i.is_file() for i in archive2.my_paths())
 
 
@@ -214,6 +262,10 @@ def test_get_domains(test_session, archive_factory):
     archive2 = archive_factory('example.com')
     archive3 = archive_factory('example.org')
     test_session.commit()
+
+    assert archive1.domain
+    assert archive2.domain
+    assert archive3.domain
 
     assert [i['domain'] for i in get_domains()] == ['example.com', 'example.org']
 
@@ -242,17 +294,17 @@ async def test_new_archive(test_session, fake_now):
         assert isinstance(archive1.readability_path, pathlib.Path)
         assert isinstance(archive1.readability_txt_path, pathlib.Path)
         assert isinstance(archive1.screenshot_path, pathlib.Path)
-        assert archive1.title == 'ジにてこちら'
+        assert archive1.file_group.title == 'ジにてこちら'
         assert archive1.url is not None
         assert archive1.domain is not None
 
         # The actual files were dumped and read correctly.
         with open(archive1.singlefile_path) as fh:
-            assert fh.read() == '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>'
+            assert fh.read() == '<html><!--\n Page saved with SingleFile\ntest single-file\nジにてこちら\n<title>some title</title></html>'
         with open(archive1.readability_path) as fh:
             assert fh.read() == '<html>test readability content</html>'
         with open(archive1.readability_txt_path) as fh:
-            assert fh.read() == '<html>test readability textContent</html>'
+            assert fh.read() == 'test readability textContent'
         with open(archive1.readability_json_path) as fh:
             assert json.load(fh) == {'title': 'ジにてこちら', 'url': 'https://example.com'}
 
@@ -267,7 +319,7 @@ async def test_get_title_from_html(test_session, fake_now):
     fake_now(datetime(2000, 1, 1))
     with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
         archive = await do_archive('https://example.com')
-        assert archive.title == 'ジにてこちら'
+        assert archive.file_group.title == 'ジにてこちら'
 
     async def fake_request_archive(_):
         singlefile = '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>'
@@ -281,7 +333,7 @@ async def test_get_title_from_html(test_session, fake_now):
     fake_now(datetime(2000, 1, 2))
     with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
         archive = await do_archive('https://example.com')
-        assert archive.title == 'some title'
+        assert archive.file_group.title == 'some title'
 
     async def fake_request_archive(_):
         singlefile = '<html></html>'
@@ -295,7 +347,7 @@ async def test_get_title_from_html(test_session, fake_now):
     fake_now(datetime(2000, 1, 3))
     with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
         archive = await do_archive('https://example.com')
-        assert archive.title is None
+        assert archive.file_group.title is None
 
 
 @skip_circleci
@@ -333,7 +385,7 @@ def test_get_new_archive_files(fake_now):
 
 @skip_circleci
 @pytest.mark.asyncio
-async def test_title_in_filename(test_session, fake_now, test_directory):
+async def test_title_in_filename(test_session, fake_now, test_directory, image_bytes_factory):
     """
     The Archive files have the title in the path.
     """
@@ -342,7 +394,7 @@ async def test_title_in_filename(test_session, fake_now, test_directory):
     with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
         archive1 = await do_archive('https://example.com')
 
-    assert archive1.title == 'ジにてこちら'
+    assert archive1.file_group.title == 'ジにてこちら'
 
     assert str(archive1.singlefile_path.relative_to(test_directory)) == \
            'archive/example.com/2000-01-01-00-00-00_ジにてこちら.html'
@@ -360,9 +412,9 @@ async def test_title_in_filename(test_session, fake_now, test_directory):
         r = dict(
             # No Title from Readability.
             content=f'<html>test readability content</html>',
-            textContent='<html>test readability textContent</html>',
+            textContent='test readability textContent',
         )
-        s = b'screenshot data'
+        s = image_bytes_factory()
         return singlefile, r, s
 
     with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
@@ -386,7 +438,7 @@ async def test_title_in_filename(test_session, fake_now, test_directory):
             content=f'<html>test readability content</html>',
             textContent='<html>test readability textContent</html>',
         )
-        s = b'screenshot data'
+        s = image_bytes_factory()
         return singlefile, r, s
 
     with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
@@ -404,7 +456,7 @@ async def test_title_in_filename(test_session, fake_now, test_directory):
            'archive/example.com/2000-01-01-00-00-00_dangerous ;_title.png'
 
 
-@skip_circleci
+# @skip_circleci
 def test_refresh_archives(test_session, test_directory, test_client, make_files_structure):
     """
     Archives can be found and put in the database.  A single Archive will have multiple files.
@@ -418,11 +470,11 @@ def test_refresh_archives(test_session, test_directory, test_client, make_files_
 
     make_files_structure({
         # These are all for an individual Archive.
-        'archive/example.com/2021-10-05 16:20:10.346823.html': singlefile_contents,  # renames to 2021-10-05-16-20-10_NA
-        'archive/example.com/2021-10-05 16:20:10.346823.png': None,
-        'archive/example.com/2021-10-05 16:20:10.346823-readability.txt': 'article text contents',
-        'archive/example.com/2021-10-05 16:20:10.346823-readability.json': '{"url": "https://example.com"}',
-        'archive/example.com/2021-10-05 16:20:10.346823-readability.html': '<html></html>',
+        'archive/example.com/2021-10-05-16-20-10_NA.html': singlefile_contents,
+        'archive/example.com/2021-10-05-16-20-10_NA.png': None,
+        'archive/example.com/2021-10-05-16-20-10_NA.readability.txt': 'article text contents',
+        'archive/example.com/2021-10-05-16-20-10_NA.readability.json': '{"url": "https://example.com"}',
+        'archive/example.com/2021-10-05-16-20-10_NA.readability.html': '<html></html>',
         # These should log an error because they are missing the singlefile path.
         'archive/example.com/2021-10-05 16:20:10.readability.html': '<html></html>',
         'archive/example.com/2021-10-05 16:20:10.readability.json': None,
@@ -434,6 +486,11 @@ def test_refresh_archives(test_session, test_directory, test_client, make_files_
     # The single archive is found.
     test_client.post('/api/files/refresh')
     assert test_session.query(Archive).count() == 1
+
+    # Cause a re-index of the archive.
+    test_session.query(FileGroup).filter_by(
+        full_stem=str(test_directory / 'archive/example.com/2021-10-05-16-20-10_NA')).one().indexed = False
+    test_session.commit()
 
     # Running the refresh does not result in a new archive.
     test_client.post('/api/files/refresh')
@@ -452,11 +509,15 @@ def test_refresh_archives(test_session, test_directory, test_client, make_files_
     content = json.dumps({'search_str': 'text', 'model': 'archive'})
     request, response = test_client.post('/api/files/search', content=content)
     assert response.status_code == HTTPStatus.OK
-    assert response.json['files'], 'No files matched "text"'
-    assert response.json['files'][0]['model'] == 'archive', 'Returned file was not an archive'
-    assert response.json['files'][0].get('path') == 'archive/example.com/2021-10-05-16-20-10_NA.html', \
+    assert response.json['file_groups'], 'No files matched "text"'
+    assert response.json['file_groups'][0]['model'] == 'archive', 'Returned file was not an archive'
+    assert response.json['file_groups'][0]['data'].get('readability_path') == \
+           'archive/example.com/2021-10-05-16-20-10_NA.readability.html',\
+        'Could not find readability html file'
+    assert response.json['file_groups'][0]['data'].get('readability_txt_path') == \
+           'archive/example.com/2021-10-05-16-20-10_NA.readability.txt',\
         'Could not find readability text file containing "text"'
-    assert response.json['files'][0]['archive']['archive_datetime'], 'Archive has no datetime'
+    assert response.json['file_groups'][0]['data']['archive_datetime'], 'Archive has no datetime'
 
 
 @pytest.mark.asyncio
@@ -482,18 +543,9 @@ async def test_refresh_archives_index(test_session, test_directory, test_client,
 
     archive: Archive = test_session.query(Archive).one()
     assert archive.singlefile_path == singlefile
-    assert archive.singlefile_file.a_text == 'the title'
-    assert archive.singlefile_file.d_text == 'article text contents'
-
-    # The associated files are not indexed.
-    for name in ('screenshot_file', 'readability_file', 'readability_json_file', 'readability_txt_file'):
-        file = getattr(archive, name)
-        assert file.associated is True, 'The associated file is not marked'
-        assert file.indexed is False
-        # file.a_text is the file name.
-        assert not file.b_text
-        assert not file.c_text
-        assert not file.d_text
+    assert archive.file_group.a_text == 'the title'
+    assert archive.file_group.d_text == 'article text contents'
+    assert archive.file_group.indexed is True
 
 
 def test_refresh_archives_invalid_file(test_session, test_directory, test_client, make_files_structure):
@@ -506,74 +558,22 @@ def test_refresh_archives_invalid_file(test_session, test_directory, test_client
         'bogus file': None,
     })
     test_client.post('/api/files/refresh')
-    assert test_session.query(File).count() == 3  # Three files total.
+    assert test_session.query(FileGroup).count() == 2  # One bogus file, one archive group.
     assert test_session.query(Archive).count() == 1  # Only one real archive.
 
     # Create an invalid Archive, it should be removed during refresh.
-    test_session.add(Archive(singlefile_path=bogus_path))
-    # Claim the bogus file as an Archive, this should be removed.
-    bogus_file: File = test_session.query(File).filter_by(path=bogus_path).one()
+    bogus_file: FileGroup = test_session.query(FileGroup).filter_by(primary_path=bogus_path).one()
     bogus_file.model = 'archive'
+    archive = Archive(file_group=bogus_file)
+    test_session.add(archive)
     test_session.commit()
-    assert test_session.query(File).count() == 3
+    assert test_session.query(FileGroup).count() == 2
     assert test_session.query(Archive).count() == 2
 
     test_client.post('/api/files/refresh')
-    assert test_session.query(File).count() == 3, 'More files in DB than we created'
+    assert test_session.query(FileGroup).count() == 2, 'More files in DB than we created'
     assert test_session.query(Archive).count() == 1, 'The bogus Archive was not removed'
     assert bogus_file.model is None, 'Model was not removed'
-
-
-def test_group_archive_files(test_directory):
-    """Archive files should be grouped together when they are the same Archive."""
-    files = [
-        pathlib.Path('2021-10-05 16:20:10.346823.html'),
-        pathlib.Path('2021-10-05 16:20:10.346823.readability.json'),
-        pathlib.Path('2000-01-01-00-00-00_Title.html'),
-        pathlib.Path('2000-01-01-00-00-00_Title.readability.json'),
-        pathlib.Path('not an archive'),
-        pathlib.Path('2000-01-01-00-00-01_Missing a singlefile.readability.json'),
-    ]
-
-    group1 = ArchiveFiles(
-        singlefile=pathlib.Path('2000-01-01-00-00-00_Title.html'),
-        readability_json=pathlib.Path('2000-01-01-00-00-00_Title.readability.json')
-    )
-    group2 = ArchiveFiles(
-        singlefile=pathlib.Path('2021-10-05 16:20:10.346823.html'),
-        readability_json=pathlib.Path('2021-10-05 16:20:10.346823.readability.json'),
-    )
-    assert list(group_archive_files(files)) == [
-        (datetime(2000, 1, 1, 0, 0, 0), group1),
-        (datetime(2021, 10, 5, 16, 20, 10), group2),
-    ]
-
-
-@pytest.mark.parametrize(
-    'name,expected', [
-        ('foo', False),
-        ('2000-01-01-00-00-00_Some Title.html', True),
-        ('2000-01-01-00-00-00_Some Title.readability.json', True),
-        ('2000-01-01-00-00-00_Some Title.readability.html', True),
-        ('2000-01-01-00-00-00_Some Title.readability.txt', True),
-        ('2000-01-01-00-00-00_Some Title.png', True),
-        ('2000-01-01-00-00-00_Some Title.jpg', True),
-        ('2000-01-01-00-00-00_Some Title.jpeg', True),
-        ('2000-01-01-00-00-00_Some NA.html', True),
-        ('2000-01-01-00-00-00_NA.readability.json', True),
-        ('2000-01-01-00-00-00_NA.readability.html', True),
-        ('2000-01-01-00-00-00_NA.readability.txt', True),
-        ('2000-01-01-00-00-00_NA.png', True),
-        ('2000-01-01-00-00-00_NA.jpg', True),
-        ('2000-01-01-00-00-00_NA.jpeg', True),
-        ('2000-01-01-00-00-00_ジにてこちら.html', True),
-        ('2000-01-01-00-00-00no underscore.html', False),
-    ]
-)
-def test_is_archive_file(name, expected, test_directory):
-    path = test_directory / name
-    path.touch()
-    assert lib.is_archive_file(path) == expected
 
 
 @pytest.mark.parametrize(
@@ -587,67 +587,10 @@ def test_is_archive_file(name, expected, test_directory):
         ('foo.html', True),
     ]
 )
-def test_is_singlefile_file(name, expected, make_files_structure, singlefile_contents):
+def test_is_singlefile_file(name, expected, make_files_structure, singlefile_contents_factory):
     """A Singlefile may not be created by WROLPi, an HTML file created by Singlefile can also be an Archive."""
-    path, = make_files_structure({name: singlefile_contents})
+    path, = make_files_structure({name: singlefile_contents_factory()})
     assert lib.is_singlefile_file(path) == expected
-
-
-@skip_circleci
-def test_migrate_archive_files(test_session, archive_directory, archive_factory):
-    """Test that migration of all old Archive formatted files are migrated."""
-    # Create some updated archives that should be ignored.
-    archive1 = archive_factory('example.com', title='the title')
-    archive2 = archive_factory('example.com')
-    archive3 = archive_factory('example.org')
-    test_session.commit()
-    assert archive1.singlefile_path.is_file()
-    assert archive2.singlefile_path.is_file()
-    assert archive3.singlefile_path.is_file()
-
-    example_com_directory = archive_directory / 'example.com'
-    example_org_directory = archive_directory / 'example.org'
-
-    # Archive4
-    (example_com_directory / '2021-10-05 16:20:10.346823.html').touch()
-    path = example_com_directory / '2021-10-05 16:20:10.346823.readability.json'
-    path.write_text(json.dumps({'title': 'my title'}))
-    # Archive5
-    (example_com_directory / '2000-01-01 00:00:00.000000.html').touch()
-    path = example_com_directory / '2000-01-01 00:00:00.000000.readability.json'
-    path.write_text(json.dumps({'title': 'invalid#*: title'}))
-    # Archive6
-    (example_org_directory / '2000-01-01 00:00:00.000000.html').touch()
-    path = example_org_directory / '2000-01-01 00:00:00.000000.readability.json'
-    path.write_text(json.dumps({'title': 'A' * 500}))  # Really long file name.
-
-    # Migration forms a plan, then performs it.
-    plan = lib.migrate_archive_files()
-    for old, new in plan:
-        # All files are moved.
-        assert not old.is_file()
-        assert new.is_file()
-    # Check that only the outdated files are moved.
-    plan = [(i.relative_to(archive_directory), j.relative_to(archive_directory)) for i, j in plan]
-    assert plan == [
-        (pathlib.Path('example.com/2000-01-01 00:00:00.000000.html'),
-         pathlib.Path('example.com/2000-01-01-00-00-00_invalid# title.html')),
-        (pathlib.Path('example.com/2000-01-01 00:00:00.000000.readability.json'),
-         pathlib.Path('example.com/2000-01-01-00-00-00_invalid# title.readability.json')),
-        (pathlib.Path('example.com/2021-10-05 16:20:10.346823.html'),
-         pathlib.Path('example.com/2021-10-05-16-20-10_my title.html')),
-        (pathlib.Path('example.com/2021-10-05 16:20:10.346823.readability.json'),
-         pathlib.Path('example.com/2021-10-05-16-20-10_my title.readability.json')),
-        (pathlib.Path('example.org/2000-01-01 00:00:00.000000.html'),
-         pathlib.Path('example.org/2000-01-01-00-00-00_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.html')),
-        (pathlib.Path('example.org/2000-01-01 00:00:00.000000.readability.json'),
-         pathlib.Path(
-             'example.org/2000-01-01-00-00-00_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.readability.json')),
-    ]
-    # New Archive files still exist.
-    assert all(i.is_file() for i in archive1.my_paths())
-    assert all(i.is_file() for i in archive2.my_paths())
-    assert all(i.is_file() for i in archive3.my_paths())
 
 
 def test_archive_files(test_directory):
@@ -687,16 +630,10 @@ async def test_archive_download_index(test_session, test_directory, image_file):
     assert archive.readability_path and archive.readability_path.exists()
     assert archive.readability_json_path
     assert archive.readability_txt_path and archive.readability_txt_path.exists()
-    assert archive.readability_txt_file.d_text == 'the readability', 'Readability text was not indexed'
-    assert archive.title == 'the singlefile', 'Did not get the title from the singlefile'
+    assert archive.file_group.d_text == 'the readability', 'Readability text was not indexed'
+    assert archive.file_group.title == 'the singlefile', 'Did not get the title from the singlefile'
     assert archive.screenshot_path and archive.screenshot_file and archive.screenshot_path.is_file(), \
         'Did not store the screenshot'
-
-    assert not archive.singlefile_file.associated
-    assert archive.readability_txt_file.associated \
-           and archive.readability_json_file.associated \
-           and archive.readability_file.associated \
-           and archive.screenshot_file.associated, 'Archive files must be associated'
 
 
 def test_archive_history(test_session, archive_factory):

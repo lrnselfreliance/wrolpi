@@ -1,20 +1,24 @@
+import contextlib
+import datetime
 import functools
 import html
 import pathlib
 import re
-from collections import defaultdict
-from typing import Tuple, Optional, Union, Generator
+import warnings
+from typing import Tuple, Optional, Generator
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 
 from wrolpi import before_startup
-from wrolpi.common import ConfigFile, get_media_directory, sanitize_link, register_after_refresh
-from wrolpi.dates import from_timestamp, Seconds
+from wrolpi.captions import extract_captions
+from wrolpi.common import ConfigFile, get_media_directory, sanitize_link, register_after_refresh, limit_concurrent
+from wrolpi.dates import Seconds
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.errors import UnknownDirectory
-from wrolpi.files.models import File
+from wrolpi.files.models import FileGroup
+from wrolpi.tags import Tag
 from wrolpi.vars import PYTEST
 from .common import is_valid_poster, convert_image, \
     generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
@@ -61,7 +65,10 @@ def get_channel_id_by_source_id(session: Session, source_id: str) -> Optional[in
     return channel.id if channel else None
 
 
-def validate_video(video: Video, channel_generate_poster: bool, session: Session):
+EXTRACT_SUBTITLES = False
+
+
+def validate_video(video: Video, channel_generate_poster: bool):
     """
     Validate a single video.
 
@@ -71,13 +78,13 @@ def validate_video(video: Video, channel_generate_poster: bool, session: Session
     A Video is also valid when it has a JPEG poster, if any.  If no poster can be
     found, it will be generated from the video file.
     """
-    info_json_path = video.info_json_file.path if video.info_json_file else video.info_json_path
-    json_data_missing = bool(video.title) and bool(video.duration) and bool(video.view_count) and bool(video.url) \
-                        and bool(video.upload_date)
+    info_json_path = video.info_json_path
+    json_data_missing = bool(video.file_group.title) and bool(video.duration) and bool(video.view_count) \
+                        and bool(video.url) and bool(video.upload_date)
     if info_json_path and json_data_missing is False:
         # These properties can be found in the info json.
         video_info_json = process_video_info_json(video)
-        video.title = video_info_json.title
+        video.file_group.title = video_info_json.title
         video.duration = video_info_json.duration
         video.url = video_info_json.url
         # View count will probably be overwritten by more recent data when this Video's Channel is
@@ -89,34 +96,39 @@ def validate_video(video: Video, channel_generate_poster: bool, session: Session
 
     video_path = video.video_path
 
-    if not video.title or not video.upload_date or not video.source_id:
+    if video_path and (not video.file_group.title or not video.upload_date or not video.source_id):
         # Video is missing things that can be extracted from the video file name.
         # These are the least trusted, so anything already on the video should be trusted.
         _, upload_date, source_id, title = parse_video_file_name(video_path)
-        video.title = video.title or html.unescape(title)
-        video.upload_date = video.upload_date or upload_date
+        upload_date = upload_date or video.upload_date
+        if upload_date:
+            upload_date = datetime.datetime.strptime(upload_date, '%Y%M%d')
+            upload_date = upload_date.replace(tzinfo=datetime.timezone.utc)
+        video.file_group.title = video.file_group.title or html.unescape(title)
+        video.upload_date = upload_date
         video.source_id = video.source_id or source_id
-
-    if not video.size or not video.modification_datetime:
-        stat = video_path.stat()
-        video.size = video.size or stat.st_size
-        video.modification_datetime = video.modification_datetime or from_timestamp(stat.st_mtime)
 
     if channel_generate_poster:
         # Try to convert/generate, but keep the old poster if those fail.
         new_poster_path, duration = convert_or_generate_poster(video) or video.poster_path
         if new_poster_path:
             # Poster was created/updated.
-            poster_file = File.upsert(new_poster_path, session)
-            session.flush([poster_file])
-            video.poster_file = poster_file
-            video.poster_path = new_poster_path
+            video.file_group.append_files(new_poster_path)
         if duration:
             video.duration = duration
 
-    if not video.duration:
+    if video_path and not video.duration:
         # Duration was not retrieved during poster generation.
         video.duration = get_video_duration(video_path)
+
+    if video_path and not video.caption_paths and video.file_group.d_text and not EXTRACT_SUBTITLES:
+        # Caption file was deleted, clear out old captions.
+        video.file_group.d_text = None
+    elif video_path and not video.file_group.d_text and EXTRACT_SUBTITLES:
+        # Captions were not found, extract them from the video.
+        video.file_group.d_text = extract_captions(video_path)
+    elif video_path and video.caption_paths and not video.file_group.d_text:
+        video.file_group.d_text = video.get_caption_text()
 
 
 def convert_or_generate_poster(video: Video) -> Tuple[Optional[pathlib.Path], Optional[int]]:
@@ -128,28 +140,32 @@ def convert_or_generate_poster(video: Video) -> Tuple[Optional[pathlib.Path], Op
     """
     video_path = video.video_path
     # Modification/generation of poster is enabled for this channel.
-    if video.poster_path or video.poster_file:
+    if video.poster_path:
         # Check that the poster is a more universally supported JPEG.
-        old: pathlib.Path = video.poster_path if video.poster_path else video.poster_file.path
+        old: pathlib.Path = video.poster_path
         new = old.with_suffix('.jpg')
 
         if old != new and new.exists():
             # Destination JPEG already exists (it may have the wrong format).
             old.unlink()
-            old = video.poster_path = new
+            old = new
 
         if not is_valid_poster(old):
             # Poster is not valid, convert it and place it in the new location.
             try:
                 convert_image(old, new)
-                old.unlink(missing_ok=True)
+                if not new.is_file():
+                    raise FileNotFoundError(f'Failed to convert poster: {new}')
+                if old != new:
+                    # Only remove the old one if we are not converting in-place.
+                    old.unlink(missing_ok=True)
                 logger.info(f'Converted invalid poster {repr(str(old))} to {repr(str(new))}')
                 return new, None
             except Exception as e:
                 logger.error(f'Failed to convert invalid poster {old} to {new}', exc_info=e)
                 return None, None
 
-    if not video.poster_path and not video.poster_file:
+    if not video.poster_path:
         # Video poster was not discovered, or converted.  Let's generate it.
         try:
             poster_path, duration = generate_video_poster(video_path)
@@ -185,10 +201,12 @@ class ChannelsConfig(ConfigFile):
 
     @property
     def favorites(self) -> dict:
+        warnings.warn('Favorites have bee moved to Tags', DeprecationWarning)
         return self._config['favorites']
 
     @favorites.setter
     def favorites(self, value: dict):
+        warnings.warn('Favorites have bee moved to Tags', DeprecationWarning)
         self.update({'favorites': value})
 
 
@@ -205,12 +223,12 @@ def get_channels_config():
     return CHANNELS_CONFIG
 
 
-def set_test_channels_config(enable: bool):
+@contextlib.contextmanager
+def set_test_channels_config():
     global TEST_CHANNELS_CONFIG
-    if enable is True:
-        TEST_CHANNELS_CONFIG = ChannelsConfig()
-    else:
-        TEST_CHANNELS_CONFIG = None
+    TEST_CHANNELS_CONFIG = ChannelsConfig()
+    yield
+    TEST_CHANNELS_CONFIG = None
 
 
 class VideoDownloaderConfig(ConfigFile):
@@ -334,46 +352,14 @@ def get_channels_config_from_db(session: Session) -> dict:
     """Create a dictionary that contains all the Channels from the DB."""
     channels = session.query(Channel).order_by(Channel.directory).all()
     channels = sorted((i.config_view() for i in channels), key=lambda i: i['directory'])
-
-    # Get all Videos that are favorites.  Store them in their own config section, so they can be preserved if a channel
-    # is deleted or the DB is wiped.
-    favorite_videos = session.query(Video).filter(Video.favorite != None, Video.video_path != None).all()  # noqa
-    favorites = defaultdict(lambda: {})
-    for video in favorite_videos:
-        if video.channel:
-            directory = video.channel.directory.relative_to(get_media_directory())
-            favorites[str(directory)][video.video_path.name] = dict(favorite=video.favorite)
-        else:
-            favorites['NO CHANNEL'][video.video_path.name] = dict(favorite=video.favorite)
-    favorites = dict(favorites)
-
-    return dict(channels=channels, favorites=favorites)
-
-
-def _detect_old_favorites(config: Union[ChannelsConfig, dict]) -> bool:
-    # TODO remove these old favorites after beta.
-    media_directory = get_media_directory()
-    favorites = config.favorites if hasattr(config, 'favorites') else config['favorites']
-    for channel, favorites in favorites.items():
-        if channel == 'NO CHANNEL':
-            continue
-        if not (media_directory / channel).is_dir():
-            return True
-    return False
+    return dict(channels=channels)
 
 
 @optional_session()
-def save_channels_config(session=None, preserve_favorites: bool = True):
+def save_channels_config(session: Session = None):
     """Get the Channel information from the DB, save it to the config."""
     config = get_channels_config_from_db(session)
     channels_config = get_channels_config()
-    # TODO remove these old favorites after beta.
-    old_favorites = _detect_old_favorites(channels_config)
-    if old_favorites and config['favorites']:
-        # There are favorites in the database, remove the old favorites.
-        channels_config.favorites = {}
-    if preserve_favorites:
-        config['favorites'].update(channels_config.favorites or {})
     channels_config.update(config)
 
 
@@ -382,6 +368,7 @@ channel_import_logger = logger.getChild('channel_import')
 
 @before_startup
 @register_after_refresh
+@limit_concurrent(1)
 def import_channels_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
     if PYTEST and not TEST_CHANNELS_CONFIG:
@@ -469,15 +456,19 @@ def import_channels_config():
                 else:
                     channel_dir = get_no_channel_directory()
 
+                favorites_tag = Tag.find_by_name('Favorite')
+                if not favorites_tag:
+                    channel_import_logger.warning(f'Cannot tag favorite videos without Favorite tag!')
+                    return
+
                 # Set favorite Videos of this Channel.
                 for video_path, data in favorites.items():
                     # Favorite in the config is the name of the video_path.  Add the channel directory onto this
                     # video_path, so we can match the complete path for the Video.
                     video_path = channel_dir / video_path
-                    video = session.query(Video).filter_by(video_path=video_path).one_or_none()
-                    # If no Video is found, it may be that we need to refresh.
-                    if video:
-                        video.favorite = data['favorite']
+                    file_group = FileGroup.find_by_path(video_path, session)
+                    if file_group:
+                        file_group.add_tag(favorites_tag, session)
                     else:
                         channel_import_logger.warning(f'Cannot find video to favorite: {video_path}')
     except Exception as e:
@@ -503,22 +494,12 @@ async def get_statistics():
         SELECT
             -- total videos
             COUNT(id) AS "videos",
-            -- total videos that are marked as favorite
-            COUNT(id) FILTER (WHERE favorite IS NOT NULL) AS "favorites",
             -- total videos downloaded over the past week/month/year
             COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 week') AS "week",
             COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 month') AS "month",
-            COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 year') AS "year",
-            -- sum of all video lengths in seconds
-            COALESCE(SUM(duration), 0) AS "sum_duration",
-            -- sum of all video file sizes
-            COALESCE(SUM(size), 0)::BIGINT AS "sum_size",
-            -- largest video
-            COALESCE(MAX(size), 0) AS "max_size"
+            COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 year') AS "year"
         FROM
             video
-        WHERE
-            video_path IS NOT NULL
         ''')
         video_stats = dict(curs.fetchone())
 
@@ -526,8 +507,7 @@ async def get_statistics():
         curs.execute('''
         SELECT
             DATE_TRUNC('month', months.a),
-            COUNT(id)::BIGINT,
-            SUM(size)::BIGINT AS "size"
+            COUNT(id)::BIGINT
         FROM
             generate_series(
                 date_trunc('month', current_date) - interval '2 years',
@@ -538,7 +518,6 @@ async def get_statistics():
             video.upload_date >= date_trunc('month', months.a)
             AND video.upload_date < date_trunc('month', months.a) + interval '1 month'
             AND video.upload_date IS NOT NULL
-            AND video.video_path IS NOT NULL
         GROUP BY
             1
         ORDER BY
@@ -610,18 +589,11 @@ def find_orphaned_video_files(directory: pathlib.Path) -> Generator[pathlib.Path
         directory = str(directory).rstrip('/')
 
         curs.execute(f'''
-        SELECT f1.path
-        FROM (
-                 -- Get array of mimetypes for each full_stem group.
-                 select f2.full_stem, array_agg(f2.mimetype) as mimetypes
-                 from file f2
-                 where f2.full_stem like '{directory}/%'
-                 group by 1) AS stem_groups
-                 -- Get all files that match the full_stem.
-                 LEFT JOIN file f1 ON stem_groups.full_stem = f1.full_stem
-        -- Get all groups which DO NOT contain one of the video mimetypes.
-        WHERE NOT (select array_agg(f3.mimetype) from file f3 where f3.mimetype like 'video/%') && stem_groups.mimetypes
+            SELECT files
+            FROM file_group
+            WHERE
+                mimetype NOT LIKE 'video%'
+                AND full_stem LIKE '{directory}/%'
         ''')
-        results = map(lambda i: pathlib.Path(i[0]), curs.fetchall())
-        results = filter(lambda i: i.is_file(), results)
+        results = (pathlib.Path(j['path']) for i in curs.fetchall() for j in i[0])
         yield from results

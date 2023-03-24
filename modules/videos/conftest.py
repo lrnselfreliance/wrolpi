@@ -14,7 +14,7 @@ from modules.videos.downloader import VideoDownloader, ChannelDownloader
 from modules.videos.lib import set_test_channels_config, set_test_downloader_config
 from modules.videos.models import Channel, Video
 from wrolpi.downloader import DownloadFrequency, DownloadManager, Download
-from wrolpi.files.models import File
+from wrolpi.files.models import FileGroup
 from wrolpi.vars import PROJECT_DIR
 
 
@@ -71,13 +71,12 @@ def download_channel(test_session, test_directory, video_download_manager) -> Ch
 
 
 @pytest.fixture
-def simple_video(test_session, test_directory, simple_channel) -> Video:
+def simple_video(test_session, test_directory, simple_channel, video_file) -> Video:
     """A Video with an empty video file whose channel is the Simple Channel."""
     video_path = test_directory / 'simple_video.mp4'
-    video_path.touch()
-    video_file = File(path=video_path, model='video')
-    video = Video(video_file=video_file, channel_id=simple_channel.id)
-    test_session.add(video)
+    video_file.rename(video_path)
+    video = Video.from_paths(test_session, video_path)
+    video.channel = simple_channel
     test_session.commit()
     video = test_session.query(Video).filter_by(id=video.id).one()
     return video
@@ -89,7 +88,7 @@ def video_factory(test_session, test_directory):
 
     def factory(channel_id: int = None, title: str = None, upload_date=None, with_video_file=None,
                 with_info_json: dict = None, with_poster_ext: str = None, with_caption_file: bool = False,
-                source_id: str = None):
+                source_id: str = None) -> Video:
         title = title or str(uuid4())
 
         if with_video_file and isinstance(with_video_file, (pathlib.Path, str)):
@@ -104,13 +103,8 @@ def video_factory(test_session, test_directory):
             (test_directory / 'videos/NO CHANNEL').mkdir(exist_ok=True, parents=True)
             path = test_directory / f'videos/NO CHANNEL/{title}.mp4'
 
-        video_file = File(path=path, model='video')
-        test_session.add(video_file)
-
-        if with_video_file:
-            shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', path)
-        else:
-            path.touch()
+        # Create a real video file for mimetype.
+        shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', path)
 
         info_json_path = None
         if with_info_json:
@@ -118,32 +112,25 @@ def video_factory(test_session, test_directory):
             with_info_json = {'duration': 5} if with_info_json is True else with_info_json
             info_json_path = path.with_suffix('.info.json')
             info_json_path.write_text(json.dumps(with_info_json))
-            test_session.add(File(path=info_json_path))
 
         poster_path = None
         if with_poster_ext:
-            poster_path = path.with_suffix(f'.{with_poster_ext}')
+            poster_path = path.with_suffix(f'.{with_poster_ext.lstrip(".")}')
             Image.new('RGB', (25, 25)).save(poster_path)
-            test_session.add(File(path=poster_path))
 
         caption_path = None
         if with_caption_file:
             caption_path = path.with_suffix('.en.vtt')
             shutil.copy(PROJECT_DIR / 'test/example1.en.vtt', caption_path)
-            test_session.add(File(path=caption_path))
 
-        video = Video(
-            video_path=path,
-            title=title,
-            channel_id=channel_id,
-            source_id=source_id or title,
-            info_json_path=info_json_path,
-            poster_path=poster_path,
-            caption_path=caption_path,
-            upload_date=upload_date,
-        )
-        test_session.add(video)
-        video_file.do_index()
+        paths = (path, info_json_path, poster_path, caption_path)
+        paths = list(filter(None, paths))
+
+        video = Video.from_paths(test_session, *paths)
+        video.channel_id = channel_id
+        video.source_id = source_id or title
+        video.upload_date = upload_date
+        video.validate()
         return video
 
     return factory
@@ -167,9 +154,8 @@ def video_download_manager(test_download_manager) -> DownloadManager:
 def test_channels_config(test_directory):
     (test_directory / 'config').mkdir(exist_ok=True)
     config_path = test_directory / 'config/channels.yaml'
-    set_test_channels_config(True)
-    yield config_path
-    set_test_channels_config(False)
+    with set_test_channels_config():
+        yield config_path
 
 
 @pytest.fixture
@@ -213,14 +199,19 @@ def assert_video_ids(test_session):
 
 
 @pytest.fixture
-def video_with_search_factory(test_session, test_directory):
+def video_with_search_factory(test_session, test_directory, video_file_factory):
     """A factory that creates a Video record with an associated video File record."""
 
     def video_with_search(path: str = None, title: str = None, b_text: str = None, c_text: str = None,
                           d_text: str = None, mimetype: str = 'video/mp4'):
-        path = path or (test_directory / str(uuid4())).absolute()
-        video_file = File(path=path, a_text=title, d_text=d_text, mimetype=mimetype, model='video')
-        video = Video(title=title, video_file=video_file)
+        video_file_group = FileGroup.from_paths(test_session, video_file_factory(path))
+        video_file_group.a_text = title
+        video_file_group.b_text = b_text
+        video_file_group.c_text = c_text
+        video_file_group.d_text = d_text
+        video_file_group.mimetype = mimetype
+        video_file_group.model = 'video'
+        video = Video(file_group=video_file_group)
         test_session.add(video)
         return video
 
@@ -238,7 +229,7 @@ def assert_video_search(test_client):
             assert_ids: List[int] = None,
             assert_paths: List[str] = None,
             search_str: str = None,
-            filters: List[str] = None,
+            tag_names: List[str] = None,
             offset: int = None,
             limit: int = None,
             order_by: str = None,
@@ -247,8 +238,8 @@ def assert_video_search(test_client):
         content = dict()
         if search_str is not None:
             content['search_str'] = search_str
-        if filters is not None:
-            content['filters'] = filters
+        if tag_names is not None:
+            content['tag_names'] = tag_names
         if offset is not None:
             content['offset'] = offset
         if limit is not None:
@@ -264,16 +255,15 @@ def assert_video_search(test_client):
         assert response.status_code == HTTPStatus.OK
 
         if assert_ids is not None:
-            assert 'files' in response.json, 'No video files in response'
-            assert [i['video']['id'] for i in response.json['files']] == assert_ids, 'Video IDs do not match'
+            assert 'file_groups' in response.json, 'No video file_groups in response'
+            assert [i['id'] for i in response.json['file_groups']] == assert_ids, 'Video IDs do not match'
 
         if assert_paths is not None:
-            assert 'files' in response.json, 'No video files in response'
-            assert [i['video']['video_path'] for i in response.json['files']] == assert_paths, \
-                'Video paths do not match'
+            assert 'file_groups' in response.json, 'No video file_groups in response'
+            assert [i['primary_path'] for i in response.json['file_groups']] == assert_paths, 'Video paths do not match'
 
-        if assert_total:
-            assert response.json['totals']['files'] == int(assert_total), 'Total video files does not match'
+        if assert_total and not (count := response.json['totals']['file_groups']) == int(assert_total):
+            raise AssertionError(f'Video count does not match: {count} != {assert_total}')
 
         return request, response
 

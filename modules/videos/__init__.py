@@ -1,163 +1,89 @@
-import json
-import pathlib
-from abc import ABC
-from typing import List, Dict
-
-from sqlalchemy.orm import Session
+import asyncio
+from typing import List, Tuple
 
 from modules.videos.models import Video, Channel
-from wrolpi.captions import read_captions, extract_captions
-from wrolpi.common import logger, register_modeler, register_after_refresh, limit_concurrent, split_lines_by_length
-from wrolpi.db import get_db_curs
-from wrolpi.files.indexers import Indexer, register_indexer
-from wrolpi.files.lib import split_path_stem_and_suffix
-from wrolpi.files.models import File
+from wrolpi.common import logger, limit_concurrent, register_modeler, register_after_refresh
+from wrolpi.db import get_db_curs, get_db_session
+from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST
 from .downloader import video_downloader  # Import downloaders so they are registered.
 
 logger = logger.getChild(__name__)
 
-__all__ = ['video_modeler', 'VideoIndexer']
+__all__ = ['video_modeler']
 
-
-def find_video_file_in_group(group: List[File]):
-    return next((i for i in group if i.mimetype.startswith('video/') and i.path.suffix != '.part'), None)
+VIDEO_PROCESSING_LIMIT = 20
 
 
 @register_modeler
-def video_modeler(groups: Dict[str, List[File]], session: Session):
-    new_videos = []
+async def video_modeler():
+    while True:
+        with get_db_session(commit=True) as session:
+            file_groups = session.query(FileGroup, Video).filter(
+                FileGroup.indexed != True,
+                FileGroup.mimetype.like('video/%'),
+            ).outerjoin(Video, Video.file_group_id == FileGroup.id) \
+                .limit(VIDEO_PROCESSING_LIMIT)
+            file_groups: List[Tuple[FileGroup, Video]] = list(file_groups)
 
-    # Search all groups for video files.
-    video_files = {stem: video_file for stem, group in groups.items() if
-                   (video_file := find_video_file_in_group(group))}
-    if not video_files:
-        # No videos in these groups.
-        return
-    # Get all matching Video records (if any) in one query.
-    video_paths = [i.path for i in video_files.values()]
-    video_records = {i.video_path: i for i in session.query(Video).filter(Video.video_path.in_(video_paths))}
+            processed = 0
+            for file_group, video in file_groups:
+                processed += 1
 
-    for stem, video_file in video_files.items():
-        group = groups[stem]
+                video_id = None
+                try:
+                    if not video:
+                        video = Video(file_group=file_group)
+                        session.add(video)
+                        session.flush([video])
+                    video_id = video.id
+                    video.validate()
+                except Exception as e:
+                    if PYTEST:
+                        raise
+                    logger.error(f'Unable to model Video {video_id=}', exc_info=e)
 
-        session.flush(group)
-        poster_file = info_json_file = caption_file = None
-        for file in group:
-            if file.mimetype.startswith('image/'):
-                poster_file = file
-            elif file.path.name.endswith('.info.json'):
-                info_json_file = file
-            # Prefer WebVTT over SRT.  (SRT cannot be displayed for HTML video).
-            elif file.path.name.endswith('.en.vtt'):
-                caption_file = file
-            elif file.path.name.endswith('.en.srt'):
-                caption_file = caption_file or file
+                file_group.indexed = True
 
-        if poster_file:
-            poster_file.associated = True
-            poster_file.do_stats()
-        if caption_file:
-            caption_file.associated = True
-            caption_file.do_stats()
-        if info_json_file:
-            info_json_file.associated = True
-            info_json_file.do_stats()
+            if processed < VIDEO_PROCESSING_LIMIT:
+                # Did not reach limit, do not query again.
+                break
 
-        video: Video = video_records.get(video_file.path)
-        if not video:
-            video = Video(video_file=video_file)
-            session.add(video)
+            logger.debug(f'Modeled {processed} videos')
 
-        size = video_file.path.stat().st_size
-
-        if poster_file != video.poster_file or \
-                caption_file != video.caption_file or \
-                info_json_file != video.info_json_file or \
-                video.size != size:
-            # Files might have been changed.  Re-index.
-            video.video_file.indexed = False
-
-        video.poster_file = poster_file
-        video.caption_file = caption_file
-        video.info_json_file = info_json_file
-        video.size = size
-        video_file.model = Video.__tablename__
-
-        new_videos.append(video)
-
-    if new_videos:
-        session.flush(new_videos)
-        for video in new_videos:
-            video.video_file.do_index()
-            video.validate(session)
-
-            # Remove this group, it will not be processed by other modelers.
-            stem, _ = split_path_stem_and_suffix(video.video_path)
-            del groups[stem]
-
+        # Sleep to catch cancel.
+        await asyncio.sleep(0)
 
 @register_after_refresh
 @limit_concurrent(1)
 def video_cleanup():
-    # Claim all Videos in a Channel's directory for that Channel.  But, only if they have not yet been claimed.
     logger.info('Claiming Videos for their Channels')
     with get_db_curs(commit=True) as curs:
+        # Delete all Videos if the FileModel no longer contains a video.
+        curs.execute('''
+            WITH deleted AS
+             (UPDATE file_group SET model=null WHERE model='video' AND mimetype NOT LIKE 'video/%' RETURNING id)
+             DELETE FROM video WHERE file_group_id = ANY(select id from deleted)
+        ''')
+        # Claim all Videos in a Channel's directory for that Channel.  But, only if they have not yet been claimed.
         curs.execute('''
             UPDATE video v
-            SET channel_id = c.id
+            SET
+                channel_id = c.id
             FROM channel c
+            LEFT JOIN file_group fg ON fg.primary_path LIKE c.directory || '/%'::VARCHAR
             WHERE
-             v.video_path LIKE c.directory || '/%'::VARCHAR
-             AND v.channel_id IS NULL
+             v.channel_id IS NULL
+             AND fg.id = v.file_group_id
         ''')
-
-
-EXTRACT_SUBTITLES = False
-
-
-@register_indexer('video')
-class VideoIndexer(Indexer, ABC):
-    """Handles video files like mp4/ogg."""
-
-    @staticmethod
-    def get_description(file):
-        video_path: pathlib.Path = file.path.path if hasattr(file.path, 'path') else file.path
-        info_json_path = video_path.with_suffix('.info.json')
-        if info_json_path.is_file():
-            with info_json_path.open('rt') as fh:
-                try:
-                    return json.load(fh)['description']
-                except Exception:
-                    if not PYTEST:
-                        logger.warning(f'Video info json file exists, but cannot get description. {file}')
-                    return None
-
-    @classmethod
-    def create_index(cls, file):
-        """
-        Index the video file and it's associated files.
-
-        a = title.
-        b = <empty>
-        c = description from info json.
-        d = captions from info json, or extracted from video file.
-        """
-        a = cls.get_title(file)
-        c = cls.get_description(file)
-
-        # Detect the associated caption files.
-        d = None
-        if (en_vtt := file.path.with_suffix('.en.vtt')).is_file():
-            d = read_captions(en_vtt)
-        elif (vtt := file.path.with_suffix('.vtt')).is_file():
-            d = read_captions(vtt)
-        elif (en_srt := file.path.with_suffix('.en.srt')).is_file():
-            d = read_captions(en_srt)
-        elif (srt := file.path.with_suffix('.srt')).is_file():
-            d = read_captions(srt)
-        elif EXTRACT_SUBTITLES:
-            d = extract_captions(file.path) or ''
-
-        d = split_lines_by_length(d)
-        return a, None, c, d
+        curs.execute('''
+            UPDATE file_group fg
+            SET
+                -- Update channel information in file_group.data
+                -- Example: data = {'channel': {'id': 1, 'name': 'example'}}
+                data = fg.data::jsonb || jsonb_build_object('channel',
+                    jsonb_build_object('id', v.channel_id, 'name', c.name))
+            FROM video v
+            LEFT JOIN channel c on c.id = v.channel_id
+            WHERE fg.id = v.file_group_id
+        ''')

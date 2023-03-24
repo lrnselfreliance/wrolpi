@@ -51,7 +51,7 @@ class WROLMode extends React.Component {
                         want to prevent any potential loss of data.
                     </Header>
                     <p {...t}>
-                        Note: User settings and favorites can still be modified.
+                        Note: User settings and tags can still be modified.
                     </p>
                     <Toggle
                         checked={this.state.WROLMode}

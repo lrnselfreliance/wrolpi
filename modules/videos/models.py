@@ -1,21 +1,23 @@
+import datetime
 import json
 import pathlib
-from datetime import datetime
 from pathlib import Path
-from typing import Optional, Generator, Dict, List
+from typing import Optional, Dict, List, Union
 
-from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey
-from sqlalchemy.orm import relationship, Session
+from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, BigInteger, any_
+from sqlalchemy.orm import relationship, Session, deferred
 from sqlalchemy.orm.collections import InstrumentedList
 
+from wrolpi.captions import read_captions
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task
 from wrolpi.dates import now, TZDateTime
-from wrolpi.db import get_db_curs, get_db_session
+from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.downloader import Download, download_manager
 from wrolpi.errors import UnknownVideo
-from wrolpi.files.lib import refresh_directory_files_recursively, glob_shared_stem, split_path_stem_and_suffix
-from wrolpi.files.models import File
+from wrolpi.files.lib import refresh_files, get_mimetype, split_path_stem_and_suffix
+from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
+from wrolpi.tags import Tag, TagFile
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -24,119 +26,73 @@ logger = logger.getChild(__name__)
 class Video(ModelHelper, Base):
     __tablename__ = 'video'
     id = Column(Integer, primary_key=True)
-    channel_id = Column(Integer, ForeignKey('channel.id'))
-    channel = relationship('Channel', primaryjoin='Video.channel_id==Channel.id', back_populates='videos')
-    validated = Column(Boolean, default=False)
 
-    censored = Column(Boolean, default=False)
     duration = Column(Integer)
-    favorite = Column(TZDateTime)
-    modification_datetime = Column(TZDateTime)
-    size = Column(Integer)
     source_id = Column(String)
-    title = Column(String)
-    upload_date = Column(TZDateTime)
+    upload_date: datetime.datetime = Column(TZDateTime)
     url = Column(String)
     view_count = Column(Integer)
     viewed = Column(TZDateTime)
 
-    # Associated Files
-    caption_path: pathlib.Path = Column(MediaPathType, ForeignKey('file.path', ondelete='CASCADE'))
-    caption_file: File = relationship('File', primaryjoin='Video.caption_path==File.path')
-    info_json_path: pathlib.Path = Column(MediaPathType, ForeignKey('file.path', ondelete='CASCADE'))
-    info_json_file: File = relationship('File', primaryjoin='Video.info_json_path==File.path')
-    poster_path: pathlib.Path = Column(MediaPathType, ForeignKey('file.path', ondelete='CASCADE'))
-    poster_file: File = relationship('File', primaryjoin='Video.poster_path==File.path')
-    video_path: pathlib.Path = Column(MediaPathType, ForeignKey('file.path', ondelete='CASCADE'))
-    video_file: File = relationship('File', primaryjoin='Video.video_path==File.path')
+    channel_id = Column(Integer, ForeignKey('channel.id'))
+    channel = relationship('Channel', primaryjoin='Video.channel_id==Channel.id', back_populates='videos')
+    file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), unique=True, nullable=False)
+    file_group: FileGroup = relationship('FileGroup')
 
     def __repr__(self):
-        v = self.video_file
+        v = None
         if self.video_path:
-            video_path = self.video_path.path if hasattr(self.video_path, 'path') else self.video_path
-            v = video_path.relative_to(get_media_directory())
-        return f'<Video id={self.id} title={repr(self.title)} path={v} channel={self.channel_id} ' \
+            v = self.video_path.relative_to(get_media_directory())
+        return f'<Video id={self.id} title={repr(self.file_group.name)} path={v} channel={self.channel_id} ' \
                f'source_id={repr(self.source_id)}>'
 
-    @classmethod
-    def upsert(cls, video_file: File, session: Session):
-        video = session.query(Video).filter_by(video_file=video_file).one_or_none()
-        if not video:
-            video = Video(video_file=video_file)
-        video: Video
-        video.video_path = video.video_path or video_file.path
-        video.video_file = video.video_file or video_file
-        video.size = video.video_path.stat().st_size
-        session.add(video)
+    def __json__(self) -> dict:
+        d = self.file_group.__json__()
 
-        video.find_my_files()
+        channel = None
+        if self.channel:
+            channel = dict(id=self.channel.id, name=self.channel.name)
 
-        # Claim the video file for this model.
-        video.video_file.model = cls.__tablename__
-
-        return video
-
-    def my_paths(self) -> Generator[Path, None, None]:
-        """Return all paths of this Video.  Returns nothing if all paths are None."""
-        if self.poster_path:
-            yield self.poster_path
-        if self.caption_path:
-            yield self.caption_path
-        if self.info_json_path:
-            yield self.info_json_path
-        if self.video_path:
-            yield self.video_path
-
-    def my_files(self) -> Generator[File, None, None]:
-        """Return all Files of this Video.  Returns nothing if all paths are None."""
-        if self.poster_file:
-            yield self.poster_file
-        if self.caption_file:
-            yield self.caption_file
-        if self.info_json_file:
-            yield self.info_json_file
-        if self.video_file:
-            yield self.video_file
+        # Put live data in "video" instead of "data" to avoid confusion on the frontend.
+        d['video'] = dict(
+            caption=self.file_group.d_text,
+            caption_files=self.caption_files,
+            channel=channel,
+            channel_id=self.channel_id,
+            description=self.file_group.c_text or self.get_video_description(),
+            id=self.id,
+            info_json_file=self.info_json_file,
+            info_json_path=self.info_json_path,
+            poster_file=self.poster_file,
+            poster_path=self.poster_path,
+            source_id=self.source_id,
+            stem=split_path_stem_and_suffix(self.video_path)[0],
+            upload_date=self.upload_date.isoformat() if self.upload_date else None,
+            url=self.url,
+            video_path=self.video_path,
+            view_count=self.view_count,
+        )
+        return d
 
     def delete(self):
-        """
-        Remove all files and File records related to this video.  Delete this Video record.
-        Add it to it's Channel's skip list.
-        """
-        for path in self.my_paths():
-            path.unlink(missing_ok=True)
-
-        needs_save = bool(self.favorite)
-
+        """Remove all files and File records related to this video.  Delete this Video record.
+        Add it to it's Channel's skip list."""
         self.add_to_skip_list()
-        self.favorite = None
         session = Session.object_session(self)
-        session.commit()
         session.delete(self)
-
-        for file in self.my_files():
-            session.delete(file)
-
-        if needs_save:
-            # Save the Channels config.  This video was a favorite and that needs to be removed.
-            from modules.videos.lib import save_channels_config
-            save_channels_config(preserve_favorites=False)
+        self.file_group.delete()
 
     def add_to_skip_list(self):
         """Add this video to it's Channel's skip list."""
         if self.channel and self.source_id:
             self.channel.add_video_to_skip_list(self.source_id)
 
-    def set_favorite(self, favorite: bool) -> Optional[datetime]:
-        self.favorite = now() if favorite else None
-        return self.favorite
-
     def set_viewed(self):
         self.viewed = now()
 
     def get_info_json(self) -> Optional[Dict]:
         """If this Video has an info_json file, return it's contents.  Otherwise, return None."""
-        info_json_path = self.info_json_file.path if self.info_json_file else self.info_json_path
+        info_json_path = self.info_json_path
         if not info_json_path:
             return
 
@@ -145,10 +101,6 @@ class Video(ModelHelper, Base):
                 return json.load(fh)
         except FileNotFoundError:
             logger.warning(f'Unable to find info json file!  {info_json_path}')
-            if self.video_path.is_file():
-                # Clear out the info_json only if the video file exists.  We don't want to clear out the info_json if
-                # the drive hasn't been mounted.
-                self.info_json_file = self.info_json_path = None
             return None
         except Exception as e:
             logger.warning(f'Unable to parse info json {self.info_json_path}', exc_info=e)
@@ -164,11 +116,6 @@ class Video(ModelHelper, Base):
             description = info_json.get('description')
             if description:
                 return description
-
-        if self.description_path:
-            with open(self.description_path, 'rt') as fh:
-                contents = fh.read()
-                return contents
 
     def get_surrounding_videos(self):
         """
@@ -236,96 +183,111 @@ class Video(ModelHelper, Base):
 
         return previous_video, next_video
 
-    def __json__(self):
-        from modules.videos.common import minimize_video_info_json
-        info_json = minimize_video_info_json(self.get_info_json()) if self.info_json_path else None
-        stem, _ = split_path_stem_and_suffix(self.video_path) if self.video_file else (None, None)
-
-        d = dict(
-            caption_path=self.caption_path,
-            censored=self.censored,
-            channel=self.channel,
-            channel_id=self.channel_id,
-            modification_datetime=self.modification_datetime,
-            duration=self.duration,
-            favorite=self.favorite,
-            id=self.id,
-            info_json=info_json,
-            info_json_path=self.info_json_path,
-            poster_path=self.poster_path,
-            size=self.size,
-            source_id=self.source_id,
-            stem=stem,
-            title=self.title,
-            upload_date=self.upload_date,
-            url=self.url,
-            validated=self.validated,
-            view_count=self.view_count,
-            video_path=self.video_path.relative_to(get_media_directory()),
-            viewed=self.viewed,
-        )
-        return d
-
-    def validate(self, session: Session):
-        """Perform a validation of this video and it's files.  Mark this video as validated if no errors occur."""
-        if not self.video_file:
+    def validate(self):
+        """Perform a validation of this video and it's files."""
+        if not self.file_group.primary_path:
             # Can't validate if there is no video file.
-            return False
+            logger.error(f'Unable to validate video {self.id} without primary file!')
 
         from .lib import validate_video
         try:
-            validate_video(self, self.channel.generate_posters if self.channel else False, session)
-            self.validated = True
+            validate_video(self, self.channel.generate_posters if self.channel else False)
         except Exception as e:
             logger.warning(f'Failed to validate video {self}', exc_info=e)
 
-        return self.validated
-
-    def find_my_files(self):
-        """Search near the video file for it's associated files.  (poster, caption, etc.)"""
-        from modules.videos.common import match_video_files
-        if not self.video_path:
-            raise ValueError("Can't find files when I don't have a video path!")
-
-        # Associated files share the same stem, but different extensions.
-        associated_paths = glob_shared_stem(self.video_path)
-        associated_paths.pop(associated_paths.index(self.video_path))
-
-        # Get the session from the video first, fallback to the video file.
-        session: Session = Session.object_session(self) or Session.object_session(self.video_file)
-
-        files = [File.upsert(i, session) for i in associated_paths]
-        _, poster_file, description_file, caption_file, info_json_file = match_video_files(files)
-
-        if poster_file:
-            poster_file.do_index()
-            poster_file.associated = True
-        if caption_file:
-            caption_file.do_index()
-            caption_file.associated = True
-        if info_json_file:
-            info_json_file.do_index()
-            info_json_file.associated = True
-
-        session.flush([i for i in files])
-
-        self.poster_file = poster_file
-        self.caption_file = caption_file
-        self.info_json_file = info_json_file
+        self.file_group.model = Video.__tablename__
+        self.file_group.a_text = self.file_group.title
+        self.file_group.c_text = self.get_video_description()
+        # self.file_group.d_text is handled in `validate_video`.
 
     @staticmethod
-    def find_by_path(path, session):
-        video = session.query(Video).filter_by(video_path=path).one_or_none()
+    def from_paths(session: Session, *paths: pathlib.Path) -> 'Video':
+        str_paths = list(map(str, paths))
+        file_group = session.query(FileGroup).filter(FileGroup.primary_path == any_(str_paths)).one_or_none()
+        if not file_group:
+            # This video has not been downloaded previously.
+            file_group = FileGroup.from_paths(session, *paths)
+
+        # Video may have been downloaded previously.
+        video = session.query(Video).filter(Video.file_group_id == file_group.id).one_or_none()
+        if not video:
+            video = Video(file_group=file_group)
+
+        video.validate()
+        session.add(video)
+        session.flush([video, file_group])
+        return video
+
+    @property
+    def info_json_file(self) -> Optional[dict]:
+        for file in self.file_group.my_json_files():
+            return file
+
+    @property
+    def info_json_path(self) -> Optional[pathlib.Path]:
+        if info_json_file := self.info_json_file:
+            return info_json_file['path']
+
+    @property
+    def video_path(self) -> Optional[pathlib.Path]:
+        if self.file_group.primary_path and get_mimetype(self.file_group.primary_path).startswith('video/'):
+            return self.file_group.primary_path
+
+        # No primary file somehow, return the first video file.
+        for file_group in self.file_group.my_video_files():
+            return file_group['path']
+
+    @property
+    def poster_file(self) -> Optional[dict]:
+        for file_group in self.file_group.my_poster_files():
+            return file_group
+
+    @property
+    def poster_path(self) -> Optional[pathlib.Path]:
+        if poster_file := self.poster_file:
+            return poster_file['path']
+
+    @property
+    def caption_files(self) -> List[dict]:
+        return self.file_group.my_files('text/srt') + self.file_group.my_files('text/vtt')
+
+    @property
+    def caption_paths(self) -> List[pathlib.Path]:
+        return [i['path'] for i in self.caption_files]
+
+    def get_caption_text(self) -> Optional[str]:
+        """Search the FileGroup's files for a caption file.  Return the captions from only the best caption file."""
+        caption_paths = self.caption_paths
+        # Some SRT files are more supported than others, these are their preferred order.
+        caption_text = None
+        if english_srt := [i for i in caption_paths if i.name.endswith('.en.srt')]:
+            caption_text = read_captions(english_srt[0])
+        elif srt := [i for i in caption_paths if i.name.endswith('.srt')]:
+            caption_text = read_captions(srt[0])
+        elif english_vtt := [i for i in caption_paths if i.name.endswith('.en.vtt')]:
+            caption_text = read_captions(english_vtt[0])
+        elif vtt := [i for i in caption_paths if i.name.endswith('.vtt')]:
+            caption_text = read_captions(vtt[0])
+
+        return caption_text
+
+    @staticmethod
+    @optional_session
+    def find_by_path(path, session: Session) -> Optional['Video']:
+        video = session.query(Video) \
+            .join(FileGroup, FileGroup.id == Video.file_group_id) \
+            .filter(FileGroup.primary_path == path).one_or_none()
         return video
 
     @staticmethod
-    def find_by_paths(paths: List[pathlib.Path], session) -> List:
-        videos = list(session.query(Video).filter(Video.video_path.in_(paths)))
-        return videos
+    @optional_session
+    def find_by_id(id_: int, session: Session) -> Optional['Video']:
+        video = session.query(Video).filter(Video.id == id_).one_or_none()
+        return video
 
-    @property
-    def primary_path(self):
-        return self.video_path
+    def add_tag(self, tag_or_tag_name: Union[Tag, str]) -> TagFile:
+        tag = Tag.find_by_name(tag_or_tag_name) if isinstance(tag_or_tag_name, str) else tag_or_tag_name
+        return self.file_group.add_tag(tag)
 
 
 class Channel(ModelHelper, Base):
@@ -342,7 +304,7 @@ class Channel(ModelHelper, Base):
     source_id = Column(String)
     refreshed = Column(Boolean, default=False)
 
-    info_json = Column(JSON)
+    info_json = deferred(Column(JSON))
     info_date = Column(Date)
 
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
@@ -414,7 +376,6 @@ class Channel(ModelHelper, Base):
             calculate_duration=self.calculate_duration,
             directory=str(self.directory),
             download_frequency=self.download_frequency,
-            favorites={},
             generate_posters=self.generate_posters,
             match_regex=self.match_regex or '',
             name=self.name,
@@ -464,9 +425,10 @@ class Channel(ModelHelper, Base):
                 SELECT
                     SUM(size),
                     MAX(size),
-                    COUNT(id)
+                    COUNT(video.id)
                 FROM video
-                WHERE channel_id = %(id)s AND video_path IS NOT NULL
+                LEFT JOIN file_group fg on fg.id = video.file_group_id
+                WHERE channel_id = %(id)s
             '''
             curs.execute(stmt, dict(id=self.id))
             size, largest_video, video_count = curs.fetchone()
@@ -484,20 +446,26 @@ class Channel(ModelHelper, Base):
         self_id = self.id
 
         # Refresh all files within this channel's directory first.
-        await refresh_directory_files_recursively(self.directory, send_events=send_events)
+        await refresh_files(self.directory, send_events=send_events)
 
-        # Apply any info_json (discover censored videos, etc.) second.
-        from modules.videos.common import apply_info_json
+        # Apply any info_json (update view counts) second.
+        from modules.videos.common import update_view_counts
         if PYTEST:
-            apply_info_json(self_id)
+            update_view_counts(self_id)
             self.refreshed = True
         else:
 
             # Perform info_json in background task.  Channel will be marked as refreshed after this completes.
             async def _():
-                apply_info_json(self_id)
+                update_view_counts(self_id)
                 with get_db_session(commit=True) as session:
                     channel: Channel = session.query(Channel).filter(Channel.id == self_id).one()
                     channel.refreshed = True
 
             background_task(_())
+
+    @staticmethod
+    @optional_session
+    def get_by_id(id_: int, session: Session = None) -> Optional['Channel']:
+        channel = session.query(Channel).filter_by(id=id_).one_or_none()
+        return channel

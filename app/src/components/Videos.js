@@ -34,26 +34,27 @@ import {
 } from "semantic-ui-react";
 import {Channels, EditChannel, NewChannel} from "./Channels";
 import {useChannel, useQuery, useSearchVideos, useVideo, useVideoStatistics} from "../hooks/customHooks";
-import {FilesView} from "./Files";
+import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {Button, Card, CardIcon, Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
 import {deleteVideos} from "../api";
 import {ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
+import {taggedImageLabel} from "../Tags";
 
 export function VideoWrapper() {
     const {videoId} = useParams();
-    const {videoFile, prevFile, nextFile, setFavorite} = useVideo(videoId);
+    const {videoFile, prevFile, nextFile, fetchVideo} = useVideo(videoId);
 
     // Scroll to the top when videoId changes.
     useEffect(scrollToTop, [videoId]);
 
-    return <VideoPage videoFile={videoFile} prevFile={prevFile} nextFile={nextFile}
-                      setFavorite={setFavorite} autoplay={true}/>
+    return <VideoPage videoFile={videoFile} prevFile={prevFile} nextFile={nextFile} fetchVideo={fetchVideo}
+                      autoplay={true}/>
 }
 
-function VideosPage({filter}) {
+function VideosPage() {
 
     const {channelId} = useParams();
     const {searchParams, updateQuery} = useQuery();
@@ -69,30 +70,18 @@ function VideosPage({filter}) {
         searchOrder = defaultSearchOrder;
     }
 
-    let filtersEnabled = searchParams.getAll('filter');
-    filtersEnabled = filter ? [...filtersEnabled, filter] : filtersEnabled;
-
     const {searchStr, setSearchStr, videos, activePage, setPage, limit, setLimit, totalPages, setOrderBy, fetchVideos} =
-        useSearchVideos(null, channelId, searchOrder, filtersEnabled);
+        useSearchVideos(null, channelId, searchOrder);
     const setView = (value) => updateQuery({view: value});
     const view = searchParams.get('view');
 
     const {channel} = useChannel(channelId);
 
     let title = 'Videos';
-    if (filter && filter.indexOf('favorite') >= 0) {
-        title = 'Favorite Videos';
-    }
     if (channel && channel.name) {
         title = `${channel.name} Videos`;
     }
     useTitle(title);
-
-    const filterOptions = [
-        {text: 'Favorites', key: 'favorite', value: 'favorite'},
-        {text: 'Censored', key: 'censored', value: 'censored'},
-    ];
-    const setFilters = (value) => updateQuery({filter: value});
 
     let videoOrders = [
         {key: '-upload_date', value: '-upload_date', text: 'Newest'},
@@ -219,10 +208,6 @@ function VideosPage({filter}) {
             setView={setView}
             setLimit={setLimit}
             setPage={setPage}
-            filterOptions={filterOptions}
-            activeFilters={filtersEnabled}
-            setFilters={setFilters}
-            multipleFilters={true}
             menuColumnsCount={3}
             menuColumns={menuColumns}
         >
@@ -242,7 +227,6 @@ function Statistics() {
 
     const videoNames = [
         {key: 'videos', label: 'Videos'},
-        {key: 'favorites', label: 'Favorite Videos'},
         {key: 'sum_size', label: 'Total Size'},
         {key: 'max_size', label: 'Largest Video'},
         {key: 'week', label: 'Downloads Past Week'},
@@ -283,7 +267,6 @@ function Statistics() {
 export function VideosRoute(props) {
     const links = [
         {text: 'Videos', to: '/videos', key: 'videos', end: true},
-        {text: 'Favorites', to: '/videos/favorites', key: 'favorites'},
         {text: 'Channels', to: '/videos/channel', key: 'channel'},
         {text: 'Statistics', to: '/videos/statistics', key: 'statistics'},
     ];
@@ -292,7 +275,6 @@ export function VideosRoute(props) {
         <TabLinks links={links}/>
         <Routes>
             <Route path='/' exact element={<VideosPage/>}/>
-            <Route path='favorites' exact element={<VideosPage filter='favorite' header='Favorite Videos'/>}/>
             <Route path='channel' exact element={<Channels/>}/>
             <Route path='statistics' exact element={<Statistics/>}/>
             <Route path='channel/new' exact element={<NewChannel/>}/>
@@ -303,7 +285,7 @@ export function VideosRoute(props) {
 }
 
 export function VideoCard({file}) {
-    const {video} = file;
+    const {video, tags} = file;
     const {s} = useContext(ThemeContext);
 
     let video_url = `/videos/video/${video.id}`;
@@ -317,10 +299,7 @@ export function VideoCard({file}) {
     }
     const poster_url = video.poster_path ? `/media/${encodeURIComponent(video.poster_path)}` : null;
 
-    let imageLabel = null;
-    if (video.favorite) {
-        imageLabel = {corner: 'left', icon: 'heart', color: 'green'};
-    }
+    let imageLabel = !_.isEmpty(tags) ? taggedImageLabel : null;
     let poster = <Link to={video_url}><CardIcon><FileIcon file={file}/></CardIcon></Link>;
     if (poster_url) {
         poster = <CardPosterLink to={video_url} poster_url={poster_url} imageLabel={imageLabel}/>;
@@ -334,7 +313,7 @@ export function VideoCard({file}) {
             <CardHeader>
                 <Container textAlign='left'>
                     <Link to={video_url} className="no-link-underscore card-link">
-                        <p {...s}>{cardTitleWrapper(video.title || video.stem || video.video_path)}</p>
+                        <p {...s}>{cardTitleWrapper(file.title || file.name || video.stem || video.video_path)}</p>
                     </Link>
                 </Container>
             </CardHeader>
@@ -357,12 +336,10 @@ export function VideoRowCells({file}) {
     const poster_url = video.poster_path ? `/media/${encodeURIComponent(video.poster_path)}` : null;
 
     let poster;
-    let imageLabel = video.favorite ? {corner: 'left', icon: 'heart', color: 'green'} : null;
     if (poster_url) {
         poster = <CardLink to={video_url}>
             <Image wrapped
                    src={poster_url}
-                   label={imageLabel}
                    width='50px'
             />
         </CardLink>
@@ -379,6 +356,7 @@ export function VideoRowCells({file}) {
         </TableCell>
         <TableCell>
             <CardLink to={video_url}>
+                <FileRowTagIcon file={file}/>
                 {textEllipsis(video.title || video.stem || video.video_path)}
             </CardLink>
         </TableCell>

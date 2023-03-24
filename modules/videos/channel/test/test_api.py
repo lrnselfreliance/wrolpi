@@ -28,10 +28,10 @@ def test_get_channels(test_directory, channel_factory, test_client):
 def test_get_video(test_client, test_session, simple_channel, video_factory):
     """Test that you get can information about a video.  Test that video file can be gotten."""
     now_ = now()
-    video1 = video_factory(channel_id=simple_channel.id)
-    video1.upload_date, video1.title = now_, 'vid1'
-    video2 = video_factory(channel_id=simple_channel.id)
-    video2.upload_date, video2.title = now_ + timedelta(seconds=1), 'vid2'
+    video1 = video_factory(channel_id=simple_channel.id, title='vid1')
+    video1.upload_date = now_
+    video2 = video_factory(channel_id=simple_channel.id, title='vid2')
+    video2.upload_date = now_ + timedelta(seconds=1)
     test_session.commit()
 
     # Test that a 404 is returned when no video exists
@@ -42,11 +42,11 @@ def test_get_video(test_client, test_session, simple_channel, video_factory):
     # Get the video info we inserted
     _, response = test_client.get('/api/videos/video/1')
     assert response.status_code == HTTPStatus.OK, response.json
-    assert_dict_contains(response.json['file']['video'], {'title': 'vid1'})
+    assert_dict_contains(response.json['file_group'], {'title': 'vid1'})
 
     # The next video is included.
     assert response.json['prev'] is None
-    assert_dict_contains(response.json['next']['video'], {'title': 'vid2'})
+    assert_dict_contains(response.json['next'], {'title': 'vid2'})
 
 
 def test_channel_no_download_frequency(test_client, test_session, test_directory, simple_channel):
@@ -173,8 +173,8 @@ def test_video_file_name(test_session, simple_video, test_client):
     """If a Video has no title, the front-end can use the file name as the title."""
     _, resp = test_client.get(f'/api/videos/video/{simple_video.id}')
     assert resp.status_code == HTTPStatus.OK
-    assert resp.json['file']['video']['video_path'] == 'simple_video.mp4'
-    assert resp.json['file']['video'].get('stem') == 'simple_video'
+    assert resp.json['file_group']['video']['video_path'] == 'simple_video.mp4'
+    assert resp.json['file_group']['video'].get('stem') == 'simple_video'
 
 
 def test_channel_conflicts(test_client, test_session, test_directory):
@@ -443,7 +443,7 @@ def test_search_videos_channel(test_client, test_session, video_factory):
     d = dict(channel_id=channel1.id)
     request, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
     assert response.status_code == HTTPStatus.OK
-    assert len(response.json['files']) == 0
+    assert len(response.json['file_groups']) == 0
 
     with get_db_session(commit=True) as session:
         vid1 = video_factory(title='vid1', channel_id=channel2.id)
@@ -454,15 +454,15 @@ def test_search_videos_channel(test_client, test_session, video_factory):
     # Videos are gotten by their respective channels
     request, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
     assert response.status_code == HTTPStatus.OK
-    assert len(response.json['files']) == 1
-    assert response.json['totals']['files'] == 1
-    assert_dict_contains(response.json['files'][0], dict(path='vid2.mp4', video=dict(channel_id=channel1.id)))
+    assert len(response.json['file_groups']) == 1
+    assert response.json['totals']['file_groups'] == 1
+    assert_dict_contains(response.json['file_groups'][0], dict(primary_path='vid2.mp4', video=dict(channel_id=channel1.id)))
 
     d = dict(channel_id=channel2.id)
     request, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
     assert response.status_code == HTTPStatus.OK
-    assert len(response.json['files']) == 1
-    assert_dict_contains(response.json['files'][0], dict(path='vid1.mp4', video=dict(channel_id=channel2.id)))
+    assert len(response.json['file_groups']) == 1
+    assert_dict_contains(response.json['file_groups'][0], dict(primary_path='vid1.mp4', video=dict(channel_id=channel2.id)))
 
 
 def test_get_channel_videos_pagination(test_client, test_session, simple_channel, video_factory, assert_video_search):
@@ -488,7 +488,7 @@ def test_get_channel_videos_pagination(test_client, test_session, simple_channel
     last_ids = []
     for offset, video_count in tests:
         _, response = assert_video_search(channel_id=simple_channel.id, order_by='id', offset=offset, limit=20)
-        assert len(response.json['files']) == video_count, 'Returned videos does not match'
-        current_ids = [i['video']['id'] for i in response.json['files']]
+        assert len(response.json['file_groups']) == video_count, 'Returned videos does not match'
+        current_ids = [i['id'] for i in response.json['file_groups']]
         assert current_ids != last_ids, f'IDs are unchanged current_ids={current_ids}'
         last_ids = current_ids

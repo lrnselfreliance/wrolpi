@@ -1,20 +1,20 @@
+import asyncio
 import json
-import pathlib
 from abc import ABC
-from typing import Tuple, Dict, List
+from typing import Tuple, List
 
+from sqlalchemy import not_
 from sqlalchemy.orm import Session
 
 from wrolpi.common import logger, register_modeler, register_after_refresh, limit_concurrent, split_lines_by_length
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
-from wrolpi.errors import UnrecoverableDownloadError
-from wrolpi.files.indexers import register_indexer, Indexer
-from wrolpi.files.models import File
+from wrolpi.errors import UnrecoverableDownloadError, InvalidArchive
+from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST
 from . import lib
 from .api import bp  # noqa
-from .lib import match_archive_files
+from .lib import is_singlefile_file, get_title_from_html
 from .models import Archive, Domain
 
 PRETTY_NAME = 'Archive'
@@ -55,58 +55,129 @@ class ArchiveDownloader(Downloader, ABC):
 archive_downloader = ArchiveDownloader(priority=100)
 
 
-def find_archive_file_in_group(group: List[File]):
-    for file in group:
-        if lib.is_singlefile_file(file.path):
-            return file
+def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
+    file_group_id = file_group.id
+    if not file_group_id:
+        session.flush([file_group])
+        file_group_id = file_group.id
+
+    # All Archives have an HTML Singlefile.
+    html_paths = file_group.my_paths('text/html')
+    if not html_paths:
+        logger.error('Query returned a group without an HTML file!')
+        raise InvalidArchive('FileGroup does not contain any html files')
+
+    # All Archives have a Singlefile.
+    for file in html_paths:
+        if is_singlefile_file(file):
+            singlefile_path = file
+            break
+    else:
+        logger.debug(f'No Archive singlefile found in {file_group}')
+        raise InvalidArchive('FileGroup does not contain a singlefile')
+
+    readability_json_path = None
+    json_files = file_group.my_json_files()
+    for json_file in json_files:
+        path = json_file['path']
+        if path.name.endswith('.readability.json'):
+            readability_json_path = path
+            break
+
+    readability_txt_path = None
+    text_files = file_group.my_text_files()
+    for text_file in text_files:
+        path = text_file['path']
+        if path.name.endswith('.readability.txt'):
+            readability_txt_path = path
+            break
+
+    try:
+        file_group.model = 'archive'
+        file_group.primary_path = singlefile_path
+
+        title = None
+        if readability_json_path:
+            title = get_title(readability_json_path)
+        if not title:
+            title = get_title_from_html(singlefile_path.read_text())
+
+        contents = None
+        if readability_txt_path:
+            contents = get_article(readability_txt_path)
+
+        archive = Archive(file_group_id=file_group_id, file_group=file_group)
+        session.add(archive)
+        archive.validate()
+        session.flush([archive])
+
+        file_group.title = file_group.a_text = title
+        file_group.d_text = contents
+        file_group.data = {
+            'id': archive.id,
+            'archive_datetime': archive.archive_datetime,
+            'domain': archive.domain.domain if archive.domain else None,
+            'readability_json_path': archive.readability_json_path,
+            'readability_path': archive.readability_path,
+            'readability_txt_path': archive.readability_txt_path,
+            'screenshot_path': archive.screenshot_path,
+            'singlefile_path': archive.singlefile_path,
+            'url': archive.url,
+        }
+
+        return archive
+    except Exception as e:
+        logger.error(f'Failed to model Archive {file_group}', exc_info=e)
+        if PYTEST:
+            raise
 
 
 @register_modeler
-def archive_modeler(groups: Dict[str, List[File]], session: Session):
-    archive_files = {stem: file for stem, group in groups.items() if (file := find_archive_file_in_group(group))}
-    if not archive_files:
-        # No archives in these groups.
-        return
-    # Get all matching Archive records (if any) in one query.
-    archive_paths = [i.path for i in archive_files.values()]
-    archive_records = {i.singlefile_path: i for i in
-                       session.query(Archive).filter(Archive.singlefile_path.in_(archive_paths))}
+async def archive_modeler():
+    invalid_archives = set()
 
-    for stem, archive_file in archive_files.items():
-        group = groups[stem]
+    while True:
+        with get_db_session(commit=True) as session:
+            results = session.query(FileGroup, Archive) \
+                .filter(
+                # Get all groups that contain a PDF that have not been indexed.
+                FileGroup.indexed != True,
+                FileGroup.mimetype == 'text/html',
+            ).filter(not_(FileGroup.id.in_(list(invalid_archives)))) \
+                .outerjoin(Archive, Archive.file_group_id == FileGroup.id) \
+                .limit(20)
 
-        readability_file, singlefile_file, readability_json_file, readability_txt_file, screenshot_file = \
-            match_archive_files(group)
+            processed = 0
+            for file_group, archive in results:
+                processed += 1
 
-        archive: Archive = archive_records.get(archive_file.path)
-        if not archive:
-            archive = Archive(singlefile_file=singlefile_file)
-            session.add(archive)
-        archive.readability_file = readability_file
-        archive.readability_json_file = readability_json_file
-        archive.readability_txt_file = readability_txt_file
-        archive.screenshot_file = screenshot_file
+                if archive:
+                    try:
+                        archive_id = archive.id
+                        archive.validate()
+                    except Exception:
+                        # Archive could not be indexed.
+                        invalid_archives |= {file_group.id, }
 
-        if archive.readability_file:
-            archive.readability_file.associated = True
-            archive.readability_file.do_stats()
-        if archive.readability_json_file:
-            archive.readability_json_file.associated = True
-            archive.readability_json_file.do_stats()
-        if archive.readability_txt_file:
-            archive.readability_txt_file.associated = True
-            archive.readability_txt_file.do_stats()
-        if archive.screenshot_file:
-            archive.screenshot_file.associated = True
-            archive.screenshot_file.do_stats()
+                        logger.error(f'Unable to validate Archive {archive_id}')
+                        if PYTEST:
+                            raise
+                else:
+                    try:
+                        model_archive(file_group, session=session)
+                    except InvalidArchive:
+                        # FileGroup was not an archive group.
+                        invalid_archives |= {file_group.id, }
 
-        archive.singlefile_file.model = Archive.__tablename__
+                # Even if indexing fails, we mark it as indexed.  We won't retry indexing this.
+                file_group.indexed = True
 
-        archive.singlefile_file.do_index()
-        archive.validate()
+            if processed < 20:
+                # Did not reach limit, do not query again.
+                break
 
-        # Remove this group, it will not be processed by other modelers.
-        del groups[stem]
+        # Sleep to catch cancel.
+        await asyncio.sleep(0)
 
 
 @register_after_refresh
@@ -124,7 +195,13 @@ def archive_cleanup():
             deleted = 0
             for archive in archives:
                 processed += 1
-                if not lib.is_singlefile_file(archive.singlefile_path):
+                singlefile_path = archive.singlefile_path
+                if not singlefile_path:
+                    archive.file_group.model = None
+                    session.delete(archive)
+                    deleted += 1
+                    continue
+                if not lib.is_singlefile_file(singlefile_path):
                     # Archive is not a real archive.
                     archive.singlefile_file.model = None
                     session.delete(archive)
@@ -142,45 +219,18 @@ def archive_cleanup():
                 session.delete(domain)
 
 
-@register_indexer('text/html')
-class ArchiveIndexer(Indexer, ABC):
-    """Gathers index data from the files associated with an Archive."""
+def get_title(path):
+    with path.open('rt') as fh:
+        try:
+            return json.load(fh)['title']
+        except Exception:
+            if not PYTEST:
+                logger.warning(f'Archive readability json file exists, but cannot get title. {path}')
+            return None
 
-    @staticmethod
-    def get_title(file: File):
-        singlefile_path: pathlib.Path = file.path.path if hasattr(file.path, 'path') else file.path
-        readability_json_path = singlefile_path.with_suffix('.readability.json')
-        if readability_json_path.is_file():
-            with readability_json_path.open('rt') as fh:
-                try:
-                    return json.load(fh)['title']
-                except Exception:
-                    if not PYTEST:
-                        logger.warning(f'Archive readability json file exists, but cannot get title. {file}')
-                    return None
 
-    @staticmethod
-    def get_article(file: File):
-        singlefile_path: pathlib.Path = file.path.path if hasattr(file.path, 'path') else file.path
-        readability_txt_path = singlefile_path.with_suffix('.readability.txt')
-        if readability_txt_path.is_file():
-            return readability_txt_path.read_text()
-
-    @classmethod
-    def create_index(cls, file: File) -> Tuple:
-        """
-        Index an Archive file and it's associated files.  This mimetype matches non-archive (non-singlefile) html files,
-        so this index will return empty if a readability file is found.
-
-        a = title
-        b = <empty>
-        c = <empty>
-        d = readability article
-        """
-        if file.path.name.endswith('.readability.html'):
-            # Readability files are not the primary Archive file.
-            return None, None, None, None
-        a = cls.get_title(file)
-        d = cls.get_article(file)
-        d = split_lines_by_length(d)
-        return a, None, None, d
+def get_article(path):
+    if path.is_file():
+        text = path.read_text()
+        text = split_lines_by_length(text)
+        return text

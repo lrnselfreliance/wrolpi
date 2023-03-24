@@ -6,9 +6,8 @@ import subprocess
 import tempfile
 from datetime import timedelta
 from decimal import Decimal
-from functools import partial
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import PIL
 from PIL import Image
@@ -16,25 +15,16 @@ from sqlalchemy.orm import Session
 
 from wrolpi.captions import FFMPEG_BIN
 from wrolpi.cmd import FFPROBE_BIN
-from wrolpi.common import logger, iterify, get_media_directory, \
-    minimize_dict, match_paths_to_suffixes
+from wrolpi.common import logger, get_media_directory
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.errors import ChannelNameConflict, ChannelURLConflict, \
     ChannelDirectoryConflict, ChannelSourceIdConflict
-from wrolpi.files.models import File
 from wrolpi.vars import DEFAULT_FILE_PERMISSIONS
 from .models import Channel
 
 logger = logger.getChild(__name__)
 
 REQUIRED_OPTIONS = ['name', 'directory']
-MINIMUM_CHANNEL_KEYS = {'id', 'name', 'directory', 'url', 'video_count'}
-MINIMUM_INFO_JSON_KEYS = {'description', 'view_count', 'webpage_url'}
-MINIMUM_VIDEO_KEYS = {'id', 'title', 'upload_date', 'duration', 'channel', 'channel_id', 'favorite', 'size',
-                      'poster_path', 'caption_path', 'video_path', 'info_json', 'channel', 'viewed', 'source_id',
-                      'view_count'}
-# These are the supported video formats.  These are in order of their preference.
-VIDEO_EXTENSIONS = ('mp4', 'ogg', 'webm', 'flv')
 
 
 class ConfigError(Exception):
@@ -145,7 +135,7 @@ def generate_video_poster(video_path: Path) -> Tuple[Path, Optional[int]]:
 
 def convert_image(existing_path: Path, destination_path: Path, ext: str = 'jpeg'):
     """Convert an image from one format to another.  Remove the existing image file.  This will safely overwrite an
-    image if the existing path is the same as the destination path.
+    image if the destination file already exists.
     """
     with tempfile.NamedTemporaryFile(dir=destination_path.parent, delete=False) as fh:
         img = Image.open(existing_path).convert('RGB')
@@ -225,11 +215,8 @@ def check_for_video_corruption(video_path: Path) -> bool:
     return corrupt
 
 
-def apply_info_json(channel_id: int):
-    """Update view_count for all Videos in a channel using its info_json file.
-
-    Mark any videos not in the info_json as "censored".
-    """
+def update_view_counts(channel_id: int):
+    """Update view_count for all Videos in a channel using its info_json file."""
     with get_db_session() as session:
         channel: Channel = session.query(Channel).filter_by(id=channel_id).one()
         channel_name = channel.name
@@ -255,47 +242,3 @@ def apply_info_json(channel_id: int):
         curs.execute(stmt, (view_counts_str, channel_id))
         count = len(curs.fetchall())
         logger.debug(f'Updated {count} view counts in DB for {channel_name}.')
-
-        # Mark any video not in the info_json entries as censored.
-        source_ids = [i['id'] for i in info['entries']]
-        stmt = '''
-            UPDATE video SET censored=(source_id != ALL(%s))
-            WHERE channel_id=%s
-        '''
-        curs.execute(stmt, (source_ids, channel_id))
-
-
-minimize_channel = partial(minimize_dict, keys=MINIMUM_CHANNEL_KEYS)
-minimize_video_info_json = partial(minimize_dict, keys=MINIMUM_INFO_JSON_KEYS)
-_minimize_video = partial(minimize_dict, keys=MINIMUM_VIDEO_KEYS)
-
-
-def minimize_video(video: dict) -> dict:
-    """
-    Return a Video dictionary that contains only the key/values typically used.  Minimize the Channel and info_json,
-    if they are present.
-    """
-    video = _minimize_video(video)
-
-    if video.get('channel'):
-        video['channel'] = minimize_channel(video['channel'])
-    if video.get('info_json'):
-        video['info_json'] = minimize_video_info_json(video['info_json'])
-
-    return video
-
-
-match_video_paths = partial(match_paths_to_suffixes, suffix_groups=(
-    tuple(f'.{i}' for i in VIDEO_EXTENSIONS),
-    ('.jpg', '.jpeg', '.webp', '.png'),
-    ('.description',),
-    ('.en.vtt', '.en.srt'),
-    ('.info.json',),
-))
-
-
-@iterify(tuple)
-def match_video_files(files: List[File]) -> Tuple[File, File, File, File, File]:
-    video_paths = match_video_paths([i.path for i in files])
-    for path in video_paths:
-        yield next((i for i in files if i.path == path), None)

@@ -12,6 +12,7 @@ import {Divider, Icon, Message} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {refreshFiles} from "./api";
 import _ from "lodash";
+import {TagsSegment} from "./Tags";
 
 function FlagsMessages({flags}) {
     if (!flags) {
@@ -62,7 +63,7 @@ function FlagsMessages({flags}) {
 export function Dashboard() {
     useTitle('Dashboard');
 
-    const {searchStr, setSearchStr} = useSearchFiles();
+    const {searchStr, setSearchStr, activeTags} = useSearchFiles();
 
     const {status} = useContext(StatusContext);
     const wrol_mode = status ? status['wrol_mode'] : null;
@@ -74,13 +75,14 @@ export function Dashboard() {
 
     // Only show dashboard parts if not searching.
     let body;
-    if (searchStr) {
+    if (searchStr || activeTags) {
         body = <FilesSearchView showLimit={true} showSelectButton={true}/>;
     } else {
         body = <>
             {!wrol_mode && downloads}
             {/* Hide Status when user is starting a download */}
             {!downloadOpen && <DashboardStatus/>}
+            <TagsSegment/>
         </>;
     }
 

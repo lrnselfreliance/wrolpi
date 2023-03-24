@@ -1,18 +1,14 @@
-import pathlib
 from http import HTTPStatus
-from typing import List
-from urllib.request import Request
 
-from sanic import response
+from sanic import response, Request
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi.common import get_media_directory, wrol_mode_check, background_task, get_relative_to_media_directory
+from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_media_directory
 from wrolpi.errors import InvalidFile
 from wrolpi.root_api import get_blueprint, json_response
 from . import lib, schema
 from ..schema import JSONErrorResponse
-from ..vars import PYTEST
 
 bp = get_blueprint('Files', '/api/files')
 
@@ -44,38 +40,20 @@ async def delete_file(_: Request, body: schema.DeleteRequest):
 
 
 @bp.post('/refresh')
-@openapi.description('Find and index all files in the media directory.')
-@wrol_mode_check
-async def refresh(_: Request):
-    await lib.refresh_files()
-    return response.empty()
-
-
-@bp.post('/refresh/directory')
-@openapi.description('Find and index all files in the provided directory.')
-@validate(schema.DirectoryRefreshRequest)
-@wrol_mode_check
-async def refresh_directory(_: Request, body: schema.DirectoryRefreshRequest):
-    directory = get_media_directory() / body.directory
-    if PYTEST:
-        await lib.refresh_directory_files_recursively(directory)
-    else:
-        background_task(lib.refresh_directory_files_recursively(directory))
-    return response.empty()
-
-
-@bp.post('/refresh/list')
 @openapi.definition(
-    summary='Refresh and index all files in the provided list',
-    body=schema.FilesRefreshListRequest,
+    summary='Refresh and index all paths (files/directories) in the provided list.  Refresh all files if not provided.',
+    body=schema.FilesRefreshRequest,
 )
-@validate(schema.FilesRefreshListRequest)
 @wrol_mode_check
-async def refresh_files_list(_: Request, body: schema.FilesRefreshListRequest):
-    if PYTEST:
-        await lib.refresh_files_list(body.files, body.include_files_near)
-    else:
-        background_task(lib.refresh_files_list(body.files, body.include_files_near))
+async def refresh(request: Request):
+    paths = None
+    if request.body:
+        media_directory = get_media_directory()
+        if not isinstance(request.json['paths'], list):
+            raise ValueError('Can only refresh a list')
+
+        paths = [media_directory / i for i in request.json['paths']]
+    await lib.refresh_files(paths)
     return response.empty()
 
 
@@ -86,8 +64,9 @@ async def refresh_files_list(_: Request, body: schema.FilesRefreshListRequest):
 )
 @validate(schema.FilesSearchRequest)
 async def post_search_files(_: Request, body: schema.FilesSearchRequest):
-    files, total = lib.search_files(body.search_str, body.limit, body.offset, body.mimetypes, body.model)
-    return json_response(dict(files=files, totals=dict(files=total)))
+    file_groups, total = lib.search_files(body.search_str, body.limit, body.offset, body.mimetypes, body.model,
+                                          body.tag_names)
+    return json_response(dict(file_groups=file_groups, totals=dict(file_groups=total)))
 
 
 @bp.post('/directories')
@@ -106,3 +85,17 @@ def post_directories(_, body: schema.DirectoriesRequest):
 
     body = {'directories': dirs, 'exists': path.exists(), 'is_dir': path.is_dir(), 'is_file': path.is_file()}
     return response.json(body)
+
+
+@bp.post('/tag')
+@validate(schema.TagFileGroupPost)
+def post_tag_file_group(_, body: schema.TagFileGroupPost):
+    lib.add_file_group_tag(body.file_group_id, body.tag_name)
+    return response.empty(HTTPStatus.CREATED)
+
+
+@bp.post('/untag')
+@validate(schema.TagFileGroupPost)
+def post_untag_file_group(_, body: schema.TagFileGroupPost):
+    lib.remove_file_group_tag(body.file_group_id, body.tag_name)
+    return response.empty(HTTPStatus.NO_CONTENT)

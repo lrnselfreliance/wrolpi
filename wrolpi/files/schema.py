@@ -19,17 +19,12 @@ class FilesSearchRequest:
     offset: Optional[int] = 0
     mimetypes: List[str] = field(default_factory=list)
     model: Optional[str] = None
+    tag_names: List[str] = field(default_factory=list)
 
 
 @dataclass
-class DirectoryRefreshRequest:
-    directory: str = None
-
-
-@dataclass
-class FilesRefreshListRequest:
-    files: List[str] = None
-    include_files_near: bool = True
+class FilesRefreshRequest:
+    paths: Optional[List[str]] = None
 
 
 @dataclass
@@ -40,3 +35,9 @@ class DirectoriesRequest:
 @dataclass
 class DirectoriesResponse:
     directories: List[str]
+
+
+@dataclass
+class TagFileGroupPost:
+    file_group_id: int
+    tag_name: str

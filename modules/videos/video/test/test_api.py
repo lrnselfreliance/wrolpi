@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 from http import HTTPStatus
 from json import dumps
@@ -60,19 +61,19 @@ def test_get_video_prev_next(test_session, channel_factory, video_factory):
             if prev_title is None:
                 assert prev_video is None
             else:
-                assert prev_video and prev_video.title == prev_title
+                assert prev_video and prev_video.file_group.title == prev_title
 
             if next_title is None:
                 assert next_video is None
             else:
-                assert next_video and next_video.title == next_title
+                assert next_video and next_video.file_group.title == next_title
         except AssertionError as e:
             raise AssertionError(f'Assert failed for {id_=} {prev_title=} {next_title=}') from e
 
 
 def test_get_video_for_app(test_session, simple_channel, simple_video):
     vid, prev, next_ = get_video_for_app(simple_video.id)
-    assert vid['video']['id'] == simple_video.id
+    assert vid['id'] == simple_video.id
 
 
 @pytest.mark.asyncio
@@ -85,7 +86,7 @@ def test_video_delete(test_client, test_session, test_directory, channel_factory
 
     assert test_session.query(Video).count() == 2
 
-    vid1_video_path, vid1_caption_path = vid1.video_path, vid1.caption_path
+    vid1_video_path, vid1_caption_path = vid1.video_path, vid1.caption_paths[0]
     vid2_video_path, vid2_info_json_path = vid2.video_path, vid2.info_json_path
 
     # No videos have been deleted yet.
@@ -120,10 +121,10 @@ def test_video_delete(test_client, test_session, test_directory, channel_factory
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
-def test_wrol_mode(test_directory, simple_channel, simple_video, wrol_mode_fixture, test_download_manager):
+def test_wrol_mode(test_directory, simple_channel, simple_video, wrol_mode_fixture, test_download_manager, tag_factory):
     """Many methods are blocked when WROL Mode is enabled."""
     channel = dumps(dict(name=simple_channel.name, directory=str(simple_channel.directory)))
-    favorite = dumps(dict(video_id=simple_video.id, favorite=True))
+    tag = tag_factory()
 
     wrol_mode_fixture(True)
 
@@ -152,8 +153,9 @@ def test_wrol_mode(test_directory, simple_channel, simple_video, wrol_mode_fixtu
     assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
 
     # THE REST OF THESE METHODS ARE ALLOWED
-    _, resp = api_app.test_client.post('/api/videos/favorite', content=favorite)
-    assert resp.status_code == HTTPStatus.OK
+    content = dict(video_id=simple_video.id, tag_name=tag.name)
+    _, resp = api_app.test_client.post('/api/videos/tag', content=json.dumps(content))
+    assert resp.status_code == HTTPStatus.NO_CONTENT
 
     assert test_download_manager.stopped.is_set()
 

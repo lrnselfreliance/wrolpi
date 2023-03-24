@@ -1,4 +1,3 @@
-import copy
 import datetime
 import json
 import pathlib
@@ -9,7 +8,6 @@ import pytz
 
 from modules.archive.lib import archive_strftime
 from modules.archive.models import Archive, Domain
-from wrolpi.files.models import File
 
 
 @pytest.fixture
@@ -68,45 +66,17 @@ def archive_factory(test_session, archive_directory, make_files_structure):
             test_session.add(domain)
             test_session.flush([domain])
 
-        archive = Archive(
-            readability_json_file=File(path=readability_json_path) if readability_json_path else None,
-            readability_file=File(path=readability_path) if readability_path else None,
-            readability_txt_file=File(path=readability_txt_path) if readability_txt_path else None,
-            screenshot_file=File(path=screenshot_path) if screenshot_path else None,
-            singlefile_file=File(path=singlefile_path, model='archive'),
-            title=title,
-            url=url,
-            domain_id=domain.id if domain else None,
-            archive_datetime=archive_datetime,
-        )
-        test_session.add(archive)
-        archive.singlefile_file.do_index()
+        # Only add files that were created.
+        files = (readability_path, readability_json_path, readability_txt_path, screenshot_path, singlefile_path)
+        files = list(filter(None, files))
+
+        archive = Archive.from_paths(test_session, *files)
+        archive.url = url
+        archive.title = title
+        archive.archive_datetime = next(now)
+        archive.domain = domain
+        archive.validate()
 
         return archive
 
     return _
-
-
-SINGLEFILE_CONTENTS = '''<html><!--
- Page saved with SingleFile 
- url: https://example.com 
- saved date: Thu May 12 2022 00:38:02 GMT+0000 (Coordinated Universal Time)
---><head><meta charset="utf-8">
-
-<meta name="msapplication-TileColor" content="#2d89ef">
-<meta name="theme-color" content="#000000">
-
-<title>the title</title>
-
-<body>
-some body contents
-</body>
-
-</html>
-'''
-
-
-@pytest.fixture
-def singlefile_contents() -> str:
-    """Return a short HTML string that contains an example Singlefile file."""
-    return copy.deepcopy(SINGLEFILE_CONTENTS)

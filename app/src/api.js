@@ -103,11 +103,11 @@ export async function getChannel(id) {
     return (await response.json())['channel'];
 }
 
-export async function searchVideos(offset, limit, channelId, searchStr, order_by, filters = []) {
+export async function searchVideos(offset, limit, channelId, searchStr, order_by, tags) {
     // Build a search query to retrieve a list of videos from the API
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
-    let body = {offset, limit, filters, order_by: order_by || 'rank'};
+    let body = {offset, limit, order_by: order_by || 'rank'};
 
     if (searchStr) {
         body['search_str'] = searchStr;
@@ -115,13 +115,16 @@ export async function searchVideos(offset, limit, channelId, searchStr, order_by
     if (channelId) {
         body['channel_id'] = parseInt(channelId);
     }
+    if (tags) {
+        body['tag_names'] = tags.split(',');
+    }
 
     console.debug('searching videos', body);
 
     let response = await apiPost(`${VIDEOS_API}/search`, body);
     if (response.status === 200) {
         let data = await response.json();
-        return [data['files'], data['totals']['files']];
+        return [data['file_groups'], data['totals']['file_groups']];
     } else {
         toast({
             type: 'error',
@@ -136,7 +139,7 @@ export async function searchVideos(offset, limit, channelId, searchStr, order_by
 export async function getVideo(video_id) {
     let response = await apiGet(`${VIDEOS_API}/video/${video_id}`);
     let data = await response.json();
-    return [data['file'], data['prev'], data['next']];
+    return [data['file_group'], data['prev'], data['next']];
 }
 
 export async function deleteVideos(videoIds) {
@@ -201,12 +204,6 @@ export async function getDownloads() {
 export async function validateRegex(regex) {
     let response = await apiPost(`${API_URI}/valid_regex`, {regex});
     return (await response.json())['valid'];
-}
-
-export async function favoriteVideo(video_id, favorite) {
-    let body = {favorite: favorite, video_id};
-    let response = await apiPost(`${VIDEOS_API}/favorite`, body);
-    return (await response.json())['favorite'];
 }
 
 export async function getVideosStatistics() {
@@ -353,7 +350,7 @@ export async function deleteArchives(archiveIds) {
     }
 }
 
-export async function searchArchives(offset, limit, domain, searchStr, order) {
+export async function searchArchives(offset, limit, domain, searchStr, order, tags) {
     // Build a search query to retrieve a list of videos from the API
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
@@ -367,12 +364,15 @@ export async function searchArchives(offset, limit, domain, searchStr, order) {
     if (order) {
         body['order_by'] = order;
     }
+    if (tags) {
+        body['tag_names'] = tags.split(',');
+    }
 
     console.debug('searching archives', body);
     let response = await apiPost(`${ARCHIVES_API}/search`, body);
     if (response.status === 200) {
         let data = await response.json();
-        return [data['archives'], data['totals']['archives']];
+        return [data['file_groups'], data['totals']['file_groups']];
     } else {
         toast({
             type: 'error',
@@ -380,6 +380,7 @@ export async function searchArchives(offset, limit, domain, searchStr, order) {
             description: 'Cannot search archives.  See server logs.',
             time: 5000,
         });
+        return [[], 0];
     }
 }
 
@@ -402,7 +403,7 @@ export async function getArchive(archiveId) {
     const response = await apiGet(`${ARCHIVES_API}/${archiveId}`);
     if (response.status === 200) {
         const data = await response.json();
-        return [data['file'], data['history']];
+        return [data['file_group'], data['history']];
     } else {
         toast({
             type: 'error', title: 'Archive Error', description: 'Unable to get Archive.  See server logs.', time: 5000,
@@ -465,17 +466,7 @@ export async function deleteDownload(downloadId) {
     }
 }
 
-const replaceFileDatetimes = (files) => {
-    for (let i = 0; i < files.length; i++) {
-        let file = files[i];
-        if (file['modified']) {
-            files[i]['modified'] = file['modified'] * 1000;
-        }
-    }
-    return files;
-}
-
-export async function filesSearch(offset, limit, searchStr, mimetypes, model) {
+export async function filesSearch(offset, limit, searchStr, mimetypes, model, tags) {
     const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit)};
     if (mimetypes) {
         body['mimetypes'] = mimetypes;
@@ -483,14 +474,16 @@ export async function filesSearch(offset, limit, searchStr, mimetypes, model) {
     if (model) {
         body['model'] = model;
     }
+    if (tags) {
+        body['tag_names'] = tags.split(',');
+    }
     console.debug('searching files', body);
     const response = await apiPost(`${API_URI}/files/search`, body);
 
     if (response.status === 200) {
         let data = await response.json();
-        let [files, total] = [data['files'], data['totals']['files']];
-        files = replaceFileDatetimes(files);
-        return [files, total];
+        let [file_groups, total] = [data['file_groups'], data['totals']['file_groups']];
+        return [file_groups, total];
     } else {
         toast({
             type: 'error',
@@ -507,9 +500,9 @@ export async function refreshFiles() {
 }
 
 export async function refreshDirectoryFiles(directory) {
-    let body = {directory};
+    let body = {paths: [directory]};
     try {
-        return await apiPost(`${API_URI}/files/refresh/directory`, body);
+        return await apiPost(`${API_URI}/files/refresh`, body);
     } catch (e) {
         console.error(e);
         toast({
@@ -526,7 +519,6 @@ export async function getFiles(directories) {
     let body = {directories: directories || []};
     let response = await apiPost(`${API_URI}/files`, body);
     let {files} = await response.json();
-    files = replaceFileDatetimes(files);
     return files;
 }
 
@@ -674,5 +666,69 @@ export async function getEvents(after) {
     let response = await apiGet(uri);
     if (response.status === 200) {
         return await response.json();
+    }
+}
+
+export async function getTags() {
+    let uri = `${API_URI}/tag`;
+    let response = await apiGet(uri);
+    if (response.status === 200) {
+        const body = await response.json();
+        return body['tags'];
+    }
+}
+
+export async function addTag(fileGroup, name) {
+    const {id} = fileGroup;
+    const uri = `${API_URI}/files/tag`;
+    const body = {file_group_id: id, tag_name: name};
+    let response = await apiPost(uri, body);
+    if (response.status !== 201) {
+        console.error('Failed to add tag');
+    }
+}
+
+export async function removeTag(fileGroup, name) {
+    const {id} = fileGroup;
+    const uri = `${API_URI}/files/untag`;
+    const body = {file_group_id: id, tag_name: name};
+    let response = await apiPost(uri, body)
+    if (response.status !== 204) {
+        console.error('Failed to remove tag');
+    }
+}
+
+export async function postTag(name, color) {
+    const body = {name: name, color: color};
+    const uri = `${API_URI}/tag/new`;
+    let response = await apiPost(uri, body);
+    if (response.status !== 201) {
+        console.error('Failed to create new tag');
+        toast({
+            type: 'error', title: 'Error!', description: 'Unable to save tag', time: 5000,
+        })
+    } else {
+        toast({
+            type: 'info', title: 'Created new tag', description: `Created new tag: ${name}`, time: 2000,
+        });
+    }
+}
+
+export async function deleteTag(name) {
+    const body = {name: name};
+    const uri = `${API_URI}/tag/delete`;
+    let response = await apiPost(uri, body);
+    if (response.status === 400) {
+        const content = await response.json();
+        if (content['code'] === 38) {
+            toast({
+                type: 'error', title: 'Error!', description: content['message'], time: 5000,
+            })
+        }
+    } else if (response.status !== 204) {
+        console.error('Failed to delete tag');
+        toast({
+            type: 'error', title: 'Error!', description: `Unable to delete tag: ${name}`, time: 5000,
+        })
     }
 }

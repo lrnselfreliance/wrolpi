@@ -2,12 +2,14 @@ import asyncio
 import datetime
 import functools
 import glob
+import json
 import os
 import pathlib
 import re
 import subprocess
+from itertools import zip_longest
 from pathlib import Path
-from typing import List, Tuple, Union, Dict
+from typing import List, Tuple, Union, Dict, Generator
 
 import cachetools.func
 import psycopg2
@@ -16,14 +18,16 @@ from sqlalchemy.orm import Session
 from wrolpi import flags
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
-    get_files_and_directories, apply_modelers, apply_after_refresh, get_model_by_table_name, chunks_by_stem, \
-    partition, ordered_unique_list, chunks, cancelable_wrapper, get_relative_to_media_directory
-from wrolpi.dates import now
-from wrolpi.db import get_db_session, get_db_curs, get_ranked_models
-from wrolpi.errors import InvalidFile
+    partition, cancelable_wrapper, \
+    get_files_and_directories, chunks_by_stem, apply_modelers, apply_after_refresh
+from wrolpi.dates import now, from_timestamp
+from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
+from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag
 from wrolpi.events import Events
-from wrolpi.files.models import File
-from wrolpi.vars import PYTEST, FILE_REFRESH_CHUNK_SIZE
+from wrolpi.files.models import FileGroup
+from wrolpi.lang import ISO_639_CODES
+from wrolpi.tags import TagFile, Tag
+from wrolpi.vars import PYTEST
 
 try:
     import magic
@@ -37,7 +41,7 @@ except ImportError:
 logger = logger.getChild(__name__)
 
 __all__ = ['list_directories_contents', 'delete_file', 'split_path_stem_and_suffix', 'refresh_files', 'search_files',
-           'get_mimetype', 'split_file_name_words']
+           'get_mimetype', 'split_file_name_words', 'get_primary_file']
 
 
 @cachetools.func.ttl_cache(10_000, 30.0)
@@ -158,7 +162,7 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
     return mimetype
 
 
-@functools.lru_cache(maxsize=1000)
+@functools.lru_cache(maxsize=10_000)
 def get_mimetype(path: Path) -> str:
     """Get the mimetype of a file, prefer using `magic`, fallback to builtin `file` command."""
     if magic is None:
@@ -177,265 +181,307 @@ def get_mimetype(path: Path) -> str:
 # Special suffixes within WROLPi.
 SUFFIXES = {
     '.info.json',
-    '.en.vtt',
-    '.en.srt',
     '.readability.json',
     '.readability.txt',
     '.readability.html',
 }
+SUFFIXES |= {f'.{i}.srt' for i in ISO_639_CODES}
+SUFFIXES |= {f'.{i}.vtt' for i in ISO_639_CODES}
 
 
-@functools.lru_cache()
-def split_path_stem_and_suffix(path: Union[pathlib.Path, str]) -> Tuple[str, str]:
+@functools.lru_cache(maxsize=10_000)
+def split_path_stem_and_suffix(path: Union[pathlib.Path, str], full: bool = False) -> Tuple[str, str]:
     """Get the path's stem and suffix.
 
     This function handles WROLPi suffixes like .info.json."""
     if isinstance(path, str):
         path = pathlib.Path(path)
 
-    full = str(path)  # May or may not be absolute.
-    suffix = next(filter(lambda i: full.endswith(i), SUFFIXES), path.suffix)
-    if suffix:
+    full_ = str(path)  # May or may not be absolute.
+    suffix = next(filter(lambda i: full_.endswith(i), SUFFIXES), path.suffix)
+    if suffix and full:
+        return f'{path.parent}/{path.name[:-1 * len(suffix)]}', suffix
+    elif suffix:
         return path.name[:-1 * len(suffix)], suffix
+
     # Path has no suffix.
-    return path.name, ''
+    if full:
+        return f'{path.parent}/{path.name}', ''
+    else:
+        return path.name, ''
 
 
 refresh_logger = logger.getChild('refresh')
 
 
-@wrol_mode_check
-async def _refresh_files_list(paths: List[pathlib.Path], idempotency: datetime.datetime):
-    """Upsert, index, and model all provided paths."""
-    # Update the idempotency if any files already in the DB.
+def _paths_to_files_dict(group: List[pathlib.Path]) -> List[dict]:
+    """This generates `FileGroup.files` from a list of files."""
+    files = list()
+    for file in group:
+        mimetype = get_mimetype(file)
+        stat = file.stat()
+        modification_datetime = str(from_timestamp(stat.st_mtime))
+        _, suffix = split_path_stem_and_suffix(file)
+        size = stat.st_size
+        files.append(dict(
+            path=str(file),
+            mimetype=mimetype,
+            modification_datetime=modification_datetime,
+            size=size,
+            suffix=suffix,
+        ))
+    return files
+
+
+def get_primary_file(files: Union[Tuple[pathlib.Path], List[pathlib.Path]], pre_sorted: bool = False) -> pathlib.Path:
+    """Given a list of files, return the file that we can model or index."""
+    from modules.archive.lib import is_singlefile_file
+
+    if len(files) == 0:
+        raise ValueError(f'Cannot find primary file without any files')
+    elif len(files) == 1:
+        # Only one file is always the primary.
+        return files[0]
+
+    file_mimetypes = [(i, get_mimetype(i)) for i in files]
+    # EPUB has high priority.
+    mimetypes = {i[1] for i in file_mimetypes}
+    has_epub = any(i.startswith('application/epub') for i in mimetypes)
+    for file, mimetype in file_mimetypes:
+        # These are the files that can be modeled.
+        if is_singlefile_file(file):
+            return file
+        if mimetype.startswith('video/'):
+            return file
+        if mimetype.startswith('application/epub'):
+            return file
+        if mimetype.startswith('application/pdf') and not has_epub:
+            return file
+        if mimetype.startswith('application/x-mobipocket-ebook') and not has_epub:
+            # Only return a MOBI if no EPUB is present.
+            return file
+
+    # Secondary file types.
+    for file, mimetype in file_mimetypes:
+        if mimetype.startswith('image/'):
+            return file
+
+    logger.debug(f'Cannot find primary file for group: {files}')
+
+    # Can't find a typical primary file, just use the alphanumeric first file.
+    files = sorted(files) if pre_sorted is False else files
+    file = files[0]
+    return file
+
+
+def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
+    """Insert/update all records of the provided files.
+
+    Any inserted files will be marked with `indexed=false`.  Any existing files will only be updated if their
+    size/modification_datetime changed.
+
+    It is assumed all files exist."""
+    idempotency = str(idempotency)
+
+    for chunk in chunks_by_stem(files, 100):
+        # Group all files by their shared full-stem.  `chunk_by_stem` already sorted the files.
+        grouped = group_files_by_stem(chunk, pre_sorted=True)
+        # Convert the groups into file_groups.  Extract common information into `file_group.data`.
+        values = dict()
+        for group in grouped:
+            full_stem, _ = split_path_stem_and_suffix(group[0], full=True)
+            # The primary file is the video/SingleFile/epub, etc.
+            primary_path = get_primary_file(group, pre_sorted=True)
+            # The primary mimetype allows modelers to find its file_groups.
+            mimetype = get_mimetype(primary_path)
+            # The group uses a common modification_datetime so the group will be re-indexed when any of it's files are
+            # modified.
+            modification_datetime = from_timestamp(max(i.stat().st_mtime for i in group))
+            size = sum(i.stat().st_size for i in group)
+            files = json.dumps(_paths_to_files_dict(group))
+            values[full_stem] = (str(primary_path), modification_datetime, mimetype, size, files)
+        values = [(stem, False, idempotency, *i) for stem, i in values.items()]
+        with get_db_curs(commit=True) as curs:
+            values = mogrify(curs, values)
+            stmt = f'''
+                INSERT INTO file_group
+                 (full_stem, indexed, idempotency, primary_path, modification_datetime, mimetype, size, files)
+                VALUES {values}
+                ON CONFLICT (full_stem) DO UPDATE
+                SET
+                    idempotency=EXCLUDED.idempotency,
+                    modification_datetime=EXCLUDED.modification_datetime,
+                    mimetype=EXCLUDED.mimetype,
+                    size=EXCLUDED.size,
+                    files=(
+                        -- Do not overwrite files unless the files have changed and need to be re-indexed.
+                        CASE
+                        WHEN
+                            file_group.modification_datetime = EXCLUDED.modification_datetime
+                            AND file_group.size = EXCLUDED.size
+                            AND json_array_length(file_group.files) = json_array_length(EXCLUDED.files)
+                            THEN file_group.files
+                        ELSE EXCLUDED.files
+                        END
+                    ),
+                    -- Preseve TRUE `indexed` only if the files have not changed.
+                    indexed=(
+                        file_group.indexed = true
+                        AND file_group.modification_datetime = EXCLUDED.modification_datetime
+                        AND file_group.size = EXCLUDED.size
+                        AND json_array_length(file_group.files) = json_array_length(EXCLUDED.files)
+                    )
+                RETURNING id, indexed
+            '''
+            curs.execute(stmt)
+            need_index = [i[0] for i in curs.fetchall() if i[1] is False]
+            if need_index:
+                logger.info(f'Invalidated indexes of {len(need_index)} file groups')
+                logger.debug(f'Invalidated indexes of file groups {need_index}')
+
+
+async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetime.datetime = None):
+    """Discover all files in the directories provided in paths, as well as all files in paths.
+
+    All records for files in `paths` that do not exist will be deleted.
+
+    Will refuse to refresh when the media directory is empty."""
+    try:
+        next(get_media_directory().iterdir())
+    except:
+        # We don't want to delete a bunch of files which would exist if the drive was mounted.
+        raise UnknownDirectory(f'Refusing to refresh because media directory is empty or does not exist.')
+
     if not paths:
-        return
+        raise ValueError('Must provide some paths to refresh.')
 
-    for idx, chunk in enumerate(map(set, chunks_by_stem(paths, FILE_REFRESH_CHUNK_SIZE))):
-        with get_db_session(commit=True) as session:
-            existing_files = list(session.query(File).filter(File.path.in_(chunk)))
-            existing_paths = {i.path for i in existing_files}
-            # Add any new files into the database.
-            new_files = []
-            if new_paths := (chunk - existing_paths):
-                new_files = [File(path=i, idempotency=idempotency) for i in new_paths]
-                session.add_all(new_files)
-            # Apply models to all files.  Many files will have no model.
-            all_files = existing_files + new_files
-            apply_modelers(all_files, session)
+    idempotency = idempotency or now()
 
-            # Update idempotency for existing files after modelers.  Otherwise SQLAlchemy forgets.
-            for existing_file in existing_files:
-                existing_file.idempotency = idempotency
+    exists, deleted = partition(lambda i: i.exists(), paths)
 
-        if idx > 0:
-            parent = all_files[0].path.parent
-            refresh_logger.debug(f'Committed chunk of {len(chunk)} files.  Refreshing near {parent}')
+    # DISCOVER all files, upsert their records.
 
-        # Sleep between chunks to catch cancel.
-        await asyncio.sleep(0)
-
-
-async def _refresh_directory_files_recursively(directory: pathlib.Path, idempotency: datetime):
-    """Refresh all files in a directory, recursively refresh all files in subdirectories."""
-    directories = [directory, ]
-    while directories:
-        directory = directories.pop(0)
-        try:
-            files, new_directories = get_files_and_directories(directory)
+    if exists:
+        # Recursively upsert all files that exist, and files in the existing directories.
+        directories, files = partition(lambda i: i.is_dir(), exists)
+        while directories:
+            directory = directories.pop(0)
+            new_files, new_directories = get_files_and_directories(directory)
             directories.extend(new_directories)
-            if files:
-                refresh_logger.info(f'Refreshing {len(files)} files in {directory}')
-                await _refresh_files_list(files, idempotency)
-        except Exception as e:
-            refresh_logger.error(f'Failed to refresh files in {directory}', exc_info=e)
-        except asyncio.CancelledError:
-            refresh_logger.error(f'Refresh canceled during {directory}')
-            raise
+            files.extend(new_files)
+            if len(files) >= 100:
+                # Wait until there are enough files to perform the upsert.
+                _upsert_files(files, idempotency)
+                files = list()
+            # Sleep to catch cancel.
+            await asyncio.sleep(0)
+        if files:
+            # Not enough files for the chunks above, finish what is left.
+            _upsert_files(files, idempotency)
 
-
-@cancelable_wrapper
-async def apply_indexers():
-    """Finds all Files that have not been indexed and indexes them."""
-    from wrolpi.files.models import File
-    from wrolpi.db import get_db_session, get_db_curs
-
-    with get_db_curs() as curs:
-        curs.execute('SELECT path FROM file WHERE indexed = false AND associated = false')
-        missing_index = [pathlib.Path(i[0]) for i in curs.fetchall()]
-
-    refresh_logger.info(f'Indexing {len(missing_index)} files')
-
-    # Indexing can be slow, commit when its been too long.
-    last_commit = now()
-    max_seconds_between_commits = 30
-
-    for chunk in chunks(missing_index, 100):
-        with get_db_session(commit=True) as session:
-            files = session.query(File).filter(File.path.in_(chunk))
-            for file in files:
-                try:
-                    file.do_index()
-                except Exception as e:
-                    refresh_logger.error(f'Failed to index {file=}', exc_info=e)
-                    if PYTEST:
-                        raise
-
-                if (now() - last_commit).total_seconds() > max_seconds_between_commits:
-                    refresh_logger.debug('Committing because its been too long.')
-                    session.commit()
-                    last_commit = now()
-
-                # Sleep to catch cancel.
-                await asyncio.sleep(0)
-        last_commit = now()
-
-        refresh_logger.info(f'Indexed chunk of {len(chunk)} files')
-
-
-@wrol_mode_check
-async def refresh_files_list(paths: List[str], include_files_near: bool = True):
-    """Refresh a list of files.  Will not refresh directories or subdirectories.
-
-    Parameters:
-        paths: A list of files that need to be refreshed.  If not absolute, they are assumed to be relative to the
-               media directory.
-        include_files_near: If true, will also refresh files that share the stem of the provided files.
-    """
-    refresh_logger.info(f'Refreshing {len(paths)} files list')
-
-    media_directory = get_media_directory()
-
-    # Convert all paths to absolute paths in the media directory.
-    paths = [pathlib.Path(i) for i in paths]
-    paths = [media_directory / i if not i.is_absolute() else i for i in paths]
-
-    if not paths:
-        raise FileNotFoundError('No files to refresh')
-
-    if include_files_near:
-        new_paths = []
-        for path in paths:
-            new_paths.extend(glob_shared_stem(path))
-        paths.extend(new_paths)
-
-    paths, deleted_paths = partition(lambda i: i.exists(), paths)
-
-    idempotency = now()
-    await _refresh_files_list(paths, idempotency)
-
-    # Delete any files near the paths that no longer exist.
-    paths_stems = [split_path_stem_and_suffix(i)[0] for i in paths]
-    paths_stems = [str(media_directory / i) for i in paths_stems]
     with get_db_curs(commit=True) as curs:
-        # Get all paths that match the stems of these refreshed files.
-        params = dict(paths_stems=paths_stems, idempotency=idempotency)
-        curs.execute('''
-            UPDATE file SET idempotency = %(idempotency)s
-            WHERE full_stem = ANY (%(paths_stems)s)
-            RETURNING path
-        ''', params)
-        existing_paths = [pathlib.Path(i[0]) for i in curs.fetchall()]
-        # Delete any files which no longer exist.
-        deleted_paths.extend([i for i in existing_paths if not i.exists()])
-        deleted_paths = list(map(str, deleted_paths))
-        curs.execute('DELETE FROM file WHERE path = ANY(%(deleted_paths)s)', dict(deleted_paths=deleted_paths))
-
-    apply_after_refresh()
-    await apply_indexers()
-
-    refresh_logger.info('Done refreshing files list')
+        wheres = ''
+        if paths:
+            # Use LIKE to delete any children of directories that are deleted.
+            wheres = ' OR '.join([curs.mogrify('full_stem LIKE %s', (f'{i}/%',)).decode() for i in paths])
+        deleted_files = ''
+        if deleted:
+            # Delete any paths that do not exist.
+            deleted_files = ' OR '.join([curs.mogrify('full_stem = %s', (str(i),)).decode() for i in deleted])
+        idempotency = curs.mogrify('%s', (idempotency,)).decode()
+        wheres = f' ( (idempotency != {idempotency} OR idempotency is null) AND ({wheres}))' if wheres else ''
+        stmt = f'''
+            DELETE FROM file_group
+            WHERE
+                -- Delete all known-deleted files.
+                {deleted_files}
+                -- Delete any files in the refreshed paths that were not updated.
+                {" OR " + wheres if deleted_files else wheres}
+        '''
+        logger.debug(stmt)
+        curs.execute(stmt)
 
 
 @limit_concurrent(1)  # Only one refresh at a time.
 @wrol_mode_check
 @cancelable_wrapper
-async def refresh_files():
+async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = True):
     """Find, model, and index all files in the media directory."""
-    with flags.refreshing:
-        refresh_logger.warning('Refreshing all files')
-        Events.send_global_refresh_started()
+    if isinstance(paths, str):
+        paths = [pathlib.Path(paths), ]
+    if isinstance(paths, pathlib.Path):
+        paths = [paths, ]
 
-        # TODO remove this later when everyone has migrated their files.
-        from modules.archive.lib import migrate_archive_files
-        migrate_archive_files()
+    with flags.refreshing:
+        if not paths:
+            refresh_logger.warning('Refreshing all files')
+        else:
+            refresh_logger.warning(f'Refreshing {", ".join(list(map(str, paths)))}')
+        if send_events:
+            Events.send_global_refresh_started()
 
         idempotency = now()
 
         # Add all files in the media directory to the DB.
-        await _refresh_directory_files_recursively(get_media_directory(), idempotency)
+        paths = paths or [get_media_directory()]
+        await refresh_discover_paths(paths, idempotency)
+        if send_events:
+            Events.send_global_refresh_discovery_completed()
 
-        Events.send_global_refresh_modeling_completed()
+        # Model all files that have not been indexed.
+        await apply_modelers()
+        if send_events:
+            Events.send_global_refresh_modeling_completed()
 
-        # Remove any records where the file no longer exists.
-        with get_db_curs(commit=True) as curs:
-            curs.execute('DELETE FROM file WHERE idempotency < %s OR idempotency is null RETURNING path',
-                         (idempotency,))
-            deleted = list(curs.fetchall())
-            logger.debug(f'{deleted=}')
-            logger.warning(f'Removed {len(deleted)} missing files')
-
-        Events.send_global_refresh_delete_completed()
-
-        apply_after_refresh()
+        # Index the rest of the files that were not indexed by modelers.
         await apply_indexers()
-        Events.send_global_refresh_indexing_completed()
+        if send_events:
+            Events.send_global_refresh_indexing_completed()
 
-        Events.send_global_refresh_completed()
+        # Cleanup any outdated file data.
+        await apply_after_refresh()
+        if send_events:
+            Events.send_global_after_refresh_completed()
+
+        if send_events:
+            Events.send_global_refresh_completed()
         refresh_logger.warning('Done refreshing Files')
-
         flags.refresh_complete.set()
 
 
-@limit_concurrent(1)
-@wrol_mode_check
-@cancelable_wrapper
-async def refresh_directory_files_recursively(directory: Union[pathlib.Path, str], send_events: bool = True):
-    """Upsert and index all files within a directory (recursively).
+async def apply_indexers():
+    """Indexes any Files that have not yet been indexed by Modelers, or by previous calls of this function."""
+    from wrolpi.files.models import FileGroup
+    while True:
+        # Continually query for Files that have not been indexed.
+        with get_db_session(commit=True) as session:
+            file_groups = session.query(FileGroup).filter(FileGroup.indexed != True).limit(20)
+            file_groups: List[FileGroup] = list(file_groups)
 
-    Any records of the files that are no longer in the directory will be removed."""
-    if isinstance(directory, str):
-        directory = pathlib.Path(directory)
-    if directory.is_file():
-        raise ValueError(f'Cannot refresh files of a file: {directory=}')
+            processed = 0
+            for file_group in file_groups:
+                processed += 1
+                try:
+                    file_group.do_index()
+                except Exception:
+                    # Error has already been logged in .do_index.
+                    if PYTEST:
+                        raise
+                # Always mark the FileGroup as indexed.  We won't try to index it again.
+                file_group.indexed = True
 
-    with flags.refreshing_directory:
-        relative_path = str(get_relative_to_media_directory(directory))
-        if send_events:
-            Events.send_directory_refresh_started(f'Refresh of {repr(relative_path)} has started.')
+                # Sleep to catch cancel.
+                await asyncio.sleep(0)
 
-        # All Files older than this will be removed.
-        idempotency = now()
-
-        refresh_logger.info(f'Recursively refreshing all files in {directory}')
-
-        await _refresh_directory_files_recursively(directory, idempotency)
-
-        # Remove any records where the file no longer exists.
-        with get_db_curs(commit=True) as curs:
-            refresh_logger.debug(f'Deleting files no longer in {directory}')
-            params = dict(
-                directory=f'{directory}/%',  # trailing / is important!
-                idempotency=idempotency,
-            )
-            stmt = '''
-            DELETE FROM file
-            WHERE
-             (idempotency < %(idempotency)s OR idempotency IS NULL)
-             AND path LIKE %(directory)s'''
-            curs.execute(stmt, params)
-
-        apply_after_refresh()
-        await apply_indexers()
-
-        if send_events:
-            Events.send_directory_refresh_completed(f'Refresh of {repr(relative_path)} has completed.')
-        refresh_logger.info(f'Done refreshing files in {directory}')
+            if processed < 20:
+                # Processed less than the limit, don't do the next query.
+                break
 
 
-def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None) -> \
+def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
+                 tags: List[str] = None) -> \
         Tuple[List[dict], int]:
-    """Search the Files table.
+    """Search the FileGroup table.
 
     Order the returned Files by their rank if `search_str` is provided.  Return all files if
     `search_str` is empty.
@@ -448,9 +494,10 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         model: Only return files that match this model.
     """
     params = dict(offset=offset, limit=limit)
-    wheres = ['associated = false']
+    wheres = []
     selects = []
     order_by = '1 ASC'
+    joins = []
 
     if search_str:
         params['search_str'] = search_str
@@ -474,25 +521,54 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         params['model'] = model
         wheres.append('model = %(model)s')
 
+    if tags:
+        where_, params_, join_ = tag_names_to_clauses(tags)
+        wheres.append(where_)
+        params.update(params_)
+        joins.append(join_)
+
     wheres = '\n AND '.join(wheres)
     selects = f"{', '.join(selects)}, " if selects else ""
+    join = '\n'.join(joins)
     stmt = f'''
-        SELECT path, {selects} COUNT(*) OVER() AS total
-        FROM file
+        SELECT fg.id, {selects} COUNT(*) OVER() AS total
+        FROM file_group fg
+        {join}
         {f"WHERE {wheres}" if wheres else ""}
+        GROUP BY fg.id
         ORDER BY {order_by}
         OFFSET %(offset)s LIMIT %(limit)s
     '''
+    logger.debug(stmt)
 
-    results, total = handle_search_results(stmt, params)
+    results, total = handle_file_group_search_results(stmt, params)
     return results, total
 
 
-def handle_search_results(statement: str, params):
+def tag_names_to_clauses(tags: List[str]):
+    """Create the SQL necessary to filter the `file_group` table by the provided Tag names."""
+    params = dict()
+
+    if not tags:
+        return '', params, ''
+
+    where_tags = []
+    for idx, tag_name in enumerate(tags):
+        where_tags.append(f't.name = %(tag_name{idx})s')
+        params[f'tag_name{idx}'] = tag_name
+    where_tags = ' OR '.join(where_tags)
+    wheres = f'({where_tags})'
+
+    join = '''LEFT JOIN tag_file tf ON tf.file_group_id = fg.id
+        LEFT JOIN tag t ON t.id = tf.tag_id'''
+    return wheres, params, join
+
+
+def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List[dict], int]:
     """
     Execute the provided SQL statement and fetch the Files returned.
 
-    WARNING: This expects specific queries to be executed and shouldn't be used for things not related to search.
+    WARNING: This expects specific queries to be executed and shouldn't be used for things not related to file search.
 
     See: `search`
     """
@@ -504,25 +580,30 @@ def handle_search_results(statement: str, params):
             # No videos
             return [], 0
         total = results[0]['total'] if results else 0
-        ranked_paths = [pathlib.Path(i['path']) for i in results]
+        ordered_ids = [i['id'] for i in results]
         try:
             ranks = [i['ts_rank'] for i in results]
         except KeyError:
-            # No `ts_rank`, probably not searching `file.textsearch`.
+            # No `ts_rank`, probably not searching `file_group.textsearch`.
             ranks = []
 
     with get_db_session() as session:
-        results = get_ranked_models(ranked_paths, File, session=session)
-        try:
-            results = assign_file_prefetched_models(results)
-        except Exception as e:
-            logger.error(f'Failed to assign file prefetched models', exc_info=e)
-            if PYTEST:
-                raise
-        results = [i.__json__() for i in results]
-        # Preserve the ts_ranks, if any.
-        for idx, rank in enumerate(ranks):
-            results[idx]['ts_rank'] = rank
+        from modules.videos.models import Video
+        results = session.query(FileGroup, Video) \
+            .filter(FileGroup.id.in_(ordered_ids)) \
+            .outerjoin(Video, Video.file_group_id == FileGroup.id)
+        # Order FileGroups by their location in ordered_ids.
+        file_groups: List[Tuple[FileGroup, Video]] = sorted(results, key=lambda i: ordered_ids.index(i[0].id))
+        results = list()
+        for rank, (file_group, video) in zip_longest(ranks, file_groups):
+            video: Video
+            if video:
+                results.append(video.__json__())
+            else:
+                results.append(file_group.__json__())
+            # Preserve the ts_ranks, if any.
+            if rank:
+                results[-1]['ts_rank'] = rank
 
     return results, total
 
@@ -542,50 +623,6 @@ def glob_shared_stem(path: pathlib.Path) -> List[pathlib.Path]:
     paths = [pathlib.Path(i) for i in path.parent.glob(f'{escaped_stem}*') if
              split_path_stem_and_suffix(i)[0] == stem]
     return paths
-
-
-def assign_file_prefetched_models(files: List[File]) -> List[File]:
-    """
-    Prefetch the sub-models (matching `File.model`) in bulk to avoid issuing a query for every File.
-
-    >>> f = File(path='something', model='video')
-    >>> v = Video(video_path='something')
-    >>> results = assign_file_prefetched_models([f])
-    >>> results[0]
-    File(path='something', model='video')
-    >>> results[0].prefetched_model == v
-    True
-    """
-    if not files:
-        return files
-
-    files = files.copy()
-    files_index = {i.path: files.index(i) for i in files}
-    session = Session.object_session(files[0])
-
-    files_by_model = dict()
-    for file in files:
-        if not file.model:
-            continue
-        try:
-            files_by_model[file.model].append(file)
-        except KeyError:
-            files_by_model[file.model] = [file, ]
-
-    logger.debug(f'Prefetching file models: {list(files_by_model.keys())}')
-    table_map = {i: get_model_by_table_name(i) for i in {j.model for j in files}}
-    for model, model_files in files_by_model.items():
-        table = table_map[model]
-        try:
-            sub_models = table.find_by_paths([i.path for i in model_files], session)
-            for sub_model in sub_models:
-                file: File = files[files_index[sub_model.primary_path]]
-                file.prefetched_model = sub_model
-        except NotImplementedError:
-            # Model has not defined the necessary methods.
-            pass
-
-    return files
 
 
 def get_matching_directories(path: Union[str, Path]) -> List[str]:
@@ -618,7 +655,7 @@ def get_matching_directories(path: Union[str, Path]) -> List[str]:
 WHITESPACE = re.compile(r'[\s_]')
 
 
-def split_file_name_words(name: str) -> List[str]:
+def split_file_name_words(name: str) -> str:
     """Split words in a filename.
 
     Words are assumed to be separated by underscore, dash, or space.  Words with a dash are included as a group, and
@@ -641,34 +678,83 @@ def split_file_name_words(name: str) -> List[str]:
         if suffix:
             words.append(suffix.lstrip('.'))
 
-        words = ordered_unique_list(words)
+        words = ' '.join(words)
         return words
     except Exception as e:
         logger.error(f'Failed to split filename into words: {name}', exc_info=e)
-        return [name]
+        return name
 
 
 def get_file_statistics():
     with get_db_curs() as curs:
         curs.execute('''
         SELECT
-            COUNT(path) AS "total_count",
-            COUNT(path) FILTER (WHERE file.mimetype = 'application/pdf') AS "pdf_count",
-            COUNT(path) FILTER (WHERE file.mimetype = 'application/zip') AS "zip_count",
-            COUNT(path) FILTER (WHERE file.mimetype LIKE 'video/%') AS "video_count",
-            COUNT(path) FILTER (WHERE file.mimetype LIKE 'image/%' AND file.associated = FALSE) AS "image_count",
-            COUNT(path) FILTER (WHERE file.mimetype LIKE 'audio/%' AND file.associated = FALSE) AS "audio_count",
-            SUM(size)::BIGINT AS "total_size"
+            COUNT(id) AS "total_count",
+            COUNT(id) FILTER (WHERE file_group.mimetype = 'application/pdf') AS "pdf_count",
+            COUNT(id) FILTER (WHERE file_group.mimetype = 'application/zip') AS "zip_count",
+            COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'video/%') AS "video_count",
+            COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'image/%') AS "image_count",
+            COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'audio/%') AS "audio_count",
+            COUNT(id) FILTER (WHERE file_group.mimetype = 'application/epub+zip' OR file_group.mimetype = 'application/x-mobipocket-ebook') AS "ebook_count",
+            SUM(size)::BIGINT AS "total_size",
+            (SELECT COUNT(*) FROM archive) AS archive_count
         FROM
-            file
+            file_group
         ''')
         statistics = dict(curs.fetchall()[0])
         statistics['total_size'] = statistics['total_size'] or 0
 
-        curs.execute('SELECT COUNT(*) FROM archive')
-        statistics['archive_count'] = curs.fetchall()[0][0]
-
-        curs.execute('SELECT COUNT(*) FROM ebook')
-        statistics['ebook_count'] = curs.fetchall()[0][0]
-
         return statistics
+
+
+def group_files_by_stem(files: List[pathlib.Path], pre_sorted: bool = False) -> \
+        Generator[List[pathlib.Path], None, None]:
+    """
+    Return lists of paths, each list contains only paths that share a common stem.
+
+    >>> a = ['foo.txt', 'foo.mp4', 'bar.txt']
+    >>> group_files_by_stem(list(map((pathlib.Path, a))))
+    # Generator(['foo.mp4', 'foo.txt'], ['bar.txt'])
+
+    @param files: A list of paths to be grouped.  All paths must be in the same directory!
+    @param pre_sorted: This function requires the files to be sorted, it will sort them by default.
+    """
+    files = sorted(files) if not pre_sorted else files
+    file = files.pop(0)
+    group = [file, ]
+    prev_stem, _ = split_path_stem_and_suffix(file)
+    for file in files:
+        stem, suffix = split_path_stem_and_suffix(file)
+        if stem == prev_stem:
+            group.append(file)
+            continue
+        # Stem has changed, group is finished.
+        yield group
+        group = [file, ]
+        prev_stem = stem
+    yield group
+
+
+def _get_tag(file_group_id: int, tag_name: str, session: Session):
+    file_group: FileGroup = session.query(FileGroup).filter_by(id=file_group_id).one_or_none()
+    if not file_group:
+        raise UnknownFile(f'Cannot find FileGroup with id {file_group_id}')
+
+    tag: Tag = Tag.find_by_name(tag_name, session)
+    if not tag:
+        raise UnknownTag(f'Cannot find Tag with name {tag_name}')
+
+    return file_group, tag
+
+
+@optional_session(commit=True)
+def add_file_group_tag(file_group_id: int, tag_name: str, session: Session = None) -> TagFile:
+    file_group, tag = _get_tag(file_group_id, tag_name, session)
+    tag_file = file_group.add_tag(tag, session)
+    return tag_file
+
+
+@optional_session(commit=True)
+def remove_file_group_tag(file_group_id: int, tag_name: str, session: Session = None):
+    file_group, tag = _get_tag(file_group_id, tag_name, session)
+    file_group.remove_tag(tag, session)

@@ -10,7 +10,7 @@ from sanic.signals import Event
 from wrolpi import flags, BEFORE_STARTUP_FUNCTIONS
 from wrolpi import root_api, admin
 from wrolpi.common import logger, get_config, import_modules, check_media_directory, limit_concurrent, \
-    wrol_mode_enabled, cancel_refresh_tasks
+    wrol_mode_enabled, cancel_refresh_tasks, set_log_level
 from wrolpi.downloader import download_manager, import_downloads_config
 from wrolpi.root_api import api_app
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, PYTEST
@@ -115,8 +115,14 @@ def main():
         return 1
 
     logger.warning(f'Starting with: {sys.argv}')
-    set_log_level(args)
-    logger.debug(get_version_string())
+    if args.verbose == 1:
+        set_log_level(logging.INFO)
+    elif args.verbose and args.verbose == 2:
+        set_log_level(logging.DEBUG)
+    elif args.verbose and args.verbose >= 3:
+        # Log everything.  Add SQLAlchemy debug logging.
+        set_log_level(logging.NOTSET)
+    logger.info(get_version_string())
 
     if DOCKERIZED:
         logger.info('Running in Docker')
@@ -149,26 +155,6 @@ def main():
     # Run the API.
     if args.sub_commands == 'api':
         return root_api.main(args)
-
-
-def set_log_level(args):
-    """
-    Set the level at the root logger so all children that have been created (or will be created) share the same level.
-    """
-    root_logger = logging.getLogger()
-    sa_logger = logging.getLogger('sqlalchemy.engine')
-    if args.verbose == 1:
-        root_logger.setLevel(logging.INFO)
-    elif args.verbose and args.verbose == 2:
-        root_logger.setLevel(logging.DEBUG)
-    elif args.verbose and args.verbose >= 3:
-        root_logger.setLevel(logging.DEBUG)
-        sa_logger.setLevel(logging.DEBUG)
-
-    # Always warn about the log level so we know what will be logged
-    effective_level = logger.getEffectiveLevel()
-    level_name = logging.getLevelName(effective_level)
-    logger.warning(f'Logging level: {level_name}')
 
 
 @api_app.before_server_start

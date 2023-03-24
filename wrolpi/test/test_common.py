@@ -415,8 +415,7 @@ def test_chunks_by_stem(test_directory, make_files_structure):
     assert_chunks(1, files, [['1.mp4', '1.txt'], ['2.mp4', '2.png', '2.txt'], ['3.mp4']])
     assert_chunks(3, files, [['1.mp4', '1.txt', '2.mp4', '2.png', '2.txt'], ['3.mp4']])
     assert_chunks(6, files, [['1.mp4', '1.txt', '2.mp4', '2.png', '2.txt', '3.mp4']])
-    # List is not sorted because it is less than the size.
-    assert_chunks(20, files, [['1.mp4', '1.txt', '2.mp4', '2.txt', '2.png', '3.mp4']])
+    assert_chunks(20, files, [['1.mp4', '1.txt', '2.mp4', '2.png', '2.txt', '3.mp4']])
 
 
 @pytest.mark.parametrize(

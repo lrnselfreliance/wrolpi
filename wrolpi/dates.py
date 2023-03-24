@@ -96,7 +96,7 @@ class TZDateTime(types.TypeDecorator):
     def process_bind_param(self, value, dialect):
         if isinstance(value, datetime):
             if not value.tzinfo:
-                raise TypeError("tzinfo is required")
+                raise TypeError(f"tzinfo is required: {value}")
             # Store all timestamps as UTC timezone.
             value = value.astimezone(timezone.utc)
         elif isinstance(value, str) and '-' in value:

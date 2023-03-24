@@ -1,36 +1,81 @@
 import pathlib
+from datetime import datetime
+from typing import List, Type, Optional
 
-from sqlalchemy import Integer, Column, String, Computed, Boolean
-from sqlalchemy.orm import deferred, Session, validates
+from sqlalchemy import Column, String, Computed, BigInteger, Boolean
+from sqlalchemy import types
+from sqlalchemy.orm import deferred, relationship, Session
+from sqlalchemy.orm.collections import InstrumentedList
 
-import wrolpi.files.indexers
-from wrolpi.common import Base, ModelHelper, get_media_directory, tsvector, logger, get_model_by_table_name, \
-    truncate_object_bytes
-from wrolpi.dates import TZDateTime, from_timestamp, now
+from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory
+from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
+from wrolpi.db import optional_session
+from wrolpi.files import indexers
 from wrolpi.media_path import MediaPathType
-from wrolpi.vars import PYTEST, FILE_MAX_TEXT_SIZE
+from wrolpi.tags import Tag, TagFile
+from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
 
-class File(ModelHelper, Base):
-    """A representation of a file on disk.
+def into_db(obj):
+    if isinstance(obj, datetime):
+        return strftime(obj)
+    if isinstance(obj, pathlib.Path):
+        return str(obj)
+    return obj
 
-    Can be searched using `textsearch` once the data has been populated by the respective Indexer.
+
+def out_of_db(media_directory, obj):
+    if obj and isinstance(obj, str) and obj.startswith(media_directory):
+        return pathlib.Path(obj)
+    if obj and isinstance(obj, str) and obj[0].isdigit():
+        try:
+            return strptime_ms(obj)
+        except Exception:
+            # Wasn't a datetime after all.
+            pass
+    return obj
+
+
+class FancyJSON(types.TypeDecorator):
+    """Converts pathlib.Path to strings when moving into DB, and vice versa.
+
+    Converts datetime to ISO strings when moving into DB, and vice versa.
     """
-    __tablename__ = 'file'
-    path: pathlib.Path = Column(MediaPathType, primary_key=True)
+    impl = types.JSON
 
-    associated = Column(Boolean, default=False)
-    full_stem = Column(String)  # f'{directory}/{stem}'
-    idempotency = Column(TZDateTime, default=lambda: now())
-    indexed = Column(Boolean, default=False)
+    def process_bind_param(self, value, dialect):
+        if value:
+            # datetime(2020, 1, 1, 0, 0, 0) <-> '2020-01-01T00:00:00'
+            value = recursive_map(value, into_db)
+        return value
+
+    def process_result_value(self, value, dialect) -> None:
+        if value:
+            media_directory = str(get_media_directory())
+            value = recursive_map(value, lambda i: out_of_db(media_directory, i))
+        return value
+
+
+class FileGroup(ModelHelper, Base):
+    __tablename__ = 'file_group'
+    id: int = Column(BigInteger, primary_key=True)
+
+    data = Column(FancyJSON)  # populated by the modeler
+    files = Column(FancyJSON, nullable=False)  # populated during discovery
+    full_stem = Column(String, unique=True)
+    idempotency = Column(TZDateTime)
+    indexed = Column(Boolean, default=lambda: False, nullable=False)
     mimetype = Column(String)  # wrolpi.files.lib.get_mimetype
-    model = Column(String)  # Filled out by the modeler.  Will be the table name (video, archive, etc.).
+    model = Column(String)  # "video", "archive", "ebook", etc.
     modification_datetime = Column(TZDateTime)
-    size = Column(Integer)
-    suffix = Column(String)  # aka the extension.
-    title = Column(String)  # Provided by the modeler, or it will be the entire file name (with suffix).
+    # the Path of the file that can be modeled or indexed.
+    primary_path = Column(MediaPathType, nullable=False, unique=True)
+    size = Column(BigInteger, default=lambda: 0)
+    title = Column(String)
+
+    tag_files: InstrumentedList = relationship('TagFile')
 
     a_text = deferred(Column(String))
     b_text = deferred(Column(String))
@@ -44,121 +89,153 @@ class File(ModelHelper, Base):
             setweight(to_tsvector('english'::regconfig, COALESCE(d_text, '')), 'D'::"char")
             ''')))
 
-    prefetched_model = None  # This may be filled with record matching `model`.
-
     def __repr__(self):
-        path = str(self.path.relative_to(get_media_directory()))
-        return f'<File {path=} mime={self.mimetype} model={self.model}>'
+        m = f'model={self.model}' if self.model else f'mimetype={self.mimetype}'
+        return f'<FileGroup id={self.id} {m} primary_path={repr(str(self.primary_path))}>'
 
-    def __json__(self) -> dict:
-        path = self.path.relative_to(get_media_directory())
-        d = dict(
-            associated=self.associated,
-            directory=self.path.parent,
-            full_stem=self.full_stem,
-            key=path,  # React browser expects this.
-            mimetype=self.mimetype,
-            model=self.model,
-            modified=self.modification_datetime,  # React browser expects this.
-            path=path,
-            size=self.size,
-            suffix=self.suffix,
-            title=self.title,
-        )
-        if self.model and self.prefetched_model:
-            d[self.model] = self.prefetched_model.__json__()
-        elif self.model:
-            model: ModelHelper = get_model_by_table_name(self.model)
-            session = Session.object_session(self)
-            instance = model.find_by_path(self.path, session)
-            if not instance:
-                logger.warning(f'Could not find instance of {model} for {self.path}')
-                return d
-            d[self.model] = instance.__json__()
-
+    def __json__(self):
+        from wrolpi.files.lib import split_path_stem_and_suffix
+        _, suffix = split_path_stem_and_suffix(self.primary_path)
+        tags = sorted([i.tag.name for i in self.tag_files])
+        d = {
+            'data': self.data,
+            'directory': self.primary_path.parent,
+            'files': self.my_files(),
+            'full_stem': pathlib.Path(self.full_stem) if self.full_stem else None,
+            'id': self.id,
+            'mimetype': self.mimetype,
+            'model': self.model,
+            'modified': self.modification_datetime or None,
+            'name': self.primary_path.name,
+            'primary_path': self.primary_path,
+            'size': self.size,
+            'suffix': suffix,
+            'tags': tags,
+            'title': self.title,
+            'key': self.primary_path,
+        }
         return d
 
-    def __eq__(self, other):
-        if isinstance(other, File):
-            return other.path == self.path
-        if isinstance(other, pathlib.Path):
-            return other == self.path
-        if isinstance(other, str):
-            return other == str(self.path)
-        return False
+    @property
+    def name(self) -> str:
+        if self.title:
+            return self.title
+        return self.primary_path.name
+
+    @optional_session
+    def add_tag(self, tag: Tag, session: Session = None) -> TagFile:
+        return tag.add_tag(self, session)
+
+    @optional_session
+    def remove_tag(self, tag: Tag, session: Session = None):
+        tag.remove_tag(self, session)
+
+    def append_files(self, *paths: pathlib.Path):
+        """Add all `paths` to this FileGroup.files."""
+        from wrolpi.files.lib import get_mimetype
+        new_files = list(self.files) if self.files else list()
+        for file in paths:
+            new_files.append(dict(path=file, mimetype=get_mimetype(file)))
+        self.files = new_files
+
+    def my_files(self, *mimetypes: str) -> List[dict]:
+        """Return all files related to this group that match any of the provided mimetypes.
+
+        >>> FileGroup().my_files()
+        >>> FileGroup().my_files('application/pdf')
+        >>> FileGroup().my_files('video/')
+        """
+        files = self.files
+        if not files:
+            logger.error(f'{self} has no files!')
+            raise ValueError(f'{self} has no files!')
+
+        # Convert path strings to Paths.
+        for i in range(len(files)):
+            files[i]['path'] = pathlib.Path(files[i]['path'])
+
+        if mimetypes:
+            files = list(filter(lambda i: any(i['mimetype'].startswith(m) for m in mimetypes), files))
+
+        # Sort files to avoid random order.
+        return sorted(files, key=lambda i: i['path'])
+
+    def my_paths(self, *mimetypes: str) -> List[pathlib.Path]:
+        return [i['path'] for i in self.my_files(*mimetypes)]
+
+    def my_video_files(self):
+        """Return all my Files that are videos."""
+        return self.my_files('video/')
+
+    def my_json_files(self):
+        """Return all my Files that are JSON."""
+        return self.my_files('application/json')
+
+    def my_poster_files(self) -> List[dict]:
+        """Return all my Files that are images."""
+        return self.my_files('image/')
+
+    def my_subtitle_files(self) -> List[dict]:
+        """Return all my Files that have text/srt or text/vtt mimetype."""
+        return self.my_files('text/srt', 'text/vtt')
+
+    def my_text_files(self) -> List[dict]:
+        """Return all my Files that have a text mimetype.  But, do not include subtitle files."""
+        text_files = self.my_files('text/')
+        subtitle_paths = [i['path'] for i in self.my_subtitle_files()]
+        return [i for i in text_files if i['path'] not in subtitle_paths]
+
+    def my_ebook_files(self) -> List[dict]:
+        return self.my_files('application/epub', 'application/x-mobipocket-ebook')
+
+    def delete(self):
+        """Delete this FileGroup record, and all of its files."""
+        for path in self.my_paths():
+            path.unlink()
+
+        session = Session.object_session(self)
+        if session:
+            session.delete(self)
 
     @property
-    def indexer(self):
-        from wrolpi.files import lib
-        return wrolpi.files.indexers.find_indexer(self)
-
-    def do_index(self, force_index: bool = False):
-        """Gather any missing information about this file.  Index the contents of this file using an Indexer."""
+    def indexer(self) -> Type[indexers.Indexer]:
         if not self.mimetype:
-            self.do_stats()
+            raise ValueError(f'Cannot find indexer because {self} does not have a mimetype!')
+        return indexers.find_indexer(self.mimetype)
 
+    def do_index(self):
+        """Gather any missing information about this file group.  Index the contents of this file using an Indexer."""
         try:
-            if force_index or self.indexed is not True:
-                # Get the indexer on a separate line for debugging.
-                indexer = self.indexer
-                # Only read the contents of the file once.
-                start = now()
-                self.a_text, self.b_text, self.c_text, self.d_text = indexer.create_index(self)
-                if (total_seconds := (now() - start).total_seconds()) > 1:
-                    logger.info(f'Indexing {self.path} took {total_seconds} seconds')
-
-            self.indexed = True
+            # Get the indexer on a separate line for debugging.
+            indexer = self.indexer
+            # Only read the contents of the file once.
+            start = now()
+            self.a_text, self.b_text, self.c_text, self.d_text = indexer.create_index(self.primary_path)
+            self.title = self.title or self.primary_path.name
+            if (total_seconds := (now() - start).total_seconds()) > 1:
+                logger.info(f'Indexing {self.primary_path} took {total_seconds} seconds')
         except Exception as e:
-            logger.error(f'Failed to index {self.path}', exc_info=e)
+            logger.error(f'Failed to index {self}', exc_info=e)
             if PYTEST:
                 raise
 
-    def do_stats(self) -> bool:
-        """Assign the mimetype, title, size, modification_time of this file.
-
-        Returns True if the file has changed since last index.  Change is detected by comparing old size, mimetype
-        modification datetime."""
-        from wrolpi.files.lib import split_path_stem_and_suffix, split_file_name_words, get_mimetype
-
-        old_mimetype = self.mimetype
-        old_size = self.size
-        old_modification_datetime = self.modification_datetime
-
-        self.mimetype = get_mimetype(self.path)
-        stem, self.suffix = split_path_stem_and_suffix(self.path)
-        self.full_stem = f'{self.path.parent}/{stem}'
-        self.title = self.title or self.path.name
-        stat = self.path.stat()
-        self.size = stat.st_size
-        self.modification_datetime = from_timestamp(stat.st_mtime)
-
-        changed = old_mimetype != self.mimetype \
-                  or old_size != self.size \
-                  or old_modification_datetime != self.modification_datetime
-
-        if changed:
-            self.indexed = False
-            # Use file stem as a_text.  This may be overwritten by the correct indexer.
-            self.a_text = self.a_text or split_file_name_words(stem)
-            # Clear old indexes, this file has changed and must be re-indexed.
-            self.b_text = self.c_text = self.d_text = None
-        return changed
-
-    @validates('path')
-    def validate_path(self, key, value):
-        value = pathlib.Path(value) if not isinstance(value, pathlib.Path) else value
-        if not value.is_absolute():
-            raise ValueError(f'File path must always be absolute! {value}')
-
-        if not str(value).startswith(str(get_media_directory())):
-            raise ValueError(f'File path {value} not in {get_media_directory()}')
-
-        return value
-
     @classmethod
-    def upsert(cls, path, session: Session) -> Base:
-        if file := session.query(File).filter_by(path=path).one_or_none():
-            return file
-        file = File(path=path)
-        session.add(file)
-        return file
+    def from_paths(cls, session: Session, *paths: pathlib.Path) -> 'FileGroup':
+        from wrolpi.files.lib import get_primary_file, split_path_stem_and_suffix, get_mimetype
+        file_group = FileGroup()
+
+        file_group.append_files(*paths)
+        file_group.full_stem, _ = split_path_stem_and_suffix(paths[0], full=True)
+        file_group.primary_path = get_primary_file(paths)
+        file_group.mimetype = get_mimetype(file_group.primary_path)
+        file_group.modification_datetime = from_timestamp(max(i.stat().st_mtime for i in paths))
+        file_group.size = sum(i.stat().st_size for i in paths)
+
+        session.add(file_group)
+        return file_group
+
+    @staticmethod
+    @optional_session
+    def find_by_path(path, session) -> Optional['FileGroup']:
+        file_group = session.query(FileGroup).filter(FileGroup.primary_path == str(path)).one_or_none()
+        return file_group

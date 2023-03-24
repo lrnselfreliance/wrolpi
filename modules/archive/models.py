@@ -2,19 +2,19 @@ import datetime
 import json
 import pathlib
 import re
-from typing import Generator, Optional, Iterable
+from typing import Iterable, List, Optional
 
 import pytz
-from sqlalchemy import Column, Integer, String, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship, Session, validates
 from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi.common import ModelHelper, Base, logger
 from wrolpi.dates import TZDateTime
 from wrolpi.errors import InvalidArchive
-from wrolpi.files.lib import split_path_stem_and_suffix
-from wrolpi.files.models import File
+from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
+from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
@@ -28,25 +28,13 @@ class Archive(Base, ModelHelper):
     __tablename__ = 'archive'
     id = Column(Integer, primary_key=True)
 
+    archive_datetime = Column(TZDateTime)
+    url = Column(String)
+
     domain_id = Column(Integer, ForeignKey('domains.id'))
     domain = relationship('Domain', primaryjoin='Archive.domain_id==Domain.id')
-
-    url = Column(String)
-    title = Column(String)
-    archive_datetime = Column(TZDateTime)
-    validated = Column(Boolean)
-
-    # Associated Files.
-    singlefile_path: pathlib.Path = Column(MediaPathType, ForeignKey('file.path', ondelete='CASCADE'))
-    singlefile_file: File = relationship('File', primaryjoin='Archive.singlefile_path==File.path')
-    readability_path: pathlib.Path = Column(MediaPathType, ForeignKey('file.path', ondelete='CASCADE'))
-    readability_file: File = relationship('File', primaryjoin='Archive.readability_path==File.path')
-    readability_json_path: pathlib.Path = Column(MediaPathType, ForeignKey('file.path', ondelete='CASCADE'))
-    readability_json_file: File = relationship('File', primaryjoin='Archive.readability_json_path==File.path')
-    readability_txt_path: pathlib.Path = Column(MediaPathType, ForeignKey('file.path', ondelete='CASCADE'))
-    readability_txt_file: File = relationship('File', primaryjoin='Archive.readability_txt_path==File.path')
-    screenshot_path: pathlib.Path = Column(MediaPathType, ForeignKey('file.path', ondelete='CASCADE'))
-    screenshot_file: File = relationship('File', primaryjoin='Archive.screenshot_path==File.path')
+    file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), unique=True, nullable=False)
+    file_group: FileGroup = relationship('FileGroup')
 
     def __repr__(self):
         if self.domain:
@@ -54,29 +42,11 @@ class Archive(Base, ModelHelper):
                    f'domain={self.domain.domain}>'
         return f'<Archive id={self.id} url={self.url} singlefile={repr(str(self.singlefile_path))}>'
 
-    def my_paths(self) -> Generator[pathlib.Path, None, None]:
-        if self.singlefile_path:
-            yield self.singlefile_path
-        if self.readability_path:
-            yield self.readability_path
-        if self.readability_json_path:
-            yield self.readability_json_path
-        if self.readability_txt_path:
-            yield self.readability_txt_path
-        if self.screenshot_path:
-            yield self.screenshot_path
+    def my_paths(self, *mimetypes: str) -> List[pathlib.Path]:
+        return self.file_group.my_paths(*mimetypes)
 
-    def my_files(self) -> Generator[File, None, None]:
-        if self.singlefile_file:
-            yield self.singlefile_file
-        if self.readability_file:
-            yield self.readability_file
-        if self.readability_json_file:
-            yield self.readability_json_file
-        if self.readability_txt_file:
-            yield self.readability_txt_file
-        if self.screenshot_file:
-            yield self.screenshot_file
+    def my_files(self, *mimetypes: str) -> List[dict]:
+        return self.file_group.my_files(*mimetypes)
 
     def unlink(self):
         """
@@ -95,32 +65,12 @@ class Archive(Base, ModelHelper):
 
         return self.archive_datetime > other.archive_datetime
 
-    def __json__(self):
-        stem, _ = split_path_stem_and_suffix(self.singlefile_path) if self.singlefile_path else (None, None)
-        d = dict(
-            archive_datetime=self.archive_datetime,
-            domain=self.domain.dict() if self.domain else None,
-            domain_id=self.domain_id,
-            id=self.id,
-            readability_json_path=self.readability_json_path,
-            readability_path=self.readability_path,
-            readability_txt_path=self.readability_txt_path,
-            screenshot_path=self.screenshot_path,
-            singlefile_path=self.singlefile_path,
-            stem=stem,
-            title=self.title,
-            url=self.url,
-        )
-        return d
-
     def delete(self):
         self.unlink()
 
         session = Session.object_session(self)
 
-        for file in self.my_files():
-            session.delete(file)
-
+        session.delete(self.file_group)
         session.delete(self)
 
         if self.domain:
@@ -139,101 +89,175 @@ class Archive(Base, ModelHelper):
         ).order_by(Archive.archive_datetime))
         return history
 
-    def read_singlefile_data(self):
-        """
-        Read the start of the singlefile (if any) and decode the Archive information.
-        """
-        path = self.singlefile_file.path if self.singlefile_file else self.singlefile_path
-        if not path:
-            # Can't read contents of nothing.
-            raise ValueError('Cannot read singlefile data when this has no files')
+    @property
+    def singlefile_file(self) -> Optional[dict]:
+        from modules.archive.lib import is_singlefile_file
+        files = self.file_group.my_files('text/html')
+        for file in files:
+            if is_singlefile_file(file['path']):
+                return file
 
-        with path.open('rt') as fh:
-            head = fh.read(1000)
-            if 'Page saved with SingleFile' not in head:
-                return
-            try:
-                if match := MATCH_URL.findall(head):
-                    self.url = match[0].strip()
-            except Exception as e:
-                logger.error(f'Could not get URL from singlefile {path}', exc_info=e)
-            try:
-                if match := MATCH_DATE.findall(head):
-                    dt = match[0].strip()
-                    dt = ' '.join(dt.split(' ')[:5])
-                    # SingleFile uses GMT.
-                    dt = datetime.datetime.strptime(
-                        dt,
-                        '%a %b %d %Y %H:%M:%S'  # Fri Jun 17 2022 19:24:52
-                    ).replace(tzinfo=pytz.timezone('GMT'))
-                    self.archive_datetime = dt
-            except Exception as e:
-                logger.error(f'Could not get archive date from singlefile {path}', exc_info=e)
+    @property
+    def singlefile_path(self) -> Optional[pathlib.Path]:
+        if singlefile_file := self.singlefile_file:
+            return singlefile_file['path']
+
+    @property
+    def readability_file(self) -> Optional[dict]:
+        files = self.file_group.my_files('text/html')
+        for file in files:
+            if file['path'].name.endswith('.readability.html'):
+                return file
+
+    @property
+    def readability_path(self) -> Optional[pathlib.Path]:
+        if readability_file := self.readability_file:
+            return readability_file['path']
+
+    @property
+    def readability_txt_file(self) -> Optional[dict]:
+        files = self.file_group.my_files('text/plain', 'text/html')
+        for file in files:
+            if file['path'].name.endswith('.readability.txt'):
+                return file
+
+    @property
+    def readability_txt_path(self) -> Optional[pathlib.Path]:
+        if readability_txt_file := self.readability_txt_file:
+            return readability_txt_file['path']
+
+    @property
+    def readability_json_file(self) -> Optional[dict]:
+        files = self.file_group.my_files()
+        for file in files:
+            if file['path'].name.endswith('.readability.json'):
+                return file
+
+    @property
+    def readability_json_path(self) -> Optional[pathlib.Path]:
+        if readability_json_file := self.readability_json_file:
+            return readability_json_file['path']
+
+    @property
+    def screenshot_file(self) -> Optional[dict]:
+        files = self.file_group.my_files('image/')
+        for file in files:
+            return file
+
+    @property
+    def screenshot_path(self) -> Optional[pathlib.Path]:
+        if screenshot_file := self.screenshot_file:
+            return screenshot_file['path']
 
     def read_readability_data(self):
         """Read the Readability JSON file, apply its contents to this record."""
-        readability_json_file = self.readability_json_file
-        if not readability_json_file or not readability_json_file.path.is_file():
-            path = self.singlefile_file.path if self.singlefile_file else self.singlefile_path
-            logger.warning(f'{path} does not have an info json file')
+        readability_json_path = self.readability_json_path
+        if not readability_json_path:
+            logger.warning(f'{self.singlefile_path} does not have an info json file')
+            return
+        if not readability_json_path.is_file():
+            error = f'Cannot read data from {readability_json_path} because it not exist.'
+            if PYTEST:
+                raise ValueError(error)
+            logger.error(error)
             return
 
         try:
-            with readability_json_file.path.open() as fh:
+            with readability_json_path.open() as fh:
                 json_contents = json.load(fh)
                 url = json_contents.get('url')
                 title = json_contents.get('title')
         except Exception as e:
             raise InvalidArchive() from e
 
-        self.url = url
-        self.title = title
+        # Readability is most trusted, it should overwrite any previous data.
+        self.url = url or self.url
+        self.file_group.title = title or self.file_group.title
+
+    def read_singlefile_data(self):
+        """Read the start of the singlefile (if any) and extract any Archive information."""
+        path = self.singlefile_path
+        if not path:
+            # Can't read contents of nothing.
+            raise ValueError('Cannot read singlefile data when this has no files')
+
+        if self.url and self.archive_datetime:
+            # This data has already been read.
+            return
+
+        with path.open('rt') as fh:
+            head = fh.read(1000)
+            if 'Page saved with SingleFile' not in head:
+                logger.error(f'Could not find SingleFile header in {self}')
+                return
+
+            if not self.url:
+                try:
+                    if match := MATCH_URL.findall(head):
+                        self.url = match[0].strip()
+                except Exception as e:
+                    logger.error(f'Could not get URL from singlefile {path}', exc_info=e)
+
+            if not self.archive_datetime:
+                try:
+                    if match := MATCH_DATE.findall(head):
+                        dt = match[0].strip()
+                        dt = ' '.join(dt.split(' ')[:5])
+                        # SingleFile uses GMT.
+                        dt = datetime.datetime.strptime(
+                            dt,
+                            '%a %b %d %Y %H:%M:%S'  # Fri Jun 17 2022 19:24:52
+                        ).replace(tzinfo=pytz.timezone('GMT'))
+                        self.archive_datetime = dt
+                except Exception as e:
+                    logger.error(f'Could not get archive date from singlefile {path}', exc_info=e)
 
     def apply_domain(self):
         """Get the domain from the URL."""
         from modules.archive.lib import get_or_create_domain
         domain = None
         if self.url:
-            domain = get_or_create_domain(Session.object_session(self), self.url)
+            session = Session.object_session(self)
+            if not session:
+                raise ValueError('No session found!')
+            domain = get_or_create_domain(session, self.url)
         # Clear domain if the URL is missing.
         self.domain_id = domain.id if domain else None
 
-    def apply_title(self):
+    def apply_singlefile_title(self):
         """Get the title from the Singlefile, if its missing."""
         from modules.archive.lib import get_title_from_html
-        if self.singlefile_path and not self.title:
-            self.title = get_title_from_html(self.singlefile_path.read_text())
+        if self.singlefile_path and not self.file_group.title:
+            self.file_group.title = get_title_from_html(self.singlefile_path.read_text())
 
     def validate(self):
+        """Fill in any missing data about this Archive from it's files."""
         try:
             self.read_readability_data()
             self.read_singlefile_data()
             self.apply_domain()
-            self.apply_title()
-            self.validated = True
+            self.apply_singlefile_title()
         except Exception as e:
             logger.warning(f'Unable to validate {self}', exc_info=e)
+            if PYTEST:
+                raise
 
     @staticmethod
-    def find_by_path(path, session: Session) -> Optional[Base]:
-        archive = session.query(Archive).filter_by(singlefile_path=path).one_or_none()
+    def from_paths(session: Session, *paths: pathlib.Path) -> 'Archive':
+        """Create a new Archive and FileGroup from the provided paths.
+
+        The files will be read and Archive data extracted."""
+        from modules.archive import model_archive
+        file_group = FileGroup.from_paths(session, *paths)
+        archive = model_archive(file_group, session)
         return archive
-
-    @staticmethod
-    def find_by_paths(paths, session):
-        archives = list(session.query(Archive).filter(Archive.singlefile_path.in_(paths)))
-        return archives
-
-    @property
-    def primary_path(self):
-        return self.singlefile_path
 
 
 class Domain(Base, ModelHelper):
     __tablename__ = 'domains'  # plural to avoid conflict
     id = Column(Integer, primary_key=True)
 
-    domain = Column(String)
+    domain = Column(String, nullable=False)
     directory = Column(MediaPathType)
 
     archives: InstrumentedList = relationship('Archive', primaryjoin='Archive.domain_id==Domain.id')

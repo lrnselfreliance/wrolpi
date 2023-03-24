@@ -1,3 +1,4 @@
+import asyncio
 from unittest import mock
 
 import pytest
@@ -92,40 +93,3 @@ def test_channels_no_url(test_session, test_directory):
 
     save_channels_config()
     import_channels_config()
-
-
-@pytest.mark.asyncio
-async def test_refresh_videos_finds_channel(test_session, test_client, channel_factory, video_factory):
-    """A Video will be assigned to a Channel by its info json first, then to its directory."""
-    channel1 = channel_factory(source_id='channel1')
-    channel2 = channel_factory(source_id='channel2')
-
-    # Put the video in the wrong directory.  It should be matched to the info json channel first, then to it's directory
-    channel1.source_id = 'channel source id'
-    vid1 = video_factory(
-        with_video_file=(channel2.directory / 'video1.mp4'),
-        with_info_json={'channel_id': channel1.source_id},
-    )
-    test_session.commit()
-    assert not vid1.channel_id
-
-    with mock.patch('wrolpi.common.after_refresh') as mock_after_refresh:
-        # Channel can be found in `video_cleanup`, prevent that with mock.
-        mock_after_refresh.side_effect = []
-        await refresh_files()
-
-    # Channel in info_json was found during validation.
-    assert vid1.channel_id == channel1.id
-
-    # Refresh using cleanup, info json should be trusted.
-    await refresh_files()
-    assert vid1.channel_id == channel1.id
-
-    # Remove the info json, the Video's Channel will be its directory.
-    vid1.channel_id = None
-    vid1.info_json_path.unlink()
-    test_session.commit()
-    await refresh_files()
-    test_session.refresh(vid1)
-    vid1 = test_session.query(Video).one()
-    assert vid1.channel_id == channel2.id

@@ -4,11 +4,14 @@ from http import HTTPStatus
 
 def check_results(test_client, data, ids):
     request, response = test_client.post('/api/archive/search', content=json.dumps(data))
-    assert response.status_code == HTTPStatus.OK, response.json
+    if not response.status_code == HTTPStatus.OK:
+        raise AssertionError(str(response.json))
+
     if ids:
-        assert response.json['archives'], f'Expected {len(ids)} archives but did not receive any'
-    assert [i['archive']['id'] for i in response.json['archives']] == ids, \
-        f'{response.json["archives"][0]["archive"]["id"]}..{response.json["archives"]["archive"][19]["id"]}'
+        file_groups = response.json['file_groups']
+        assert file_groups, f'Expected {len(ids)} archives but did not receive any'
+    assert [i['id'] for i in response.json['file_groups']] == ids, \
+        f'{response.json["file_groups"][0]["id"]}..{response.json["file_groups"][-1]["id"]}'
 
 
 def test_archives_search(test_session, archive_directory, archive_factory, test_client):
@@ -87,22 +90,22 @@ def test_archives_search_no_query(test_session, archive_factory, test_client):
     # All archives are returned when no `search_str` is passed.
     request, response = test_client.post('/api/archive/search', content='{}')
     assert response.status_code == HTTPStatus.OK, response.json
-    assert [i['archive']['id'] for i in response.json['archives']] == list(range(100, 80, -1))
-    assert response.json['totals']['archives'] == 100
+    assert [i['id'] for i in response.json['file_groups']] == list(range(100, 80, -1))
+    assert response.json['totals']['file_groups'] == 100
 
     # All archives are from "example.com".
     data = dict(domain='example.com')
     request, response = test_client.post('/api/archive/search', content=json.dumps(data))
     assert response.status_code == HTTPStatus.OK, response.json
-    assert [i['archive']['id'] for i in response.json['archives']] == list(range(100, 80, -1))
-    assert response.json['totals']['archives'] == 100
+    assert [i['id'] for i in response.json['file_groups']] == list(range(100, 80, -1))
+    assert response.json['totals']['file_groups'] == 100
 
     # No archives are from "example.org".
     data = dict(domain='example.org')
     request, response = test_client.post('/api/archive/search', content=json.dumps(data))
     assert response.status_code == HTTPStatus.OK, response.json
-    assert [i['archive']['id'] for i in response.json['archives']] == []
-    assert response.json['totals']['archives'] == 0
+    assert [i['id'] for i in response.json['file_groups']] == []
+    assert response.json['totals']['file_groups'] == 0
 
 
 def test_archive_and_domain_crud(test_session, test_client, archive_factory):
@@ -121,14 +124,14 @@ def test_archive_and_domain_crud(test_session, test_client, archive_factory):
     # Archive1 has Archive2 as history.
     request, response = test_client.get(f'/api/archive/{archive1.id}')
     assert response.status_code == HTTPStatus.OK
-    assert response.json['file']['archive']['id'] == archive1.id
-    assert response.json['history'][0]['archive']['id'] == archive2.id
+    assert response.json['file_group']['id'] == archive1.id
+    assert response.json['history'][0]['id'] == archive2.id
 
     # Archive2 has Archive1 as history.
     request, response = test_client.get(f'/api/archive/{archive2.id}')
     assert response.status_code == HTTPStatus.OK
-    assert archive2.id == response.json['file']['archive']['id']
-    assert response.json['history'][0]['archive']['id'] == archive1.id
+    assert archive2.id == response.json['file_group']['id']
+    assert response.json['history'][0]['id'] == archive1.id
 
     # Only one domain.
     request, response = test_client.get(f'/api/archive/domains')
@@ -150,7 +153,7 @@ def test_archive_and_domain_crud(test_session, test_client, archive_factory):
     # Archive2 no longer has history.
     request, response = test_client.get(f'/api/archive/{archive2.id}')
     assert response.status_code == HTTPStatus.OK
-    assert response.json['file']['archive']['id'] == archive2.id
+    assert response.json['file_group']['id'] == archive2.id
     assert response.json['history'] == []
 
     # No Archives, no Domains.

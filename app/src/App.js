@@ -19,6 +19,7 @@ import {Donate} from "./components/Donate";
 import {useEventsInterval} from "./Events";
 import {SemanticToastContainer} from "react-semantic-toasts-2";
 import {FilePreviewWrapper} from "./components/FilePreview";
+import {TagsContext, useTags} from "./Tags";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);
@@ -75,7 +76,8 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
 </Route>));
 
 export default function App() {
-    const status = useStatusInterval();
+    const statusValue = useStatusInterval();
+    const tagsValue = useTags();
     useEventsInterval();
 
     return <ThemeWrapper>
@@ -85,9 +87,11 @@ export default function App() {
             {/* Toasts can be on any page. */}
             <SemanticToastContainer position='top-right'/>
             <MediaContextProvider>
-                <StatusContext.Provider value={status}>
-                    <RouterProvider router={router}/>
-                </StatusContext.Provider>
+                <TagsContext.Provider value={tagsValue}>
+                    <StatusContext.Provider value={statusValue}>
+                        <RouterProvider router={router}/>
+                    </StatusContext.Provider>
+                </TagsContext.Provider>
             </MediaContextProvider>
         </FilePreviewWrapper>
     </ThemeWrapper>

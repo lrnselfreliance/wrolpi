@@ -139,11 +139,12 @@ class VideoResponse:
 @dataclass
 class VideoSearchRequest:
     search_str: Optional[str] = None
-    filters: List[str] = field(default_factory=list)
+    tags: List[str] = field(default_factory=list)
     offset: Optional[int] = None
     limit: Optional[int] = VIDEO_QUERY_LIMIT
     order_by: Optional[str] = DEFAULT_VIDEO_ORDER
     channel_id: Optional[int] = None
+    tag_names: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -158,15 +159,9 @@ class PaginationQuery:
 
 
 @dataclass
-class FavoriteRequest:
+class TagRequest:
     video_id: int
-    favorite: bool
-
-
-@dataclass
-class FavoriteResponse:
-    video_id: int
-    favorite: datetime
+    tag_name: str
 
 
 @dataclass
@@ -177,7 +172,6 @@ class WROLModeRequest:
 @dataclass
 class VideoStatistics:
     videos: int
-    favorites: int
     week: int
     month: int
     year: int

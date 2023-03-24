@@ -47,7 +47,7 @@ def truthy_arg(value: str) -> bool:
 DEFAULT_MEDIA_DIRECTORY = Path('/media/wrolpi')
 MEDIA_DIRECTORY = Path(os.environ.get('MEDIA_DIRECTORY', DEFAULT_MEDIA_DIRECTORY))
 if not MEDIA_DIRECTORY.is_dir() and not PYTEST:
-    print(f'Media directory does not exist!  {MEDIA_DIRECTORY}')
+    print(f'Media directory does not exist!  {MEDIA_DIRECTORY}', file=sys.stderr)
 
 CONFIG_DIR: Path = MEDIA_DIRECTORY / 'config'
 MODULES_DIR: Path = PROJECT_DIR / 'modules'

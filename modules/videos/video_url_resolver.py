@@ -11,9 +11,7 @@ formatters = {
 
 
 def video_url_resolver(domain: str, entry: dict) -> str:
-    """
-    Guess the full URL of a Youtube-DL entry.
-    """
+    """Guess the full URL of a Youtube-DL entry."""
     if 'webpage_url' in entry:
         return entry['webpage_url']
 

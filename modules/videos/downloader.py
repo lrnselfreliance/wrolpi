@@ -5,6 +5,7 @@ import re
 import traceback
 from abc import ABC
 from typing import Tuple, List, Optional, Dict
+from urllib.parse import urlparse
 
 import yt_dlp.utils
 from sqlalchemy.orm import Session
@@ -15,18 +16,18 @@ from yt_dlp.utils import UnsupportedError, DownloadError
 from wrolpi.cmd import YT_DLP_BIN
 from wrolpi.common import logger, get_media_directory, escape_file_name, resolve_generators
 from wrolpi.dates import now
-from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.db import get_db_session
 from wrolpi.db import optional_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
-from wrolpi.files.models import File
+from wrolpi.files.lib import glob_shared_stem
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
-from .common import apply_info_json, get_no_channel_directory, get_videos_directory
+from .common import get_no_channel_directory, get_videos_directory, update_view_counts
 from .lib import get_downloader_config
 from .models import Video, Channel
 from .schema import ChannelPostRequest
-from .video_url_resolver import normalize_youtube_shorts_url
+from .video_url_resolver import normalize_youtube_shorts_url, video_url_resolver
 
 logger = logger.getChild(__name__)
 ydl_logger = logger.getChild('youtube-dl')
@@ -319,13 +320,11 @@ class VideoDownloader(Downloader, ABC):
                 )
 
             with get_db_session(commit=True) as session:
-                video_file = File.upsert(video_path, session)
-                video: Video = Video.upsert(video_file, session)
+                # Find any files downloaded with the video (poster, caption, etc.).
+                video_paths = glob_shared_stem(video_path)
+                video = Video.from_paths(session, *video_paths)
                 video.source_id = entry['id']
                 video.channel_id = channel_id
-                video.video_file.do_index()
-                video.validate(session)
-                session.flush([video])
                 video_id = video.id
         except UnrecoverableDownloadError:
             raise
@@ -464,9 +463,6 @@ def update_channel_catalog(channel: Channel, info: dict):
         logger.warning(f'entries: {entries}')
         raise KeyError('No id key for entry!') from e
 
-    # In order to store the Video's URL, we will need a quick lookup.
-    urls = {i['id']: i.get('webpage_url') for i in entries}
-
     with get_db_session(commit=True) as session:
         # Get the channel in this new context.
         channel: Channel = session.query(Channel).filter_by(id=channel.id).one()
@@ -474,20 +470,7 @@ def update_channel_catalog(channel: Channel, info: dict):
         channel.info_json = info
         channel.info_date = now()
         channel.source_id = info.get('id')
-
-        with get_db_curs() as curs:
-            # Get all known videos in this channel.
-            query = 'SELECT source_id FROM video WHERE channel_id=%s AND source_id IS NOT NULL'
-            curs.execute(query, (channel.id,))
-            known_source_ids = {i[0] for i in curs.fetchall()}
-
-        new_source_ids = all_source_ids.difference(known_source_ids)
-
-        logger.info(f'Got {len(new_source_ids)} new videos for channel {channel.name}')
         channel_id = channel.id
-        for source_id in new_source_ids:
-            url = urls.get(source_id)
-            session.add(Video(source_id=source_id, channel_id=channel_id, url=url))
 
     # Write the Channel's info to a JSON file.
     if channel.directory:
@@ -496,30 +479,44 @@ def update_channel_catalog(channel: Channel, info: dict):
             json.dump(info, fh, indent=2)
 
     # Update all view counts using the latest from the Channel's info_json.
-    apply_info_json(channel_id)
+    update_view_counts(channel_id)
 
 
 def _find_all_missing_videos(channel_id: id) -> List[Tuple]:
     """Get all Video entries which don't have the required media files (i.e. hasn't been downloaded)."""
-    with get_db_curs() as curs:
-        query = f'''
-            SELECT
-                video.id, video.source_id, video.channel_id
-            FROM
-                video
-                LEFT JOIN channel ON channel.id = video.channel_id
-            WHERE
-                channel.url IS NOT NULL
-                AND channel.url != ''
-                AND video.source_id IS NOT NULL
-                AND channel_id = %s
-                AND video.channel_id IS NOT NULL
-                AND (video_path IS NULL OR video_path = '' OR poster_path IS NULL OR poster_path = '')
-        '''
-        params = (channel_id,)
-        curs.execute(query, params)
-        missing_videos = list(curs.fetchall())
-        return missing_videos
+    with get_db_session() as session:
+        channel: Channel = Channel.get_by_id(channel_id)
+        if not channel:
+            raise UnknownChannel(f'Cannot find channel with id {channel_id}')
+
+        def resolve_url(entry: dict) -> str:
+            parsed = urlparse(entry.get('webpage_url') or entry['url'])
+            domain = parsed.hostname
+            url_ = video_url_resolver(domain, entry)
+            url_ = normalize_youtube_shorts_url(url_)
+            return url_
+
+        info_json = channel.info_json
+        # (source_id, url, channel_id)
+        channel_videos = [(i['id'], resolve_url(i), channel_id) for i in info_json['entries']]
+
+        video_source_ids = [i[0] for i in channel_videos]
+        videos_with_source_id = list(session.query(Video).filter(Video.source_id.in_(video_source_ids)))
+        found_source_ids = set()
+        missing_files = []
+        for video in videos_with_source_id:
+            found_source_ids |= {video.source_id, }
+            if not video.poster_path:
+                missing_files.append(video)
+            elif not video.video_path:
+                missing_files.append(video)
+
+        missing_source_ids = set(video_source_ids) - found_source_ids
+        for source_id in missing_source_ids:
+            yield None, source_id, channel_id
+
+        for video in missing_files:
+            yield video.id, video.source_id, channel_id
 
 
 async def find_all_missing_videos(channel_id: int = None):

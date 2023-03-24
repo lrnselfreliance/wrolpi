@@ -7,6 +7,7 @@ import {
     Container,
     Dropdown,
     Image,
+    Label,
     PlaceholderLine,
     TableCell,
     TableHeaderCell,
@@ -40,6 +41,7 @@ import {FileBrowser} from "./FileBrowser";
 import {refreshDirectoryFiles, refreshFiles} from "../api";
 import {useSubscribeEventName} from "../Events";
 import {FilePreviewContext} from "./FilePreview";
+import {TagsContext} from "../Tags";
 
 
 export function FilesPage() {
@@ -50,19 +52,17 @@ export function FilesPage() {
 
 function EbookCard({file}) {
     const {s} = useContext(ThemeContext);
-    let {ebook, suffix} = file;
+    let {data} = file;
 
-    const downloadUrl = `/download/${encodeURIComponent(file.path)}`;
+    const downloadUrl = `/download/${encodeURIComponent(file.primary_path)}`;
     const isEpub = file['mimetype'].startsWith('application/epub');
     const viewerUrl = isEpub ? `/epub.html?url=${downloadUrl}` : null;
 
     let cover = <FileIcon file={file}/>;
-    if (ebook && ebook.cover_path) {
-        const coverSrc = `/media/${encodeURIComponent(ebook.cover_path)}`;
+    if (data && data.cover_path) {
+        const coverSrc = `/media/${encodeURIComponent(data.cover_path)}`;
         cover = <CardPosterLink poster_url={coverSrc}/>;
     }
-
-    suffix = suffix ? _.trimStart(suffix, '.').toUpperCase() : null;
 
     const color = mimetypeColor(file.mimetype);
     return <Card color={color}>
@@ -73,12 +73,13 @@ function EbookCard({file}) {
             <CardHeader>
                 <Container textAlign='left'>
                     <ExternalCardLink to={viewerUrl || downloadUrl}>
-                        {ebook ? ebook.title : file.title}
+                        {data ? data.title : file.title}
                     </ExternalCardLink>
                 </Container>
             </CardHeader>
             <CardMeta>
-                <pre {...s}>{suffix}</pre>
+                {data.creator ? <b {...s}>{data.creator}</b> : null}
+                {file.size && <p {...s}>{humanFileSize(file.size)}</p>}
             </CardMeta>
         </CardContent>
     </Card>
@@ -88,7 +89,7 @@ function EbookCard({file}) {
 function ImageCard({file}) {
     const {s} = useContext(ThemeContext);
     const {setPreviewFile} = React.useContext(FilePreviewContext);
-    const url = `/media/${encodeURIComponent(file.path)}`;
+    const url = `/media/${encodeURIComponent(file.primary_path)}`;
 
     let poster = <FileIcon file={file}/>;
     if (file.size && file.size < 50000000) {
@@ -107,7 +108,7 @@ function ImageCard({file}) {
         <CardContent {...s}>
             <CardHeader>
                 <ExternalCardLink to={url} className='no-link-underscore card-link'>
-                    <p>{textEllipsis(file.title || file.stem || file.path)}</p>
+                    <p>{textEllipsis(file.title || file.stem || file.primary_path)}</p>
                 </ExternalCardLink>
             </CardHeader>
             <CardMeta {...s}>
@@ -127,17 +128,19 @@ function FileCard({file}) {
         file.mimetype.startsWith('application/epub') || file.mimetype.startsWith('application/x-mobipocket-ebook')
     );
 
-    if (file.model === 'video' && file['video']) {
-        return <VideoCard key={file['path']} file={file}/>;
-    } else if (file.model === 'archive' && file['archive']) {
-        return <ArchiveCard key={file['path']} file={file}/>;
+    if (file.model === 'video') {
+        return <VideoCard key={file['primary_path']} file={file}/>;
+    } else if (file.model === 'archive') {
+        return <ArchiveCard key={file['primary_path']} file={file}/>;
     } else if (file.mimetype && file.mimetype.startsWith('image/')) {
-        return <ImageCard key={file['path']} file={file}/>;
+        return <ImageCard key={file['primary_path']} file={file}/>;
     } else if (isEbookType) {
-        return <EbookCard key={file['path']} file={file}/>;
+        return <EbookCard key={file['primary_path']} file={file}/>;
     }
 
-    const downloadUrl = `/download/${encodeURIComponent(file.path)}`;
+    const {data} = file;
+    const {author} = data;
+    const downloadUrl = `/download/${encodeURIComponent(file.primary_path)}`;
     const color = mimetypeColor(file.mimetype);
     const size = file.size !== null && file.size !== undefined ? humanFileSize(file.size) : null;
 
@@ -150,10 +153,11 @@ function FileCard({file}) {
         <CardContent {...s}>
             <CardHeader>
                 <ExternalCardLink to={downloadUrl}>
-                    {cardTitleWrapper(file.title || file.stem || file.path)}
+                    {cardTitleWrapper(file.title || file.stem || file.primary_path)}
                 </ExternalCardLink>
             </CardHeader>
-            <p>{isoDatetimeToString(file.modified / 1000)}</p>
+            {author && <b {...s}>{author}</b>}
+            <p>{isoDatetimeToString(file.modified)}</p>
             <p>{size}</p>
         </CardContent>
     </Card>
@@ -162,7 +166,7 @@ function FileCard({file}) {
 export function FileCards({files}) {
     if (!_.isEmpty(files)) {
         return <CardGroupCentered>
-            {files.map(i => <FileCard key={i['path']} file={i}/>)}
+            {files.map(i => <FileCard key={i['primary_path']} file={i}/>)}
         </CardGroupCentered>
     } else if (files && files.length === 0) {
         return <Segment>No results!</Segment>
@@ -172,7 +176,7 @@ export function FileCards({files}) {
 }
 
 function ImageRowCells({file}) {
-    const url = `/media/${encodeURIComponent(file.path)}`;
+    const url = `/media/${encodeURIComponent(file.primary_path)}`;
 
     let poster = <FileIcon file={file} size='large'/>;
     if (file.size && file.size < 50000000) {
@@ -189,18 +193,18 @@ function ImageRowCells({file}) {
         </TableCell>
         <TableCell>
             <PreviewLink file={file}>
-                <p>{textEllipsis(file.title || file.stem || file.path)}</p>
+                <p>{textEllipsis(file.title || file.stem || file.primary_path)}</p>
             </PreviewLink>
         </TableCell>
     </React.Fragment>
 }
 
 export function EbookRowCells({file}) {
-    const {ebook} = file;
+    const {data} = file;
 
     let cover = <CardIcon><FileIcon file={file}/></CardIcon>;
-    if (ebook && ebook.cover_path) {
-        const coverSrc = `/media/${encodeURIComponent(ebook.cover_path)}`;
+    if (data && data.cover_path) {
+        const coverSrc = `/media/${encodeURIComponent(data.cover_path)}`;
         cover = <Image wrapped src={coverSrc} width='50px'/>;
     }
 
@@ -211,7 +215,7 @@ export function EbookRowCells({file}) {
         </TableCell>
         <TableCell>
             <PreviewLink file={file}>
-                {textEllipsis(ebook.title || file.title)}
+                {textEllipsis(file.title || file.stem)}
             </PreviewLink>
         </TableCell>
     </React.Fragment>
@@ -224,12 +228,12 @@ function FileRow({file}) {
 
     if (file.model === 'video' && 'video' in file) {
         return <VideoRowCells file={file}/>;
-    } else if (file.model === 'archive' && 'archive' in file) {
+    } else if (file.model === 'archive') {
         return <ArchiveRowCells file={file}/>;
     } else if (file.mimetype && file.mimetype.startsWith('image/')) {
         return <ImageRowCells file={file}/>;
     } else if (isEbookType) {
-        return <EbookRowCells key={file['path']} file={file}/>;
+        return <EbookRowCells key={file['primary_path']} file={file}/>;
     }
 
     // Fragment for SelectableRow
@@ -263,6 +267,14 @@ export function FileTable({files, selectOn, onSelect, footer, selectedKeys}) {
         />;
     } else {
         return <Segment>No results!</Segment>
+    }
+}
+
+export function FileRowTagIcon({file}) {
+    if (file.tags && file.tags.length) {
+        return <Label circular color='green' style={{padding: '0.5em', marginRight: '0.5em'}}>
+            <Icon name='tag' style={{margin: 0}}/>
+        </Label>;
     }
 }
 
@@ -347,19 +359,20 @@ export function FilesView({
 
     const filtersDropdown = <Dropdown selection clearable search
                                       multiple={multipleFilters || undefined}
-                                      options={filterOptions}
-                                      placeholder={filterPlaceholder || 'Filters'}
+                                      options={filterOptions || []}
+                                      placeholder={filterPlaceholder || 'Files Types'}
                                       onChange={(e, {value}) => setFilters(value)}
-                                      style={{marginLeft: '0.3em'}}
+                                      style={{marginLeft: '0.3em', marginTop: '0.3em'}}
                                       value={activeFilters}
     />;
 
     return <>
         <Grid columns={menuColumnsCount || 1} stackable>
-            <Grid.Column mobile={8} computer={6}>
+            <Grid.Column mobile={16} computer={12}>
                 {selectButton}
                 {viewButton}
                 {limitDropdown}
+                <TagsFilesGroupDropdown/>
                 {filterOptions && filtersDropdown}
             </Grid.Column>
             {menuColumns}
@@ -367,6 +380,38 @@ export function FilesView({
         {body}
         {paginator}
     </>
+}
+
+export function TagsFilesGroupDropdown({onChange}) {
+    // Creates a dropdown that the User can use to manipulate the tag query.
+    const {searchParams, updateQuery} = useQuery();
+    const activeTag = searchParams.get('tag');
+    const {tags} = React.useContext(TagsContext);
+
+    const localOnChange = (name) => {
+        updateQuery({'tag': name});
+        if (onChange) {
+            onChange(name);
+        }
+    }
+
+    let tagOptions = [];
+    if (tags && tags.length) {
+        for (let i = 0; i < tags.length; i++) {
+            const {name} = tags[i];
+            tagOptions = [...tagOptions, {key: name, text: name, value: name}];
+        }
+
+        return <Dropdown selection clearable search
+                         options={tagOptions || []}
+                         placeholder={'Tags'}
+                         onChange={(e, {value}) => localOnChange(value)}
+                         style={{marginLeft: '0.3em', marginTop: '0.3em'}}
+                         value={activeTag}
+        />;
+    } else {
+        return <React.Fragment/>
+    }
 }
 
 export function FilesSearchView({
@@ -391,7 +436,6 @@ export function FilesSearchView({
 
     const {searchFiles, limit, setLimit, totalPages, activePage, setPage} =
         useSearchFiles(24, emptySearch, model);
-
     const {searchParams, updateQuery} = useQuery();
     const setView = (value) => updateQuery({view: value});
     const view = searchParams.get('view');

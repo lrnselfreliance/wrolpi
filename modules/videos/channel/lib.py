@@ -58,8 +58,6 @@ async def get_channels_video_count() -> Dict[int, int]:
             FROM
                 channel AS c
                 LEFT JOIN video AS v ON v.channel_id = c.id
-            WHERE
-                v.video_path IS NOT NULL
             GROUP BY 1
         '''
         curs.execute(stmt)

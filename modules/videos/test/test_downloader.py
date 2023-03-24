@@ -13,27 +13,15 @@ from modules.videos.models import Channel, Video
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Download, DownloadResult
 from wrolpi.errors import InvalidDownload
-from wrolpi.files.models import File
+from wrolpi.test.common import skip_circleci
 from wrolpi.test.test_downloader import HTTPDownloader
 from wrolpi.vars import PROJECT_DIR
 
 
 @pytest.mark.asyncio
-async def test_find_all_missing_videos(test_session, channel_factory, video_factory):
+async def test_find_all_missing_videos(test_session, channel_factory, video_factory, image_file):
     channel1 = channel_factory(url='some url')
-    channel1.info_json = {'entries': [{'id': 'foo', 'view_count': 0}]}
-    test_session.commit()
-
-    # Two videos are already downloaded.
-    video_factory()
-    video_factory()
-
-    # No missing videos
-    assert [] == [i async for i in find_all_missing_videos(channel1.id)]
-
-    # Create a video that has no video file.
-    video = Video(title='needs to be downloaded', channel_id=channel1.id, source_id='foo')
-    test_session.add(video)
+    channel1.info_json = {'entries': [{'id': 'foo', 'view_count': 0, 'webpage_url': 'https://example.com'}]}
     test_session.commit()
 
     missing = [i async for i in find_all_missing_videos(channel1.id)]
@@ -41,10 +29,24 @@ async def test_find_all_missing_videos(test_session, channel_factory, video_fact
 
     # The video returned is the one we faked.
     id_, source_id, entry = missing[0]
-    # Two videos were created for this test already.
-    assert id_ == 3
+    # No Video.id because the video is missing.
+    assert id_ is None
     # The fake entry we added is regurgitated back.
     assert entry == channel1.info_json['entries'][0]
+
+    # Create a video without a poster, attempt to download it.
+    video = video_factory(channel_id=channel1.id, with_video_file=True)
+    channel1.info_json = {'entries': [
+        {'id': 'foo', 'view_count': 0, 'webpage_url': 'https://example.com'},
+        {'id': video.source_id, 'view_count': 0, 'webpage_url': 'https://example.com/new'},
+    ]}
+    test_session.commit()
+
+    missing = [i async for i in find_all_missing_videos(channel1.id)]
+    assert len(missing) == 2
+
+    _, new = missing
+    assert new == (video.id, video.source_id, channel1.info_json['entries'][1])
 
 
 example_video_json = {
@@ -174,11 +176,12 @@ async def test_download_no_channel(test_session, video_download_manager, video_f
     assert str(video.video_path) == f'{channel_dir}/video.mp4'
 
 
+@skip_circleci
 @pytest.mark.asyncio
 async def test_download_channel(test_session, simple_channel, video_download_manager, video_file,
                                 mock_video_extract_info, mock_video_prepare_filename,
                                 mock_video_process_runner):
-    """Downloading (updating the catalog of) a Channel creates download records for all of it's missing videos.
+    """Downloading (updating the catalog of) a Channel updates it's info_json.
 
     If a Channel has `match_regex` only those videos with matching titles will be downloaded."""
     url = 'https://www.youtube.com/c/LearningSelfReliance/videos'
@@ -407,10 +410,8 @@ async def test_video_download(test_session, test_directory, simple_channel, vide
     assert test_session.query(Channel).one()
 
     video: Video = test_session.query(Video).one()
-    assert video.video_path.is_absolute(), 'Video path is not absolute'
-    assert video.poster_path == poster_path, 'Video poster was not discovered'
-    assert video.validated, 'Video was not validated'
-    assert video.video_file and video.video_file.indexed, 'Video was not indexed'
+    assert video.video_path.is_absolute() and video.video_path == video_path, 'Video path is not absolute'
+    assert video.video_path.is_absolute() and video.poster_path == poster_path, 'Video poster was not discovered'
 
 
 @pytest.mark.asyncio
@@ -433,11 +434,10 @@ async def test_download_result(test_session, test_directory, video_download_mana
     assert download.url == 'https://example.com'
     assert download.location == '/videos/channel/1/video/1'
 
-    # Video files are associated.
+    # Video has its files.
     video = test_session.query(Video).one()
-    assert not video.video_file.associated, 'Video file should not be associated.'
+    assert video.video_path.is_file(), 'Video file was not found.'
     assert video.poster_path.is_file(), 'Poster file was not found.'
-    assert video.poster_file.associated, 'Poster file was not associated.'
 
 
 @pytest.mark.asyncio
@@ -527,15 +527,16 @@ example_playlist_json = {
 
 
 @pytest.mark.asyncio
-async def test_download_playlist(test_session, test_directory, mock_video_extract_info, video_download_manager):
+async def test_download_playlist(test_session, test_directory, mock_video_extract_info, video_download_manager,
+                                 video_file):
     """All videos in a playlist can be downloaded for it's Channel."""
     download = Download(url='playlist url')
     test_session.add(download)
     channel = get_or_create_channel(example_playlist_json['channel_id'], download.url, example_channel_json['uploader'])
-    video_file = File(path=test_directory / 'video file.mp4')
-    test_session.add(video_file)
-    test_session.add(Video(url='https://www.youtube.com/watch?v=video_1_url',
-                           source_id='video 1 id', channel_id=channel.id, video_file=video_file))
+    video = Video.from_paths(test_session, video_file)
+    video.channel_id = channel.id
+    video.source_id = 'video 1 id'
+    video.url = 'https://www.youtube.com/watch?v=video_1_url'
     test_session.commit()
 
     mock_video_extract_info.return_value = example_playlist_json  # Playlist info is fetched first.

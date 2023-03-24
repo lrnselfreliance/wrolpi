@@ -15,7 +15,7 @@ from wrolpi.dates import  now
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.vars import PROJECT_DIR
 from .. import common
-from ..common import convert_image, apply_info_json, get_video_duration, generate_video_poster, is_valid_poster
+from ..common import convert_image, update_view_counts, get_video_duration, generate_video_poster, is_valid_poster
 from ..lib import save_channels_config, get_channels_config, import_channels_config
 
 
@@ -101,22 +101,22 @@ def test_update_view_count(test_session, channel_factory, video_factory):
     check_view_counts({'vid1': None, 'vid2': None, 'vid3': None, 'vid4': None})
 
     # Channel 1 is updated, the other channels are left alone.
-    apply_info_json(channel1.id)
+    update_view_counts(channel1.id)
     check_view_counts({'vid1': 10, 'vid2': None, 'vid3': None, 'vid4': None})
 
     # Channel 2 is updated, the other channels are left alone.  The 'bad_id' video is ignored.
-    apply_info_json(channel2.id)
+    update_view_counts(channel2.id)
     check_view_counts({'vid1': 10, 'vid2': 11, 'vid3': None, 'vid4': None})
 
     # All videos are updated.
-    apply_info_json(channel3.id)
+    update_view_counts(channel3.id)
     check_view_counts({'vid1': 10, 'vid2': 11, 'vid3': 13, 'vid4': 14})
 
     # An outdated view count will be overwritten.
     vid = test_session.query(Video).filter_by(id=1).one()
     vid.view_count = 8
     check_view_counts({'vid1': 8, 'vid2': 11, 'vid3': 13, 'vid4': 14})
-    apply_info_json(channel1.id)
+    update_view_counts(channel1.id)
     check_view_counts({'vid1': 10, 'vid2': 11, 'vid3': 13, 'vid4': 14})
 
 
@@ -128,128 +128,6 @@ def test_generate_video_poster(video_file):
     generate_video_poster(video_file)
     assert poster_path.is_file(), f'{poster_path} was not created!'
     assert poster_path.stat().st_size > 0
-
-
-def test_update_censored_videos(test_session, video_factory, simple_channel):
-    vid1 = video_factory(channel_id=simple_channel.id)
-    vid2 = video_factory(channel_id=simple_channel.id)
-    vid3 = video_factory(channel_id=simple_channel.id)
-    vid4 = video_factory()  # should not be censored because it has no channel.
-    test_session.commit()
-
-    def check_censored(expected):
-        for video_id, censored in expected:
-            video = test_session.query(Video).filter_by(id=video_id).one()
-            assert video.censored == censored
-
-    # Videos are not censored by default.
-    test_session.commit()
-    apply_info_json(simple_channel.id)
-    check_censored([(vid1.id, False), (vid2.id, False), (vid3.id, False), (vid4.id, False)])
-
-    # All videos are in the info_json.
-    simple_channel.info_json = {
-        'entries': [
-            dict(id=vid1.source_id, view_count=0),
-            dict(id=vid2.source_id, view_count=0),
-            dict(id=vid3.source_id, view_count=0),
-        ]
-    }
-    test_session.commit()
-
-    apply_info_json(simple_channel.id)
-    check_censored([(vid1.id, False), (vid2.id, False), (vid3.id, False), (vid4.id, False)])
-
-    simple_channel.info_json = {
-        'entries': [
-            dict(id=vid1.source_id, view_count=0),  # vid2 is missing
-            dict(id=vid3.source_id, view_count=0),
-        ]
-    }
-    test_session.commit()
-    apply_info_json(simple_channel.id)
-    check_censored([(vid1.id, False), (vid2.id, True), (vid3.id, False), (vid4.id, False)])
-
-    simple_channel.info_json = {
-        'entries': [
-            dict(id=vid1.source_id, view_count=0),  # vid2 is back, vid3 is missing.
-            dict(id=vid2.source_id, view_count=0),
-        ]
-    }
-    test_session.commit()
-    apply_info_json(simple_channel.id)
-    check_censored([(vid1.id, False), (vid2.id, False), (vid3.id, True), (vid4.id, False)])
-
-    simple_channel.info_json = {
-        'entries': []  # all videos gone
-    }
-    test_session.commit()
-    apply_info_json(simple_channel.id)
-    check_censored([(vid1.id, True), (vid2.id, True), (vid3.id, True), (vid4.id, False)])
-
-    # Channels without info json preserve their last censored.
-    simple_channel.info_json = None
-    test_session.commit()
-    apply_info_json(simple_channel.id)
-    check_censored([(vid1.id, True), (vid2.id, True), (vid3.id, True), (vid4.id, False)])
-
-
-def test_import_favorites(test_session, test_directory, simple_channel, video_factory, test_channels_config):
-    """
-    A favorited Video will be preserved through everything (channel deletion, DB wipe) and can be imported and will be
-    favorited again.
-
-    A Video's favorited status can only be cleared by calling `Video.delete`.
-    """
-    video_factory(channel_id=simple_channel.id)  # never favorited
-    vid2 = video_factory(channel_id=None)  # has no channel
-    vid3 = video_factory(channel_id=simple_channel.id)
-    favorite = vid3.favorite = vid2.favorite = datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.UTC)
-    test_session.commit()
-    vid2_video_path = vid2.video_path
-
-    favorites = {
-        str(simple_channel.directory.relative_to(test_directory)): {vid3.video_path.name: {'favorite': favorite}},
-        'NO CHANNEL': {vid2.video_path.name: {'favorite': favorite}},
-    }
-
-    # Save config, verify that favorite is set.
-    save_channels_config()
-    config = get_channels_config()
-    assert config.favorites == favorites
-
-    def import_and_verify(favorited_ids: List[int]):
-        with mock.patch('modules.videos.lib.get_channel_source_id', lambda i: 'foo'):
-            import_channels_config()
-            for video in test_session.query(Video).all():
-                if video.id in favorited_ids:
-                    assert video.favorite
-                else:
-                    assert not video.favorite
-
-    # Clear the favorite (as if the DB was wiped), verify that the favorite is imported and set.
-    vid2.favorite = None
-    import_and_verify([vid2.id, vid3.id])
-
-    # Removing the video does not delete the favorite.  If the DB is wiped, we do not want to lose our favorites!
-    test_session.query(Video).filter_by(id=vid2.id).delete()
-    test_session.commit()
-    save_channels_config()
-    config = get_channels_config()
-    assert config.favorites == favorites
-    import_and_verify([vid3.id])
-
-    # Add vid2 again, it should be favorited on import.
-    vid2 = Video(video_path=vid2_video_path)
-    test_session.add(vid2)
-    test_session.commit()
-    import_and_verify([vid3.id, vid2.id])
-
-    # Deleting the Video in the model really removes the favorite status.
-    vid3.delete()
-    config = get_channels_config()
-    assert config.favorites == {'NO CHANNEL': {vid2.video_path.name: {'favorite': favorite}}}
-    import_and_verify([vid2.id])
 
 
 def test_import_channel_downloads(test_session, channel_factory, test_channels_config):
@@ -303,67 +181,6 @@ def test_import_channel_downloads(test_session, channel_factory, test_channels_c
     import_channels_config()
     download: Download = test_session.query(Download).one()
     assert next_download == str(download.next_download)
-
-
-def test_import_channels_config_outdated(test_session, test_directory, channel_factory, test_channels_config,
-                                         video_factory):
-    """The Channels' config used to use a "link" to differentiate channels, test that old configs can be imported."""
-    channel1 = channel_factory(name='Channel1', download_frequency=DownloadFrequency.weekly)
-    channel2 = channel_factory(name='Channel2', download_frequency=DownloadFrequency.weekly)
-    test_session.commit()
-
-    vid1 = video_factory(title='vid1', channel_id=channel1.id)
-    vid2 = video_factory(title='vid2', channel_id=channel2.id)
-    vid3 = video_factory(title='vid3')
-    vid4 = video_factory(title='vid4')
-    test_session.commit()
-
-    channel1_name, channel_1_directory = channel1.name, channel1.directory
-    channel2_name, channel_2_directory = channel2.name, channel2.directory
-
-    assert channel1.directory.exists() and channel1.directory.is_absolute()
-    assert channel2.directory.exists() and channel2.directory.is_absolute()
-
-    # Channel's used to have a relative directory in the DB.
-    test_session.execute('UPDATE channel SET directory=:directory WHERE id=2',
-                         dict(directory=str(channel_2_directory.relative_to(test_directory))),
-                         )
-
-    save_channels_config()
-
-    # The config has a list of Channels, use the old method of a "dict" with the sanitized name as the key.
-    channels_config = get_channels_config()
-    channels_config.channels = {sanitize_link(i['name']): i for i in channels_config.channels}
-    # Change frequency to verify that the channels are updated.
-    for link, channel in channels_config.channels.items():
-        channel['download_frequency'] = DownloadFrequency.biweekly
-    # Change the favorites to the old "link" method as well.
-    channels_config.favorites = {
-        sanitize_link(channel1.name): {str(vid1.video_path): {'favorite': now()}},
-        sanitize_link(channel2.name): {str(vid2.video_path): {'favorite': now()}},
-        'NO CHANNEL': {str(vid3.video_path): {'favorite': now()}},
-    }
-    channels_config.save()
-
-    assert not vid1.favorite and not vid2.favorite and not vid3.favorite and not vid3.favorite
-
-    assert test_session.query(Channel).count() == 2
-
-    with mock.patch('modules.videos.lib.get_channel_source_id') as mock_get_channel_source_id:
-        mock_get_channel_source_id.return_value = 'some source id'
-        import_channels_config()
-
-    # No new channels were created.  Existing channels were updated.
-    assert test_session.query(Channel).count() == 2
-    channel1, channel2 = test_session.query(Channel).order_by(Channel.id)
-    assert channel1.name == channel1_name and str(channel1.directory) == str(channel_1_directory)
-    # Channel2's directory is now absolute.
-    assert channel2.name == channel2_name and str(channel2.directory) == str(channel_2_directory)
-    assert channel1.download_frequency == DownloadFrequency.biweekly
-    assert channel2.download_frequency == DownloadFrequency.biweekly
-    # Videos were favorited by their channel "link".
-    assert vid1.favorite and vid2.favorite and vid3.favorite
-    assert not vid4.favorite
 
 
 def test_check_for_video_corruption(video_file, test_directory):

@@ -19,6 +19,7 @@ import {useChannel} from "../hooks/customHooks";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, darkTheme, Header, Icon, Segment, Tab, TabPane} from "./Theme";
 import {VideoCard} from "./Videos";
+import {TagsDisplay} from "../Tags";
 
 const MEDIA_PATH = '/media';
 
@@ -26,6 +27,7 @@ const MEDIA_PATH = '/media';
 function videoFileLink(path, directory = false) {
     if (path) {
         const href = directory ?
+            // Add / to end of directory.
             `${MEDIA_PATH}/${encodeURIComponent(path)}/` :
             `${MEDIA_PATH}/${encodeURIComponent(path)}`;
         return <a href={href} target='_blank' rel='noopener noreferrer'>
@@ -36,7 +38,7 @@ function videoFileLink(path, directory = false) {
     }
 }
 
-function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
+function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     const {theme} = useContext(ThemeContext);
 
     const navigate = useNavigate();
@@ -84,29 +86,11 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
     let vttCaptions = video.caption_path && video.caption_path.endsWith('.vtt');
 
     let description = 'No description available.';
-    let viewCount = video.view_count;
-    if (video.info_json && video.info_json['description']) {
+    if (video && video['description']) {
         // Only replace empty description if there is one available.
-        description = video.info_json['description'];
+        description = video['description'];
         description = chaptersInDescription(description, setVideoTime)
-        viewCount = viewCount || video.info_json['view_count'];
     }
-
-    const favorite = video && video.favorite;
-    let handleFavorite = async (e) => {
-        e.preventDefault();
-        if (video) {
-            setFavorite(!favorite);
-        }
-    }
-    const favorite_button = (<Button
-        color='green'
-        style={{'margin': '0.5em'}}
-        onClick={handleFavorite}
-    >
-        <Icon name='heart'/>
-        {favorite ? 'Unfavorite' : 'Favorite'}
-    </Button>);
 
     let descriptionPane = {
         menuItem: 'Description', render: () => <TabPane>
@@ -119,13 +103,13 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
     let aboutPane = {
         menuItem: 'About', render: () => <TabPane>
             <h3>Size</h3>
-            <p>{video.size ? humanFileSize(video.size) : 'Unknown'}</p>
+            <p>{videoFile.size ? humanFileSize(videoFile.size) : 'Unknown'}</p>
 
             <h3>Source URL</h3>
             <p>{video.url ? <a href={video.url}>{video.url}</a> : 'N/A'}</p>
 
             <h3>View Count</h3>
-            <p>{viewCount ? humanNumber(viewCount) : 'N/A'}</p>
+            <p>{video.view_count ? humanNumber(video.view_count) : 'N/A'}</p>
 
             <h3>Censored</h3>
             <p>{video.censored ? 'Yes' : 'No'}</p>
@@ -138,25 +122,30 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
         </TabPane>
     };
 
+    const {poster_file, caption_files, info_json_file} = video;
     let filesPane = {
         menuItem: 'Files', render: () => <TabPane>
             <h3>Video File</h3>
             {videoFileLink(video['video_path'])}
 
             <h4>Info JSON File</h4>
-            <PreviewPath
-                path={video['info_json_path']}
-                mimetype='application/json'>{video['info_json_path']}</PreviewPath>
+            {info_json_file &&
+                <PreviewPath
+                    path={info_json_file['path']}
+                    mimetype={info_json_file['mimetype']}>{info_json_file['path']}</PreviewPath>
+            }
 
-            <h4>Caption File</h4>
-            <PreviewPath
-                path={video['caption_path']}
-                mimetype='text/'>{video['caption_path']}</PreviewPath>
+            <h4>Caption Files</h4>
+            {caption_files &&
+                caption_files.map(i => <PreviewPath key={i['path']} {...i}>{i['path']}</PreviewPath>)
+            }
 
             <h4>Poster File</h4>
-            <PreviewPath
-                path={video['poster_path']}
-                mimetype='image/'>{video['poster_path']}</PreviewPath>
+            {poster_file &&
+                <PreviewPath
+                    path={poster_file['path']}
+                    mimetype={poster_file['mimetype']}>{poster_file['path']}</PreviewPath>
+            }
 
             <h4>Directory</h4>
             {videoFileLink(videoFile['directory'], true)}
@@ -188,7 +177,7 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
         <Container style={{marginTop: '1em'}}>
             <Segment>
 
-                <Header as='h2'>{video.title || video.video_path}</Header>
+                <Header as='h2'>{videoFile.title || videoFile.stem || video.video_path}</Header>
                 {video.upload_date && <h3>{isoDatetimeToString(video.upload_date)}</h3>}
                 <h3>
                     {channel && <Link to={`/videos/channel/${channel.id}/video`}>
@@ -197,7 +186,6 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
                 </h3>
 
                 <p>
-                    {favorite_button}
                     <a href={downloadUrl} target='_blank' rel='noopener noreferrer'>
                         <Button style={{margin: '0.5em'}}>
                             <Icon name='download'/>
@@ -217,6 +205,11 @@ function VideoPage({videoFile, prevFile, nextFile, setFavorite, ...props}) {
                         onConfirm={() => handleDeleteVideo(video.id)}
                     />
                 </p>
+                <br/>
+            </Segment>
+
+            <Segment>
+                <TagsDisplay fileGroup={videoFile} onClick={fetchVideo}/>
             </Segment>
 
             <Tab menu={tabMenu} panes={tabPanes}/>

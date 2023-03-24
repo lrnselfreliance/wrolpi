@@ -30,12 +30,16 @@ class Events:
         send_event('global_refresh_modeling_completed', message, subject='refresh')
 
     @staticmethod
+    def send_global_refresh_discovery_completed(message: str = None):
+        send_event('global_refresh_discovery_completed', message, subject='refresh')
+
+    @staticmethod
     def send_global_refresh_indexing_completed(message: str = None):
         send_event('global_refresh_indexing_completed', message, subject='refresh')
 
     @staticmethod
-    def send_global_refresh_delete_completed(message: str = None):
-        send_event('global_refresh_delete_completed', message, subject='refresh')
+    def send_global_after_refresh_completed(message: str = None):
+        send_event('global_after_refresh_completed', message, subject='refresh')
 
     @staticmethod
     def send_ready(message: str = None):

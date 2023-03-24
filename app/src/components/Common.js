@@ -1,5 +1,5 @@
 import React, {useContext, useEffect, useState} from "react";
-import {Card, Container, IconGroup, Input, Modal, Pagination} from 'semantic-ui-react';
+import {Card, Container, IconGroup, Image, Input, Modal, Pagination} from 'semantic-ui-react';
 import {Link, NavLink, useNavigate} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDirectories, useDownloaders, useHotspot, useSettings, useThrottle} from "../hooks/customHooks";
@@ -117,7 +117,7 @@ export function Duration({video}) {
 
 export function isoDatetimeToString(dt) {
     // Convert a datetime to a human-readable date format.
-    let d = <></>;
+    let d = <React.Fragment/>;
     if (dt) {
         d = new Date(dt);
         d = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
@@ -444,8 +444,8 @@ export function CardGroupCentered(props) {
 export function CardPosterLink({to, poster_url, imageLabel, external = false}) {
     const {s} = useContext(ThemeContext);
     const style = {display: 'flex', justifyContent: 'center', ...s['style']};
-    const image = <img src={poster_url} alt={imageLabel}
-                       style={{maxHeight: '163px', width: 'auto'}}
+    const image = <Image src={poster_url} label={imageLabel}
+                         style={{maxHeight: '163px', width: 'auto'}}
     />;
     if (external === true && to) {
         return <a href={to} target='_blank' rel='noreferrer' style={style}>
@@ -461,12 +461,12 @@ export function CardPosterLink({to, poster_url, imageLabel, external = false}) {
     }
 }
 
-export function HelpPopup({icon, size, content, position}) {
+export function HelpPopup({icon, size, content, position, iconSize = 'small'}) {
     return <Popup
         content={content}
         size={size || null}
         position={position || 'left center'}
-        trigger={<Icon circular link name={icon || 'question'} size='small'
+        trigger={<Icon circular link name={icon || 'question'} size={iconSize}
                        style={{marginLeft: '0.25em', marginRight: '0.25em'}}
         />}
     />
@@ -616,8 +616,9 @@ export function isZipMimetype(mimetype) {
 
 export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
     // Default to a grey file icon.
-    const {mimetype, path} = file;
-    const lowerPath = path.toLowerCase();
+    const {mimetype, path, primary_path} = file;
+    // `file` may be a file_group or a file.
+    const lowerPath = primary_path ? primary_path.toLocaleString() : path.toLowerCase();
     props['name'] = 'file';
     props['color'] = mimetypeColor(mimetype);
     if (mimetype) {
@@ -850,4 +851,26 @@ export const toLocaleString = (num, locale = 'en-US') => {
 export const cardTitleWrapper = (title, maxLength = 100, breakWord = true) => {
     const style = breakWord ? {overflowWrap: 'break-word'} : null;
     return <span style={style}>{textEllipsis(title, maxLength)}</span>
+}
+
+function luma(color) {
+    let rgb = (typeof color === 'string') ? hexToRGBArray(color) : color;
+    return (0.2126 * rgb[0]) + (0.7152 * rgb[1]) + (0.0722 * rgb[2]); // SMPTE C, Rec. 709 weightings
+}
+
+function hexToRGBArray(color) {
+    if (color.length === 7) {
+        color = color.slice(1);
+    }
+    if (color.length !== 6) {
+        console.error('Invalid hex color: ' + color);
+        return;
+    }
+    let rgb = [];
+    for (let i = 0; i <= 2; i++) rgb[i] = parseInt(color.substr(i * 2, 2), 16);
+    return rgb;
+}
+
+export function contrastingColor(color) {
+    return (luma(color) >= 120) ? '#000000' : '#dddddd';
 }

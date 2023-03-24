@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
 
@@ -30,9 +30,10 @@ class ArchiveSearchRequest:
     offset: Optional[int] = None
     limit: Optional[int] = None
     order_by: Optional[str] = None
+    tag_names: List[str] = field(default_factory=list)
 
 
 @dataclass
 class ArchiveSearchResponse:
-    videos: List[ArchiveDict]
+    file_groups: List[ArchiveDict]
     totals: dict

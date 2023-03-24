@@ -152,6 +152,14 @@ class UnknownArchive(APIError):
     pass
 
 
+class UnknownTag(APIError):
+    pass
+
+
+class UsedTag(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -334,5 +342,15 @@ API_ERRORS = {
         'code': next(error_codes),
         'message': 'Unable to find the archive',
         'status': HTTPStatus.NOT_FOUND,
-    }
+    },
+    UnknownTag: {
+        'code': next(error_codes),
+        'message': 'Unable to find the tag',
+        'status': HTTPStatus.NOT_FOUND,
+    },
+    UsedTag: {
+        'code': next(error_codes),
+        'message': 'Tag is being used',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
 }

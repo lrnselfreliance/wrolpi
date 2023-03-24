@@ -1,12 +1,12 @@
 import json
 import shutil
 from http import HTTPStatus
-from unittest import mock
 
 import pytest
 
-from wrolpi.files.ebooks import EBook, MOBI_MIMETYPE, EPUB_MIMETYPE
+from wrolpi.files.ebooks import EBook, EPUB_MIMETYPE
 from wrolpi.files.lib import refresh_files
+from wrolpi.files.models import FileGroup
 from wrolpi.test.common import assert_dict_contains
 
 
@@ -17,38 +17,53 @@ async def test_index(test_session, test_directory, example_epub, example_mobi):
     Covers can be discovered."""
     await refresh_files()
 
-    ebook_epub, ebook_mobi = test_session.query(EBook).order_by(EBook.ebook_path)
-    ebook_epub: EBook
-    ebook_mobi: EBook
+    ebook: EBook = test_session.query(EBook).one()
 
-    assert ebook_epub.title == 'WROLPi Test Book'
-    assert ebook_epub.ebook_file.mimetype.startswith(EPUB_MIMETYPE)
-    assert ebook_epub.creator == 'roland'
-    assert ebook_epub.size == ebook_epub.ebook_file.size
-    assert ebook_epub.cover_path and ebook_epub.cover_path.is_file()
-    # The cover is the WROLPi logo.
-    assert ebook_epub.cover_file.size == 297099
+    assert ebook.file_group.title == 'WROLPi Test Book'
+    assert ebook.file_group.mimetype.startswith(EPUB_MIMETYPE)
+    assert ebook.creator == 'roland'
+    assert ebook.size == 292579
+    assert ebook.file_group.data == {'creator': 'roland', 'title': 'WROLPi Test Book',
+                                     'cover_path': test_directory / 'example.jpeg',
+                                     'ebook_path': test_directory / 'example.epub',
+                                     }
 
-    assert ebook_epub.ebook_file.a_text, 'Book title was not indexed'
-    assert ebook_epub.ebook_file.b_text, 'Book creator was not indexed'
-    assert ebook_epub.ebook_file.d_text, 'Book text was not indexed'
-
-    # Mobi is not fully supported, title is the file name.  No creator or cover.
-    assert ebook_mobi.title == 'example'
-    assert ebook_mobi.ebook_file.mimetype == MOBI_MIMETYPE
-    assert not ebook_mobi.creator
-    assert not ebook_mobi.cover_path
+    assert ebook.file_group.a_text, 'Book title was not indexed'
+    assert ebook.file_group.b_text, 'Book creator was not indexed'
+    assert ebook.file_group.d_text, 'Book text was not indexed'
+    # Both ebooks are assumed to be the same book, but different formats.
+    assert (epubs := ebook.file_group.my_files('application/epub+zip')) and len(epubs) == 1 \
+           and epubs[0]['path'] == example_epub
+    assert (mobis := ebook.file_group.my_files('application/x-mobipocket-ebook')) and len(mobis) == 1 \
+           and mobis[0]['path'] == example_mobi
+    # Cover was discovered.
+    assert len(ebook.file_group.my_poster_files()) == 1
+    # EPUB, MOBI, JPEG.
+    assert len(ebook.file_group.files) == 3
 
     # Ebooks can be deleted during refresh.
-    example_mobi.unlink()
     example_epub.unlink()
     await refresh_files()
-    assert test_session.query(EBook).count() == 0
+    assert test_session.query(EBook).count() == 1
+    assert not ebook.file_group.my_files('application/epub+zip')
+    assert (mobis := ebook.file_group.my_files('application/x-mobipocket-ebook')) and len(mobis) == 1 \
+           and mobis[0]['path'] == example_mobi
+    # Cover was discovered.
+    assert len(ebook.file_group.my_poster_files()) == 1
+    # MOBI, JPEG.
+    assert len(ebook.file_group.files) == 2
 
-    # Extract/index should only be done once.
-    with mock.patch('wrolpi.files.ebooks.extract_ebook_data') as mock_extract_ebook_data:
-        mock_extract_ebook_data.side_effect = Exception('extract_ebook_data should not be called again')
-        await refresh_files()
+
+@pytest.mark.asyncio
+async def test_discover_local_cover(test_session, test_directory, example_epub, image_bytes_factory):
+    cover_path = example_epub.with_suffix('.jpg')
+    cover_path.write_bytes(image_bytes_factory())
+    await refresh_files()
+
+    ebook: EBook = test_session.query(EBook).one()
+
+    # Cover file near the eBook was discovered.
+    assert ebook.cover_path.read_bytes() == cover_path.read_bytes()
 
 
 def test_search(test_session, test_client, example_epub):
@@ -59,75 +74,59 @@ def test_search(test_session, test_client, example_epub):
     assert test_session.query(EBook).count() == 1
 
     ebook: EBook = test_session.query(EBook).one()
-    assert ebook.title == 'WROLPi Test Book'
+    assert ebook.file_group.title == 'WROLPi Test Book'
     assert ebook.creator == 'roland'
-    assert ebook.ebook_file.a_text == 'WROLPi Test Book', 'Book title was not updated'
-    assert ebook.ebook_file.d_text, 'Book was not indexed'
+    assert ebook.file_group.a_text == 'WROLPi Test Book', 'Book title was not updated'
+    assert ebook.file_group.d_text, 'Book was not indexed'
 
     content = dict(mimetypes=['application/epub', 'application/x-mobipocket-ebook'])
     request, response = test_client.post('/api/files/search', content=json.dumps(content))
     assert response.status == HTTPStatus.OK
     assert response.json
-    result = response.json['files'][0]
-    assert result['path'] == 'example.epub'
-    assert result['mimetype'] == 'application/epub+zip'
+    file_group = response.json['file_groups'][0]
+    epub_file = file_group['files'][0]
+    assert epub_file['path'] == 'example.epub' and epub_file['mimetype'] == 'application/epub+zip'
     assert_dict_contains(
-        result['ebook'],
-        {'cover_path': 'example.jpeg', 'ebook_path': 'example.epub'},
+        file_group['data'],
+        {'cover_path': 'example.jpeg', 'ebook_path': 'example.epub', 'title': 'WROLPi Test Book', 'creator': 'roland'},
     )
 
-    content = dict(mimetypes=['application/epub+zip', 'application/x-mobipocket-ebook'])
-    request, response = test_client.post('/api/files/search', content=json.dumps(content))
-    result = response.json['files'][0]
-    assert result['path'] == 'example.epub'
-    assert result['mimetype'] == 'application/epub+zip'
-
-    content = dict(mimetypes=[])
+    # No Mobi ebook.
+    content = dict(mimetypes=['application/x-mobipocket-ebook'])
     request, response = test_client.post('/api/files/search', content=json.dumps(content))
     assert response.status == HTTPStatus.OK
     assert response.json
+    assert len(response.json['file_groups']) == 0
 
 
 @pytest.mark.asyncio
-async def test_discover_calibre_cover(test_session, test_directory, example_epub, image_file):
+async def test_discover_calibre_cover(test_session, test_directory, example_epub, example_mobi, image_file):
     """Calibre puts a cover near an ebook file, test if it can be found."""
-    # Create two files in the
+    # Create a Calibre metadata file.
     metadata = test_directory / 'metadata.opf'
     metadata.touch()
-    # Create an alternate format next to the epub.  This will be ignored because it is not yet supported.
-    mobi_path = example_epub.with_suffix('.mobi')
-    mobi_path.touch()
 
     await refresh_files()
 
     assert test_session.query(EBook).count() == 1
     ebook: EBook = test_session.query(EBook).one()
-    assert ebook.title == 'WROLPi Test Book'
+    assert ebook.file_group.title == 'WROLPi Test Book'
     # The cover in the ebook was extracted.
-    assert ebook.cover_file.size == 297099
+    assert ebook.cover_file['path'] == test_directory / 'example.jpeg'
+    assert (test_directory / 'example.jpeg').is_file()
 
     # Delete the extracted cover, use the cover image from Calibre.
-    ebook.cover_path.unlink()
-    test_session.delete(ebook.cover_file)
+    (test_directory / 'example.jpeg').unlink()
     cover_image = test_directory / 'cover.jpg'
     shutil.move(image_file, cover_image)
+
+    # Reset files.
+    for file_group in test_session.query(FileGroup):
+        test_session.delete(file_group)
+    test_session.commit()
 
     # Calibre cover image was discovered, no cover was generated.
     await refresh_files()
     ebook: EBook = test_session.query(EBook).one()
-    assert ebook.title == 'WROLPi Test Book'
-    assert ebook.cover_file.size == 641
-
-    # Create a file nearby, its no longer a Calibre directory.
-    mobi_path = mobi_path.rename(test_directory / 'other book.mobi')
-    await refresh_files()
-    assert ebook.title == 'WROLPi Test Book'
-    assert ebook.cover_file.size == 297099
-    mobi_path.unlink()
-
-    # Delete the discovered cover, cover should be generated.
-    cover_image.unlink()
-    await refresh_files()
-    ebook: EBook = test_session.query(EBook).one()
-    assert ebook.title == 'WROLPi Test Book'
-    assert ebook.cover_file.size == 297099
+    assert ebook.file_group.title == 'WROLPi Test Book'
+    assert ebook.cover_file['path'] == test_directory / 'cover.jpg'

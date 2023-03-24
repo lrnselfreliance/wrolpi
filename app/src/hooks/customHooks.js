@@ -1,6 +1,5 @@
 import {useContext, useEffect, useRef, useState} from "react";
 import {
-    favoriteVideo,
     fetchDomains,
     filesSearch,
     getArchive,
@@ -81,17 +80,17 @@ export const useDomains = () => {
 }
 
 export const useArchive = (archiveId) => {
-    const [archiveFile, setArchiveFile] = useState(null);
+    const [archiveFileGroup, setArchiveFileGroup] = useState(null);
     const [history, setHistory] = useState(null);
 
     const fetchArchive = async () => {
         try {
-            const [file, history] = await getArchive(archiveId);
-            setArchiveFile(file);
+            const [file_group, history] = await getArchive(archiveId);
+            setArchiveFileGroup(file_group);
             setHistory(history);
         } catch (e) {
             console.error(e);
-            setArchiveFile(undefined);
+            setArchiveFileGroup(undefined);
         }
     }
 
@@ -99,7 +98,7 @@ export const useArchive = (archiveId) => {
         fetchArchive();
     }, [archiveId]);
 
-    return {archiveFile, history};
+    return {archiveFile: archiveFileGroup, history, fetchArchive};
 }
 
 export const useQuery = () => {
@@ -152,6 +151,7 @@ export const useSearchArchives = (defaultLimit, domain, order_by) => {
     const {searchParams, updateQuery} = useQuery();
     const searchStr = searchParams.get('q') || '';
     const order = searchParams.get('order') || order_by;
+    const activeTags = searchParams.get('tag');
 
     const [archives, setArchives] = useState(null);
     const [totalPages, setTotalPages] = useState(0);
@@ -160,7 +160,7 @@ export const useSearchArchives = (defaultLimit, domain, order_by) => {
         setArchives(null);
         setTotalPages(0);
         try {
-            let [archives_, total] = await searchArchives(offset, limit, domain, searchStr, order);
+            let [archives_, total] = await searchArchives(offset, limit, domain, searchStr, order, activeTags);
             setArchives(archives_);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
@@ -177,7 +177,7 @@ export const useSearchArchives = (defaultLimit, domain, order_by) => {
 
     useEffect(() => {
         localSearchArchives();
-    }, [searchStr, limit, domain, order, activePage]);
+    }, [searchStr, limit, domain, order, activePage, activeTags]);
 
     const setSearchStr = (value) => {
         updateQuery({q: value, o: 0, order: undefined});
@@ -204,11 +204,12 @@ export const useSearchArchives = (defaultLimit, domain, order_by) => {
     }
 }
 
-export const useSearchVideos = (defaultLimit, channelId, order_by, filters) => {
+export const useSearchVideos = (defaultLimit, channelId, order_by) => {
     const {searchParams, updateQuery} = useQuery();
     const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit)
     const searchStr = searchParams.get('q') || '';
     const order = searchParams.get('order') || order_by;
+    const activeTags = searchParams.get('tag');
 
     const [videos, setVideos] = useState();
     const [totalPages, setTotalPages] = useState(0);
@@ -217,7 +218,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by, filters) => {
         setVideos(null);
         setTotalPages(0);
         try {
-            let [videos_, total] = await searchVideos(offset, limit, channelId, searchStr, order, filters);
+            let [videos_, total] = await searchVideos(offset, limit, channelId, searchStr, order, activeTags);
             setVideos(videos_);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
@@ -234,7 +235,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by, filters) => {
 
     useEffect(() => {
         localSearchVideos();
-    }, [searchStr, limit, channelId, offset, order_by, filters.join('')]);
+    }, [searchStr, limit, channelId, offset, order_by, activeTags]);
 
     const setSearchStr = (value) => {
         updateQuery({q: value, o: 0, order: undefined});
@@ -258,6 +259,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by, filters) => {
         setSearchStr,
         setOrderBy,
         fetchVideos: localSearchVideos,
+        activeTags,
     }
 }
 
@@ -292,24 +294,11 @@ export const useVideo = (videoId) => {
         }
     }
 
-    const setFavorite = async (value) => {
-        if (!videoFile) {
-            console.error('No video to favorite');
-            return
-        }
-        try {
-            await favoriteVideo(videoFile.video.id, value);
-            fetchVideo();
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
     useEffect(() => {
         fetchVideo();
     }, [videoId]);
 
-    return {videoFile, prevFile, nextFile, setFavorite};
+    return {videoFile, prevFile, nextFile, fetchVideo};
 }
 
 export const useChannel = (channel_id) => {
@@ -394,22 +383,23 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
     const searchStr = searchParams.get('q');
     const filter = searchParams.get('filter');
     const model_ = searchParams.get('model');
+    const activeTags = searchParams.get('tag');
 
     const [searchFiles, setSearchFiles] = useState(null);
     const [totalPages, setTotalPages] = useState(0);
     const [activePage, setActivePage] = useState(calculatePage(offset, limit));
 
     const localSearchFiles = async () => {
-        if (!emptySearch && !searchStr) {
+        if (!emptySearch && !searchStr && !activeTags) {
             return;
         }
         const mimetypes = filterToMimetypes(filter);
         setSearchFiles(null);
         setTotalPages(0);
         try {
-            let [files, total] = await filesSearch(
-                offset, limit, searchStr, mimetypes, model || model_);
-            setSearchFiles(files);
+            let [file_groups, total] = await filesSearch(
+                offset, limit, searchStr, mimetypes, model || model_, activeTags);
+            setSearchFiles(file_groups);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
             console.error(e);
@@ -424,7 +414,7 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
 
     useEffect(() => {
         localSearchFiles();
-    }, [searchStr, limit, offset, activePage, filter, model, model_]);
+    }, [searchStr, limit, offset, activePage, filter, model, model_, activeTags]);
 
     const setPage = (i) => {
         i = parseInt(i);
@@ -442,7 +432,7 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
         updateQuery({l: value, o: 0});
     }
 
-    return {searchFiles, totalPages, limit, searchStr, filter, setSearchStr, activePage, setPage, setLimit};
+    return {searchFiles, totalPages, limit, searchStr, filter, setSearchStr, activePage, setPage, setLimit, activeTags};
 }
 
 export const useBrowseFiles = () => {

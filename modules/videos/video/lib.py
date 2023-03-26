@@ -39,7 +39,7 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
 
 VIDEO_ORDERS = {
     'upload_date': 'v.upload_date ASC, LOWER(fg.primary_path) ASC',
-    '-upload_date': 'v.upload_date DESC NULLS LAST, LOWER(fg.primary_path) DESC',
+    '-upload_date': 'v.upload_date DESC NULLS LAST, LOWER(fg.primary_path) ASC',
     'rank': '2 DESC, LOWER(fg.primary_path) DESC',
     '-rank': '2 ASC, LOWER(fg.primary_path) ASC',
     'id': 'fg.id ASC',

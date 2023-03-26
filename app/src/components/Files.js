@@ -139,7 +139,10 @@ function FileCard({file}) {
     }
 
     const {data} = file;
-    const {author} = data;
+    let author;
+    if (data) {
+        author = data['author'];
+    }
     const downloadUrl = `/download/${encodeURIComponent(file.primary_path)}`;
     const color = mimetypeColor(file.mimetype);
     const size = file.size !== null && file.size !== undefined ? humanFileSize(file.size) : null;
@@ -153,7 +156,7 @@ function FileCard({file}) {
         <CardContent {...s}>
             <CardHeader>
                 <ExternalCardLink to={downloadUrl}>
-                    {cardTitleWrapper(file.title || file.stem || file.primary_path)}
+                    {cardTitleWrapper(file.title || file.name || file.primary_path)}
                 </ExternalCardLink>
             </CardHeader>
             {author && <b {...s}>{author}</b>}

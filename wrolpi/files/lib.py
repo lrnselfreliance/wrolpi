@@ -688,7 +688,8 @@ def get_file_statistics():
     with get_db_curs() as curs:
         curs.execute('''
         SELECT
-            COUNT(id) AS "total_count",
+            -- All items in file_group.files are real individual files.
+            SUM(json_array_length(files)) AS "total_count",
             COUNT(id) FILTER (WHERE file_group.mimetype = 'application/pdf') AS "pdf_count",
             COUNT(id) FILTER (WHERE file_group.mimetype = 'application/zip') AS "zip_count",
             COUNT(id) FILTER (WHERE file_group.mimetype LIKE 'video/%') AS "video_count",

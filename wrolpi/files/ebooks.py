@@ -213,14 +213,14 @@ def _model_ebook(ebook: EBook) -> EBook:
     size = ebook_file.stat().st_size
 
     # Only index if it hasn't been done, or if the file has changed.
-    changed = size != ebook.size or not ebook.title
+    changed = size != ebook.size or not ebook.file_group.title
     if epub_file and changed:
         # Only read the contents of the file if it has changed.
         try:
             data = extract_ebook_data(ebook_file, ebook_mimetype)
             if data:
                 # Title is a_text.
-                ebook.file_group.title = ebook.file_group.a_text = ebook.title = data.title
+                ebook.file_group.title = ebook.file_group.a_text = data.title
                 # Creator is b_text.
                 ebook.file_group.b_text = ebook.creator = data.creator
                 # All text is d_text.
@@ -282,7 +282,7 @@ async def ebook_modeler():
                     file_group.model = EBook.__tablename__
                     file_group.indexed = True
                 except Exception as e:
-                    logger.error(f'Failed to index ebook {file_group}')
+                    logger.error(f'Failed to index ebook {file_group}', exc_info=e)
                     if PYTEST:
                         raise
 

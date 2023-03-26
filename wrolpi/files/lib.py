@@ -336,8 +336,7 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
             curs.execute(stmt)
             need_index = [i[0] for i in curs.fetchall() if i[1] is False]
             if need_index:
-                logger.info(f'Invalidated indexes of {len(need_index)} file groups')
-                logger.debug(f'Invalidated indexes of file groups {need_index}')
+                refresh_logger.info(f'Invalidated indexes of {len(need_index)} file groups')
 
 
 async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetime.datetime = None):
@@ -398,7 +397,7 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
                 -- Delete any files in the refreshed paths that were not updated.
                 {" OR " + wheres if deleted_files else wheres}
         '''
-        logger.debug(stmt)
+        refresh_logger.debug(stmt)
         curs.execute(stmt)
 
 

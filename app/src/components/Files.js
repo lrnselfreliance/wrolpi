@@ -41,7 +41,7 @@ import {FileBrowser} from "./FileBrowser";
 import {refreshDirectoryFiles, refreshFiles} from "../api";
 import {useSubscribeEventName} from "../Events";
 import {FilePreviewContext} from "./FilePreview";
-import {TagsContext} from "../Tags";
+import {taggedImageLabel, TagsContext} from "../Tags";
 
 
 export function FilesPage() {
@@ -121,6 +121,18 @@ function ImageCard({file}) {
     </Card>
 }
 
+function findPosterPath(files) {
+    if (_.isEmpty(files)) {
+        return;
+    }
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file['mimetype'] && file['mimetype'].startsWith('image/')) {
+            return file['path'];
+        }
+    }
+}
+
 function FileCard({file}) {
     const {s} = useContext(ThemeContext);
 
@@ -138,7 +150,7 @@ function FileCard({file}) {
         return <EbookCard key={file['primary_path']} file={file}/>;
     }
 
-    const {data} = file;
+    const {data, tags} = file;
     let author;
     if (data) {
         author = data['author'];
@@ -147,11 +159,17 @@ function FileCard({file}) {
     const color = mimetypeColor(file.mimetype);
     const size = file.size !== null && file.size !== undefined ? humanFileSize(file.size) : null;
 
+    const posterFile = findPosterPath(file['files']);
+    let poster = <CardIcon><FileIcon file={file}/></CardIcon>;
+    let imageLabel = !_.isEmpty(tags) ? taggedImageLabel : null;
+    if (posterFile) {
+        const posterUrl = `/media/${encodeURIComponent(posterFile)}`;
+        poster = <CardPosterLink to={downloadUrl} poster_url={posterUrl} imageLabel={imageLabel}/>;
+    }
+
     return <Card color={color}>
         <PreviewLink file={file}>
-            <CardIcon>
-                <FileIcon file={file}/>
-            </CardIcon>
+            {poster}
         </PreviewLink>
         <CardContent {...s}>
             <CardHeader>

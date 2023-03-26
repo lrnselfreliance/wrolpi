@@ -183,7 +183,7 @@ class EBook(ModelHelper, Base):
             cover_path.write_bytes(cover_bytes)
             return cover_path
 
-        logger.warning(f'Unable to generate cover for {self.ebook_path}')
+        logger.warning(f'Unable to generate ebook cover for {self.file_group.primary_path}')
 
     @property
     def cover_file(self) -> Optional[dict]:
@@ -236,8 +236,9 @@ def _model_ebook(ebook: EBook) -> EBook:
         else:
             # Extract cover because there is no cover file.
             cover_path = ebook.generate_cover()
-            ebook.file_group.append_files(cover_path)
-            ebook.file_group.data['cover_path'] = str(cover_path)
+            if cover_path:
+                ebook.file_group.append_files(cover_path)
+                ebook.file_group.data['cover_path'] = str(cover_path)
 
     if not ebook.file_group.title:
         # Book was not indexed above (probably a MOBI), use the file data.

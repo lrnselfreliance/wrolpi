@@ -66,6 +66,16 @@ async def test_discover_local_cover(test_session, test_directory, example_epub, 
     assert ebook.cover_path.read_bytes() == cover_path.read_bytes()
 
 
+@pytest.mark.asyncio
+async def test_extract_cover(test_session, test_directory, example_epub):
+    """First image is extracted from the Ebook and used as the cover."""
+    await refresh_files()
+
+    ebook: EBook = test_session.query(EBook).one()
+    # The WROLPi logo is the first image in the example epub.
+    assert ebook.cover_path and ebook.cover_path.stat().st_size == 297099
+
+
 def test_search(test_session, test_client, example_epub):
     """Ebooks are handled in File search results."""
     request, response = test_client.post('/api/files/refresh')

@@ -82,7 +82,7 @@ def search_videos(
 ) -> Tuple[List[dict], int]:
     tag_names = tag_names or []
     # Only search videos.
-    wheres = ["fg.model = 'video'"]
+    wheres = ["fg.mimetype LIKE 'video/%%'"]
     joins = list()
     join_video = False
 

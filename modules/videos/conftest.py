@@ -224,7 +224,7 @@ def assert_video_search(test_client):
 
     If assert_* params are passed, the response is checked."""
 
-    def search_videos(
+    def _search_videos(
             assert_total: int = None,
             assert_ids: List[int] = None,
             assert_paths: List[str] = None,
@@ -267,4 +267,4 @@ def assert_video_search(test_client):
 
         return request, response
 
-    return search_videos
+    return _search_videos

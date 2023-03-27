@@ -5,9 +5,10 @@ from cryptography.exceptions import InvalidTag
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship, Session
 
-from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory
+from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task
 from wrolpi.db import optional_session
 from wrolpi.errors import UnknownTag, UsedTag
+from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
@@ -55,7 +56,9 @@ class Tag(ModelHelper, Base):
         session.add(tag_file)
         session.flush([tag_file])
         session.commit()
-        get_tags_config().save_tags(session)
+
+        # Save changes to config.
+        schedule_save(session)
         return tag_file
 
     @optional_session
@@ -73,7 +76,9 @@ class Tag(ModelHelper, Base):
         if tag_file:
             session.delete(tag_file)
             session.commit()
-            get_tags_config().save_tags(session)
+
+            # Save changes to config.
+            schedule_save(session)
         else:
             logger.warning(f'Could not find tag_file for FileGroup.id={file_group.id}/Tag.id={self.id=}')
 
@@ -89,17 +94,18 @@ class TagsConfig(ConfigFile):
     width = 500
 
     default_config = dict(
+        tag_files=list(),
         tags=list(),
     )
 
     @property
-    def tags(self) -> list:
-        return self._config['tags']
+    def tag_files(self) -> list:
+        return self._config['tag_files']
 
-    @tags.setter
-    def tags(self, value):
+    @tag_files.setter
+    def tag_files(self, value):
         value = sorted(value, key=lambda i: (i[0].lower(), i[1]))
-        self.update({'tags': value})
+        self.update({'tag_files': value})
 
     def save_tags(self, session: Session):
         media_directory = get_media_directory()
@@ -109,13 +115,21 @@ class TagsConfig(ConfigFile):
             .filter(TagFile.tag_id == Tag.id, TagFile.file_group_id == FileGroup.id) \
             .order_by(FileGroup.primary_path)
 
-        tags = []
+        tags = dict()
+        tag_rows = session.query(Tag)
+        for tag in tag_rows:
+            tags[tag.name] = dict(color=tag.color)
+
+        tag_files = []
         for tag, _, file_group in results:
             value = [tag.name, str(file_group.primary_path.relative_to(media_directory))]
-            tags.append(value)
+            tag_files.append(value)
 
-        # Write tags to the config.
-        self.tags = tags
+        # Write to the config.
+        self.update({
+            'tag_files': tag_files,
+            'tags': tags,
+        })
 
 
 TAGS_CONFIG: TagsConfig = TagsConfig(global_=True)
@@ -168,3 +182,14 @@ def delete_tag(name: str, session: Session = None):
 
     session.delete(tag)
     session.commit()
+
+
+def schedule_save(session: Session):
+    """Schedule a background task to save all TagFiles to the config file.  If testing, save synchronously."""
+    if PYTEST:
+        get_tags_config().save_tags(session)
+    else:
+        async def _():
+            get_tags_config().save_tags(session)
+
+        background_task(_())

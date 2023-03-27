@@ -1,8 +1,9 @@
 import pytest
 
+from wrolpi import tags
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
-from wrolpi.tags import TagFile, get_tags_config
+from wrolpi.tags import TagFile
 
 
 @pytest.mark.asyncio
@@ -63,6 +64,11 @@ async def test_tags_config_(test_session, test_directory, tag_factory, example_p
     video: FileGroup = FileGroup.find_by_path(video_file, test_session)
     tag1 = tag_factory()
     tag2 = tag_factory()
+    test_session.commit()
+
+    tags.schedule_save(test_session)
+    assert tag1.name in test_tags_config.read_text()
+    assert tag2.name in test_tags_config.read_text()
 
     video.add_tag(tag1)
     assert str(video_file.relative_to(test_directory)) in test_tags_config.read_text()
@@ -89,8 +95,8 @@ async def test_tags_config_(test_session, test_directory, tag_factory, example_p
     assert str(example_pdf.relative_to(test_directory)) not in test_tags_config.read_text()
 
     # No more tags.
-    tags_config = get_tags_config()
-    assert isinstance(tags_config.tags, list) and len(tags_config.tags) == 0
+    tags_config = tags.get_tags_config()
+    assert isinstance(tags_config.tag_files, list) and len(tags_config.tag_files) == 0
 
     # Removing non-existent tag does not error.
     video.remove_tag(tag1)

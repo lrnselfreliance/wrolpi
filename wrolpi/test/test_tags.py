@@ -1,3 +1,6 @@
+import json
+from http import HTTPStatus
+
 import pytest
 
 from wrolpi import tags
@@ -100,3 +103,53 @@ async def test_tags_config_(test_session, test_directory, tag_factory, example_p
 
     # Removing non-existent tag does not error.
     video.remove_tag(tag1)
+
+
+def test_tags_crud(test_session, test_client, example_pdf):
+    """Test API Create/Retrieve/Update/Delete of Tags."""
+    pdf = FileGroup.from_paths(test_session, example_pdf)
+    test_session.add(pdf)
+    test_session.commit()
+
+    # Can get empty tags.
+    request, response = test_client.get('/api/tag')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['tags'] == list()
+
+    # Tags can be created.
+    content = dict(name='foo', color='#123456')
+    request, response = test_client.post('/api/tag', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.CREATED
+
+    # The tag can be retrieved.
+    request, response = test_client.get('/api/tag')
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['tags'] == [dict(name='foo', color='#123456', id=1)]
+
+    # Apply the tag to the PDF.
+    tag = test_session.query(tags.Tag).one()
+    pdf.add_tag(tag, test_session)
+    test_session.commit()
+
+    # The tag can be updated.
+    content = dict(name='bar', color='#000000')
+    request, response = test_client.post('/api/tag/1', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    request, response = test_client.get('/api/tag')
+    assert response.json['tags'] == [dict(name='bar', color='#000000', id=1)]
+
+    # Conflicting names return an error.
+    content = dict(name='bar', color='#111111')
+    request, response = test_client.post('/api/tag', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    # Cannot delete Tag that is used.
+    request, response = test_client.delete('/api/tag/1')
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    pdf.remove_tag(tag, test_session)
+    test_session.commit()
+
+    # Can delete unused Tag.
+    request, response = test_client.delete('/api/tag/1')
+    assert response.status_code == HTTPStatus.NO_CONTENT

@@ -160,6 +160,10 @@ class UsedTag(APIError):
     pass
 
 
+class InvalidTag(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -351,6 +355,11 @@ API_ERRORS = {
     UsedTag: {
         'code': next(error_codes),
         'message': 'Tag is being used',
+        'status': HTTPStatus.BAD_REQUEST,
+    },
+    InvalidTag: {
+        'code': next(error_codes),
+        'message': 'Tag is not allowed',
         'status': HTTPStatus.BAD_REQUEST,
     },
 }

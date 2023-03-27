@@ -25,7 +25,7 @@ from wrolpi.errors import WROLModeEnabled, API_ERRORS, APIError, ValidationError
 from wrolpi.events import get_events
 from wrolpi.files.lib import get_file_statistics
 from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, DownloadRequest, EchoResponse, \
-    EventsRequest, NewTagRequest, DeleteTagRequest
+    EventsRequest, TagRequest
 from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
     truthy_arg
 from wrolpi.version import __version__
@@ -385,17 +385,23 @@ async def get_tags_request(_: Request):
     return json_response(dict(tags=tags_))
 
 
-@api_bp.post('/tag/new')
-@validate(NewTagRequest)
-async def post_new_tag(_: Request, body: NewTagRequest):
-    tags.new_tag(body.name, body.color)
-    return response.empty(HTTPStatus.CREATED)
+@api_bp.post('/tag')
+@api_bp.post('/tag/<tag_id:int>')
+@validate(TagRequest)
+@openapi.definition(
+    summary='Create or update a Tag',
+)
+async def post_new_tag(_: Request, body: TagRequest, tag_id: int = None):
+    tags.upsert_tag(body.name, body.color, tag_id)
+    if tag_id:
+        return response.empty(HTTPStatus.OK)
+    else:
+        return response.empty(HTTPStatus.CREATED)
 
 
-@api_bp.post('/tag/delete')
-@validate(DeleteTagRequest)
-async def delete_tag_request(_: Request, body: DeleteTagRequest):
-    tags.delete_tag(body.name)
+@api_bp.delete('/tag/<tag_id:int>')
+async def delete_tag_request(_: Request, tag_id: int):
+    tags.delete_tag(tag_id)
     return response.empty(HTTPStatus.NO_CONTENT)
 
 
@@ -449,15 +455,19 @@ def json_response(*a, **kwargs) -> HTTPResponse:
     return resp
 
 
-def json_error_handler(request, exception: Exception):
+def json_error_handler(request: Request, exception: Exception):
     error = API_ERRORS[type(exception)]
     if isinstance(exception, ValidationError):
         body = dict(error='Could not validate the contents of the request', code=error['code'])
     else:
         body = dict(message=str(exception), api_error=error['message'], code=error['code'])
     if cause := exception.__cause__:
-        cause = API_ERRORS[type(cause)]
-        body['cause'] = dict(error=cause['message'], code=cause['code'])
+        try:
+            cause = API_ERRORS[type(cause)]
+            body['cause'] = dict(error=cause['message'], code=cause['code'])
+        except KeyError:
+            # Cause was not an APIError.
+            logger.error(f'Could not find cause {cause}')
     return json_response(body, error['status'])
 
 

@@ -1,13 +1,13 @@
 import contextlib
 from typing import List
 
-from cryptography.exceptions import InvalidTag
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import relationship, Session
 
-from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task
+from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, run_after
 from wrolpi.db import optional_session
-from wrolpi.errors import UnknownTag, UsedTag
+from wrolpi.errors import UnknownTag, UsedTag, InvalidTag
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -154,37 +154,7 @@ def test_tags_config():
 
 
 @optional_session
-def get_tags(session: Session) -> List[Tag]:
-    tags = list(session.query(Tag))
-    return tags
-
-
-@optional_session
-def new_tag(name: str, color: str, session: Session) -> Tag:
-    if ',' in name:
-        raise InvalidTag('Tag name cannot have comma')
-
-    tag = Tag(name=name, color=color)
-    session.add(tag)
-    session.flush([tag])
-    session.commit()
-    return tag
-
-
-@optional_session
-def delete_tag(name: str, session: Session = None):
-    tag: Tag = Tag.find_by_name(name, session)
-    if not tag:
-        raise UnknownTag(f'Cannot find tag {name}')
-    if tag.tag_files:
-        count = len(tag.tag_files)
-        raise UsedTag(f'Cannot delete {name} it is used by {count} files!')
-
-    session.delete(tag)
-    session.commit()
-
-
-def schedule_save(session: Session):
+def schedule_save(session: Session = None):
     """Schedule a background task to save all TagFiles to the config file.  If testing, save synchronously."""
     if PYTEST:
         get_tags_config().save_tags(session)
@@ -193,3 +163,51 @@ def schedule_save(session: Session):
             get_tags_config().save_tags(session)
 
         background_task(_())
+
+
+@optional_session
+def get_tags(session: Session) -> List[Tag]:
+    tags = list(session.query(Tag).order_by(Tag.name))
+    return tags
+
+
+@optional_session
+@run_after(schedule_save)
+def upsert_tag(name: str, color: str, tag_id: int = None, session: Session = None) -> Tag:
+    if ',' in name:
+        raise InvalidTag('Tag name cannot have comma')
+
+    if tag_id:
+        tag = session.query(Tag).filter_by(id=tag_id).one_or_none()
+        if not tag:
+            raise UnknownTag(f'Cannot find tag with id={tag_id}')
+        tag.name = name
+        tag.color = color
+    else:
+        tag = Tag(name=name, color=color)
+        session.add(tag)
+
+    try:
+        session.flush([tag])
+        session.commit()
+    except IntegrityError as e:
+        # Conflicting name
+        session.rollback()
+        raise InvalidTag(f'Name already taken') from e
+
+    return tag
+
+
+@optional_session
+def delete_tag(tag_id: int, session: Session = None):
+    tag: Tag = session.query(Tag).filter_by(id=tag_id).one_or_none()
+
+    if not tag:
+        raise UnknownTag(f'Cannot find tag {tag_id}')
+
+    if tag.tag_files:
+        count = len(tag.tag_files)
+        raise UsedTag(f'Cannot delete {tag.name} it is used by {count} files!')
+
+    session.delete(tag)
+    session.commit()

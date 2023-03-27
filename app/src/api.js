@@ -698,26 +698,32 @@ export async function removeTag(fileGroup, name) {
     }
 }
 
-export async function postTag(name, color) {
+export async function saveTag(name, color, id) {
     const body = {name: name, color: color};
-    const uri = `${API_URI}/tag/new`;
+    let uri = `${API_URI}/tag`;
+    if (id) {
+        uri = `${uri}/${id}`;
+    }
     let response = await apiPost(uri, body);
-    if (response.status !== 201) {
+    if (id && response.status === 200) {
+        toast({
+            type: 'info', title: 'Saved tag', description: `Saved tag: ${name}`, time: 2000,
+        });
+    } else if (response.status === 201) {
+        toast({
+            type: 'info', title: 'Created new tag', description: `Created new tag: ${name}`, time: 2000,
+        });
+    } else {
         console.error('Failed to create new tag');
         toast({
             type: 'error', title: 'Error!', description: 'Unable to save tag', time: 5000,
         })
-    } else {
-        toast({
-            type: 'info', title: 'Created new tag', description: `Created new tag: ${name}`, time: 2000,
-        });
     }
 }
 
-export async function deleteTag(name) {
-    const body = {name: name};
-    const uri = `${API_URI}/tag/delete`;
-    let response = await apiPost(uri, body);
+export async function deleteTag(id, name) {
+    const uri = `${API_URI}/tag/${id}`;
+    let response = await apiDelete(uri);
     if (response.status === 400) {
         const content = await response.json();
         if (content['code'] === 38) {

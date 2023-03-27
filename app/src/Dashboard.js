@@ -12,7 +12,7 @@ import {Divider, Icon, Message} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {refreshFiles} from "./api";
 import _ from "lodash";
-import {TagsSegment} from "./Tags";
+import {TagsDashboard} from "./Tags";
 
 function FlagsMessages({flags}) {
     if (!flags) {
@@ -82,7 +82,7 @@ export function Dashboard() {
             {!wrol_mode && downloads}
             {/* Hide Status when user is starting a download */}
             {!downloadOpen && <DashboardStatus/>}
-            <TagsSegment/>
+            <TagsDashboard/>
         </>;
     }
 

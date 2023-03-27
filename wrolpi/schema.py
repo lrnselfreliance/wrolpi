@@ -67,7 +67,7 @@ class EventsRequest:
 
 
 @dataclass
-class NewTagRequest:
+class TagRequest:
     name: str
     color: str
 

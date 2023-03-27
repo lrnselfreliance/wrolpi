@@ -1,19 +1,25 @@
 import React, {useEffect, useState} from "react";
-import {addTag, deleteTag, getTags, postTag, removeTag} from "./api";
+import {addTag, deleteTag, getTags, removeTag, saveTag} from "./api";
 import {
     Button as SButton,
     Confirm,
     Dimmer,
     Divider,
     Form,
-    FormField,
     FormInput,
     Grid,
     Header,
     Label,
+    LabelGroup,
     Loader,
     Loader as SLoader,
     Modal,
+    Table as STable,
+    TableBody,
+    TableCell,
+    TableHeader,
+    TableHeaderCell,
+    TableRow,
 } from "semantic-ui-react";
 import {contrastingColor, HelpPopup} from "./components/Common";
 import {Button, Segment} from "./components/Theme";
@@ -21,7 +27,8 @@ import _ from "lodash";
 import {Link} from "react-router-dom";
 import {HexColorPicker} from "react-colorful";
 
-export const TagsContext = React.createContext({tags: [], fetchTags: null});
+const DEFAULT_TAG_COLOR = '#000000';
+export const TagsContext = React.createContext({tags: [], fetchTags: null, findTagByName: null});
 
 export function useTags() {
     const [tags, setTags] = React.useState(null);
@@ -39,27 +46,37 @@ export function useTags() {
         }
     }
 
-    const NameToTagLabel = ({name, color, to, ...props}) => {
-        if (tags && tags.length) {
-            for (let i = 0; i < tags.length; i++) {
-                const tag = tags[i];
-                if (name === tag['name']) {
-                    const textColor = contrastingColor(tag['color']);
-                    const label = <Label
-                        size='large'
-                        style={{backgroundColor: tag['color'], color: textColor}}
-                        className='clickable'
-                        {...props} // onClick passed here.
-                    >
-                        {name}
-                    </Label>;
-                    return label;
-                }
+    const findTagByName = (name) => {
+        if (!tags || tags.length === 0) {
+            return;
+        }
+        for (let i = 0; i < tags.length; i++) {
+            const tag = tags[i];
+            if (name === tag['name']) {
+                return tag;
             }
         }
+    }
 
-        // Could not find tag by name, or no tags have been fetched.
-        return <Label size='large'>{name}</Label>;
+    const NameToTagLabel = ({name, to, ...props}) => {
+        const defaultTag = <Label size='large'>{name}</Label>;
+        const tag = findTagByName(name);
+        if (tag !== null && tag !== undefined) {
+            const tagColor = tag['color'] || DEFAULT_TAG_COLOR;
+            const textColor = contrastingColor(tagColor);
+            const style = {...props['style'], backgroundColor: tagColor, color: textColor};
+            return <Label
+                size='large'
+                {...props} // onClick passed here.
+                style={style}
+                className='clickable'
+            >
+                {name}
+            </Label>;
+        }
+
+        // No tags have been fetched.
+        return defaultTag;
     }
 
     const TagsGroup = ({tagNames, onClick}) => {
@@ -71,14 +88,14 @@ export function useTags() {
         </Label.Group>
     }
 
-    const TagsLinkGroup = ({tagNames}) => {
+    const TagsLinkGroup = ({tagNames, ...props}) => {
         if (!tagNames || tagNames.length === 0) {
             return <React.Fragment/>;
         }
         return <Label.Group tag>
             {tagNames.map(i =>
-                <Link key={i} to={`/?tag=${i}`} style={{margin: '0.3em'}}>
-                    <NameToTagLabel name={i}/>
+                <Link key={i} to={`/?tag=${i}`} style={{marginLeft: '0.3em', marginRight: '0.3em'}}>
+                    <NameToTagLabel name={i} {...props}/>
                 </Link>
             )}
         </Label.Group>
@@ -89,75 +106,73 @@ export function useTags() {
         fetchTags();
     }, []);
 
-    return {tags, tagNames, NameToTagLabel, TagsGroup, TagsLinkGroup, fetchTags}
+    return {tags, tagNames, NameToTagLabel, TagsGroup, TagsLinkGroup, fetchTags, findTagByName}
 }
 
-function DeleteTagLabel({name, onConfirm}) {
+function EditTagLabel({tag, onDelete, onEdit}) {
     const {NameToTagLabel} = React.useContext(TagsContext);
-    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+    const {name, color, id} = tag;
 
-    return <div style={{marginTop: '1em'}}>
-        <SButton color='red' onClick={() => setConfirmOpen(true)} icon='close'/>
-        <Confirm
-            id={`confirm${name}`}
-            open={confirmOpen}
-            content={`Are you sure you want to delete: ${name}?`}
-            confirmButton='Delete'
-            onCancel={() => setConfirmOpen(false)}
-            onConfirm={async () => onConfirm(name)}
-        />
-        <NameToTagLabel name={name}/>
-        <br/>
-    </div>
+    return <TableRow>
+        <TableCell>
+            <SButton color='red' onClick={() => setConfirmDeleteOpen(true)} icon='close'/>
+            <Confirm
+                id={`confirm${name}`}
+                open={confirmDeleteOpen}
+                content={`Are you sure you want to delete: ${name}?`}
+                confirmButton='Delete'
+                onCancel={() => setConfirmDeleteOpen(false)}
+                onConfirm={async () => onDelete(id, name)}
+            />
+        </TableCell>
+        <TableCell>
+            <SButton primary onClick={() => onEdit(name, color, id)} icon='edit'/>
+        </TableCell>
+        <TableCell>
+            <LabelGroup tag>
+                <NameToTagLabel name={name}/>
+            </LabelGroup>
+        </TableCell>
+    </TableRow>
 }
 
-function DeleteTagModal() {
-    const {fetchTags, tagNames} = React.useContext(TagsContext);
+function EditTagsModal() {
+    const {fetchTags, tags} = React.useContext(TagsContext);
 
     const [open, setOpen] = useState(false);
+    const [tagId, setTagId] = useState(null);
+    const [tagName, setTagName] = useState('');
+    const [tagColor, setTagColor] = useState(DEFAULT_TAG_COLOR);
+    const textColor = contrastingColor(tagColor);
 
-    const localDeleteTag = async (name) => {
-        await deleteTag(name);
+    const localDeleteTag = async (id, name) => {
+        await deleteTag(id, name);
         if (fetchTags) {
             await fetchTags();
         }
     }
 
-    const content = tagNames && tagNames.length ?
-        tagNames.map(i => <DeleteTagLabel key={i} name={i} onConfirm={localDeleteTag}/>)
-        : <Dimmer><Loader inline active/></Dimmer>;
+    const localEditTag = async (name, color, id) => {
+        setTagName(name);
+        setTagColor(color || DEFAULT_TAG_COLOR);
+        setTagId(id);
+    }
 
-    return <>
-        <Modal closeIcon
-               open={open}
-               onOpen={() => setOpen(true)}
-               onClose={() => setOpen(false)}
-        >
-            <Modal.Header>Delete Tags</Modal.Header>
-            <Modal.Content>
-                {content}
-            </Modal.Content>
-        </Modal>
-        <SButton color='red' onClick={() => setOpen(true)}>
-            Delete
-        </SButton>
-    </>
-}
-
-function CreateTagModal() {
-    const {fetchTags} = React.useContext(TagsContext);
-
-    const [open, setOpen] = useState(false);
-    const [tagName, setTagName] = useState('');
-    const [tagColor, setTagColor] = useState('#000000');
-    const textColor = contrastingColor(tagColor);
-
-    const saveTag = async () => {
-        await postTag(tagName, tagColor);
+    const localSaveTag = async () => {
+        await saveTag(tagName, tagColor, tagId);
         if (fetchTags) {
             await fetchTags();
         }
         setTagName('');
+        setTagId(null);
+        setTagColor(DEFAULT_TAG_COLOR);
+    }
+
+    let content = <Dimmer><Loader inline active/></Dimmer>;
+    if (tags && tags.length) {
+        content = tags.map(i => <EditTagLabel key={i['name']} tag={i} onDelete={localDeleteTag}
+                                              onEdit={localEditTag}/>);
     }
 
     return <>
@@ -166,7 +181,7 @@ function CreateTagModal() {
                onOpen={() => setOpen(true)}
                onClose={() => setOpen(false)}
         >
-            <Modal.Header>Create New Tag</Modal.Header>
+            <Modal.Header>Edit Tags</Modal.Header>
             <Modal.Content>
                 <Label.Group tag>
                     <Label size='large' style={{backgroundColor: tagColor, color: textColor}}>
@@ -174,35 +189,44 @@ function CreateTagModal() {
                     </Label>
                 </Label.Group>
 
-                <Divider/>
-
                 <Form autoComplete='off'>
-                    <FormField>
-                        <FormInput required
-                                   label='Tag Name'
-                                   type='text'
-                                   placeholder='Unique Name'
-                                   value={tagName}
-                                   onChange={(e, {value}) => setTagName(value)}
-                        />
-                    </FormField>
-
-                    <HexColorPicker color={tagColor} onChange={setTagColor}/>
-
-                    <SButton primary
-                             size='big'
-                             onClick={saveTag}
-                             style={{marginTop: '2em'}}
-                             disabled={!!!tagName}
-                    >
-                        Save
-                    </SButton>
+                    <FormInput required
+                               label='Tag Name'
+                               placeholder='Unique name'
+                               value={tagName}
+                               onChange={(e, {value}) => setTagName(value)}
+                    />
                 </Form>
 
+                <HexColorPicker color={tagColor} onChange={setTagColor} style={{marginTop: '1em'}}/>
+
+                <SButton primary
+                         size='big'
+                         onClick={localSaveTag}
+                         style={{marginTop: '2em'}}
+                         disabled={!!!tagName}
+                >
+                    Save
+                </SButton>
+
+                <Divider/>
+                <STable striped basic='very' unstackable>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHeaderCell width={2}>Delete</TableHeaderCell>
+                            <TableHeaderCell width={2}>Edit</TableHeaderCell>
+                            <TableHeaderCell width={8}>Tag</TableHeaderCell>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {content}
+                    </TableBody>
+                </STable>
             </Modal.Content>
         </Modal>
-
-        <SButton primary onClick={() => setOpen(true)}>New</SButton>
+        <SButton primary onClick={() => setOpen(true)}>
+            Edit
+        </SButton>
     </>
 }
 
@@ -265,8 +289,7 @@ export function TagsModal({fileGroup, onClick}) {
             {availableTagsGroup}
         </Modal.Content>
         <Modal.Actions>
-            <DeleteTagModal/>
-            <CreateTagModal/>
+            <EditTagsModal/>
         </Modal.Actions>
     </Modal>
 
@@ -296,20 +319,20 @@ export const TagsDisplay = ({fileGroup, onClick}) => {
     </Grid>
 }
 
-export const TagsSegment = () => {
+export const TagsDashboard = () => {
     const {tagNames, TagsLinkGroup} = useTags();
 
     let availableTagsGroup = <SLoader active inline/>;
     if (tagNames && tagNames.length) {
-        availableTagsGroup = <TagsLinkGroup tagNames={tagNames}/>;
+        availableTagsGroup = <TagsLinkGroup tagNames={tagNames} style={{marginTop: '0.5em'}}/>;
     }
+
     return <Segment>
         <Header as='h2'>Tags</Header>
         {availableTagsGroup}
 
         <Divider/>
 
-        <DeleteTagModal/>
-        <CreateTagModal/>
+        <EditTagsModal/>
     </Segment>
 }

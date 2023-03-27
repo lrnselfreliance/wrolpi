@@ -10,16 +10,28 @@ import {
     ModalHeader
 } from "semantic-ui-react";
 
-function getMediaPathURL(path) {
-    return `/media/${encodeURIComponent(path['path'])}`;
+function getMediaPathURL(file) {
+    if (file['primary_path']) {
+        return `/media/${encodeURIComponent(file['primary_path'])}`;
+    } else {
+        return `/media/${encodeURIComponent(file['path'])}`;
+    }
 }
 
-function getDownloadPathURL(path) {
-    return `/download/${encodeURIComponent(path['path'])}`;
+function getDownloadPathURL(file) {
+    if (file['primary_path']) {
+        return `/download/${encodeURIComponent(file['primary_path'])}`;
+    } else {
+        return `/download/${encodeURIComponent(file['path'])}`;
+    }
 }
 
-function getEpubViewerURL(path) {
-    return `/epub.html?url=download/${encodeURIComponent(path['path'])}`;
+function getEpubViewerURL(file) {
+    if (file['primary_path']) {
+        return `/epub.html?url=download/${encodeURIComponent(file['primary_path'])}`;
+    } else {
+        return `/epub.html?url=download/${encodeURIComponent(file['path'])}`;
+    }
 }
 
 function getIframeModal(path) {
@@ -143,7 +155,8 @@ export function FilePreviewWrapper({children}) {
         }
 
         if (previewFile && !_.isEmpty(previewFile)) {
-            const {mimetype, size, path} = previewFile;
+            const {mimetype, size} = previewFile;
+            const path = previewFile['primary_path'] || previewFile['path'];
             const lowerPath = path.toLowerCase();
             console.debug(`useFilePreview path=${previewFile['path']} mimetype=${mimetype}`);
             const url = getMediaPathURL(previewFile);

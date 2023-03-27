@@ -467,7 +467,7 @@ def import_channels_config():
                     # video_path, so we can match the complete path for the Video.
                     video_path = channel_dir / video_path
                     file_group: FileGroup = FileGroup.find_by_path(video_path, session)
-                    if file_group.tag_files:
+                    if file_group and file_group.tag_files:
                         # Video is already tagged or favorited.
                         pass
                     elif file_group:

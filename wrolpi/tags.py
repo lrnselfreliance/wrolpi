@@ -1,6 +1,7 @@
 import contextlib
 from typing import List
 
+from cryptography.exceptions import InvalidTag
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship, Session
 
@@ -96,6 +97,7 @@ class TagsConfig(ConfigFile):
 
     @tags.setter
     def tags(self, value):
+        value = sorted(value, key=lambda i: (i[0].lower(), i[1]))
         self.update({'tags': value})
 
     def add_tag(self, tag_file: TagFile):
@@ -105,7 +107,7 @@ class TagsConfig(ConfigFile):
         tag_name = tag_file.tag.name
         tags = self.tags.copy()
 
-        value = [primary_path, tag_name]
+        value = [tag_name, primary_path]
         if value not in tags:
             tags.append(value)
             self.tags = tags
@@ -118,7 +120,7 @@ class TagsConfig(ConfigFile):
         tags = self.tags.copy()
 
         for idx, value in enumerate(self.tags):
-            if value == [primary_path, tag_name]:
+            if value == [tag_name, primary_path]:
                 tags = tags.copy()
                 tags.pop(idx)
                 self.tags = tags
@@ -154,6 +156,9 @@ def get_tags(session: Session) -> List[Tag]:
 
 @optional_session
 def new_tag(name: str, color: str, session: Session) -> Tag:
+    if ',' in name:
+        raise InvalidTag('Tag name cannot have comma')
+
     tag = Tag(name=name, color=color)
     session.add(tag)
     session.flush([tag])

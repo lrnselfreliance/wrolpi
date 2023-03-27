@@ -456,11 +456,8 @@ async def test_title_in_filename(test_session, fake_now, test_directory, image_b
            'archive/example.com/2000-01-01-00-00-00_dangerous ;_title.png'
 
 
-# @skip_circleci
 def test_refresh_archives(test_session, test_directory, test_client, make_files_structure):
-    """
-    Archives can be found and put in the database.  A single Archive will have multiple files.
-    """
+    """Archives can be found and put in the database.  A single Archive will have multiple files."""
     # The start of a typical singlefile html file.
     singlefile_contents = '''<!DOCTYPE html> <html lang="en"><!--
  Page saved with SingleFile 

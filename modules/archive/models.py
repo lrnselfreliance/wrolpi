@@ -153,7 +153,7 @@ class Archive(Base, ModelHelper):
         """Read the Readability JSON file, apply its contents to this record."""
         readability_json_path = self.readability_json_path
         if not readability_json_path:
-            logger.warning(f'{self.singlefile_path} does not have an info json file')
+            logger.debug(f'{self.singlefile_path} does not have an info json file')
             return
         if not readability_json_path.is_file():
             error = f'Cannot read data from {readability_json_path} because it not exist.'

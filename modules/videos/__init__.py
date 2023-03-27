@@ -76,14 +76,3 @@ def video_cleanup():
              v.channel_id IS NULL
              AND fg.id = v.file_group_id
         ''')
-        curs.execute('''
-            UPDATE file_group fg
-            SET
-                -- Update channel information in file_group.data
-                -- Example: data = {'channel': {'id': 1, 'name': 'example'}}
-                data = fg.data::jsonb || jsonb_build_object('channel',
-                    jsonb_build_object('id', v.channel_id, 'name', c.name))
-            FROM video v
-            LEFT JOIN channel c on c.id = v.channel_id
-            WHERE fg.id = v.file_group_id
-        ''')

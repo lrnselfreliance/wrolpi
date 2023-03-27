@@ -411,9 +411,12 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
     if isinstance(paths, pathlib.Path):
         paths = [paths, ]
 
+    refreshing_all_files = False
+
     with flags.refreshing:
         if not paths:
             refresh_logger.warning('Refreshing all files')
+            refreshing_all_files = True
         else:
             refresh_logger.warning(f'Refreshing {", ".join(list(map(str, paths)))}')
         if send_events:
@@ -445,12 +448,17 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
         if send_events:
             Events.send_global_refresh_completed()
         refresh_logger.warning('Done refreshing Files')
-        flags.refresh_complete.set()
+
+        if refreshing_all_files:
+            # Only set refresh_complete flag if all files have been refreshed.
+            flags.refresh_complete.set()
 
 
 async def apply_indexers():
     """Indexes any Files that have not yet been indexed by Modelers, or by previous calls of this function."""
     from wrolpi.files.models import FileGroup
+    refresh_logger.info('Applying indexers')
+
     while True:
         # Continually query for Files that have not been indexed.
         with get_db_session(commit=True) as session:
@@ -471,6 +479,8 @@ async def apply_indexers():
 
                 # Sleep to catch cancel.
                 await asyncio.sleep(0)
+
+            refresh_logger.debug(f'Indexed {processed} files')
 
             if processed < 20:
                 # Processed less than the limit, don't do the next query.
@@ -702,6 +712,7 @@ def get_file_statistics():
             file_group
         ''')
         statistics = dict(curs.fetchall()[0])
+        statistics['total_count'] = statistics['total_count'] or 0
         statistics['total_size'] = statistics['total_size'] or 0
 
         return statistics

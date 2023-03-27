@@ -259,7 +259,7 @@ def test_file_statistics(test_session, test_client, test_directory, example_pdf,
         'ebook_count': 2,
         'image_count': 0,
         'pdf_count': 1,
-        'total_count': 4,
+        'total_count': 5,  # extracted cover
         'video_count': 1,
         'zip_count': 0,
     }

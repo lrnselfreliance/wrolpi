@@ -6,7 +6,8 @@ from typing import Tuple, List
 from sqlalchemy import not_
 from sqlalchemy.orm import Session
 
-from wrolpi.common import logger, register_modeler, register_after_refresh, limit_concurrent, split_lines_by_length
+from wrolpi.common import logger, register_modeler, register_after_refresh, limit_concurrent, split_lines_by_length, \
+    slow_logger
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError, InvalidArchive
@@ -69,9 +70,14 @@ def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
 
     # All Archives have a Singlefile.
     for file in html_paths:
-        if is_singlefile_file(file):
-            singlefile_path = file
-            break
+        try:
+            if is_singlefile_file(file):
+                singlefile_path = file
+                break
+        except Exception as e:
+            if PYTEST:
+                raise
+            logger.debug(f'Cannot check is_singlefile_file of {repr(file)}', exc_info=e)
     else:
         logger.debug(f'No Archive singlefile found in {file_group}')
         raise InvalidArchive('FileGroup does not contain a singlefile')
@@ -147,27 +153,28 @@ async def archive_modeler():
                 .outerjoin(Archive, Archive.file_group_id == FileGroup.id) \
                 .limit(20)
 
+            logger.debug(f'{len(list(invalid_archives))=}')
+
             processed = 0
             for file_group, archive in results:
                 processed += 1
 
                 if archive:
                     try:
-                        archive_id = archive.id
-                        archive.validate()
+                        with slow_logger(1, f'Modeling old archive took %(elapsed)s seconds'):
+                            archive_id = archive.id
+                            archive.validate()
                     except Exception:
-                        # Archive could not be indexed.
-                        invalid_archives |= {file_group.id, }
-
                         logger.error(f'Unable to validate Archive {archive_id}')
                         if PYTEST:
                             raise
                 else:
                     try:
-                        model_archive(file_group, session=session)
+                        with slow_logger(1, f'Modeling new archive took %(elapsed)s seconds'):
+                            model_archive(file_group, session=session)
                     except InvalidArchive:
-                        # FileGroup was not an archive group.
-                        invalid_archives |= {file_group.id, }
+                        # May not be a real Singlefile archive.
+                        pass
 
                 # Even if indexing fails, we mark it as indexed.  We won't retry indexing this.
                 file_group.indexed = True
@@ -175,6 +182,8 @@ async def archive_modeler():
             if processed < 20:
                 # Did not reach limit, do not query again.
                 break
+
+            logger.debug(f'Modeled {processed} Archives')
 
         # Sleep to catch cancel.
         await asyncio.sleep(0)

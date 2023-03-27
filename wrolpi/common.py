@@ -827,7 +827,10 @@ def register_modeler(modeler: callable):
 
 async def apply_modelers():
     for modeler in modelers:
-        await modeler()
+        try:
+            await modeler()
+        except Exception as e:
+            logger.error(f'Modeler raised error', exc_info=e)
         # Sleep to catch cancel.
         await asyncio.sleep(0)
 
@@ -919,6 +922,17 @@ def timer(name):
         yield
     finally:
         logger_.warning(f'{name} elapsed {(datetime.now() - before).total_seconds()} seconds')
+
+
+@contextlib.contextmanager
+def slow_logger(max_seconds: int, message: str):
+    before = now()
+    try:
+        yield
+    finally:
+        elapsed = (now() - before).total_seconds()
+        if elapsed >= max_seconds:
+            logger.warning(message % elapsed)
 
 
 TIMERS = dict()

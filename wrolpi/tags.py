@@ -54,8 +54,8 @@ class Tag(ModelHelper, Base):
         logger.info(f'Tagging {file_group} with {self}')
         session.add(tag_file)
         session.flush([tag_file])
-        get_tags_config().add_tag(tag_file)
         session.commit()
+        get_tags_config().save_tags(session)
         return tag_file
 
     @optional_session
@@ -72,8 +72,8 @@ class Tag(ModelHelper, Base):
             .one_or_none()
         if tag_file:
             session.delete(tag_file)
-            get_tags_config().remove_tag(tag_file)
             session.commit()
+            get_tags_config().save_tags(session)
         else:
             logger.warning(f'Could not find tag_file for FileGroup.id={file_group.id}/Tag.id={self.id=}')
 
@@ -86,6 +86,7 @@ class Tag(ModelHelper, Base):
 
 class TagsConfig(ConfigFile):
     file_name = 'tags.yaml'
+    width = 500
 
     default_config = dict(
         tags=list(),
@@ -100,31 +101,21 @@ class TagsConfig(ConfigFile):
         value = sorted(value, key=lambda i: (i[0].lower(), i[1]))
         self.update({'tags': value})
 
-    def add_tag(self, tag_file: TagFile):
-        from wrolpi.files.models import FileGroup
-        file_group: FileGroup = tag_file.file_group
-        primary_path = str(file_group.primary_path.relative_to(get_media_directory()))
-        tag_name = tag_file.tag.name
-        tags = self.tags.copy()
+    def save_tags(self, session: Session):
+        media_directory = get_media_directory()
 
-        value = [tag_name, primary_path]
-        if value not in tags:
+        from wrolpi.files.models import FileGroup
+        results = session.query(Tag, TagFile, FileGroup) \
+            .filter(TagFile.tag_id == Tag.id, TagFile.file_group_id == FileGroup.id) \
+            .order_by(FileGroup.primary_path)
+
+        tags = []
+        for tag, _, file_group in results:
+            value = [tag.name, str(file_group.primary_path.relative_to(media_directory))]
             tags.append(value)
-            self.tags = tags
 
-    def remove_tag(self, tag_file: TagFile):
-        from wrolpi.files.models import FileGroup
-        file_group: FileGroup = tag_file.file_group
-        primary_path = str(file_group.primary_path.relative_to(get_media_directory()))
-        tag_name = tag_file.tag.name
-        tags = self.tags.copy()
-
-        for idx, value in enumerate(self.tags):
-            if value == [tag_name, primary_path]:
-                tags = tags.copy()
-                tags.pop(idx)
-                self.tags = tags
-                break
+        # Write tags to the config.
+        self.tags = tags
 
 
 TAGS_CONFIG: TagsConfig = TagsConfig(global_=True)

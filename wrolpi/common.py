@@ -185,6 +185,7 @@ class ConfigFile:
     """
     file_name: str = None
     default_config: dict = None
+    width: int = None
 
     def __init__(self, global_: bool = False):
         self.file_lock = Lock()
@@ -202,6 +203,8 @@ class ConfigFile:
             # Use the config file to get the values the user set.
             with config_file.open('rt') as fh:
                 self._config.update(yaml.load(fh, Loader=yaml.Loader))
+
+        self.width = self.width or 90
 
     def __repr__(self):
         return f'<{self.__class__.__name__} file={self.get_file()}>'
@@ -236,7 +239,7 @@ class ConfigFile:
 
             config.update({k: v for k, v in self._config.items() if v is not None})
             with config_file.open('wt') as fh:
-                yaml.dump(config, fh)
+                yaml.dump(config, fh, width=self.width)
         finally:
             if acquired:
                 self.file_lock.release()

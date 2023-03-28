@@ -75,7 +75,7 @@ class FileGroup(ModelHelper, Base):
     size = Column(BigInteger, default=lambda: 0)
     title = Column(String)
 
-    tag_files: InstrumentedList = relationship('TagFile')
+    tag_files: InstrumentedList = relationship('TagFile', cascade='all')
 
     a_text = deferred(Column(String))
     b_text = deferred(Column(String))

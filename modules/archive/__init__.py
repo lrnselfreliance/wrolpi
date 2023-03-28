@@ -6,7 +6,7 @@ from typing import Tuple, List
 from sqlalchemy import not_
 from sqlalchemy.orm import Session
 
-from wrolpi.common import logger, register_modeler, register_after_refresh, limit_concurrent, split_lines_by_length, \
+from wrolpi.common import logger, register_modeler, register_refresh_cleanup, limit_concurrent, split_lines_by_length, \
     slow_logger
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
@@ -189,7 +189,7 @@ async def archive_modeler():
         await asyncio.sleep(0)
 
 
-@register_after_refresh
+@register_refresh_cleanup
 @limit_concurrent(1)
 def archive_cleanup():
     # Process all Archives that have not been validated.  Delete any that no longer exist, or are not real Archives.

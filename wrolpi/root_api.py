@@ -14,7 +14,7 @@ from sanic.response import HTTPResponse
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi import admin, status, flags
+from wrolpi import admin, status, flags, schema
 from wrolpi import tags
 from wrolpi.admin import HotspotStatus
 from wrolpi.common import logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
@@ -24,8 +24,6 @@ from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, API_ERRORS, APIError, ValidationError, HotspotError
 from wrolpi.events import get_events
 from wrolpi.files.lib import get_file_statistics
-from wrolpi.schema import RegexRequest, RegexResponse, SettingsRequest, SettingsResponse, DownloadRequest, EchoResponse, \
-    EventsRequest, TagRequest
 from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
     truthy_arg
 from wrolpi.version import __version__
@@ -118,7 +116,7 @@ def index(_):
 
 @api_bp.route('/echo', methods=['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'])
 @openapi.description('Echo whatever is sent to this.')
-@openapi.response(HTTPStatus.OK, EchoResponse)
+@openapi.response(HTTPStatus.OK, schema.EchoResponse)
 async def echo(request: Request):
     ret = dict(
         form=request.form,
@@ -132,7 +130,7 @@ async def echo(request: Request):
 
 @api_bp.route('/settings', methods=['GET', 'OPTIONS'])
 @openapi.description('Get WROLPi settings')
-@openapi.response(HTTPStatus.OK, SettingsResponse)
+@openapi.response(HTTPStatus.OK, schema.SettingsResponse)
 def get_settings(_: Request):
     config = get_config()
 
@@ -157,8 +155,8 @@ def get_settings(_: Request):
 
 @api_bp.patch('/settings')
 @openapi.description('Update WROLPi settings')
-@validate(json=SettingsRequest)
-def update_settings(_: Request, body: SettingsRequest):
+@validate(json=schema.SettingsRequest)
+def update_settings(_: Request, body: schema.SettingsRequest):
     if wrol_mode_enabled() and body.wrol_mode is None:
         # Cannot update settings while WROL Mode is enabled, unless you want to disable WROL Mode.
         raise WROLModeEnabled()
@@ -195,10 +193,10 @@ def update_settings(_: Request, body: SettingsRequest):
 
 @api_bp.post('/valid_regex')
 @openapi.description('Check if the regex is valid.')
-@openapi.response(HTTPStatus.OK, RegexResponse)
-@openapi.response(HTTPStatus.BAD_REQUEST, RegexResponse)
-@validate(RegexRequest)
-def valid_regex(_: Request, body: RegexRequest):
+@openapi.response(HTTPStatus.OK, schema.RegexResponse)
+@openapi.response(HTTPStatus.BAD_REQUEST, schema.RegexResponse)
+@validate(schema.RegexRequest)
+def valid_regex(_: Request, body: schema.RegexRequest):
     try:
         re.compile(body.regex)
         return response.json({'valid': True, 'regex': body.regex})
@@ -208,9 +206,9 @@ def valid_regex(_: Request, body: RegexRequest):
 
 @api_bp.post('/download')
 @openapi.description('Download the many URLs that are provided.')
-@validate(DownloadRequest)
+@validate(schema.DownloadRequest)
 @wrol_mode_check
-async def post_download(_: Request, body: DownloadRequest):
+async def post_download(_: Request, body: schema.DownloadRequest):
     # URLs are provided in a textarea, lets split all lines.
     urls = [i.strip() for i in str(body.urls).strip().splitlines()]
     excluded_urls = [i.strip() for i in body.excluded_urls.split(',')] if body.excluded_urls else None
@@ -371,8 +369,8 @@ async def get_statistics(_):
 
 
 @api_bp.get('/events/feed')
-@validate(query=EventsRequest)
-async def feed(_: Request, query: EventsRequest):
+@validate(query=schema.EventsRequest)
+async def feed(_: Request, query: schema.EventsRequest):
     start = now()
     after = None if query.after == 'None' else strptime(query.after)
     events = get_events(after)
@@ -380,6 +378,9 @@ async def feed(_: Request, query: EventsRequest):
 
 
 @api_bp.get('/tag')
+@openapi.definition(
+    summary='Get a list of all Tags',
+)
 async def get_tags_request(_: Request):
     tags_ = tags.get_tags()
     return json_response(dict(tags=tags_))
@@ -387,11 +388,11 @@ async def get_tags_request(_: Request):
 
 @api_bp.post('/tag')
 @api_bp.post('/tag/<tag_id:int>')
-@validate(TagRequest)
+@validate(schema.TagRequest)
 @openapi.definition(
     summary='Create or update a Tag',
 )
-async def post_new_tag(_: Request, body: TagRequest, tag_id: int = None):
+async def post_new_tag(_: Request, body: schema.TagRequest, tag_id: int = None):
     tags.upsert_tag(body.name, body.color, tag_id)
     if tag_id:
         return response.empty(HTTPStatus.OK)

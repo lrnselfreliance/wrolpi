@@ -100,8 +100,13 @@ class Flag:
 db_up = Flag('db_up')
 # The global refresh is running.
 refreshing = Flag('refreshing')
-# Refreshing single directory.
-refreshing_directory = Flag('refreshing_directory')
+
+# Steps of refreshing.
+refresh_discovery = Flag('refresh_discovery')
+refresh_modeling = Flag('refresh_modeling')
+refresh_indexing = Flag('refresh_indexing')
+cleanup = Flag('cleanup')
+
 # The global refresh has been performed.  This is False on a fresh instance of WROLPi.
 refresh_complete = Flag('refresh_complete', store_db=True)
 # Third party packages that may be required.  See `cmd.py`
@@ -121,8 +126,6 @@ def get_flags() -> List[str]:
         flags.append('db_up')
     if refreshing.is_set():
         flags.append('refreshing')
-    if refreshing_directory.is_set():
-        flags.append('refreshing_directory')
     if refresh_complete.is_set():
         flags.append('refresh_complete')
     if chromium_installed.is_set():

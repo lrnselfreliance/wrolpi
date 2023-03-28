@@ -123,6 +123,7 @@ async def pdf_modeler():
                     file_group.b_text = author
                     file_group.c_text = file_title
                     file_group.d_text = contents
+                    file_group.model = 'pdf'
                 except Exception as e:
                     logger.error(f'Failed to index PDF {pdf_file}', exc_info=e)
                     if PYTEST:
@@ -130,6 +131,9 @@ async def pdf_modeler():
 
                 # Even if indexing fails, we mark it as indexed.  We won't retry indexing this.
                 file_group.indexed = True
+
+                # Sleep to catch cancel.
+                await asyncio.sleep(0)
 
             if processed:
                 logger.debug(f'pdf_modeler processed {processed} PDFs')

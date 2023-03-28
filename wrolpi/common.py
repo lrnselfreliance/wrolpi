@@ -110,8 +110,8 @@ __all__ = [
     'aiohttp_post',
     'register_modeler',
     'apply_modelers',
-    'register_after_refresh',
-    'apply_after_refresh',
+    'register_refresh_cleanup',
+    'apply_refresh_cleanup',
     'match_paths_to_suffixes',
     'chunks',
     'chunks_by_stem',
@@ -830,6 +830,7 @@ def register_modeler(modeler: callable):
 
 async def apply_modelers():
     for modeler in modelers:
+        logger_.info(f'Applying modeler {modeler.__name__}')
         try:
             await modeler()
         except Exception as e:
@@ -838,17 +839,17 @@ async def apply_modelers():
         await asyncio.sleep(0)
 
 
-after_refresh = []
+REFRESH_CLEANUP = []
 
 
-def register_after_refresh(func: callable):
-    after_refresh.append(func)
+def register_refresh_cleanup(func: callable):
+    REFRESH_CLEANUP.append(func)
     return func
 
 
-async def apply_after_refresh():
-    for func in after_refresh:
-        logger_.info(f'Applying after-refresh {func.__name__}')
+async def apply_refresh_cleanup():
+    for func in REFRESH_CLEANUP:
+        logger_.info(f'Applying refresh cleanup {func.__name__}')
         func()
 
 

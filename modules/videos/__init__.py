@@ -2,7 +2,7 @@ import asyncio
 from typing import List, Tuple
 
 from modules.videos.models import Video, Channel
-from wrolpi.common import logger, limit_concurrent, register_modeler, register_after_refresh
+from wrolpi.common import logger, limit_concurrent, register_modeler, register_refresh_cleanup
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST
@@ -54,7 +54,7 @@ async def video_modeler():
         # Sleep to catch cancel.
         await asyncio.sleep(0)
 
-@register_after_refresh
+@register_refresh_cleanup
 @limit_concurrent(1)
 def video_cleanup():
     logger.info('Claiming Videos for their Channels')

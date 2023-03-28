@@ -19,7 +19,7 @@ from wrolpi import flags
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
     partition, cancelable_wrapper, \
-    get_files_and_directories, chunks_by_stem, apply_modelers, apply_after_refresh
+    get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup
 from wrolpi.dates import now, from_timestamp
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
 from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag
@@ -426,22 +426,26 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
 
         # Add all files in the media directory to the DB.
         paths = paths or [get_media_directory()]
-        await refresh_discover_paths(paths, idempotency)
+        with flags.refresh_discovery:
+            await refresh_discover_paths(paths, idempotency)
         if send_events:
             Events.send_global_refresh_discovery_completed()
 
         # Model all files that have not been indexed.
-        await apply_modelers()
+        with flags.refresh_modeling:
+            await apply_modelers()
         if send_events:
             Events.send_global_refresh_modeling_completed()
 
         # Index the rest of the files that were not indexed by modelers.
-        await apply_indexers()
+        with flags.refresh_indexing:
+            await apply_indexers()
         if send_events:
             Events.send_global_refresh_indexing_completed()
 
         # Cleanup any outdated file data.
-        await apply_after_refresh()
+        with flags.cleanup:
+            await apply_refresh_cleanup()
         if send_events:
             Events.send_global_after_refresh_completed()
 
@@ -769,3 +773,30 @@ def add_file_group_tag(file_group_id: int, tag_name: str, session: Session = Non
 def remove_file_group_tag(file_group_id: int, tag_name: str, session: Session = None):
     file_group, tag = _get_tag(file_group_id, tag_name, session)
     file_group.remove_tag(tag, session)
+
+
+def get_refresh_progress():
+    with get_db_curs() as curs:
+        curs.execute('''
+            SELECT
+                COUNT(id) AS "total_files",
+                COUNT(id) FILTER (WHERE indexed IS TRUE) AS "indexed",
+                COUNT(id) FILTER (WHERE indexed IS FALSE) AS "unindexed",
+                COUNT(id) FILTER (WHERE model IS NOT NULL) AS "modeled"
+            FROM file_group
+        ''')
+        results = dict(curs.fetchone())
+
+        status = dict(
+            cleanup=flags.cleanup.is_set(),
+            discovery=flags.refresh_discovery.is_set(),
+            indexed=results['indexed'],
+            indexing=flags.refresh_indexing.is_set(),
+            modeled=results['modeled'],
+            modeling=flags.refresh_modeling.is_set(),
+            refreshing=flags.refreshing.is_set(),
+            total_files=results['total_files'],
+            unindexed=results['unindexed'],
+        )
+
+    return status

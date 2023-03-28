@@ -57,6 +57,16 @@ async def refresh(request: Request):
     return response.empty()
 
 
+@bp.get('/refresh_progress')
+@openapi.definition(
+    summary='Get the progress of the file refresh'
+)
+async def refresh_progress(request: Request):
+    progress = lib.get_refresh_progress()
+    return json_response(dict(
+        progress=progress,
+    ))
+
 @bp.post('/search')
 @openapi.definition(
     summary='Search Files',

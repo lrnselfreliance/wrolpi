@@ -3,6 +3,7 @@ import json
 import shutil
 import zipfile
 from datetime import datetime
+from http import HTTPStatus
 from pathlib import Path
 from typing import List
 from uuid import uuid4
@@ -11,7 +12,6 @@ import mock
 import pytest
 from PIL import Image
 
-from modules import videos
 from wrolpi.common import timer
 from wrolpi.dates import now, from_timestamp
 from wrolpi.errors import InvalidFile, UnknownDirectory
@@ -569,3 +569,19 @@ def test_tag_names_to_clauses(tags, wheres, params, join):
     assert result[0] == wheres
     assert result[1] == params
     assert result[2] == join
+
+
+def test_get_refresh_progress(test_client, test_session):
+    request, response = test_client.get('/api/files/refresh_progress')
+    assert response.status_code == HTTPStatus.OK
+    assert 'progress' in response.json
+    progress = response.json['progress']
+    assert 'cleanup' in progress
+    assert 'discovery' in progress
+    assert 'indexed' in progress
+    assert 'indexing' in progress
+    assert 'modeled' in progress
+    assert 'modeling' in progress
+    assert 'refreshing' in progress
+    assert 'total_files' in progress
+    assert 'unindexed' in progress

@@ -21,12 +21,6 @@ function handleEvents(events) {
             return;
         } else if (event === 'global_refresh_completed') {
             eventToast('Refresh completed', 'All files have been refreshed.');
-        } else if (event === 'directory_refresh_started') {
-            const description = message || 'Refresh of directory has started.';
-            eventToast('Refresh started', description);
-        } else if (event === 'directory_refresh_completed') {
-            const description = message || 'Refresh of directory has completed.';
-            eventToast('Refresh completed', description);
         }
 
         if (subject) {

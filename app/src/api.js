@@ -527,6 +527,13 @@ export async function deleteFile(file) {
     await apiPost(`${API_URI}/files/delete`, body);
 }
 
+export async function fetchFilesProgress() {
+    const response = await apiGet(`${API_URI}/files/refresh_progress`);
+    if (response.status === 200) {
+        const json = await response.json();
+        return json['progress'];
+    }
+}
 
 export async function getHotspotStatus() {
     let response = await getSettings();
@@ -639,11 +646,6 @@ export async function clearFailedDownloads() {
             time: 5000,
         });
     }
-}
-
-export async function getAPIStatus() {
-    let response = await apiGet(`${API_URI}/echo`);
-    return response.status === 200;
 }
 
 export async function getStatistics() {

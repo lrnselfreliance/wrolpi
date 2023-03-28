@@ -27,13 +27,13 @@ import {
     textEllipsis,
     useTitle
 } from "./Common";
-import {useQuery, useSearchFiles} from "../hooks/customHooks";
+import {useFilesProgressInterval, useQuery, useSearchFiles} from "../hooks/customHooks";
 import {Route, Routes} from "react-router-dom";
 import {CardPlacholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {StatusContext, ThemeContext} from "../contexts/contexts";
-import {Button, Card, CardIcon, Icon, Placeholder, Segment} from "./Theme";
+import {Button, Card, CardIcon, Icon, Placeholder, Progress, Segment} from "./Theme";
 import {SelectableTable} from "./Tables";
 import {VideoCard, VideoRowCells} from "./Videos";
 import _ from 'lodash';
@@ -42,13 +42,6 @@ import {refreshDirectoryFiles, refreshFiles} from "../api";
 import {useSubscribeEventName} from "../Events";
 import {FilePreviewContext} from "./FilePreview";
 import {taggedImageLabel, TagsContext} from "../Tags";
-
-
-export function FilesPage() {
-    useTitle('Files');
-
-    return <FileBrowser/>;
-}
 
 function EbookCard({file}) {
     const {s} = useContext(ThemeContext);
@@ -479,6 +472,46 @@ export function FilesSearchView({
         filterOptions={filterOptions}
         setFilters={setFilters || setFilter}
     />
+}
+
+export function FilesProgress() {
+    const {progress} = useFilesProgressInterval();
+
+    if (!progress) {
+        return;
+    }
+
+    const {refreshing, modeling, indexing, cleanup, indexed, unindexed, total_files, modeled} = progress;
+
+    if (refreshing) {
+        // Default is Discovery / Step 1.
+        let params = {value: 0, total: 3, progress: 'ratio'};
+        let label = 'Refresh: Discovery';
+
+        if (modeling) {
+            params['value'] = modeled;
+            params['total'] = total_files;
+            label = 'Refresh: Modeling';
+        } else if (indexing) {
+            params['value'] = unindexed;
+            params['total'] = unindexed + indexed;
+            label = 'Refresh: Indexing';
+        } else if (cleanup) {
+            params['value'] = 3;
+            params['total'] = 4;
+            label = 'Refresh: Cleanup';
+        }
+        return <Progress active {...params}>{label}</Progress>
+    }
+}
+
+function FilesPage() {
+    useTitle('Files');
+
+    return <>
+        <FilesProgress/>
+        <FileBrowser/>
+    </>;
 }
 
 export function FilesRoute() {

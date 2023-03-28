@@ -153,3 +153,16 @@ def test_tags_crud(test_session, test_client, example_pdf):
     # Can delete unused Tag.
     request, response = test_client.delete('/api/tag/1')
     assert response.status_code == HTTPStatus.NO_CONTENT
+
+
+@pytest.mark.asyncio
+async def test_delete_tagged_file(test_session, example_pdf, tag_factory):
+    await files_lib.refresh_files()
+    tag = tag_factory()
+
+    pdf: FileGroup = test_session.query(FileGroup).one()
+    pdf.add_tag(tag)
+    test_session.commit()
+
+    pdf.delete()
+    test_session.commit()

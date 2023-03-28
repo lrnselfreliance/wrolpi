@@ -45,14 +45,6 @@ class Events:
     def send_ready(message: str = None):
         send_event('ready', message)
 
-    @staticmethod
-    def send_directory_refresh_started(message: str):
-        send_event('directory_refresh_started', message, subject='refresh_directory')
-
-    @staticmethod
-    def send_directory_refresh_completed(message: str):
-        send_event('directory_refresh_completed', message, subject='refresh_directory')
-
 
 def log_event(event: str, message: str = None, action: str = None, subject: str = None):
     log = f'{event=}'

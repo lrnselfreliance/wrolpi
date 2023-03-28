@@ -1,6 +1,7 @@
 import {useContext, useEffect, useRef, useState} from "react";
 import {
     fetchDomains,
+    fetchFilesProgress,
     filesSearch,
     getArchive,
     getChannel,
@@ -454,6 +455,34 @@ export const useBrowseFiles = () => {
     }, [openFolders])
 
     return {browseFiles, openFolders, setOpenFolders, fetchFiles};
+}
+
+export const useFilesProgress = () => {
+    const [progress, setProgress] = useState(null);
+
+    const localFetchFilesProgress = async () => {
+        try {
+            let p = await fetchFilesProgress();
+            setProgress(p);
+        } catch (e) {
+            setProgress(null);
+            console.error(e);
+        }
+    }
+
+    useEffect(() => {
+        localFetchFilesProgress();
+    }, []);
+
+    return {progress, fetchFilesProgress: localFetchFilesProgress}
+}
+
+export const useFilesProgressInterval = () => {
+    const {progress, fetchFilesProgress} = useFilesProgress();
+
+    useRecurringTimeout(fetchFilesProgress, 1000 * 3);
+
+    return {progress, fetchFilesProgress};
 }
 
 export const useHotspot = () => {

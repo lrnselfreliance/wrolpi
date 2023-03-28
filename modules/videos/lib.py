@@ -13,7 +13,7 @@ from yt_dlp import YoutubeDL
 
 from wrolpi import before_startup
 from wrolpi.captions import extract_captions
-from wrolpi.common import ConfigFile, get_media_directory, sanitize_link, register_after_refresh, limit_concurrent
+from wrolpi.common import ConfigFile, get_media_directory, sanitize_link, register_refresh_cleanup, limit_concurrent
 from wrolpi.dates import Seconds
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.errors import UnknownDirectory
@@ -367,7 +367,7 @@ channel_import_logger = logger.getChild('channel_import')
 
 
 @before_startup
-@register_after_refresh
+@register_refresh_cleanup
 @limit_concurrent(1)
 def import_channels_config():
     """Import channel settings to the DB.  Existing channels will be updated."""

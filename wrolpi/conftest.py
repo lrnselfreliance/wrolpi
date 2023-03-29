@@ -258,22 +258,22 @@ def bad_vtt_file(test_directory) -> pathlib.Path:
 
 @pytest.fixture
 def example_pdf(test_directory) -> pathlib.Path:
-    destination = test_directory / 'example.pdf'
-    shutil.copy(PROJECT_DIR / 'test/example.pdf', destination)
+    destination = test_directory / 'pdf example.pdf'
+    shutil.copy(PROJECT_DIR / 'test/pdf example.pdf', destination)
     yield destination
 
 
 @pytest.fixture
 def example_epub(test_directory) -> pathlib.Path:
-    destination = test_directory / 'example.epub'
-    shutil.copy(PROJECT_DIR / 'test/example.epub', destination)
+    destination = test_directory / 'ebook example.epub'
+    shutil.copy(PROJECT_DIR / 'test/ebook example.epub', destination)
     yield destination
 
 
 @pytest.fixture
 def example_mobi(test_directory) -> pathlib.Path:
-    destination = test_directory / 'example.mobi'
-    shutil.copy(PROJECT_DIR / 'test/example.mobi', destination)
+    destination = test_directory / 'ebook example.mobi'
+    shutil.copy(PROJECT_DIR / 'test/ebook example.mobi', destination)
     yield destination
 
 

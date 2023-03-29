@@ -18,8 +18,10 @@ import {
     CardLink,
     cardTitleWrapper,
     defaultSearchOrder,
+    encodeMediaPath,
     ExternalCardLink,
     FileIcon,
+    findPosterPath,
     HelpHeader,
     isoDatetimeToString,
     mimetypeColor,
@@ -68,8 +70,8 @@ function ArchivePage() {
 
     const {data} = archiveFile;
 
-    const singlefileUrl = data.singlefile_path ? `/media/${encodeURIComponent(data.singlefile_path)}` : null;
-    const screenshotUrl = data.screenshot_path ? `/media/${encodeURIComponent(data.screenshot_path)}` : null;
+    const singlefileUrl = data.singlefile_path ? `/media/${encodeMediaPath(data.singlefile_path)}` : null;
+    const screenshotUrl = data.screenshot_path ? `/media/${encodeMediaPath(data.screenshot_path)}` : null;
     const readabilityUrl = data.readability_path;
 
     const singlefileButton = <ExternalCardLink to={singlefileUrl}>
@@ -178,8 +180,8 @@ export function ArchiveCard({file}) {
     const {s} = useContext(ThemeContext);
     const {data} = file;
 
-    const imageSrc = data.screenshot_path ? `/media/${encodeURIComponent(data.screenshot_path)}` : null;
-    const singlefileUrl = data.singlefile_path ? `/media/${encodeURIComponent(data.singlefile_path)}` : null;
+    const imageSrc = data.screenshot_path ? `/media/${encodeMediaPath(data.screenshot_path)}` : null;
+    const singlefileUrl = data.singlefile_path ? `/media/${encodeMediaPath(data.singlefile_path)}` : null;
 
     let screenshot = <CardIcon><FileIcon file={file}/></CardIcon>;
     const imageLabel = file.tags && file.tags.length ? taggedImageLabel : null;
@@ -436,7 +438,8 @@ export function ArchiveRowCells({file}) {
     const {data} = file;
 
     const archiveUrl = `/archive/${data.id}`;
-    const posterUrl = data.screenshot_path ? `/media/${encodeURIComponent(data.screenshot_path)}` : null;
+    const posterPath = findPosterPath(file);
+    const posterUrl = posterPath ? `/media/${encodeMediaPath(posterPath)}` : null;
 
     let poster;
     if (posterUrl) {

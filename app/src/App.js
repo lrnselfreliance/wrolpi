@@ -81,18 +81,18 @@ export default function App() {
     useEventsInterval();
 
     return <ThemeWrapper>
-        <FilePreviewWrapper>
-            {/* Context and style to handle switching between mobile/computer. */}
-            <style>{mediaStyles}</style>
-            {/* Toasts can be on any page. */}
-            <SemanticToastContainer position='top-right'/>
-            <MediaContextProvider>
-                <TagsContext.Provider value={tagsValue}>
+        <TagsContext.Provider value={tagsValue}>
+            <FilePreviewWrapper>
+                {/* Context and style to handle switching between mobile/computer. */}
+                <style>{mediaStyles}</style>
+                {/* Toasts can be on any page. */}
+                <SemanticToastContainer position='top-right'/>
+                <MediaContextProvider>
                     <StatusContext.Provider value={statusValue}>
                         <RouterProvider router={router}/>
                     </StatusContext.Provider>
-                </TagsContext.Provider>
-            </MediaContextProvider>
-        </FilePreviewWrapper>
+                </MediaContextProvider>
+            </FilePreviewWrapper>
+        </TagsContext.Provider>
     </ThemeWrapper>
 }

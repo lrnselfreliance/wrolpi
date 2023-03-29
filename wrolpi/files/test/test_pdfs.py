@@ -21,7 +21,7 @@ async def test_pdf_title(test_session, example_pdf):
     assert pdf.indexed is True
     assert pdf.title == pdf.a_text == 'WROLPi Test PDF'
     assert pdf.b_text == 'roland'
-    assert pdf.c_text == 'example pdf'
+    assert pdf.c_text == 'pdf example pdf'
     assert pdf.d_text and pdf.d_text.startswith('Page one\n') and len(pdf.d_text) == 467
     assert pdf.data and pdf.data.get('author') == 'roland'
 
@@ -40,7 +40,7 @@ async def test_pdf_modeler(test_session, example_pdf):
     # The author.
     assert b_text == 'roland'
     # The parsed file name.
-    assert c_text == 'example pdf'
+    assert c_text == 'pdf example pdf'
     # All pages are extracted.  Text is formatted to fit on vertical screen.
     assert d_text == 'Page one\n' \
                      'Page two\n' \

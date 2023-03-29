@@ -2,12 +2,14 @@ import React, {Fragment, useContext, useEffect, useState} from 'react';
 import {Link, Route, Routes, useParams} from "react-router-dom";
 import {
     CardLink,
-    CardPosterLink,
+    CardPoster,
     cardTitleWrapper,
     defaultSearchOrder,
     defaultVideoOrder,
     Duration,
+    encodeMediaPath,
     FileIcon,
+    findPosterPath,
     isoDatetimeToString,
     mimetypeColor,
     PageContainer,
@@ -37,11 +39,10 @@ import {useChannel, useQuery, useSearchVideos, useVideo, useVideoStatistics} fro
 import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {Button, Card, CardIcon, Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
+import {Button, Card, Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
 import {deleteVideos} from "../api";
 import {ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
-import {taggedImageLabel} from "../Tags";
 
 export function VideoWrapper() {
     const {videoId} = useParams();
@@ -285,7 +286,7 @@ export function VideosRoute(props) {
 }
 
 export function VideoCard({file}) {
-    const {video, tags} = file;
+    const {video} = file;
     const {s} = useContext(ThemeContext);
 
     let video_url = `/videos/video/${video.id}`;
@@ -297,13 +298,8 @@ export function VideoCard({file}) {
         channel_url = `/videos/channel/${channel.id}/video`;
         video_url = `/videos/channel/${channel.id}/video/${video.id}`;
     }
-    const poster_url = video.poster_path ? `/media/${encodeURIComponent(video.poster_path)}` : null;
 
-    let imageLabel = !_.isEmpty(tags) ? taggedImageLabel : null;
-    let poster = <Link to={video_url}><CardIcon><FileIcon file={file}/></CardIcon></Link>;
-    if (poster_url) {
-        poster = <CardPosterLink to={video_url} poster_url={poster_url} imageLabel={imageLabel}/>;
-    }
+    let poster = <CardPoster to={video_url} file={file}/>;
 
     const color = mimetypeColor(file.mimetype);
     return <Card color={color}>
@@ -333,7 +329,8 @@ export function VideoRowCells({file}) {
     const {video} = file;
 
     let video_url = `/videos/video/${video.id}`;
-    const poster_url = video.poster_path ? `/media/${encodeURIComponent(video.poster_path)}` : null;
+    const poster_path = findPosterPath(file);
+    const poster_url = poster_path ? `/media/${encodeMediaPath(poster_path)}` : null;
 
     let poster;
     if (poster_url) {

@@ -1,11 +1,12 @@
 import React, {useContext, useEffect, useState} from "react";
-import {Card, Container, IconGroup, Image, Input, Modal, Pagination} from 'semantic-ui-react';
+import {Card, Container, IconGroup, Input, Modal, Pagination} from 'semantic-ui-react';
 import {Link, NavLink, useNavigate} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDirectories, useDownloaders, useHotspot, useSettings, useThrottle} from "../hooks/customHooks";
 import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
-import {Button, darkTheme, Form, Header, Icon, lightTheme, Menu, Popup, Statistic} from "./Theme";
+import {Button, CardIcon, darkTheme, Form, Header, Icon, lightTheme, Menu, Popup, Statistic} from "./Theme";
 import {FilePreviewContext} from "./FilePreview";
+import _ from "lodash";
 
 export const API_URI = process.env && process.env.REACT_APP_API_URI ? process.env.REACT_APP_API_URI : `${window.location.protocol}//${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -441,23 +442,77 @@ export function CardGroupCentered(props) {
     </div>
 }
 
-export function CardPosterLink({to, poster_url, imageLabel, external = false}) {
+export function findPosterPath(file) {
+    if (!file) {
+        return;
+    }
+    const {files, poster_path, cover_path, screenshot_path, video} = file;
+    if (poster_path) {
+        return poster_path;
+    }
+    if (cover_path) {
+        return cover_path;
+    }
+    if (screenshot_path) {
+        return screenshot_path;
+    }
+    if (video && video['poster_path']) {
+        // file is a video model.
+        return video['poster_path'];
+    }
+    if (!_.isEmpty(files)) {
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            if (file['mimetype'] && file['mimetype'].startsWith('image/')) {
+                // Found an image file, use that as the poster.
+                return file['path'];
+            }
+        }
+    }
+}
+
+export function CardPoster({to, file}) {
     const {s} = useContext(ThemeContext);
+    // Used to center posters in CardIcon.
     const style = {display: 'flex', justifyContent: 'center', ...s['style']};
-    const image = <Image src={poster_url} label={imageLabel}
-                         style={{maxHeight: '163px', width: 'auto'}}
-    />;
-    if (external === true && to) {
-        return <a href={to} target='_blank' rel='noreferrer' style={style}>
-            {image}
-        </a>
-    } else if (to) {
+
+    const cardTagIcon = <div className="ui green left corner label">
+        <i aria-hidden="true" className="tag icon"></i>
+    </div>;
+    let imageLabel = !_.isEmpty(file.tags) ? cardTagIcon : null;
+
+    let posterPath = findPosterPath(file);
+
+    if (!posterPath) {
+        // No poster, use a FileIcon.
+        return <PreviewLink file={file}>
+            <CardIcon>
+                {imageLabel}
+                <FileIcon file={file}/>
+            </CardIcon>
+        </PreviewLink>
+    }
+
+    posterPath = `/media/${encodeMediaPath(posterPath)}`;
+
+    const image = <>
+        {/* Replicate <Image label/> but with maxHeight applied to image */}
+        {imageLabel}
+        <img alt='poster' src={posterPath} style={{maxHeight: '163px', width: 'auto'}}/>
+    </>;
+
+    if (to) {
         // Link using React Router.
         return <Link to={to} style={style}>
             {image}
         </Link>
     } else {
-        return <div style={style}>{image}</div>;
+        // Preview the file.
+        return <div style={style}>
+            <PreviewLink file={file}>
+                {image}
+            </PreviewLink>
+        </div>
     }
 }
 
@@ -840,7 +895,7 @@ export const filterToMimetypes = (filter) => {
     } else if (filter === 'image') {
         return ['image'];
     } else if (filter === 'zip') {
-        return ['application/zip'];
+        return ['application/zip', 'application/zlib', 'application/x-bzip2', 'application/x-xz', 'application/x-bzip', 'application/x-bzip2', 'application/gzip', 'application/vnd.rar', 'application/x-tar', 'application/x-7z-compressed'];
     }
 }
 
@@ -873,4 +928,13 @@ function hexToRGBArray(color) {
 
 export function contrastingColor(color) {
     return (luma(color) >= 120) ? '#000000' : '#dddddd';
+}
+
+export const encodeMediaPath = (path) => {
+    // Replace % first to avoid replacing the other replacements.
+    path = path.replaceAll('%', '%25');
+
+    path = path.replaceAll('#', '%23');
+    path = path.replaceAll(' ', '%20');
+    return path
 }

@@ -213,7 +213,7 @@ CHANNELS_CONFIG: ChannelsConfig = ChannelsConfig(global_=True)
 TEST_CHANNELS_CONFIG: ChannelsConfig = None
 
 
-def get_channels_config():
+def get_channels_config() -> ChannelsConfig:
     global TEST_CHANNELS_CONFIG
     if isinstance(TEST_CHANNELS_CONFIG, ConfigFile):
         return TEST_CHANNELS_CONFIG
@@ -425,6 +425,8 @@ def import_channels_config():
                     save_config = True
                     if not channel.source_id:
                         channel_import_logger.warning(f'Unable to fetch source_id for {channel.url}')
+                    else:
+                        session.commit()
 
                 channel_import_logger.debug(f'Updated {repr(channel.name)}'
                                             f' url={channel.url}'
@@ -435,7 +437,7 @@ def import_channels_config():
 
         if save_config:
             # Information about the channel was fetched, store it.
-            config.save()
+            save_channels_config()
 
         with get_db_session(commit=True) as session:
             channels_by_link = {sanitize_link(i.name): i for i in session.query(Channel)}

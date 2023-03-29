@@ -24,8 +24,8 @@ async def test_index(test_session, test_directory, example_epub, example_mobi):
     assert ebook.creator == 'roland'
     assert ebook.size == 292579
     assert ebook.file_group.data == {'creator': 'roland', 'title': 'WROLPi Test Book',
-                                     'cover_path': test_directory / 'example.jpeg',
-                                     'ebook_path': test_directory / 'example.epub',
+                                     'cover_path': test_directory / 'ebook example.jpeg',
+                                     'ebook_path': test_directory / 'ebook example.epub',
                                      }
 
     assert ebook.file_group.a_text, 'Book title was not indexed'
@@ -95,10 +95,11 @@ def test_search(test_session, test_client, example_epub):
     assert response.json
     file_group = response.json['file_groups'][0]
     epub_file = file_group['files'][0]
-    assert epub_file['path'] == 'example.epub' and epub_file['mimetype'] == 'application/epub+zip'
+    assert epub_file['path'] == 'ebook example.epub' and epub_file['mimetype'] == 'application/epub+zip'
     assert_dict_contains(
         file_group['data'],
-        {'cover_path': 'example.jpeg', 'ebook_path': 'example.epub', 'title': 'WROLPi Test Book', 'creator': 'roland'},
+        {'cover_path': 'ebook example.jpeg', 'ebook_path': 'ebook example.epub', 'title': 'WROLPi Test Book',
+         'creator': 'roland'},
     )
 
     # No Mobi ebook.
@@ -122,11 +123,11 @@ async def test_discover_calibre_cover(test_session, test_directory, example_epub
     ebook: EBook = test_session.query(EBook).one()
     assert ebook.file_group.title == 'WROLPi Test Book'
     # The cover in the ebook was extracted.
-    assert ebook.cover_file['path'] == test_directory / 'example.jpeg'
-    assert (test_directory / 'example.jpeg').is_file()
+    assert ebook.cover_file['path'] == test_directory / 'ebook example.jpeg'
+    assert (test_directory / 'ebook example.jpeg').is_file()
 
     # Delete the extracted cover, use the cover image from Calibre.
-    (test_directory / 'example.jpeg').unlink()
+    (test_directory / 'ebook example.jpeg').unlink()
     cover_image = test_directory / 'cover.jpg'
     shutil.move(image_file, cover_image)
 

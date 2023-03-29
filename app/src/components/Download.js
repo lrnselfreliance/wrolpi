@@ -39,7 +39,6 @@ class Downloader extends React.Component {
     }
 
     handleInputChange = async (event, {name, value}) => {
-        console.log(name, value);
         this.setState({[name]: value}, this.validateUrls);
     }
 

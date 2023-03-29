@@ -4,6 +4,7 @@ import {Link, useNavigate, useParams} from "react-router-dom";
 import _ from "lodash";
 import {
     BackButton,
+    encodeMediaPath,
     humanFileSize,
     humanNumber,
     isoDatetimeToString,
@@ -28,8 +29,8 @@ function videoFileLink(path, directory = false) {
     if (path) {
         const href = directory ?
             // Add / to end of directory.
-            `${MEDIA_PATH}/${encodeURIComponent(path)}/` :
-            `${MEDIA_PATH}/${encodeURIComponent(path)}`;
+            `${MEDIA_PATH}/${encodeMediaPath(path)}/` :
+            `${MEDIA_PATH}/${encodeMediaPath(path)}`;
         return <a href={href} target='_blank' rel='noopener noreferrer'>
             <pre>{path}</pre>
         </a>
@@ -78,11 +79,11 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         navigate(-1);
     }
 
-    let videoUrl = `${MEDIA_PATH}/${encodeURIComponent(video.video_path)}`;
-    let downloadUrl = `/download/${encodeURIComponent(video.video_path)}`;
+    let videoUrl = `${MEDIA_PATH}/${encodeMediaPath(video.video_path)}`;
+    let downloadUrl = `/download/${encodeMediaPath(video.video_path)}`;
 
-    let posterUrl = video.poster_path ? `${MEDIA_PATH}/${encodeURIComponent(video.poster_path)}` : null;
-    let captionsUrl = video.caption_path ? `${MEDIA_PATH}/${encodeURIComponent(video.caption_path)}` : null;
+    let posterUrl = video.poster_path ? `${MEDIA_PATH}/${encodeMediaPath(video.poster_path)}` : null;
+    let captionsUrl = video.caption_path ? `${MEDIA_PATH}/${encodeMediaPath(video.caption_path)}` : null;
     let vttCaptions = video.caption_path && video.caption_path.endsWith('.vtt');
 
     let description = 'No description available.';

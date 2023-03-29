@@ -14,10 +14,12 @@ import {
 } from "semantic-ui-react";
 import {
     CardGroupCentered,
-    CardPosterLink,
+    CardPoster,
     cardTitleWrapper,
+    encodeMediaPath,
     ExternalCardLink,
     FileIcon,
+    findPosterPath,
     humanFileSize,
     isoDatetimeToString,
     mimetypeColor,
@@ -40,33 +42,24 @@ import _ from 'lodash';
 import {FileBrowser} from "./FileBrowser";
 import {refreshDirectoryFiles, refreshFiles} from "../api";
 import {useSubscribeEventName} from "../Events";
-import {FilePreviewContext} from "./FilePreview";
-import {taggedImageLabel, TagsContext} from "../Tags";
+import {TagsContext} from "../Tags";
 
 function EbookCard({file}) {
     const {s} = useContext(ThemeContext);
     let {data} = file;
 
-    const downloadUrl = `/download/${encodeURIComponent(file.primary_path)}`;
+    const downloadUrl = `/download/${encodeMediaPath(file.primary_path)}`;
     const isEpub = file['mimetype'].startsWith('application/epub');
     const viewerUrl = isEpub ? `/epub.html?url=${downloadUrl}` : null;
 
-    let cover = <FileIcon file={file}/>;
-    if (data && data.cover_path) {
-        const coverSrc = `/media/${encodeURIComponent(data.cover_path)}`;
-        cover = <CardPosterLink poster_url={coverSrc}/>;
-    }
-
     const color = mimetypeColor(file.mimetype);
     return <Card color={color}>
-        <PreviewLink file={file}>
-            {cover}
-        </PreviewLink>
+        <CardPoster file={file} preview={true}/>
         <CardContent {...s}>
             <CardHeader>
                 <Container textAlign='left'>
                     <ExternalCardLink to={viewerUrl || downloadUrl}>
-                        {data ? data.title : file.title}
+                        {cardTitleWrapper(data ? data.title : file.title)}
                     </ExternalCardLink>
                 </Container>
             </CardHeader>
@@ -81,22 +74,11 @@ function EbookCard({file}) {
 
 function ImageCard({file}) {
     const {s} = useContext(ThemeContext);
-    const {setPreviewFile} = React.useContext(FilePreviewContext);
-    const url = `/media/${encodeURIComponent(file.primary_path)}`;
-
-    let poster = <FileIcon file={file}/>;
-    if (file.size && file.size < 50000000) {
-        // Image is less than 5mb, use it.
-        poster = <Image wrapped
-                        src={url}
-                        style={{position: 'relative', width: '100%'}}
-                        onClick={() => setPreviewFile(file)}
-        />
-    }
+    const url = `/media/${encodeMediaPath(file.primary_path)}`;
 
     return <Card color={mimetypeColor(file.mimetype)}>
         <PreviewLink file={file}>
-            {poster}
+            <CardPoster file={file}/>
         </PreviewLink>
         <CardContent {...s}>
             <CardHeader>
@@ -112,18 +94,6 @@ function ImageCard({file}) {
             </CardDescription>
         </CardContent>
     </Card>
-}
-
-function findPosterPath(files) {
-    if (_.isEmpty(files)) {
-        return;
-    }
-    for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (file['mimetype'] && file['mimetype'].startsWith('image/')) {
-            return file['path'];
-        }
-    }
 }
 
 function FileCard({file}) {
@@ -143,27 +113,17 @@ function FileCard({file}) {
         return <EbookCard key={file['primary_path']} file={file}/>;
     }
 
-    const {data, tags} = file;
+    const {data} = file;
     let author;
     if (data) {
         author = data['author'];
     }
-    const downloadUrl = `/download/${encodeURIComponent(file.primary_path)}`;
+    const downloadUrl = `/download/${encodeMediaPath(file.primary_path)}`;
     const color = mimetypeColor(file.mimetype);
     const size = file.size !== null && file.size !== undefined ? humanFileSize(file.size) : null;
 
-    const posterFile = findPosterPath(file['files']);
-    let poster = <CardIcon><FileIcon file={file}/></CardIcon>;
-    let imageLabel = !_.isEmpty(tags) ? taggedImageLabel : null;
-    if (posterFile) {
-        const posterUrl = `/media/${encodeURIComponent(posterFile)}`;
-        poster = <CardPosterLink to={downloadUrl} poster_url={posterUrl} imageLabel={imageLabel}/>;
-    }
-
     return <Card color={color}>
-        <PreviewLink file={file}>
-            {poster}
-        </PreviewLink>
+        <CardPoster to={downloadUrl} file={file}/>
         <CardContent {...s}>
             <CardHeader>
                 <ExternalCardLink to={downloadUrl}>
@@ -190,7 +150,7 @@ export function FileCards({files}) {
 }
 
 function ImageRowCells({file}) {
-    const url = `/media/${encodeURIComponent(file.primary_path)}`;
+    const url = `/media/${encodeMediaPath(file.primary_path)}`;
 
     let poster = <FileIcon file={file} size='large'/>;
     if (file.size && file.size < 50000000) {
@@ -214,11 +174,10 @@ function ImageRowCells({file}) {
 }
 
 export function EbookRowCells({file}) {
-    const {data} = file;
-
     let cover = <CardIcon><FileIcon file={file}/></CardIcon>;
-    if (data && data.cover_path) {
-        const coverSrc = `/media/${encodeURIComponent(data.cover_path)}`;
+    const posterPath = findPosterPath(file);
+    if (posterPath) {
+        const coverSrc = `/media/${encodeMediaPath(posterPath)}`;
         cover = <Image wrapped src={coverSrc} width='50px'/>;
     }
 
@@ -229,6 +188,7 @@ export function EbookRowCells({file}) {
         </TableCell>
         <TableCell>
             <PreviewLink file={file}>
+                <FileRowTagIcon file={file}/>
                 {textEllipsis(file.title || file.stem)}
             </PreviewLink>
         </TableCell>
@@ -256,7 +216,8 @@ function FileRow({file}) {
             <center><FileIcon file={file} size='large'/></center>
         </TableCell>
         <TableCell>
-            <PreviewLink file={file}>{textEllipsis(file.title)}</PreviewLink>
+            <FileRowTagIcon file={file}/>
+            <PreviewLink file={file}>{textEllipsis(file.title || file.name || file.stem)}</PreviewLink>
         </TableCell>
     </React.Fragment>
 }
@@ -397,7 +358,7 @@ export function FilesView({
 }
 
 export function TagsFilesGroupDropdown({onChange}) {
-    // Creates a dropdown that the User can use to manipulate the tag query.
+    // Creates  dropdown that the User can use to manipulate the tag query.
     const {searchParams, updateQuery} = useQuery();
     const activeTag = searchParams.get('tag');
     const {tags} = React.useContext(TagsContext);

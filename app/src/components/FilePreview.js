@@ -2,6 +2,7 @@ import React from "react";
 import _ from "lodash";
 import {
     Button as SButton,
+    Grid,
     Header as SHeader,
     Image,
     Modal,
@@ -9,33 +10,36 @@ import {
     ModalContent,
     ModalHeader
 } from "semantic-ui-react";
+import {TagsDisplay} from "../Tags";
+import {Media} from "../contexts/contexts";
+import {encodeMediaPath} from "./Common";
 
-function getMediaPathURL(file) {
-    if (file['primary_path']) {
-        return `/media/${encodeURIComponent(file['primary_path'])}`;
+function getMediaPathURL(previewFile) {
+    if (previewFile['primary_path']) {
+        return `/media/${encodeMediaPath(previewFile['primary_path'])}`;
     } else {
-        return `/media/${encodeURIComponent(file['path'])}`;
+        return `/media/${encodeMediaPath(previewFile['path'])}`;
     }
 }
 
-function getDownloadPathURL(file) {
-    if (file['primary_path']) {
-        return `/download/${encodeURIComponent(file['primary_path'])}`;
+function getDownloadPathURL(previewFile) {
+    if (previewFile['primary_path']) {
+        return `/download/${encodeMediaPath(previewFile['primary_path'])}`;
     } else {
-        return `/download/${encodeURIComponent(file['path'])}`;
+        return `/download/${encodeMediaPath(previewFile['path'])}`;
     }
 }
 
-function getEpubViewerURL(file) {
-    if (file['primary_path']) {
-        return `/epub.html?url=download/${encodeURIComponent(file['primary_path'])}`;
+function getEpubViewerURL(previewFile) {
+    if (previewFile['primary_path']) {
+        return `/epub.html?url=download/${encodeMediaPath(previewFile['primary_path'])}`;
     } else {
-        return `/epub.html?url=download/${encodeURIComponent(file['path'])}`;
+        return `/epub.html?url=download/${encodeMediaPath(previewFile['path'])}`;
     }
 }
 
-function getIframeModal(path) {
-    const url = getMediaPathURL(path);
+function getIframeModal(previewFile) {
+    const url = getMediaPathURL(previewFile);
     return <ModalContent>
         <div className='full-height'>
             <iframe title='textModal' src={url}
@@ -46,9 +50,11 @@ function getIframeModal(path) {
     </ModalContent>
 }
 
-function getImageModal(path) {
-    const url = getMediaPathURL(path);
-    const name = path['path'].replace(/^.*[\\\/]/, '');
+function getImageModal(previewFile) {
+    const path = previewFile.primary_path ?? previewFile.path;
+    const url = getMediaPathURL(previewFile);
+    // Get the file name from the absolute path.
+    const name = path.replace(/^.*[\\\/]/, '');
     return <React.Fragment>
         <ModalHeader>
             {name}
@@ -61,8 +67,8 @@ function getImageModal(path) {
     </React.Fragment>
 }
 
-function getEpubModal(path) {
-    const downloadURL = getDownloadPathURL(path);
+function getEpubModal(previewFile) {
+    const downloadURL = getDownloadPathURL(previewFile);
     const viewerUrl = `/epub.html?url=${downloadURL}`;
     return <ModalContent>
         <div className='full-height'>
@@ -74,10 +80,11 @@ function getEpubModal(path) {
     </ModalContent>
 }
 
-function getVideoModal(path) {
-    const url = getMediaPathURL(path);
-    const name = path['path'].replace(/^.*[\\\/]/, '');
-    const type = path['mimetype'] ? path['mimetype'] : 'video/mp4';
+function getVideoModal(previewFile) {
+    const url = getMediaPathURL(previewFile);
+    const path = previewFile.primary_path ?? previewFile.path;
+    const name = path.replace(/^.*[\\\/]/, '');
+    const type = previewFile.mimetype ? previewFile.mimetype : 'video/mp4';
     return <React.Fragment>
         <ModalHeader>
             {name}
@@ -96,11 +103,12 @@ function getVideoModal(path) {
     </React.Fragment>
 }
 
-function getAudioModal(path) {
-    const url = getMediaPathURL(path);
-    const name = path['path'].replace(/^.*[\\\/]/, '');
+function getAudioModal(previewFile) {
+    const url = getMediaPathURL(previewFile);
+    const path = previewFile.primary_path ?? previewFile.path;
+    const name = path.replace(/^.*[\\\/]/, '');
     // Some audio files may not have the correct mimetype.  Trust the suffix identifies an audio file.
-    const type = path['mimetype'] !== 'application/octet-stream' ? path['mimetype'] : 'audio/mpeg';
+    const type = previewFile['mimetype'] !== 'application/octet-stream' ? previewFile['mimetype'] : 'audio/mpeg';
     return <React.Fragment>
         <ModalHeader>
             {name}
@@ -132,6 +140,16 @@ export function FilePreviewWrapper({children}) {
     };
 
     function setModalContent(content, url, downloadURL) {
+        const openButton = <SButton color='blue' as='a' href={url}>Open</SButton>;
+        const closeButton = <SButton onClick={() => setPreviewFile(null)}>Close</SButton>;
+        const tagsDisplay = <TagsDisplay fileGroup={previewFile}/>;
+        let downloadButton;
+        if (downloadURL) {
+            downloadButton = <SButton color='yellow' as='a' href={downloadURL} floated='left'>
+                Download
+            </SButton>;
+        }
+
         setPreviewModal(<Modal closeIcon
                                size='fullscreen'
                                open={true}
@@ -139,10 +157,28 @@ export function FilePreviewWrapper({children}) {
         >
             {content}
             <ModalActions>
-                {downloadURL &&
-                    <SButton color='yellow' onClick={() => window.open(downloadURL)} floated='left'>Download</SButton>}
-                <SButton color='blue' onClick={() => window.open(url)}>Open</SButton>
-                <SButton onClick={() => setPreviewFile(null)}>Close</SButton>
+                <Media at='mobile'>
+                    <Grid>
+                        <Grid.Row>
+                            <Grid.Column width={6}>{downloadButton}</Grid.Column>
+                            <Grid.Column width={5}>{openButton}</Grid.Column>
+                            <Grid.Column width={5}>{closeButton}</Grid.Column>
+                        </Grid.Row>
+                        <Grid.Row>
+                            <Grid.Column width={16}>{tagsDisplay}</Grid.Column>
+                        </Grid.Row>
+                    </Grid>
+                </Media>
+                <Media greaterThanOrEqual='tablet'>
+                    <Grid>
+                        <Grid.Row>
+                            <Grid.Column width={2}>{downloadButton}</Grid.Column>
+                            <Grid.Column width={10}>{tagsDisplay}</Grid.Column>
+                            <Grid.Column width={2}>{openButton}</Grid.Column>
+                            <Grid.Column width={2}>{closeButton}</Grid.Column>
+                        </Grid.Row>
+                    </Grid>
+                </Media>
             </ModalActions>
         </Modal>);
     }
@@ -173,6 +209,8 @@ export function FilePreviewWrapper({children}) {
             } else if (mimetype.startsWith('application/epub')) {
                 const viewerURL = getEpubViewerURL(previewFile);
                 setModalContent(getEpubModal(previewFile), viewerURL, downloadURL);
+            } else if (mimetype.startsWith('application/pdf')) {
+                setModalContent(getIframeModal(previewFile), url, downloadURL);
             } else if (mimetype.startsWith('image/')) {
                 setModalContent(getImageModal(previewFile), url);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.mp3')) {

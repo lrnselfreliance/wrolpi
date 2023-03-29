@@ -22,13 +22,21 @@ import {
     TableRow,
 } from "semantic-ui-react";
 import {contrastingColor, HelpPopup} from "./components/Common";
-import {Button, Segment} from "./components/Theme";
+import {Segment} from "./components/Theme";
 import _ from "lodash";
-import {Link} from "react-router-dom";
 import {HexColorPicker} from "react-colorful";
 
+export const TagsContext = React.createContext({
+    NameToTagLabel: null,
+    TagsGroup: null,
+    TagsLinkGroup: null,
+    fetchTags: null,
+    findTagByName: null,
+    tagNames: [],
+    tags: [],
+});
+
 const DEFAULT_TAG_COLOR = '#000000';
-export const TagsContext = React.createContext({tags: [], fetchTags: null, findTagByName: null});
 
 export function useTags() {
     const [tags, setTags] = React.useState(null);
@@ -94,9 +102,9 @@ export function useTags() {
         }
         return <Label.Group tag>
             {tagNames.map(i =>
-                <Link key={i} to={`/?tag=${i}`} style={{marginLeft: '0.3em', marginRight: '0.3em'}}>
+                <a key={i} href={`/?tag=${i}`} style={{marginLeft: '0.3em', marginRight: '0.3em'}}>
                     <NameToTagLabel name={i} {...props}/>
-                </Link>
+                </a>
             )}
         </Label.Group>
     }
@@ -116,7 +124,7 @@ function EditTagLabel({tag, onDelete, onEdit}) {
 
     return <TableRow>
         <TableCell>
-            <SButton color='red' onClick={() => setConfirmDeleteOpen(true)} icon='close'/>
+            <SButton color='red' onClick={() => setConfirmDeleteOpen(true)} icon='trash'/>
             <Confirm
                 id={`confirm${name}`}
                 open={confirmDeleteOpen}
@@ -232,8 +240,7 @@ function EditTagsModal() {
 
 export function TagsModal({fileGroup, onClick}) {
     const {tags: usedTags} = fileGroup;
-    const {TagsGroup} = useTags();
-    const {tags: availableTags} = React.useContext(TagsContext);
+    const {tags: availableTags, TagsGroup} = React.useContext(TagsContext);
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
 
@@ -241,7 +248,9 @@ export function TagsModal({fileGroup, onClick}) {
         setLoading(true);
         try {
             await addTag(fileGroup, name);
-            await onClick();
+            if (onClick) {
+                await onClick();
+            }
             console.debug('Added tag');
         } finally {
             setLoading(false);
@@ -252,7 +261,9 @@ export function TagsModal({fileGroup, onClick}) {
         setLoading(true);
         try {
             await removeTag(fileGroup, name);
-            await onClick();
+            if (onClick) {
+                await onClick();
+            }
             console.debug('Removed tag');
         } finally {
             setLoading(false);
@@ -294,7 +305,7 @@ export function TagsModal({fileGroup, onClick}) {
     </Modal>
 
     return <>
-        <Button icon='tag' onClick={() => setOpen(true)}/>
+        <SButton icon='tag' onClick={() => setOpen(true)}/>
         {modal}
     </>
 }
@@ -302,7 +313,11 @@ export function TagsModal({fileGroup, onClick}) {
 export const taggedImageLabel = {corner: 'left', icon: 'tag', color: 'green'};
 
 export const TagsDisplay = ({fileGroup, onClick}) => {
-    const {TagsLinkGroup} = useTags();
+    const {TagsLinkGroup} = React.useContext(TagsContext);
+
+    if (!fileGroup || !TagsLinkGroup) {
+        return
+    }
 
     return <Grid>
         <Grid.Row>
@@ -320,7 +335,7 @@ export const TagsDisplay = ({fileGroup, onClick}) => {
 }
 
 export const TagsDashboard = () => {
-    const {tagNames, TagsLinkGroup} = useTags();
+    const {tagNames, TagsLinkGroup} = React.useContext(TagsContext);
 
     let availableTagsGroup = <SLoader active inline/>;
     if (tagNames && tagNames.length) {

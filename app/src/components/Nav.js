@@ -11,7 +11,8 @@ const links = [
     {text: 'Map', to: '/map', key: 'map'},
     {text: 'Files', to: '/files', key: 'files'},
     {text: 'Inventory', to: '/inventory', key: 'inventory'},
-    {text: 'More', key: 'more',
+    {
+        text: 'More', key: 'more',
         links: [
             {to: '/more/otp', text: 'One Time Pad', end: true},
             {to: '/more/statistics', text: 'Statistics', end: true},

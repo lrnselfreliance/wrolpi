@@ -79,3 +79,13 @@ def test_timedelta_to_timestamp(td, expected):
 ])
 def test_strptime(dt, expected):
     assert dates.strptime(dt) == expected
+
+
+@pytest.mark.parametrize('dt,expected', [
+    ('20010101', datetime(2001, 1, 1, tzinfo=pytz.UTC)),
+    ('20050607', datetime(2005, 6, 7, tzinfo=pytz.UTC)),
+    ('2006-07-08', datetime(2006, 7, 8, tzinfo=pytz.UTC)),
+    ('2007-8-9', datetime(2007, 8, 9, tzinfo=pytz.UTC)),
+])
+def test_strpdate(dt, expected):
+    assert dates.strpdate(dt) == expected

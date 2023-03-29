@@ -11,7 +11,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 
-from wrolpi import before_startup
+from wrolpi import before_startup, dates
 from wrolpi.captions import extract_captions
 from wrolpi.common import ConfigFile, get_media_directory, sanitize_link, register_refresh_cleanup, limit_concurrent
 from wrolpi.dates import Seconds
@@ -80,7 +80,7 @@ def validate_video(video: Video, channel_generate_poster: bool):
     """
     info_json_path = video.info_json_path
     json_data_missing = bool(video.file_group.title) and bool(video.duration) and bool(video.view_count) \
-                        and bool(video.url) and bool(video.upload_date)
+                        and bool(video.url)
     if info_json_path and json_data_missing is False:
         # These properties can be found in the info json.
         video_info_json = process_video_info_json(video)
@@ -101,9 +101,8 @@ def validate_video(video: Video, channel_generate_poster: bool):
         # These are the least trusted, so anything already on the video should be trusted.
         _, upload_date, source_id, title = parse_video_file_name(video_path)
         upload_date = upload_date or video.upload_date
-        if upload_date:
-            upload_date = datetime.datetime.strptime(upload_date, '%Y%M%d')
-            upload_date = upload_date.replace(tzinfo=datetime.timezone.utc)
+        if upload_date and isinstance(upload_date, str):
+            upload_date = dates.strpdate(upload_date)
         video.file_group.title = video.file_group.title or html.unescape(title)
         video.upload_date = upload_date
         video.source_id = video.source_id or source_id

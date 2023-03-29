@@ -69,7 +69,7 @@ async def test_video_factory(test_session, video_factory, channel_factory):
 
 def test_validate_video(test_session, test_directory, video_factory, image_bytes_factory, video_file):
     """A video poster will be generated only if the channel permits."""
-    video_file = video_file.rename(test_directory / 'Channel Name_20000101_1234567890_The Title.mp4')
+    video_file = video_file.rename(test_directory / 'Channel Name_20050607_1234567890_The Title.mp4')
     vid1 = video_factory(with_video_file=video_file)
     # Clear source_id so source_id in the file will be extracted.
     vid1.source_id = None
@@ -81,7 +81,7 @@ def test_validate_video(test_session, test_directory, video_factory, image_bytes
     assert vid1.poster_path.is_file(), 'Poster path does not exist'
     assert vid1.video_path.stem == vid1.poster_path.stem
     assert vid1.poster_path.suffix == '.jpg'
-    assert vid1.upload_date == datetime.datetime(2000, 1, 1, 0, 1, tzinfo=datetime.timezone.utc)
+    assert vid1.upload_date == datetime.datetime(2005, 6, 7, 0, 0, tzinfo=datetime.timezone.utc)
     assert vid1.source_id == '1234567890'
     assert vid1.file_group.title == 'The Title'
 

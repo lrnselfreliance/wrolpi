@@ -48,6 +48,13 @@ def strptime(dt: str) -> datetime:
     return datetime.fromisoformat(dt).astimezone(pytz.UTC)
 
 
+def strpdate(dt: str) -> datetime:
+    if '-' in dt:
+        return datetime.strptime(dt, '%Y-%m-%d').replace(tzinfo=pytz.UTC)
+
+    return datetime.strptime(dt, '%Y%m%d').replace(tzinfo=pytz.UTC)
+
+
 def strftime_ms(dt: datetime) -> str:
     return dt.strftime(DATETIME_FORMAT_MS)
 

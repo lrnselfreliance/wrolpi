@@ -18,6 +18,7 @@ from uuid import uuid1, uuid4
 
 import pytest
 import sqlalchemy
+import yaml
 from PIL import Image
 from sanic_testing.testing import SanicTestClient
 from sqlalchemy.engine import Engine, create_engine

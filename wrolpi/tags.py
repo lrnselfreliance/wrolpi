@@ -1,11 +1,12 @@
 import contextlib
-from typing import List
+from typing import List, Dict
 
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import relationship, Session
 
-from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, run_after
+from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, run_after, \
+    limit_concurrent
 from wrolpi.db import optional_session
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag
 from wrolpi.vars import PYTEST
@@ -43,7 +44,7 @@ class Tag(ModelHelper, Base):
         )
 
     @optional_session
-    def add_tag(self, file_group, session: Session = None) -> TagFile:
+    def add_file_group_tag(self, file_group, session: Session = None) -> TagFile:
         """Add a TagFile for the provided FileGroup and this Tag.
 
         @warning: Commits the session to keep the config in sync."""
@@ -62,7 +63,7 @@ class Tag(ModelHelper, Base):
         return tag_file
 
     @optional_session
-    def remove_tag(self, file_group, session: Session = None):
+    def remove_file_group_tag(self, file_group, session: Session = None):
         """Remove the record of a Tag applied to the FileGroup.
 
         @warning: Commits the session to keep config in sync."""
@@ -106,6 +107,14 @@ class TagsConfig(ConfigFile):
     def tag_files(self, value):
         value = sorted(value, key=lambda i: (i[0].lower(), i[1]))
         self.update({'tag_files': value})
+
+    @property
+    def tags(self) -> dict:
+        return self._config['tags']
+
+    @tags.setter
+    def tags(self, value: dict):
+        self.update({'tags': value})
 
     def save_tags(self, session: Session):
         media_directory = get_media_directory()
@@ -211,3 +220,76 @@ def delete_tag(tag_id: int, session: Session = None):
 
     session.delete(tag)
     session.commit()
+
+
+@optional_session
+def import_tags_config(session: Session = None):
+    """Reads the Tags and TagFiles from the config file, upserts them in the DB."""
+    if PYTEST and not TEST_TAGS_CONFIG:
+        logger.warning('Refusing to import tags without test tags config.  '
+                       'Use `test_tags_config` fixture if you would like to call this.')
+        return
+
+    config = get_tags_config()
+    if not (path := config.get_file()).is_file():
+        logger.warning(f'Refusing to import tags config because it does not exist: {path}')
+        return
+
+    logger.info('Importing tags config')
+
+    try:
+        if config.tags:
+            # Tags have been saved to config, import them
+            tags_by_name: Dict[str, Tag] = {i.name: i for i in session.query(Tag)}
+            new_tags = list()
+            for name, attrs in config.tags.items():
+                tag = tags_by_name.get(name)
+                if not tag:
+                    # Maintainer added a Tag to the config manually, or DB was wiped.
+                    tag = Tag(name=name, color=attrs['color'])
+                    new_tags.append(tag)
+                tag.color = attrs['color']
+
+            if new_tags:
+                session.add_all(new_tags)
+
+            session.commit()
+
+        if config.tag_files:
+            from wrolpi.files.models import FileGroup
+
+            need_commit = False
+
+            # Get all Tags again because new ones may exist.
+            tags_by_name: Dict[str, Tag] = {i.name: i for i in session.query(Tag)}
+
+            media_directory = get_media_directory()
+            primary_paths = [str(media_directory / i[1]) for i in config.tag_files]
+            file_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(primary_paths))
+            file_groups_by_primary_path = {i.primary_path: i for i in file_groups}
+            file_group_ids = [i.id for i in file_groups]
+            # Get all TagFiles referencing the FileGroups.
+            tag_files = session.query(TagFile).filter(TagFile.file_group_id.in_(file_group_ids))
+            tag_files = [(i.tag_id, i.file_group_id) for i in tag_files]
+
+            for tag_name, primary_path in config.tag_files:
+                tag: Tag = tags_by_name.get(tag_name)
+                # Paths are absolute in the DB, relative in config.
+                absolute_path = media_directory / primary_path
+                file_group: FileGroup = file_groups_by_primary_path.get(absolute_path)
+                if tag and file_group:
+                    if (tag.id, file_group.id) not in tag_files:
+                        # This FileGroup has not been tagged with the Tag, add it.
+                        tag.add_file_group_tag(file_group, session)
+                        need_commit = True
+                elif not file_group:
+                    logger.warning(f'Cannot find FileGroup for {repr(str(primary_path))}')
+                elif not tag:
+                    logger.warning(f'Cannot find Tag for {repr(str(primary_path))}')
+
+            if need_commit:
+                session.commit()
+    except Exception as e:
+        logger.error(f'Failed to import tags config', exc_info=e)
+        if PYTEST:
+            raise

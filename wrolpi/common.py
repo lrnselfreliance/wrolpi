@@ -195,6 +195,13 @@ class ConfigFile:
             self._config = self.default_config.copy()
             return
 
+        self.width = self.width or 90
+        self.initialize()
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__} file={self.get_file()}>'
+
+    def initialize(self):
         config_file = self.get_file()
         self._config = Manager().dict()
         # Use the default settings to initialize the config.
@@ -203,11 +210,6 @@ class ConfigFile:
             # Use the config file to get the values the user set.
             with config_file.open('rt') as fh:
                 self._config.update(yaml.load(fh, Loader=yaml.Loader))
-
-        self.width = self.width or 90
-
-    def __repr__(self):
-        return f'<{self.__class__.__name__} file={self.get_file()}>'
 
     def save(self):
         """

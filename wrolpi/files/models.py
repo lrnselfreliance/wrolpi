@@ -124,11 +124,11 @@ class FileGroup(ModelHelper, Base):
 
     @optional_session
     def add_tag(self, tag: Tag, session: Session = None) -> TagFile:
-        return tag.add_tag(self, session)
+        return tag.add_file_group_tag(self, session)
 
     @optional_session
     def remove_tag(self, tag: Tag, session: Session = None):
-        tag.remove_tag(self, session)
+        tag.remove_file_group_tag(self, session)
 
     def append_files(self, *paths: pathlib.Path):
         """Add all `paths` to this FileGroup.files."""

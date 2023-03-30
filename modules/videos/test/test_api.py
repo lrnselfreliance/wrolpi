@@ -203,9 +203,9 @@ def test_search_videos_file(test_client, test_session, test_directory, video_wit
 
 def test_search_videos(test_client, test_session, video_factory, assert_video_search, simple_channel, tag_factory):
     """Search the Video table.  This does not need to use a join with the File table."""
-    vid1 = video_factory(upload_date='2022-09-16', with_video_file=True, title='vid1')
-    vid2 = video_factory(upload_date='2022-09-17', with_video_file=True, title='vid2', channel_id=simple_channel.id)
-    vid3 = video_factory(upload_date='2022-09-18', with_video_file=True, title='vid3')
+    vid1: Video = video_factory(upload_date='2022-09-16', with_video_file=True, title='vid1')
+    vid2: Video = video_factory(upload_date='2022-09-17', with_video_file=True, title='vid2', channel_id=simple_channel.id)
+    vid3: Video = video_factory(upload_date='2022-09-18', with_video_file=True, title='vid3')
     tag1, tag2 = tag_factory(), tag_factory()
     vid1.add_tag(tag1)
     vid3.add_tag(tag2)

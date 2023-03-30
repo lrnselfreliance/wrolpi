@@ -221,6 +221,13 @@ async def start_workers(app: Sanic):
     download_manager.start_workers()
 
 
+@api_app.before_server_start
+@limit_concurrent(1)
+async def main_import_tags_config(app: Sanic):
+    from wrolpi import tags
+    tags.import_tags_config()
+
+
 @api_app.after_server_start
 async def bandwidth_worker(app: Sanic):
     from wrolpi import status

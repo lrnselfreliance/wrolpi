@@ -1,6 +1,9 @@
+import asyncio
+import contextlib
 import multiprocessing
 import subprocess
 import threading
+from datetime import datetime
 from typing import List
 
 from sqlalchemy import Column, Boolean, Integer
@@ -94,6 +97,12 @@ class Flag:
                         ''', dict(value=value))
             except Exception as e:
                 logger.critical(f'Unable to save flag! {repr(self)}', exc_info=e)
+
+    @contextlib.asynccontextmanager
+    async def wait_for(self, timeout: int = 0):
+        """Wait for this Flag to be set."""
+        async with wait_for_flag(self, timeout=timeout):
+            yield
 
 
 # Set by `check_db_is_up`.
@@ -202,3 +211,24 @@ def init_flags():
                 refresh_complete.clear()
 
     FLAGS_INITIALIZED.set()
+
+
+@contextlib.asynccontextmanager
+async def wait_for_flag(flag: Flag, timeout: int = 0):
+    """Sleeps until the provided Flag is set.
+
+    >>> async with wait_for_flag(db_up):
+    >>>     do_db_operation()
+
+    @raise TimeoutError: Raises this when the timeout is reached.
+    """
+    start = datetime.now()
+    while True:
+        if timeout and (elapsed := (datetime.now() - start).total_seconds()) > timeout:
+            raise TimeoutError(f'Waited too long ({elapsed}s) for {flag} to be set!')
+
+        if flag.is_set():
+            break
+        await asyncio.sleep(0.1)
+
+    yield

@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from sqlalchemy.orm import Session
 
@@ -43,3 +45,11 @@ def test_flags_with(flags_lock):
         with flags.refreshing:
             with flags.refreshing:
                 raise Exception('We should not get here!')
+
+
+@pytest.mark.asyncio
+async def test_flag_wait_for(flags_lock):
+    """Wait for throws an error when waiting exceeds timeout."""
+    with pytest.raises(TimeoutError):
+        async with flags.refreshing.wait_for(timeout=1):
+            await asyncio.sleep(2)

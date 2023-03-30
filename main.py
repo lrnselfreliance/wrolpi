@@ -160,7 +160,7 @@ def main():
 @api_app.before_server_start
 @limit_concurrent(1)
 async def startup(app: Sanic):
-    # Check database status first.  Many function will reference flags.db_up.
+    # Check database status first.  Many functions will reference flags.db_up.
     flags.check_db_is_up()
 
     flags.init_flags()
@@ -183,9 +183,8 @@ async def periodic_downloads(app: Sanic):
 
     Limited to only one process.
     """
-    if not flags.db_up.is_set():
-        logger.warning(f'Refusing to download when DB is not up.')
-        return
+    async with flags.db_up.wait_for():
+        pass
 
     if not flags.refresh_complete.is_set():
         logger.warning('Refusing to download without refresh')
@@ -206,8 +205,9 @@ async def periodic_downloads(app: Sanic):
         download_manager.disable()
         return
 
-    download_manager.enable()
-    app.add_task(download_manager.perpetual_download())
+    async with flags.wait_for_flag(flags.db_up):
+        download_manager.enable()
+        app.add_task(download_manager.perpetual_download())
 
 
 @api_app.after_server_start
@@ -218,14 +218,16 @@ async def start_workers(app: Sanic):
         download_manager.stop()
         return
 
-    download_manager.start_workers()
+    async with flags.wait_for_flag(flags.db_up):
+        download_manager.start_workers()
 
 
 @api_app.before_server_start
 @limit_concurrent(1)
 async def main_import_tags_config(app: Sanic):
     from wrolpi import tags
-    tags.import_tags_config()
+    async with flags.db_up.wait_for():
+        tags.import_tags_config()
 
 
 @api_app.after_server_start

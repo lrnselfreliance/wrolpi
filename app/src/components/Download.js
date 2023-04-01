@@ -6,6 +6,7 @@ import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {ThemeContext} from "../contexts/contexts";
 import {Accordion, Button, Form, FormField, FormGroup, FormInput, Header, Loader, Segment, TextArea} from "./Theme";
 import {AccordionContent, AccordionTitle, FormDropdown} from "semantic-ui-react";
+import {Link} from "react-router-dom";
 
 const validUrl = /^(http|https):\/\/[^ "]+$/;
 
@@ -20,17 +21,18 @@ class Downloader extends React.Component {
             pending: false,
             urls: '',
             valid: true,
+            submitted: false,
         };
     }
 
     submitDownload = async () => {
         let {urls, downloader, destination} = this.state;
         if (urls) {
-            this.setState({pending: true});
+            this.setState({pending: true, submitted: false});
             try {
                 let response = await postDownload(urls, downloader, null, null, null, destination);
                 if (response.status === 204) {
-                    this.setState({urls: '', pending: false});
+                    this.setState({urls: '', pending: false, submitted: true});
                 }
             } finally {
                 this.setState({pending: false});
@@ -60,9 +62,24 @@ class Downloader extends React.Component {
         }
     }
 
+    handleKeydown = async (e) => {
+        const {valid, urls} = this.state;
+        if (e.keyCode === 13 && e.ctrlKey && urls && valid) {
+            await this.submitDownload();
+        }
+    }
+
+    componentDidMount() {
+        document.addEventListener('keydown', this.handleKeydown);
+    }
+
+    componentWillUnmount() {
+        document.removeEventListener('keydown', this.handleKeydown);
+    }
+
     render() {
         let disabled = !this.state.urls || !this.state.valid || this.state.pending || !this.state.downloader;
-        const {advancedOpen, destination} = this.state;
+        const {advancedOpen, destination, submitted} = this.state;
         const {header, withDestination} = this.props;
 
         const advancedAccordion = <Accordion>
@@ -86,6 +103,8 @@ class Downloader extends React.Component {
             </AccordionContent>
         </Accordion>;
 
+        const viewDownloads = <Link to='/admin'><Icon name='checkmark'/> View downloads</Link>;
+
         return <ThemeContext.Consumer>
             {({i}) => (<Form onSubmit={this.submitDownload}>
                 <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
@@ -99,6 +118,7 @@ class Downloader extends React.Component {
                 {withDestination && advancedAccordion}
                 <Button content='Cancel' onClick={this.props.clearSelected}/>
                 <Button primary style={{marginTop: '1em'}} disabled={disabled}>Download</Button>
+                {submitted && viewDownloads}
             </Form>)}
         </ThemeContext.Consumer>
     }

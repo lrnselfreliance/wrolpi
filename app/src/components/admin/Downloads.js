@@ -180,7 +180,16 @@ class StoppableRow extends React.Component {
             stopOpen: false,
             startOpen: false,
             errorModalOpen: false,
+            deleteOpen: false,
         };
+    }
+
+    openDelete = () => {
+        this.setState({deleteOpen: true});
+    }
+
+    closeDelete = () => {
+        this.setState({deleteOpen: false});
     }
 
     openStop = () => {
@@ -199,6 +208,13 @@ class StoppableRow extends React.Component {
         this.setState({startOpen: false});
     }
 
+    handleDelete = async (e) => {
+        e.preventDefault();
+        await deleteDownload(this.props.id);
+        this.closeDelete();
+        await this.props.fetchDownloads();
+    };
+
     handleStop = async (e) => {
         e.preventDefault();
         await killDownload(this.props.id);
@@ -216,7 +232,7 @@ class StoppableRow extends React.Component {
 
     render() {
         let {url, last_successful_download, status, location, error} = this.props;
-        let {stopOpen, startOpen, errorModalOpen} = this.state;
+        let {stopOpen, startOpen, errorModalOpen, deleteOpen} = this.state;
 
         const link = location ?
             (text) => <Link to={location}>{text}</Link> :
@@ -243,21 +259,15 @@ class StoppableRow extends React.Component {
         } else if (status === 'failed' || status === 'deferred') {
             buttonCell = (
                 <TableCell>
-                    <Button
-                        onClick={this.openStop}
-                        color='red'
-                    >Stop</Button>
+                    <Button icon='trash' onClick={this.openDelete} color='red'/>
                     <Confirm
-                        open={stopOpen}
-                        content='Are you sure you want to stop this download?  It will not be retried.'
-                        confirmButton='Stop'
-                        onCancel={this.closeStop}
-                        onConfirm={this.handleStop}
+                        open={deleteOpen}
+                        content='Are you sure you want to delete this download?'
+                        confirmButton='Delete'
+                        onCancel={this.closeDelete}
+                        onConfirm={this.handleDelete}
                     />
-                    <Button
-                        onClick={this.openStart}
-                        color='green'
-                    >Retry</Button>
+                    <Button onClick={this.openStart} color='green'>Retry</Button>
                     <Confirm
                         open={startOpen}
                         content='Are you sure you want to restart this download?'

@@ -2,11 +2,12 @@ import React, {useContext, useEffect, useState} from "react";
 import {Card, Container, IconGroup, Input, Modal, Pagination} from 'semantic-ui-react';
 import {Link, NavLink, useNavigate} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useDirectories, useDownloaders, useHotspot, useSettings, useThrottle} from "../hooks/customHooks";
+import {useDirectories, useHotspot, useSettings, useThrottle} from "../hooks/customHooks";
 import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
 import {Button, CardIcon, darkTheme, Form, Header, Icon, lightTheme, Menu, Popup, Statistic} from "./Theme";
 import {FilePreviewContext} from "./FilePreview";
 import _ from "lodash";
+import {killDownloads, startDownloads} from "../api";
 
 export const API_URI = process.env && process.env.REACT_APP_API_URI ? process.env.REACT_APP_API_URI : `${window.location.protocol}//${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -20,16 +21,32 @@ export function Paginator({activePage, onPageChange, totalPages, showFirstAndLas
         onPageChange(activePage);
     }
 
-    return <Pagination
-        activePage={activePage}
-        boundaryRange={1}
-        onPageChange={handlePageChange}
-        size={size}
-        siblingRange={2}
-        totalPages={totalPages}
-        firstItem={showFirstAndLast ? undefined : null}
-        lastItem={showFirstAndLast ? undefined : null}
-    />
+    return <>
+        <Media at='mobile'>
+            <Pagination
+                activePage={activePage}
+                boundaryRange={1}
+                onPageChange={handlePageChange}
+                size={size}
+                siblingRange={2}
+                totalPages={totalPages}
+                firstItem={showFirstAndLast ? undefined : null}
+                lastItem={showFirstAndLast ? undefined : null}
+            />
+        </Media>
+        <Media greaterThanOrEqual='tablet'>
+            <Pagination
+                activePage={activePage}
+                boundaryRange={1}
+                onPageChange={handlePageChange}
+                size={size}
+                siblingRange={5}
+                totalPages={totalPages}
+                firstItem={showFirstAndLast ? undefined : null}
+                lastItem={showFirstAndLast ? undefined : null}
+            />
+        </Media>
+    </>
 }
 
 export function divmod(x, y) {
@@ -616,7 +633,19 @@ export function Toggle({label, checked, disabled, onChange, icon}) {
 }
 
 export function DisableDownloadsToggle() {
-    let {on, setDownloads} = useDownloaders();
+    const {status, fetchStatus} = React.useContext(StatusContext);
+    const {downloads} = status;
+
+    const setDownloads = async (enable) => {
+    if (enable) {
+        await startDownloads();
+    } else {
+        await killDownloads();
+    }
+    await fetchStatus();
+    }
+
+    const on = downloads && downloads['disabled'] === false;
     return <Form>
         <Toggle
             label={on ? 'Downloading Enabled' : 'Downloading Disabled'}

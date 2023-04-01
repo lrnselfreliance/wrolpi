@@ -623,6 +623,8 @@ class DownloadManager:
         if len(self.data['processing_domains']) >= len(self.workers):
             return
 
+        logger.debug(f'   queue_downloads {self.data["processing_domains"]=}')
+
         # Find download whose domain isn't already being downloaded.
         new_downloads = list(session.query(Download).filter(
             Download.status == 'new',
@@ -632,6 +634,8 @@ class DownloadManager:
             Download.frequency,
             Download.id))  # noqa
         count = 0
+        new_download_ids = [i.id for i in new_downloads]
+        logger.debug(f'   queue_downloads {new_download_ids=}')
         for download in new_downloads:
             download.manager = self  # Assign this Download to this manager.
             domain = download.domain

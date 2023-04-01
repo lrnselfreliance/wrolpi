@@ -531,37 +531,6 @@ export const useDownloads = () => {
     return {onceDownloads, recurringDownloads, fetchDownloads}
 }
 
-export const useDownloaders = () => {
-    const [on, setOn] = useState(null);
-    const [downloaders, setDownloaders] = useState(null);
-
-    const fetchDownloaders = async () => {
-        try {
-            let data = await getDownloaders();
-            setDownloaders(data['downloaders']);
-            setOn(!data['manager_disabled']);
-        } catch (e) {
-            console.error(e);
-        }
-    }
-
-    useEffect(() => {
-        fetchDownloaders();
-    }, []);
-
-    const localSetDownloads = async (on) => {
-        setOn(null);
-        if (on) {
-            await startDownloads();
-        } else {
-            await killDownloads();
-        }
-        await fetchDownloaders();
-    }
-
-    return {on, setOn, downloaders, setDownloads: localSetDownloads};
-}
-
 export const useThrottle = () => {
     const [on, setOn] = useState(null);
 
@@ -669,12 +638,6 @@ export const useStatus = () => {
             setStatus(s);
         } catch (e) {
             console.error(e);
-            toast({
-                type: 'error',
-                title: 'Unexpected server response',
-                description: 'Could not get server status',
-                time: 5000,
-            });
         }
     }
 

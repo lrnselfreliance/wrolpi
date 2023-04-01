@@ -10,9 +10,10 @@ import {
     ModalContent,
     ModalHeader
 } from "semantic-ui-react";
-import {TagsDisplay} from "../Tags";
+import {TagsDisplay, TagsProvider} from "../Tags";
 import {Media} from "../contexts/contexts";
 import {encodeMediaPath} from "./Common";
+import {fetchFile} from "../api";
 
 function getMediaPathURL(previewFile) {
     if (previewFile['primary_path']) {
@@ -126,7 +127,11 @@ function getAudioModal(previewFile) {
 }
 
 export const FilePreviewContext = React.createContext({
-    previewFile: null, setPreviewFile: null, previewModal: null, setPreviewModal: null,
+    previewFile: null,
+    setPreviewFile: null,
+    previewModal: null,
+    setPreviewModal: null,
+    setCallbacks: null,
 });
 
 const MAXIMUM_TEXT_SIZE = 5_000_000;
@@ -134,15 +139,38 @@ const MAXIMUM_TEXT_SIZE = 5_000_000;
 export function FilePreviewWrapper({children}) {
     const [previewFile, setPreviewFile] = React.useState(null);
     const [previewModal, setPreviewModal] = React.useState(null);
+    const [callbacks, setCallbacks] = React.useState(null);
 
-    const value = {
-        previewFile, setPreviewFile, previewModal, setPreviewModal,
+    const localFetchFile = async () => {
+        // Get the file again with its Tags.
+        const {path, primary_path} = previewFile;
+        try {
+            const file = await fetchFile(primary_path ?? path);
+            setPreviewFile(file);
+        } finally {
+            await handleCallbacks();
+        }
     };
+
+    const handleClose = () => {
+        setPreviewModal(null);
+        setPreviewFile(null);
+    }
+
+    const handleCallbacks = async () => {
+        for (const callbacksKey in callbacks) {
+            try {
+                await callbacks[callbacksKey]();
+            } catch (e) {
+                console.error(e);
+            }
+        }
+    }
 
     function setModalContent(content, url, downloadURL) {
         const openButton = <SButton color='blue' as='a' href={url}>Open</SButton>;
-        const closeButton = <SButton onClick={() => setPreviewFile(null)}>Close</SButton>;
-        const tagsDisplay = <TagsDisplay fileGroup={previewFile}/>;
+        const closeButton = <SButton onClick={handleClose}>Close</SButton>;
+        const tagsDisplay = <TagsDisplay fileGroup={previewFile} afterTag={localFetchFile}/>;
         let downloadButton;
         if (downloadURL) {
             downloadButton = <SButton color='yellow' as='a' href={downloadURL} floated='left'>
@@ -153,7 +181,7 @@ export function FilePreviewWrapper({children}) {
         setPreviewModal(<Modal closeIcon
                                size='fullscreen'
                                open={true}
-                               onClose={() => setPreviewModal(null)}
+                               onClose={handleClose}
         >
             {content}
             <ModalActions>
@@ -221,6 +249,8 @@ export function FilePreviewWrapper({children}) {
             }
         }
     }, [previewFile]);
+
+    const value = {previewFile, setPreviewFile, previewModal, setPreviewModal, setCallbacks};
 
     return <FilePreviewContext.Provider value={value}>
         {children}

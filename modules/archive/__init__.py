@@ -179,6 +179,8 @@ async def archive_modeler():
                 # Even if indexing fails, we mark it as indexed.  We won't retry indexing this.
                 file_group.indexed = True
 
+            session.commit()
+
             if processed < 20:
                 # Did not reach limit, do not query again.
                 break

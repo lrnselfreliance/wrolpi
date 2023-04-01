@@ -215,7 +215,7 @@ def check_for_video_corruption(video_path: Path) -> bool:
     return corrupt
 
 
-def update_view_counts(channel_id: int):
+async def update_view_counts(channel_id: int):
     """Update view_count for all Videos in a channel using its info_json file."""
     with get_db_session() as session:
         channel: Channel = session.query(Channel).filter_by(id=channel_id).one()

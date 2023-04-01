@@ -77,22 +77,19 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
 
 export default function App() {
     const statusValue = useStatusInterval();
-    const tagsValue = useTags();
     useEventsInterval();
 
     return <ThemeWrapper>
-        <TagsContext.Provider value={tagsValue}>
-            <FilePreviewWrapper>
-                {/* Context and style to handle switching between mobile/computer. */}
-                <style>{mediaStyles}</style>
-                {/* Toasts can be on any page. */}
-                <SemanticToastContainer position='top-right'/>
-                <MediaContextProvider>
-                    <StatusContext.Provider value={statusValue}>
-                        <RouterProvider router={router}/>
-                    </StatusContext.Provider>
-                </MediaContextProvider>
-            </FilePreviewWrapper>
-        </TagsContext.Provider>
+        <FilePreviewWrapper>
+            {/* Context and style to handle switching between mobile/computer. */}
+            <style>{mediaStyles}</style>
+            {/* Toasts can be on any page. */}
+            <SemanticToastContainer position='top-right'/>
+            <MediaContextProvider>
+                <StatusContext.Provider value={statusValue}>
+                    <RouterProvider router={router}/>
+                </StatusContext.Provider>
+            </MediaContextProvider>
+        </FilePreviewWrapper>
     </ThemeWrapper>
 }

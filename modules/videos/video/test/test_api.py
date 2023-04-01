@@ -148,7 +148,7 @@ def test_wrol_mode(test_directory, simple_channel, simple_video, wrol_mode_fixtu
     _, resp = api_app.test_client.post('/api/files/refresh')
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
-    _, resp = api_app.test_client.post(f'/api/videos/download/{simple_channel.id}')
+    _, resp = api_app.test_client.post(f'/api/videos/channels/download/{simple_channel.id}')
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
 

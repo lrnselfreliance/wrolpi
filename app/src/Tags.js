@@ -25,6 +25,7 @@ import {contrastingColor, HelpPopup} from "./components/Common";
 import {Segment} from "./components/Theme";
 import _ from "lodash";
 import {HexColorPicker} from "react-colorful";
+import {useRecurringTimeout} from "./hooks/customHooks";
 
 export const TagsContext = React.createContext({
     NameToTagLabel: null,
@@ -115,6 +116,15 @@ export function useTags() {
     }, []);
 
     return {tags, tagNames, NameToTagLabel, TagsGroup, TagsLinkGroup, fetchTags, findTagByName}
+}
+
+export const useTagsInterval = () => {
+    const tagsValue = useTags();
+    const {fetchTags} = tagsValue;
+
+    useRecurringTimeout(fetchTags, 10_000);
+
+    return tagsValue
 }
 
 function EditTagLabel({tag, onDelete, onEdit}) {
@@ -238,7 +248,7 @@ function EditTagsModal() {
     </>
 }
 
-export function TagsModal({fileGroup, onClick}) {
+export function AddTagsButton({fileGroup, afterTag}) {
     const {tags: usedTags} = fileGroup;
     const {tags: availableTags, TagsGroup} = React.useContext(TagsContext);
     const [open, setOpen] = useState(false);
@@ -248,10 +258,11 @@ export function TagsModal({fileGroup, onClick}) {
         setLoading(true);
         try {
             await addTag(fileGroup, name);
-            if (onClick) {
-                await onClick();
-            }
             console.debug('Added tag');
+            if (afterTag) {
+                console.debug('Calling afterTag');
+                await afterTag();
+            }
         } finally {
             setLoading(false);
         }
@@ -261,10 +272,11 @@ export function TagsModal({fileGroup, onClick}) {
         setLoading(true);
         try {
             await removeTag(fileGroup, name);
-            if (onClick) {
-                await onClick();
-            }
             console.debug('Removed tag');
+            if (afterTag) {
+                console.debug('Calling afterTag');
+                await afterTag();
+            }
         } finally {
             setLoading(false);
         }
@@ -312,7 +324,7 @@ export function TagsModal({fileGroup, onClick}) {
 
 export const taggedImageLabel = {corner: 'left', icon: 'tag', color: 'green'};
 
-export const TagsDisplay = ({fileGroup, onClick}) => {
+const Display = ({fileGroup, afterTag}) => {
     const {TagsLinkGroup} = React.useContext(TagsContext);
 
     if (!fileGroup || !TagsLinkGroup) {
@@ -322,7 +334,7 @@ export const TagsDisplay = ({fileGroup, onClick}) => {
     return <Grid>
         <Grid.Row>
             <Grid.Column mobile={2} computer={1}>
-                <TagsModal fileGroup={fileGroup} onClick={onClick}/>
+                <AddTagsButton fileGroup={fileGroup} afterTag={afterTag}/>
             </Grid.Column>
             <Grid.Column mobile={13} computer={14}>
                 <TagsLinkGroup tagNames={fileGroup['tags']}/>
@@ -334,7 +346,13 @@ export const TagsDisplay = ({fileGroup, onClick}) => {
     </Grid>
 }
 
-export const TagsDashboard = () => {
+export const TagsDisplay = ({fileGroup, afterTag, ...props}) => {
+    return <TagsProvider>
+        <Display fileGroup={fileGroup} afterTag={afterTag} {...props}/>
+    </TagsProvider>
+}
+
+const Dashboard = () => {
     const {tagNames, TagsLinkGroup} = React.useContext(TagsContext);
 
     let availableTagsGroup = <SLoader active inline/>;
@@ -350,4 +368,18 @@ export const TagsDashboard = () => {
 
         <EditTagsModal/>
     </Segment>
+}
+
+export const TagsDashboard = () => {
+    return <TagsProvider>
+        <Dashboard/>
+    </TagsProvider>
+}
+
+export const TagsProvider = ({children}) => {
+    const value = useTagsInterval();
+
+    return <TagsContext.Provider value={value}>
+        {children}
+    </TagsContext.Provider>
 }

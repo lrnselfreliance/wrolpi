@@ -26,16 +26,6 @@ add_blueprint(bp)
 logger = logger.getChild(__name__)
 
 
-@content_bp.post('/download/<channel_id:int>')
-@openapi.description('Update a channel catalog, download any missing videos')
-@openapi.response(HTTPStatus.OK, schema.StreamResponse)
-@openapi.response(HTTPStatus.BAD_REQUEST, JSONErrorResponse)
-@wrol_mode_check
-def download(_, channel_id: int = None):
-    channel_lib.download_channel(channel_id)
-    return response.empty()
-
-
 @content_bp.post('/tag')
 @openapi.definition(
     description='Associate a Video with a Tag',

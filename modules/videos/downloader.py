@@ -14,7 +14,7 @@ from yt_dlp.extractor import YoutubeTabIE  # noqa
 from yt_dlp.utils import UnsupportedError, DownloadError
 
 from wrolpi.cmd import YT_DLP_BIN
-from wrolpi.common import logger, get_media_directory, escape_file_name, resolve_generators
+from wrolpi.common import logger, get_media_directory, escape_file_name, resolve_generators, background_task
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.db import optional_session
@@ -438,7 +438,7 @@ def update_channel_catalog(channel: Channel, info: dict):
 
     It is expected that any missing videos will be downloaded later.
     """
-    logger.info(f'Downloading video list for {channel.name} at {channel.url}  This may take several minutes.')
+    logger.info(f'Downloading video list for {channel} at {channel.url}')
 
     # Resolve all entries to dictionaries.
     entries = info['entries'] = list(info['entries'])
@@ -452,16 +452,7 @@ def update_channel_catalog(channel: Channel, info: dict):
             if entry['title'] == 'Uploads':
                 logger.info('Youtube-DL gave back a list of URLs, found the "Uploads" URL and using it.')
                 info = extract_info(entry['url'])
-                entries = info['entries'] = list(info['entries'])
                 break
-
-    # This is all the source id's that are currently available.
-    try:
-        all_source_ids = {i['id'] for i in entries}
-    except KeyError as e:
-        logger.warning(f'No ids for entries!  Was the channel update successful?  Is the channel URL correct?')
-        logger.warning(f'entries: {entries}')
-        raise KeyError('No id key for entry!') from e
 
     with get_db_session(commit=True) as session:
         # Get the channel in this new context.
@@ -478,8 +469,10 @@ def update_channel_catalog(channel: Channel, info: dict):
         with info_json_path.open('wt') as fh:
             json.dump(info, fh, indent=2)
 
+    logger.info(f'Finished downloading video list for {channel} found {len(entries)} videos')
+
     # Update all view counts using the latest from the Channel's info_json.
-    update_view_counts(channel_id)
+    background_task(update_view_counts(channel_id))
 
 
 def _find_all_missing_videos(channel_id: id) -> List[Tuple]:
@@ -552,8 +545,11 @@ async def find_all_missing_videos(channel_id: int = None):
             logger.warning(f'Video {channel.name} / {source_id} is not in {channel.name} info_json')
             continue
 
-        if not match_regex or (match_regex and missing_video['title'] and match_regex.match(missing_video['title'])):
-            # No title match regex, or the title matches the regex.
+        if not match_regex:
+            # No title match regex, yield all videos.
+            yield video_id, source_id, missing_video
+        if match_regex and missing_video['title'] and match_regex.match(missing_video['title']):
+            # Title matches the regex.
             yield video_id, source_id, missing_video
 
 

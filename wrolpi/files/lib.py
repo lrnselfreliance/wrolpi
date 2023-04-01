@@ -44,16 +44,30 @@ __all__ = ['list_directories_contents', 'delete_file', 'split_path_stem_and_suff
            'get_mimetype', 'split_file_name_words', 'get_primary_file']
 
 
-@cachetools.func.ttl_cache(10_000, 30.0)
-def _get_file_dict(file: pathlib.Path,
-                   directories_cache: str,  # Used to cache by requested directories.
-                   ) -> Dict:
+@optional_session
+def get_file_tag_names(file: pathlib.Path, session: Session = None) -> List[str]:
+    """Returns all Tag names for the provided file path."""
+    tags = session.query(Tag) \
+        .join(TagFile, Tag.id == TagFile.tag_id) \
+        .join(FileGroup, FileGroup.id == TagFile.file_group_id) \
+        .filter(FileGroup.primary_path == str(file))
+    names = sorted([tag.name for tag in tags], key=lambda i: i.lower())
+    return names
+
+
+def _get_file_dict(file: pathlib.Path) -> Dict:
     media_directory = get_media_directory()
     return dict(
         path=file.relative_to(media_directory),
         size=file.stat().st_size,
         mimetype=get_mimetype(file),
+        tags=get_file_tag_names(file),
     )
+
+
+def get_file_dict(file: str) -> Dict:
+    media_directory = get_media_directory()
+    return _get_file_dict(media_directory / file)
 
 
 @cachetools.func.ttl_cache(10_000, 30.0)
@@ -78,7 +92,7 @@ def _get_recursive_directory_dict(directory: pathlib.Path, directories: List[pat
             elif path.is_dir():
                 children[f'{path.name}/'] = _get_directory_dict(path, directories_cache)
             else:
-                children[path.name] = _get_file_dict(path, directories_cache)
+                children[path.name] = _get_file_dict(path)
         d['children'] = children
     return d
 
@@ -109,7 +123,7 @@ def list_directories_contents(directories_: List[str]) -> Dict:
         if path.is_dir():
             paths[f'{path.name}/'] = _get_recursive_directory_dict(path, directories)
         else:
-            paths[path.name] = _get_file_dict(path, str(directories))
+            paths[path.name] = _get_file_dict(path)
 
     return paths
 
@@ -750,28 +764,46 @@ def group_files_by_stem(files: List[pathlib.Path], pre_sorted: bool = False) -> 
     yield group
 
 
-def _get_tag(file_group_id: int, tag_name: str, session: Session):
-    file_group: FileGroup = session.query(FileGroup).filter_by(id=file_group_id).one_or_none()
-    if not file_group:
-        raise UnknownFile(f'Cannot find FileGroup with id {file_group_id}')
+def _get_tag_and_file_group(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
+                            session: Session):
+    if file_group_id:
+        file_group: FileGroup = session.query(FileGroup).filter_by(id=file_group_id).one_or_none()
+        if not file_group:
+            raise UnknownFile(f'Cannot find FileGroup with id {file_group_id}')
+    elif file_group_primary_path:
+        path = str(get_media_directory() / file_group_primary_path)
+        file_group: FileGroup = session.query(FileGroup).filter_by(primary_path=path).one_or_none()
+        if not file_group:
+            raise UnknownFile(f'Cannot find FileGroup with primary_path {file_group_primary_path}')
+    else:
+        raise UnknownFile(f'Cannot find FileGroup without id or primary_path')
 
-    tag: Tag = Tag.find_by_name(tag_name, session)
-    if not tag:
-        raise UnknownTag(f'Cannot find Tag with name {tag_name}')
+    if tag_id:
+        tag: Tag = session.query(Tag).filter_by(id=tag_id).one_or_none()
+        if not tag:
+            raise UnknownTag(f'Cannot find Tag with id {tag_id}')
+    elif tag_name:
+        tag: Tag = Tag.find_by_name(tag_name, session)
+        if not tag:
+            raise UnknownTag(f'Cannot find Tag with name {tag_name}')
+    else:
+        raise UnknownTag('Cannot find Tag without id or name')
 
     return file_group, tag
 
 
 @optional_session(commit=True)
-def add_file_group_tag(file_group_id: int, tag_name: str, session: Session = None) -> TagFile:
-    file_group, tag = _get_tag(file_group_id, tag_name, session)
+def add_file_group_tag(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
+                       session: Session = None) -> TagFile:
+    file_group, tag = _get_tag_and_file_group(file_group_id, file_group_primary_path, tag_name, tag_id, session)
     tag_file = file_group.add_tag(tag, session)
     return tag_file
 
 
 @optional_session(commit=True)
-def remove_file_group_tag(file_group_id: int, tag_name: str, session: Session = None):
-    file_group, tag = _get_tag(file_group_id, tag_name, session)
+def remove_file_group_tag(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
+                          session: Session = None):
+    file_group, tag = _get_tag_and_file_group(file_group_id, file_group_primary_path, tag_name, tag_id, session)
     file_group.remove_tag(tag, session)
 
 

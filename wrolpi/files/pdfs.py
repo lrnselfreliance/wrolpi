@@ -135,8 +135,9 @@ async def pdf_modeler():
                 # Sleep to catch cancel.
                 await asyncio.sleep(0)
 
-            if processed:
-                logger.debug(f'pdf_modeler processed {processed} PDFs')
+            logger.info(f'pdf_modeler processed {processed} PDFs')
+
+            session.commit()
 
             if processed < PDF_PROCESSING_LIMIT:
                 # Did not reach limit, do not query again.

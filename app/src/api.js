@@ -681,9 +681,18 @@ export async function getTags() {
 }
 
 export async function addTag(fileGroup, name) {
-    const {id} = fileGroup;
+    const body = {tag_name: name};
+
+    const {id, primary_path, path} = fileGroup;
+    if (id) {
+        body['file_group_id'] = id;
+    } else if (primary_path) {
+        body['file_group_primary_path'] = primary_path;
+    } else if (path) {
+        body['file_group_primary_path'] = path;
+    }
+
     const uri = `${API_URI}/files/tag`;
-    const body = {file_group_id: id, tag_name: name};
     let response = await apiPost(uri, body);
     if (response.status !== 201) {
         console.error('Failed to add tag');
@@ -691,9 +700,18 @@ export async function addTag(fileGroup, name) {
 }
 
 export async function removeTag(fileGroup, name) {
-    const {id} = fileGroup;
+    const body = {tag_name: name};
+
+    const {id, primary_path, path} = fileGroup;
+    if (id) {
+        body['file_group_id'] = id;
+    } else if (primary_path) {
+        body['file_group_primary_path'] = primary_path;
+    } else if (path) {
+        body['file_group_primary_path'] = path;
+    }
+
     const uri = `${API_URI}/files/untag`;
-    const body = {file_group_id: id, tag_name: name};
     let response = await apiPost(uri, body)
     if (response.status !== 204) {
         console.error('Failed to remove tag');
@@ -738,5 +756,17 @@ export async function deleteTag(id, name) {
         toast({
             type: 'error', title: 'Error!', description: `Unable to delete tag: ${name}`, time: 5000,
         })
+    }
+}
+
+export async function fetchFile(path) {
+    const uri = `${API_URI}/files/file`;
+    const body = {file: path};
+    const response = await apiPost(uri, body);
+    if (response.status === 200) {
+        const content = await response.json();
+        return content['file'];
+    } else {
+        console.error('Unable to fetch file dict!  See client logs.');
     }
 }

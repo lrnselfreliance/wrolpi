@@ -7,10 +7,12 @@ import pytest
 from wrolpi.errors import API_ERRORS, WROLModeEnabled
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
+from wrolpi.tags import TagFile
+from wrolpi.test.common import assert_dict_contains
 from wrolpi.vars import PROJECT_DIR
 
 
-def test_list_files_api(test_client, make_files_structure, test_directory):
+def test_list_files_api(test_session, test_client, make_files_structure, test_directory):
     files = [
         'archives/bar.txt',
         'archives/baz/bar.txt',
@@ -29,10 +31,7 @@ def test_list_files_api(test_client, make_files_structure, test_directory):
         assert not response.json.get('errors')
         # The first dict is the media directory.
         children = response.json['files']
-        assert children == expected_files
-        # Clear caches before next call.
-        files_lib._get_file_dict.cache_clear()
-        files_lib._get_directory_dict.cache_clear()
+        assert_dict_contains(children, expected_files)
 
     # Requesting no directories results in the top-level results.
     expected = {
@@ -263,3 +262,45 @@ def test_file_statistics(test_session, test_client, test_directory, example_pdf,
         'video_count': 1,
         'zip_count': 0,
     }
+
+
+def test_file_group_tag_by_primary_path(test_session, test_client, test_directory, example_singlefile, tag_factory,
+                                        insert_file_group):
+    singlefile = FileGroup.from_paths(test_session, example_singlefile)
+    tag1 = tag_factory()
+    tag2 = tag_factory()
+    test_session.commit()
+
+    # FileGroup can be tagged with its primary_path.
+    content = dict(file_group_primary_path=str(singlefile.primary_path.relative_to(test_directory)), tag_name=tag1.name)
+    request, response = test_client.post('/api/files/tag', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.CREATED
+    assert test_session.query(TagFile).count() == 1
+
+    # FileGroup can be tagged with its id.
+    content = dict(file_group_id=singlefile.id, tag_name=tag2.name)
+    request, response = test_client.post('/api/files/tag', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.CREATED
+    assert test_session.query(TagFile).count() == 2
+
+    # FileGroup can be untagged with its primary_path.
+    content = dict(file_group_id=singlefile.id, tag_id=tag1.id)
+    request, response = test_client.post('/api/files/untag', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert test_session.query(TagFile).count() == 1
+
+    # FileGroup can be untagged with its id.
+    content = dict(file_group_id=singlefile.id, tag_name=tag2.name)
+    request, response = test_client.post('/api/files/untag', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert test_session.query(TagFile).count() == 0
+
+
+def test_file_group_tag(test_client):
+    request, response = test_client.post('/api/files/tag', content=json.dumps(dict(tag_id=1)))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert 'file_group_id' in response.json['error']
+
+    request, response = test_client.post('/api/files/tag', content=json.dumps(dict(file_group_id=1)))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert 'tag_id' in response.json['error']

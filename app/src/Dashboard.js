@@ -12,7 +12,7 @@ import {Divider, Icon, Message} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {refreshFiles} from "./api";
 import _ from "lodash";
-import {TagsDashboard} from "./Tags";
+import {TagsDashboard, TagsProvider} from "./Tags";
 
 function FlagsMessages({flags}) {
     if (!flags) {

@@ -43,7 +43,7 @@ class Video(ModelHelper, Base):
         v = None
         if self.video_path:
             v = self.video_path.relative_to(get_media_directory())
-        return f'<Video id={self.id} title={repr(self.file_group.name)} path={v} channel={self.channel_id} ' \
+        return f'<Video id={self.id} title={repr(self.file_group.title)} path={v} channel={self.channel_id} ' \
                f'source_id={repr(self.source_id)}>'
 
     def __json__(self) -> dict:
@@ -60,6 +60,7 @@ class Video(ModelHelper, Base):
             channel=channel,
             channel_id=self.channel_id,
             description=self.file_group.c_text or self.get_video_description(),
+            duration=self.duration,
             id=self.id,
             info_json_file=self.info_json_file,
             info_json_path=self.info_json_path,
@@ -446,18 +447,18 @@ class Channel(ModelHelper, Base):
         self_id = self.id
 
         # Refresh all files within this channel's directory first.
-        await refresh_files(self.directory, send_events=send_events)
+        await refresh_files([self.directory], send_events=send_events)
 
         # Apply any info_json (update view counts) second.
         from modules.videos.common import update_view_counts
         if PYTEST:
-            update_view_counts(self_id)
+            await update_view_counts(self_id)
             self.refreshed = True
         else:
 
             # Perform info_json in background task.  Channel will be marked as refreshed after this completes.
             async def _():
-                update_view_counts(self_id)
+                await update_view_counts(self_id)
                 with get_db_session(commit=True) as session:
                     channel: Channel = session.query(Channel).filter(Channel.id == self_id).one()
                     channel.refreshed = True

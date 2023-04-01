@@ -26,6 +26,17 @@ async def get_files(_: Request, body: schema.FilesRequest):
     return json_response({'files': files})
 
 
+@bp.post('/file')
+@openapi.definition(
+    summary='Get the dict of one file',
+    body=schema.FileRequest,
+)
+@validate(schema.FileRequest)
+async def get_file(_: Request, body: schema.FileRequest):
+    file = lib.get_file_dict(body.file)
+    return json_response({'file': file})
+
+
 @bp.post('/delete')
 @openapi.definition(
     summary='Delete a single file.  Returns an error if WROL Mode is enabled.',
@@ -67,6 +78,7 @@ async def refresh_progress(request: Request):
         progress=progress,
     ))
 
+
 @bp.post('/search')
 @openapi.definition(
     summary='Search Files',
@@ -100,12 +112,23 @@ def post_directories(_, body: schema.DirectoriesRequest):
 @bp.post('/tag')
 @validate(schema.TagFileGroupPost)
 def post_tag_file_group(_, body: schema.TagFileGroupPost):
-    lib.add_file_group_tag(body.file_group_id, body.tag_name)
+    if not body.tag_id and not body.tag_name:
+        return json_response(
+            dict(error='tag_id and tag_name cannot both be empty'),
+            HTTPStatus.BAD_REQUEST,
+        )
+    if not body.file_group_id and not body.file_group_primary_path:
+        return json_response(
+            dict(error='file_group_primary_path and file_group_id cannot both be empty'),
+            HTTPStatus.BAD_REQUEST,
+        )
+
+    lib.add_file_group_tag(body.file_group_id, body.file_group_primary_path, body.tag_name, body.tag_id)
     return response.empty(HTTPStatus.CREATED)
 
 
 @bp.post('/untag')
 @validate(schema.TagFileGroupPost)
 def post_untag_file_group(_, body: schema.TagFileGroupPost):
-    lib.remove_file_group_tag(body.file_group_id, body.tag_name)
+    lib.remove_file_group_tag(body.file_group_id, body.file_group_primary_path, body.tag_name, body.tag_id)
     return response.empty(HTTPStatus.NO_CONTENT)

@@ -95,6 +95,8 @@ def validate_video(video: Video, channel_generate_poster: bool):
             video.channel_id = get_channel_id_by_source_id(source_id=video_info_json.channel_source_id)
 
     video_path = video.video_path
+    if not video_path:
+        logger.error(f'{video} does not have video_path!')
 
     if video_path and (not video.file_group.title or not video.upload_date or not video.source_id):
         # Video is missing things that can be extracted from the video file name.

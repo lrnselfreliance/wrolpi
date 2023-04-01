@@ -287,6 +287,8 @@ async def ebook_modeler():
                     if PYTEST:
                         raise
 
+            session.commit()
+
             if processed < 10:
                 # Did not reach limit, no more books.
                 break

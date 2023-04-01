@@ -1,12 +1,12 @@
 import {Button, Icon, Placeholder} from "./Theme";
 import {Checkbox, Confirm, PlaceholderLine, TableCell, TableFooter, TableHeaderCell, TableRow} from "semantic-ui-react";
 import {FileIcon, humanFileSize} from "./Common";
-import React from "react";
-import {deleteFile} from "../api";
+import React, {useEffect} from "react";
+import {deleteFile, fetchFile} from "../api";
 import _ from 'lodash';
 import {SortableTable} from "./SortableTable";
 import {useBrowseFiles} from "../hooks/customHooks";
-import {DirectoryRefreshButton, FilesRefreshButton} from "./Files";
+import {DirectoryRefreshButton, FileRowTagIcon, FilesRefreshButton} from "./Files";
 import {FilePreviewContext} from "./FilePreview";
 
 function depthIndentation(path) {
@@ -58,6 +58,7 @@ function File({file, onFileClick, selectedPath, onSelect}) {
         </TableCell>
         <TableCell onClick={() => onFileClick(file)} className='file-path'>
             {depthIndentation(path)}
+            <FileRowTagIcon file={file}/>
             {/*null size to make icon the correct size*/}
             <FileIcon file={file} size={null}/>
             {name}
@@ -96,11 +97,20 @@ export function FileBrowser() {
 
     const {browseFiles, openFolders, setOpenFolders, fetchFiles} = useBrowseFiles();
 
-    const headers = [{key: 'select', text: ''}, {
-        key: 'path', text: 'Path', sortBy: i => i['path'].toLowerCase()
-    }, {key: 'size', text: 'Size', sortBy: 'size'},];
+    const headers = [
+        {key: 'select', text: ''},
+        {key: 'path', text: 'Path', sortBy: i => i['path'].toLowerCase()},
+        {key: 'size', text: 'Size', sortBy: 'size'},
+    ];
 
-    const {setPreviewFile} = React.useContext(FilePreviewContext);
+    const {setPreviewFile, setCallbacks} = React.useContext(FilePreviewContext);
+
+    useEffect(() => {
+        // Fetch files after tagging.
+        setCallbacks([fetchFiles]);
+
+        return () => setCallbacks(null);
+    }, []);
 
     const onSelect = (path) => {
         if (path.endsWith('/') && selectedPath === path) {

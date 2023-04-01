@@ -8,6 +8,11 @@ class FilesRequest:
 
 
 @dataclass
+class FileRequest:
+    file: str
+
+
+@dataclass
 class DeleteRequest:
     file: str
 
@@ -39,5 +44,7 @@ class DirectoriesResponse:
 
 @dataclass
 class TagFileGroupPost:
-    file_group_id: int
-    tag_name: str
+    tag_name: Optional[str] = None
+    tag_id: Optional[int] = None
+    file_group_id: Optional[int] = None
+    file_group_primary_path: Optional[str] = None

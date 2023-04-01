@@ -81,7 +81,8 @@ def test_is_valid_poster(ext, expected, test_directory):
     assert is_valid_poster(image_path) == expected, f'is_valid_poster({image_path}) should be {expected}'
 
 
-def test_update_view_count(test_session, channel_factory, video_factory):
+@pytest.mark.asyncio
+async def test_update_view_count(test_session, channel_factory, video_factory):
     def check_view_counts(view_counts):
         for source_id, view_count in view_counts.items():
             video = test_session.query(Video).filter_by(source_id=source_id).one()
@@ -101,22 +102,22 @@ def test_update_view_count(test_session, channel_factory, video_factory):
     check_view_counts({'vid1': None, 'vid2': None, 'vid3': None, 'vid4': None})
 
     # Channel 1 is updated, the other channels are left alone.
-    update_view_counts(channel1.id)
+    await update_view_counts(channel1.id)
     check_view_counts({'vid1': 10, 'vid2': None, 'vid3': None, 'vid4': None})
 
     # Channel 2 is updated, the other channels are left alone.  The 'bad_id' video is ignored.
-    update_view_counts(channel2.id)
+    await update_view_counts(channel2.id)
     check_view_counts({'vid1': 10, 'vid2': 11, 'vid3': None, 'vid4': None})
 
     # All videos are updated.
-    update_view_counts(channel3.id)
+    await update_view_counts(channel3.id)
     check_view_counts({'vid1': 10, 'vid2': 11, 'vid3': 13, 'vid4': 14})
 
     # An outdated view count will be overwritten.
     vid = test_session.query(Video).filter_by(id=1).one()
     vid.view_count = 8
     check_view_counts({'vid1': 8, 'vid2': 11, 'vid3': 13, 'vid4': 14})
-    update_view_counts(channel1.id)
+    await update_view_counts(channel1.id)
     check_view_counts({'vid1': 10, 'vid2': 11, 'vid3': 13, 'vid4': 14})
 
 

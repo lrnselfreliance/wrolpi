@@ -45,6 +45,8 @@ async def video_modeler():
 
                 file_group.indexed = True
 
+            session.commit()
+
             if processed < VIDEO_PROCESSING_LIMIT:
                 # Did not reach limit, do not query again.
                 break
@@ -53,6 +55,7 @@ async def video_modeler():
 
         # Sleep to catch cancel.
         await asyncio.sleep(0)
+
 
 @register_refresh_cleanup
 @limit_concurrent(1)

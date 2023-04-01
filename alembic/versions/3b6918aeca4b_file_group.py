@@ -99,7 +99,6 @@ def upgrade():
     session.execute('''
     INSERT INTO tag (name, color) VALUES 
         ('Automotive', '#353535'),
-        ('Child Care', '#0a4003'),
         ('Clothing', '#9858C5'),
         ('Comms', '#ECD71C'),
         ('Cooking', '#00A04A'),
@@ -127,7 +126,6 @@ def upgrade():
         ('Schooling', '#6d752e'),
         ('Security', '#333333'),
         ('Shelter', '#625641'),
-        ('Social Decay', '#674c09'),
         ('Social', '#490c73'),
         ('Survival', '#A18A62'),
         ('Tools', '#f0d730'),

@@ -210,7 +210,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             </Segment>
 
             <Segment>
-                <TagsDisplay fileGroup={videoFile} onClick={fetchVideo}/>
+                <TagsDisplay fileGroup={videoFile} afterTag={fetchVideo}/>
             </Segment>
 
             <Tab menu={tabMenu} panes={tabPanes}/>

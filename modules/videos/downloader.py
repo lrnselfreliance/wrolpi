@@ -393,7 +393,7 @@ class VideoDownloader(Downloader, ABC):
 
 channel_downloader = ChannelDownloader()
 # Videos may match the ChannelDownloader, give it a higher priority.
-video_downloader = VideoDownloader(40)
+video_downloader = VideoDownloader()
 
 
 def get_or_create_channel(source_id: str = None, url: str = None, name: str = None) -> Channel:

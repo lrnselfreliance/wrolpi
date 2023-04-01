@@ -130,15 +130,14 @@ class Download(ModelHelper, Base):  # noqa
         if self.downloader:
             return self.manager.get_downloader_by_name(self.downloader)
 
-        downloader, _ = self.manager.get_downloader(self.url)
-        return downloader
+        raise UnrecoverableDownloadError(f'Cannot find downloader for {repr(str(self.url))}')
 
     @property
     def domain(self):
         return urlparse(self.url).netloc
 
     @property
-    def manager(self):
+    def manager(self) -> 'DownloadManager':
         if self._manager:
             return self._manager
         raise ValueError('No manager has been set!')
@@ -163,19 +162,11 @@ class Downloader:
     listable: bool = True
     timeout: int = None
 
-    def __init__(self, priority: int = 50, name: str = None, timeout: int = None):
-        """
-        Lower `priority` means the downloader will be checked first.  Valid priority: 0-100
-
-        Downloaders of equal priority will be used at random.
-        """
+    def __init__(self, name: str = None, timeout: int = None):
         if not name and not self.name:
             raise NotImplementedError('Downloader must have a name!')
-        if not 0 <= priority <= 100:
-            raise ValueError(f'Priority of {priority} of {self} is invalid!')
 
         self.name: str = self.name or name
-        self.priority: int = priority
         self.timeout: int = timeout or self.timeout
         self._kill = multiprocessing.Event()
 
@@ -288,7 +279,6 @@ class DownloadManager:
     Only one download from each domain will be downloaded at a time.  If we only have one domain (example.com) in the
     URLs to be downloaded, then only one worker will be busy.
     """
-    priority_sorter = partial(sorted, key=attrgetter('priority'))
     manager = multiprocessing.Event()
 
     def __init__(self):
@@ -318,8 +308,7 @@ class DownloadManager:
 
         instance.manager = self
 
-        i = (*self.instances, instance)
-        self.instances = tuple(self.priority_sorter(i))
+        self.instances = (*self.instances, instance)
         self._instances[instance.name] = instance
 
     async def download_worker(self, num: int):
@@ -404,10 +393,8 @@ class DownloadManager:
                     if result.downloads:
                         worker_logger.info(f'Adding {len(result.downloads)} downloads from result of {download.url}')
                         urls = download.filter_excluded(result.downloads)
-                        downloads = self.create_downloads(urls, session,
-                                                          downloader=download.sub_downloader,
-                                                          settings=result.settings,
-                                                          )
+                        self.create_downloads(urls, session, downloader_name=download.sub_downloader,
+                                              settings=result.settings)
 
                     if try_again is False and not download.frequency:
                         # Only once-downloads can fail.
@@ -511,16 +498,11 @@ class DownloadManager:
 
         background_task(_perpetual_download())
 
-    def get_downloader(self, url: str) -> Tuple[Downloader, Dict]:
-        for i in self.instances:
-            valid, info = i.valid_url(url)
-            if valid:
-                return i, info
-        raise InvalidDownload(f'Invalid URL {url=}')
-
     def get_downloader_by_name(self, name: str) -> Optional[Downloader]:
         """Attempt to find a registered Downloader by its name.  Returns None if it cannot be found."""
-        return self._instances.get(name)
+        if downloader := self._instances.get(name):
+            return downloader
+        raise InvalidDownload(f'Cannot find downloader with name {name}')
 
     def get_or_create_download(self, url: str, session: Session) -> Download:
         """Get a Download by its URL, if it cannot be found create one."""
@@ -539,18 +521,16 @@ class DownloadManager:
         return download
 
     @optional_session
-    def create_downloads(self, urls: List[str], session: Session = None, downloader: str = None,
-                         reset_attempts: bool = False, sub_downloader: str = None, settings: dict = None) \
+    def create_downloads(self, urls: List[str], downloader_name: str, session: Session = None,
+                         reset_attempts: bool = False, sub_downloader_name: str = None, settings: dict = None) \
             -> List[Download]:
         """Schedule all URLs for download.  If one cannot be downloaded, none will be added."""
         if not all(urls):
             raise ValueError('Download must have a URL')
 
         downloads = []
-        shared_downloader = self.get_downloader_by_name(downloader) if downloader else None
-        if downloader and not shared_downloader:
-            # Could not look up the downloader.
-            raise InvalidDownload(f'Unknown downloader {downloader}')
+        # Throws an error if no downloader is found.
+        self.get_downloader_by_name(downloader_name)
 
         with session.transaction:
             for url in urls:
@@ -560,20 +540,12 @@ class DownloadManager:
                 elif url in DOWNLOAD_MANAGER_CONFIG.skip_urls:
                     self.log_warning(f'Skipping {url} because it is in the download_manager.yaml skip list.')
                     continue
-                info_json = None
-                if not shared_downloader:
-                    # User has requested automatic downloader selection, try and find it.
-                    local_downloader, info_json = self.get_downloader(url)
-                else:
-                    # One Downloader provided for all URLs, use it.
-                    local_downloader = shared_downloader
 
                 download = self.get_or_create_download(url, session)
                 # Download may have failed, try again.
                 download.renew(reset_attempts=reset_attempts)
-                download.downloader = local_downloader.name
-                download.info_json = info_json or download.info_json
-                download.sub_downloader = sub_downloader
+                download.downloader = downloader_name
+                download.sub_downloader = sub_downloader_name
                 download.settings = settings
                 downloads.append(download)
 
@@ -590,24 +562,27 @@ class DownloadManager:
         return downloads
 
     @optional_session
-    def create_download(self, url: str, session: Session = None, downloader: str = None, reset_attempts: bool = False,
-                        sub_downloader: str = None, settings: Dict = None) -> Download:
+    def create_download(self, url: str, downloader_name: str, session: Session = None, reset_attempts: bool = False,
+                        sub_downloader_name: str = None, settings: Dict = None) -> Download:
         """Schedule a URL for download.  If the URL failed previously, it may be retried."""
-        downloads = self.create_downloads([url], session=session, downloader=downloader, settings=settings,
-                                          reset_attempts=reset_attempts, sub_downloader=sub_downloader)
+        downloads = self.create_downloads([url], session=session, downloader_name=downloader_name,
+                                          reset_attempts=reset_attempts, sub_downloader_name=sub_downloader_name,
+                                          settings=settings)
         return downloads[0]
 
-    def recurring_download(self, url: str, frequency: int, downloader: str = None,
-                           sub_downloader: str = None, reset_attempts: bool = False,
+    @optional_session
+    def recurring_download(self, url: str, frequency: int, downloader_name: str, session: Session = None,
+                           sub_downloader_name: str = None, reset_attempts: bool = False,
                            settings: Dict = None) -> Download:
         """Schedule a recurring download."""
-        if not frequency:
+        if not frequency or not isinstance(frequency, int):
             raise ValueError('Recurring download must have a frequency!')
 
-        with get_db_session(commit=True) as session:
-            download, = self.create_downloads([url, ], session=session, downloader=downloader, settings=settings,
-                                              sub_downloader=sub_downloader, reset_attempts=reset_attempts)
-            download.frequency = frequency
+        download, = self.create_downloads([url, ], session=session, downloader_name=downloader_name,
+                                          reset_attempts=reset_attempts, sub_downloader_name=sub_downloader_name,
+                                          settings=settings)
+        download.frequency = frequency
+        session.commit()
 
         return download
 
@@ -1205,4 +1180,4 @@ class RSSDownloader(Downloader, ABC):
         return False
 
 
-rss_downloader = RSSDownloader(30)
+rss_downloader = RSSDownloader()

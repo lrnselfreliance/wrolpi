@@ -23,6 +23,10 @@ function handleEvents(events) {
             eventToast('Refresh completed', 'All files have been refreshed.');
         }
 
+        if (event === 'downloads_disabled') {
+            eventToast('Downloads Disabled', message, 'info');
+        }
+
         if (subject) {
             newestEvents[subject] = dt;
         }

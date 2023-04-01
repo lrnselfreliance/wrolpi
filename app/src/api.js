@@ -412,6 +412,16 @@ export async function getArchive(archiveId) {
 }
 
 export async function postDownload(urls, downloader, frequency, sub_downloader, excludedURLs, destination) {
+    if (!downloader) {
+        toast({
+            type: 'error',
+            title: 'Failed to submit download',
+            description: 'downloader is required, but was not provided',
+            time: 5000,
+        })
+        throw new Error('downloader is required, but was not provided');
+    }
+
     let body = {
         urls: urls,
         downloader: downloader,

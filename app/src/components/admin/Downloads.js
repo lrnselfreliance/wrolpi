@@ -208,7 +208,7 @@ class StoppableRow extends React.Component {
 
     handleStart = async (e) => {
         e.preventDefault();
-        let downloader = this.props.downloader || null;
+        let downloader = this.props.downloader;
         await postDownload(`${this.props.url}`, downloader);
         this.closeStart();
         await this.props.fetchDownloads();

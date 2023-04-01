@@ -5,11 +5,12 @@ import mock
 import pytest
 
 from wrolpi.db import optional_session
-from wrolpi.downloader import Download, DownloadResult, RSSDownloader
-from wrolpi.test.test_downloader import HTTPDownloader
+from wrolpi.downloader import Download, DownloadResult, RSSDownloader, Downloader
 
 
-class RSSHTTPDownloader(HTTPDownloader):
+class RSSHTTPDownloader(Downloader):
+    name = 'rss_http'
+
     def do_download(self, download: Download) -> DownloadResult:
         return DownloadResult(success=True)
 
@@ -44,7 +45,8 @@ async def test_rss_download(test_session, test_download_manager):
                 dict(link='https://example.com/c'),
             ]
         )
-        test_download_manager.create_download('https://example.com/feed', sub_downloader='http')
+        test_download_manager.create_download('https://example.com/feed', rss_downloader.name,
+                                              sub_downloader_name='rss_http')
         await test_download_manager.wait_for_all_downloads()
 
     # Feed download is complete.
@@ -63,7 +65,8 @@ async def test_rss_download(test_session, test_download_manager):
                 dict(link='https://example.com/d'),
             ]
         )
-        test_download_manager.create_download('https://example.com/feed', sub_downloader='http')
+        test_download_manager.create_download('https://example.com/feed', rss_downloader.name,
+                                              sub_downloader_name='rss_http')
         await test_download_manager.wait_for_all_downloads()
 
     # Only the new URLs are Archived.
@@ -84,7 +87,8 @@ async def test_rss_no_entries(test_session, test_download_manager):
 
     with mock.patch('wrolpi.downloader.parse_feed') as mock_parse_feed:
         mock_parse_feed.return_value = dict(bozo=0, )  # missing `entries`
-        test_download_manager.create_download('https://example.com/feed', test_session, sub_downloader='http')
+        test_download_manager.create_download('https://example.com/feed', rss_downloader.name, test_session,
+                                              sub_downloader_name='rss_http')
         await test_download_manager.wait_for_all_downloads()
 
     (download,) = test_download_manager.get_downloads(test_session)

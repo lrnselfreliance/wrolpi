@@ -45,6 +45,10 @@ class Events:
     def send_ready(message: str = None):
         send_event('ready', message)
 
+    @staticmethod
+    def send_downloads_disabled(message: str = None):
+        send_event('downloads_disabled', message, subject='downloads')
+
 
 def log_event(event: str, message: str = None, action: str = None, subject: str = None):
     log = f'{event=}'

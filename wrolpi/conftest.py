@@ -9,6 +9,7 @@ import multiprocessing
 import pathlib
 import shutil
 import tempfile
+from abc import ABC
 from itertools import zip_longest
 from typing import List, Callable, Union, Dict
 from typing import Tuple, Set
@@ -29,7 +30,7 @@ from wrolpi.common import iterify, log_level_context
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.dates import set_test_now
 from wrolpi.db import postgres_engine, get_db_args
-from wrolpi.downloader import DownloadManager, DownloadResult, set_test_download_manager_config, Download
+from wrolpi.downloader import DownloadManager, DownloadResult, set_test_download_manager_config, Download, Downloader
 from wrolpi.files import lib as files_lib
 from wrolpi.root_api import BLUEPRINTS, api_app
 from wrolpi.tags import Tag
@@ -179,11 +180,42 @@ def failed_download():
 
 @pytest.fixture
 def assert_download_urls(test_session):
-    def asserter(urls: Set[str]):
+    def asserter(expected_urls: Set[str]):
         downloads = test_session.query(Download).all()
-        assert {i.url for i in downloads} == set(urls)
+        urls = {i.url for i in downloads}
+        if urls != set(expected_urls):
+            raise AssertionError(f'Download URLs do not match: {urls} != {expected_urls}')
 
     return asserter
+
+
+@pytest.fixture
+def assert_downloads(test_session):
+    from wrolpi.test.common import assert_dict_contains
+
+    def asserter(expected: List[Dict]):
+        downloads = test_session.query(Download).order_by(Download.url)
+        for download_, expected_ in zip_longest(downloads, expected):
+            assert_dict_contains(download_.__json__(), expected_)
+        if (count := test_session.query(Download).count()) != len(expected):
+            raise AssertionError(f'Download count does not match: {count} != {len(expected)}')
+
+    return asserter
+
+
+@pytest.fixture
+def test_downloader(test_download_manager):
+    class TestDownloader(Downloader, ABC):
+        """A testing Downloader"""
+        name = 'test_downloader'
+
+        def __repr__(self):
+            return '<TESTING Downloader>'
+
+    test_downloader = TestDownloader()
+    test_download_manager.register_downloader(test_downloader)
+
+    return test_downloader
 
 
 @pytest.fixture

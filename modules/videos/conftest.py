@@ -64,7 +64,8 @@ def download_channel(test_session, test_directory, video_download_manager) -> Ch
         url='https://example.com/channel1',
         download_frequency=DownloadFrequency.weekly,
     )
-    download = Download(url=channel.url, downloader='video_channel', frequency=channel.download_frequency)
+    download = Download(url=channel.url, downloader='video_channel', frequency=channel.download_frequency,
+                        sub_downloader='video')
     test_session.add_all([channel, download])
     test_session.commit()
     return channel
@@ -140,7 +141,7 @@ def video_factory(test_session, test_directory):
 def video_download_manager(test_download_manager) -> DownloadManager:
     """Get a DownloadManager ready to download Videos and Channels."""
     channel_downloader = ChannelDownloader()
-    video_downloader = VideoDownloader(priority=40)
+    video_downloader = VideoDownloader()
 
     test_download_manager.register_downloader(channel_downloader)
     test_download_manager.register_downloader(video_downloader)

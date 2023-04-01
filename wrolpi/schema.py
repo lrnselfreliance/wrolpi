@@ -49,7 +49,7 @@ class EchoResponse:
 @dataclass
 class DownloadRequest:
     urls: str
-    downloader: Optional[str] = None
+    downloader: str
     frequency: Optional[int] = None
     sub_downloader: Optional[str] = None
     excluded_urls: Optional[str] = None

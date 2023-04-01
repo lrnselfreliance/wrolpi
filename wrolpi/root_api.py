@@ -21,8 +21,8 @@ from wrolpi.common import logger, get_config, wrol_mode_enabled, Base, get_media
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics
 from wrolpi.dates import now, strptime
 from wrolpi.downloader import download_manager
-from wrolpi.errors import WROLModeEnabled, API_ERRORS, APIError, ValidationError, HotspotError
-from wrolpi.events import get_events
+from wrolpi.errors import WROLModeEnabled, API_ERRORS, APIError, ValidationError, HotspotError, InvalidDownload
+from wrolpi.events import get_events, Events
 from wrolpi.files.lib import get_file_statistics
 from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
     truthy_arg
@@ -205,25 +205,30 @@ def valid_regex(_: Request, body: schema.RegexRequest):
 
 
 @api_bp.post('/download')
-@openapi.description('Download the many URLs that are provided.')
+@openapi.description('Download all the URLs that are provided.')
 @validate(schema.DownloadRequest)
 @wrol_mode_check
 async def post_download(_: Request, body: schema.DownloadRequest):
     # URLs are provided in a textarea, lets split all lines.
     urls = [i.strip() for i in str(body.urls).strip().splitlines()]
+    downloader = download_manager.get_downloader_by_name(body.downloader)
+    if not downloader:
+        raise InvalidDownload(f'Cannot find downloader with name {body.downloader}')
+
     excluded_urls = [i.strip() for i in body.excluded_urls.split(',')] if body.excluded_urls else None
-    downloader = body.downloader
-    if not downloader or downloader in ('auto', 'None', 'null'):
-        downloader = None
     destination = str(get_media_directory() / body.destination) if body.destination else None
     settings = dict(excluded_urls=excluded_urls, destination=destination)
     if body.frequency:
-        download_manager.recurring_download(urls[0], body.frequency, downloader=downloader,
-                                            sub_downloader=body.sub_downloader, reset_attempts=True,
+        download_manager.recurring_download(urls[0], body.frequency, downloader_name=body.downloader,
+                                            sub_downloader_name=body.sub_downloader, reset_attempts=True,
                                             settings=settings)
     else:
-        download_manager.create_downloads(urls, downloader=downloader, sub_downloader=body.sub_downloader,
-                                          reset_attempts=True, settings=settings)
+        download_manager.create_downloads(urls, downloader_name=body.downloader, reset_attempts=True,
+                                          sub_downloader_name=body.sub_downloader, settings=settings)
+    if download_manager.disabled:
+        # Downloads are disabled, warn the user.
+        Events.send_downloads_disabled('Download created. But, downloads are disabled.')
+
     return response.empty()
 
 

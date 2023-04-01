@@ -423,7 +423,8 @@ def test_change_channel_url(test_client, test_session, test_download_manager, do
     test_session.commit()
 
     download = test_session.query(Download).one()
-    assert download.url == download_channel.url == 'https://example.com/new-url', "Channel's download URL was not changed."
+    assert download.url == download_channel.url == 'https://example.com/new-url', \
+        "Channel's download URL was not changed."
 
     download_channel.update({'download_frequency': None})
     assert not list(test_session.query(Download).all())
@@ -456,13 +457,15 @@ def test_search_videos_channel(test_client, test_session, video_factory):
     assert response.status_code == HTTPStatus.OK
     assert len(response.json['file_groups']) == 1
     assert response.json['totals']['file_groups'] == 1
-    assert_dict_contains(response.json['file_groups'][0], dict(primary_path='vid2.mp4', video=dict(channel_id=channel1.id)))
+    assert_dict_contains(response.json['file_groups'][0],
+                         dict(primary_path='vid2.mp4', video=dict(channel_id=channel1.id)))
 
     d = dict(channel_id=channel2.id)
     request, response = test_client.post(f'/api/videos/search', content=json.dumps(d))
     assert response.status_code == HTTPStatus.OK
     assert len(response.json['file_groups']) == 1
-    assert_dict_contains(response.json['file_groups'][0], dict(primary_path='vid1.mp4', video=dict(channel_id=channel2.id)))
+    assert_dict_contains(response.json['file_groups'][0],
+                         dict(primary_path='vid1.mp4', video=dict(channel_id=channel2.id)))
 
 
 def test_get_channel_videos_pagination(test_client, test_session, simple_channel, video_factory, assert_video_search):

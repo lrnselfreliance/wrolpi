@@ -53,7 +53,7 @@ class ArchiveDownloader(Downloader, ABC):
 
 
 # Archive downloader is the last downloader which should be used.
-archive_downloader = ArchiveDownloader(priority=100)
+archive_downloader = ArchiveDownloader()
 
 
 def model_archive(file_group: FileGroup, session: Session = None) -> Archive:

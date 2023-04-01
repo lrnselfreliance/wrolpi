@@ -11,6 +11,8 @@ import os.path
 import pathlib
 import subprocess
 import tempfile
+import traceback
+from json import JSONDecodeError
 
 from sanic import Sanic, response
 from sanic.request import Request
@@ -97,7 +99,11 @@ async def extract_readability(path: str, url: str) -> dict:
     cmd = f'readability-extractor {path} "{url}"'
     logger.debug(f'readability cmd: {cmd}')
     stdout, stderr, return_code = await check_output(cmd)
-    output = json.loads(stdout)
+    try:
+        output = json.loads(stdout)
+    except JSONDecodeError as e:
+        stderr = stderr.decode() if stderr else None
+        raise ChildProcessError(f'Failed to extract readability.  {stderr}') from e
     logger.debug(f'done readability for {url}')
     return output
 
@@ -148,7 +154,12 @@ async def post_archive(request: Request):
         singlefile, screenshot = await asyncio.gather(call_single_file(url), take_screenshot(url))
         with tempfile.NamedTemporaryFile('wb') as fh:
             fh.write(singlefile)
-            readability = await extract_readability(fh.name, url)
+            try:
+                readability = await extract_readability(fh.name, url)
+            except Exception as e:
+                # Readability had error, but its is not required.
+                logger.error(f'Failed to get readability', exc_info=e)
+                readability = None
 
         # Compress for smaller response.
         singlefile = prepare_bytes(singlefile)
@@ -163,7 +174,8 @@ async def post_archive(request: Request):
         return response.json(ret)
     except Exception as e:
         logger.error(f'Failed to archive {url}', exc_info=e)
-        return response.json({'error': f'Failed to archive {url} error was... \n\n {e}'})
+        error = str(traceback.format_exc())
+        return response.json({'error': f'Failed to archive {url} traceback is below... \n\n {error}'})
 
 
 if __name__ == '__main__':

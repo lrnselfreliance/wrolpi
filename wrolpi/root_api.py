@@ -225,7 +225,7 @@ async def post_download(_: Request, body: schema.DownloadRequest):
     else:
         download_manager.create_downloads(urls, downloader_name=body.downloader, reset_attempts=True,
                                           sub_downloader_name=body.sub_downloader, settings=settings)
-    if download_manager.disabled:
+    if download_manager.disabled.is_set() or download_manager.stopped.is_set():
         # Downloads are disabled, warn the user.
         Events.send_downloads_disabled('Download created. But, downloads are disabled.')
 

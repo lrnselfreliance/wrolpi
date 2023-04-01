@@ -1055,7 +1055,6 @@ async def save_downloads_config(session: Session):
             downloader=download.downloader,
             frequency=download.frequency,
             last_successful_download=download.last_successful_download,
-            location=download.location,
             next_download=download.next_download,
             status=download.status,
             sub_downloader=download.sub_downloader,
@@ -1089,7 +1088,6 @@ async def import_downloads_config(session: Session):
                 existing.downloader = download['downloader']
                 existing.frequency = download['frequency']
                 existing.last_successful_download = download['last_successful_download']
-                existing.location = download['location']
                 existing.next_download = download['next_download']
                 existing.status = download['status']
                 existing.sub_downloader = download['sub_downloader']
@@ -1101,7 +1099,6 @@ async def import_downloads_config(session: Session):
                 downloader=download['downloader'],
                 frequency=download['frequency'],
                 last_successful_download=download['last_successful_download'],
-                location=download['location'],
                 next_download=download['next_download'],
                 status=download['status'],
                 sub_downloader=download['sub_downloader'],

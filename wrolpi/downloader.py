@@ -591,7 +591,9 @@ class DownloadManager:
             # Don't queue downloads when disabled.
             return
 
-        if len(self.data['processing_domains']) >= len(self.workers):
+        if (domains := len(self.data['processing_domains'])) >= 4:
+            self.log_debug(
+                f'Unable to queue downloads because there are more domains than workers: {domains} >= 4')
             return
 
         # Find download whose domain isn't already being downloaded.

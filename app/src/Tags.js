@@ -78,7 +78,7 @@ export function useTags() {
                 size='large'
                 {...props} // onClick passed here.
                 style={style}
-                className='clickable'
+                className={props.onClick ? 'clickable' : null}
             >
                 {name}
             </Label>;
@@ -248,108 +248,87 @@ function EditTagsModal() {
     </>
 }
 
-export function AddTagsButton({fileGroup, afterTag}) {
-    const {tags: usedTags} = fileGroup;
-    const {tags: availableTags, TagsGroup} = React.useContext(TagsContext);
-    const [open, setOpen] = useState(false);
-    const [loading, setLoading] = useState(false);
+export function AddTagsButton({selectedTagNames = [], onToggle = _.noop, onAdd = _.noop, onRemove = _.noop}) {
+    // A button which displays a modal in which the user can add or remove tags.
 
-    const localAddTag = async (name) => {
+    const {tagNames, TagsGroup} = React.useContext(TagsContext);
+    const [open, setOpen] = React.useState(false);
+    const [loading, setLoading] = React.useState(false);
+    const [localTags, setLocalTags] = React.useState(selectedTagNames);
+
+    const addTag = (name) => {
         setLoading(true);
         try {
-            await addTag(fileGroup, name);
-            console.debug('Added tag');
-            if (afterTag) {
-                console.debug('Calling afterTag');
-                await afterTag();
-            }
+            const newTags = [...localTags, name];
+            setLocalTags(newTags);
+            onToggle(newTags);
+            onAdd(name);
         } finally {
             setLoading(false);
         }
-    };
+    }
 
-    const localRemoveTag = async (name) => {
+    const removeTag = (name) => {
         setLoading(true);
         try {
-            await removeTag(fileGroup, name);
-            console.debug('Removed tag');
-            if (afterTag) {
-                console.debug('Calling afterTag');
-                await afterTag();
-            }
+            const newTags = localTags.filter(i => i !== name);
+            setLocalTags(newTags);
+            onToggle(newTags);
+            onRemove(name);
         } finally {
             setLoading(false);
         }
-    };
-
-    const availableTagNames = availableTags && availableTags.length ? availableTags.map(i => i['name']) : [];
-
-    const unusedTags = _.difference(availableTagNames, usedTags);
-
-    let availableTagsGroup = <SLoader active inline/>;
-    if (unusedTags && unusedTags.length) {
-        availableTagsGroup = <TagsGroup tagNames={unusedTags} onClick={localAddTag}/>;
     }
 
-    let usedTagsGroup = 'Add tags by clicking them below';
-    if (usedTags && usedTags.length) {
-        // TODO sort these labels.
-        usedTagsGroup = <TagsGroup tagNames={usedTags} onClick={localRemoveTag}/>;
-    }
-
-    const modal = <Modal closeIcon
-                         open={open}
-                         onOpen={() => setOpen(true)}
-                         onClose={() => setOpen(false)}>
-        <Modal.Content>
-            {loading && <Dimmer active><SLoader/></Dimmer>}
-            <Header as='h4'>Used Tags</Header>
-
-            {usedTagsGroup}
-
-            <Divider/>
-
-            {availableTagsGroup}
-        </Modal.Content>
-        <Modal.Actions>
-            <EditTagsModal/>
-        </Modal.Actions>
-    </Modal>
+    const selectedTagsGroup = <TagsGroup tagNames={localTags} onClick={removeTag}/>;
+    const unusedTags = _.difference(tagNames, localTags);
+    const unusedTagsGroup = <TagsGroup tagNames={unusedTags} onClick={addTag}/>;
 
     return <>
         <SButton icon='tag' onClick={() => setOpen(true)}/>
-        {modal}
+        <Modal closeIcon
+               open={open}
+               onOpen={() => setOpen(true)}
+               onClose={() => setOpen(false)}>
+            <Modal.Content>
+                {loading && <Dimmer active><SLoader/></Dimmer>}
+                <Header as='h4'>Applied Tags</Header>
+
+                {localTags && localTags.length > 0 ? selectedTagsGroup : 'Add tags below'}
+
+                <Divider/>
+
+                {unusedTags && unusedTags.length > 0 ? unusedTagsGroup : 'You have no tags'}
+            </Modal.Content>
+            <Modal.Actions>
+                <EditTagsModal/>
+            </Modal.Actions>
+        </Modal>
     </>
 }
 
 export const taggedImageLabel = {corner: 'left', icon: 'tag', color: 'green'};
 
-const Display = ({fileGroup, afterTag}) => {
+export const TagsSelector = ({selectedTagNames = [], onToggle = _.noop, onAdd = _.noop, onRemove = _.noop}) => {
+    // Provides a button to add tags to a list.  Displays the tags of that list.
     const {TagsLinkGroup} = React.useContext(TagsContext);
 
-    if (!fileGroup || !TagsLinkGroup) {
-        return
+    if (!TagsLinkGroup) {
+        // Tags have not been fetched.
+        return <></>;
     }
 
     return <Grid>
         <Grid.Row>
             <Grid.Column mobile={2} computer={1}>
-                <AddTagsButton fileGroup={fileGroup} afterTag={afterTag}/>
+                <AddTagsButton selectedTagNames={selectedTagNames} onToggle={onToggle} onAdd={onAdd}
+                               onRemove={onRemove}/>
             </Grid.Column>
             <Grid.Column mobile={13} computer={14}>
-                <TagsLinkGroup tagNames={fileGroup['tags']}/>
-                {_.isEmpty(fileGroup['tags']) &&
-                    <HelpPopup content='Click the button to add tags' iconSize={null}/>
-                }
+                <TagsLinkGroup tagNames={selectedTagNames}/>
             </Grid.Column>
         </Grid.Row>
     </Grid>
-}
-
-export const TagsDisplay = ({fileGroup, afterTag, ...props}) => {
-    return <TagsProvider>
-        <Display fileGroup={fileGroup} afterTag={afterTag} {...props}/>
-    </TagsProvider>
 }
 
 const Dashboard = () => {

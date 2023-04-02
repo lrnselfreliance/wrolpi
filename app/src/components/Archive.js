@@ -32,7 +32,7 @@ import {
     textEllipsis,
     useTitle
 } from "./Common";
-import {deleteArchives, postDownload} from "../api";
+import {addTag, deleteArchives, postDownload, removeTag} from "../api";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useArchive, useDomains, useQuery, useSearchArchives} from "../hooks/customHooks";
@@ -43,7 +43,7 @@ import _ from "lodash";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, Card, CardIcon, Header, Loader, Placeholder, Segment} from "./Theme";
 import {SortableTable} from "./SortableTable";
-import {taggedImageLabel, TagsDisplay} from "../Tags";
+import {taggedImageLabel, TagsProvider, TagsSelector} from "../Tags";
 
 function ArchivePage() {
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -144,6 +144,16 @@ function ArchivePage() {
         </Header>;
     }
 
+    const localAddTag = async (name) => {
+        await addTag(archiveFile, name);
+        await fetchArchive();
+    }
+
+    const localRemoveTag = async (name) => {
+        await removeTag(archiveFile, name);
+        await fetchArchive();
+    }
+
     return <>
         <BackButton/>
 
@@ -163,7 +173,9 @@ function ArchivePage() {
         </Segment>
 
         <Segment>
-            <TagsDisplay fileGroup={archiveFile} onClick={fetchArchive}/>
+            <TagsProvider>
+                <TagsSelector selectedTagNames={archiveFile['tags']} onAdd={localAddTag} onRemove={localRemoveTag}/>
+            </TagsProvider>
         </Segment>
 
         <Segment>

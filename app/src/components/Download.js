@@ -7,6 +7,7 @@ import {ThemeContext} from "../contexts/contexts";
 import {Accordion, Button, Form, FormField, FormGroup, FormInput, Header, Loader, Segment, TextArea} from "./Theme";
 import {AccordionContent, AccordionTitle, FormDropdown} from "semantic-ui-react";
 import {Link} from "react-router-dom";
+import {TagsProvider, TagsSelector} from "../Tags";
 
 const validUrl = /^(http|https):\/\/[^ "]+$/;
 
@@ -19,9 +20,10 @@ class Downloader extends React.Component {
             disabled: this.props.disabled,
             downloader: props.downloader,
             pending: false,
+            submitted: false,
+            tagNames: [],
             urls: '',
             valid: true,
-            submitted: false,
         };
     }
 
@@ -69,6 +71,11 @@ class Downloader extends React.Component {
         }
     }
 
+    handleSelectedTags = (tagNames) => {
+        console.log(tagNames);
+        this.setState({tagNames});
+    }
+
     componentDidMount() {
         document.addEventListener('keydown', this.handleKeydown);
     }
@@ -79,7 +86,7 @@ class Downloader extends React.Component {
 
     render() {
         let disabled = !this.state.urls || !this.state.valid || this.state.pending || !this.state.downloader;
-        const {advancedOpen, destination, submitted} = this.state;
+        const {advancedOpen, destination, submitted, tagNames} = this.state;
         const {header, withDestination} = this.props;
 
         const advancedAccordion = <Accordion>
@@ -99,6 +106,10 @@ class Downloader extends React.Component {
                             />
                         </FormField>
                     </FormGroup>
+                    <br/>
+                    <TagsProvider>
+                        <TagsSelector selectedTagNames={tagNames} onToggle={this.handleSelectedTags}/>
+                    </TagsProvider>
                 </Segment>
             </AccordionContent>
         </Accordion>;

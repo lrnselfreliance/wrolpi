@@ -10,10 +10,10 @@ import {
     ModalContent,
     ModalHeader
 } from "semantic-ui-react";
-import {TagsDisplay, TagsProvider} from "../Tags";
+import {TagsProvider, TagsSelector} from "../Tags";
 import {Media} from "../contexts/contexts";
 import {encodeMediaPath} from "./Common";
-import {fetchFile} from "../api";
+import {addTag, fetchFile, removeTag} from "../api";
 
 function getMediaPathURL(previewFile) {
     if (previewFile['primary_path']) {
@@ -167,10 +167,22 @@ export function FilePreviewWrapper({children}) {
         }
     }
 
+    const localAddTag = async (name) => {
+        await addTag(previewFile, name);
+        await localFetchFile();
+    }
+
+    const localRemoveTag = async (name) => {
+        await removeTag(previewFile, name);
+        await localFetchFile();
+    }
+
     function setModalContent(content, url, downloadURL) {
         const openButton = <SButton color='blue' as='a' href={url}>Open</SButton>;
         const closeButton = <SButton onClick={handleClose}>Close</SButton>;
-        const tagsDisplay = <TagsDisplay fileGroup={previewFile} afterTag={localFetchFile}/>;
+        const tagsDisplay = <TagsProvider>
+            <TagsSelector selectedTagNames={previewFile['tags']} onAdd={localAddTag} onRemove={localRemoveTag}/>
+        </TagsProvider>;
         let downloadButton;
         if (downloadURL) {
             downloadButton = <SButton color='yellow' as='a' href={downloadURL} floated='left'>

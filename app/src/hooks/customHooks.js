@@ -1,5 +1,6 @@
 import {useContext, useEffect, useRef, useState} from "react";
 import {
+    addTag,
     fetchDomains,
     fetchFilesProgress,
     filesSearch,
@@ -17,7 +18,7 @@ import {
     getThrottleStatus,
     getVideo,
     getVideosStatistics,
-    killDownloads,
+    killDownloads, removeTag,
     searchArchives,
     searchVideos,
     setHotspot,

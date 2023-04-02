@@ -1,5 +1,5 @@
 import React, {useContext, useState} from 'react';
-import {deleteVideos} from "../api";
+import {addTag, deleteVideos, removeTag} from "../api";
 import {Link, useNavigate, useParams} from "react-router-dom";
 import _ from "lodash";
 import {
@@ -20,7 +20,7 @@ import {useChannel} from "../hooks/customHooks";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, darkTheme, Header, Icon, Segment, Tab, TabPane} from "./Theme";
 import {VideoCard} from "./Videos";
-import {TagsDisplay} from "../Tags";
+import {TagsProvider, TagsSelector} from "../Tags";
 
 const MEDIA_PATH = '/media';
 
@@ -83,8 +83,10 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     let downloadUrl = `/download/${encodeMediaPath(video.video_path)}`;
 
     let posterUrl = video.poster_path ? `${MEDIA_PATH}/${encodeMediaPath(video.poster_path)}` : null;
-    let captionsUrl = video.caption_path ? `${MEDIA_PATH}/${encodeMediaPath(video.caption_path)}` : null;
-    let vttCaptions = video.caption_path && video.caption_path.endsWith('.vtt');
+    const {caption_files} = video;
+    const captionUrls = caption_files && caption_files.length > 0 ?
+        caption_files.filter(i => i['mimetype'] === 'text/vtt').map(i => `${MEDIA_PATH}/${encodeMediaPath(i['path'])}`)
+        : [];
 
     let description = 'No description available.';
     if (video && video['description']) {
@@ -123,7 +125,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         </TabPane>
     };
 
-    const {poster_file, caption_files, info_json_file} = video;
+    const {poster_file, info_json_file} = video;
     let filesPane = {
         menuItem: 'Files', render: () => <TabPane>
             <h3>Video File</h3>
@@ -156,6 +158,16 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     let tabPanes = [descriptionPane, aboutPane, filesPane, captionsPane];
     const tabMenu = theme === darkTheme ? {inverted: true, attached: true} : {attached: true};
 
+    const localAddTag = async (name) => {
+        await addTag(videoFile, name);
+        await fetchVideo();
+    }
+
+    const localRemoveTag = async (name) => {
+        await removeTag(videoFile, name);
+        await fetchVideo();
+    }
+
     return <>
         <Container style={{margin: '1em'}}>
             <BackButton/>
@@ -171,8 +183,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         >
             <source src={videoUrl} type="video/mp4"/>
             {/* Only WebVTT captions can be displayed. */}
-            {vttCaptions &&
-                <track kind="captions" label="English" src={captionsUrl} srcLang="en" default/>}
+            {captionUrls.map(i => <track kind="captions" label="English" src={i} srcLang="en" default/>)}
         </video>
 
         <Container style={{marginTop: '1em'}}>
@@ -210,7 +221,9 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             </Segment>
 
             <Segment>
-                <TagsDisplay fileGroup={videoFile} afterTag={fetchVideo}/>
+                <TagsProvider>
+                    <TagsSelector selectedTagNames={videoFile['tags']} onAdd={localAddTag} onRemove={localRemoveTag}/>
+                </TagsProvider>
             </Segment>
 
             <Tab menu={tabMenu} panes={tabPanes}/>

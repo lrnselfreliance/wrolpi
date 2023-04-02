@@ -484,7 +484,7 @@ class DownloadManager:
         self.manager.set()
 
         async def _perpetual_download():
-            self.log_debug('perpetual download is alive')
+            self.log_debug(f'perpetual download is alive with {self.download_queue.qsize()} queued downloads')
             if self.stopped.is_set():
                 return
 

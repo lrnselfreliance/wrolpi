@@ -180,10 +180,6 @@ class Downloader:
     def __repr__(self):
         return f'<Downloader name={self.name}>'
 
-    @classmethod
-    def valid_url(cls, url: str) -> Tuple[bool, Optional[dict]]:
-        raise NotImplementedError()
-
     async def do_download(self, download: Download) -> DownloadResult:
         raise NotImplementedError()
 

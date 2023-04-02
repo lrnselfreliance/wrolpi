@@ -70,14 +70,6 @@ class ChannelDownloader(Downloader, ABC):
     def __repr__(self):
         return f'<ChannelDownloader>'
 
-    @classmethod
-    def valid_url(cls, url) -> Tuple[bool, None]:
-        for ie in ChannelIEs:
-            if ie.suitable(url):
-                return True, None
-        logger.debug(f'{cls.__name__} not suitable for {url}')
-        return False, None
-
     @staticmethod
     def is_a_playlist(info: dict):
         # A playlist may have an id different from its channel.
@@ -95,6 +87,7 @@ class ChannelDownloader(Downloader, ABC):
                                              f' Try requesting the videos only:'
                                              f' https://example.com -> https://example.com/videos')
 
+        download.sub_downloader = video_downloader.name
         download.info_json = info
         if session := Session.object_session(download):
             # May not have a session during testing.
@@ -183,44 +176,18 @@ class VideoDownloader(Downloader, ABC):
     @optional_session
     def already_downloaded(self, *urls: str, session: Session = None) -> List:
         # We only consider a video record with a video file as "downloaded".
-        videos = list(session.query(Video).filter(
-            Video.url.in_(urls),
-            Video.video_path != None,  # noqa
-        ))
+        videos = list(session.query(Video).filter(Video.url.in_(urls)))
         return videos
-
-    @classmethod
-    def valid_url(cls, url) -> Tuple[bool, Optional[dict]]:
-        """Match against all Youtube-DL Info Extractors, except those that match a Channel."""
-        for ie in YDL._ies.values():
-            if ie.suitable(url) and not ChannelDownloader.valid_url(url)[0]:
-                try:
-                    info = extract_info(url)
-                    return True, info
-                except UnsupportedError:
-                    logger.debug(f'Video downloader extract_info failed for {url}')
-                    return False, None
-                except DownloadError:
-                    logger.debug(f'Video downloader extract_info failed for {url}')
-                    return False, None
-        logger.debug(f'{cls.__name__} not suitable for {url}')
-        return False, None
 
     async def do_download(self, download: Download) -> DownloadResult:
         if download.attempts >= 10:
             raise UnrecoverableDownloadError('Max download attempts reached')
 
         url = download.url
-        info = download.info_json
+        info = download.info_json or extract_info(url)
 
         if not info:
-            # Info was not fetched by the DownloadManager, lets get it.
-            valid, info = self.valid_url(url)
-            if not valid:
-                raise UnrecoverableDownloadError(f'{self} cannot download {url}')
-            session = Session.object_session(download)
-            download.info_json = info
-            session.commit()
+            raise ValueError(f'Cannot download video with no info_json.')
 
         found_channel = None
 

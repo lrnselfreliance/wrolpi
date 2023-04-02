@@ -106,31 +106,6 @@ example_channel_json = {
 }
 
 
-def test_video_valid_url():
-    # A specific video can be downloaded.
-    assert video_downloader.valid_url('https://www.youtube.com/watch?v=31jPEBiAC3c')[0] is True
-
-    # A channel cannot be downloaded.
-    assert video_downloader.valid_url('https://www.youtube.com/c/LearningSelfReliance/videos')[0] is False
-    assert video_downloader.valid_url('https://www.youtube.com/c/LearningSelfReliance')[0] is False
-
-
-def test_channel_valid_url():
-    # An entire domain cannot be downloaded.
-    assert not channel_downloader.valid_url('https://example.com')[0]
-    assert not channel_downloader.valid_url('https://youtube.com')[0]
-
-    # Cannot download a single video.
-    assert not channel_downloader.valid_url('https://www.youtube.com/watch?v=31jPEBiAC3c')[0]
-
-    # Can download entire channels.
-    assert channel_downloader.valid_url('https://www.youtube.com/c/LearningSelfReliance/videos')[0]
-    assert channel_downloader.valid_url('https://www.youtube.com/c/LearningSelfReliance')[0]
-
-    # Can download entire playlists.
-    assert channel_downloader.valid_url('https://www.youtube.com/playlist?list=PLCdlMQeP-TbG12nkBCt0E96yr3EfwcH4E')[0]
-
-
 @pytest.mark.asyncio
 async def test_download_no_channel(test_session, video_download_manager, video_factory, test_directory,
                                    mock_video_extract_info, mock_video_process_runner):

@@ -161,18 +161,13 @@ def create_channel(session: Session, data: schema.ChannelPostRequest, return_dic
     except APIError as e:
         raise ValidationError() from e
 
-    channel = Channel(
-        name=data.name,
-        url=data.url or None,
-        match_regex=data.match_regex,
-        directory=get_media_directory() / data.directory,
-        download_frequency=data.download_frequency,
-        source_id=data.source_id,
-    )
+    channel = Channel()
     session.add(channel)
+    session.flush([channel])
+    # Apply the changes now that we've OK'd them
+    channel.update(data.__dict__)
+
     session.commit()
-    session.flush()
-    session.refresh(channel)
 
     return channel.dict() if return_dict else channel
 

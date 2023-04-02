@@ -416,6 +416,23 @@ def test_channel_crud(test_session, test_client, test_directory, test_download_m
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
+def test_channel_creation_with_download(test_client, test_session, test_directory):
+    """A Download is created when a Channel is created."""
+    new_channel = dict(
+        directory=str(test_directory),
+        name='Download this one',
+        url='https://example.com/channel1',
+        download_frequency=60,
+    )
+    request, response = test_client.post('/api/videos/channels', content=json.dumps(new_channel))
+    assert response.status_code == HTTPStatus.CREATED
+
+    download = test_session.query(Download).one()
+    assert download.url == 'https://example.com/channel1'
+    assert download.downloader == 'video_channel'
+    assert download.sub_downloader == 'video'
+
+
 def test_change_channel_url(test_client, test_session, test_download_manager, download_channel,
                             test_download_manager_config):
     # Change the Channel's URL.

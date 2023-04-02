@@ -343,6 +343,10 @@ class Channel(ModelHelper, Base):
         # Get the download before we change the URL.
         download = self.get_download()
 
+        # URL should not be empty string.
+        if 'url' in data:
+            data['url'] = data['url'] or None
+
         for key, value in data.items():
             setattr(self, key, value)
 
@@ -362,8 +366,12 @@ class Channel(ModelHelper, Base):
             # Keep next_download if available.
             download.next_download = download.next_download or download_manager.calculate_next_download(download,
                                                                                                         session)
+            download.sub_downloader = 'video'
         elif not download and self.download_frequency and self.url:
-            download = Download(frequency=self.download_frequency, url=self.url, downloader='video_channel')
+            download = Download(frequency=self.download_frequency, url=self.url,
+                                downloader='video_channel',
+                                sub_downloader='video',
+                                )
             session.add(download)
             session.flush()
             download.next_download = download_manager.calculate_next_download(download, session)

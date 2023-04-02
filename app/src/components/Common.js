@@ -2,7 +2,7 @@ import React, {useContext, useEffect, useState} from "react";
 import {Card, Container, IconGroup, Input, Modal, Pagination} from 'semantic-ui-react';
 import {Link, NavLink, useNavigate} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useDirectories, useHotspot, useSettings, useThrottle} from "../hooks/customHooks";
+import {useDirectories, useDownloads, useHotspot, useSettings, useThrottle} from "../hooks/customHooks";
 import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
 import {Button, CardIcon, darkTheme, Form, Header, Icon, lightTheme, Menu, Popup, Statistic} from "./Theme";
 import {FilePreviewContext} from "./FilePreview";
@@ -633,23 +633,27 @@ export function Toggle({label, checked, disabled, onChange, icon}) {
 }
 
 export function DisableDownloadsToggle() {
+    const [pending, setPending] = React.useState(false);
     const {status, fetchStatus} = React.useContext(StatusContext);
-    const {downloads} = status;
+
+    const {downloads} = status ? status : {downloads: null};
 
     const setDownloads = async (enable) => {
-    if (enable) {
-        await startDownloads();
-    } else {
-        await killDownloads();
-    }
-    await fetchStatus();
+        setPending(true);
+        if (enable) {
+            await startDownloads();
+        } else {
+            await killDownloads();
+        }
+        await fetchStatus();
+        setPending(false);
     }
 
-    const on = downloads && downloads['disabled'] === false;
+    const on = downloads && downloads['disabled'] === false && downloads['stopped'] === false;
     return <Form>
         <Toggle
-            label={on ? 'Downloading Enabled' : 'Downloading Disabled'}
-            disabled={on === null}
+            label={on === true ? 'Downloading Enabled' : 'Downloading Disabled'}
+            disabled={pending || downloads === null}
             checked={on === true}
             onChange={setDownloads}
         />

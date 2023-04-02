@@ -217,9 +217,9 @@ class VideoDownloader(Downloader, ABC):
         channel_directory = channel.directory if channel else None
 
         if found_channel == 'yt_dlp':
-            logger.debug('Found channel using yt_dlp')
+            logger.debug(f'Found {channel} using yt_dlp')
         elif found_channel == 'download_settings':
-            logger.info('Found channel using Download.settings')
+            logger.info(f'Found {channel} using Download.settings')
         else:
             logger.warning('Could not find channel')
 

@@ -155,6 +155,14 @@ class DownloadRow extends React.Component {
             />
         </>;
 
+        // Show "now" if we have passed the next_download.
+        let next = 'now';
+        if (next_download) {
+            if (new Date() < new Date(next_download)) {
+                next = isoDatetimeToElapsedPopup(next_download);
+            }
+        }
+
         return <TableRow>
             <TableCell>
                 {link(textEllipsis(url, 50))}
@@ -164,7 +172,7 @@ class DownloadRow extends React.Component {
                 {last_successful_download ? isoDatetimeToElapsedPopup(last_successful_download) : null}
                 {status === 'pending' ? <Loader active inline size='tiny'/> : null}
             </TableCell>
-            <TableCell>{next_download ? isoDatetimeToElapsedPopup(next_download) : null}</TableCell>
+            <TableCell>{next}</TableCell>
             <TableCell>
                 {error && errorModal}
                 {deleteButton}

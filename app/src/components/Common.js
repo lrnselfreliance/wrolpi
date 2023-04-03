@@ -473,6 +473,10 @@ export function findPosterPath(file) {
     if (screenshot_path) {
         return screenshot_path;
     }
+    if (file['data'] && file['data']['cover_path']) {
+        // Ebook.
+        return file['data']['cover_path'];
+    }
     if (video && video['poster_path']) {
         // file is a video model.
         return video['poster_path'];

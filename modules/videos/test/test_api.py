@@ -2,12 +2,13 @@ import json
 from http import HTTPStatus
 from pathlib import Path
 
+import mock.mock
 import pytest
 
 from modules.videos.models import Video, Channel
 from modules.videos.video import lib as video_lib
 from wrolpi.db import get_db_curs
-from wrolpi.downloader import DownloadFrequency
+from wrolpi.downloader import DownloadFrequency, Download
 from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
 
@@ -160,6 +161,36 @@ def test_api_download_channel(test_session, test_client, simple_channel):
     assert response.status_code == HTTPStatus.NO_CONTENT, response.json
 
 
+def test_api_download(test_session, test_client, test_directory):
+    """A video can be downloaded."""
+    content = {'urls': 'https://example.com/video1', 'downloader': 'video', 'destination': 'dest',
+               'excluded_urls': 'example.com'}
+    request, response = test_client.post('/api/download', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    download = test_session.query(Download).one()
+    assert download.url == 'https://example.com/video1'
+    assert download.downloader == 'video'
+    assert download.settings['excluded_urls'] == ['example.com']
+    assert download.settings['destination'] == str(test_directory / 'dest')
+    assert download.settings['tag_names'] == []
+
+
+def test_api_download_video_tags(test_session, test_client, tag_factory):
+    """A user can request Tags for a video being downloaded."""
+    tag1 = tag_factory()
+    tag2 = tag_factory()
+
+    content = {'urls': 'https://example.com/video1', 'downloader': 'video', 'tag_names': [tag1.name, tag2.name]}
+    request, response = test_client.post('/api/download', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    download = test_session.query(Download).one()
+    assert download.url == 'https://example.com/video1'
+    assert download.downloader == 'video'
+    assert download.settings['tag_names'] == [tag1.name, tag2.name]
+
+
 def test_search_videos_file(test_client, test_session, test_directory, video_with_search_factory, assert_video_search):
     """Test that videos can be searched and that their order is by their textsearch rank."""
     # These captions have repeated letters, so they will be higher in the ranking.
@@ -204,7 +235,8 @@ def test_search_videos_file(test_client, test_session, test_directory, video_wit
 def test_search_videos(test_client, test_session, video_factory, assert_video_search, simple_channel, tag_factory):
     """Search the Video table.  This does not need to use a join with the File table."""
     vid1: Video = video_factory(upload_date='2022-09-16', with_video_file=True, title='vid1')
-    vid2: Video = video_factory(upload_date='2022-09-17', with_video_file=True, title='vid2', channel_id=simple_channel.id)
+    vid2: Video = video_factory(upload_date='2022-09-17', with_video_file=True, title='vid2',
+                                channel_id=simple_channel.id)
     vid3: Video = video_factory(upload_date='2022-09-18', with_video_file=True, title='vid3')
     tag1, tag2 = tag_factory(), tag_factory()
     vid1.add_tag(tag1)

@@ -28,11 +28,11 @@ class Downloader extends React.Component {
     }
 
     submitDownload = async () => {
-        let {urls, downloader, destination} = this.state;
+        let {urls, downloader, destination, tagNames} = this.state;
         if (urls) {
             this.setState({pending: true, submitted: false});
             try {
-                let response = await postDownload(urls, downloader, null, null, null, destination);
+                let response = await postDownload(urls, downloader, null, null, null, destination, tagNames);
                 if (response.status === 204) {
                     this.setState({urls: '', pending: false, submitted: true});
                 }
@@ -72,7 +72,6 @@ class Downloader extends React.Component {
     }
 
     handleSelectedTags = (tagNames) => {
-        console.log(tagNames);
         this.setState({tagNames});
     }
 
@@ -87,7 +86,29 @@ class Downloader extends React.Component {
     render() {
         let disabled = !this.state.urls || !this.state.valid || this.state.pending || !this.state.downloader;
         const {advancedOpen, destination, submitted, tagNames} = this.state;
-        const {header, withDestination} = this.props;
+        const {header, withDestination, withTags} = this.props;
+
+        let destinationField;
+        if (withDestination) {
+            destinationField = <FormGroup>
+                <FormField width={16}>
+                    <label>Destination</label>
+                    <DirectoryInput
+                        isDirectory={true}
+                        value={destination}
+                        setInput={this.handleDestinationChange}
+                        placeholder='download/into/custom/directory'
+                    />
+                </FormField>
+            </FormGroup>;
+        }
+
+        let tagsSelector;
+        if (withTags) {
+            tagsSelector = <TagsProvider>
+                <TagsSelector selectedTagNames={tagNames} onToggle={this.handleSelectedTags}/>
+            </TagsProvider>;
+        }
 
         const advancedAccordion = <Accordion>
             <AccordionTitle onClick={() => this.setState({advancedOpen: !advancedOpen})}>
@@ -95,21 +116,9 @@ class Downloader extends React.Component {
             </AccordionTitle>
             <AccordionContent active={advancedOpen}>
                 <Segment>
-                    <FormGroup>
-                        <FormField width={16}>
-                            <label>Destination</label>
-                            <DirectoryInput
-                                isDirectory={true}
-                                value={destination}
-                                setInput={this.handleDestinationChange}
-                                placeholder='download/into/custom/directory'
-                            />
-                        </FormField>
-                    </FormGroup>
-                    <br/>
-                    <TagsProvider>
-                        <TagsSelector selectedTagNames={tagNames} onToggle={this.handleSelectedTags}/>
-                    </TagsProvider>
+                    {destinationField}
+                    {withDestination && withTags && <br/>}
+                    {tagsSelector}
                 </Segment>
             </AccordionContent>
         </Accordion>;
@@ -126,7 +135,7 @@ class Downloader extends React.Component {
                           onChange={this.handleInputChange}
                           value={this.state.urls}
                 />
-                {withDestination && advancedAccordion}
+                {(withDestination || withTags) && advancedAccordion}
                 <Button content='Cancel' onClick={this.props.clearSelected}/>
                 <Button primary style={{marginTop: '1em'}} disabled={disabled}>Download</Button>
                 {submitted && viewDownloads}
@@ -419,12 +428,14 @@ export function DownloadMenu({onOpen, disabled}) {
         archive: <Downloader
             clearSelected={clearSelected}
             header={<><Icon name='file alternate'/> Archive</>}
-            downloader='archive'/>,
+            downloader='archive'
+            withTags={true}/>,
         video: <Downloader
             clearSelected={clearSelected}
             header={<><Icon name='film'/> Videos</>}
             downloader='video'
-            withDestination={true}/>,
+            withDestination={true}
+            withTags={true}/>,
         video_channel: <ChannelDownload clearSelected={clearSelected}/>,
         rss: <RSSDownload
             clearSelected={clearSelected}

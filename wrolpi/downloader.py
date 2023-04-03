@@ -1125,16 +1125,6 @@ class RSSDownloader(Downloader, ABC):
     def __repr__(self):
         return '<RSSDownloader>'
 
-    @classmethod
-    def valid_url(cls, url: str) -> Tuple[bool, Optional[dict]]:
-        """Attempts to parse an RSS Feed.  If it succeeds, it returns a FeedParserDict as a dictionary."""
-        feed = parse_feed(url)
-        feed = dict(feed)
-        if feed['bozo']:
-            # Feed did not parse.
-            return False, {}
-        return True, dict(feed=feed)
-
     def do_download(self, download: Download) -> DownloadResult:
         if isinstance(download.info_json, dict) and download.info_json.get('feed'):
             feed = download.info_json['feed']

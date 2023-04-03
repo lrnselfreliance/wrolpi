@@ -6,11 +6,9 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import logger
-from wrolpi.common import wrol_mode_check
 from wrolpi.root_api import add_blueprint, json_response
 from wrolpi.schema import JSONErrorResponse
 from . import lib, schema
-from .channel import lib as channel_lib
 from .channel.api import channel_bp
 from .video import lib as video_lib
 from .video.api import video_bp

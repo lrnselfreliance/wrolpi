@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, List
 
 
@@ -54,6 +54,7 @@ class DownloadRequest:
     sub_downloader: Optional[str] = None
     excluded_urls: Optional[str] = None
     destination: Optional[str] = None
+    tag_names: List[str] = field(default_factory=lambda: list())
 
 
 @dataclass

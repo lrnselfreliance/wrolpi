@@ -107,7 +107,7 @@ example_channel_json = {
 
 
 @pytest.mark.asyncio
-async def test_download_no_channel(test_session, video_download_manager, video_factory, test_directory,
+async def test_download_no_channel(test_session, video_download_manager, test_directory,
                                    mock_video_extract_info, mock_video_process_runner):
     """A video can be downloaded even if it does not have a Channel."""
     channel_dir = test_directory / 'NO CHANNEL'
@@ -134,6 +134,27 @@ async def test_download_no_channel(test_session, video_download_manager, video_f
 
     video: Video = test_session.query(Video).one()
     assert str(video.video_path) == f'{channel_dir}/video.mp4'
+
+
+@pytest.mark.asyncio
+async def test_download_video_tags(test_session, video_download_manager, video_file_factory, test_directory,
+                                   mock_video_extract_info, mock_video_process_runner, tag_factory):
+    """A Video is tagged when Download record requires it."""
+    video_path = video_file_factory()
+    tag1, tag2 = tag_factory(), tag_factory()
+
+    url = 'https://www.youtube.com/watch?v=31jPEBiAC3c'
+    mock_video_extract_info.return_value = copy(example_video_json)
+    with mock.patch('modules.videos.downloader.VideoDownloader.prepare_filename') as mock_prepare_filename:
+        mock_prepare_filename.return_value = (video_path, {'id': 'foo'})
+        settings = dict(tag_names=[tag1.name, tag2.name])
+        video_download_manager.create_download(url, video_downloader.name, settings=settings)
+        await video_download_manager.wait_for_all_downloads()
+
+    mock_video_process_runner.assert_called_once()
+
+    video: Video = test_session.query(Video).one()
+    assert [i.tag.name for i in video.file_group.tag_files] == [tag1.name, tag2.name]
 
 
 @skip_circleci

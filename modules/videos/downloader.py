@@ -293,6 +293,13 @@ class VideoDownloader(Downloader, ABC):
                 video.source_id = entry['id']
                 video.channel_id = channel_id
                 video_id = video.id
+
+                session.commit()
+
+                if download.settings and (tag_names := download.settings.get('tag_names')):
+                    for name in tag_names:
+                        video.add_tag(name)
+
         except UnrecoverableDownloadError:
             raise
         except yt_dlp.utils.UnsupportedError as e:

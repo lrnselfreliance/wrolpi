@@ -411,7 +411,7 @@ export async function getArchive(archiveId) {
     }
 }
 
-export async function postDownload(urls, downloader, frequency, sub_downloader, excludedURLs, destination) {
+export async function postDownload(urls, downloader, frequency, sub_downloader, excludedURLs, destination, tagNames) {
     if (!downloader) {
         toast({
             type: 'error',
@@ -431,6 +431,9 @@ export async function postDownload(urls, downloader, frequency, sub_downloader, 
     };
     if (sub_downloader) {
         body['sub_downloader'] = sub_downloader;
+    }
+    if (tagNames) {
+        body['tag_names'] = tagNames;
     }
     let response = await apiPost(`${API_URI}/download`, body);
     return response;

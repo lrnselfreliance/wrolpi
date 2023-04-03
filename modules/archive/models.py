@@ -2,7 +2,7 @@ import datetime
 import json
 import pathlib
 import re
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, Union
 
 import pytz
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
@@ -14,6 +14,7 @@ from wrolpi.dates import TZDateTime
 from wrolpi.errors import InvalidArchive
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
+from wrolpi.tags import Tag, TagFile
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -251,6 +252,10 @@ class Archive(Base, ModelHelper):
         file_group = FileGroup.from_paths(session, *paths)
         archive = model_archive(file_group, session)
         return archive
+
+    def add_tag(self, tag_or_tag_name: Union[Tag, str]) -> TagFile:
+        tag = Tag.find_by_name(tag_or_tag_name) if isinstance(tag_or_tag_name, str) else tag_or_tag_name
+        return self.file_group.add_tag(tag)
 
 
 class Domain(Base, ModelHelper):

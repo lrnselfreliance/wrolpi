@@ -256,6 +256,13 @@ export function AddTagsButton({selectedTagNames = [], onToggle = _.noop, onAdd =
     const [loading, setLoading] = React.useState(false);
     const [localTags, setLocalTags] = React.useState(selectedTagNames);
 
+    const handleOpen = (e) => {
+        if (e) {
+            e.preventDefault();
+        }
+        setOpen(true);
+    }
+
     const addTag = (name) => {
         setLoading(true);
         try {
@@ -285,10 +292,10 @@ export function AddTagsButton({selectedTagNames = [], onToggle = _.noop, onAdd =
     const unusedTagsGroup = <TagsGroup tagNames={unusedTags} onClick={addTag}/>;
 
     return <>
-        <SButton icon='tag' onClick={() => setOpen(true)}/>
+        <SButton icon='tag' onClick={handleOpen}/>
         <Modal closeIcon
                open={open}
-               onOpen={() => setOpen(true)}
+               onOpen={(e) => handleOpen(e)}
                onClose={() => setOpen(false)}>
             <Modal.Content>
                 {loading && <Dimmer active><SLoader/></Dimmer>}

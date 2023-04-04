@@ -14,6 +14,7 @@ import {TagsProvider, TagsSelector} from "../Tags";
 import {Media} from "../contexts/contexts";
 import {encodeMediaPath} from "./Common";
 import {addTag, fetchFile, removeTag} from "../api";
+import {StlViewer} from "react-stl-viewer";
 
 function getMediaPathURL(previewFile) {
     if (previewFile['primary_path']) {
@@ -113,16 +114,32 @@ function getAudioModal(previewFile) {
     return <React.Fragment>
         <ModalHeader>
             {name}
-        </ModalHeader><ModalContent>
-        <audio controls
-               autoPlay={true}
-               id="player"
-               playsInline={true}
-               style={{width: '90%', maxWidth: '95%'}}
-        >
-            <source src={url} type={type}/>
-        </audio>
-    </ModalContent>
+        </ModalHeader>
+        <ModalContent>
+            <audio controls
+                   autoPlay={true}
+                   id="player"
+                   playsInline={true}
+                   style={{width: '90%', maxWidth: '95%'}}
+            >
+                <source src={url} type={type}/>
+            </audio>
+        </ModalContent>
+    </React.Fragment>
+}
+
+function getSTLModal(previewFile) {
+    const url = getMediaPathURL(previewFile);
+    const path = previewFile.primary_path ?? previewFile.path;
+    const name = path.replace(/^.*[\\\/]/, '');
+    return <React.Fragment>
+        <ModalHeader>{name}</ModalHeader>
+        <ModalContent>
+            <StlViewer orbitControls shadows
+                       url={url}
+                       style={{height: '80vw', width: '80vw'}}
+            />
+        </ModalContent>
     </React.Fragment>
 }
 
@@ -178,7 +195,10 @@ export function FilePreviewWrapper({children}) {
     }
 
     function setModalContent(content, url, downloadURL) {
-        const openButton = <SButton color='blue' as='a' href={url}>Open</SButton>;
+        let openButton;
+        if (url) {
+            openButton = <SButton color='blue' as='a' href={url}>Open</SButton>;
+        }
         const closeButton = <SButton onClick={handleClose}>Close</SButton>;
         const tagsDisplay = <TagsProvider>
             <TagsSelector selectedTagNames={previewFile['tags']} onAdd={localAddTag} onRemove={localRemoveTag}/>
@@ -253,8 +273,12 @@ export function FilePreviewWrapper({children}) {
                 setModalContent(getIframeModal(previewFile), url, downloadURL);
             } else if (mimetype.startsWith('image/')) {
                 setModalContent(getImageModal(previewFile), url);
+            } else if (mimetype.startsWith('model/stl')) {
+                setModalContent(getSTLModal(previewFile), null, downloadURL);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.mp3')) {
                 setModalContent(getAudioModal(previewFile), url, downloadURL);
+            } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.stl')) {
+                setModalContent(getSTLModal(previewFile), null, downloadURL);
             } else {
                 // No special handler for this file type, just open it.
                 window.open(downloadURL);

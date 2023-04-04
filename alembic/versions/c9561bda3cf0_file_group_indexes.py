@@ -28,6 +28,7 @@ def upgrade():
     session.execute('CREATE INDEX file_group_model_idx ON file_group(model)')
     session.execute('CREATE INDEX file_group_modification_datetime_idx ON file_group(modification_datetime)')
     session.execute('CREATE INDEX file_group_size_ix ON file_group(size)')
+    session.execute('CREATE INDEX file_group_textsearch_idx ON file_group USING GIN(textsearch)')
 
     session.execute('CREATE INDEX archive_domain_id_idx ON archive(domain_id)')
 

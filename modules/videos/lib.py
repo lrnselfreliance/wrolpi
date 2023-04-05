@@ -499,13 +499,20 @@ async def get_statistics():
         curs.execute('''
         SELECT
             -- total videos
-            COUNT(id) AS "videos",
+            COUNT(v.id) AS "videos",
             -- total videos downloaded over the past week/month/year
-            COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 week') AS "week",
-            COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 month') AS "month",
-            COUNT(id) FILTER (WHERE upload_date >= current_date - interval '1 year') AS "year"
+            COUNT(v.id) FILTER (WHERE upload_date >= current_date - interval '1 week') AS "week",
+            COUNT(v.id) FILTER (WHERE upload_date >= current_date - interval '1 month') AS "month",
+            COUNT(v.id) FILTER (WHERE upload_date >= current_date - interval '1 year') AS "year",
+            -- sum of all video lengths in seconds
+            COALESCE(SUM(v.duration), 0) AS "sum_duration",
+            -- sum of all video file sizes
+            COALESCE(SUM(fg.size), 0)::BIGINT AS "sum_size",
+            -- largest video
+            COALESCE(MAX(fg.size), 0) AS "max_size"
         FROM
-            video
+            video v
+            LEFT JOIN file_group fg on v.file_group_id = fg.id
         ''')
         video_stats = dict(curs.fetchone())
 
@@ -513,13 +520,15 @@ async def get_statistics():
         curs.execute('''
         SELECT
             DATE_TRUNC('month', months.a),
-            COUNT(id)::BIGINT
+            COUNT(video.id)::BIGINT,
+            SUM(size)::BIGINT AS "size"
         FROM
             generate_series(
                 date_trunc('month', current_date) - interval '2 years',
                 date_trunc('month', current_date) - interval '1 month',
                 '1 month'::interval) AS months(a),
             video
+            LEFT JOIN file_group fg on video.file_group_id = fg.id
         WHERE
             video.upload_date >= date_trunc('month', months.a)
             AND video.upload_date < date_trunc('month', months.a) + interval '1 month'

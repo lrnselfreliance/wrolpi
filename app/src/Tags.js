@@ -4,7 +4,7 @@ import {
     Button as SButton,
     Confirm,
     Dimmer,
-    Divider,
+    Divider, Dropdown,
     Form,
     FormInput,
     Grid,
@@ -354,6 +354,40 @@ const Dashboard = () => {
 
         <EditTagsModal/>
     </Segment>
+}
+
+export const TagsDropdown = ({value = [], onChange, ...props}) => {
+    const {tagNames} = React.useContext(TagsContext);
+    const [activeTags, setActiveTags] = React.useState(value);
+
+    const handleChange = (e, {value}) => {
+        if (e) {
+            e.preventDefault();
+        }
+        if (!value) {
+            setActiveTags([]);
+            onChange([]);
+        } else {
+            setActiveTags(value);
+            onChange(value);
+        }
+    }
+
+    let options = [{key: null, text: '', value: ''}];
+    if (tagNames && tagNames.length > 0) {
+        const tagOptions = tagNames.map(i => {
+            return {key: i, text: i, value: i}
+        })
+        options = [...options, ...tagOptions];
+    }
+
+    return <Dropdown multiple selection clearable
+                     options={options}
+                     placeholder='Tags'
+                     onChange={handleChange}
+                     value={activeTags}
+                     {...props}
+    />
 }
 
 export const TagsDashboard = () => {

@@ -103,7 +103,7 @@ export async function getChannel(id) {
     return (await response.json())['channel'];
 }
 
-export async function searchVideos(offset, limit, channelId, searchStr, order_by, tags) {
+export async function searchVideos(offset, limit, channelId, searchStr, order_by, tagNames) {
     // Build a search query to retrieve a list of videos from the API
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
@@ -115,8 +115,8 @@ export async function searchVideos(offset, limit, channelId, searchStr, order_by
     if (channelId) {
         body['channel_id'] = parseInt(channelId);
     }
-    if (tags) {
-        body['tag_names'] = tags.split(',');
+    if (tagNames) {
+        body['tag_names'] = tagNames;
     }
 
     console.debug('searching videos', body);
@@ -350,7 +350,7 @@ export async function deleteArchives(archiveIds) {
     }
 }
 
-export async function searchArchives(offset, limit, domain, searchStr, order, tags) {
+export async function searchArchives(offset, limit, domain, searchStr, order, tagNames) {
     // Build a search query to retrieve a list of videos from the API
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
@@ -364,8 +364,8 @@ export async function searchArchives(offset, limit, domain, searchStr, order, ta
     if (order) {
         body['order_by'] = order;
     }
-    if (tags) {
-        body['tag_names'] = tags.split(',');
+    if (tagNames) {
+        body['tag_names'] = tagNames;
     }
 
     console.debug('searching archives', body);
@@ -479,7 +479,7 @@ export async function deleteDownload(downloadId) {
     }
 }
 
-export async function filesSearch(offset, limit, searchStr, mimetypes, model, tags) {
+export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames) {
     const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit)};
     if (mimetypes) {
         body['mimetypes'] = mimetypes;
@@ -487,8 +487,8 @@ export async function filesSearch(offset, limit, searchStr, mimetypes, model, ta
     if (model) {
         body['model'] = model;
     }
-    if (tags) {
-        body['tag_names'] = tags.split(',');
+    if (tagNames) {
+        body['tag_names'] = tagNames;
     }
     console.debug('searching files', body);
     const response = await apiPost(`${API_URI}/files/search`, body);

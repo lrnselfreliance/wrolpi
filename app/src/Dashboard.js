@@ -75,7 +75,7 @@ export function Dashboard() {
 
     // Only show dashboard parts if not searching.
     let body;
-    if (searchStr || activeTags) {
+    if (searchStr || (activeTags && activeTags.length > 0)) {
         body = <FilesSearchView showLimit={true} showSelectButton={true}/>;
     } else {
         body = <>

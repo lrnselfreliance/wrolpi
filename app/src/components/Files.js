@@ -42,7 +42,7 @@ import _ from 'lodash';
 import {FileBrowser} from "./FileBrowser";
 import {refreshDirectoryFiles, refreshFiles} from "../api";
 import {useSubscribeEventName} from "../Events";
-import {TagsContext} from "../Tags";
+import {TagsContext, TagsDropdown, TagsProvider} from "../Tags";
 
 function EbookCard({file}) {
     const {s} = useContext(ThemeContext);
@@ -347,7 +347,9 @@ export function FilesView({
                 {selectButton}
                 {viewButton}
                 {limitDropdown}
-                <TagsFilesGroupDropdown/>
+                <TagsProvider>
+                    <TagsFilesGroupDropdown/>
+                </TagsProvider>
                 {filterOptions && filtersDropdown}
             </Grid.Column>
             {menuColumns}
@@ -360,8 +362,7 @@ export function FilesView({
 export function TagsFilesGroupDropdown({onChange}) {
     // Creates  dropdown that the User can use to manipulate the tag query.
     const {searchParams, updateQuery} = useQuery();
-    const activeTag = searchParams.get('tag');
-    const {tags} = React.useContext(TagsContext);
+    const activeTags = searchParams.getAll('tag');
 
     const localOnChange = (name) => {
         updateQuery({'tag': name});
@@ -370,23 +371,11 @@ export function TagsFilesGroupDropdown({onChange}) {
         }
     }
 
-    let tagOptions = [];
-    if (tags && tags.length) {
-        for (let i = 0; i < tags.length; i++) {
-            const {name} = tags[i];
-            tagOptions = [...tagOptions, {key: name, text: name, value: name}];
-        }
-
-        return <Dropdown selection clearable search
-                         options={tagOptions || []}
-                         placeholder={'Tags'}
-                         onChange={(e, {value}) => localOnChange(value)}
-                         style={{marginLeft: '0.3em', marginTop: '0.3em'}}
-                         value={activeTag}
-        />;
-    } else {
-        return <React.Fragment/>
-    }
+    return <TagsDropdown
+        value={activeTags}
+        onChange={localOnChange}
+        style={{marginLeft: '0.3em', marginTop: '0.3em'}}
+    />
 }
 
 export function FilesSearchView({

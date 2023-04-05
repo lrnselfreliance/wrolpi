@@ -19,7 +19,6 @@ from uuid import uuid1, uuid4
 
 import pytest
 import sqlalchemy
-import yaml
 from PIL import Image
 from sanic_testing.testing import SanicTestClient
 from sqlalchemy.engine import Engine, create_engine
@@ -30,7 +29,8 @@ from wrolpi.common import iterify, log_level_context
 from wrolpi.common import set_test_media_directory, Base, set_test_config
 from wrolpi.dates import set_test_now
 from wrolpi.db import postgres_engine, get_db_args
-from wrolpi.downloader import DownloadManager, DownloadResult, set_test_download_manager_config, Download, Downloader
+from wrolpi.downloader import DownloadManager, DownloadResult, Download, Downloader, \
+    downloads_manager_config_context
 from wrolpi.files import lib as files_lib
 from wrolpi.root_api import BLUEPRINTS, api_app
 from wrolpi.tags import Tag
@@ -135,11 +135,10 @@ def test_client() -> SanicTestClient:
 
 @pytest.fixture
 def test_download_manager_config(test_directory):
-    (test_directory / 'config').mkdir(exist_ok=True)
-    config_path = test_directory / 'config/download_manager.yaml'
-    set_test_download_manager_config(True)
-    yield config_path
-    set_test_download_manager_config(False)
+    with downloads_manager_config_context():
+        (test_directory / 'config').mkdir(exist_ok=True)
+        config_path = test_directory / 'config/download_manager.yaml'
+        yield config_path
 
 
 @pytest.fixture

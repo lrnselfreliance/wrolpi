@@ -13,7 +13,7 @@ import pytz
 from wrolpi.dates import Seconds
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download, DownloadFrequency, DownloadResult, import_downloads_config, \
-    RSSDownloader
+    RSSDownloader, get_download_manager_config
 from wrolpi.errors import UnrecoverableDownloadError, InvalidDownload, WROLModeEnabled
 from wrolpi.test.common import assert_dict_contains
 
@@ -250,8 +250,7 @@ async def test_max_attempts(test_session, test_download_manager, test_downloader
 async def test_skip_urls(test_session, test_download_manager, test_client, assert_download_urls, test_downloader):
     """The DownloadManager will not create downloads for URLs in it's skip list."""
     _, session = get_db_context()
-    from wrolpi.downloader import DOWNLOAD_MANAGER_CONFIG
-    DOWNLOAD_MANAGER_CONFIG.skip_urls = ['https://example.com/skipme']
+    get_download_manager_config().skip_urls = ['https://example.com/skipme']
 
     test_downloader.do_download = MagicMock()
     test_downloader.do_download.return_value = DownloadResult(success=True)
@@ -263,14 +262,14 @@ async def test_skip_urls(test_session, test_download_manager, test_client, asser
     ], downloader_name=test_downloader.name)
     await test_download_manager.wait_for_all_downloads()
     assert_download_urls({'https://example.com/1', 'https://example.com/2'})
-    assert DOWNLOAD_MANAGER_CONFIG.skip_urls == ['https://example.com/skipme']
+    assert get_download_manager_config().skip_urls == ['https://example.com/skipme']
 
     test_download_manager.delete_completed()
 
     # The user can start a download even if the URL is in the skip list.
     test_download_manager.create_download('https://example.com/skipme', test_downloader.name, reset_attempts=True)
     assert_download_urls({'https://example.com/skipme'})
-    assert DOWNLOAD_MANAGER_CONFIG.skip_urls == []
+    assert get_download_manager_config().skip_urls == []
 
 
 @pytest.mark.asyncio
@@ -363,7 +362,7 @@ async def test_downloads_config(test_session, test_client, test_download_manager
     await asyncio.sleep(0)
 
     # Downloads were saved to config.
-    assert DOWNLOAD_MANAGER_CONFIG.downloads, 'No downloads were saved'
+    assert get_download_manager_config().downloads, 'No downloads were saved'
     expected = [
         # https://example.com/1 is missing because it is completed.
         dict(
@@ -380,7 +379,7 @@ async def test_downloads_config(test_session, test_client, test_download_manager
             sub_downloader=None,
         ),
     ]
-    for download, expected in zip_longest(DOWNLOAD_MANAGER_CONFIG.downloads, expected):
+    for download, expected in zip_longest(get_download_manager_config().downloads, expected):
         assert_dict_contains(download, expected)
 
     # Delete a Downloads, so we can import what was saved.

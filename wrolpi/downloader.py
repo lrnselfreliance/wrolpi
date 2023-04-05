@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import multiprocessing
 import os
@@ -507,7 +508,7 @@ class DownloadManager:
 
         download = self.get_download(session, url=url)
         if not download:
-            if url in DOWNLOAD_MANAGER_CONFIG.skip_urls:
+            if url in get_download_manager_config().skip_urls:
                 raise InvalidDownload(
                     f'Refusing to download {url} because it is in the download_manager.yaml skip list')
             download = Download(url=url, status='new')
@@ -530,10 +531,10 @@ class DownloadManager:
 
         with session.transaction:
             for url in urls:
-                if url in DOWNLOAD_MANAGER_CONFIG.skip_urls and reset_attempts:
+                if url in get_download_manager_config().skip_urls and reset_attempts:
                     # User manually entered this download, remove it from the skip list.
                     self.remove_from_skip_list(url)
-                elif url in DOWNLOAD_MANAGER_CONFIG.skip_urls:
+                elif url in get_download_manager_config().skip_urls:
                     self.log_warning(f'Skipping {url} because it is in the download_manager.yaml skip list.')
                     continue
 
@@ -990,13 +991,13 @@ class DownloadManager:
 
     @staticmethod
     def add_to_skip_list(*urls: str):
-        DOWNLOAD_MANAGER_CONFIG.skip_urls = list(set(DOWNLOAD_MANAGER_CONFIG.skip_urls) | set(urls))
-        DOWNLOAD_MANAGER_CONFIG.save()
+        get_download_manager_config().skip_urls = list(set(get_download_manager_config().skip_urls) | set(urls))
+        get_download_manager_config().save()
 
     @staticmethod
     def remove_from_skip_list(url: str):
-        DOWNLOAD_MANAGER_CONFIG.skip_urls = [i for i in DOWNLOAD_MANAGER_CONFIG.skip_urls if i != url]
-        DOWNLOAD_MANAGER_CONFIG.save()
+        get_download_manager_config().skip_urls = [i for i in get_download_manager_config().skip_urls if i != url]
+        get_download_manager_config().save()
 
 
 # The global DownloadManager.  This should be used everywhere!
@@ -1028,13 +1029,25 @@ class DownloadMangerConfig(ConfigFile):
 
 
 DOWNLOAD_MANAGER_CONFIG: DownloadMangerConfig = DownloadMangerConfig()
+TEST_DOWNLOAD_MANAGER_CONFIG: DownloadMangerConfig = None
 
 
-def set_test_download_manager_config(enabled: bool):
+@contextlib.contextmanager
+def downloads_manager_config_context():
+    """Used to create a test config."""
+    global TEST_DOWNLOAD_MANAGER_CONFIG
+    TEST_DOWNLOAD_MANAGER_CONFIG = DownloadMangerConfig()
+    yield
+    TEST_DOWNLOAD_MANAGER_CONFIG = None
+
+
+def get_download_manager_config() -> DownloadMangerConfig:
+    global TEST_DOWNLOAD_MANAGER_CONFIG
+    if isinstance(TEST_DOWNLOAD_MANAGER_CONFIG, ConfigFile):
+        return TEST_DOWNLOAD_MANAGER_CONFIG
+
     global DOWNLOAD_MANAGER_CONFIG
-    DOWNLOAD_MANAGER_CONFIG = None
-    if enabled:
-        DOWNLOAD_MANAGER_CONFIG = DownloadMangerConfig()
+    return DOWNLOAD_MANAGER_CONFIG
 
 
 @optional_session(commit=False)
@@ -1055,9 +1068,9 @@ async def save_downloads_config(session: Session):
             sub_downloader=download.sub_downloader,
             url=download.url,
         ))
-    if config != DOWNLOAD_MANAGER_CONFIG.downloads:
+    if config != get_download_manager_config().downloads:
         # Only save if there are changes.
-        DOWNLOAD_MANAGER_CONFIG.downloads = config
+        get_download_manager_config().downloads = config
 
 
 @optional_session
@@ -1073,7 +1086,7 @@ async def import_downloads_config(session: Session):
     try:
         logger.warning('Importing downloads in config')
 
-        downloads_by_url = {i['url']: i for i in DOWNLOAD_MANAGER_CONFIG.downloads}
+        downloads_by_url = {i['url']: i for i in get_download_manager_config().downloads}
         existing_downloads = list(session.query(Download))
         for existing in existing_downloads:
             download = downloads_by_url.pop(existing.url, None)

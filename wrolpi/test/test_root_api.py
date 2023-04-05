@@ -8,7 +8,7 @@ from wrolpi.admin import HotspotStatus
 from wrolpi.common import get_config
 from wrolpi.dates import strptime
 from wrolpi.db import get_db_session
-from wrolpi.downloader import Download
+from wrolpi.downloader import Download, get_download_manager_config
 from wrolpi.root_api import api_app
 from wrolpi.test.common import TestAPI, wrap_test_db, skip_circleci
 
@@ -232,8 +232,6 @@ def test_throttle_toggle(test_session, test_client, test_config):
 
 
 def test_clear_downloads(test_session, test_client, test_config, test_download_manager_config):
-    from wrolpi.downloader import DOWNLOAD_MANAGER_CONFIG
-
     with get_db_session(commit=True) as session:
         d1 = Download(url='https://example.com/1', status='complete')
         d2 = Download(url='https://example.com/2', status='pending')
@@ -298,7 +296,7 @@ def test_clear_downloads(test_session, test_client, test_config, test_download_m
     check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
 
     # Failed once-downloads will not be downloaded again.
-    assert DOWNLOAD_MANAGER_CONFIG.skip_urls == ['https://example.com/5', ]
+    assert get_download_manager_config().skip_urls == ['https://example.com/5', ]
 
 
 def test_get_status(test_client, test_session):

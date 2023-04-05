@@ -111,7 +111,7 @@ def post_directories(_, body: schema.DirectoriesRequest):
 
 @bp.post('/tag')
 @validate(schema.TagFileGroupPost)
-def post_tag_file_group(_, body: schema.TagFileGroupPost):
+async def post_tag_file_group(_, body: schema.TagFileGroupPost):
     if not body.tag_id and not body.tag_name:
         return json_response(
             dict(error='tag_id and tag_name cannot both be empty'),
@@ -123,12 +123,12 @@ def post_tag_file_group(_, body: schema.TagFileGroupPost):
             HTTPStatus.BAD_REQUEST,
         )
 
-    lib.add_file_group_tag(body.file_group_id, body.file_group_primary_path, body.tag_name, body.tag_id)
+    await lib.add_file_group_tag(body.file_group_id, body.file_group_primary_path, body.tag_name, body.tag_id)
     return response.empty(HTTPStatus.CREATED)
 
 
 @bp.post('/untag')
 @validate(schema.TagFileGroupPost)
-def post_untag_file_group(_, body: schema.TagFileGroupPost):
-    lib.remove_file_group_tag(body.file_group_id, body.file_group_primary_path, body.tag_name, body.tag_id)
+async def post_untag_file_group(_, body: schema.TagFileGroupPost):
+    await lib.remove_file_group_tag(body.file_group_id, body.file_group_primary_path, body.tag_name, body.tag_id)
     return response.empty(HTTPStatus.NO_CONTENT)

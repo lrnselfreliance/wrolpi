@@ -113,7 +113,7 @@ async def request_archive(url: str) -> Tuple[str, Optional[str], Optional[str]]:
             # Report the error from the archive service.
             raise Exception(f'Received error from archive service: {error}')
 
-        readability = contents['readability']
+        readability = contents.get('readability')
         # Compressed base64
         singlefile = contents['singlefile']
         screenshot = contents['screenshot']

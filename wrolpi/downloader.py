@@ -757,13 +757,10 @@ class DownloadManager:
         """Delete a Download.  Returns True if a Download was deleted, otherwise return False."""
         download = self.get_download(session, id_=download_id)
         if download:
+            url = download.url
             session.delete(download)
             session.commit()
-            # Save the config because a download was deleted.
-            if PYTEST:
-                save_downloads_config()
-            else:
-                background_task(save_downloads_config())
+            self.add_to_skip_list(url)
             return True
         return False
 

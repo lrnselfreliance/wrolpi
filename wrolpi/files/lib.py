@@ -19,7 +19,7 @@ from wrolpi import flags
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
     partition, cancelable_wrapper, \
-    get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup
+    get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task
 from wrolpi.dates import now, from_timestamp
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
 from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag
@@ -764,17 +764,24 @@ def group_files_by_stem(files: List[pathlib.Path], pre_sorted: bool = False) -> 
     yield group
 
 
-def _get_tag_and_file_group(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
-                            session: Session):
+async def _get_tag_and_file_group(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
+                                  session: Session):
     if file_group_id:
         file_group: FileGroup = session.query(FileGroup).filter_by(id=file_group_id).one_or_none()
         if not file_group:
             raise UnknownFile(f'Cannot find FileGroup with id {file_group_id}')
     elif file_group_primary_path:
-        path = str(get_media_directory() / file_group_primary_path)
-        file_group: FileGroup = session.query(FileGroup).filter_by(primary_path=path).one_or_none()
+        path = get_media_directory() / file_group_primary_path
+        file_group: FileGroup = session.query(FileGroup).filter_by(primary_path=str(path)).one_or_none()
+        if not file_group and path.is_file():
+            # File may not have been refreshed.
+            await refresh_discover_paths([path])
+            session.flush()
+            file_group: FileGroup = session.query(FileGroup).filter_by(primary_path=str(path)).one_or_none()
+            background_task(refresh_files([path]))
+
         if not file_group:
-            raise UnknownFile(f'Cannot find FileGroup with primary_path {file_group_primary_path}')
+            raise UnknownFile(f'Cannot find FileGroup with primary_path {repr(str(file_group_primary_path))}')
     else:
         raise UnknownFile(f'Cannot find FileGroup without id or primary_path')
 
@@ -793,17 +800,17 @@ def _get_tag_and_file_group(file_group_id: int, file_group_primary_path: str, ta
 
 
 @optional_session(commit=True)
-def add_file_group_tag(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
-                       session: Session = None) -> TagFile:
-    file_group, tag = _get_tag_and_file_group(file_group_id, file_group_primary_path, tag_name, tag_id, session)
+async def add_file_group_tag(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
+                             session: Session = None) -> TagFile:
+    file_group, tag = await _get_tag_and_file_group(file_group_id, file_group_primary_path, tag_name, tag_id, session)
     tag_file = file_group.add_tag(tag, session)
     return tag_file
 
 
 @optional_session(commit=True)
-def remove_file_group_tag(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
-                          session: Session = None):
-    file_group, tag = _get_tag_and_file_group(file_group_id, file_group_primary_path, tag_name, tag_id, session)
+async def remove_file_group_tag(file_group_id: int, file_group_primary_path: str, tag_name: str, tag_id: int,
+                                session: Session = None):
+    file_group, tag = await _get_tag_and_file_group(file_group_id, file_group_primary_path, tag_name, tag_id, session)
     file_group.remove_tag(tag, session)
 
 

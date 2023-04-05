@@ -75,7 +75,7 @@ function ArchivePage() {
     const readabilityUrl = data.readability_path;
 
     const singlefileButton = <ExternalCardLink to={singlefileUrl}>
-        <Button content='View' color='blue'/>
+        <Button content='View' color='violet'/>
     </ExternalCardLink>;
 
     const readabilityLink = readabilityUrl ?
@@ -97,7 +97,7 @@ function ArchivePage() {
     }
 
     const updateButton = (<>
-        <Button color='yellow' onClick={() => setUpdateOpen(true)} content='Update'/>
+        <Button color='green' onClick={() => setUpdateOpen(true)} content='Update'/>
         <Confirm
             open={updateOpen}
             content='Download the latest version of this URL?'

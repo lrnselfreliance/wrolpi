@@ -213,7 +213,7 @@ export class Settings extends React.Component {
 
                         <br/>
 
-                        <Button color="blue" type="submit" disabled={disabled} size='large'>
+                        <Button color='violet' type="submit" disabled={disabled} size='large'>
                             Save
                         </Button>
 

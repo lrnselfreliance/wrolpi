@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from "react";
-import {addTag, deleteTag, getTags, removeTag, saveTag} from "./api";
+import {deleteTag, getTags, saveTag} from "./api";
 import {
     Button as SButton,
     Confirm,
@@ -21,7 +21,7 @@ import {
     TableHeaderCell,
     TableRow,
 } from "semantic-ui-react";
-import {contrastingColor, HelpPopup} from "./components/Common";
+import {contrastingColor} from "./components/Common";
 import {Segment} from "./components/Theme";
 import _ from "lodash";
 import {HexColorPicker} from "react-colorful";
@@ -218,7 +218,7 @@ function EditTagsModal() {
 
                 <HexColorPicker color={tagColor} onChange={setTagColor} style={{marginTop: '1em'}}/>
 
-                <SButton primary
+                <SButton color='violet'
                          size='big'
                          onClick={localSaveTag}
                          style={{marginTop: '2em'}}
@@ -242,7 +242,7 @@ function EditTagsModal() {
                 </STable>
             </Modal.Content>
         </Modal>
-        <SButton primary onClick={() => setOpen(true)}>
+        <SButton onClick={() => setOpen(true)} color='violet'>
             Edit
         </SButton>
     </>
@@ -292,7 +292,7 @@ export function AddTagsButton({selectedTagNames = [], onToggle = _.noop, onAdd =
     const unusedTagsGroup = <TagsGroup tagNames={unusedTags} onClick={addTag}/>;
 
     return <>
-        <SButton icon='tag' onClick={handleOpen}/>
+        <SButton icon='tag' onClick={handleOpen} color='violet'/>
         <Modal closeIcon
                open={open}
                onOpen={(e) => handleOpen(e)}

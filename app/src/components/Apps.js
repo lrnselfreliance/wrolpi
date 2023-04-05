@@ -59,7 +59,7 @@ class Encrypt extends React.Component {
                 </Segment>
             </SegmentGroup>
             <br/>
-            <Button onClick={this.handleSubmit}>Encrypt</Button>
+            <Button color='violet' onClick={this.handleSubmit}>Encrypt</Button>
         </>
     }
 }
@@ -116,7 +116,7 @@ class Decrypt extends React.Component {
                 </Segment>
             </SegmentGroup>
             <br/>
-            <Button onClick={this.handleSubmit}>Decrypt</Button>
+            <Button color='violet' onClick={this.handleSubmit}>Decrypt</Button>
         </>
     }
 }
@@ -134,7 +134,7 @@ function OTP() {
         <Header as='h4'>One-Time Pads can be used to encrypt your communications. This can be done by hand
             (yes, really) or in this app.</Header>
         <p {...t}>These messages are never stored and cannot be retrieved.</p>
-        <Button primary href={newPadURL}>Generate New Pad</Button>
+        <Button color='violet' href={newPadURL}>Generate New Pad</Button>
         <Button secondary href={cheatSheetURL}>Cheat Sheet PDF</Button>
 
         <Divider/>

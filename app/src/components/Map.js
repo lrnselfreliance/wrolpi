@@ -201,7 +201,7 @@ class ManageMap extends React.Component {
 
         let disabled = dockerized || _.isEmpty(files) || import_running;
         let importButton = <Button
-            primary
+            color='violet'
             disabled={disabled}
             onClick={this.import}
         >

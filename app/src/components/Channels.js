@@ -391,7 +391,7 @@ function ChannelPage({create, header}) {
                                         onConfirm={handleDeleteConfirm}
                                     />
                                     <Button
-                                        color='violet'
+                                        color='green'
                                         size='small'
                                         onClick={handleDownloadChannel}
                                         disabled={!channel.url || !channel.download_frequency}
@@ -406,7 +406,7 @@ function ChannelPage({create, header}) {
                         </Grid.Column>
                         <Grid.Column>
                             <Button
-                                color="green"
+                                color='violet'
                                 size='big'
                                 type="submit"
                                 floated='right'

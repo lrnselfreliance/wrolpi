@@ -435,7 +435,7 @@ export function FilesSearchView({
     />
 }
 
-export function FilesProgress() {
+export function FilesRefreshProgress() {
     const {progress} = useFilesProgressInterval();
 
     if (!progress) {
@@ -462,7 +462,7 @@ export function FilesProgress() {
             params['total'] = 4;
             label = 'Refresh: Cleanup';
         }
-        return <Progress active {...params}>{label}</Progress>
+        return <Progress active color='violet' {...params}>{label}</Progress>
     }
 }
 
@@ -470,7 +470,7 @@ function FilesPage() {
     useTitle('Files');
 
     return <>
-        <FilesProgress/>
+        <FilesRefreshProgress/>
         <FileBrowser/>
     </>;
 }

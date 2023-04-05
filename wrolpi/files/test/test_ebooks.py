@@ -117,27 +117,17 @@ async def test_discover_calibre_cover(test_session, test_directory, example_epub
     metadata = test_directory / 'metadata.opf'
     metadata.touch()
 
-    await refresh_files()
-
-    assert test_session.query(EBook).count() == 1
-    ebook: EBook = test_session.query(EBook).one()
-    assert ebook.file_group.title == 'WROLPi Test Book'
-    # The cover in the ebook was extracted.
-    assert ebook.cover_file['path'] == test_directory / 'ebook example.jpeg'
-    assert (test_directory / 'ebook example.jpeg').is_file()
-
-    # Delete the extracted cover, use the cover image from Calibre.
-    (test_directory / 'ebook example.jpeg').unlink()
+    # Create a "cover.jpg" file near the ebook, this is the Calibre cover.
     cover_image = test_directory / 'cover.jpg'
     shutil.move(image_file, cover_image)
-
-    # Reset files.
-    for file_group in test_session.query(FileGroup):
-        test_session.delete(file_group)
-    test_session.commit()
 
     # Calibre cover image was discovered, no cover was generated.
     await refresh_files()
     ebook: EBook = test_session.query(EBook).one()
     assert ebook.file_group.title == 'WROLPi Test Book'
     assert ebook.cover_file['path'] == test_directory / 'cover.jpg'
+    assert {i['path'].name for i in ebook.file_group.files} == {'ebook example.epub', 'ebook example.mobi', 'cover.jpg'}
+    # Cover is not the first image from the EPUB.
+    assert ebook.cover_path.stat().st_size != 292579
+    # Metadata and cover were deleted from the FileGroups.
+    assert test_session.query(FileGroup).count() == 1

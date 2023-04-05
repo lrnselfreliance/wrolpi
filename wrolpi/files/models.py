@@ -71,7 +71,7 @@ class FileGroup(ModelHelper, Base):
     model = Column(String)  # "video", "archive", "ebook", etc.
     modification_datetime = Column(TZDateTime)
     # the Path of the file that can be modeled or indexed.
-    primary_path = Column(MediaPathType, nullable=False, unique=True)
+    primary_path: pathlib.Path = Column(MediaPathType, nullable=False, unique=True)
     size = Column(BigInteger, default=lambda: 0)
     title = Column(String)
 

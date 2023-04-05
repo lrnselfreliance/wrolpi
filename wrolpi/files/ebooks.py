@@ -175,6 +175,7 @@ class EBook(ModelHelper, Base):
             raise ValueError('Cannot generate cover for ebook without ebook file!')
 
         if calibre_cover := discover_calibre_cover(path):
+            self.hide_calibre_files()
             return calibre_cover
 
         cover_bytes = extract_ebook_cover(path)
@@ -193,6 +194,24 @@ class EBook(ModelHelper, Base):
     @property
     def cover_path(self) -> Optional[pathlib.Path]:
         return self.cover_file['path']
+
+    def hide_calibre_files(self):
+        """Delete FileGroups of the cover/metadata when this is a Calibre ebook directory."""
+        path = self.file_group.primary_path
+        if not discover_calibre_cover(path):
+            raise ValueError(f'Refusing to hide Calibre files when we do not have a Calibre ebook directory!')
+
+        metadata = path.parent / 'metadata.opf'
+        cover = path.parent / 'cover.jpg'
+
+        with get_db_session(commit=True) as session:
+            file_groups = session.query(FileGroup) \
+                .filter(or_(
+                FileGroup.primary_path == str(metadata),
+                FileGroup.primary_path == str(cover),
+            ))
+            for file_group in file_groups:
+                session.delete(file_group)
 
 
 def _model_ebook(ebook: EBook) -> EBook:

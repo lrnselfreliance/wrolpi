@@ -12,10 +12,10 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}-2
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
       - run: cd app && npm install
       - save_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}-2
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
           paths:
             - ./app/node_modules
       - run: cd app && npm run test
@@ -26,10 +26,10 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}-2
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
       - run: cd app && npm install
       - save_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}-2
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
           paths:
             - ./app/node_modules
       - run: cd app && npm run test
@@ -40,10 +40,10 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}-2
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
       - run: cd app && npm install --legacy-peer-deps
       - save_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}-2
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
           paths:
             - ./app/node_modules
       - run: cd app && npm run test
@@ -54,10 +54,10 @@ jobs:
     steps:
       - checkout
       - restore_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}-2
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
       - run: cd app && npm install --legacy-peer-deps
       - save_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}-2
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
           paths:
             - ./app/node_modules
       - run: cd app && npm run test

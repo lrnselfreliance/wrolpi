@@ -1,7 +1,6 @@
 import React from "react";
 import {getByTestId, render, screen} from '@testing-library/react';
 import {DisableDownloadsToggle} from "./Common";
-import user from '@testing-library/user-event';
 import {StatusContext} from "../contexts/contexts";
 import {startDownloads} from "../components/Common";
 

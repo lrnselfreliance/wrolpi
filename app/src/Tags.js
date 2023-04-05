@@ -122,7 +122,7 @@ export const useTagsInterval = () => {
     const tagsValue = useTags();
     const {fetchTags} = tagsValue;
 
-    useRecurringTimeout(fetchTags, 10_000);
+    useRecurringTimeout(fetchTags, 30_000);
 
     return tagsValue
 }
@@ -338,7 +338,7 @@ export const TagsSelector = ({selectedTagNames = [], onToggle = _.noop, onAdd = 
     </Grid>
 }
 
-const Dashboard = () => {
+export const TagsDashboard = () => {
     const {tagNames, TagsLinkGroup} = React.useContext(TagsContext);
 
     let availableTagsGroup = <SLoader active inline/>;
@@ -388,12 +388,6 @@ export const TagsDropdown = ({value = [], onChange, ...props}) => {
                      value={activeTags}
                      {...props}
     />
-}
-
-export const TagsDashboard = () => {
-    return <TagsProvider>
-        <Dashboard/>
-    </TagsProvider>
 }
 
 export const TagsProvider = ({children}) => {

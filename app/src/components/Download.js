@@ -7,7 +7,7 @@ import {ThemeContext} from "../contexts/contexts";
 import {Accordion, Button, Form, FormField, FormGroup, FormInput, Header, Loader, Segment, TextArea} from "./Theme";
 import {AccordionContent, AccordionTitle, FormDropdown} from "semantic-ui-react";
 import {Link} from "react-router-dom";
-import {TagsProvider, TagsSelector} from "../Tags";
+import {TagsSelector} from "../Tags";
 
 const validUrl = /^(http|https):\/\/[^ "]+$/;
 
@@ -105,9 +105,7 @@ class Downloader extends React.Component {
 
         let tagsSelector;
         if (withTags) {
-            tagsSelector = <TagsProvider>
-                <TagsSelector selectedTagNames={tagNames} onToggle={this.handleSelectedTags}/>
-            </TagsProvider>;
+            tagsSelector = <TagsSelector selectedTagNames={tagNames} onToggle={this.handleSelectedTags}/>;
         }
 
         const advancedAccordion = <Accordion>

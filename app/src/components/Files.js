@@ -42,7 +42,7 @@ import _ from 'lodash';
 import {FileBrowser} from "./FileBrowser";
 import {refreshDirectoryFiles, refreshFiles} from "../api";
 import {useSubscribeEventName} from "../Events";
-import {TagsContext, TagsDropdown, TagsProvider} from "../Tags";
+import {TagsDropdown} from "../Tags";
 
 function EbookCard({file}) {
     const {s} = useContext(ThemeContext);
@@ -347,9 +347,7 @@ export function FilesView({
                 {selectButton}
                 {viewButton}
                 {limitDropdown}
-                <TagsProvider>
-                    <TagsFilesGroupDropdown/>
-                </TagsProvider>
+                <TagsFilesGroupDropdown/>
                 {filterOptions && filtersDropdown}
             </Grid.Column>
             {menuColumns}

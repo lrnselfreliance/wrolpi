@@ -20,7 +20,7 @@ import {useChannel} from "../hooks/customHooks";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, darkTheme, Header, Icon, Segment, Tab, TabPane} from "./Theme";
 import {VideoCard} from "./Videos";
-import {TagsProvider, TagsSelector} from "../Tags";
+import {TagsSelector} from "../Tags";
 
 const MEDIA_PATH = '/media';
 
@@ -221,9 +221,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             </Segment>
 
             <Segment>
-                <TagsProvider>
-                    <TagsSelector selectedTagNames={videoFile['tags']} onAdd={localAddTag} onRemove={localRemoveTag}/>
-                </TagsProvider>
+                <TagsSelector selectedTagNames={videoFile['tags']} onAdd={localAddTag} onRemove={localRemoveTag}/>
             </Segment>
 
             <Tab menu={tabMenu} panes={tabPanes}/>

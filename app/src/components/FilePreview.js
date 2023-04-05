@@ -10,7 +10,7 @@ import {
     ModalContent,
     ModalHeader
 } from "semantic-ui-react";
-import {TagsProvider, TagsSelector} from "../Tags";
+import {TagsSelector} from "../Tags";
 import {Media} from "../contexts/contexts";
 import {encodeMediaPath} from "./Common";
 import {addTag, fetchFile, removeTag} from "../api";
@@ -201,9 +201,8 @@ export function FilePreviewWrapper({children}) {
             openButton = <SButton color='blue' as='a' href={url}>Open</SButton>;
         }
         const closeButton = <SButton onClick={handleClose}>Close</SButton>;
-        const tagsDisplay = <TagsProvider>
-            <TagsSelector selectedTagNames={previewFile['tags']} onAdd={localAddTag} onRemove={localRemoveTag}/>
-        </TagsProvider>;
+        const tagsDisplay = <TagsSelector selectedTagNames={previewFile['tags']} onAdd={localAddTag}
+                                          onRemove={localRemoveTag}/>;
         let downloadButton;
         if (downloadURL) {
             downloadButton = <SButton color='yellow' as='a' href={downloadURL} floated='left'>

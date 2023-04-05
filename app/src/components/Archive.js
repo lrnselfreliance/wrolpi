@@ -43,7 +43,7 @@ import _ from "lodash";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, Card, CardIcon, Header, Loader, Placeholder, Segment} from "./Theme";
 import {SortableTable} from "./SortableTable";
-import {taggedImageLabel, TagsProvider, TagsSelector} from "../Tags";
+import {taggedImageLabel, TagsSelector} from "../Tags";
 
 function ArchivePage() {
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -173,9 +173,7 @@ function ArchivePage() {
         </Segment>
 
         <Segment>
-            <TagsProvider>
-                <TagsSelector selectedTagNames={archiveFile['tags']} onAdd={localAddTag} onRemove={localRemoveTag}/>
-            </TagsProvider>
+            <TagsSelector selectedTagNames={archiveFile['tags']} onAdd={localAddTag} onRemove={localRemoveTag}/>
         </Segment>
 
         <Segment>

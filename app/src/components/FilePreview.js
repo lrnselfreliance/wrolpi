@@ -138,6 +138,7 @@ function getSTLModal(previewFile) {
             <StlViewer orbitControls shadows
                        url={url}
                        style={{height: '80vw', width: '80vw'}}
+                       modelProps={{color: '#7353a8'}}
             />
         </ModalContent>
     </React.Fragment>

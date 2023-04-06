@@ -1,5 +1,5 @@
 import React, {useContext, useEffect, useState} from "react";
-import {Card, Container, IconGroup, Input, Modal, Pagination} from 'semantic-ui-react';
+import {Card, Container, IconGroup, Input, Modal, Pagination, Icon as SIcon} from 'semantic-ui-react';
 import {Link, NavLink, useNavigate} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useDirectories, useDownloads, useHotspot, useSettings, useThrottle} from "../hooks/customHooks";
@@ -779,7 +779,8 @@ export function DarkModeToggle() {
         iconName = 'sun';
     }
 
-    return <Icon
+    return <SIcon
+        inverted
         name={iconName}
         onClick={cycleSavedTheme}
         style={{cursor: 'pointer'}}

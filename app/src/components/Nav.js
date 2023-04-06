@@ -58,7 +58,6 @@ export function NavBar() {
     const wrolpiIcon = <img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/>;
     const name = NAME || wrolpiIcon;
     const topNavText = wrol_mode ? <>{name}&nbsp; <Icon name='lock'/></> : name;
-    const {i} = useContext(ThemeContext);
 
     const homeLink = <NavLink className='item' to='/' style={{paddingTop: 0, paddingBottom: 0}}>
         {topNavText}
@@ -70,7 +69,7 @@ export function NavBar() {
 
     return <>
         <Media at='mobile'>
-            <Menu {...i} attached='top'>
+            <Menu attached='top' inverted color='violet'>
                 {homeLink}
                 <Menu.Menu position='right'>
                     {icons}
@@ -83,7 +82,7 @@ export function NavBar() {
             </Menu>
         </Media>
         <Media greaterThanOrEqual='tablet'>
-            <Menu {...i} attached='top'>
+            <Menu attached='top' inverted color='violet'>
                 {homeLink}
                 {links.map(i => <MenuLink link={i} key={i.key}/>)}
 

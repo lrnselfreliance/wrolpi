@@ -160,7 +160,7 @@ function ArchivePage() {
         <Segment>
             {screenshot}
             <ExternalCardLink to={singlefileUrl}>
-                <Header as='h2'>{textEllipsis(data.title || data.url)}</Header>
+                <Header as='h2'>{textEllipsis(archiveFile.title || data.url)}</Header>
             </ExternalCardLink>
             <Header as='h3'>{isoDatetimeToString(data.archive_datetime)}</Header>
             {domainHeader}

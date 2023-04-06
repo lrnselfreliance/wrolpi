@@ -538,23 +538,20 @@ def test_get_primary_file(test_directory, video_file, srt_file3, example_epub, e
     assert lib.get_primary_file([example_pdf, example_mobi, example_epub]) == example_epub
 
 
-COMMON_JOIN = '''LEFT JOIN tag_file tf ON tf.file_group_id = fg.id
-        LEFT JOIN tag t ON t.id = tf.tag_id'''
-
-
 @pytest.mark.parametrize(
     'tags,wheres,params,join', [
         (
                 ['one'],
-                '(t.name = %(tag_name0)s)',
+                '(t0.name = %(tag_name0)s)',
                 dict(tag_name0='one'),
-                COMMON_JOIN,
+                'LEFT JOIN tag_file tf0 ON tf0.file_group_id = fg.id LEFT JOIN tag t0 ON t0.id = tf0.tag_id',
         ),
         (
                 ['one', 'two'],
-                '(t.name = %(tag_name0)s OR t.name = %(tag_name1)s)',
+                '(t0.name = %(tag_name0)s AND t1.name = %(tag_name1)s)',
                 dict(tag_name0='one', tag_name1='two'),
-                COMMON_JOIN,
+                'LEFT JOIN tag_file tf0 ON tf0.file_group_id = fg.id LEFT JOIN tag t0 ON t0.id = tf0.tag_id'
+                '\nLEFT JOIN tag_file tf1 ON tf1.file_group_id = fg.id LEFT JOIN tag t1 ON t1.id = tf1.tag_id',
         ),
         (
                 [],

@@ -580,14 +580,15 @@ def tag_names_to_clauses(tags: List[str]):
         return '', params, ''
 
     where_tags = []
+    joins = []
     for idx, tag_name in enumerate(tags):
-        where_tags.append(f't.name = %(tag_name{idx})s')
+        where_tags.append(f't{idx}.name = %(tag_name{idx})s')
         params[f'tag_name{idx}'] = tag_name
-    where_tags = ' OR '.join(where_tags)
+        joins.append(f'LEFT JOIN tag_file tf{idx} ON tf{idx}.file_group_id = fg.id '
+                     f'LEFT JOIN tag t{idx} ON t{idx}.id = tf{idx}.tag_id')
+    where_tags = ' AND '.join(where_tags)
     wheres = f'({where_tags})'
-
-    join = '''LEFT JOIN tag_file tf ON tf.file_group_id = fg.id
-        LEFT JOIN tag t ON t.id = tf.tag_id'''
+    join = '\n'.join(joins)
     return wheres, params, join
 
 

@@ -239,8 +239,15 @@ def test_search_videos(test_client, test_session, video_factory, assert_video_se
                                 channel_id=simple_channel.id)
     vid3: Video = video_factory(upload_date='2022-09-18', with_video_file=True, title='vid3')
     tag1, tag2 = tag_factory(), tag_factory()
+
     vid1.add_tag(tag1)
+
+    # vid2 has two tags
+    vid2.add_tag(tag1)
+    vid2.add_tag(tag2)
+
     vid3.add_tag(tag2)
+
     test_session.commit()
     assert test_session.query(Video).count() == 3
     assert test_session.query(FileGroup).count() == 3
@@ -250,12 +257,14 @@ def test_search_videos(test_client, test_session, video_factory, assert_video_se
     assert_video_search(assert_total=3, assert_ids=[vid3.id, vid2.id], order_by='-upload_date', limit=2)
     assert_video_search(assert_total=3, assert_ids=[vid2.id, vid1.id], order_by='-upload_date', limit=2, offset=1)
     assert_video_search(assert_total=1, assert_ids=[vid2.id], order_by='-upload_date', channel_id=simple_channel.id)
-    assert_video_search(assert_total=1, assert_ids=[vid1.id], tag_names=[tag1.name])
-    assert_video_search(assert_total=1, assert_ids=[vid1.id], tag_names=[tag1.name], limit=1)
-    assert_video_search(assert_total=2, assert_ids=[vid3.id, vid1.id], tag_names=[tag1.name, tag2.name])
+    assert_video_search(assert_total=2, assert_ids=[vid1.id, vid2.id], tag_names=[tag1.name])
+    assert_video_search(assert_total=2, assert_ids=[vid3.id, vid2.id], tag_names=[tag2.name])
+    assert_video_search(assert_total=2, assert_ids=[vid1.id], tag_names=[tag1.name], limit=1)
+    # Only vid2 has both tags.
+    assert_video_search(assert_total=1, assert_ids=[vid2.id], tag_names=[tag1.name, tag2.name])
 
     # No results, no total is returned from the DB.
-    assert_video_search(assert_total=0, assert_ids=[], tag_names=[tag1.name], offset=1)
+    assert_video_search(assert_total=0, assert_ids=[], tag_names=[tag1.name], offset=2)
 
     # Check all order_by.
     for order_by in video_lib.VIDEO_ORDERS:

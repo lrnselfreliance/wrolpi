@@ -53,11 +53,12 @@ function NavIcon(props) {
 }
 
 export function NavBar() {
-    const {status} = useContext(StatusContext);
+    const {status} = React.useContext(StatusContext);
     const wrol_mode = status ? status['wrol_mode'] : null;
     const wrolpiIcon = <img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/>;
     const name = NAME || wrolpiIcon;
     const topNavText = wrol_mode ? <>{name}&nbsp; <Icon name='lock'/></> : name;
+    const {i} = React.useContext(ThemeContext);
 
     const homeLink = <NavLink className='item' to='/' style={{paddingTop: 0, paddingBottom: 0}}>
         {topNavText}
@@ -69,7 +70,7 @@ export function NavBar() {
 
     return <>
         <Media at='mobile'>
-            <Menu attached='top' inverted color='violet'>
+            <Menu {...i} attached='top' color='violet'>
                 {homeLink}
                 <Menu.Menu position='right'>
                     {icons}
@@ -82,7 +83,7 @@ export function NavBar() {
             </Menu>
         </Media>
         <Media greaterThanOrEqual='tablet'>
-            <Menu attached='top' inverted color='violet'>
+            <Menu {...i} attached='top' color='violet'>
                 {homeLink}
                 {links.map(i => <MenuLink link={i} key={i.key}/>)}
 

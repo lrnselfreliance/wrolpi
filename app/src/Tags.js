@@ -4,7 +4,8 @@ import {
     Button as SButton,
     Confirm,
     Dimmer,
-    Divider, Dropdown,
+    Divider,
+    Dropdown,
     Form,
     FormInput,
     Grid,
@@ -164,6 +165,13 @@ function EditTagsModal() {
     const [tagColor, setTagColor] = useState(DEFAULT_TAG_COLOR);
     const textColor = contrastingColor(tagColor);
 
+    const localOnClose = () => {
+        setOpen(false);
+        setTagName('');
+        setTagColor(null);
+        setTagId(null);
+    }
+
     const localDeleteTag = async (id, name) => {
         await deleteTag(id, name);
         if (fetchTags) {
@@ -197,7 +205,7 @@ function EditTagsModal() {
         <Modal closeIcon
                open={open}
                onOpen={() => setOpen(true)}
-               onClose={() => setOpen(false)}
+               onClose={localOnClose}
         >
             <Modal.Header>Edit Tags</Modal.Header>
             <Modal.Content>
@@ -388,12 +396,4 @@ export const TagsDropdown = ({value = [], onChange, ...props}) => {
                      value={activeTags}
                      {...props}
     />
-}
-
-export const TagsProvider = ({children}) => {
-    const value = useTagsInterval();
-
-    return <TagsContext.Provider value={value}>
-        {children}
-    </TagsContext.Provider>
 }

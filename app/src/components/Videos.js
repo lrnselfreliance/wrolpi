@@ -178,7 +178,12 @@ function VideosPage() {
         setPage,
     );
 
-    const searchInput = <SearchInput clearable searchStr={searchStr} onSubmit={setSearchStr} actionIcon='search'/>;
+    const searchInput = <SearchInput clearable
+                                     searchStr={searchStr}
+                                     onSubmit={setSearchStr}
+                                     actionIcon='search'
+                                     placeholder='Search Videos...'
+    />;
 
     return <>
         {header}
@@ -203,10 +208,8 @@ function VideosPage() {
                     <Grid.Column width={1}>{viewButton}</Grid.Column>
                     <Grid.Column width={2}>{limitDropdown}</Grid.Column>
                     <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
-                    <Grid.Column width={5}><SortButton sorts={videoOrders}/></Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column width={8}>{searchInput}</Grid.Column>
+                    <Grid.Column width={4}><SortButton sorts={videoOrders}/></Grid.Column>
+                    <Grid.Column width={7}>{searchInput}</Grid.Column>
                 </Grid.Row>
             </Grid>
         </Media>
@@ -353,7 +356,7 @@ export function VideoRowCells({file}) {
         <TableCell>
             <CardLink to={video_url}>
                 <FileRowTagIcon file={file}/>
-                {textEllipsis(video.title || video.stem || video.video_path)}
+                {textEllipsis(file.title || video.stem || video.video_path)}
             </CardLink>
         </TableCell>
     </React.Fragment>

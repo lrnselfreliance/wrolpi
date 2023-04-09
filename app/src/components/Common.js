@@ -208,10 +208,6 @@ const secondsToYears = 31536000;
 const secondsToDays = 86400;
 const secondsToHours = 3600;
 const secondsToMinutes = 60;
-const msToYears = secondsToYears * 1000;
-const msToDays = secondsToDays * 1000;
-const msToHours = secondsToHours * 1000;
-const msToMinutes = secondsToMinutes * 1000;
 
 export function secondsToFullDuration(seconds) {
     let s = '';
@@ -233,11 +229,6 @@ export function secondsToFullDuration(seconds) {
         s = `${s} ${hours}:${minutes}`;
     }
     return s;
-}
-
-export function secondsToDate(seconds) {
-    let date = new Date(seconds * 1000);
-    return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 }
 
 export function secondsToTimestamp(seconds) {

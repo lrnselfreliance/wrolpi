@@ -25,6 +25,7 @@ import {
     FileIcon,
     findPosterPath,
     HelpHeader,
+    humanFileSize,
     isoDatetimeToString,
     mimetypeColor,
     PageContainer,
@@ -70,7 +71,7 @@ function ArchivePage() {
         </>
     }
 
-    const {data} = archiveFile;
+    const {data, size} = archiveFile;
 
     const singlefileUrl = data.singlefile_path ? `/media/${encodeMediaPath(data.singlefile_path)}` : null;
     const screenshotUrl = data.screenshot_path ? `/media/${encodeMediaPath(data.screenshot_path)}` : null;
@@ -167,6 +168,7 @@ function ArchivePage() {
             <Header as='h3'>{isoDatetimeToString(data.archive_datetime)}</Header>
             {domainHeader}
             {urlHeader}
+            <Header as='h5'>{humanFileSize(size)}</Header>
 
             {singlefileButton}
             {readabilityLink}
@@ -452,6 +454,7 @@ function Archives() {
                                      actionIcon='search'
                                      searchStr={searchStr}
                                      onSubmit={setSearchStr}
+                                     placeholder='Search Archives...'
     />;
 
     return <>

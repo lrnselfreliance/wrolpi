@@ -219,11 +219,16 @@ class FileGroup(ModelHelper, Base):
 
     @classmethod
     def from_paths(cls, session: Session, *paths: pathlib.Path) -> 'FileGroup':
-        from wrolpi.files.lib import get_primary_file, split_path_stem_and_suffix, get_mimetype
+        """Create a new FileGroup which contains the provided file paths."""
+        from wrolpi.files.lib import get_primary_file, get_mimetype
         file_group = FileGroup()
 
+        primary_path = get_primary_file(paths)
+        if not isinstance(primary_path, pathlib.Path):
+            raise ValueError('Cannot create FileGroup without a primary path.')
+
         file_group.append_files(*paths)
-        file_group.primary_path = get_primary_file(paths)
+        file_group.primary_path = primary_path
         file_group.mimetype = get_mimetype(file_group.primary_path)
         file_group.modification_datetime = from_timestamp(max(i.stat().st_mtime for i in paths))
         file_group.size = sum(i.stat().st_size for i in paths)

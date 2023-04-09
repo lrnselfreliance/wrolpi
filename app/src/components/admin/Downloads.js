@@ -10,7 +10,7 @@ import {
     WROLModeMessage
 } from "../Common";
 import {
-    Button as SemanticButton,
+    Button as SButton,
     Confirm,
     Loader,
     Modal,
@@ -140,7 +140,7 @@ class DownloadRow extends React.Component {
                 <pre style={{overflowX: 'scroll'}}>{error}</pre>
             </Modal.Content>
             <Modal.Actions>
-                <SemanticButton onClick={() => this.setState({errorModalOpen: false})}>Close</SemanticButton>
+                <SButton onClick={() => this.setState({errorModalOpen: false})}>Close</SButton>
             </Modal.Actions>
         </Modal>;
 
@@ -306,7 +306,7 @@ class StoppableRow extends React.Component {
                         <pre style={{overflowX: 'scroll'}}>{error}</pre>
                     </Modal.Content>
                     <Modal.Actions>
-                        <Button onClick={() => this.setState({errorModalOpen: false})}>Close</Button>
+                        <SButton onClick={() => this.setState({errorModalOpen: false})}>Close</SButton>
                     </Modal.Actions>
                 </Modal>
             )

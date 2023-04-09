@@ -128,7 +128,8 @@ def upgrade():
         ('Social', '#490c73'),
         ('Survival', '#A18A62'),
         ('Tools', '#f0d730'),
-        ('Water', '#291BC2')
+        ('Water', '#291BC2'),
+        ('WROL', '#4700ab')
     ''')
 
     session.execute('UPDATE wrolpi_flag SET refresh_complete = false')

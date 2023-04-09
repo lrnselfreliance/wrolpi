@@ -73,10 +73,9 @@ def test_refresh_videos(test_client, test_session, test_directory, simple_channe
     # Create a bogus video in the channel.
     video_file = test_directory / 'foo.mp4'
     with get_db_curs(commit=True) as curs:
-        full_stem, _ = split_path_stem_and_suffix(video_file, full=True)
-        stmt = "INSERT INTO file_group (mimetype, full_stem, primary_path, indexed, files, model)" \
-               " values ('video/mp4', %(full_stem)s, %(primary_path)s, true, %(files)s, 'video') RETURNING id"
-        params = {'full_stem': full_stem, 'primary_path': str(video_file), 'files': list()}
+        stmt = "INSERT INTO file_group (mimetype, primary_path, indexed, files, model)" \
+               " values ('video/mp4', %(primary_path)s, true, %(files)s, 'video') RETURNING id"
+        params = {'primary_path': str(video_file), 'files': list()}
         curs.execute(stmt, params)
         video4_id = curs.fetchall()[0][0]
         stmt = "INSERT INTO video (file_group_id) values (%(video_id)s)"

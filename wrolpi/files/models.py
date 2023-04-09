@@ -64,7 +64,6 @@ class FileGroup(ModelHelper, Base):
 
     data = Column(FancyJSON)  # populated by the modeler
     files = Column(FancyJSON, nullable=False)  # populated during discovery
-    full_stem = Column(String, unique=True)
     idempotency = Column(TZDateTime)
     indexed = Column(Boolean, default=lambda: False, nullable=False)
     mimetype = Column(String)  # wrolpi.files.lib.get_mimetype
@@ -101,7 +100,6 @@ class FileGroup(ModelHelper, Base):
             'data': self.data,
             'directory': self.primary_path.parent,
             'files': self.my_files(),
-            'full_stem': pathlib.Path(self.full_stem) if self.full_stem else None,
             'id': self.id,
             'mimetype': self.mimetype,
             'model': self.model,
@@ -225,7 +223,6 @@ class FileGroup(ModelHelper, Base):
         file_group = FileGroup()
 
         file_group.append_files(*paths)
-        file_group.full_stem, _ = split_path_stem_and_suffix(paths[0], full=True)
         file_group.primary_path = get_primary_file(paths)
         file_group.mimetype = get_mimetype(file_group.primary_path)
         file_group.modification_datetime = from_timestamp(max(i.stat().st_mtime for i in paths))

@@ -176,10 +176,10 @@ def schedule_save(session: Session = None):
 def get_tags() -> List[dict]:
     with get_db_curs() as curs:
         curs.execute('''
-            SELECT t.name, t.color, COUNT(tf.tag_id)
+            SELECT t.id, t.name, t.color, COUNT(tf.tag_id)
             FROM tag t
             LEFT JOIN tag_file tf on t.id = tf.tag_id
-            GROUP BY t.name, t.color
+            GROUP BY t.id, t.name, t.color
             ORDER BY t.name
         ''')
         tags = list(map(dict, curs.fetchall()))

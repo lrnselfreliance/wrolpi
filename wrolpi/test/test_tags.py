@@ -29,9 +29,11 @@ async def test_tags_file_group_json(test_session, make_files_structure, tag_fact
 
 
 @pytest.mark.asyncio
-async def test_tags_file_group(test_session, make_files_structure, tag_factory):
+async def test_tags_file_group(test_session, make_files_structure, tag_factory, video_bytes, image_bytes_factory):
     """A FileGroup can be tagged with multiple Tags."""
-    make_files_structure(['video.mp4', 'video.png'])
+    make_files_structure({
+        'video.mp4': video_bytes, 'video.png': image_bytes_factory(),
+    })
     await files_lib.refresh_files()
     video_group: FileGroup = test_session.query(FileGroup).one()
 
@@ -126,7 +128,7 @@ def test_tags_crud(test_session, test_client, example_pdf, assert_tags_config):
     # The tag can be retrieved.
     request, response = test_client.get('/api/tag')
     assert response.status_code == HTTPStatus.OK
-    assert response.json['tags'] == [dict(name='foo', color='#123456', id=1)]
+    assert response.json['tags'] == [dict(name='foo', color='#123456', id=1, count=0)]
 
     # Apply the tag to the PDF.
     tag = test_session.query(tags.Tag).one()
@@ -138,7 +140,7 @@ def test_tags_crud(test_session, test_client, example_pdf, assert_tags_config):
     request, response = test_client.post('/api/tag/1', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     request, response = test_client.get('/api/tag')
-    assert response.json['tags'] == [dict(name='bar', color='#000000', id=1)]
+    assert response.json['tags'] == [dict(name='bar', color='#000000', id=1, count=1)]
     assert_tags_config(tags={'bar': {'color': '#000000'}})
 
     # Conflicting names return an error.

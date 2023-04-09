@@ -486,7 +486,7 @@ def test_refresh_archives(test_session, test_directory, test_client, make_files_
 
     # Cause a re-index of the archive.
     test_session.query(FileGroup).filter_by(
-        full_stem=str(test_directory / 'archive/example.com/2021-10-05-16-20-10_NA')).one().indexed = False
+        primary_path=str(test_directory / 'archive/example.com/2021-10-05-16-20-10_NA.html')).one().indexed = False
     test_session.commit()
 
     # Running the refresh does not result in a new archive.

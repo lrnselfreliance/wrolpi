@@ -56,7 +56,6 @@ def upgrade():
         id BIGSERIAL PRIMARY KEY,
         data JSON,
         files JSON,
-        full_stem TEXT NOT NULL UNIQUE,
         idempotency TIMESTAMP WITH TIME ZONE,
         indexed BOOLEAN DEFAULT FALSE,
         mimetype TEXT NOT NULL,

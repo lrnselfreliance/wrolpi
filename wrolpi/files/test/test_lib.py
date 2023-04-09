@@ -80,19 +80,19 @@ async def test_refresh_files(test_session, make_files_structure, assert_file_gro
 
     await lib.refresh_files()
     assert_file_groups([
-        {'full_stem': 'foo', 'indexed': True},
-        {'full_stem': 'bar', 'indexed': True},
-        {'full_stem': 'baz', 'indexed': True}])
+        {'primary_path': 'foo.txt', 'indexed': True},
+        {'primary_path': 'bar.txt', 'indexed': True},
+        {'primary_path': 'baz.txt', 'indexed': True}])
 
     baz.unlink()
 
     await lib.refresh_files()
-    assert_file_groups([{'full_stem': 'foo', 'indexed': True}, {'full_stem': 'bar', 'indexed': True}])
+    assert_file_groups([{'primary_path': 'foo.txt', 'indexed': True}, {'primary_path': 'bar.txt', 'indexed': True}])
 
     foo.unlink()
 
     await lib.refresh_files()
-    assert_file_groups([{'full_stem': 'bar', 'indexed': True}])
+    assert_file_groups([{'primary_path': 'bar.txt', 'indexed': True}])
 
 
 @pytest.mark.asyncio
@@ -106,14 +106,14 @@ async def test_refresh_bogus_files(test_session, make_files_structure, test_dire
 
     # Bogus file was inserted.
     assert_file_groups([
-        {'full_stem': 'does exist', 'indexed': True},
-        {'full_stem': 'does not exist', 'indexed': True},
+        {'primary_path': 'does exist.txt', 'indexed': True},
+        {'primary_path': 'does not exist.txt', 'indexed': True},
     ])
 
     await lib.refresh_files()
 
     assert test_session.query(FileGroup).count() == 1, 'Bogus file was not removed'
-    assert_file_groups([{'full_stem': 'does exist', 'indexed': True}])
+    assert_file_groups([{'primary_path': 'does exist.txt', 'indexed': True}])
 
 
 @pytest.mark.asyncio
@@ -132,7 +132,6 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     })
     video_file = video_file.rename(test_directory / 'video.mp4')
     srt_file3 = srt_file3.rename(test_directory / 'video.en.srt')
-    video_stem = str(test_directory / video_file.stem)
     foo_mtime = from_timestamp(srt_file3.stat().st_mtime)
 
     # All files are found because they are in this refresh request, or in the `dir1` directory.
@@ -159,7 +158,7 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     test_session.query(FileGroup).filter_by(primary_path=video_file).one().indexed = True
     test_session.commit()
     assert_file_groups(
-        [{'full_stem': video_stem, 'idempotency': idempotency, 'modification_datetime': foo_mtime, 'indexed': True}],
+        [{'primary_path': str(video_file), 'idempotency': idempotency, 'modification_datetime': foo_mtime, 'indexed': True}],
         assert_count=False)
 
     # Only modified files need to be re-indexed.
@@ -181,7 +180,7 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     # Deleting SRT removes it from the video.
     srt_file3.unlink()
     lib._upsert_files([video_file, bar, baz], idempotency)
-    video_file_group: FileGroup = test_session.query(FileGroup).filter_by(full_stem=str(test_directory / 'video')).one()
+    video_file_group: FileGroup = test_session.query(FileGroup).filter_by(primary_path=str(video_file)).one()
     assert len(video_file_group.files) == 1, 'SRT file was not removed from files'
 
 
@@ -230,8 +229,8 @@ async def test_refresh_discover_paths(test_session, make_files_structure, test_d
 
 
 @pytest.mark.asyncio
-async def test_refresh_discover_paths_groups(test_session, make_files_structure, test_directory):
-    make_files_structure(['dir1/foo.mp4', 'dir1/foo.info.json', 'baz.txt'])
+async def test_refresh_discover_paths_groups(test_session, make_files_structure, test_directory, video_bytes):
+    make_files_structure({'dir1/foo.mp4': video_bytes, 'dir1/foo.info.json': 'hello', 'baz.txt': 'hello'})
     await lib.refresh_discover_paths([test_directory, ], now())
 
     # Two "foo" files, one "baz" file.
@@ -370,7 +369,7 @@ async def test_files_indexer(test_session, make_files_structure, test_directory)
         await lib.refresh_files()
 
     text_file, zip_file, image_file, unknown_file, video_file \
-        = test_session.query(FileGroup).order_by(FileGroup.full_stem)
+        = test_session.query(FileGroup).order_by(FileGroup.primary_path)
 
     # Indexers are detected correctly.
     assert text_file.mimetype == 'text/plain' and text_file.indexer == indexers.TextIndexer
@@ -582,3 +581,21 @@ def test_get_refresh_progress(test_client, test_session):
     assert 'refreshing' in progress
     assert 'total_files' in progress
     assert 'unindexed' in progress
+
+
+@pytest.mark.asyncio
+async def test_refresh_files_no_groups(test_session, test_directory, make_files_structure, zip_file_factory):
+    """Files that share a name, but cannot be grouped into a FileGroup have their own FileGroups."""
+    foo_txt, foo_zip = make_files_structure({
+        'foo.txt': 'text',
+        'foo.zip': zip_file_factory(),
+    })
+    assert foo_txt.stat().st_size and foo_zip.stat().st_size
+
+    await lib.refresh_files()
+
+    # Two distinct FileGroups.
+    assert test_session.query(FileGroup).count() == 2
+    txt, zip_ = test_session.query(FileGroup)
+    assert txt.primary_path == foo_txt and txt.size == foo_txt.stat().st_size
+    assert zip_.primary_path == foo_zip and zip_.size == foo_zip.stat().st_size

@@ -252,7 +252,7 @@ def _paths_to_files_dict(group: List[pathlib.Path]) -> List[dict]:
     return files
 
 
-def get_primary_file(files: Union[Tuple[pathlib.Path], List[pathlib.Path]], pre_sorted: bool = False) -> pathlib.Path:
+def get_primary_file(files: Union[Tuple[pathlib.Path], List[pathlib.Path]]) -> Union[pathlib.Path, List[pathlib.Path]]:
     """Given a list of files, return the file that we can model or index."""
     from modules.archive.lib import is_singlefile_file
 
@@ -287,10 +287,8 @@ def get_primary_file(files: Union[Tuple[pathlib.Path], List[pathlib.Path]], pre_
 
     logger.debug(f'Cannot find primary file for group: {files}')
 
-    # Can't find a typical primary file, just use the alphanumeric first file.
-    files = sorted(files) if pre_sorted is False else files
-    file = files[0]
-    return file
+    # Can't find a typical primary file.
+    return files
 
 
 def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
@@ -308,25 +306,39 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
         # Convert the groups into file_groups.  Extract common information into `file_group.data`.
         values = dict()
         for group in grouped:
-            full_stem, _ = split_path_stem_and_suffix(group[0], full=True)
             # The primary file is the video/SingleFile/epub, etc.
-            primary_path = get_primary_file(group, pre_sorted=True)
-            # The primary mimetype allows modelers to find its file_groups.
-            mimetype = get_mimetype(primary_path)
-            # The group uses a common modification_datetime so the group will be re-indexed when any of it's files are
-            # modified.
-            modification_datetime = from_timestamp(max(i.stat().st_mtime for i in group))
-            size = sum(i.stat().st_size for i in group)
-            files = json.dumps(_paths_to_files_dict(group))
-            values[full_stem] = (str(primary_path), modification_datetime, mimetype, size, files)
-        values = [(stem, False, idempotency, *i) for stem, i in values.items()]
+            primary_path_or_paths = get_primary_file(group)
+            if isinstance(primary_path_or_paths, list) or isinstance(primary_path_or_paths, tuple):
+                # Cannot find primary path, create group for each file.
+                for primary_path in primary_path_or_paths:
+                    primary_path: pathlib.Path
+                    # The primary mimetype allows modelers to find its file_groups.
+                    mimetype = get_mimetype(primary_path)
+                    modification_datetime = from_timestamp(primary_path.stat().st_mtime)
+                    size = primary_path.stat().st_size
+                    files = json.dumps(_paths_to_files_dict([primary_path]))
+                    values[primary_path] = (modification_datetime, mimetype, size, files)
+            else:
+                # Multiple files in this group.
+                primary_path: pathlib.Path = primary_path_or_paths
+                # The primary mimetype allows modelers to find its file_groups.
+                mimetype = get_mimetype(primary_path)
+                # The group uses a common modification_datetime so the group will be re-indexed when any of it's files
+                # are modified.
+                modification_datetime = from_timestamp(max(i.stat().st_mtime for i in group))
+                size = sum(i.stat().st_size for i in group)
+                files = json.dumps(_paths_to_files_dict(group))
+                values[primary_path] = (modification_datetime, mimetype, size, files)
+
+        # `False` is the `indexed` which is false to force indexing by default.
+        values = [(str(primary_path), False, idempotency, *i) for primary_path, i in values.items()]
         with get_db_curs(commit=True) as curs:
             values = mogrify(curs, values)
             stmt = f'''
                 INSERT INTO file_group
-                 (full_stem, indexed, idempotency, primary_path, modification_datetime, mimetype, size, files)
+                    (primary_path, indexed, idempotency, modification_datetime, mimetype, size, files)
                 VALUES {values}
-                ON CONFLICT (full_stem) DO UPDATE
+                ON CONFLICT (primary_path) DO UPDATE
                 SET
                     idempotency=EXCLUDED.idempotency,
                     modification_datetime=EXCLUDED.modification_datetime,
@@ -401,11 +413,11 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
         wheres = ''
         if paths:
             # Use LIKE to delete any children of directories that are deleted.
-            wheres = ' OR '.join([curs.mogrify('full_stem LIKE %s', (f'{i}/%',)).decode() for i in paths])
+            wheres = ' OR '.join([curs.mogrify('primary_path LIKE %s', (f'{i}/%',)).decode() for i in paths])
         deleted_files = ''
         if deleted:
             # Delete any paths that do not exist.
-            deleted_files = ' OR '.join([curs.mogrify('full_stem = %s', (str(i),)).decode() for i in deleted])
+            deleted_files = ' OR '.join([curs.mogrify('primary_path = %s', (str(i),)).decode() for i in deleted])
         idempotency = curs.mogrify('%s', (idempotency,)).decode()
         wheres = f' ( (idempotency != {idempotency} OR idempotency is null) AND ({wheres}))' if wheres else ''
         stmt = f'''

@@ -9,6 +9,7 @@ import multiprocessing
 import pathlib
 import shutil
 import tempfile
+import zipfile
 from abc import ABC
 from itertools import zip_longest
 from typing import List, Callable, Union, Dict
@@ -241,6 +242,11 @@ def video_file_factory(test_directory):
 
 
 @pytest.fixture
+def video_bytes():
+    return (PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4').read_bytes()
+
+
+@pytest.fixture
 def corrupted_video_file(test_directory) -> pathlib.Path:
     """Return a copy of the corrupted video file in the `test_directory`."""
     destination = test_directory / f'{uuid4()}.mp4'
@@ -415,17 +421,16 @@ def assert_files(test_session, test_directory):
     def _(files: List[Dict]):
         from wrolpi.files.models import FileGroup
         for expected in files:
-            from wrolpi.files.lib import split_path_stem_and_suffix
-            full_stem, _ = split_path_stem_and_suffix(test_directory / expected.pop('path'), full=True)
+            primary_path = test_directory / expected.pop('path')
             try:
-                file: FileGroup = test_session.query(FileGroup).filter_by(full_stem=full_stem).one()
+                file: FileGroup = test_session.query(FileGroup).filter_by(primary_path=primary_path).one()
             except sqlalchemy.orm.exc.NoResultFound as e:
-                raise ValueError(f'No FileGroup found with {full_stem=}') from e
+                raise ValueError(f'No FileGroup found with {primary_path=}') from e
 
             for key, value in expected.items():
                 attr = getattr(file, key)
                 if attr != value:
-                    raise AssertionError(f'{full_stem} {attr} != {value}')
+                    raise AssertionError(f'{primary_path} {attr} != {value}')
 
     return _
 
@@ -437,18 +442,14 @@ def assert_file_groups(test_session, test_directory):
     def _(file_groups: List[Dict], assert_count: bool = True):
         from wrolpi.files.models import FileGroup
         for expected in file_groups:
-            if 'full_stem' in expected:
-                full_stem = str(test_directory / expected.pop('full_stem'))
-                try:
-                    file_group: FileGroup = test_session.query(FileGroup).filter_by(full_stem=full_stem).one()
-                except sqlalchemy.exc.NoResultFound as e:
-                    raise ValueError(f'No FileGroup found with {full_stem=}') from e
-            elif 'primary_path' in expected:
-                primary_path = str(test_directory / expected.pop('primary_path'))
-                try:
-                    file_group: FileGroup = test_session.query(FileGroup).filter_by(primary_path=primary_path).one()
-                except sqlalchemy.exc.NoResultFound as e:
-                    raise ValueError(f'No FileGroup found with {primary_path=}') from e
+            if 'primary_path' not in expected:
+                raise Exception('You must specify the primary path for this fixture!')
+
+            primary_path = str(test_directory / expected.pop('primary_path'))
+            try:
+                file_group: FileGroup = test_session.query(FileGroup).filter_by(primary_path=primary_path).one()
+            except Exception as e:
+                raise ValueError(f'No FileGroup found with {primary_path=}') from e
 
             # Compare file dictionaries.
             files = expected.pop('files', None)
@@ -544,13 +545,12 @@ def insert_file_group(test_session, test_directory):
     def _(paths: List[pathlib.Path]):
         files = [dict(path=str(i), mimetype='fake') for i in paths]
         params = dict(
-            full_stem=str(test_directory / files_lib.split_path_stem_and_suffix(paths[0])[0]),
             primary_path=str(paths[0]),
             files=json.dumps(files),
         )
         test_session.execute('INSERT INTO file_group '
-                             '(indexed, full_stem, primary_path, files) VALUES '
-                             '(true, :full_stem, :primary_path, :files)', params)
+                             '(indexed, primary_path, files) VALUES '
+                             '(true, :primary_path, :files)', params)
 
     return _
 
@@ -574,9 +574,22 @@ def assert_tags_config(test_tags_config):
         if tags:
             for key, item in tags.items():
                 assert key in contents['tags']
-                assert_dict_contains(contents['tags'][key], item)
+                assert_dict_contains(item, contents['tags'][key])
         else:
             # Expect no tags to be saved.
             assert not contents['tags']
+
+    return _
+
+
+@pytest.fixture
+def zip_file_factory(test_directory):
+    def _() -> bytes:
+        with tempfile.NamedTemporaryFile() as fh:
+            with zipfile.ZipFile(fh, 'w') as zip_file:
+                zip_file.write(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4')
+
+            fh.seek(0)
+            return fh.read()
 
     return _

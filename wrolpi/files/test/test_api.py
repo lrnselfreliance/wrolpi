@@ -172,10 +172,10 @@ def test_files_search(test_session, test_client, make_files_structure, assert_fi
     request, response = test_client.post('/api/files/refresh')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    assert_files_search('foo', [dict(full_stem='foo_is_the_name')])
-    assert_files_search('bar', [dict(full_stem='archives/bar')])
-    assert_files_search('baz', [dict(full_stem='baz baz two'), dict(full_stem='baz')])
-    assert_files_search('two', [dict(full_stem='baz baz two')])
+    assert_files_search('foo', [dict(primary_path='foo_is_the_name.txt')])
+    assert_files_search('bar', [dict(primary_path='archives/bar.txt')])
+    assert_files_search('baz', [dict(primary_path='baz baz two.mp4'), dict(primary_path='baz.mp4')])
+    assert_files_search('two', [dict(primary_path='baz baz two.mp4')])
     assert_files_search('nothing', [])
 
 
@@ -204,9 +204,12 @@ def test_directory_search(test_client, make_files_structure):
     assert_directories('food', [])
 
 
-def test_refresh_files_list(test_session, test_client, make_files_structure, test_directory):
+def test_refresh_files_list(test_session, test_client, make_files_structure, test_directory, video_bytes):
     """The user can request to refresh specific files."""
-    make_files_structure(['bar.txt', 'bar.mp4'])
+    make_files_structure({
+        'bar.txt': 'hello',
+        'bar.mp4': video_bytes,
+    })
 
     # Only the single file that was refreshed is discovered.
     content = json.dumps({'paths': ['bar.txt']})

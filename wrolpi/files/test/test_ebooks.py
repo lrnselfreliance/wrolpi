@@ -45,6 +45,7 @@ async def test_index(test_session, test_directory, example_epub, example_mobi):
     example_epub.unlink()
     await refresh_files()
     assert test_session.query(EBook).count() == 1
+    ebook = test_session.query(EBook).one()
     assert not ebook.file_group.my_files('application/epub+zip')
     assert (mobis := ebook.file_group.my_files('application/x-mobipocket-ebook')) and len(mobis) == 1 \
            and mobis[0]['path'] == example_mobi

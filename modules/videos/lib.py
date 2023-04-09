@@ -608,7 +608,7 @@ def find_orphaned_video_files(directory: pathlib.Path) -> Generator[pathlib.Path
             FROM file_group
             WHERE
                 mimetype NOT LIKE 'video%'
-                AND full_stem LIKE '{directory}/%'
+                AND primary_path LIKE '{directory}/%'
         ''')
         results = (pathlib.Path(j['path']) for i in curs.fetchall() for j in i[0])
         yield from results

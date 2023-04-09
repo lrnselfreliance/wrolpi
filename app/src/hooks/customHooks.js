@@ -25,8 +25,6 @@ import {createSearchParams, useSearchParams} from "react-router-dom";
 import {enumerate, filterToMimetypes, humanFileSize, secondsToFullDuration} from "../components/Common";
 import {StatusContext} from "../contexts/contexts";
 import {toast} from "react-semantic-toasts-2";
-import {Modal} from "semantic-ui-react";
-import {Button} from "../components/Theme";
 
 const calculatePage = (offset, limit) => {
     return offset && limit ? Math.round((offset / limit) + 1) : 1;
@@ -140,7 +138,7 @@ export const useOneQuery = (name) => {
 export const usePages = (defaultLimit) => {
     const {searchParams, updateQuery} = useQuery();
     const offset = searchParams.get('o') || 0;
-    const limit = searchParams.get('l') || defaultLimit || 24;
+    const limit = parseInt(searchParams.get('l') || defaultLimit || 24);
     const [activePage, setActivePage] = useState(calculatePage(offset, limit));
 
     const setLimit = (value) => {

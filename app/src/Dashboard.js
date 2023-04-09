@@ -1,5 +1,5 @@
 import {LoadStatistic, PageContainer, SearchInput, useTitle} from "./components/Common";
-import {useSearchFiles} from "./hooks/customHooks";
+import {useQuery, useSearchFiles} from "./hooks/customHooks";
 import React, {useContext, useState} from "react";
 import {StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
@@ -63,7 +63,12 @@ function FlagsMessages({flags}) {
 export function Dashboard() {
     useTitle('Dashboard');
 
-    const {searchStr, setSearchStr, activeTags} = useSearchFiles();
+    const {searchParams, updateQuery} = useQuery();
+    const searchStr = searchParams.get('q');
+    const activeTags = searchParams.getAll('tag');
+    const setSearchStr = (value) => {
+        updateQuery({q: value, o: null});
+    }
 
     const {status} = useContext(StatusContext);
     const wrol_mode = status ? status['wrol_mode'] : null;
@@ -76,7 +81,7 @@ export function Dashboard() {
     // Only show dashboard parts if not searching.
     let body;
     if (searchStr || (activeTags && activeTags.length > 0)) {
-        body = <FilesSearchView showSelectButton={true}/>;
+        body = <FilesSearchView/>;
     } else {
         body = <>
             {!wrol_mode && downloads}

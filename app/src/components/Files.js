@@ -282,7 +282,7 @@ export function SearchLimitDropdown({limits = []}) {
     return <Dropdown fluid selection
                      placeholder='Limit'
                      options={limitOptions}
-                     value={parseInt(limit || limitOptions[0]['value'])}
+                     value={limit || limitOptions[0]['value']}
                      onChange={(e, {value}) => setLimit(value)}
     />
 }
@@ -439,8 +439,7 @@ export function FilesSearchView({
         {key: 'model', text: '3D Model', value: 'model'},
     ];
 
-    const {searchFiles, totalPages, activePage, setPage} =
-        useSearchFiles(24, emptySearch, model);
+    const {searchFiles, totalPages, activePage, setPage} = useSearchFiles(24, emptySearch, model);
 
     const {body, paginator, selectButton, viewButton, limitDropdown, tagQuerySelector} = FilesView(
         searchFiles,
@@ -470,7 +469,7 @@ export function FilesSearchView({
                         <Grid.Column width={1}>{selectButton}</Grid.Column>}
                     {showView &&
                         <Grid.Column width={1}>{viewButton}</Grid.Column>}
-                    <Grid.Column width={4}>{limitDropdown}</Grid.Column>
+                    <Grid.Column width={2}>{limitDropdown}</Grid.Column>
                     <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
                     <Grid.Column width={1}><SearchFilter filters={filterOptions}/></Grid.Column>
                 </Grid.Row>

@@ -6,9 +6,10 @@ import {
     CardMeta,
     Confirm,
     Container,
-    Image,
     Dropdown,
-    Input, Modal,
+    Image,
+    Input,
+    Modal,
     PlaceholderHeader,
     PlaceholderLine,
     TableCell,
@@ -28,7 +29,8 @@ import {
     mimetypeColor,
     PageContainer,
     PreviewLink,
-    SearchInput, SortButton,
+    SearchInput,
+    SortButton,
     TabLinks,
     textEllipsis,
     useTitle
@@ -37,7 +39,7 @@ import {addTag, deleteArchives, postDownload, removeTag} from "../api";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useArchive, useDomains, useQuery, useSearchArchives, useSearchDomain} from "../hooks/customHooks";
-import {FileCards, FileRowTagIcon, FilesView, SearchFilter} from "./Files";
+import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
 import {Media, ThemeContext} from "../contexts/contexts";

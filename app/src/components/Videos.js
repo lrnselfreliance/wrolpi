@@ -1,4 +1,4 @@
-import React, {Fragment, useContext, useEffect, useState} from 'react';
+import React, {useContext, useEffect, useState} from 'react';
 import {Link, Route, Routes, useParams} from "react-router-dom";
 import {
     CardLink,
@@ -14,7 +14,8 @@ import {
     mimetypeColor,
     PageContainer,
     scrollToTop,
-    SearchInput, SortButton,
+    SearchInput,
+    SortButton,
     TabLinks,
     textEllipsis,
     useTitle
@@ -26,7 +27,6 @@ import {
     CardHeader,
     Confirm,
     Container,
-    Dropdown,
     Image,
     PlaceholderHeader,
     PlaceholderLine,
@@ -43,7 +43,6 @@ import {Button, Card, Header, Loader, Placeholder, Segment, Statistic, Statistic
 import {deleteVideos} from "../api";
 import {Media, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
-import {SearchDomain} from "./Archive";
 
 export function VideoWrapper() {
     const {videoId} = useParams();

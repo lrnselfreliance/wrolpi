@@ -2,7 +2,7 @@ import {Button, Icon, Placeholder} from "./Theme";
 import {Checkbox, Confirm, PlaceholderLine, TableCell, TableFooter, TableHeaderCell, TableRow} from "semantic-ui-react";
 import {FileIcon, humanFileSize} from "./Common";
 import React, {useEffect} from "react";
-import {deleteFile, fetchFile} from "../api";
+import {deleteFile} from "../api";
 import _ from 'lodash';
 import {SortableTable} from "./SortableTable";
 import {useBrowseFiles} from "../hooks/customHooks";

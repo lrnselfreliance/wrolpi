@@ -19,7 +19,7 @@ import {Donate} from "./components/Donate";
 import {useEventsInterval} from "./Events";
 import {SemanticToastContainer} from "react-semantic-toasts-2";
 import {FilePreviewWrapper} from "./components/FilePreview";
-import {TagsContext, useTags, useTagsInterval} from "./Tags";
+import {TagsContext, useTagsInterval} from "./Tags";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);

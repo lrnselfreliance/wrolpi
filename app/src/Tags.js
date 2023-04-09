@@ -27,7 +27,6 @@ import {Segment} from "./components/Theme";
 import _ from "lodash";
 import {HexColorPicker} from "react-colorful";
 import {useRecurringTimeout} from "./hooks/customHooks";
-import {Link} from "react-router-dom";
 
 export const TagsContext = React.createContext({
     NameToTagLabel: null,

@@ -1,4 +1,4 @@
-import React, {useContext} from "react";
+import React from "react";
 import {NavLink} from "react-router-dom";
 import {Dropdown, Menu} from "semantic-ui-react";
 import {Media, StatusContext, ThemeContext} from "../contexts/contexts";

@@ -149,13 +149,19 @@ function EditTagRow({tag, onDelete, onEdit}) {
     const nameLabel = <LabelGroup tag>
         <NameToTagLabel name={name}/>
     </LabelGroup>;
+    const countLabel = <Label>{count}</Label>;
 
     return <TableRow>
         <TableCell>{deleteConfirm}</TableCell>
         <TableCell>{editButton}</TableCell>
         <TableCell>{nameLabel}</TableCell>
         <Media greaterThanOrEqual='tablet'>
-            <TableCell><Label>{count}</Label></TableCell>
+            {(className, renderChildren) => {
+                return renderChildren ? <TableCell className={className}>
+                        {countLabel}
+                    </TableCell>
+                    : null;
+            }}
         </Media>
     </TableRow>
 }
@@ -247,7 +253,11 @@ function EditTagsModal() {
                             <TableHeaderCell width={2}>Edit</TableHeaderCell>
                             <TableHeaderCell width={8}>Tag</TableHeaderCell>
                             <Media greaterThanOrEqual='tablet'>
-                                <TableHeaderCell>Count</TableHeaderCell>
+                                {(className, renderChildren) => {
+                                    return renderChildren ?
+                                        <TableHeaderCell className={className} width={2}>Count</TableHeaderCell>
+                                        : null;
+                                }}
                             </Media>
                         </TableRow>
                     </TableHeader>

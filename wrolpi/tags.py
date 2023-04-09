@@ -5,9 +5,8 @@ from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import relationship, Session
 
-from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, run_after, \
-    limit_concurrent
-from wrolpi.db import optional_session
+from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, run_after
+from wrolpi.db import optional_session, get_db_curs
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag
 from wrolpi.vars import PYTEST
 
@@ -174,9 +173,16 @@ def schedule_save(session: Session = None):
         background_task(_())
 
 
-@optional_session
-def get_tags(session: Session) -> List[Tag]:
-    tags = list(session.query(Tag).order_by(Tag.name))
+def get_tags() -> List[dict]:
+    with get_db_curs() as curs:
+        curs.execute('''
+            SELECT t.name, t.color, COUNT(tf.tag_id)
+            FROM tag t
+            LEFT JOIN tag_file tf on t.id = tf.tag_id
+            GROUP BY t.name, t.color
+            ORDER BY t.name
+        ''')
+        tags = list(map(dict, curs.fetchall()))
     return tags
 
 

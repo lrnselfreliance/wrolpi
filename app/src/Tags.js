@@ -27,6 +27,7 @@ import {Segment} from "./components/Theme";
 import _ from "lodash";
 import {HexColorPicker} from "react-colorful";
 import {useRecurringTimeout} from "./hooks/customHooks";
+import {Media} from "./contexts/contexts";
 
 export const TagsContext = React.createContext({
     NameToTagLabel: null,
@@ -128,31 +129,34 @@ export const useTagsInterval = () => {
     return tagsValue
 }
 
-function EditTagLabel({tag, onDelete, onEdit}) {
+function EditTagRow({tag, onDelete, onEdit}) {
     const {NameToTagLabel} = React.useContext(TagsContext);
     const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-    const {name, color, id} = tag;
+    const {name, color, id, count} = tag;
+
+    const deleteConfirm = <>
+        <SButton color='red' onClick={() => setConfirmDeleteOpen(true)} icon='trash'/>
+        <Confirm
+            id={`confirm${name}`}
+            open={confirmDeleteOpen}
+            content={`Are you sure you want to delete: ${name}?`}
+            confirmButton='Delete'
+            onCancel={() => setConfirmDeleteOpen(false)}
+            onConfirm={async () => onDelete(id, name)}
+        />
+    </>;
+    const editButton = <SButton primary onClick={() => onEdit(name, color, id)} icon='edit'/>;
+    const nameLabel = <LabelGroup tag>
+        <NameToTagLabel name={name}/>
+    </LabelGroup>;
 
     return <TableRow>
-        <TableCell>
-            <SButton color='red' onClick={() => setConfirmDeleteOpen(true)} icon='trash'/>
-            <Confirm
-                id={`confirm${name}`}
-                open={confirmDeleteOpen}
-                content={`Are you sure you want to delete: ${name}?`}
-                confirmButton='Delete'
-                onCancel={() => setConfirmDeleteOpen(false)}
-                onConfirm={async () => onDelete(id, name)}
-            />
-        </TableCell>
-        <TableCell>
-            <SButton primary onClick={() => onEdit(name, color, id)} icon='edit'/>
-        </TableCell>
-        <TableCell>
-            <LabelGroup tag>
-                <NameToTagLabel name={name}/>
-            </LabelGroup>
-        </TableCell>
+        <TableCell>{deleteConfirm}</TableCell>
+        <TableCell>{editButton}</TableCell>
+        <TableCell>{nameLabel}</TableCell>
+        <Media greaterThanOrEqual='tablet'>
+            <TableCell><Label>{count}</Label></TableCell>
+        </Media>
     </TableRow>
 }
 
@@ -197,8 +201,8 @@ function EditTagsModal() {
 
     let content = <Dimmer><Loader inline active/></Dimmer>;
     if (tags && tags.length) {
-        content = tags.map(i => <EditTagLabel key={i['name']} tag={i} onDelete={localDeleteTag}
-                                              onEdit={localEditTag}/>);
+        content = tags.map(i => <EditTagRow key={i['name']} tag={i} onDelete={localDeleteTag}
+                                            onEdit={localEditTag}/>);
     }
 
     return <>
@@ -242,6 +246,9 @@ function EditTagsModal() {
                             <TableHeaderCell width={2}>Delete</TableHeaderCell>
                             <TableHeaderCell width={2}>Edit</TableHeaderCell>
                             <TableHeaderCell width={8}>Tag</TableHeaderCell>
+                            <Media greaterThanOrEqual='tablet'>
+                                <TableHeaderCell>Count</TableHeaderCell>
+                            </Media>
                         </TableRow>
                     </TableHeader>
                     <TableBody>

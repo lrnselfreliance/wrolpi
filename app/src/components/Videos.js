@@ -14,7 +14,7 @@ import {
     mimetypeColor,
     PageContainer,
     scrollToTop,
-    SearchInput,
+    SearchInput, SortButton,
     TabLinks,
     textEllipsis,
     useTitle
@@ -41,8 +41,9 @@ import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {Button, Card, Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
 import {deleteVideos} from "../api";
-import {ThemeContext} from "../contexts/contexts";
+import {Media, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
+import {SearchDomain} from "./Archive";
 
 export function VideoWrapper() {
     const {videoId} = useParams();
@@ -58,7 +59,7 @@ export function VideoWrapper() {
 function VideosPage() {
 
     const {channelId} = useParams();
-    const {searchParams, updateQuery} = useQuery();
+    const {searchParams} = useQuery();
     const [selectedVideos, setSelectedVideos] = useState([]);
     const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -71,10 +72,8 @@ function VideosPage() {
         searchOrder = defaultSearchOrder;
     }
 
-    const {searchStr, setSearchStr, videos, activePage, setPage, limit, setLimit, totalPages, setOrderBy, fetchVideos} =
+    const {searchStr, setSearchStr, videos, activePage, setPage, totalPages, fetchVideos} =
         useSearchVideos(null, channelId, searchOrder);
-    const setView = (value) => updateQuery({view: value});
-    const view = searchParams.get('view');
 
     const {channel} = useChannel(channelId);
 
@@ -85,37 +84,15 @@ function VideosPage() {
     useTitle(title);
 
     let videoOrders = [
-        {key: '-upload_date', value: '-upload_date', text: 'Newest'},
-        {key: 'upload_date', value: 'upload_date', text: 'Oldest'},
-        {key: '-duration', value: '-duration', text: 'Longest'},
-        {key: 'duration', value: 'duration', text: 'Shortest'},
-        {key: '-viewed', value: '-viewed', text: 'Recently viewed'},
-        {key: '-size', value: '-size', text: 'Largest'},
-        {key: 'size', value: 'size', text: 'Smallest'},
-        {key: '-view_count', value: '-view_count', text: 'Most Views'},
-        {key: 'view_count', value: 'view_count', text: 'Least Views'},
-        {key: '-modification_datetime', value: '-modification_datetime', text: 'Newest File'},
-        {key: 'modification_datetime', value: 'modification_datetime', text: 'Oldest File'},
-    ];
+        {value: 'upload_date', text: 'Date'},
+        {value: 'duration', text: 'Duration'},
+        {value: 'size', text: 'Size'},
+        {value: 'view_count', text: 'Views'},
+    ]
 
     if (searchStr) {
-        videoOrders = [{key: 'rank', value: 'rank', text: 'Search Rank'}, ...videoOrders];
+        videoOrders = [{value: 'rank', text: 'Search'}, ...videoOrders];
     }
-
-    const menuColumns = <Fragment>
-        <Grid.Column mobile={8} computer={5}>
-            <SearchInput clearable searchStr={searchStr} onSubmit={setSearchStr} actionIcon='search'/>
-        </Grid.Column>
-        <Grid.Column mobile={6} computer={5}>
-            <Dropdown selection fluid
-                      size='large'
-                      placeholder='Sort by...'
-                      value={searchOrder}
-                      options={videoOrders}
-                      onChange={(e, {value}) => setOrderBy(value)}
-            />
-        </Grid.Column>
-    </Fragment>;
 
     let header;
     if (channel && channel.name) {
@@ -192,27 +169,50 @@ function VideosPage() {
         </Button>
     </div>;
 
+    const {body, paginator, selectButton, viewButton, limitDropdown, tagQuerySelector} = FilesView(
+        videos,
+        activePage,
+        totalPages,
+        selectElm,
+        selectedVideos,
+        onSelect,
+        setPage,
+    );
+
+    const searchInput = <SearchInput clearable searchStr={searchStr} onSubmit={setSearchStr} actionIcon='search'/>;
+
     return <>
         {header}
-        <FilesView
-            files={videos}
-            view={view}
-            limit={limit}
-            activePage={activePage}
-            totalPages={totalPages}
-            showView={true}
-            showLimit={true}
-            showSelect={true}
-            onSelect={onSelect}
-            selectedKeys={selectedVideos}
-            selectElem={selectElm}
-            setView={setView}
-            setLimit={setLimit}
-            setPage={setPage}
-            menuColumnsCount={3}
-            menuColumns={menuColumns}
-        >
-        </FilesView>
+        <Media at='mobile'>
+            <Grid>
+                <Grid.Row>
+                    <Grid.Column width={2}>{selectButton}</Grid.Column>
+                    <Grid.Column width={2}>{viewButton}</Grid.Column>
+                    <Grid.Column width={4}>{limitDropdown}</Grid.Column>
+                    <Grid.Column width={2}>{tagQuerySelector}</Grid.Column>
+                    <Grid.Column width={6}><SortButton sorts={videoOrders}/></Grid.Column>
+                </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column width={10}>{searchInput}</Grid.Column>
+                </Grid.Row>
+            </Grid>
+        </Media>
+        <Media greaterThanOrEqual='tablet'>
+            <Grid>
+                <Grid.Row>
+                    <Grid.Column width={1}>{selectButton}</Grid.Column>
+                    <Grid.Column width={1}>{viewButton}</Grid.Column>
+                    <Grid.Column width={2}>{limitDropdown}</Grid.Column>
+                    <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
+                    <Grid.Column width={5}><SortButton sorts={videoOrders}/></Grid.Column>
+                </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column width={8}>{searchInput}</Grid.Column>
+                </Grid.Row>
+            </Grid>
+        </Media>
+        {body}
+        {paginator}
     </>
 }
 

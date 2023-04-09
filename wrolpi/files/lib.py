@@ -146,8 +146,11 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
     """Special handling for mimetypes.  Python Magic may not return the correct mimetype."""
     from wrolpi.files.ebooks import MOBI_MIMETYPE
     suffix = path.suffix.lower()
-    if mimetype == 'application/octet-stream' and suffix.endswith('.mobi'):
-        return MOBI_MIMETYPE
+    if mimetype == 'application/octet-stream':
+        if suffix.endswith('.mobi'):
+            return MOBI_MIMETYPE
+        if suffix.endswith('.stl'):
+            return 'model/stl'
     if suffix.endswith('.hgt'):
         return 'application/octet-stream'
     if mimetype == 'text/plain':
@@ -173,6 +176,8 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
             return 'text/yaml'
         if suffix.endswith('.azw3'):
             return 'application/vnd.amazon.mobi8-ebook'
+        if suffix.endswith('.obj'):
+            return 'model/obj'
     return mimetype
 
 

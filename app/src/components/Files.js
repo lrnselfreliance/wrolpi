@@ -1,13 +1,17 @@
-import React, {useContext} from "react";
+import React, {useContext, useState} from "react";
 import {
+    Button as SButton,
     CardContent,
     CardDescription,
     CardHeader,
     CardMeta,
+    Checkbox,
     Container,
     Dropdown,
+    Form,
     Image,
     Label,
+    Modal,
     PlaceholderLine,
     TableCell,
     TableHeaderCell,
@@ -29,12 +33,19 @@ import {
     textEllipsis,
     useTitle
 } from "./Common";
-import {useFilesProgressInterval, useQuery, useSearchFiles} from "../hooks/customHooks";
+import {
+    useFilesProgressInterval,
+    usePages,
+    useQuery,
+    useSearchFiles,
+    useSearchFilter,
+    useSearchView
+} from "../hooks/customHooks";
 import {Route, Routes} from "react-router-dom";
 import {CardPlacholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {StatusContext, ThemeContext} from "../contexts/contexts";
+import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
 import {Button, Card, CardIcon, Icon, Placeholder, Progress, Segment} from "./Theme";
 import {SelectableTable} from "./Tables";
 import {VideoCard, VideoRowCells} from "./Videos";
@@ -42,7 +53,7 @@ import _ from 'lodash';
 import {FileBrowser} from "./FileBrowser";
 import {refreshDirectoryFiles, refreshFiles} from "../api";
 import {useSubscribeEventName} from "../Events";
-import {TagsDropdown} from "../Tags";
+import {TagsSelector} from "../Tags";
 
 function EbookCard({file}) {
     const {s} = useContext(ThemeContext);
@@ -253,67 +264,51 @@ export function FileRowTagIcon({file}) {
     }
 }
 
-export function FilesView({
-                              files,
-                              limit,
-                              setLimit,
-                              showLimit = false,
-                              activePage,
-                              totalPages,
-                              view,
-                              setView,
-                              showView = true,
-                              showSelect = false,
-                              selectElem,
-                              selectedKeys,
-                              onSelect,
-                              setPage,
-                              menuColumnsCount,
-                              menuColumns,
-                              filterOptions,
-                              activeFilters,
-                              setFilters,
-                              multipleFilters,
-                              filterPlaceholder,
-                          }) {
+export function SearchViewButton() {
+    const {view, setView} = useSearchView();
+
+    if (view === 'list') {
+        return <Button icon='th' onClick={() => setView('cards')}/>;
+    }
+    return <Button icon='browser' onClick={() => setView('list')}/>;
+}
+
+export function SearchLimitDropdown({limits = []}) {
+    const {limit, setLimit} = usePages();
+    const limitOptions = limits.map(i => {
+        return {key: i, value: i, text: i.toString()}
+    });
+
+    return <Dropdown fluid selection
+                     placeholder='Limit'
+                     options={limitOptions}
+                     value={parseInt(limit || limitOptions[0]['value'])}
+                     onChange={(e, {value}) => setLimit(value)}
+    />
+}
+
+export function FilesView(
+    files,
+    activePage,
+    totalPages,
+    selectElem,
+    selectedKeys,
+    onSelect,
+    setPage,
+    limitOptions = [12, 24, 48, 96],
+) {
+    const {view} = useSearchView();
 
     let selectButton;
     const [selectOn, setSelectOn] = React.useState(false);
     const toggleSelectOn = () => setSelectOn(!selectOn);
     const selectButtonDisabled = view !== 'list';
-    if (showSelect && selectOn) {
+    if (selectOn) {
         selectButton = <Button active disabled={selectButtonDisabled} icon='checkmark box'
                                onClick={toggleSelectOn}/>;
-    } else if (showSelect) {
+    } else {
         selectButton = <Button icon='checkmark box' disabled={selectButtonDisabled}
                                onClick={toggleSelectOn}/>;
-    }
-
-    let viewButton;
-    if (showView) {
-        if (view === 'list') {
-            viewButton = <Button icon='th' onClick={() => setView('cards')}/>;
-        } else {
-            viewButton = <Button icon='browser' onClick={() => setView('list')}/>;
-        }
-    }
-
-    let limitDropdown;
-    const limitOptions = [
-        {key: 12, value: 12, text: '12'},
-        {key: 24, value: 24, text: '24'},
-        {key: 48, value: 48, text: '48'},
-        {key: 96, value: 96, text: '96'},
-    ];
-    if (showLimit) {
-        limitDropdown = <Dropdown
-            compact
-            selection
-            placeholder='Limit'
-            options={limitOptions}
-            value={parseInt(limit || limitOptions[0]['value'])}
-            onChange={(e, {value}) => setLimit(value)}
-        />
     }
 
     const paginator = <center style={{marginTop: '2em'}}>
@@ -326,38 +321,87 @@ export function FilesView({
             <>
                 <TableHeaderCell colSpan='3'>{selectElem}</TableHeaderCell>
             </> : null;
-        body = <FileTable files={files} selectOn={selectOn}
-                          onSelect={onSelect} footer={footer} selectedKeys={selectedKeys}/>;
+        body = <FileTable
+            files={files}
+            selectOn={selectOn}
+            onSelect={onSelect}
+            footer={footer}
+            selectedKeys={selectedKeys || []}
+        />;
     } else {
         body = <FileCards files={files}/>;
     }
 
-    const filtersDropdown = <Dropdown selection clearable search
-                                      multiple={multipleFilters || undefined}
-                                      options={filterOptions || []}
-                                      placeholder={filterPlaceholder || 'Files Types'}
-                                      onChange={(e, {value}) => setFilters(value)}
-                                      style={{marginLeft: '0.3em', marginTop: '0.3em'}}
-                                      value={activeFilters}
-    />;
+    const viewButton = <SearchViewButton/>
+    const limitDropdown = <SearchLimitDropdown limits={limitOptions}/>;
+    const tagQuerySelector = <TagsQuerySelector/>;
 
-    return <>
-        <Grid columns={menuColumnsCount || 1} stackable>
-            <Grid.Column mobile={16} computer={12}>
-                {selectButton}
-                {viewButton}
-                {limitDropdown}
-                <TagsFilesGroupDropdown/>
-                {filterOptions && filtersDropdown}
-            </Grid.Column>
-            {menuColumns}
-        </Grid>
-        {body}
-        {paginator}
-    </>
+    return {
+        body,
+        paginator,
+        selectButton,
+        viewButton,
+        limitDropdown,
+        tagQuerySelector,
+    }
 }
 
-export function TagsFilesGroupDropdown({onChange}) {
+export function SearchFilter({filters = [], modalHeader}) {
+    const {filter, setFilter} = useSearchFilter();
+    const [open, setOpen] = useState(false);
+
+    const handleOpen = (e) => {
+        if (e) {
+            e.preventDefault();
+        }
+        setOpen(true);
+    }
+
+    const handleClear = (e) => {
+        if (e) {
+            e.preventDefault();
+        }
+        setFilter(null);
+        setOpen(false);
+    }
+
+    const filterFields = filters.map(
+        i => <Form.Field key={i['text']}>
+            <Checkbox radio
+                      label={i['text']}
+                      name='searchFilterRadioGroup'
+                      checked={filter === i['value']}
+                      value={i['value']}
+                      onChange={() => setFilter(i['value'])}
+            />
+        </Form.Field>
+    );
+
+    if (filters && filters.length > 0) {
+        return <>
+            <Modal open={open} onOpen={() => handleOpen()} onClose={() => setOpen(false)} closeIcon>
+                {modalHeader || <Modal.Header>Filter</Modal.Header>}
+                <Modal.Content>
+                    <Form>
+                        {filterFields}
+                    </Form>
+                </Modal.Content>
+                <Modal.Actions>
+                    <SButton onClick={handleClear} secondary>Clear</SButton>
+                    <SButton onClick={() => setOpen(false)}>Close</SButton>
+                </Modal.Actions>
+            </Modal>
+            <Button
+                icon='filter'
+                onClick={handleOpen}
+                primary={!!filter}
+            />
+        </>
+    }
+    return <></>
+}
+
+export function TagsQuerySelector({onChange}) {
     // Creates  dropdown that the User can use to manipulate the tag query.
     const {searchParams, updateQuery} = useQuery();
     const activeTags = searchParams.getAll('tag');
@@ -369,24 +413,22 @@ export function TagsFilesGroupDropdown({onChange}) {
         }
     }
 
-    return <TagsDropdown
-        value={activeTags}
-        onChange={localOnChange}
-        style={{marginLeft: '0.3em', marginTop: '0.3em'}}
+    return <TagsSelector hideGroup={true}
+                         hideEdit={true}
+                         active={activeTags && activeTags.length > 0}
+                         selectedTagNames={activeTags}
+                         onToggle={localOnChange}
+                         style={{marginLeft: '0.3em', marginTop: '0.3em'}}
     />
 }
 
 export function FilesSearchView({
                                     showView = true,
-                                    showLimit = false,
                                     showSelect = false,
                                     emptySearch = false,
-                                    filterOptions,
                                     model,
-                                    onSelect,
-                                    setFilters,
                                 }) {
-    filterOptions = filterOptions || [
+    const filterOptions = [
         {key: 'video', text: 'Video', value: 'video'},
         {key: 'archive', text: 'Archive', value: 'archive'},
         {key: 'pdf', text: 'PDF', value: 'pdf'},
@@ -394,32 +436,49 @@ export function FilesSearchView({
         {key: 'audio', text: 'Audio', value: 'audio'},
         {key: 'image', text: 'Image', value: 'image'},
         {key: 'zip', text: 'ZIP', value: 'zip'},
+        {key: 'model', text: '3D Model', value: 'model'},
     ];
 
-    const {searchFiles, limit, setLimit, totalPages, activePage, setPage} =
+    const {searchFiles, totalPages, activePage, setPage} =
         useSearchFiles(24, emptySearch, model);
-    const {searchParams, updateQuery} = useQuery();
-    const setView = (value) => updateQuery({view: value});
-    const view = searchParams.get('view');
 
-    const setFilter = (value) => updateQuery({'filter': value});
+    const {body, paginator, selectButton, viewButton, limitDropdown, tagQuerySelector} = FilesView(
+        searchFiles,
+        activePage,
+        totalPages,
+        setPage,
+    );
 
-    return <FilesView
-        files={searchFiles}
-        limit={limit}
-        setLimit={setLimit}
-        showLimit={showLimit}
-        activePage={activePage}
-        totalPages={totalPages}
-        view={view}
-        setView={setView}
-        showView={showView}
-        showSelect={showSelect}
-        onSelect={onSelect}
-        setPage={setPage}
-        filterOptions={filterOptions}
-        setFilters={setFilters || setFilter}
-    />
+    return <>
+        <Media at='mobile'>
+            <Grid>
+                <Grid.Row>
+                    {showSelect &&
+                        <Grid.Column width={2}>{selectButton}</Grid.Column>}
+                    {showView &&
+                        <Grid.Column width={2}>{viewButton}</Grid.Column>}
+                    <Grid.Column width={4}>{limitDropdown}</Grid.Column>
+                    <Grid.Column width={2}>{tagQuerySelector}</Grid.Column>
+                    <Grid.Column width={2}><SearchFilter filters={filterOptions}/></Grid.Column>
+                </Grid.Row>
+            </Grid>
+        </Media>
+        <Media greaterThanOrEqual='tablet'>
+            <Grid>
+                <Grid.Row>
+                    {showSelect &&
+                        <Grid.Column width={1}>{selectButton}</Grid.Column>}
+                    {showView &&
+                        <Grid.Column width={1}>{viewButton}</Grid.Column>}
+                    <Grid.Column width={4}>{limitDropdown}</Grid.Column>
+                    <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
+                    <Grid.Column width={1}><SearchFilter filters={filterOptions}/></Grid.Column>
+                </Grid.Row>
+            </Grid>
+        </Media>
+        {body}
+        {paginator}
+    </>
 }
 
 export function FilesRefreshProgress() {

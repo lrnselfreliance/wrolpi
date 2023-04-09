@@ -76,13 +76,13 @@ export function Dashboard() {
     // Only show dashboard parts if not searching.
     let body;
     if (searchStr || (activeTags && activeTags.length > 0)) {
-        body = <FilesSearchView showLimit={true} showSelectButton={true}/>;
+        body = <FilesSearchView showSelectButton={true}/>;
     } else {
         body = <>
             {!wrol_mode && downloads}
-            {/* Hide Status when user is starting a download */}
+            {/* Hide extras when user is starting a download */}
             {!downloadOpen && <DashboardStatus/>}
-            <TagsDashboard/>
+            {!downloadOpen && <TagsDashboard/>}
         </>;
     }
 

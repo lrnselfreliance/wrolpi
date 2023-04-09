@@ -119,15 +119,15 @@ class TagsConfig(ConfigFile):
     def save_tags(self, session: Session):
         media_directory = get_media_directory()
 
-        from wrolpi.files.models import FileGroup
-        results = session.query(Tag, TagFile, FileGroup) \
-            .filter(TagFile.tag_id == Tag.id, TagFile.file_group_id == FileGroup.id) \
-            .order_by(FileGroup.primary_path)
-
         tags = dict()
         tag_rows = session.query(Tag)
         for tag in tag_rows:
             tags[tag.name] = dict(color=tag.color)
+
+        from wrolpi.files.models import FileGroup
+        results = session.query(Tag, TagFile, FileGroup) \
+            .filter(TagFile.tag_id == Tag.id, TagFile.file_group_id == FileGroup.id) \
+            .order_by(FileGroup.primary_path)
 
         tag_files = []
         for tag, _, file_group in results:
@@ -204,6 +204,8 @@ def upsert_tag(name: str, color: str, tag_id: int = None, session: Session = Non
         session.rollback()
         raise InvalidTag(f'Name already taken') from e
 
+    schedule_save()
+
     return tag
 
 
@@ -220,6 +222,8 @@ def delete_tag(tag_id: int, session: Session = None):
 
     session.delete(tag)
     session.commit()
+
+    schedule_save()
 
 
 @optional_session

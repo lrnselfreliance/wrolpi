@@ -19,6 +19,7 @@ from uuid import uuid1, uuid4
 
 import pytest
 import sqlalchemy
+import yaml
 from PIL import Image
 from sanic_testing.testing import SanicTestClient
 from sqlalchemy.engine import Engine, create_engine
@@ -561,3 +562,21 @@ def test_tags_config(test_directory):
         (test_directory / 'config').mkdir(exist_ok=True)
         config_path = test_directory / 'config/tags.yaml'
         yield config_path
+
+
+@pytest.fixture
+def assert_tags_config(test_tags_config):
+    def _(tags: dict = None):
+        from wrolpi.test.common import assert_dict_contains
+        with test_tags_config.open('rt') as fh:
+            contents = yaml.load(fh, Loader=yaml.Loader)
+
+        if tags:
+            for key, item in tags.items():
+                assert key in contents['tags']
+                assert_dict_contains(contents['tags'][key], item)
+        else:
+            # Expect no tags to be saved.
+            assert not contents['tags']
+
+    return _

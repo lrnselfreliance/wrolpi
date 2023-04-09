@@ -7,7 +7,8 @@ import {
     Confirm,
     Container,
     Image,
-    Input,
+    Dropdown,
+    Input, Modal,
     PlaceholderHeader,
     PlaceholderLine,
     TableCell,
@@ -27,7 +28,7 @@ import {
     mimetypeColor,
     PageContainer,
     PreviewLink,
-    SearchInput,
+    SearchInput, SortButton,
     TabLinks,
     textEllipsis,
     useTitle
@@ -35,12 +36,11 @@ import {
 import {addTag, deleteArchives, postDownload, removeTag} from "../api";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useArchive, useDomains, useQuery, useSearchArchives} from "../hooks/customHooks";
-import {FileCards, FileRowTagIcon, FilesView} from "./Files";
+import {useArchive, useDomains, useQuery, useSearchArchives, useSearchDomain} from "../hooks/customHooks";
+import {FileCards, FileRowTagIcon, FilesView, SearchFilter} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
 import _ from "lodash";
-import {ThemeContext} from "../contexts/contexts";
+import {Media, ThemeContext} from "../contexts/contexts";
 import {Button, Card, CardIcon, Header, Loader, Placeholder, Segment} from "./Theme";
 import {SortableTable} from "./SortableTable";
 import {taggedImageLabel, TagsSelector} from "../Tags";
@@ -236,7 +236,7 @@ export function ArchiveCard({file}) {
     </Card>
 }
 
-export function Domains() {
+export function DomainsPage() {
     useTitle('Archive Domains');
 
     const [domains] = useDomains();
@@ -297,20 +297,60 @@ export function Domains() {
     </>;
 }
 
+export function SearchDomain() {
+    // A Dropdown which allows the user to filter by Archive domains.
+    const {domain, domains, setDomain} = useSearchDomain();
+    const [open, setOpen] = useState(false);
+
+    const handleOpen = (e) => {
+        if (e) {
+            e.preventDefault();
+        }
+        setOpen(true);
+    }
+
+    const handleClose = (e) => {
+        if (e) {
+            e.preventDefault();
+        }
+        setOpen(false);
+    }
+
+    const handleChange = (e, {value}) => {
+        setDomain(value);
+    }
+
+    if (domains && domains.length > 0) {
+        const domainOptions = domains.map(i => {
+            return {key: i['domain'], value: i['domain'], text: i['domain']}
+        });
+        return <>
+            <Modal closeIcon
+                   open={open}
+                   onOpen={() => handleOpen()}
+                   onClose={() => handleClose()}
+            >
+                <Modal.Content>
+                    domains
+                </Modal.Content>
+            </Modal>
+            <Dropdown selection search clearable fluid
+                      placeholder='Domains'
+                      options={domainOptions}
+                      onChange={handleChange}
+                      value={domain}
+            />
+        </>
+    }
+    return <></>
+}
+
 function Archives() {
-    const [domains] = useDomains();
     const [selectedArchives, setSelectedArchives] = useState([]);
     const [deleteOpen, setDeleteOpen] = useState(false);
 
     useTitle('Archives');
-
-    let filterOptions = [];
-    if (!_.isEmpty(domains)) {
-        domains.forEach(i => {
-            filterOptions = [...filterOptions, {text: i['domain'], key: i['domain'], value: i['domain']}]
-        });
-    }
-    const {searchParams, updateQuery} = useQuery();
+    const {searchParams} = useQuery();
 
     let searchOrder = '-date';
     if (searchParams.get('order')) {
@@ -321,49 +361,24 @@ function Archives() {
         searchOrder = defaultSearchOrder;
     }
 
-    const domain = searchParams.get('domain');
     const {
         archives,
-        limit,
-        setLimit,
         totalPages,
         activePage,
         setPage,
         searchStr,
         setSearchStr,
-        setOrderBy,
         fetchArchives,
-    } = useSearchArchives(24, domain, searchOrder);
-    const setView = (value) => updateQuery({view: value});
-    const view = searchParams.get('view');
-    const setDomain = (value) => updateQuery({'domain': value, 'o': 0});
+    } = useSearchArchives();
 
     let archiveOrders = [
-        {key: '-date', value: '-date', text: 'Newest'},
-        {key: 'date', value: 'date', text: 'Oldest'},
+        {value: 'date', text: 'Date'},
+        {value: 'size', text: 'Size'},
     ];
 
     if (searchStr) {
-        archiveOrders = [{key: 'rank', value: 'rank', text: 'Search Rank'}, ...archiveOrders];
+        archiveOrders = [{value: 'rank', text: 'Rank'}, ...archiveOrders];
     }
-
-    const menuColumns = (<>
-        <Grid.Column width={5}>
-            <SearchInput clearable
-                         actionIcon='search'
-                         searchStr={searchStr}
-                         onSubmit={setSearchStr}
-            />
-        </Grid.Column>
-        <Grid.Column width={5}>
-            <Dropdown selection fluid
-                      placeholder='Sort by...'
-                      value={searchOrder}
-                      options={archiveOrders}
-                      onChange={(e, {value}) => setOrderBy(value)}
-            />
-        </Grid.Column>
-    </>);
 
     const onSelect = (path, checked) => {
         if (checked && path) {
@@ -421,27 +436,56 @@ function Archives() {
         </Button>
     </div>;
 
-    return <FilesView
-        files={archives}
-        limit={limit}
-        setLimit={setLimit}
-        activePage={activePage}
-        totalPages={totalPages}
-        showLimit={true}
-        showSelect={true}
-        onSelect={onSelect}
-        selectElem={selectElm}
-        selectedKeys={selectedArchives}
-        view={view}
-        setView={setView}
-        setPage={setPage}
-        filterOptions={filterOptions}
-        activeFilters={domain}
-        setFilters={setDomain}
-        filterPlaceholder='Domain'
-        menuColumns={menuColumns}
-        menuColumnsCount={2}
-    />
+    const {body, paginator, selectButton, viewButton, limitDropdown, tagQuerySelector} = FilesView(
+        archives,
+        activePage,
+        totalPages,
+        selectElm,
+        selectedArchives,
+        onSelect,
+        setPage,
+    );
+
+    const searchInput = <SearchInput clearable
+                                     actionIcon='search'
+                                     searchStr={searchStr}
+                                     onSubmit={setSearchStr}
+    />;
+
+    return <>
+        <Media at='mobile'>
+            <Grid>
+                <Grid.Row>
+                    <Grid.Column width={2}>{selectButton}</Grid.Column>
+                    <Grid.Column width={2}>{viewButton}</Grid.Column>
+                    <Grid.Column width={4}>{limitDropdown}</Grid.Column>
+                    <Grid.Column width={2}>{tagQuerySelector}</Grid.Column>
+                    <Grid.Column width={6}><SortButton sorts={archiveOrders}/></Grid.Column>
+                </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column width={10}>{searchInput}</Grid.Column>
+                    <Grid.Column width={6}><SearchDomain/></Grid.Column>
+                </Grid.Row>
+            </Grid>
+        </Media>
+        <Media greaterThanOrEqual='tablet'>
+            <Grid>
+                <Grid.Row>
+                    <Grid.Column width={1}>{selectButton}</Grid.Column>
+                    <Grid.Column width={1}>{viewButton}</Grid.Column>
+                    <Grid.Column width={2}>{limitDropdown}</Grid.Column>
+                    <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
+                    <Grid.Column width={5}><SortButton sorts={archiveOrders}/></Grid.Column>
+                </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column width={8}>{searchInput}</Grid.Column>
+                    <Grid.Column width={6}><SearchDomain/></Grid.Column>
+                </Grid.Row>
+            </Grid>
+        </Media>
+        {body}
+        {paginator}
+    </>
 }
 
 export function ArchiveRowCells({file}) {
@@ -483,7 +527,7 @@ export function ArchiveRoute() {
         <TabLinks links={links}/>
         <Routes>
             <Route path='/' element={<Archives/>}/>
-            <Route path='domains' element={<Domains/>}/>
+            <Route path='domains' element={<DomainsPage/>}/>
             <Route path=':archiveId' element={<ArchivePage/>}/>
         </Routes>
     </PageContainer>

@@ -507,7 +507,7 @@ def test_get_channel_videos_pagination(test_client, test_session, simple_channel
     ]
     last_ids = []
     for offset, video_count in tests:
-        _, response = assert_video_search(channel_id=simple_channel.id, order_by='id', offset=offset, limit=20)
+        _, response = assert_video_search(channel_id=simple_channel.id, order_by='upload_date', offset=offset, limit=20)
         assert len(response.json['file_groups']) == video_count, 'Returned videos does not match'
         current_ids = [i['id'] for i in response.json['file_groups']]
         assert current_ids != last_ids, f'IDs are unchanged current_ids={current_ids}'

@@ -1,8 +1,8 @@
 import React, {useContext, useEffect, useState} from "react";
-import {Card, Container, IconGroup, Input, Modal, Pagination} from 'semantic-ui-react';
+import {Button as SButton, ButtonGroup, Card, Container, IconGroup, Input, Modal, Pagination} from 'semantic-ui-react';
 import {Link, NavLink, useNavigate} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useDirectories, useDownloads, useHotspot, useSettings, useThrottle} from "../hooks/customHooks";
+import {useDirectories, useHotspot, useSearchOrder, useSettings, useThrottle} from "../hooks/customHooks";
 import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
 import {Button, CardIcon, darkTheme, Form, Header, Icon, lightTheme, Menu, Popup, Statistic} from "./Theme";
 import {FilePreviewContext} from "./FilePreview";
@@ -933,6 +933,8 @@ export const filterToMimetypes = (filter) => {
         return ['image'];
     } else if (filter === 'zip') {
         return ['application/zip', 'application/zlib', 'application/x-bzip2', 'application/x-xz', 'application/x-bzip', 'application/x-bzip2', 'application/gzip', 'application/vnd.rar', 'application/x-tar', 'application/x-7z-compressed'];
+    } else if (filter === 'model') {
+        return ['application/x-openscad', 'model/stl', 'application/sla', 'model/obj'];
     }
 }
 
@@ -974,4 +976,65 @@ export const encodeMediaPath = (path) => {
     path = path.replaceAll('#', '%23');
     path = path.replaceAll(' ', '%20');
     return path
+}
+
+export function SortButton({sorts = []}) {
+    const {sort, setSort} = useSearchOrder();
+
+    if (!sorts || (sorts && sorts.length === 0)) {
+        console.error('No sorts have been defined!');
+    }
+
+    // Use the order in the URL query, fallback to the first in the orders array.
+    const defaultDesc = sort ? sort.startsWith('-') : true;
+    const defaultSort = sort ? sort.replaceAll(/^-/g, '') : sorts[0]['value'];
+
+    const [localSort, setLocalSort] = useState(defaultSort);
+    const [open, setOpen] = useState(false);
+    const [desc, setDesc] = useState(defaultDesc);
+
+    useEffect(() => {
+        if (localSort) {
+            const newSort = desc ? `-${localSort}` : localSort;
+            console.debug(`Setting new sort: ${newSort}`)
+            setSort(newSort);
+        }
+    }, [localSort, desc]);
+
+    const handleSortButton = (o) => {
+        setLocalSort(o);
+        setOpen(false);
+    }
+
+    const toggleDesc = () => {
+        setDesc(!desc);
+        setOpen(false);
+    }
+
+    let sortFields;
+    if (sorts && sorts.length) {
+        sortFields = sorts.map((i) => {
+            return <SButton key={i['value']} onClick={() => handleSortButton(i['value'])}>{i['text']}</SButton>
+        })
+    }
+
+    // Remove the - from the front of the query sort.
+    const sortKey = localSort.replaceAll(/^-/g, '');
+    const selectedSort = sorts.find(i => i['value'] === sortKey);
+
+    return <>
+        <Modal closeIcon
+               open={open}
+               onClose={() => setOpen(false)}
+        >
+            <Modal.Header>Sort By</Modal.Header>
+            <Modal.Content>
+                {sortFields}
+            </Modal.Content>
+        </Modal>
+        <ButtonGroup icon>
+            <Button icon={desc ? 'sort down' : 'sort up'} onClick={() => toggleDesc()}/>
+            <Button content={selectedSort['text']} onClick={() => setOpen(true)}/>
+        </ButtonGroup>
+    </>
 }

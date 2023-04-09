@@ -1,6 +1,5 @@
 import {useContext, useEffect, useRef, useState} from "react";
 import {
-    addTag,
     fetchDomains,
     fetchFilesProgress,
     filesSearch,
@@ -8,7 +7,6 @@ import {
     getChannel,
     getChannels,
     getDirectories,
-    getDownloaders,
     getDownloads,
     getFiles,
     getInventory,
@@ -18,17 +16,17 @@ import {
     getThrottleStatus,
     getVideo,
     getVideosStatistics,
-    killDownloads, removeTag,
     searchArchives,
     searchVideos,
     setHotspot,
     setThrottle,
-    startDownloads
 } from "../api";
 import {createSearchParams, useSearchParams} from "react-router-dom";
 import {enumerate, filterToMimetypes, humanFileSize, secondsToFullDuration} from "../components/Common";
 import {StatusContext} from "../contexts/contexts";
 import {toast} from "react-semantic-toasts-2";
+import {Modal} from "semantic-ui-react";
+import {Button} from "../components/Theme";
 
 const calculatePage = (offset, limit) => {
     return offset && limit ? Math.round((offset / limit) + 1) : 1;
@@ -128,6 +126,17 @@ export const useQuery = () => {
     return {searchParams, setSearchParams, setQuery, updateQuery}
 }
 
+export const useOneQuery = (name) => {
+    const {searchParams, updateQuery} = useQuery();
+    const value = searchParams.get(name);
+
+    const setValue = (newValue) => {
+        updateQuery({[name]: newValue});
+    }
+
+    return [value, setValue]
+}
+
 export const usePages = (defaultLimit) => {
     const {searchParams, updateQuery} = useQuery();
     const offset = searchParams.get('o') || 0;
@@ -148,11 +157,12 @@ export const usePages = (defaultLimit) => {
     return {offset, limit, setLimit, activePage, setPage};
 }
 
-export const useSearchArchives = (defaultLimit, domain, order_by) => {
-    const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit)
+export const useSearchArchives = (defaultLimit) => {
+    const {domain} = useSearchDomain();
+    const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit);
     const {searchParams, updateQuery} = useQuery();
     const searchStr = searchParams.get('q') || '';
-    const order = searchParams.get('order') || order_by;
+    const order = searchParams.get('order');
     const activeTags = searchParams.getAll('tag');
 
     const [archives, setArchives] = useState(null);
@@ -208,7 +218,7 @@ export const useSearchArchives = (defaultLimit, domain, order_by) => {
 
 export const useSearchVideos = (defaultLimit, channelId, order_by) => {
     const {searchParams, updateQuery} = useQuery();
-    const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit)
+    const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit);
     const searchStr = searchParams.get('q') || '';
     const order = searchParams.get('order') || order_by;
     const activeTags = searchParams.getAll('tag');
@@ -723,4 +733,25 @@ export const useStatistics = () => {
     }, []);
 
     return {statistics};
+}
+
+export const useSearchFilter = () => {
+    const [filter, setFilter] = useOneQuery('filter');
+    return {filter, setFilter}
+}
+
+export const useSearchDomain = () => {
+    const [domains] = useDomains();
+    const [domain, setDomain] = useOneQuery('domain');
+    return {domain, domains, setDomain}
+}
+
+export const useSearchView = () => {
+    const [view, setView] = useOneQuery('view');
+    return {view, setView}
+}
+
+export const useSearchOrder = () => {
+    const [order, setOrder] = useOneQuery('order');
+    return {sort: order, setSort: setOrder}
 }

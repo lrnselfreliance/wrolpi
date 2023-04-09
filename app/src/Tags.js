@@ -27,6 +27,7 @@ import {Segment} from "./components/Theme";
 import _ from "lodash";
 import {HexColorPicker} from "react-colorful";
 import {useRecurringTimeout} from "./hooks/customHooks";
+import {Link} from "react-router-dom";
 
 export const TagsContext = React.createContext({
     NameToTagLabel: null,
@@ -168,7 +169,7 @@ function EditTagsModal() {
     const localOnClose = () => {
         setOpen(false);
         setTagName('');
-        setTagColor(null);
+        setTagColor(DEFAULT_TAG_COLOR);
         setTagId(null);
     }
 
@@ -256,7 +257,14 @@ function EditTagsModal() {
     </>
 }
 
-export function AddTagsButton({selectedTagNames = [], onToggle = _.noop, onAdd = _.noop, onRemove = _.noop}) {
+export function AddTagsButton({
+                                  hideEdit,
+                                  active,
+                                  selectedTagNames = [],
+                                  onToggle = _.noop,
+                                  onAdd = _.noop,
+                                  onRemove = _.noop
+                              }) {
     // A button which displays a modal in which the user can add or remove tags.
 
     const {tagNames, TagsGroup} = React.useContext(TagsContext);
@@ -300,7 +308,7 @@ export function AddTagsButton({selectedTagNames = [], onToggle = _.noop, onAdd =
     const unusedTagsGroup = <TagsGroup tagNames={unusedTags} onClick={addTag}/>;
 
     return <>
-        <SButton icon='tag' onClick={handleOpen} color='violet'/>
+        <SButton icon={active ? 'tags' : 'tag'} onClick={handleOpen} primary={!!active}/>
         <Modal closeIcon
                open={open}
                onOpen={(e) => handleOpen(e)}
@@ -316,7 +324,16 @@ export function AddTagsButton({selectedTagNames = [], onToggle = _.noop, onAdd =
                 {unusedTags && unusedTags.length > 0 ? unusedTagsGroup : 'You have no tags'}
             </Modal.Content>
             <Modal.Actions>
-                <EditTagsModal/>
+                <Grid textAlign='left'>
+                    <Grid.Row>
+                        <Grid.Column width={8}>
+                            {!hideEdit && <EditTagsModal/>}
+                        </Grid.Column>
+                        <Grid.Column width={8}>
+                            <SButton onClick={() => setOpen(false)} floated='right'>Close</SButton>
+                        </Grid.Column>
+                    </Grid.Row>
+                </Grid>
             </Modal.Actions>
         </Modal>
     </>
@@ -324,7 +341,15 @@ export function AddTagsButton({selectedTagNames = [], onToggle = _.noop, onAdd =
 
 export const taggedImageLabel = {corner: 'left', icon: 'tag', color: 'green'};
 
-export const TagsSelector = ({selectedTagNames = [], onToggle = _.noop, onAdd = _.noop, onRemove = _.noop}) => {
+export const TagsSelector = ({
+                                 hideEdit = false,
+                                 active,
+                                 hideGroup = false,
+                                 selectedTagNames = [],
+                                 onToggle = _.noop,
+                                 onAdd = _.noop,
+                                 onRemove = _.noop
+                             }) => {
     // Provides a button to add tags to a list.  Displays the tags of that list.
     const {TagsLinkGroup} = React.useContext(TagsContext);
 
@@ -333,11 +358,23 @@ export const TagsSelector = ({selectedTagNames = [], onToggle = _.noop, onAdd = 
         return <></>;
     }
 
+    const button = <AddTagsButton
+        hideEdit={hideEdit}
+        active={active}
+        selectedTagNames={selectedTagNames}
+        onToggle={onToggle}
+        onAdd={onAdd}
+        onRemove={onRemove}
+    />;
+
+    if (hideGroup) {
+        return button;
+    }
+
     return <Grid>
         <Grid.Row>
             <Grid.Column mobile={2} computer={1}>
-                <AddTagsButton selectedTagNames={selectedTagNames} onToggle={onToggle} onAdd={onAdd}
-                               onRemove={onRemove}/>
+                {button}
             </Grid.Column>
             <Grid.Column mobile={13} computer={14}>
                 <TagsLinkGroup tagNames={selectedTagNames}/>
@@ -389,7 +426,7 @@ export const TagsDropdown = ({value = [], onChange, ...props}) => {
         options = [...options, ...tagOptions];
     }
 
-    return <Dropdown multiple selection clearable
+    return <Dropdown multiple selection clearable fluid
                      options={options}
                      placeholder='Tags'
                      onChange={handleChange}

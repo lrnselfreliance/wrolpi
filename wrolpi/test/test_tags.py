@@ -106,7 +106,7 @@ async def test_tags_config_(test_session, test_directory, tag_factory, example_p
     video.remove_tag(tag1)
 
 
-def test_tags_crud(test_session, test_client, example_pdf):
+def test_tags_crud(test_session, test_client, example_pdf, assert_tags_config):
     """Test API Create/Retrieve/Update/Delete of Tags."""
     pdf = FileGroup.from_paths(test_session, example_pdf)
     test_session.add(pdf)
@@ -121,6 +121,7 @@ def test_tags_crud(test_session, test_client, example_pdf):
     content = dict(name='foo', color='#123456')
     request, response = test_client.post('/api/tag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
+    assert_tags_config(tags={'foo': {'color': '#123456'}})
 
     # The tag can be retrieved.
     request, response = test_client.get('/api/tag')
@@ -138,11 +139,13 @@ def test_tags_crud(test_session, test_client, example_pdf):
     assert response.status_code == HTTPStatus.OK
     request, response = test_client.get('/api/tag')
     assert response.json['tags'] == [dict(name='bar', color='#000000', id=1)]
+    assert_tags_config(tags={'bar': {'color': '#000000'}})
 
     # Conflicting names return an error.
     content = dict(name='bar', color='#111111')
     request, response = test_client.post('/api/tag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert_tags_config(tags={'bar': {'color': '#000000'}})
 
     # Cannot delete Tag that is used.
     request, response = test_client.delete('/api/tag/1')
@@ -154,6 +157,9 @@ def test_tags_crud(test_session, test_client, example_pdf):
     # Can delete unused Tag.
     request, response = test_client.delete('/api/tag/1')
     assert response.status_code == HTTPStatus.NO_CONTENT
+
+    # Config is empty.
+    assert_tags_config()
 
 
 @pytest.mark.asyncio

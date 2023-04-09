@@ -42,8 +42,6 @@ VIDEO_ORDERS = {
     '-upload_date': 'v.upload_date DESC NULLS LAST, LOWER(fg.primary_path) ASC',
     'rank': '2 DESC, LOWER(fg.primary_path) DESC',
     '-rank': '2 ASC, LOWER(fg.primary_path) ASC',
-    'id': 'fg.id ASC',
-    '-id': 'fg.id DESC',
     'size': 'fg.size ASC, LOWER(fg.primary_path) ASC',
     '-size': 'fg.size DESC, LOWER(fg.primary_path) DESC',
     'duration': 'duration ASC, LOWER(fg.primary_path) ASC',

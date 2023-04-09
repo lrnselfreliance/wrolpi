@@ -370,6 +370,8 @@ ARCHIVE_ORDERS = {
     '-date': 'a.archive_datetime DESC NULLS LAST, LOWER(fg.primary_path) DESC',
     'rank': '2 DESC, a.archive_datetime DESC',
     '-rank': '2 ASC, a.archive_datetime ASC',
+    'size': 'fg.size ASC, LOWER(fg.primary_path) ASC',
+    '-size': 'fg.size DESC NULLS LAST, LOWER(fg.primary_path) DESC',
 }
 
 

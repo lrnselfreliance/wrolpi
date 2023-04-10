@@ -6,7 +6,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import relationship, Session
 
 from wrolpi import dates
-from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, run_after
+from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, run_after, \
+    limit_concurrent, register_refresh_cleanup
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag
@@ -239,6 +240,7 @@ def delete_tag(tag_id: int, session: Session = None):
     schedule_save()
 
 
+@register_refresh_cleanup
 @optional_session
 def import_tags_config(session: Session = None):
     """Reads the Tags and TagFiles from the config file, upserts them in the DB."""

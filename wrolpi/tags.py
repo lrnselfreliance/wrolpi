@@ -295,7 +295,7 @@ def import_tags_config(session: Session = None):
                 absolute_path = media_directory / primary_path
                 file_group: FileGroup = file_groups_by_primary_path.get(absolute_path)
                 if tag and file_group:
-                    tag_file = tag_files.get((tag.id, file_group.id))
+                    tag_file: TagFile = tag_files.get((tag.id, file_group.id))
                     if not tag_file:
                         # This FileGroup has not been tagged with the Tag, add it.
                         tag_file = tag.add_file_group_tag(file_group, session)

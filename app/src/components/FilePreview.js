@@ -170,7 +170,10 @@ export function FilePreviewWrapper({children}) {
         }
     };
 
-    const handleClose = () => {
+    const handleClose = (e) => {
+        if (e) {
+            e.preventDefault();
+        }
         setPreviewModal(null);
         setPreviewFile(null);
     }
@@ -213,7 +216,7 @@ export function FilePreviewWrapper({children}) {
         setPreviewModal(<Modal closeIcon
                                size='fullscreen'
                                open={true}
-                               onClose={handleClose}
+                               onClose={e => handleClose(e)}
         >
             {content}
             <ModalActions>

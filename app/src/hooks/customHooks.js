@@ -52,6 +52,52 @@ export const useRecurringTimeout = (callback, delay) => {
     }, [delay])
 }
 
+export const useQuery = () => {
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    const setQuery = (obj) => {
+        setSearchParams(createSearchParams(obj), {replace: true});
+    }
+
+    const updateQuery = (obj) => {
+        const newQuery = {};
+        for (const entry of searchParams.entries()) {
+            newQuery[entry[0]] = entry[1];
+        }
+        Object.entries(obj).forEach(([key, value]) => {
+            if (value === undefined || value === null || value === '') {
+                delete newQuery[key];
+            } else {
+                newQuery[key] = value;
+            }
+        })
+        setQuery(newQuery);
+    }
+
+    return {searchParams, setSearchParams, setQuery, updateQuery}
+}
+
+export const useOneQuery = (name) => {
+    const {searchParams, updateQuery} = useQuery();
+    const value = searchParams.get(name);
+
+    const setValue = (newValue) => {
+        updateQuery({[name]: newValue});
+    }
+
+    return [value, setValue]
+}
+
+export const useAllQuery = (name) => {
+    const {searchParams, updateQuery} = useQuery();
+    const value = searchParams.getAll(name);
+
+    const setValue = (newValue) => {
+        updateQuery({[name]: newValue});
+    }
+
+    return [value, setValue]
+}
 
 export const useDomains = () => {
     const [domains, setDomains] = useState(null);
@@ -97,42 +143,6 @@ export const useArchive = (archiveId) => {
     }, [archiveId]);
 
     return {archiveFile: archiveFileGroup, history, fetchArchive};
-}
-
-export const useQuery = () => {
-    const [searchParams, setSearchParams] = useSearchParams();
-
-    const setQuery = (obj) => {
-        setSearchParams(createSearchParams(obj), {replace: true});
-    }
-
-    const updateQuery = (obj) => {
-        const newQuery = {};
-        for (const entry of searchParams.entries()) {
-            newQuery[entry[0]] = entry[1];
-        }
-        Object.entries(obj).forEach(([key, value]) => {
-            if (value === undefined || value === null || value === '') {
-                delete newQuery[key];
-            } else {
-                newQuery[key] = value;
-            }
-        })
-        setQuery(newQuery);
-    }
-
-    return {searchParams, setSearchParams, setQuery, updateQuery}
-}
-
-export const useOneQuery = (name) => {
-    const {searchParams, updateQuery} = useQuery();
-    const value = searchParams.get(name);
-
-    const setValue = (newValue) => {
-        updateQuery({[name]: newValue});
-    }
-
-    return [value, setValue]
 }
 
 export const usePages = (defaultLimit) => {
@@ -447,7 +457,7 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
 
 export const useBrowseFiles = () => {
     const [browseFiles, setBrowseFiles] = useState(null);
-    const [openFolders, setOpenFolders] = useState([]);
+    const [openFolders, setOpenFolders] = useAllQuery('folders');
 
     const fetchFiles = async () => {
         try {
@@ -461,7 +471,7 @@ export const useBrowseFiles = () => {
 
     useEffect(() => {
         fetchFiles();
-    }, [openFolders])
+    }, [JSON.stringify(openFolders)])
 
     return {browseFiles, openFolders, setOpenFolders, fetchFiles};
 }

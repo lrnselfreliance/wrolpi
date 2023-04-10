@@ -107,7 +107,7 @@ export function FileBrowser() {
 
     useEffect(() => {
         // Fetch files after tagging.
-        setCallbacks([fetchFiles]);
+        setCallbacks([() => fetchFiles(openFolders)]);
 
         return () => setCallbacks(null);
     }, []);

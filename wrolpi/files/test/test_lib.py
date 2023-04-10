@@ -579,7 +579,8 @@ def test_get_refresh_progress(test_client, test_session):
     assert 'modeled' in progress
     assert 'modeling' in progress
     assert 'refreshing' in progress
-    assert 'total_files' in progress
+    assert 'counted_files' in progress
+    assert 'total_file_groups' in progress
     assert 'unindexed' in progress
 
 

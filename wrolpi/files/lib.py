@@ -492,7 +492,7 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
             Events.send_global_refresh_indexing_completed()
 
         # Cleanup any outdated file data.
-        with flags.cleanup:
+        with flags.refresh_cleanup:
             await apply_refresh_cleanup()
         if send_events:
             Events.send_global_after_refresh_completed()
@@ -862,15 +862,15 @@ def get_refresh_progress():
         results = dict(curs.fetchone())
 
         status = dict(
-            cleanup=flags.cleanup.is_set(),
+            counted_files=REFRESH.get('counted_files', 0),
             counting=flags.refresh_counting.is_set(),
             discovery=flags.refresh_discovery.is_set(),
             indexed=results['indexed'],
             indexing=flags.refresh_indexing.is_set(),
             modeled=results['modeled'],
             modeling=flags.refresh_modeling.is_set(),
+            cleanup=flags.refresh_cleanup.is_set(),
             refreshing=flags.refreshing.is_set(),
-            counted_files=REFRESH.get('counted_files', 0),
             total_file_groups=results['total_file_groups'],
             unindexed=results['unindexed'],
         )

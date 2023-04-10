@@ -115,7 +115,7 @@ refresh_counting = Flag('refresh_counting')
 refresh_discovery = Flag('refresh_discovery')
 refresh_modeling = Flag('refresh_modeling')
 refresh_indexing = Flag('refresh_indexing')
-cleanup = Flag('cleanup')
+refresh_cleanup = Flag('refresh_cleanup')
 
 # The global refresh has been performed.  This is False on a fresh instance of WROLPi.
 refresh_complete = Flag('refresh_complete', store_db=True)

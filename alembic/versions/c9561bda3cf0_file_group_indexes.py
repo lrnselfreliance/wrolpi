@@ -23,7 +23,6 @@ def upgrade():
     bind = op.get_bind()
     session = Session(bind=bind)
 
-    session.execute('CREATE INDEX file_group_full_stem_idx ON file_group(full_stem)')
     session.execute('CREATE INDEX file_group_mimetype_idx ON file_group(mimetype)')
     session.execute('CREATE INDEX file_group_model_idx ON file_group(model)')
     session.execute('CREATE INDEX file_group_modification_datetime_idx ON file_group(modification_datetime)')

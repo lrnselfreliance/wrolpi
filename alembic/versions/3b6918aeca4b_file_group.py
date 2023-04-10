@@ -91,7 +91,7 @@ def upgrade():
     CREATE TABLE tag_file (
         tag_id INTEGER REFERENCES tag(id),
         file_group_id BIGINT REFERENCES file_group(id) ON DELETE CASCADE,
-        created_at TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (tag_id, file_group_id)
     )''')
 

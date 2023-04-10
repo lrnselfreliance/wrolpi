@@ -5,7 +5,9 @@ from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import relationship, Session
 
+from wrolpi import dates
 from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_directory, background_task, run_after
+from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag
 from wrolpi.vars import PYTEST
@@ -15,6 +17,7 @@ logger = logger.getChild(__name__)
 
 class TagFile(ModelHelper, Base):
     __tablename__ = 'tag_file'
+    created_at = Column(TZDateTime, default=dates.now)
 
     tag_id = Column(Integer, ForeignKey('tag.id', ondelete='CASCADE'), primary_key=True)
     tag = relationship('Tag', back_populates='tag_files')
@@ -129,8 +132,12 @@ class TagsConfig(ConfigFile):
             .order_by(FileGroup.primary_path)
 
         tag_files = []
-        for tag, _, file_group in results:
-            value = [tag.name, str(file_group.primary_path.relative_to(media_directory))]
+        for tag, tag_file, file_group in results:
+            value = [
+                tag.name,
+                str(file_group.primary_path.relative_to(media_directory)),
+                dates.strftime_ms(tag_file.created_at or dates.now()),  # Fallback to current time if not set.
+            ]
             tag_files.append(value)
 
         # Write to the config.
@@ -280,18 +287,20 @@ def import_tags_config(session: Session = None):
             file_group_ids = [i.id for i in file_groups]
             # Get all TagFiles referencing the FileGroups.
             tag_files = session.query(TagFile).filter(TagFile.file_group_id.in_(file_group_ids))
-            tag_files = [(i.tag_id, i.file_group_id) for i in tag_files]
+            tag_files = {(i.tag_id, i.file_group_id): i for i in tag_files}
 
-            for tag_name, primary_path in config.tag_files:
+            for tag_name, primary_path, created_at in config.tag_files:
                 tag: Tag = tags_by_name.get(tag_name)
                 # Paths are absolute in the DB, relative in config.
                 absolute_path = media_directory / primary_path
                 file_group: FileGroup = file_groups_by_primary_path.get(absolute_path)
                 if tag and file_group:
-                    if (tag.id, file_group.id) not in tag_files:
+                    tag_file = tag_files.get((tag.id, file_group.id))
+                    if not tag_file:
                         # This FileGroup has not been tagged with the Tag, add it.
-                        tag.add_file_group_tag(file_group, session)
-                        need_commit = True
+                        tag_file = tag.add_file_group_tag(file_group, session)
+                    tag_file.created_at = dates.strptime_ms(created_at) if created_at else dates.now()
+                    need_commit = True
                 elif not file_group:
                     logger.warning(f'Cannot find FileGroup for {repr(str(primary_path))}')
                 elif not tag:

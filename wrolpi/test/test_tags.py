@@ -5,6 +5,7 @@ import pytest
 import yaml
 
 from wrolpi import tags
+from wrolpi.dates import now
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
@@ -188,8 +189,8 @@ async def test_import_tags_config(test_session, test_directory, test_tags_config
         data = dict(
             tags={'Foo': {'color': '#123456'}},
             tag_files=[
-                ('Foo', str(example_singlefile.relative_to(test_directory))),
-                ('Foo', 'does not exist'),
+                ('Foo', str(example_singlefile.relative_to(test_directory)), '2000-01-01 01:01:01'),
+                ('Foo', 'does not exist', None),
             ],
         )
         yaml.dump(data, fh)

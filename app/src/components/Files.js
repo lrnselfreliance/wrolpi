@@ -497,7 +497,7 @@ export function FilesRefreshProgress() {
 
         if (modeling) {
             params['value'] = modeled;
-            params['total'] = total_files;
+            params['total'] = total_file_groups;
             label = 'Refresh: Modeling';
         } else if (indexing) {
             params['value'] = unindexed;

@@ -7,10 +7,10 @@
 
 ## Upgrading Docker containers
 
-1. Pull the latest master
-    * `git pull origin master --ff`
-2. Stop docker containers
+1. Stop docker containers
     * `docker-compose stop`
+2. Pull the latest master
+    * `git pull origin master --ff`
 3. Build all docker containers
     * `docker-compose build --parallel`
 4. Create the map volumes

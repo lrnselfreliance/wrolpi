@@ -6,7 +6,7 @@ import {sendNotification} from "../api";
 
 export const ShareEveryoneButton = ({url, size, onClick}) => {
     const handleShare = async () => {
-        await sendNotification('Look at this page', url);
+        await sendNotification('A user shared this', url);
         if (onClick) {
             await onClick();
         }

@@ -783,3 +783,14 @@ export async function fetchFile(path) {
         console.error('Unable to fetch file dict!  See client logs.');
     }
 }
+
+export async function sendNotification(message, url) {
+    const body = {message, url};
+    const response = await apiPost(`${API_URI}/notify`, body);
+    if (response.status === 201) {
+        toast({type: 'success', title: 'Shared', description: 'Your share was sent', time: 2000});
+    } else {
+        toast({type: 'error', title: 'Error', description: 'Your share failed to send!', time: 5000});
+        console.error('Failed to share');
+    }
+}

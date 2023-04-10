@@ -49,6 +49,10 @@ class Events:
     def send_downloads_disabled(message: str = None):
         send_event('downloads_disabled', message, subject='downloads')
 
+    @staticmethod
+    def send_user_notify(message: str, url: str = None):
+        send_event('user_notify_message', message, subject='user_notify', url=url)
+
 
 def log_event(event: str, message: str = None, action: str = None, subject: str = None):
     log = f'{event=}'
@@ -61,7 +65,7 @@ def log_event(event: str, message: str = None, action: str = None, subject: str 
     logger.debug(log)
 
 
-def send_event(event: str, message: str = None, action: str = None, subject: str = None):
+def send_event(event: str, message: str = None, action: str = None, subject: str = None, url: str = None):
     EVENTS_LOCK.acquire()
     try:
         # All events will be in time order, they should never be at the exact same time.
@@ -73,6 +77,7 @@ def send_event(event: str, message: str = None, action: str = None, subject: str
             event=event,
             message=message,
             subject=subject,
+            url=url,
         )
         EVENTS_HISTORY.append(e)
 

@@ -76,3 +76,9 @@ class TagRequest:
 @dataclass
 class DeleteTagRequest:
     name: str
+
+
+@dataclass
+class NotifyRequest:
+    message: str
+    url: str = None

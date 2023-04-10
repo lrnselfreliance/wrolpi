@@ -18,7 +18,7 @@ from wrolpi import admin, status, flags, schema
 from wrolpi import tags
 from wrolpi.admin import HotspotStatus
 from wrolpi.common import logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
-    wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics
+    wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host
 from wrolpi.dates import now, strptime
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, API_ERRORS, APIError, ValidationError, HotspotError, InvalidDownload
@@ -408,7 +408,16 @@ async def post_new_tag(_: Request, body: schema.TagRequest, tag_id: int = None):
 @api_bp.delete('/tag/<tag_id:int>')
 async def delete_tag_request(_: Request, tag_id: int):
     tags.delete_tag(tag_id)
-    return response.empty(HTTPStatus.NO_CONTENT)
+    return response.empty()
+
+
+@api_bp.post('/notify')
+@validate(schema.NotifyRequest)
+async def post_notify(_: Request, body: schema.NotifyRequest):
+    """Sends a notify Event"""
+    url = url_strip_host(body.url)
+    Events.send_user_notify(body.message, url)
+    return response.empty(HTTPStatus.CREATED)
 
 
 class CustomJSONEncoder(json.JSONEncoder):

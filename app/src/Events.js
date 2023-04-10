@@ -5,15 +5,15 @@ import {toast} from "react-semantic-toasts-2";
 
 const apiEventName = 'apiEvent';
 
-function eventToast(title, description, type = 'success', time = 5000) {
-    toast({type: type, title: title, description: description, time: time});
+function eventToast(title, description, type = 'success', time = 5000, onClick = null) {
+    toast({type: type, title: title, description: description, time: time, onClick: onClick});
 }
 
 function handleEvents(events) {
     const newestEvents = {};
 
     events.forEach(e => {
-        const {event, message, subject, dt} = e;
+        const {event, message, subject, dt, url} = e;
         document.dispatchEvent(new CustomEvent(apiEventName, {detail: e}));
 
         if (subject && newestEvents[subject] && newestEvents[subject] > dt) {
@@ -25,6 +25,16 @@ function handleEvents(events) {
 
         if (event === 'downloads_disabled') {
             eventToast('Downloads Disabled', message, 'info');
+        }
+
+        if (event === 'user_notify_message') {
+            console.log(message, url);
+            eventToast(
+                message,
+                'Click here to view the shared page',
+                'info',
+                10_000,
+                () => window.open(url, '_self'));
         }
 
         if (subject) {

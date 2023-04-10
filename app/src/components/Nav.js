@@ -4,6 +4,7 @@ import {Dropdown, Menu} from "semantic-ui-react";
 import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {DarkModeToggle, HotspotStatusIcon, NAME} from "./Common";
+import {ShareButton} from "./Share";
 
 const links = [
     {text: 'Videos', to: '/videos', key: 'videos'},
@@ -64,6 +65,7 @@ export function NavBar() {
         {topNavText}
     </NavLink>;
     const icons = <React.Fragment>
+        <NavIcon><ShareButton/></NavIcon>
         <NavIcon><HotspotStatusIcon/></NavIcon>
         <NavIcon><DarkModeToggle/></NavIcon>
     </React.Fragment>;

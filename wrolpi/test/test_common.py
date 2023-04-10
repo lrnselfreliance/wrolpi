@@ -638,3 +638,18 @@ def test_resolve_generators2():
             }
         ]
     }
+
+
+@pytest.mark.parametrize(
+    'url,expected', [
+        ('https://example.com', '/'),
+        ('https://example.com/foo', '/foo'),
+        ('https://example.com/foo?question=answer', '/foo?question=answer'),
+        ('https://example.com/foo?question=answer#fragment', '/foo?question=answer#fragment'),
+        ('https://exmaple.com/files?folders=test+%23+example%2F', '/files?folders=test+%23+example%2F'),
+        ('https://exmaple.com/files?folders=test+%23+example%2F&folders=map%2F',
+         '/files?folders=test+%23+example%2F&folders=map%2F'),
+    ]
+)
+def test_url_strip_host(url, expected):
+    assert common.url_strip_host(url) == expected

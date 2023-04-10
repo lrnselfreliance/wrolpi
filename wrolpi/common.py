@@ -20,7 +20,7 @@ from multiprocessing import Lock, Manager
 from pathlib import Path
 from types import GeneratorType
 from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any, Set
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunsplit
 
 import aiohttp
 import yaml
@@ -1166,3 +1166,14 @@ def resolve_generators(obj: Union[Dict, List]) -> Any:
     elif isinstance(obj, GeneratorType) or isinstance(obj, Iterable):
         return [resolve_generators(i) for i in obj]
     return obj
+
+
+def url_strip_host(url: str) -> str:
+    """Return a relative URL without the host or scheme.
+
+    >>> url_strip_host('https://example.com/foo')
+    '/foo'
+    """
+    url = urlparse(url)
+    url = urlunsplit(('', '', url.path, url.query, url.fragment))
+    return url or '/'

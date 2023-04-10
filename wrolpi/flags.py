@@ -111,6 +111,7 @@ db_up = Flag('db_up')
 refreshing = Flag('refreshing')
 
 # Steps of refreshing.
+refresh_counting = Flag('refresh_counting')
 refresh_discovery = Flag('refresh_discovery')
 refresh_modeling = Flag('refresh_modeling')
 refresh_indexing = Flag('refresh_indexing')

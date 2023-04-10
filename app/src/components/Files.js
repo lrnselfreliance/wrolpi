@@ -487,15 +487,29 @@ export function FilesRefreshProgress() {
         return;
     }
 
-    const {refreshing, modeling, indexing, cleanup, indexed, unindexed, total_files, total_file_groups, modeled}
-        = progress;
+    const {
+        discovery,
+        refreshing,
+        modeling,
+        indexing,
+        cleanup,
+        indexed,
+        unindexed,
+        counted_files,
+        total_file_groups,
+        modeled
+    } = progress;
 
     if (refreshing) {
-        // Default is Discovery / Step 1.
-        let params = {value: total_file_groups, total: total_files, progress: 'ratio'};
-        let label = 'Refresh: Discovery';
+        // Default is Counting / Step 1.  Move progress bar toward the middle to avoid clipping out of the screen.
+        let params = {value: Math.floor(counted_files / 5), total: counted_files, progress: 'ratio'};
+        let label = 'Refresh: Counting';
 
-        if (modeling) {
+        if (discovery) {
+            params['value'] = total_file_groups;
+            params['total'] = counted_files;
+            label = 'Refresh: Discovery'
+        } else if (modeling) {
             params['value'] = modeled;
             params['total'] = total_file_groups;
             label = 'Refresh: Modeling';

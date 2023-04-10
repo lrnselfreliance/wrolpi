@@ -461,10 +461,20 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
 
         # Add all files in the media directory to the DB.
         paths = paths or [get_media_directory()]
+
+        directories = list(filter(lambda i: i.is_dir(), paths))
+        if directories:
+            with flags.refresh_counting:
+                while directories:
+                    directory = directories.pop()
+                    files, dirs = get_files_and_directories(directory)
+                    directories.extend(dirs)
+                    REFRESH['counted_files'] = REFRESH.get('counted_files', 0) + len(files)
+                    # Sleep to catch cancel.
+                    await asyncio.sleep(0)
+                refresh_logger.info(f'Counted {REFRESH["counted_files"]} files')
+
         with flags.refresh_discovery:
-            from wrolpi.count_files import count_files
-            total_count = sum(count_files(i) for i in paths)
-            REFRESH['total_files'] = total_count
             await refresh_discover_paths(paths, idempotency)
         if send_events:
             Events.send_global_refresh_discovery_completed()
@@ -853,13 +863,14 @@ def get_refresh_progress():
 
         status = dict(
             cleanup=flags.cleanup.is_set(),
+            counting=flags.refresh_counting.is_set(),
             discovery=flags.refresh_discovery.is_set(),
             indexed=results['indexed'],
             indexing=flags.refresh_indexing.is_set(),
             modeled=results['modeled'],
             modeling=flags.refresh_modeling.is_set(),
             refreshing=flags.refreshing.is_set(),
-            total_files=REFRESH.get('total_files', 0),
+            counted_files=REFRESH.get('counted_files', 0),
             total_file_groups=results['total_file_groups'],
             unindexed=results['unindexed'],
         )

@@ -75,7 +75,7 @@ jobs:
       - run: sudo apt-get update
       - run: sudo apt-get install -y ffmpeg
       - restore_cache:
-          key: deps-3.8-{{ checksum "requirements.txt" }}
+          key: deps-3.8-{{ checksum "requirements.txt" }}-2
       - run:
           name: Install Requirements
           command: |
@@ -102,7 +102,7 @@ jobs:
       - run: sudo apt-get update
       - run: sudo apt-get install -y ffmpeg
       - restore_cache:
-          key: deps-3.9-{{ checksum "requirements.txt" }}
+          key: deps-3.9-{{ checksum "requirements.txt" }}-2
       - run:
           name: Install Requirements
           command: |
@@ -129,7 +129,7 @@ jobs:
       - run: sudo apt-get update
       - run: sudo apt-get install -y ffmpeg
       - restore_cache:
-          key: deps-3.10-{{ checksum "requirements.txt" }}
+          key: deps-3.10-{{ checksum "requirements.txt" }}-2
       - run:
           name: Install Requirements
           command: |
@@ -156,7 +156,7 @@ jobs:
       - run: sudo apt-get update
       - run: sudo apt-get install -y ffmpeg
       - restore_cache:
-          key: deps-3.11-{{ checksum "requirements.txt" }}
+          key: deps-3.11-{{ checksum "requirements.txt" }}-2
       - run:
           name: Install Requirements
           command: |

@@ -3,6 +3,7 @@ import datetime
 import functools
 import glob
 import json
+import multiprocessing
 import os
 import pathlib
 import re
@@ -432,6 +433,9 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
         curs.execute(stmt)
 
 
+REFRESH = multiprocessing.Manager().dict()
+
+
 @limit_concurrent(1)  # Only one refresh at a time.
 @wrol_mode_check
 @cancelable_wrapper
@@ -458,6 +462,9 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
         # Add all files in the media directory to the DB.
         paths = paths or [get_media_directory()]
         with flags.refresh_discovery:
+            from wrolpi.count_files import count_files
+            total_count = sum(count_files(i) for i in paths)
+            REFRESH['total_files'] = total_count
             await refresh_discover_paths(paths, idempotency)
         if send_events:
             Events.send_global_refresh_discovery_completed()
@@ -836,7 +843,7 @@ def get_refresh_progress():
     with get_db_curs() as curs:
         curs.execute('''
             SELECT
-                COUNT(id) AS "total_files",
+                COUNT(id) AS "total_file_groups",
                 COUNT(id) FILTER (WHERE indexed IS TRUE) AS "indexed",
                 COUNT(id) FILTER (WHERE indexed IS FALSE) AS "unindexed",
                 COUNT(id) FILTER (WHERE model IS NOT NULL) AS "modeled"
@@ -852,7 +859,8 @@ def get_refresh_progress():
             modeled=results['modeled'],
             modeling=flags.refresh_modeling.is_set(),
             refreshing=flags.refreshing.is_set(),
-            total_files=results['total_files'],
+            total_files=REFRESH.get('total_files', 0),
+            total_file_groups=results['total_file_groups'],
             unindexed=results['unindexed'],
         )
 

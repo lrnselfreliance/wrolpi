@@ -487,11 +487,12 @@ export function FilesRefreshProgress() {
         return;
     }
 
-    const {refreshing, modeling, indexing, cleanup, indexed, unindexed, total_files, modeled} = progress;
+    const {refreshing, modeling, indexing, cleanup, indexed, unindexed, total_files, total_file_groups, modeled}
+        = progress;
 
     if (refreshing) {
         // Default is Discovery / Step 1.
-        let params = {value: 0, total: 3, progress: 'ratio'};
+        let params = {value: total_file_groups, total: total_files, progress: 'ratio'};
         let label = 'Refresh: Discovery';
 
         if (modeling) {

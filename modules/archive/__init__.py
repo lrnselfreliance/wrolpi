@@ -158,22 +158,21 @@ async def archive_modeler():
             for file_group, archive in results:
                 processed += 1
 
-                if archive:
-                    try:
-                        with slow_logger(1, f'Modeling old archive took %(elapsed)s seconds'):
+                with slow_logger(1, f'Modeling archive took %(elapsed)s seconds: {file_group}', logger__=logger):
+                    if archive:
+                        try:
                             archive_id = archive.id
                             archive.validate()
-                    except Exception:
-                        logger.error(f'Unable to validate Archive {archive_id}')
-                        if PYTEST:
-                            raise
-                else:
-                    try:
-                        with slow_logger(1, f'Modeling new archive took %(elapsed)s seconds'):
+                        except Exception:
+                            logger.error(f'Unable to validate Archive {archive_id}')
+                            if PYTEST:
+                                raise
+                    else:
+                        try:
                             model_archive(file_group, session=session)
-                    except InvalidArchive:
-                        # May not be a real Singlefile archive.
-                        pass
+                        except InvalidArchive:
+                            # May not be a real Singlefile archive.
+                            pass
 
                 # Even if indexing fails, we mark it as indexed.  We won't retry indexing this.
                 file_group.indexed = True

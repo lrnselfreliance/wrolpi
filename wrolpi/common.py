@@ -940,14 +940,14 @@ def timer(name):
 
 
 @contextlib.contextmanager
-def slow_logger(max_seconds: int, message: str):
+def slow_logger(max_seconds: int, message: str, logger__=logger, level=logging.WARNING):
     before = now()
     try:
         yield
     finally:
         elapsed = (now() - before).total_seconds()
         if elapsed >= max_seconds:
-            logger.warning(message % dict(elapsed=elapsed))
+            logger__.log(level, message % dict(elapsed=elapsed))
 
 
 TIMERS = dict()

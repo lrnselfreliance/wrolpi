@@ -164,6 +164,10 @@ class InvalidTag(APIError):
     pass
 
 
+class FileGroupIsTagged(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -361,5 +365,10 @@ API_ERRORS = {
         'code': next(error_codes),
         'message': 'Tag is not allowed',
         'status': HTTPStatus.BAD_REQUEST,
+    },
+    FileGroupIsTagged: {
+        'code': next(error_codes),
+        'message': 'File group is tagged',
+        'status': HTTPStatus.CONFLICT,
     },
 }

@@ -13,7 +13,7 @@ from wrolpi.common import Base, ModelHelper, logger, get_media_directory, backgr
 from wrolpi.dates import now, TZDateTime
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.downloader import Download, download_manager
-from wrolpi.errors import UnknownVideo
+from wrolpi.errors import UnknownVideo, FileGroupIsTagged
 from wrolpi.files.lib import refresh_files, get_mimetype, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
@@ -78,10 +78,11 @@ class Video(ModelHelper, Base):
     def delete(self):
         """Remove all files and File records related to this video.  Delete this Video record.
         Add it to it's Channel's skip list."""
+        self.file_group.delete()
+
         self.add_to_skip_list()
         session = Session.object_session(self)
         session.delete(self)
-        self.file_group.delete()
 
     def add_to_skip_list(self):
         """Add this video to it's Channel's skip list."""

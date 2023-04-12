@@ -947,7 +947,7 @@ def slow_logger(max_seconds: int, message: str):
     finally:
         elapsed = (now() - before).total_seconds()
         if elapsed >= max_seconds:
-            logger.warning(message % elapsed)
+            logger.warning(message % dict(elapsed=elapsed))
 
 
 TIMERS = dict()

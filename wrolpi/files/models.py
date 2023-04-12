@@ -10,6 +10,7 @@ from sqlalchemy.orm.collections import InstrumentedList
 from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
 from wrolpi.db import optional_session
+from wrolpi.errors import FileGroupIsTagged
 from wrolpi.files import indexers
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag, TagFile
@@ -187,12 +188,16 @@ class FileGroup(ModelHelper, Base):
         return self.my_files('application/epub', 'application/x-mobipocket-ebook')
 
     def delete(self):
-        """Delete this FileGroup record, and all of its files."""
+        """Delete this FileGroup record, and all of its files.
+
+        @raise FileGroupIsTagged: If any tags are related to me."""
+        if self.tag_files:
+            raise FileGroupIsTagged(f'Cannot delete {self} because it has tags')
+
         for path in self.my_paths():
             path.unlink()
 
-        session = Session.object_session(self)
-        if session:
+        if session := Session.object_session(self):
             session.delete(self)
 
     @property

@@ -67,11 +67,9 @@ class Archive(Base, ModelHelper):
         return self.archive_datetime > other.archive_datetime
 
     def delete(self):
-        self.unlink()
+        self.file_group.delete()
 
         session = Session.object_session(self)
-
-        session.delete(self.file_group)
         session.delete(self)
 
         if self.domain:

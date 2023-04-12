@@ -2,6 +2,7 @@ import pytest
 
 from modules.videos.models import Video
 from wrolpi.dates import now
+from wrolpi.errors import FileGroupIsTagged
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 
@@ -41,6 +42,22 @@ def test_delete_video(test_session, video_factory):
     test_session.commit()
     assert test_session.query(Video).count() == 0, 'Video was not deleted.'
     assert test_session.query(FileGroup).count() == 0, 'Video files were not deleted.'
+
+
+def test_delete_video_with_tag(test_session, video_factory, tag_factory):
+    """You cannot delete a video with a tag."""
+    video = video_factory(with_video_file=True, with_poster_ext='png')
+    tag = tag_factory()
+    video.add_tag(tag)
+    test_session.commit()
+
+    with pytest.raises(FileGroupIsTagged):
+        video.delete()
+
+    # Video was not deleted.
+    test_session.commit()
+    assert test_session.query(Video).count() == 1
+    assert test_session.query(FileGroup).count() == 1
 
 
 @pytest.mark.asyncio

@@ -154,8 +154,6 @@ async def archive_modeler():
                 .outerjoin(Archive, Archive.file_group_id == FileGroup.id) \
                 .limit(20)
 
-            logger.debug(f'{len(list(invalid_archives))=}')
-
             processed = 0
             for file_group, archive in results:
                 processed += 1

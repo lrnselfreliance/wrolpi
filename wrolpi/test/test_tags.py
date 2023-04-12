@@ -6,6 +6,7 @@ import yaml
 
 from wrolpi import tags
 from wrolpi.dates import now
+from wrolpi.errors import FileGroupIsTagged
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
@@ -167,6 +168,7 @@ def test_tags_crud(test_session, test_client, example_pdf, assert_tags_config):
 
 @pytest.mark.asyncio
 async def test_delete_tagged_file(test_session, example_pdf, tag_factory):
+    """You cannot delete a FileGroup if it is tagged."""
     await files_lib.refresh_files()
     tag = tag_factory()
 
@@ -174,8 +176,11 @@ async def test_delete_tagged_file(test_session, example_pdf, tag_factory):
     pdf.add_tag(tag)
     test_session.commit()
 
-    pdf.delete()
+    with pytest.raises(FileGroupIsTagged):
+        pdf.delete()
+
     test_session.commit()
+    assert test_session.query(FileGroup).count() == 1
 
 
 def test_import_empty_tags_config(test_session, test_tags_config):

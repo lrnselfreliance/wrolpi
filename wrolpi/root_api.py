@@ -397,7 +397,7 @@ async def get_tags_request(_: Request):
 @openapi.definition(
     summary='Create or update a Tag',
 )
-async def post_new_tag(_: Request, body: schema.TagRequest, tag_id: int = None):
+async def post_tag(_: Request, body: schema.TagRequest, tag_id: int = None):
     tags.upsert_tag(body.name, body.color, tag_id)
     if tag_id:
         return response.empty(HTTPStatus.OK)

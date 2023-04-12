@@ -354,16 +354,6 @@ function Archives() {
     const [deleteOpen, setDeleteOpen] = useState(false);
 
     useTitle('Archives');
-    const {searchParams} = useQuery();
-
-    let searchOrder = '-date';
-    if (searchParams.get('order')) {
-        // Use whatever order the user specified.
-        searchOrder = searchParams.get('order');
-    } else if (searchParams.get('q')) {
-        // User used a search_str
-        searchOrder = defaultSearchOrder;
-    }
 
     const {
         archives,

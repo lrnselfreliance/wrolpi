@@ -860,6 +860,7 @@ def get_refresh_progress():
             FROM file_group
         ''')
         results = dict(curs.fetchone())
+        # TODO counts are wrong if we are not refreshing all files.
 
         status = dict(
             counted_files=REFRESH.get('counted_files', 0),

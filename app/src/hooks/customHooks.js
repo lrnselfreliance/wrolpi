@@ -760,6 +760,6 @@ export const useSearchView = () => {
 }
 
 export const useSearchOrder = () => {
-    const [order, setOrder] = useOneQuery('order');
-    return {sort: order, setSort: setOrder}
+    const [sort, setSort] = useOneQuery('order');
+    return {sort, setSort}
 }

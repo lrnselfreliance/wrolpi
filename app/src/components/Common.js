@@ -976,13 +976,13 @@ export function SortButton({sorts = []}) {
         console.error('No sorts have been defined!');
     }
 
-    // Use the order in the URL query, fallback to the first in the orders array.
-    const defaultDesc = sort ? sort.startsWith('-') : true;
-    const defaultSort = sort ? sort.replaceAll(/^-/g, '') : sorts[0]['value'];
-
-    const [localSort, setLocalSort] = useState(defaultSort);
+    const [localSort, setLocalSort] = useState(sort ? sort.replaceAll(/^-/g, '') : null);
+    const [desc, setDesc] = useState(sort ? sort.startsWith('-') : true);
     const [open, setOpen] = useState(false);
-    const [desc, setDesc] = useState(defaultDesc);
+
+    // Remove the - from the front of the query sort, it will be added when toggling direction.
+    const sortKey = localSort ? localSort.replaceAll(/^-/g, '') : sorts[0]['value'];
+    const selectedSort = sorts.find(i => i['value'] === sortKey);
 
     useEffect(() => {
         if (localSort) {
@@ -999,6 +999,10 @@ export function SortButton({sorts = []}) {
 
     const toggleDesc = () => {
         setDesc(!desc);
+        if (!localSort) {
+            // No sort in URL, use the first.
+            setLocalSort(sorts[0]['value']);
+        }
         setOpen(false);
     }
 
@@ -1008,10 +1012,6 @@ export function SortButton({sorts = []}) {
             return <SButton key={i['value']} onClick={() => handleSortButton(i['value'])}>{i['text']}</SButton>
         })
     }
-
-    // Remove the - from the front of the query sort.
-    const sortKey = localSort.replaceAll(/^-/g, '');
-    const selectedSort = sorts.find(i => i['value'] === sortKey);
 
     return <>
         <Modal closeIcon

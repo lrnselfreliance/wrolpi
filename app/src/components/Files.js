@@ -502,7 +502,7 @@ export function FilesRefreshProgress() {
 
     if (refreshing) {
         // Default is Counting / Step 1.  Move progress bar toward the middle to avoid clipping out of the screen.
-        let params = {value: Math.floor(counted_files / 5), total: counted_files, progress: 'ratio'};
+        let params = {value: Math.floor(counted_files / 2), total: counted_files, progress: 'ratio'};
         let label = 'Refresh: Counting';
 
         if (discovery) {

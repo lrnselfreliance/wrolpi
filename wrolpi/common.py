@@ -836,7 +836,9 @@ async def apply_modelers():
         try:
             await modeler()
         except Exception as e:
-            logger.error(f'Modeler raised error', exc_info=e)
+            logger.error(f'Modeler {modeler.__name__} raised error', exc_info=e)
+            if PYTEST:
+                raise
         # Sleep to catch cancel.
         await asyncio.sleep(0)
 
@@ -851,8 +853,15 @@ def register_refresh_cleanup(func: callable):
 
 async def apply_refresh_cleanup():
     for func in REFRESH_CLEANUP:
-        logger_.info(f'Applying refresh cleanup {func.__name__}')
-        func()
+        try:
+            logger_.info(f'Applying refresh cleanup {func.__name__}')
+            func()
+        except Exception as e:
+            logger.error(f'Refresh cleanup {func.__name__} failed!', exc_info=e)
+            if PYTEST:
+                raise
+        # Sleep to catch cancel.
+        await asyncio.sleep(0)
 
 
 @iterify(tuple)

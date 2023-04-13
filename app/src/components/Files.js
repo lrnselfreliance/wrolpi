@@ -460,10 +460,10 @@ export function FilesSearchView({
         searchFiles,
         activePage,
         totalPages,
+        null,
+        null,
+        null,
         setPage,
-        null,
-        null,
-        null,
         true,
     );
 

@@ -2,10 +2,11 @@ import {CardIcon, Header, Placeholder, Segment} from "./Theme";
 import {PlaceholderLine, Item, Image} from "semantic-ui-react";
 import React from "react";
 import {ThemeContext} from "../contexts/contexts";
-import {encodeMediaPath, FileIcon, findPosterPath, isoDatetimeToString, PreviewLink} from "./Common";
+import {encodeMediaPath, FileIcon, findPosterPath, PreviewLink} from "./Common";
 import {Link} from "react-router-dom";
 import _ from "lodash";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import {FileRowTagIcon} from "./Files";
 
 const HeadlineParagraph = ({headline}) => {
     const {s} = React.useContext(ThemeContext);
@@ -13,12 +14,13 @@ const HeadlineParagraph = ({headline}) => {
         headline = headline.replaceAll('<b>', '<b><u>');
         headline = headline.replaceAll('</b>', '</b></u>');
         headline = headline.replaceAll('\n', '<br/>');
+        // Postgres inserts <b>...</b> tags which we will use.
         return <p {...s} dangerouslySetInnerHTML={{__html: headline}}></p>
     }
 }
 
 const FileHeadline = ({file, to}) => {
-    const {title_headline, b_headline, c_headline, d_headline} = file;
+    const {title, name, title_headline, b_headline, c_headline, d_headline} = file;
 
     let poster;
     const posterPath = findPosterPath(file);
@@ -29,12 +31,15 @@ const FileHeadline = ({file, to}) => {
         poster = <FileIcon file={file}/>;
     }
 
-    let header = <PreviewLink file={file}><HeadlineParagraph headline={title_headline}/></PreviewLink>;
+    let header = title || name;
+    if (title_headline) {
+        header = <PreviewLink file={file}><HeadlineParagraph headline={title_headline}/></PreviewLink>;
+    }
     if (to) {
         header = <Link to={to}><HeadlineParagraph headline={title_headline}/></Link>
     }
 
-    let body = <p>No highlights</p>
+    let body = <p><small>No highlights available.</small></p>;
     if (b_headline || c_headline || d_headline) {
         body = <>
             <HeadlineParagraph headline={b_headline}/>
@@ -48,7 +53,10 @@ const FileHeadline = ({file, to}) => {
             <Grid.Row>
                 <Grid.Column mobile={4} computer={2}>{poster}</Grid.Column>
                 <Grid.Column mobile={12} computer={12}>
-                    <span style={{fontSize: '1.25em'}}>{header}</span>
+                    <big>
+                        <FileRowTagIcon file={file}/>
+                        {header}
+                    </big>
                 </Grid.Column>
             </Grid.Row>
         </Grid>

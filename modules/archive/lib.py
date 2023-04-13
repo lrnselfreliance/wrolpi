@@ -406,7 +406,7 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
         params.update(params_)
         joins.append(join_)
 
-    if headline:
+    if search_str and headline:
         headline = ''',
                 ts_headline(fg.title, websearch_to_tsquery(%(search_str)s)) AS "title_headline",
                 ts_headline(fg.b_text, websearch_to_tsquery(%(search_str)s)) AS "b_headline",

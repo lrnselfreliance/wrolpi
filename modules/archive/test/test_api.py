@@ -62,6 +62,31 @@ def test_archives_search(test_session, archive_directory, archive_factory, test_
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
+def test_archives_search_headline(test_session, archive_directory, archive_factory, test_client):
+    """Headlines can be requested."""
+    archive_factory('example.com', 'https://example.com/one', 'my archive', 'foo bar qux')
+    archive_factory('example.com', 'https://example.com/one', 'other archive', 'foo baz qux qux')
+    archive_factory('example.org', title='archive third', contents='baz qux qux qux')
+    archive_factory('example.org')  # has no contents
+    test_session.commit()
+
+    content = dict(search_str='foo')
+    request, response = test_client.post('/api/archive/search', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+
+    # Headlines are only fetched if requested.
+    assert response.json['file_groups'][0]['d_headline'] is None
+    assert response.json['file_groups'][1]['d_headline'] is None
+
+    content = dict(search_str='foo', headline=True)
+    request, response = test_client.post('/api/archive/search', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+
+    # Postgresql uses <b>...</b> to highlight matching words.
+    assert response.json['file_groups'][0]['d_headline'] == '<b>foo</b> baz qux qux'
+    assert response.json['file_groups'][1]['d_headline'] == '<b>foo</b> bar qux'
+
+
 def test_search_offset(test_session, archive_factory, test_client):
     """Archive search can be offset."""
     for i in range(500):

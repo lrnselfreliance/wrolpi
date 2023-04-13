@@ -19,6 +19,14 @@ cat >/home/wrolpi/.pgpass <<'EOF'
 127.0.0.1:5432:gis:_renderd:wrolpi
 127.0.0.1:5432:wrolpi:wrolpi:wrolpi
 EOF
+cat >/home/wrolpi/wrolpi.desktop <<'EOF'
+[Desktop Entry]
+Encoding=UTF-8
+Name=WROLPi App
+Type=Link
+URL=http://locahost
+Icon=/opt/wrolpi/icon.png
+EOF
 chown -R ${FIRST_USER_NAME}:${FIRST_USER_NAME} /home/wrolpi
 chmod 0600 /home/wrolpi/.pgpass
 

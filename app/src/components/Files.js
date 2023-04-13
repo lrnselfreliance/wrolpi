@@ -54,6 +54,7 @@ import {FileBrowser} from "./FileBrowser";
 import {refreshDirectoryFiles, refreshFiles} from "../api";
 import {useSubscribeEventName} from "../Events";
 import {TagsSelector} from "../Tags";
+import {Headlines} from "./Headline";
 
 function EbookCard({file}) {
     const {s} = useContext(ThemeContext);
@@ -264,9 +265,20 @@ export function FileRowTagIcon({file}) {
     }
 }
 
-export function SearchViewButton() {
+export function SearchViewButton({headlines}) {
     const {view, setView} = useSearchView();
 
+    if (headlines) {
+        // Cycle: cards -> headline -> list
+        if (view === 'headline') {
+            return <Button icon='list' onClick={() => setView('list')}/>;
+        } else if (view === 'list') {
+            return <Button icon='th' onClick={() => setView('cards')}/>;
+        }
+        return <Button icon='searchengin' onClick={() => setView('headline')}/>;
+    }
+
+    // Cycle: cards -> list
     if (view === 'list') {
         return <Button icon='th' onClick={() => setView('cards')}/>;
     }
@@ -295,6 +307,7 @@ export function FilesView(
     selectedKeys,
     onSelect,
     setPage,
+    headlines = false,
     limitOptions = [12, 24, 48, 96],
 ) {
     const {view} = useSearchView();
@@ -328,11 +341,13 @@ export function FilesView(
             footer={footer}
             selectedKeys={selectedKeys || []}
         />;
+    } else if (view === 'headline') {
+        body = <Headlines results={files}/>;
     } else {
         body = <FileCards files={files}/>;
     }
 
-    const viewButton = <SearchViewButton/>
+    const viewButton = <SearchViewButton headlines={headlines}/>
     const limitDropdown = <SearchLimitDropdown limits={limitOptions}/>;
     const tagQuerySelector = <TagsQuerySelector/>;
 
@@ -446,6 +461,10 @@ export function FilesSearchView({
         activePage,
         totalPages,
         setPage,
+        null,
+        null,
+        null,
+        true,
     );
 
     return <>

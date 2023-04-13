@@ -438,6 +438,7 @@ function Archives() {
         selectedArchives,
         onSelect,
         setPage,
+        !!searchStr,
     );
 
     const searchInput = <SearchInput clearable

@@ -127,7 +127,11 @@ def search_videos(
     join = '\n'.join(joins)
     stmt = f'''
         SELECT
-            {select_columns}
+            {select_columns},
+           ts_headline(fg.title, websearch_to_tsquery(%(search_str)s)) AS "title_headline",
+           ts_headline(fg.b_text, websearch_to_tsquery(%(search_str)s)) AS "b_headline",
+           ts_headline(fg.c_text, websearch_to_tsquery(%(search_str)s)) AS "c_headline",
+           ts_headline(fg.d_text, websearch_to_tsquery(%(search_str)s)) AS "d_headline"
         FROM file_group fg
         {join}
         {where}

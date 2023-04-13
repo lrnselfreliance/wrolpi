@@ -416,7 +416,11 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
     stmt = f'''
             SELECT
                 fg.id -- always get `file_group.id` for `handle_file_group_search_results`
-                 {select_columns}
+                {select_columns},
+                ts_headline(fg.title, websearch_to_tsquery(%(search_str)s)) AS "title_headline",
+                ts_headline(fg.b_text, websearch_to_tsquery(%(search_str)s)) AS "b_headline",
+                ts_headline(fg.c_text, websearch_to_tsquery(%(search_str)s)) AS "c_headline",
+                ts_headline(fg.d_text, websearch_to_tsquery(%(search_str)s)) AS "d_headline"
             FROM file_group fg
             LEFT JOIN archive a ON a.file_group_id = fg.id
             {join}

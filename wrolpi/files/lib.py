@@ -592,7 +592,11 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     selects = f"{', '.join(selects)}, " if selects else ""
     join = '\n'.join(joins)
     stmt = f'''
-        SELECT fg.id, {selects} COUNT(*) OVER() AS total
+        SELECT fg.id, {selects} COUNT(*) OVER() AS total,
+           ts_headline(fg.title, websearch_to_tsquery(%(search_str)s)) AS "title_headline",
+           ts_headline(fg.b_text, websearch_to_tsquery(%(search_str)s)) AS "b_headline",
+           ts_headline(fg.c_text, websearch_to_tsquery(%(search_str)s)) AS "c_headline",
+           ts_headline(fg.d_text, websearch_to_tsquery(%(search_str)s)) AS "d_headline"
         FROM file_group fg
         {join}
         {f"WHERE {wheres}" if wheres else ""}
@@ -644,10 +648,16 @@ def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List
         total = results[0]['total'] if results else 0
         ordered_ids = [i['id'] for i in results]
         try:
-            ranks = [i['ts_rank'] for i in results]
+            extras = [dict(
+                ts_rank=i.get('ts_rank'),
+                title_headline=i.get('title_headline'),
+                b_headline=i.get('b_headline'),
+                c_headline=i.get('c_headline'),
+                d_headline=i.get('d_headline'),
+            ) for i in results]
         except KeyError:
             # No `ts_rank`, probably not searching `file_group.textsearch`.
-            ranks = []
+            extras = []
 
     with get_db_session() as session:
         from modules.videos.models import Video
@@ -657,15 +667,19 @@ def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List
         # Order FileGroups by their location in ordered_ids.
         file_groups: List[Tuple[FileGroup, Video]] = sorted(results, key=lambda i: ordered_ids.index(i[0].id))
         results = list()
-        for rank, (file_group, video) in zip_longest(ranks, file_groups):
+        for extra, (file_group, video) in zip_longest(extras, file_groups):
             video: Video
             if video:
                 results.append(video.__json__())
             else:
                 results.append(file_group.__json__())
             # Preserve the ts_ranks, if any.
-            if rank:
-                results[-1]['ts_rank'] = rank
+            if extra:
+                results[-1]['ts_rank'] = extra['ts_rank']
+                results[-1]['title_headline'] = extra['title_headline']
+                results[-1]['b_headline'] = extra['b_headline']
+                results[-1]['c_headline'] = extra['c_headline']
+                results[-1]['d_headline'] = extra['d_headline']
 
     return results, total
 

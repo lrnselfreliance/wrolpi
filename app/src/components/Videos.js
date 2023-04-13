@@ -176,6 +176,7 @@ function VideosPage() {
         selectedVideos,
         onSelect,
         setPage,
+        !!searchStr,
     );
 
     const searchInput = <SearchInput clearable

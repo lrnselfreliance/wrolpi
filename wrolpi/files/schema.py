@@ -25,6 +25,7 @@ class FilesSearchRequest:
     mimetypes: List[str] = field(default_factory=list)
     model: Optional[str] = None
     tag_names: List[str] = field(default_factory=list)
+    headline: bool = False
 
 
 @dataclass

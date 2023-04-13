@@ -540,7 +540,7 @@ async def apply_indexers():
 
 
 def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
-                 tags: List[str] = None) -> \
+                 tags: List[str] = None, headlines: bool = False) -> \
         Tuple[List[dict], int]:
     """Search the FileGroup table.
 
@@ -553,6 +553,8 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         offset: Offset the query.
         mimetypes: Only return files that match these mimetypes.
         model: Only return files that match this model.
+        tags: A list of tag names.
+        headlines: Includes Postgresql headlines if True.
     """
     params = dict(offset=offset, limit=limit)
     wheres = []
@@ -588,15 +590,21 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         params.update(params_)
         joins.append(join_)
 
+    if headlines:
+        headlines = ''',
+           ts_headline(fg.title, websearch_to_tsquery(%(search_str)s)) AS "title_headline",
+           ts_headline(fg.b_text, websearch_to_tsquery(%(search_str)s)) AS "b_headline",
+           ts_headline(fg.c_text, websearch_to_tsquery(%(search_str)s)) AS "c_headline",
+           ts_headline(fg.d_text, websearch_to_tsquery(%(search_str)s)) AS "d_headline"'''
+    else:
+        headlines = ''
+
     wheres = '\n AND '.join(wheres)
     selects = f"{', '.join(selects)}, " if selects else ""
     join = '\n'.join(joins)
     stmt = f'''
-        SELECT fg.id, {selects} COUNT(*) OVER() AS total,
-           ts_headline(fg.title, websearch_to_tsquery(%(search_str)s)) AS "title_headline",
-           ts_headline(fg.b_text, websearch_to_tsquery(%(search_str)s)) AS "b_headline",
-           ts_headline(fg.c_text, websearch_to_tsquery(%(search_str)s)) AS "c_headline",
-           ts_headline(fg.d_text, websearch_to_tsquery(%(search_str)s)) AS "d_headline"
+        SELECT fg.id, {selects} COUNT(*) OVER() AS total
+            {headlines}
         FROM file_group fg
         {join}
         {f"WHERE {wheres}" if wheres else ""}

@@ -375,7 +375,8 @@ ARCHIVE_ORDERS = {
 }
 
 
-def search_archives(search_str: str, domain: str, limit: int, offset: int, order: str, tag_names: List[str]) \
+def search_archives(search_str: str, domain: str, limit: int, offset: int, order: str, tag_names: List[str],
+                    headline: bool = False) \
         -> Tuple[List[dict], int]:
     # Always filter FileGroups to Archives.
     wheres = ["fg.model = 'archive'"]
@@ -405,6 +406,15 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
         params.update(params_)
         joins.append(join_)
 
+    if headline:
+        headline = ''',
+                ts_headline(fg.title, websearch_to_tsquery(%(search_str)s)) AS "title_headline",
+                ts_headline(fg.b_text, websearch_to_tsquery(%(search_str)s)) AS "b_headline",
+                ts_headline(fg.c_text, websearch_to_tsquery(%(search_str)s)) AS "c_headline",
+                ts_headline(fg.d_text, websearch_to_tsquery(%(search_str)s)) AS "d_headline"'''
+    else:
+        headline = ''
+
     if domain:
         params['domain'] = domain
         wheres.append('a.domain_id = (select id from domains where domains.domain = %(domain)s)')
@@ -416,11 +426,8 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
     stmt = f'''
             SELECT
                 fg.id -- always get `file_group.id` for `handle_file_group_search_results`
-                {select_columns},
-                ts_headline(fg.title, websearch_to_tsquery(%(search_str)s)) AS "title_headline",
-                ts_headline(fg.b_text, websearch_to_tsquery(%(search_str)s)) AS "b_headline",
-                ts_headline(fg.c_text, websearch_to_tsquery(%(search_str)s)) AS "c_headline",
-                ts_headline(fg.d_text, websearch_to_tsquery(%(search_str)s)) AS "d_headline"
+                {select_columns}
+                {headline}
             FROM file_group fg
             LEFT JOIN archive a ON a.file_group_id = fg.id
             {join}

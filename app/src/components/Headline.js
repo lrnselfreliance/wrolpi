@@ -76,25 +76,24 @@ export const Headlines = ({results}) => {
         return <Segment>No results!</Segment>
     }
 
-    let items = [];
+    let headlines = [];
     for (let i = 0; i < results.length; i++) {
         const result = results[i];
         const {model, data, video} = result;
 
         if (model === 'video' && !_.isEmpty(video)) {
-            let video_url = `/videos/video/${video.id}`;
-            const channel = video.channel ? video.channel : null;
-            if (channel) {
-                video_url = `/videos/channel/${channel.id}/video/${video.id}`;
-            }
-            items = [...items, <FileHeadline key={result['key']} file={result} to={video_url}/>];
+            const {channel} = video;
+            const video_url = channel
+                ? `/videos/channel/${channel.id}/video/${video.id}`
+                : `/videos/video/${video.id}`;
+            headlines = [...headlines, <FileHeadline key={result['key']} file={result} to={video_url}/>];
         } else if (model === 'archive' && !_.isEmpty(data)) {
-            items = [...items, <FileHeadline key={result['key']} file={result} to={`/archive/${data.id}`}/>];
+            headlines = [...headlines, <FileHeadline key={result['key']} file={result} to={`/archive/${data.id}`}/>];
         } else {
-            items = [...items, <FileHeadline key={result['key']} file={result}/>];
+            headlines = [...headlines, <FileHeadline key={result['key']} file={result}/>];
         }
     }
     return <>
-        {items}
+        {headlines}
     </>
 }

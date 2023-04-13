@@ -172,6 +172,8 @@ export const useSearchArchives = (defaultLimit) => {
     const searchStr = searchParams.get('q') || '';
     const order = searchParams.get('order');
     const activeTags = searchParams.getAll('tag');
+    const {view} = useSearchView();
+    const headline = view === 'headline';
 
     const [archives, setArchives] = useState(null);
     const [totalPages, setTotalPages] = useState(0);
@@ -180,7 +182,7 @@ export const useSearchArchives = (defaultLimit) => {
         setArchives(null);
         setTotalPages(0);
         try {
-            let [archives_, total] = await searchArchives(offset, limit, domain, searchStr, order, activeTags);
+            let [archives_, total] = await searchArchives(offset, limit, domain, searchStr, order, activeTags, headline);
             setArchives(archives_);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
@@ -197,7 +199,7 @@ export const useSearchArchives = (defaultLimit) => {
 
     useEffect(() => {
         localSearchArchives();
-    }, [searchStr, limit, domain, order, activePage, JSON.stringify(activeTags)]);
+    }, [searchStr, limit, domain, order, activePage, JSON.stringify(activeTags), headline]);
 
     const setSearchStr = (value) => {
         updateQuery({q: value, o: 0, order: undefined});
@@ -230,6 +232,8 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
     const searchStr = searchParams.get('q') || '';
     const order = searchParams.get('order') || order_by;
     const activeTags = searchParams.getAll('tag');
+    const {view} = useSearchView();
+    const headline = view === 'headline';
 
     const [videos, setVideos] = useState();
     const [totalPages, setTotalPages] = useState(0);
@@ -238,7 +242,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
         setVideos(null);
         setTotalPages(0);
         try {
-            let [videos_, total] = await searchVideos(offset, limit, channelId, searchStr, order, activeTags);
+            let [videos_, total] = await searchVideos(offset, limit, channelId, searchStr, order, activeTags, headline);
             setVideos(videos_);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
@@ -255,7 +259,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
 
     useEffect(() => {
         localSearchVideos();
-    }, [searchStr, limit, channelId, offset, order_by, JSON.stringify(activeTags)]);
+    }, [searchStr, limit, channelId, offset, order_by, JSON.stringify(activeTags), headline]);
 
     const setSearchStr = (value) => {
         updateQuery({q: value, o: 0, order: undefined});
@@ -404,10 +408,12 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
     const filter = searchParams.get('filter');
     const model_ = searchParams.get('model');
     const activeTags = searchParams.getAll('tag');
+    const {view} = useSearchView();
 
     const [searchFiles, setSearchFiles] = useState(null);
     const [totalPages, setTotalPages] = useState(0);
     const [activePage, setActivePage] = useState(calculatePage(offset, limit));
+    const headline = view === 'headline';
 
     const localSearchFiles = async () => {
         if (!emptySearch && !searchStr && !activeTags) {
@@ -418,7 +424,7 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
         setTotalPages(0);
         try {
             let [file_groups, total] = await filesSearch(
-                offset, limit, searchStr, mimetypes, model || model_, activeTags);
+                offset, limit, searchStr, mimetypes, model || model_, activeTags, headline);
             setSearchFiles(file_groups);
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
@@ -434,7 +440,7 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
 
     useEffect(() => {
         localSearchFiles();
-    }, [searchStr, limit, offset, activePage, filter, model, model_, JSON.stringify(activeTags)]);
+    }, [searchStr, limit, offset, activePage, filter, model, model_, JSON.stringify(activeTags), headline]);
 
     const setPage = (i) => {
         i = parseInt(i);

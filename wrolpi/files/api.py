@@ -87,7 +87,7 @@ async def refresh_progress(request: Request):
 @validate(schema.FilesSearchRequest)
 async def post_search_files(_: Request, body: schema.FilesSearchRequest):
     file_groups, total = lib.search_files(body.search_str, body.limit, body.offset, body.mimetypes, body.model,
-                                          body.tag_names)
+                                          body.tag_names, body.headline)
     return json_response(dict(file_groups=file_groups, totals=dict(file_groups=total)))
 
 

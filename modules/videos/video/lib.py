@@ -77,6 +77,7 @@ def search_videos(
         channel_id: int = None,
         order: str = None,
         tag_names: List[str] = None,
+        headline: bool = False,
 ) -> Tuple[List[dict], int]:
     tag_names = tag_names or []
     # Only search videos.
@@ -106,6 +107,15 @@ def search_videos(
         params.update(params_)
         joins.append(join_)
 
+    if headline:
+        headline = ''',
+           ts_headline(fg.title, websearch_to_tsquery(%(search_str)s)) AS "title_headline",
+           ts_headline(fg.b_text, websearch_to_tsquery(%(search_str)s)) AS "b_headline",
+           ts_headline(fg.c_text, websearch_to_tsquery(%(search_str)s)) AS "c_headline",
+           ts_headline(fg.d_text, websearch_to_tsquery(%(search_str)s)) AS "d_headline"'''
+    else:
+        headline = ''
+
     # Convert the user-friendly order by into a real order by, restrict what can be interpolated by using the
     # whitelist.
     order_by = VIDEO_ORDERS[DEFAULT_VIDEO_ORDER]
@@ -127,11 +137,8 @@ def search_videos(
     join = '\n'.join(joins)
     stmt = f'''
         SELECT
-            {select_columns},
-           ts_headline(fg.title, websearch_to_tsquery(%(search_str)s)) AS "title_headline",
-           ts_headline(fg.b_text, websearch_to_tsquery(%(search_str)s)) AS "b_headline",
-           ts_headline(fg.c_text, websearch_to_tsquery(%(search_str)s)) AS "c_headline",
-           ts_headline(fg.d_text, websearch_to_tsquery(%(search_str)s)) AS "d_headline"
+            {select_columns}
+            {headline}
         FROM file_group fg
         {join}
         {where}

@@ -31,6 +31,7 @@ class ArchiveSearchRequest:
     limit: Optional[int] = None
     order_by: Optional[str] = None
     tag_names: List[str] = field(default_factory=list)
+    headline: bool = False
 
 
 @dataclass

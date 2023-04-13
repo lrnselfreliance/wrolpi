@@ -145,6 +145,7 @@ class VideoSearchRequest:
     order_by: Optional[str] = DEFAULT_VIDEO_ORDER
     channel_id: Optional[int] = None
     tag_names: List[str] = field(default_factory=list)
+    headline: bool = False
 
 
 @dataclass

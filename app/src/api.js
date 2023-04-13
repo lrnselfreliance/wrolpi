@@ -1,5 +1,6 @@
 import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, emptyToNull, OTP_API, VIDEOS_API} from "./components/Common";
 import {toast} from "react-semantic-toasts-2";
+import {computeHeadingLevel} from "@testing-library/react";
 
 function timeoutPromise(ms, promise) {
     // Create a timeout wrapper around a promise.  If the timeout is reached, throw an error.  Otherwise, return
@@ -103,7 +104,7 @@ export async function getChannel(id) {
     return (await response.json())['channel'];
 }
 
-export async function searchVideos(offset, limit, channelId, searchStr, order_by, tagNames) {
+export async function searchVideos(offset, limit, channelId, searchStr, order_by, tagNames, headline) {
     // Build a search query to retrieve a list of videos from the API
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
@@ -117,6 +118,9 @@ export async function searchVideos(offset, limit, channelId, searchStr, order_by
     }
     if (tagNames) {
         body['tag_names'] = tagNames;
+    }
+    if (headline) {
+        body['headline'] = true;
     }
 
     console.debug('searching videos', body);
@@ -350,7 +354,7 @@ export async function deleteArchives(archiveIds) {
     }
 }
 
-export async function searchArchives(offset, limit, domain, searchStr, order, tagNames) {
+export async function searchArchives(offset, limit, domain, searchStr, order, tagNames, headline) {
     // Build a search query to retrieve a list of videos from the API
     offset = parseInt(offset || 0);
     limit = parseInt(limit || DEFAULT_LIMIT);
@@ -366,6 +370,9 @@ export async function searchArchives(offset, limit, domain, searchStr, order, ta
     }
     if (tagNames) {
         body['tag_names'] = tagNames;
+    }
+    if (headline) {
+        body['headline'] = true;
     }
 
     console.debug('searching archives', body);
@@ -479,7 +486,7 @@ export async function deleteDownload(downloadId) {
     }
 }
 
-export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames) {
+export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline) {
     const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit)};
     if (mimetypes) {
         body['mimetypes'] = mimetypes;
@@ -489,6 +496,9 @@ export async function filesSearch(offset, limit, searchStr, mimetypes, model, ta
     }
     if (tagNames) {
         body['tag_names'] = tagNames;
+    }
+    if (headline) {
+        body['headline'] = true;
     }
     console.debug('searching files', body);
     const response = await apiPost(`${API_URI}/files/search`, body);

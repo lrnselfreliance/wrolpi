@@ -195,7 +195,7 @@ class FileGroup(ModelHelper, Base):
             raise FileGroupIsTagged(f'Cannot delete {self} because it has tags')
 
         for path in self.my_paths():
-            path.unlink()
+            path.unlink(missing_ok=True)
 
         if session := Session.object_session(self):
             session.delete(self)

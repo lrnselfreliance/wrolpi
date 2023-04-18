@@ -13,8 +13,8 @@ from wrolpi.common import Base, ModelHelper, logger, get_media_directory, backgr
 from wrolpi.dates import now, TZDateTime
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.downloader import Download, download_manager
-from wrolpi.errors import UnknownVideo, FileGroupIsTagged
-from wrolpi.files.lib import refresh_files, get_mimetype, split_path_stem_and_suffix
+from wrolpi.errors import UnknownVideo
+from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag, TagFile
@@ -232,7 +232,7 @@ class Video(ModelHelper, Base):
 
     @property
     def video_path(self) -> Optional[pathlib.Path]:
-        if self.file_group.primary_path and get_mimetype(self.file_group.primary_path).startswith('video/'):
+        if self.file_group.primary_path:
             return self.file_group.primary_path
 
         # No primary file somehow, return the first video file.

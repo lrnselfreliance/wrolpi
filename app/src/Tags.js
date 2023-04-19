@@ -1,21 +1,14 @@
 import React, {useEffect, useState} from "react";
 import {deleteTag, getTags, saveTag} from "./api";
 import {
-    Button as SButton,
     Confirm,
     Dimmer,
     Divider,
     Dropdown,
     Form,
-    FormInput,
     Grid,
-    Header,
     Label,
     LabelGroup,
-    Loader,
-    Loader as SLoader,
-    Modal,
-    Table as STable,
     TableBody,
     TableCell,
     TableHeader,
@@ -23,7 +16,18 @@ import {
     TableRow,
 } from "semantic-ui-react";
 import {contrastingColor} from "./components/Common";
-import {Segment} from "./components/Theme";
+import {
+    Button,
+    FormInput,
+    Header,
+    Loader,
+    Modal,
+    ModalActions,
+    ModalContent,
+    ModalHeader,
+    Segment,
+    Table
+} from "./components/Theme";
 import _ from "lodash";
 import {HexColorPicker} from "react-colorful";
 import {useRecurringTimeout} from "./hooks/customHooks";
@@ -135,7 +139,7 @@ function EditTagRow({tag, onDelete, onEdit}) {
     const {name, color, id, count} = tag;
 
     const deleteConfirm = <>
-        <SButton color='red' onClick={() => setConfirmDeleteOpen(true)} icon='trash'/>
+        <Button color='red' onClick={() => setConfirmDeleteOpen(true)} icon='trash'/>
         <Confirm
             id={`confirm${name}`}
             open={confirmDeleteOpen}
@@ -145,7 +149,7 @@ function EditTagRow({tag, onDelete, onEdit}) {
             onConfirm={async () => onDelete(id, name)}
         />
     </>;
-    const editButton = <SButton primary onClick={() => onEdit(name, color, id)} icon='edit'/>;
+    const editButton = <Button primary onClick={() => onEdit(name, color, id)} icon='edit'/>;
     const nameLabel = <LabelGroup tag>
         <NameToTagLabel name={name}/>
     </LabelGroup>;
@@ -217,8 +221,8 @@ function EditTagsModal() {
                onOpen={() => setOpen(true)}
                onClose={localOnClose}
         >
-            <Modal.Header>Edit Tags</Modal.Header>
-            <Modal.Content>
+            <ModalHeader>Edit Tags</ModalHeader>
+            <ModalContent>
                 <Label.Group tag>
                     <Label size='large' style={{backgroundColor: tagColor, color: textColor}}>
                         {tagName || 'Example Tag'}
@@ -227,7 +231,7 @@ function EditTagsModal() {
 
                 <Form autoComplete='off'>
                     <FormInput required
-                               label='Tag Name'
+                               label={<b>Tag Name</b>}
                                placeholder='Unique name'
                                value={tagName}
                                onChange={(e, {value}) => setTagName(value)}
@@ -236,17 +240,17 @@ function EditTagsModal() {
 
                 <HexColorPicker color={tagColor} onChange={setTagColor} style={{marginTop: '1em'}}/>
 
-                <SButton color='violet'
-                         size='big'
-                         onClick={localSaveTag}
-                         style={{marginTop: '2em'}}
-                         disabled={!!!tagName}
+                <Button color='violet'
+                        size='big'
+                        onClick={localSaveTag}
+                        style={{marginTop: '2em'}}
+                        disabled={!!!tagName}
                 >
                     Save
-                </SButton>
+                </Button>
 
                 <Divider/>
-                <STable striped basic='very' unstackable>
+                <Table striped basic='very' unstackable>
                     <TableHeader>
                         <TableRow>
                             <TableHeaderCell width={2}>Delete</TableHeaderCell>
@@ -264,12 +268,12 @@ function EditTagsModal() {
                     <TableBody>
                         {content}
                     </TableBody>
-                </STable>
-            </Modal.Content>
+                </Table>
+            </ModalContent>
         </Modal>
-        <SButton onClick={() => setOpen(true)} color='violet'>
+        <Button onClick={() => setOpen(true)} color='violet'>
             Edit
-        </SButton>
+        </Button>
     </>
 }
 
@@ -324,33 +328,33 @@ export function AddTagsButton({
     const unusedTagsGroup = <TagsGroup tagNames={unusedTags} onClick={addTag}/>;
 
     return <>
-        <SButton icon={active ? 'tags' : 'tag'} onClick={handleOpen} primary={!!active}/>
+        <Button icon={active ? 'tags' : 'tag'} onClick={handleOpen} primary={!!active}/>
         <Modal closeIcon
                open={open}
                onOpen={(e) => handleOpen(e)}
                onClose={() => setOpen(false)}>
-            <Modal.Content>
-                {loading && <Dimmer active><SLoader/></Dimmer>}
+            <ModalContent>
+                {loading && <Dimmer active><Loader/></Dimmer>}
                 <Header as='h4'>Applied Tags</Header>
 
-                {localTags && localTags.length > 0 ? selectedTagsGroup : 'Add tags below'}
+                {localTags && localTags.length > 0 ? selectedTagsGroup : 'Add one or more tags below'}
 
                 <Divider/>
 
                 {unusedTags && unusedTags.length > 0 ? unusedTagsGroup : 'You have no tags'}
-            </Modal.Content>
-            <Modal.Actions>
+            </ModalContent>
+            <ModalActions>
                 <Grid textAlign='left'>
                     <Grid.Row>
                         <Grid.Column width={8}>
                             {!hideEdit && <EditTagsModal/>}
                         </Grid.Column>
                         <Grid.Column width={8}>
-                            <SButton onClick={() => setOpen(false)} floated='right'>Close</SButton>
+                            <Button onClick={() => setOpen(false)} floated='right'>Close</Button>
                         </Grid.Column>
                     </Grid.Row>
                 </Grid>
-            </Modal.Actions>
+            </ModalActions>
         </Modal>
     </>
 }
@@ -402,7 +406,7 @@ export const TagsSelector = ({
 export const TagsDashboard = () => {
     const {tagNames, TagsLinkGroup} = React.useContext(TagsContext);
 
-    let availableTagsGroup = <SLoader active inline/>;
+    let availableTagsGroup = <Loader active inline/>;
     if (tagNames && tagNames.length) {
         availableTagsGroup = <TagsLinkGroup tagNames={tagNames} style={{marginTop: '0.5em'}}/>;
     }

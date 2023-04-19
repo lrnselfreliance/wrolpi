@@ -1,6 +1,8 @@
+import pathlib
 from pathlib import Path
 from typing import List, Dict, Union
 
+from sqlalchemy import asc
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -194,3 +196,13 @@ def download_channel(id_: int):
         raise InvalidDownload(f'Channel {channel.name} does not have a download!')
     download.renew(reset_attempts=True)
     session.commit()
+
+
+@optional_session
+def search_channels_by_directory(name: str, limit: int = 5, session: Session = None) -> List[Channel]:
+    channels = session.query(Channel) \
+        .filter(Channel.directory.ilike(f'%{name}%')) \
+        .order_by(asc(Channel.name)) \
+        .limit(limit) \
+        .all()
+    return channels

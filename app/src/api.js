@@ -1,6 +1,5 @@
 import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, emptyToNull, OTP_API, VIDEOS_API} from "./components/Common";
 import {toast} from "react-semantic-toasts-2";
-import {computeHeadingLevel} from "@testing-library/react";
 
 function timeoutPromise(ms, promise) {
     // Create a timeout wrapper around a promise.  If the timeout is reached, throw an error.  Otherwise, return
@@ -803,4 +802,26 @@ export async function sendNotification(message, url) {
         toast({type: 'error', title: 'Error', description: 'Your share failed to send!', time: 5000});
         console.error('Failed to share');
     }
+}
+
+export async function searchDirectories(name) {
+    const body = {name: name || ''};
+    const response = await apiPost(`${API_URI}/files/search_directories`, body);
+    if (response.status === 204) {
+        return [];
+    } else if (response.status === 200) {
+        const content = await response.json();
+        return content;
+    } else {
+        toast({type: 'error', title: 'Error', description: 'Failed to search directories!', time: 5000});
+    }
+}
+
+export async function uploadFiles(files, destination) {
+    const data = new FormData();
+    for (let i = 0; i < files.length; i++) {
+        data.append('file', files[i]);
+    }
+    data.append('destination', destination);
+    console.log(data);
 }

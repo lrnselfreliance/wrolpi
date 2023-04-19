@@ -1,13 +1,14 @@
 import React, {useContext, useState} from "react";
 import {getDownloaders, postDownload} from "../api";
-import {DirectoryInput, frequencyOptions, HelpPopup, rssFrequencyOptions, WROLModeMessage} from "./Common";
+import {DirectorySearch, frequencyOptions, HelpPopup, rssFrequencyOptions, WROLModeMessage} from "./Common";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {ThemeContext} from "../contexts/contexts";
-import {Accordion, Button, Form, FormField, FormGroup, FormInput, Header, Loader, Segment, TextArea} from "./Theme";
-import {AccordionContent, AccordionTitle, FormDropdown} from "semantic-ui-react";
+import {Accordion, Button, Form, FormInput, Header, Loader, TextArea} from "./Theme";
+import {AccordionContent, AccordionTitle, Form as SForm, FormDropdown} from "semantic-ui-react";
 import {Link} from "react-router-dom";
 import {TagsSelector} from "../Tags";
+import {toast} from "react-semantic-toasts-2";
 
 const validUrl = /^(http|https):\/\/[^ "]+$/;
 
@@ -24,6 +25,7 @@ class Downloader extends React.Component {
             tagNames: [],
             urls: '',
             valid: true,
+            destinationRequired: props.destinationRequired !== undefined ? props.destinationRequired : false,
         };
     }
 
@@ -35,6 +37,8 @@ class Downloader extends React.Component {
                 let response = await postDownload(urls, downloader, null, null, null, destination, tagNames);
                 if (response.status === 204) {
                     this.setState({urls: '', pending: false, submitted: true});
+                } else {
+                    toast({type: 'error', title: 'Error', description: 'Failed to create download!'});
                 }
             } finally {
                 this.setState({pending: false});
@@ -44,10 +48,6 @@ class Downloader extends React.Component {
 
     handleInputChange = async (event, {name, value}) => {
         this.setState({[name]: value}, this.validateUrls);
-    }
-
-    handleDestinationChange = (value) => {
-        this.setState({destination: value});
     }
 
     validateUrls = async () => {
@@ -84,23 +84,31 @@ class Downloader extends React.Component {
     }
 
     render() {
-        let disabled = !this.state.urls || !this.state.valid || this.state.pending || !this.state.downloader;
-        const {advancedOpen, destination, submitted, tagNames} = this.state;
-        const {header, withDestination, withTags} = this.props;
+        const {
+            advancedOpen,
+            submitted,
+            tagNames,
+            urls,
+            valid,
+            pending,
+            downloader,
+            destination,
+            destinationRequired
+        } = this.state;
+        let disabled = !urls || !valid || pending || !downloader;
+        const {header, withTags, withSearchDirectory} = this.props;
 
-        let destinationField;
-        if (withDestination) {
-            destinationField = <FormGroup>
-                <FormField width={16}>
+        let directorySearch;
+        if (withSearchDirectory) {
+            directorySearch = <div style={{marginTop: '1em'}}>
+                <SForm.Field required={destinationRequired}>
                     <label>Destination</label>
-                    <DirectoryInput
-                        isDirectory={true}
-                        value={destination}
-                        setInput={this.handleDestinationChange}
-                        placeholder='download/into/custom/directory'
-                    />
-                </FormField>
-            </FormGroup>;
+                    <DirectorySearch onSelect={i => this.setState({destination: i})}/>
+                </SForm.Field>
+            </div>;
+        }
+        if (destinationRequired) {
+            disabled = !destination || disabled;
         }
 
         let tagsSelector;
@@ -109,15 +117,12 @@ class Downloader extends React.Component {
         }
 
         const advancedAccordion = <Accordion>
-            <AccordionTitle onClick={() => this.setState({advancedOpen: !advancedOpen})}>
-                <Icon name='dropdown'/>Advanced
+            <AccordionTitle active={advancedOpen} onClick={() => this.setState({advancedOpen: !advancedOpen})}>
+                <Icon name='dropdown'/>
+                Advanced
             </AccordionTitle>
             <AccordionContent active={advancedOpen}>
-                <Segment>
-                    {destinationField}
-                    {withDestination && withTags && <br/>}
-                    {tagsSelector}
-                </Segment>
+                {directorySearch}
             </AccordionContent>
         </Accordion>;
 
@@ -132,8 +137,14 @@ class Downloader extends React.Component {
                           name='urls'
                           onChange={this.handleInputChange}
                           value={this.state.urls}
+                          style={{marginBottom: '1em'}}
                 />
-                {(withDestination || withTags) && advancedAccordion}
+                {tagsSelector}
+                {pending && <Loader active={pending}/>}
+
+                {/* Display DirectorySearch if its required, show it in an Accordion if it's not required */}
+                {withSearchDirectory ? destinationRequired ? directorySearch : advancedAccordion : null}
+
                 <Button content='Cancel' onClick={this.props.clearSelected}/>
                 <Button primary style={{marginTop: '1em'}} disabled={disabled}>Download</Button>
                 {submitted && viewDownloads}
@@ -195,7 +206,7 @@ class ChannelDownload extends React.Component {
 
         return <Form>
             <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
-            <Header as='h4'><Icon name='film'/> Channel / Playlist</Header>
+            <Header as='h4'><Icon name='film' color='blue'/> Channel / Playlist</Header>
             <FormInput
                 required
                 label='URL'
@@ -225,7 +236,7 @@ class ChannelDownload extends React.Component {
                 onClick={this.handleSubmit}
                 disabled={buttonDisabled}
             />
-            <Loader active={pending}/>
+            {pending && <Loader active={pending}/>}
             {success && <Icon name='check'/>}
         </Form>
     }
@@ -318,7 +329,7 @@ class RSSDownload extends ChannelDownload {
 
         return <Form>
             <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
-            <Header as='h4'><Icon name='rss'/> RSS Feed</Header>
+            <Header as='h4'><Icon name='rss' color='orange'/> RSS Feed</Header>
             <FormInput
                 required
                 label='URL'
@@ -373,7 +384,7 @@ class RSSDownload extends ChannelDownload {
                 onClick={this.handleSubmit}
                 disabled={buttonDisabled}
             />
-            <Loader active={pending}/>
+            {pending && <Loader active={pending}/>}
             {success && <Icon name='check'/>}
         </Form>
     }
@@ -397,7 +408,7 @@ export function DownloadMenu({onOpen, disabled}) {
         />
         <Button
             color='green'
-            content='Archive'
+            content='Archives'
             disabled={disabled}
             onClick={() => localOnOpen('archive')}
             style={{marginBottom: '1em'}}
@@ -415,6 +426,13 @@ export function DownloadMenu({onOpen, disabled}) {
             onClick={() => localOnOpen('rss')}
             style={{marginBottom: '1em'}}
         />
+        <Button
+            color='black'
+            content='File'
+            disabled={disabled}
+            onClick={() => localOnOpen('file')}
+            style={{marginBottom: '1em'}}
+        />
     </>);
 
     function clearSelected() {
@@ -425,25 +443,29 @@ export function DownloadMenu({onOpen, disabled}) {
     const downloaders = {
         archive: <Downloader
             clearSelected={clearSelected}
-            header={<><Icon name='file alternate'/> Archive</>}
+            header={<><Icon name='file alternate' color='green'/> Archives</>}
             downloader='archive'
             withTags={true}/>,
         video: <Downloader
             clearSelected={clearSelected}
-            header={<><Icon name='film'/> Videos</>}
+            header={<><Icon name='film' color='blue'/> Videos</>}
             downloader='video'
-            withDestination={true}
+            withSearchDirectory={true}
             withTags={true}/>,
         video_channel: <ChannelDownload clearSelected={clearSelected}/>,
-        rss: <RSSDownload
+        rss: <RSSDownload clearSelected={clearSelected}/>,
+        file: <Downloader
             clearSelected={clearSelected}
-            header={<><Icon name='rss square'/> RSS</>}/>,
+            header={<><Icon name='file'/> Files</>}
+            downloader='file'
+            withSearchDirectory={true}
+            destinationRequired={true}
+            withTags={true}/>,
     };
 
     body = downloader in downloaders ? downloaders[downloader] : body;
 
     return <>
-        <Header as='h2'>Download</Header>
         {body}
     </>
 }

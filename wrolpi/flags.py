@@ -129,6 +129,7 @@ ffprobe_installed = Flag('ffprobe_installed')
 nmcli_installed = Flag('nmcli_installed')
 readability_installed = Flag('readability_installed')
 singlefile_installed = Flag('singlefile_installed')
+wget_installed = Flag('wget_installed')
 yt_dlp_installed = Flag('yt_dlp_installed')
 
 

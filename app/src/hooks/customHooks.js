@@ -17,6 +17,7 @@ import {
     getVideo,
     getVideosStatistics,
     searchArchives,
+    searchDirectories,
     searchVideos,
     setHotspot,
     setThrottle,
@@ -622,6 +623,39 @@ export const useDirectories = (defaultDirectory) => {
     return {directory, directories, setDirectory, exists, isDir, isFile};
 }
 
+export const useSearchDirectories = (value) => {
+    const [directoryName, setDirectoryName] = useState(value ?? '');
+    const [directories, setDirectories] = useState(null);
+    const [channelDirectories, setChannelDirectories] = useState(null);
+    const [domainDirectories, setDomainDirectories] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    const localSearchDirectories = async () => {
+        setLoading(true);
+        try {
+            const {directories: dirs, channel_directories, domain_directories} = await searchDirectories(directoryName);
+            setDirectories(dirs);
+            setChannelDirectories(channel_directories);
+            setDomainDirectories(domain_directories);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        localSearchDirectories();
+    }, [directoryName]);
+
+    return {
+        directoryName,
+        setDirectoryName,
+        directories,
+        loading,
+        channelDirectories,
+        domainDirectories
+    }
+}
+
 export const useSettings = () => {
     const [settings, setSettings] = useState({});
 
@@ -644,6 +678,12 @@ export const useSettings = () => {
     }, []);
 
     return {settings, fetchSettings};
+}
+
+export const useMediaDirectory = () => {
+    const {settings} = useSettings();
+
+    return settings['media_directory'];
 }
 
 export const useSettingsInterval = () => {
@@ -768,4 +808,115 @@ export const useSearchView = () => {
 export const useSearchOrder = () => {
     const [sort, setSort] = useOneQuery('order');
     return {sort, setSort}
+}
+
+export const useUploadFile = () => {
+    const [files, setFiles] = useState([]);
+    const [progresses, setProgresses] = useState({});
+    const [destination, setDestination] = useState('');
+
+    const handleProgress = (name, chunk, totalChunks, status, type) => {
+        const percent = Math.round((100 * chunk) / totalChunks);
+        const newProgress = {[name]: {percent, status, type}};
+        setProgresses(prevState => ({...prevState, ...newProgress}));
+    }
+
+    const handleFilesChange = (newFiles) => {
+        let newProgresses = {};
+        newFiles.map(i => {
+            newProgresses = {...newProgresses, [i['name']]: {percent: 0, status: 'pending'}};
+        });
+        setProgresses(newProgresses);
+        setFiles(newFiles);
+    }
+
+    const uploadChunk = async (file, chunkNum, chunkSize, totalChunks, tries, maxTries) => {
+        if (tries > maxTries) {
+            console.error(`Exceeded max tries ${maxTries}`);
+        }
+
+        const start = chunkNum * chunkSize;
+        const end = Math.min(start + chunkSize, file.size);
+        // The bytes that we will send.
+        const chunk = file.slice(start, end);
+
+        const formData = new FormData();
+        formData.append('chunkNumber', chunkNum.toString());
+        formData.append('filename', file.path);
+        formData.append('totalChunks', totalChunks.toString());
+        formData.append('destination', destination);
+        // Send the size that we're actually sending.
+        formData.append('chunkSize', chunk.size.toString());
+        formData.append('chunk', chunk);
+
+        console.debug(`file upload: tries=${tries} chunkNum=${chunkNum} totalChunks=${totalChunks} chunkSize=${chunk.size} destination=${destination}`);
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/api/files/upload', true);
+        xhr.onreadystatechange = async () => {
+            if (xhr.readyState === 4) {
+                if (xhr.status === 200 || xhr.status === 416) {
+                    const data = JSON.parse(xhr.responseText);
+                    handleProgress(file.name, chunkNum, totalChunks, 'pending', file.type);
+                    const expectedChunk = data['expected_chunk'];
+                    if (xhr.status === 416) {
+                        console.log(`Server requested a different chunk ${chunkNum}`);
+                        await uploadChunk(file, expectedChunk, chunkSize, totalChunks, tries + 1, maxTries);
+                    } else {
+                        console.debug(`Uploading of chunk ${chunkNum} succeeded, got request for chunk ${chunkNum}`);
+                        // Success, reset tries.
+                        await uploadChunk(file, expectedChunk, chunkSize, totalChunks, 0, maxTries);
+                    }
+                } else if (xhr.status === 201) {
+                    handleProgress(file.name, totalChunks, totalChunks, 'complete', file.type);
+                    console.log(`Uploading of ${file.path} completed.`);
+                } else if (xhr.status === 400) {
+                    handleProgress(file.name, totalChunks, totalChunks, 'conflicting', file.type);
+                    const data = JSON.parse(xhr.responseText);
+                    if (data['code'] === 41) {
+                        console.error('File already exists. Giving up.');
+                    }
+                } else {
+                    handleProgress(file.name, totalChunks, totalChunks, 'failed', file.type);
+                    console.error(`Failed to upload chunk ${chunkNum}. Giving up.`);
+                }
+            }
+        }
+        await xhr.send(formData);
+    };
+
+    const doUpload = async () => {
+        if (!files || files.length === 0 || !destination) {
+            return;
+        }
+
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            console.log(`Starting file upload`);
+            console.log(file);
+
+            const chunkNum = 0;
+            const chunkSize = 10 * 1024 * 1024; // 10MB
+            const totalChunks = Math.ceil(file.size / chunkSize);
+            const tries = 0;
+            const maxTries = 20;
+
+            // Start recursive function to upload the file.
+            await uploadChunk(file, chunkNum, chunkSize, totalChunks, tries, maxTries);
+        }
+
+        // Clear form after upload.
+        setFiles([]);
+    }
+
+    const doClear = () => {
+        setFiles([]);
+        setProgresses({});
+    }
+
+    useEffect(() => {
+        doUpload()
+    }, [JSON.stringify(files)]);
+
+    return {files, setFiles: handleFilesChange, progresses, destination, setDestination, doClear, doUpload}
 }

@@ -39,6 +39,11 @@ class DirectoriesRequest:
 
 
 @dataclass
+class DirectoriesSearchRequest:
+    name: str
+
+
+@dataclass
 class DirectoriesResponse:
     directories: List[str]
 

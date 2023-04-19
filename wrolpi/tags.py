@@ -148,7 +148,7 @@ class TagsConfig(ConfigFile):
         })
 
 
-TAGS_CONFIG: TagsConfig = TagsConfig(global_=True)
+TAGS_CONFIG: TagsConfig = TagsConfig()
 TEST_TAGS_CONFIG: TAGS_CONFIG = None
 
 

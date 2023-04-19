@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import pytz
+import yaml
 
 from wrolpi.dates import Seconds
 from wrolpi.db import get_db_context
@@ -338,8 +339,6 @@ def test_crud_download(test_client, test_session, test_download_manager, test_do
 @pytest.mark.asyncio
 async def test_downloads_config(test_session, test_client, test_download_manager, test_download_manager_config,
                                 test_downloader, assert_downloads):
-    from wrolpi.downloader import DOWNLOAD_MANAGER_CONFIG
-
     # Can import with an empty config.
     await import_downloads_config()
     assert_downloads([])
@@ -354,6 +353,7 @@ async def test_downloads_config(test_session, test_client, test_download_manager
     test_download_manager.recurring_download('https://example.com/3', frequency=DownloadFrequency.weekly,
                                              downloader_name=test_downloader.name)
     download2.next_download = datetime(2000, 1, 2, 0, 0, 0, tzinfo=pytz.UTC)
+    download2.settings = {'destination': 'some directory'}
     # Completed once-downloads should be ignored.
     download1.last_successful_download = datetime(2000, 1, 1, 0, 0, 0, tzinfo=pytz.UTC)
     test_session.commit()
@@ -370,12 +370,14 @@ async def test_downloads_config(test_session, test_client, test_download_manager
             frequency=None,
             next_download=datetime(2000, 1, 2, 0, 0, 0, tzinfo=pytz.UTC),
             downloader='test_downloader',
+            settings={'destination': 'some directory'},
             sub_downloader=None,
         ),
         dict(
             url='https://example.com/3',
             frequency=DownloadFrequency.weekly,
             downloader='test_downloader',
+            settings=None,
             sub_downloader=None,
         ),
     ]
@@ -386,6 +388,16 @@ async def test_downloads_config(test_session, test_client, test_download_manager
     test_session.query(Download).delete()
     test_session.commit()
 
+    # Change the destination.
+    with test_download_manager_config.open('rt') as fh:
+        config_contents = yaml.load(fh, Loader=yaml.Loader)
+        for idx, download in enumerate(config_contents['downloads']):
+            if download['url'] == 'https://example.com/2':
+                config_contents['downloads'][idx]['settings'] = dict(destination='a different directory')
+    with test_download_manager_config.open('wt') as fh:
+        yaml.dump(config_contents, fh)
+    get_download_manager_config().initialize()
+
     # Import the saved downloads.
     await import_downloads_config()
     expected = [
@@ -394,12 +406,15 @@ async def test_downloads_config(test_session, test_client, test_download_manager
             frequency=None,
             next_download=datetime(2000, 1, 2, 0, 0, 0, tzinfo=pytz.UTC),
             downloader='test_downloader',
+            # The destination was imported from the config.
+            settings={'destination': 'a different directory'},
             sub_downloader=None,
         ),
         dict(
             url='https://example.com/3',
             frequency=DownloadFrequency.weekly,
             downloader='test_downloader',
+            settings=dict(),
             sub_downloader=None,
         ),
     ]

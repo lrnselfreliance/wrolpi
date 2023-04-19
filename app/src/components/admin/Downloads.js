@@ -13,7 +13,6 @@ import {
     Button as SButton,
     Confirm,
     Loader,
-    Modal,
     PlaceholderLine,
     TableBody,
     TableCell,
@@ -21,7 +20,7 @@ import {
     TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
-import {Button, Header, Placeholder, Segment, Table} from "../Theme";
+import {Button, Header, Modal, ModalActions, ModalContent, ModalHeader, Placeholder, Segment, Table} from "../Theme";
 import {useDownloads} from "../../hooks/customHooks";
 import _ from "lodash";
 
@@ -135,13 +134,13 @@ class DownloadRow extends React.Component {
             open={errorModalOpen}
             trigger={<Button icon='exclamation circle' color='orange'/>}
         >
-            <Modal.Header>Download Error</Modal.Header>
-            <Modal.Content>
+            <ModalHeader>Download Error</ModalHeader>
+            <ModalContent>
                 <pre style={{overflowX: 'scroll'}}>{error}</pre>
-            </Modal.Content>
-            <Modal.Actions>
+            </ModalContent>
+            <ModalActions>
                 <SButton onClick={() => this.setState({errorModalOpen: false})}>Close</SButton>
-            </Modal.Actions>
+            </ModalActions>
         </Modal>;
 
         const deleteButton = <>
@@ -242,7 +241,8 @@ class StoppableRow extends React.Component {
         let {url, last_successful_download, status, location, error} = this.props;
         let {stopOpen, startOpen, errorModalOpen, deleteOpen} = this.state;
 
-        const link = location ?
+        // Open downloads (/download), or external links in an anchor.
+        const link = location && !location.startsWith('/download') ?
             (text) => <Link to={location}>{text}</Link> :
             (text) => <a href={url} target='_blank' rel='noopener noreferrer'>{text}</a>;
 
@@ -301,13 +301,13 @@ class StoppableRow extends React.Component {
                     open={errorModalOpen}
                     trigger={<Button icon='exclamation circle' color='red'/>}
                 >
-                    <Modal.Header>Download Error</Modal.Header>
-                    <Modal.Content>
+                    <ModalHeader>Download Error</ModalHeader>
+                    <ModalContent>
                         <pre style={{overflowX: 'scroll'}}>{error}</pre>
-                    </Modal.Content>
-                    <Modal.Actions>
+                    </ModalContent>
+                    <ModalActions>
                         <SButton onClick={() => this.setState({errorModalOpen: false})}>Close</SButton>
-                    </Modal.Actions>
+                    </ModalActions>
                 </Modal>
             )
         }

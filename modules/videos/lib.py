@@ -211,7 +211,7 @@ class ChannelsConfig(ConfigFile):
         self.update({'favorites': value})
 
 
-CHANNELS_CONFIG: ChannelsConfig = ChannelsConfig(global_=True)
+CHANNELS_CONFIG: ChannelsConfig = ChannelsConfig()
 TEST_CHANNELS_CONFIG: ChannelsConfig = None
 
 
@@ -328,7 +328,7 @@ class VideoDownloaderConfig(ConfigFile):
         self.update({'youtube_include_dash_manifest': value})
 
 
-VIDEO_DOWNLOADER_CONFIG: VideoDownloaderConfig = VideoDownloaderConfig(global_=True)
+VIDEO_DOWNLOADER_CONFIG: VideoDownloaderConfig = VideoDownloaderConfig()
 TEST_VIDEO_DOWNLOADER_CONFIG: VideoDownloaderConfig = None
 
 

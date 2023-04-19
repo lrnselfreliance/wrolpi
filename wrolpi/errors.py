@@ -168,6 +168,10 @@ class FileGroupIsTagged(APIError):
     pass
 
 
+class FileUploadFailed(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -370,5 +374,10 @@ API_ERRORS = {
         'code': next(error_codes),
         'message': 'File group is tagged',
         'status': HTTPStatus.CONFLICT,
+    },
+    FileUploadFailed: {
+        'code': next(error_codes),
+        'message': 'Failed to upload file',
+        'status': HTTPStatus.BAD_REQUEST,
     },
 }

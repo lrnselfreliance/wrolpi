@@ -1,20 +1,16 @@
 import React from "react";
 import _ from "lodash";
 import {
-    Button as SButton,
     Grid,
     Header as SHeader,
     Image,
-    Modal,
-    ModalActions,
-    ModalContent,
-    ModalHeader
 } from "semantic-ui-react";
 import {TagsSelector} from "../Tags";
 import {Media} from "../contexts/contexts";
 import {encodeMediaPath} from "./Common";
 import {addTag, fetchFile, removeTag} from "../api";
 import {StlViewer} from "react-stl-viewer";
+import {Button, Modal, ModalActions, ModalContent, ModalHeader} from "./Theme";
 
 function getMediaPathURL(previewFile) {
     if (previewFile['primary_path']) {
@@ -47,6 +43,8 @@ function getIframeModal(previewFile) {
             <iframe title='textModal' src={url}
                     style={{
                         height: '100%', width: '100%', border: 'none', position: 'absolute', top: 0,
+                        // Use white to avoid iframe displaying with dark-theme.
+                        backgroundColor: '#ffffff',
                     }}/>
         </div>
     </ModalContent>
@@ -201,16 +199,16 @@ export function FilePreviewWrapper({children}) {
     function setModalContent(content, url, downloadURL) {
         let openButton;
         if (url) {
-            openButton = <SButton color='blue' as='a' href={url}>Open</SButton>;
+            openButton = <Button color='blue' as='a' href={url}>Open</Button>;
         }
-        const closeButton = <SButton onClick={handleClose}>Close</SButton>;
+        const closeButton = <Button onClick={handleClose}>Close</Button>;
         const tagsDisplay = <TagsSelector selectedTagNames={previewFile['tags']} onAdd={localAddTag}
                                           onRemove={localRemoveTag}/>;
         let downloadButton;
         if (downloadURL) {
-            downloadButton = <SButton color='yellow' as='a' href={downloadURL} floated='left'>
+            downloadButton = <Button color='yellow' as='a' href={downloadURL} floated='left'>
                 Download
-            </SButton>;
+            </Button>;
         }
 
         setPreviewModal(<Modal closeIcon

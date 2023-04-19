@@ -51,6 +51,9 @@ NMCLI_BIN = which('nmcli', '/usr/bin/nmcli', flag=flags.nmcli_installed)
 CPUFREQ_INFO_BIN = which('cpufreq-info', '/usr/bin/cpufreq-info')
 CPUFREQ_SET_BIN = which('cpufreq-set', '/usr/bin/cpufreq-set')
 
+# Files
+WGET_BIN = which('wget', '/usr/bin/wget', flag=flags.wget_installed)
+
 # Map
 BASH_BIN = which('bash', '/bin/bash', warn=True)
 

@@ -172,6 +172,35 @@ textarea.otp {
     background-color: #222222;
 }
 
+.modal .inverted {
+    border-color: #888888;
+}
+
+.modal .header.inverted {
+    color: #DDDDDD !important;
+    background-color: #171616 !important;
+}
+
+.modal .content.inverted {
+    color: #DDDDDD !important;
+    border-color: #888888 !important;
+    background-color: #171616 !important;
+}
+
+.modal .actions.inverted {
+    color: #DDDDDD !important;
+    border-color: #888888 !important;
+    background-color: #171616 !important;
+}
+
 .clickable {
     cursor: pointer;
+}
+
+.segment.inverted {
+    border: 1px solid #ffffff22 !important;
+}
+
+.inverted label {
+    color: #DDDDDD !important;
 }

@@ -1,6 +1,5 @@
 import React, {useContext, useState} from "react";
 import {
-    Button as SButton,
     CardContent,
     CardDescription,
     CardHeader,
@@ -11,7 +10,6 @@ import {
     Form,
     Image,
     Label,
-    Modal,
     PlaceholderLine,
     TableCell,
     TableHeaderCell,
@@ -46,7 +44,19 @@ import {CardPlacholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
-import {Button, Card, CardIcon, Icon, Placeholder, Progress, Segment} from "./Theme";
+import {
+    Button,
+    Card,
+    CardIcon,
+    Icon,
+    Modal,
+    ModalActions,
+    ModalContent,
+    ModalHeader,
+    Placeholder,
+    Progress,
+    Segment
+} from "./Theme";
 import {SelectableTable} from "./Tables";
 import {VideoCard, VideoRowCells} from "./Videos";
 import _ from 'lodash';
@@ -395,16 +405,16 @@ export function SearchFilter({filters = [], modalHeader}) {
     if (filters && filters.length > 0) {
         return <>
             <Modal open={open} onOpen={() => handleOpen()} onClose={() => setOpen(false)} closeIcon>
-                {modalHeader || <Modal.Header>Filter</Modal.Header>}
-                <Modal.Content>
+                {modalHeader || <ModalHeader>Filter</ModalHeader>}
+                <ModalContent>
                     <Form>
                         {filterFields}
                     </Form>
-                </Modal.Content>
-                <Modal.Actions>
-                    <SButton onClick={handleClear} secondary>Clear</SButton>
-                    <SButton onClick={() => setOpen(false)}>Close</SButton>
-                </Modal.Actions>
+                </ModalContent>
+                <ModalActions>
+                    <Button onClick={handleClear} secondary>Clear</Button>
+                    <Button onClick={() => setOpen(false)}>Close</Button>
+                </ModalActions>
             </Modal>
             <Button
                 icon='filter'

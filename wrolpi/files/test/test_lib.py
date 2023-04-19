@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import mock
 import pytest
+import sqlalchemy.exc
 from PIL import Image
 
 from wrolpi.common import timer
@@ -158,7 +159,8 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     test_session.query(FileGroup).filter_by(primary_path=video_file).one().indexed = True
     test_session.commit()
     assert_file_groups(
-        [{'primary_path': str(video_file), 'idempotency': idempotency, 'modification_datetime': foo_mtime, 'indexed': True}],
+        [{'primary_path': str(video_file), 'idempotency': idempotency, 'modification_datetime': foo_mtime,
+          'indexed': True}],
         assert_count=False)
 
     # Only modified files need to be re-indexed.
@@ -411,6 +413,7 @@ async def test_files_indexer(test_session, make_files_structure, test_directory)
     ('name two', 'name two'),
     ('this self-reliance_split.txt', 'this self reliance self-reliance split txt'),
     ('-be_split!.txt', '-be split! txt'),
+    ('WROLPi-v0.10-aarch64-desktop.img.xz', 'WROLPi v0.10 aarch64 desktop.img WROLPi-v0.10-aarch64-desktop.img xz'),
 ])
 def test_split_file_name_words(name, expected):
     assert lib.split_file_name_words(name) == expected
@@ -503,6 +506,7 @@ def test_group_files_by_stem(make_files_structure, test_directory):
         'foo.mp4',
         'foo.txt',
         'foo.info.json',
+        'foo.live_chat.json',
         'bar.txt',
         'baz.txt',
     ])
@@ -511,7 +515,7 @@ def test_group_files_by_stem(make_files_structure, test_directory):
     assert list(lib.group_files_by_stem(files)) == [
         [test_directory / 'bar.txt'],
         [test_directory / 'baz.txt'],
-        [test_directory / 'foo.info.json', test_directory / 'foo.mp4', test_directory / 'foo.txt'],
+        [test_directory / 'foo.info.json', test_directory / 'foo.live_chat.json', test_directory / 'foo.mp4', test_directory / 'foo.txt'],
     ]
 
 
@@ -600,3 +604,44 @@ async def test_refresh_files_no_groups(test_session, test_directory, make_files_
     txt, zip_ = test_session.query(FileGroup)
     assert txt.primary_path == foo_txt and txt.size == foo_txt.stat().st_size
     assert zip_.primary_path == foo_zip and zip_.size == foo_zip.stat().st_size
+
+
+@pytest.mark.asyncio
+async def test_refresh_directories(test_session, test_directory, assert_directories):
+    """
+    Directories are stored when they are discovered.  They are removed when they can no longer be found.
+    """
+    foo = test_directory / 'foo'
+    bar = test_directory / 'bar'
+    baz = test_directory / 'baz'
+    foo.mkdir()
+    bar.mkdir()
+    baz.mkdir()
+
+    await lib.refresh_files()
+    assert_directories({'foo', 'bar', 'baz'})
+
+    # Deleted directory is removed.
+    foo.rmdir()
+    await lib.refresh_files()
+    assert_directories({'bar', 'baz'})
+
+    bar.rmdir()
+    await lib.refresh_files([bar])
+    assert_directories({'baz', })
+
+    # A new directory can be refreshed directly.
+    foo.mkdir()
+    await lib.refresh_files([foo])
+    assert_directories({'foo', 'baz'})
+
+
+def test_file_group_primary_path_is_unique(test_session, test_directory):
+    """You cannot create a FileGroup that shares a path"""
+    path = test_directory / 'file.txt'
+    path.touch()
+
+    one = FileGroup.from_paths(test_session, path)
+    two = FileGroup.from_paths(test_session, path)
+    with pytest.raises(sqlalchemy.exc.IntegrityError):
+        test_session.commit()

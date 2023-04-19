@@ -53,7 +53,6 @@ class ArchiveDownloader(Downloader, ABC):
         return archives
 
 
-# Archive downloader is the last downloader which should be used.
 archive_downloader = ArchiveDownloader()
 
 

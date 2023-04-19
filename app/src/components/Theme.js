@@ -1,27 +1,33 @@
 import React, {useContext, useEffect, useState} from 'react';
 import {ThemeContext} from "../contexts/contexts";
 import {
-    Accordion as ACCORDION,
-    Button as BUTTON,
-    Card as CARD,
-    Form as FORM,
-    FormField as FORM_FIELD,
-    FormGroup as FORM_GROUP,
-    FormInput as FORM_INPUT,
-    Header as HEADER,
-    Icon as ICON,
-    Loader as LOADER,
-    Menu as MENU,
-    Placeholder as PLACEHOLDER,
-    Popup as POPUP,
-    Progress as PROGRESS,
-    Segment as SEGMENT,
-    Statistic as STATISTIC,
-    StatisticGroup as STATISTIC_GROUP,
-    Tab as TAB,
-    Table as TABLE,
-    TabPane as TAB_PANE,
-    TextArea as TEXTAREA
+    Accordion as SAccordion,
+    Button as SButton,
+    Card as SCard,
+    Divider as SDivider,
+    Form as SForm,
+    FormField as SFormField,
+    FormGroup as SFormGroup,
+    FormInput as SFormInput,
+    Header as SHeader,
+    Icon as SIcon,
+    Loader as SLoader,
+    Menu as SMenu,
+    Modal as SModal,
+    ModalActions as SModalActions,
+    ModalContent as SModalContent,
+    ModalDescription as SModalDescription,
+    ModalHeader as SModalHeader,
+    Placeholder as SPlaceholder,
+    Popup as SPopup,
+    Progress as SProgress,
+    Segment as SSegment,
+    Statistic as SStatistic,
+    StatisticGroup as SStatisticGroup,
+    Tab as STab,
+    Table as STable,
+    TabPane as STabPane,
+    TextArea as STextArea
 } from "semantic-ui-react";
 import {ColorToSemanticHexColor} from "./Common";
 import _ from "lodash";
@@ -56,7 +62,7 @@ export function ThemeWrapper({children, ...props}) {
         console.debug('setDarkTheme');
         setI({inverted: true});
         setS({style: {backgroundColor: '#1B1C1D', color: '#dddddd'}});
-        setT({style: {color: '#dddddd'}});
+        setT({style: {color: '#eeeeee'}});
         setInverted('inverted');
         setTheme(darkTheme);
         document.body.style.background = '#171616';
@@ -161,125 +167,158 @@ const defaultGrey = (props, inverted) => {
     return props;
 }
 
-export function Button(props) {
-    const {i, inverted} = useContext(ThemeContext);
-    props = defaultGrey({...i, ...props}, inverted);
-    return <BUTTON {...props}/>
-}
-
 export function Accordion(props) {
     const {i, inverted} = useContext(ThemeContext);
     props = defaultGrey({...i, ...props}, inverted);
-    return <ACCORDION {...props}/>
+    return <SAccordion {...props}/>
+}
+
+export function Button(props) {
+    const {i, inverted} = useContext(ThemeContext);
+    props = defaultGrey({...i, ...props}, inverted);
+    return <SButton {...props}/>
+}
+
+export function Divider({...props}) {
+    const {i} = useContext(ThemeContext);
+    props = {...i, ...props};
+    return <SDivider {...props}/>
 }
 
 export function Header(props) {
-    const {i, inverted} = useContext(ThemeContext);
-    props = defaultGrey({...i, ...props}, inverted);
-    return <HEADER {...props}/>
+    const {t, inverted} = useContext(ThemeContext);
+    props = defaultGrey({...t, ...props}, inverted);
+    return <SHeader {...props}/>
 }
 
 export function Form(props) {
     const {i} = useContext(ThemeContext);
     props = {...i, ...props};
-    return <FORM {...props}/>
+    return <SForm {...props}/>
 }
 
 export function FormField(props) {
     const {i} = useContext(ThemeContext);
     props = invertedNull({...i, ...props});
-    return <FORM_FIELD {...props}/>
+    return <SFormField {...props}/>
 }
 
 export function FormGroup(props) {
     const {i} = useContext(ThemeContext);
     props = invertedNull({...i, ...props});
-    return <FORM_GROUP {...props}/>
+    return <SFormGroup {...props}/>
 }
 
 export function FormInput(props) {
     const {i} = useContext(ThemeContext);
     props = {...i, ...props};
-    return <FORM_INPUT {...props}/>
+    return <SFormInput {...props}/>
 }
 
 export function Icon(props) {
     const {i} = useContext(ThemeContext);
     props = {...i, ...props};
-    return <ICON {...props}/>
+    return <SIcon {...props}/>
 }
 
 export function Loader(props) {
     const {i} = useContext(ThemeContext);
     props = {...i, ...props};
-    return <LOADER {...props}/>
+    return <SLoader {...props}/>
 }
 
 export function Menu(props) {
     const {i} = useContext(ThemeContext);
     props = {...i, ...props};
-    return <MENU {...props}/>
+    return <SMenu {...props}/>
+}
+
+export function Modal({...props}) {
+    const {inverted} = useContext(ThemeContext);
+    return <SModal {...props} className={`${inverted}`}/>
+}
+
+export function ModalActions({...props}) {
+    const {inverted} = useContext(ThemeContext);
+    return <SModalActions {...props} className={`${inverted}`}/>
+}
+
+export function ModalContent({...props}) {
+    const {inverted} = useContext(ThemeContext);
+    return <SModalContent {...props} className={`${inverted}`}/>
+}
+
+export function ModalDescription({...props}) {
+    const {inverted} = useContext(ThemeContext);
+    return <SModalDescription {...props} className={`${inverted}`}/>
+}
+
+export function ModalHeader({...props}) {
+    const {inverted} = useContext(ThemeContext);
+    return <SModalHeader {...props} className={`${inverted}`}>
+        {props.children}
+    </SModalHeader>
 }
 
 export function Placeholder(props) {
     const {i} = useContext(ThemeContext);
     props = {...i, ...props};
-    return <PLACEHOLDER {...props}/>
+    return <SPlaceholder {...props}/>
 }
 
 export function Popup(props) {
     const {i} = useContext(ThemeContext);
     props = {...i, ...props};
-    return <POPUP {...props}/>
+    return <SPopup {...props}/>
 }
 
 export function Progress(props) {
     const {i} = useContext(ThemeContext);
     props = {...i, ...props};
-    return <PROGRESS {...props}/>
+    return <SProgress {...props}/>
 }
 
 export function Segment(props) {
     const {i} = useContext(ThemeContext);
     props = {...i, ...props};
-    return <SEGMENT {...props}/>
+    return <SSegment {...props}/>
 }
 
 export function Statistic(props) {
     const {i, inverted} = useContext(ThemeContext);
     props = defaultGrey({...i, ...props}, inverted);
-    return <STATISTIC {...props}/>
+    return <SStatistic {...props}/>
 }
 
 export function StatisticGroup(props) {
     const {i} = useContext(ThemeContext);
     props = {...i, ...props};
     props['style'] = {...props['style'], marginLeft: 0, marginRight: 0};
-    return <STATISTIC_GROUP {...props}/>
+    return <SStatisticGroup {...props}/>
 }
 
 export function Tab(props) {
     const {i} = useContext(ThemeContext);
     props = invertedNull({...i, ...props});
-    return <TAB {...props}/>
+    return <STab {...props}/>
 }
 
 export function TabPane(props) {
     const {i} = useContext(ThemeContext);
     props = {...i, ...props};
-    return <TAB_PANE {...props}/>
+    return <STabPane {...props}/>
 }
 
 export function Table(props) {
     const {i} = useContext(ThemeContext);
     props = {...i, ...props};
-    return <TABLE {...props}/>
+    return <STable {...props}/>
 }
 
 export function TextArea(props) {
     const {i} = useContext(ThemeContext);
     props = invertedNull({...i, ...props});
-    return <TEXTAREA {...props}/>
+    return <STextArea {...props}/>
 }
 
 export function CardIcon({onClick, ...props}) {
@@ -304,5 +343,5 @@ export function Card({color, ...props}) {
         const borderColor = inverted ? '#888' : '#ddd';
         props['style']['boxShadow'] = `0 0 0 2px ${borderColor}, 0 5px 0 0 ${emphasisColor}, 0 0px 3px 0 #d4d4d5`;
     }
-    return <CARD {...props}/>
+    return <SCard {...props}/>
 }

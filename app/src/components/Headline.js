@@ -1,5 +1,5 @@
-import {CardIcon, Header, Placeholder, Segment} from "./Theme";
-import {PlaceholderLine, Item, Image} from "semantic-ui-react";
+import {Placeholder, Segment} from "./Theme";
+import {Image, PlaceholderLine} from "semantic-ui-react";
 import React from "react";
 import {ThemeContext} from "../contexts/contexts";
 import {encodeMediaPath, FileIcon, findPosterPath, PreviewLink} from "./Common";

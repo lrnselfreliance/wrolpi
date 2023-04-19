@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import json
 import logging
 import multiprocessing
 import os
@@ -94,6 +95,7 @@ class Download(ModelHelper, Base):  # noqa
             last_successful_download=self.last_successful_download,
             location=self.location,
             next_download=self.next_download,
+            settings=self.settings,
             status=self.status,
             sub_downloader=self.sub_downloader,
             url=self.url,
@@ -352,7 +354,6 @@ class DownloadManager:
                 download.manager = self
 
                 downloader: Downloader = download.get_downloader()
-                logger.warning(f'{downloader=}')
                 if not downloader:
                     worker_logger.warning(f'Could not find downloader for {download.downloader=}')
 
@@ -375,7 +376,8 @@ class DownloadManager:
                     result = DownloadResult(success=False, error=str(traceback.format_exc()))
 
                 error_len = len(result.error) if result.error else 0
-                worker_logger.debug(f'Got success={result.success} from {downloader} with {error_len=}')
+                worker_logger.debug(
+                    f'Got success={result.success} from {downloader} download_id={download.id} with {error_len=}')
 
                 with get_db_session(commit=True) as session:
                     # Modify the download in a new session because downloads may take a long time.
@@ -1064,6 +1066,7 @@ async def save_downloads_config(session: Session):
             frequency=download.frequency,
             last_successful_download=download.last_successful_download,
             next_download=download.next_download,
+            settings=download.settings,
             status=download.status,
             sub_downloader=download.sub_downloader,
             url=download.url,
@@ -1099,7 +1102,7 @@ async def import_downloads_config(session: Session):
                 existing.next_download = download['next_download']
                 existing.status = download['status']
                 existing.sub_downloader = download['sub_downloader']
-                logger.debug(f'Updating download {existing.url} with {download}')
+                existing.settings = download['settings'] or dict()
 
         for download in downloads_by_url.values():
             # These downloads are new, import them.
@@ -1108,6 +1111,7 @@ async def import_downloads_config(session: Session):
                 frequency=download['frequency'],
                 last_successful_download=download['last_successful_download'],
                 next_download=download['next_download'],
+                settings=download['settings'] or dict(),
                 status=download['status'],
                 sub_downloader=download['sub_downloader'],
                 url=(url := download['url']),

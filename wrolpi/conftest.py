@@ -12,7 +12,7 @@ import tempfile
 import zipfile
 from abc import ABC
 from itertools import zip_longest
-from typing import List, Callable, Union, Dict
+from typing import List, Callable, Union, Dict, Sequence
 from typing import Tuple, Set
 from unittest import mock
 from unittest.mock import MagicMock
@@ -33,7 +33,7 @@ from wrolpi.dates import set_test_now
 from wrolpi.db import postgres_engine, get_db_args
 from wrolpi.downloader import DownloadManager, DownloadResult, Download, Downloader, \
     downloads_manager_config_context
-from wrolpi.files import lib as files_lib
+from wrolpi.files.models import Directory
 from wrolpi.root_api import BLUEPRINTS, api_app
 from wrolpi.tags import Tag
 from wrolpi.vars import PROJECT_DIR
@@ -591,5 +591,34 @@ def zip_file_factory(test_directory):
 
             fh.seek(0)
             return fh.read()
+
+    return _
+
+
+@pytest.fixture
+def assert_directories(test_session, test_directory):
+    def _(expected: Sequence[str]):
+        directories = test_session.query(Directory).all()
+        names = {str(i.path.relative_to(test_directory)) for i in directories}
+        assert names == set(expected)
+
+    return _
+
+
+@pytest.fixture
+def make_multipart_form():
+    def _(forms: List[dict]):
+        boundary = '-----sanic\n'
+        new_forms = []
+        for form in forms:
+            name, value, filename = form['name'], form['value'], form.get('filename')
+            if filename:
+                new_forms.append(f'Content-Disposition: form-data; name="{name}"; filename="{filename}"\n\n{value}\n')
+            else:
+                new_forms.append(f'Content-Disposition: form-data; name="{name}"\n\n{value}\n')
+        body = f'\n{boundary}'.join(new_forms)
+        body = f'{boundary}{body}\n{boundary}'
+        body = '\r\n'.join(body.split('\n')).strip()
+        return body
 
     return _

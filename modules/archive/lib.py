@@ -11,6 +11,7 @@ from typing import Optional, Tuple, List
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from sqlalchemy import asc
 from sqlalchemy.orm import Session
 
 from modules.archive.models import Domain, Archive
@@ -440,3 +441,13 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
 
     results, total = handle_file_group_search_results(stmt, params)
     return results, total
+
+
+@optional_session
+def search_domains_by_directory(name: str, limit: int = 5, session: Session = None) -> List[Domain]:
+    domains = session.query(Domain) \
+        .filter(Domain.directory.ilike(f'%{name}%')) \
+        .order_by(asc(Domain.domain)) \
+        .limit(limit) \
+        .all()
+    return domains

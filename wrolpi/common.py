@@ -180,28 +180,28 @@ def sanitize_link(link: str) -> str:
 
 class ConfigFile:
     """
-    This class keeps track of the contents of a config file.  You can update the config by calling
-    .update(), or by creating a property that does so.  Save your changes using .save().
+    This class keeps track of the contents of a config file.  You can update the config (and it's file) by
+    calling .update().
     """
     file_name: str = None
     default_config: dict = None
     width: int = None
 
-    def __init__(self, global_: bool = False):
+    def __init__(self):
         self.file_lock = Lock()
+        self.width = self.width or 90
 
         if PYTEST:
             # Do not load a global config on import while testing.  A global instance will never be used for testing.
             self._config = self.default_config.copy()
             return
-
-        self.width = self.width or 90
         self.initialize()
 
     def __repr__(self):
         return f'<{self.__class__.__name__} file={self.get_file()}>'
 
     def initialize(self):
+        """Initializes this config dict using the default config and the config file."""
         config_file = self.get_file()
         self._config = Manager().dict()
         # Use the default settings to initialize the config.
@@ -261,7 +261,7 @@ class ConfigFile:
         self._config.update(config)
         self.save()
 
-    def dict(self):
+    def dict(self) -> dict:
         """Get a deepcopy of this config."""
         if not hasattr(self, '_config'):
             raise NotImplementedError('You cannot use a global config while testing!')
@@ -347,7 +347,7 @@ class WROLPiConfig(ConfigFile):
         self.update({'wrol_mode': value})
 
 
-WROLPI_CONFIG: WROLPiConfig = WROLPiConfig(global_=True)
+WROLPI_CONFIG: WROLPiConfig = WROLPiConfig()
 TEST_WROLPI_CONFIG: WROLPiConfig = None
 
 
@@ -765,7 +765,7 @@ def walk(path: Path) -> Generator[Path, None, None]:
 def get_files_and_directories(directory: Path):
     """Walk a directory, return a tuple of all files and all directories within.  (Not recursive)."""
     if not directory.exists():
-        raise ValueError(f'Directory does not exist: {directory}')
+        raise FileNotFoundError(f'Directory does not exist: {directory}')
     if not directory.is_dir():
         raise ValueError('Can only walk a directory.')
 

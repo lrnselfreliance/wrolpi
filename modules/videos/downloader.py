@@ -208,8 +208,13 @@ class VideoDownloader(Downloader, ABC):
         if not channel and (local_channel_id or channel_url or destination):
             # Could not find channel via yt-dlp info_json, use info from ChannelDownloader if it created this Download.
             logger.info(f'Using download.settings to find channel')
-            channel = get_channel(channel_id=local_channel_id, url=channel_url, directory=destination,
-                                  return_dict=False)
+            try:
+                channel = get_channel(channel_id=local_channel_id, url=channel_url, directory=destination,
+                                      return_dict=False)
+            except UnknownChannel:
+                # We do not need a Channel if we have a destination directory.
+                if not destination:
+                    raise
             if channel:
                 found_channel = 'download_settings'
 
@@ -297,8 +302,10 @@ class VideoDownloader(Downloader, ABC):
                 session.commit()
 
                 if download.settings and (tag_names := download.settings.get('tag_names')):
+                    existing_names = video.file_group.tag_names
                     for name in tag_names:
-                        video.add_tag(name)
+                        if name not in existing_names:
+                            video.add_tag(name)
 
         except UnrecoverableDownloadError:
             raise

@@ -9,7 +9,6 @@ import {
     Dropdown,
     Image,
     Input,
-    Modal,
     PlaceholderHeader,
     PlaceholderLine,
     TableCell,
@@ -19,7 +18,6 @@ import {
     BackButton,
     CardLink,
     cardTitleWrapper,
-    defaultSearchOrder,
     encodeMediaPath,
     ExternalCardLink,
     FileIcon,
@@ -39,7 +37,7 @@ import {
 import {addTag, deleteArchives, postDownload, removeTag} from "../api";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useArchive, useDomains, useQuery, useSearchArchives, useSearchDomain} from "../hooks/customHooks";
+import {useArchive, useDomains, useSearchArchives, useSearchDomain} from "../hooks/customHooks";
 import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
@@ -304,21 +302,6 @@ export function DomainsPage() {
 export function SearchDomain() {
     // A Dropdown which allows the user to filter by Archive domains.
     const {domain, domains, setDomain} = useSearchDomain();
-    const [open, setOpen] = useState(false);
-
-    const handleOpen = (e) => {
-        if (e) {
-            e.preventDefault();
-        }
-        setOpen(true);
-    }
-
-    const handleClose = (e) => {
-        if (e) {
-            e.preventDefault();
-        }
-        setOpen(false);
-    }
 
     const handleChange = (e, {value}) => {
         setDomain(value);
@@ -329,15 +312,6 @@ export function SearchDomain() {
             return {key: i['domain'], value: i['domain'], text: i['domain']}
         });
         return <>
-            <Modal closeIcon
-                   open={open}
-                   onOpen={() => handleOpen()}
-                   onClose={() => handleClose()}
-            >
-                <Modal.Content>
-                    domains
-                </Modal.Content>
-            </Modal>
             <Dropdown selection search clearable fluid
                       placeholder='Domains'
                       options={domainOptions}

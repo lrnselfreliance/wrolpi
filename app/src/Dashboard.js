@@ -1,18 +1,29 @@
 import {LoadStatistic, PageContainer, SearchInput, useTitle} from "./components/Common";
-import {useQuery, useSearchFiles} from "./hooks/customHooks";
+import {useQuery} from "./hooks/customHooks";
 import React, {useContext, useState} from "react";
 import {StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
 import {FilesSearchView} from "./components/Files";
-import {Header, Segment, Statistic, StatisticGroup} from "./components/Theme";
+import {
+    Button,
+    Divider,
+    Header,
+    Modal,
+    ModalContent,
+    ModalHeader,
+    Segment,
+    Statistic,
+    StatisticGroup
+} from "./components/Theme";
 import {Link} from "react-router-dom";
 import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
 import {ProgressPlaceholder} from "./components/Placeholder";
-import {Divider, Icon, Message} from "semantic-ui-react";
+import {GridColumn, GridRow, Icon, Message} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {refreshFiles} from "./api";
 import _ from "lodash";
 import {TagsDashboard} from "./Tags";
+import {Upload} from "./components/Upload";
 
 function FlagsMessages({flags}) {
     if (!flags) {
@@ -29,8 +40,8 @@ function FlagsMessages({flags}) {
         refreshing = <Message icon>
             <Icon name='circle notched' loading/>
             <Message.Content>
-                <Message.Header>Refreshing</Message.Header>
-                Your files are being refreshed.
+                <Message.Header>Your files are being refreshed.</Message.Header>
+                <p><Link to='/files'>Click here to view the progress</Link></p>
             </Message.Content>
         </Message>;
     } else if (flags.indexOf('refresh_complete') === -1) {
@@ -73,10 +84,51 @@ export function Dashboard() {
     const {status} = useContext(StatusContext);
     const wrol_mode = status ? status['wrol_mode'] : null;
 
-    const [downloadOpen, setDownloadOpen] = useState(false);
-    const onDownloadOpen = (name) => setDownloadOpen(!!name);
-    const downloadsDisabled = status?.flags?.indexOf('refresh_complete') === -1;
-    const downloads = <Segment><DownloadMenu onOpen={onDownloadOpen} disabled={downloadsDisabled}/></Segment>;
+    // Getters are Downloads or Uploads.
+    const [selectedGetter, setSelectedGetter] = useState(null);
+    const gettersDisabled = status?.flags?.indexOf('refresh_complete') === -1;
+    const handleSetGetter = (e, value) => {
+        if (e) {
+            e.preventDefault();
+        }
+        setSelectedGetter(value);
+    }
+
+    let getter = <Segment>
+        <Grid columns={2} textAlign='center'>
+            <Divider vertical>Or</Divider>
+            <GridRow verticalAlign='middle'>
+                <GridColumn>
+                    <Button color='violet' onClick={e => handleSetGetter(e, 'downloads')}>
+                        <Icon name='download'/>
+                        Download
+                    </Button>
+                </GridColumn>
+                <GridColumn>
+                    <Button onClick={e => handleSetGetter(e, 'upload')}>
+                        <Icon name='upload'/>
+                        Upload
+                    </Button>
+                </GridColumn>
+            </GridRow>
+        </Grid>
+    </Segment>;
+    let getterModal;
+    if (selectedGetter === 'downloads') {
+        getterModal = <Modal open={true} closeIcon onClose={() => handleSetGetter(null, null)}>
+            <ModalHeader>Downloads</ModalHeader>
+            <ModalContent>
+                <DownloadMenu disabled={gettersDisabled}/>
+            </ModalContent>
+        </Modal>;
+    } else if (selectedGetter === 'upload') {
+        getterModal = <Modal open={true} closeIcon onClose={() => handleSetGetter(null, null)}>
+            <ModalHeader>Upload</ModalHeader>
+            <ModalContent>
+                <Upload disabled={gettersDisabled}/>
+            </ModalContent>
+        </Modal>;
+    }
 
     // Only show dashboard parts if not searching.
     let body;
@@ -84,10 +136,10 @@ export function Dashboard() {
         body = <FilesSearchView/>;
     } else {
         body = <>
-            {!wrol_mode && downloads}
-            {/* Hide extras when user is starting a download */}
-            {!downloadOpen && <DashboardStatus/>}
-            {!downloadOpen && <TagsDashboard/>}
+            {!wrol_mode && getter}
+            {getterModal}
+            <TagsDashboard/>
+            <DashboardStatus/>
         </>;
     }
 

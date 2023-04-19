@@ -1,7 +1,7 @@
 import React from "react";
 import {getSettings, saveSettings} from "../../api";
-import {Button, Form, FormGroup, FormInput, Header, Loader, Segment} from "../Theme";
-import {Container, Dimmer, Icon, Modal} from "semantic-ui-react";
+import {Button, Form, FormGroup, FormInput, Header, Loader, Modal, ModalContent, ModalHeader, Segment} from "../Theme";
+import {Container, Dimmer, Icon} from "semantic-ui-react";
 import {ThemeContext} from "../../contexts/contexts";
 import {HelpPopup, HotspotToggle, ThrottleToggle, Toggle, WROLModeMessage} from "../Common";
 import QRCode from "react-qr-code";
@@ -203,12 +203,14 @@ export class Settings extends React.Component {
                                open={this.state.qrOpen}
                                trigger={qrButton}
                         >
-                            <Modal.Header>
+                            <ModalHeader>
                                 Scan this code to join the hotspot
-                            </Modal.Header>
-                            <Modal.Content>
-                                <QRCode value={qrCodeValue} size={300}/>
-                            </Modal.Content>
+                            </ModalHeader>
+                            <ModalContent>
+                                <div style={{display: 'inline-block', backgroundColor: '#ffffff', padding: '1em'}}>
+                                    <QRCode value={qrCodeValue} size={300}/>
+                                </div>
+                            </ModalContent>
                         </Modal>
 
                         <br/>

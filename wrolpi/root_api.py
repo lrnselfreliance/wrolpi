@@ -483,6 +483,9 @@ def json_error_handler(request: Request, exception: Exception):
         except KeyError:
             # Cause was not an APIError.
             logger.error(f'Could not find cause {cause}')
+    logger.debug(f'API returning JSON error {exception=}'
+                 f' error={body.get("api_error") or body.get("error")}'
+                 f' code={body["code"]}')
     return json_response(body, error['status'])
 
 

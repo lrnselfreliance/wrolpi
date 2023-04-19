@@ -127,7 +127,7 @@ class InventoriesConfig(ConfigFile):
         self.update({'version': value})
 
 
-INVENTORIES_CONFIG: InventoriesConfig = InventoriesConfig(global_=True)
+INVENTORIES_CONFIG: InventoriesConfig = InventoriesConfig()
 TEST_INVENTORIES_CONFIG: InventoriesConfig = None
 
 

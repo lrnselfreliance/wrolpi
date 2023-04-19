@@ -14,6 +14,7 @@ from typing import List, Tuple, Union, Dict, Generator
 
 import cachetools.func
 import psycopg2
+from sqlalchemy import asc
 from sqlalchemy.orm import Session
 
 from wrolpi import flags
@@ -25,7 +26,7 @@ from wrolpi.dates import now, from_timestamp
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
 from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag
 from wrolpi.events import Events
-from wrolpi.files.models import FileGroup
+from wrolpi.files.models import FileGroup, Directory
 from wrolpi.lang import ISO_639_CODES
 from wrolpi.tags import TagFile, Tag
 from wrolpi.vars import PYTEST
@@ -204,6 +205,7 @@ SUFFIXES = {
     '.readability.json',
     '.readability.txt',
     '.readability.html',
+    '.live_chat.json'
 }
 SUFFIXES |= {f'.{i}.srt' for i in ISO_639_CODES}
 SUFFIXES |= {f'.{i}.vtt' for i in ISO_639_CODES}
@@ -301,6 +303,7 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
     It is assumed all files exist."""
     idempotency = str(idempotency)
 
+    non_primary_files = set()
     for chunk in chunks_by_stem(files, 100):
         # Group all files by their shared full-stem.  `chunk_by_stem` already sorted the files.
         grouped = group_files_by_stem(chunk, pre_sorted=True)
@@ -309,17 +312,7 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
         for group in grouped:
             # The primary file is the video/SingleFile/epub, etc.
             primary_path_or_paths = get_primary_file(group)
-            if isinstance(primary_path_or_paths, list) or isinstance(primary_path_or_paths, tuple):
-                # Cannot find primary path, create group for each file.
-                for primary_path in primary_path_or_paths:
-                    primary_path: pathlib.Path
-                    # The primary mimetype allows modelers to find its file_groups.
-                    mimetype = get_mimetype(primary_path)
-                    modification_datetime = from_timestamp(primary_path.stat().st_mtime)
-                    size = primary_path.stat().st_size
-                    files = json.dumps(_paths_to_files_dict([primary_path]))
-                    values[primary_path] = (modification_datetime, mimetype, size, files)
-            else:
+            if isinstance(primary_path_or_paths, pathlib.Path):
                 # Multiple files in this group.
                 primary_path: pathlib.Path = primary_path_or_paths
                 # The primary mimetype allows modelers to find its file_groups.
@@ -330,9 +323,21 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
                 size = sum(i.stat().st_size for i in group)
                 files = json.dumps(_paths_to_files_dict(group))
                 values[primary_path] = (modification_datetime, mimetype, size, files)
+                non_primary_files = {i for i in group if i != primary_path}
+            else:
+                # Cannot find primary path, create a `file_group` for each file.
+                for primary_path in primary_path_or_paths:
+                    primary_path: pathlib.Path
+                    # The primary mimetype allows modelers to find its file_groups.
+                    mimetype = get_mimetype(primary_path)
+                    modification_datetime = from_timestamp(primary_path.stat().st_mtime)
+                    size = primary_path.stat().st_size
+                    files = json.dumps(_paths_to_files_dict([primary_path]))
+                    values[primary_path] = (modification_datetime, mimetype, size, files)
 
-        # `False` is the `indexed` which is false to force indexing by default.
-        values = [(str(primary_path), False, idempotency, *i) for primary_path, i in values.items()]
+        values = [(str(primary_path),
+                   False,  # `indexed` is false to force indexing by default.
+                   idempotency, *i) for primary_path, i in values.items()]
         with get_db_curs(commit=True) as curs:
             values = mogrify(curs, values)
             stmt = f'''
@@ -369,6 +374,12 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
             need_index = [i[0] for i in curs.fetchall() if i[1] is False]
             if need_index:
                 refresh_logger.info(f'Invalidated indexes of {len(need_index)} file groups')
+
+            if non_primary_files:
+                # New files may have been added which change what primary paths exist.  Delete any file_groups which
+                # use paths which are not primary.
+                curs.execute('DELETE FROM file_group WHERE primary_path = ANY(%s)',
+                             (list(map(str, non_primary_files)),))
 
 
 async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetime.datetime = None):
@@ -463,12 +474,14 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
         paths = paths or [get_media_directory()]
 
         directories = list(filter(lambda i: i.is_dir(), paths))
+        found_directories = set()
         if directories:
             with flags.refresh_counting:
                 while directories:
                     directory = directories.pop()
                     files, dirs = get_files_and_directories(directory)
                     directories.extend(dirs)
+                    found_directories |= set(dirs)
                     REFRESH['counted_files'] = REFRESH.get('counted_files', 0) + len(files)
                     # Sleep to catch cancel.
                     await asyncio.sleep(0)
@@ -476,34 +489,40 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
 
         with flags.refresh_discovery:
             await refresh_discover_paths(paths, idempotency)
-        if send_events:
-            Events.send_global_refresh_discovery_completed()
+            if send_events:
+                Events.send_global_refresh_discovery_completed()
 
         # Model all files that have not been indexed.
         with flags.refresh_modeling:
             await apply_modelers()
-        if send_events:
-            Events.send_global_refresh_modeling_completed()
+            if send_events:
+                Events.send_global_refresh_modeling_completed()
 
         # Index the rest of the files that were not indexed by modelers.
         with flags.refresh_indexing:
             await apply_indexers()
-        if send_events:
-            Events.send_global_refresh_indexing_completed()
+            if send_events:
+                Events.send_global_refresh_indexing_completed()
 
         # Cleanup any outdated file data.
         with flags.refresh_cleanup:
             await apply_refresh_cleanup()
-        if send_events:
-            Events.send_global_after_refresh_completed()
 
-        if send_events:
-            Events.send_global_refresh_completed()
+            with get_db_session() as session:
+                parent_directories = {i[0] for i in session.query(Directory.path).filter(Directory.path.in_(paths))}
+                parent_directories |= set(filter(lambda i: i.is_dir(), paths))
+            await upsert_directories(parent_directories, found_directories)
+
+            if send_events:
+                Events.send_global_after_refresh_completed()
+
         refresh_logger.warning('Done refreshing Files')
 
         if refreshing_all_files:
             # Only set refresh_complete flag if all files have been refreshed.
             flags.refresh_complete.set()
+            if send_events:
+                Events.send_global_refresh_completed()
 
 
 async def apply_indexers():
@@ -537,6 +556,50 @@ async def apply_indexers():
             if processed < 20:
                 # Processed less than the limit, don't do the next query.
                 break
+
+
+async def upsert_directories(parent_directories, directories):
+    """
+    Insert/update/delete directories provided.  Deletes all children of `parent_directories` which are not in
+    `directories`.
+    """
+    idempotency = now()
+    directories = list(directories) + list(parent_directories)
+
+    # Only insert directories that are children of `media_directory` and exist.
+    media_directory = get_media_directory()
+    directories = [i for i in directories if i.is_dir() and i != media_directory]
+
+    if directories:
+        # Insert any directories that were created, update any directories which previously existed.
+        with get_db_curs(commit=True) as curs:
+            values = [(str(i.absolute()), i.name, idempotency) for i in directories]
+            values = mogrify(curs, values)
+            stmt = f'''
+                INSERT INTO directory (path, name, idempotency) VALUES {values}
+                ON CONFLICT (path) DO UPDATE
+                SET idempotency = EXCLUDED.idempotency
+            '''
+            curs.execute(stmt)
+
+    with get_db_curs(commit=True) as curs:
+        # Delete the children of any parent directory which no longer exists.
+        for directory in parent_directories:
+            stmt = f'DELETE FROM directory WHERE path LIKE %(directory)s AND idempotency != %(idempotency)s'
+            curs.execute(stmt, dict(directory=f'{directory.absolute()}%', idempotency=idempotency))
+
+
+@optional_session
+async def search_directories(name: str, excluded: List[str] = None, limit: int = 20, session: Session = None) \
+        -> List[Directory]:
+    """Find the Directories whose names contain the `name` string."""
+    excluded = excluded or []
+    directories = session.query(Directory) \
+        .filter(Directory.name.ilike(f'%{name}%')) \
+        .filter(Directory.path.notin_(excluded)) \
+        .order_by(asc(Directory.name)) \
+        .limit(limit).all()
+    return directories
 
 
 def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,

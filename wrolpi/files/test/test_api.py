@@ -5,7 +5,6 @@ from unittest import mock
 import pytest
 
 from wrolpi.errors import API_ERRORS, WROLModeEnabled
-from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
 from wrolpi.test.common import assert_dict_contains
@@ -179,31 +178,6 @@ def test_files_search(test_session, test_client, make_files_structure, assert_fi
     assert_files_search('nothing', [])
 
 
-def test_directory_search(test_client, make_files_structure):
-    """Test that directories can be searched."""
-    make_files_structure([
-        'foo/',
-        'fool/',
-        'not a directory',
-    ])
-
-    def assert_directories(search_str, expected):
-        body = dict(search_str=search_str)
-        request, response = test_client.post('/api/files/directories', content=json.dumps(body))
-        assert response.status_code == HTTPStatus.OK
-        assert response.json['directories'] == expected
-
-    # All directories are returned.
-    assert_directories(None, ['foo', 'fool'])
-    assert_directories('', ['foo', 'fool'])
-    # Matches both directories.
-    assert_directories('fo', ['foo', 'fool'])
-    # Matches the one directory exactly.
-    assert_directories('foo', ['foo'])
-    # Does not exist.
-    assert_directories('food', [])
-
-
 def test_refresh_files_list(test_session, test_client, make_files_structure, test_directory, video_bytes):
     """The user can request to refresh specific files."""
     make_files_structure({
@@ -307,3 +281,158 @@ def test_file_group_tag(test_client):
     request, response = test_client.post('/api/files/tag', content=json.dumps(dict(file_group_id=1)))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert 'tag_id' in response.json['error']
+
+
+def test_search_directories(test_client, test_session, make_files_structure, assert_directories):
+    """Directories can be searched by name."""
+    make_files_structure(['foo/one.txt', 'foo/two.txt', 'bar/one.txt'])
+    request, response = test_client.post('/api/files/refresh')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert_directories({'foo', 'bar'})
+
+    # More than one character required.
+    content = dict(name='f')
+    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    content = dict(name='fo')
+    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert [i['path'] for i in response.json['directories']] == ['foo', ]
+
+    # Case is ignored.
+    content = dict(name='BAR')
+    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert [i['path'] for i in response.json['directories']] == ['bar', ]
+
+    # Searching for something that does not exist.
+    content = dict(name='does not exist')
+    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert [i['path'] for i in response.json['directories']] == []
+
+    # Only first 20 "foo" are returned.
+    make_files_structure([
+        'fooo/',
+        'foooo/',
+        'fooooo/',
+        'foooooo/',
+        'fooooooo/',
+        'foooooooo/',
+        'fooooooooo/',
+        'foooooooooo/',
+        'fooooooooooo/',
+        'foooooooooooo/',
+        'fooooooooooooo/',
+        'foooooooooooooo/',
+        'fooooooooooooooo/',
+        'foooooooooooooooo/',
+        'fooooooooooooooooo/',
+        'foooooooooooooooooo/',
+        'fooooooooooooooooooo/',
+        'foooooooooooooooooooo/',
+        'fooooooooooooooooooooo/',
+        'foooooooooooooooooooooo/',
+        'fooooooooooooooooooooooo/',
+    ])
+    test_client.post('/api/files/refresh')
+    content = dict(name='fo')
+    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert [i['path'] for i in response.json['directories']] == [f'f{"o" * i}' for i in range(2, 22)]
+
+
+def test_post_search_directories(test_session, test_client, make_files_structure):
+    """Directory names can be searched.  This endpoint also returns Channel and Domain directories."""
+    channel_dir, domain_dir, _, _ = make_files_structure([
+        'dir1/',
+        'dir2/',
+        'dir3/',
+        'dir4/',
+    ])
+    request, response = test_client.post('/api/files/refresh')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    from modules.videos.models import Channel
+    channel = Channel(directory=channel_dir, name='Channel Name')
+    from modules.archive.models import Domain
+    domain = Domain(directory=domain_dir, domain='example.com')
+    test_session.add_all([channel, domain])
+    test_session.commit()
+
+    content = {'name': 'di'}
+    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    # All directories contain "di", but directories filters out the Channel and Domain directories.
+    assert response.json['directories'] == [{'name': 'dir3', 'path': 'dir3'}, {'name': 'dir4', 'path': 'dir4'}]
+    assert response.json['channel_directories'] == [{'name': 'Channel Name', 'path': 'dir1'}, ]
+    assert response.json['domain_directories'] == [{'domain': 'example.com', 'path': 'dir2'}, ]
+
+
+def test_post_upload_directory(test_session, test_client, test_directory, make_files_structure, make_multipart_form):
+    """A file can be uploaded in a directory in the destination."""
+    make_files_structure(['uploads/'])
+
+    forms = [
+        dict(name='chunkNumber', value='0'),
+        dict(name='filename', value='/foo/bar.txt'),  # notice the directory
+        dict(name='totalChunks', value='0'),
+        dict(name='destination', value='uploads'),
+        dict(name='chunkSize', value='3'),
+        dict(name='chunk', value='foo', filename='chunk')
+    ]
+    body = make_multipart_form(forms)
+    request, response = test_client.post('/api/files/upload', data=body,
+                                         headers={
+                                             'Content-Type': 'multipart/form-data; name=upload; filename="file.txt";'
+                                                             ' boundary=-----sanic'})
+    assert response.status_code == HTTPStatus.CREATED
+
+    assert (test_directory / 'uploads/foo/bar.txt').is_file()
+    assert (test_directory / 'uploads/foo/bar.txt').read_text() == 'foo'
+
+    assert test_session.query(FileGroup).count() == 1
+
+
+def test_post_upload(test_session, test_client, test_directory, make_files_structure, make_multipart_form):
+    """A file can be uploaded in chunks directly to the destination."""
+    make_files_structure(['uploads/'])
+
+    forms = [
+        dict(name='chunkNumber', value='0'),
+        dict(name='filename', value='foo.txt'),
+        dict(name='totalChunks', value='1'),
+        dict(name='destination', value='uploads'),
+        dict(name='chunkSize', value='3'),
+        dict(name='chunk', value='foo', filename='chunk')
+    ]
+    body = make_multipart_form(forms)
+    request, response = test_client.post('/api/files/upload', data=body,
+                                         headers={
+                                             'Content-Type': 'multipart/form-data; name=upload; filename="file.txt";'
+                                                             ' boundary=-----sanic'})
+    assert response.status_code == HTTPStatus.OK
+
+    assert (test_directory / 'uploads/foo.txt').is_file()
+    assert (test_directory / 'uploads/foo.txt').read_text() == 'foo'
+
+    forms = [
+        dict(name='chunkNumber', value='1'),
+        dict(name='filename', value='foo.txt'),
+        dict(name='totalChunks', value='1'),
+        dict(name='destination', value='uploads'),
+        dict(name='chunkSize', value='3'),
+        dict(name='chunk', value='bar', filename='chunk')
+    ]
+    body = make_multipart_form(forms)
+    request, response = test_client.post('/api/files/upload', data=body,
+                                         headers={
+                                             'Content-Type': 'multipart/form-data; name=upload; filename="file.txt";'
+                                                             ' boundary=-----sanic'})
+    assert response.status_code == HTTPStatus.CREATED
+
+    assert (test_directory / 'uploads/foo.txt').is_file()
+    assert (test_directory / 'uploads/foo.txt').read_text() == 'foobar'
+
+    assert test_session.query(FileGroup).count() == 1

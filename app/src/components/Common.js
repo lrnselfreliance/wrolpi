@@ -1,13 +1,36 @@
 import React, {useContext, useEffect, useState} from "react";
-import {Button as SButton, ButtonGroup, Card, Container, IconGroup, Input, Modal, Pagination} from 'semantic-ui-react';
+import {Button as SButton, ButtonGroup, Card, Container, IconGroup, Input, Pagination, Search} from 'semantic-ui-react';
 import {Link, NavLink, useNavigate} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useDirectories, useHotspot, useSearchOrder, useSettings, useThrottle} from "../hooks/customHooks";
+import {
+    useDirectories,
+    useHotspot,
+    useSearchDirectories,
+    useSearchOrder,
+    useSettings,
+    useThrottle
+} from "../hooks/customHooks";
 import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
-import {Button, CardIcon, darkTheme, Form, Header, Icon, lightTheme, Menu, Popup, Statistic} from "./Theme";
+import {
+    Button,
+    CardIcon,
+    darkTheme,
+    Form,
+    Header,
+    Icon,
+    lightTheme,
+    Menu,
+    Modal,
+    ModalActions,
+    ModalContent,
+    ModalDescription, ModalHeader,
+    Popup,
+    Statistic
+} from "./Theme";
 import {FilePreviewContext} from "./FilePreview";
 import _ from "lodash";
 import {killDownloads, startDownloads} from "../api";
+import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
 export const API_URI = process.env && process.env.REACT_APP_API_URI ? process.env.REACT_APP_API_URI : `${window.location.protocol}//${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
@@ -697,54 +720,65 @@ export function isZipMimetype(mimetype) {
     return mimetype.startsWith('application/zip') || mimetype.startsWith('application/zlib') || mimetype.startsWith('application/x-7z-compressed') || mimetype.startsWith('application/x-bzip2') || mimetype.startsWith('application/x-xz') || mimetype.startsWith('application/gzip') || mimetype.startsWith('application/x-rar');
 }
 
+export function mimetypeIconName(mimetype, lowerPath = '') {
+    if (mimetype) {
+        if (mimetype.startsWith('text/html') || mimetype.startsWith('application/json') || mimetype.startsWith('text/yaml') || mimetype.startsWith('text/xml')) {
+            return 'file code';
+        } else if (mimetype.startsWith('application/pdf')) {
+            return 'file pdf';
+        } else if (mimetype.startsWith('text/plain')) {
+            return 'file text';
+        } else if (mimetype.startsWith('image/')) {
+            return 'image';
+        } else if (mimetype.startsWith('video/')) {
+            return 'film';
+        } else if (mimetype.startsWith('message/rfc822')) {
+            return 'mail';
+        } else if (isZipMimetype(mimetype)) {
+            return 'file archive';
+        } else if (mimetype.startsWith('application/x-iso9660-image') || mimetype.startsWith('application/x-raw-disk-image') || mimetype.startsWith('application/x-cd-image')) {
+            return 'dot circle';
+        } else if (mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook') || mimetype.startsWith('application/vnd.amazon.mobi8-ebook')) {
+            return 'book';
+        } else if (mimetype.startsWith('text/vtt') || mimetype.startsWith('text/srt')) {
+            return 'closed captioning';
+        } else if (mimetype.startsWith('application/x-openscad') || mimetype.startsWith('model/stl')) {
+            return 'cube';
+        } else if (mimetype.startsWith('application/x-dosexec') || mimetype.startsWith('application/x-msi')) {
+            return 'microsoft';
+        } else if (mimetype.startsWith('audio/')) {
+            return 'file audio';
+        } else if (mimetype.startsWith('application/vnd.openxmlformats-officedocument.wordprocessingml.document')) {
+            return 'file word';
+        } else if (mimetype.startsWith('application/x-x509-ca-cert')) {
+            return 'certificate';
+        } else if (mimetype.startsWith('application/octet-stream')) {
+            if (lowerPath.endsWith('.mp3')) {
+                return 'file audio';
+            } else if (lowerPath.endsWith('.stl')) {
+                return 'cube';
+            } else if (lowerPath.endsWith('.blend')) {
+                return 'cube';
+            } else if (lowerPath.endsWith('.dmg')) {
+                return 'apple';
+            } else if (lowerPath.endsWith('.azw3')) {
+                return 'book';
+            }
+        }
+    }
+    if (lowerPath.endsWith('.pem')) {
+        return 'certificate';
+    }
+    return 'file';
+}
+
 export function FileIcon({file, disabled = true, size = 'huge', ...props}) {
     // Default to a grey file icon.
     const {mimetype, path, primary_path} = file;
     // `file` may be a file_group or a file.
     const lowerPath = primary_path ? primary_path.toLocaleString() : path.toLowerCase();
-    props['name'] = 'file';
+    props['name'] = mimetypeIconName(mimetype, lowerPath);
     props['color'] = mimetypeColor(mimetype);
-    if (mimetype) {
-        if (mimetype.startsWith('text/html') || mimetype.startsWith('application/json') || mimetype.startsWith('text/yaml') || mimetype.startsWith('text/xml')) {
-            props['name'] = 'file code';
-        } else if (mimetype.startsWith('application/pdf')) {
-            props['name'] = 'file pdf';
-        } else if (mimetype.startsWith('text/plain')) {
-            props['name'] = 'file text';
-        } else if (mimetype.startsWith('image/')) {
-            props['name'] = 'image';
-        } else if (mimetype.startsWith('video/')) {
-            props['name'] = 'film';
-        } else if (mimetype.startsWith('message/rfc822')) {
-            props['name'] = 'mail';
-        } else if (isZipMimetype(mimetype)) {
-            props['name'] = 'file archive';
-        } else if (mimetype.startsWith('application/x-iso9660-image')) {
-            props['name'] = 'dot circle';
-        } else if (mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook') || mimetype.startsWith('application/vnd.amazon.mobi8-ebook')) {
-            props['name'] = 'book';
-        } else if (mimetype.startsWith('text/vtt') || mimetype.startsWith('text/srt')) {
-            props['name'] = 'closed captioning';
-        } else if (mimetype.startsWith('application/x-openscad') || mimetype.startsWith('model/stl')) {
-            props['name'] = 'cube';
-        } else if (mimetype.startsWith('application/x-dosexec') || mimetype.startsWith('application/x-msi')) {
-            props['name'] = 'microsoft';
-        } else if (mimetype.startsWith('audio/')) {
-            props['name'] = 'file audio';
-        } else if (mimetype.startsWith('application/octet-stream')) {
-            if (lowerPath.endsWith('.mp3')) {
-                props['name'] = 'file audio';
-            } else if (lowerPath.endsWith('.stl')) {
-                props['name'] = 'cube';
-            } else if (lowerPath.endsWith('.blend')) {
-                props['name'] = 'cube';
-            } else if (lowerPath.endsWith('.dmg')) {
-                props['name'] = 'apple';
-            } else if (lowerPath.endsWith('.azw3')) {
-                props['name'] = 'book';
-            }
-        }
-    }
     return <Icon disabled={disabled} size={size} {...props}/>
 }
 
@@ -792,14 +826,14 @@ export function UnsupportedModal(header, message, icon) {
             <Icon name={icon || 'exclamation triangle'}/>
             {header || 'Unsupported'}
         </Header>
-        <Modal.Content>
-            <Modal.Description>
+        <ModalContent>
+            <ModalDescription>
                 {message}
-            </Modal.Description>
-        </Modal.Content>
-        <Modal.Actions>
+            </ModalDescription>
+        </ModalContent>
+        <ModalActions>
             <Button basic inverted onClick={onClose}>Ok</Button>
-        </Modal.Actions>
+        </ModalActions>
     </Modal>;
 
     return {modal, doClose: onClose, doOpen: onOpen};
@@ -849,6 +883,99 @@ export function useTitle(title) {
             document.title = originalTitle.current;
         }
     }, [title]);
+}
+
+export function DirectorySearch({onSelect, value, ...props}) {
+    const {
+        directoryName,
+        setDirectoryName,
+        directories,
+        channelDirectories,
+        domainDirectories,
+        loading,
+    } = useSearchDirectories(value);
+    const [results, setResults] = useState();
+
+    useEffect(() => {
+        if (
+            (directories && directories.length >= 0)
+            || (channelDirectories && channelDirectories.length >= 0)
+            || (domainDirectories && domainDirectories.length >= 0)) {
+            setResults({
+                directories: {
+                    name: 'Directories',
+                    results: directories.map(i => {
+                        return {title: i['path']}
+                    }),
+                },
+                channel_directories: {
+                    name: 'Channels',
+                    results: channelDirectories.map(i => {
+                        return {title: i['path'], description: i['name']};
+                    }),
+                },
+                domain_directories: {
+                    name: 'Domains',
+                    results: domainDirectories.map(i => {
+                        return {title: i['path'], description: i['domain']};
+                    }),
+                }
+            });
+        }
+    }, [
+        JSON.stringify(directories),
+        JSON.stringify(channelDirectories),
+        JSON.stringify(domainDirectories),
+        loading,
+    ]);
+
+    const handleSearchChange = (e, data) => {
+        if (e) {
+            e.preventDefault();
+        }
+        if (onSelect) {
+            onSelect('');
+        }
+        setDirectoryName(data.value);
+    }
+
+    const handleResultSelect = (e, data) => {
+        if (e) {
+            e.preventDefault();
+        }
+        // title is the relative path.
+        if (onSelect) {
+            onSelect(data.result.title);
+        }
+        setDirectoryName(data.result.title);
+    }
+
+    const handleClear = (e) => {
+        if (e) {
+            e.preventDefault();
+        }
+        onSelect('');
+        setDirectoryName('');
+    }
+
+    return <Grid>
+        <Grid.Row>
+            <Grid.Column mobile={13} tablet={14} computer={15}>
+                <Search category
+                        placeholder='Search directory names...'
+                        onSearchChange={handleSearchChange}
+                        onResultSelect={handleResultSelect}
+                        loading={loading}
+                        value={directoryName}
+                        results={results}
+                        {...props}
+                />
+            </Grid.Column>
+            <Grid.Column mobile={3} tablet={2} computer={1}>
+                <Button secondary icon='close' onClick={handleClear}/>
+            </Grid.Column>
+        </Grid.Row>
+    </Grid>
 }
 
 export function DirectoryInput({disabled, error, placeholder, setInput, value, required, isDirectory}) {
@@ -1009,7 +1136,7 @@ export function SortButton({sorts = []}) {
     let sortFields;
     if (sorts && sorts.length) {
         sortFields = sorts.map((i) => {
-            return <SButton key={i['value']} onClick={() => handleSortButton(i['value'])}>{i['text']}</SButton>
+            return <Button key={i['value']} onClick={() => handleSortButton(i['value'])}>{i['text']}</Button>
         })
     }
 
@@ -1018,10 +1145,10 @@ export function SortButton({sorts = []}) {
                open={open}
                onClose={() => setOpen(false)}
         >
-            <Modal.Header>Sort By</Modal.Header>
-            <Modal.Content>
+            <ModalHeader>Sort By</ModalHeader>
+            <ModalContent>
                 {sortFields}
-            </Modal.Content>
+            </ModalContent>
         </Modal>
         <ButtonGroup icon>
             <Button icon={desc ? 'sort down' : 'sort up'} onClick={() => toggleDesc()}/>

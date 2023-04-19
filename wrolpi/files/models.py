@@ -246,3 +246,23 @@ class FileGroup(ModelHelper, Base):
     def find_by_path(path, session) -> Optional['FileGroup']:
         file_group = session.query(FileGroup).filter(FileGroup.primary_path == str(path)).one_or_none()
         return file_group
+
+    @property
+    def tag_names(self) -> List[str]:
+        return [i.tag.name for i in self.tag_files]
+
+
+class Directory(ModelHelper, Base):
+    """A representation of a file directory in the media directory."""
+    __tablename__ = 'directory'
+
+    path: pathlib.Path = Column(MediaPathType, primary_key=True)
+    name: str = Column(String, nullable=False)
+    idempotency = Column(TZDateTime, default=lambda: now())
+
+    def __json__(self):
+        d = dict(
+            path=self.path,
+            name=self.name,
+        )
+        return d

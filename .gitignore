@@ -123,3 +123,6 @@ mapnik.xml
 
 # docker override
 docker-compose.override.yml
+
+# test directory is used as media directory, we don't want to commit what a user downloads.
+test

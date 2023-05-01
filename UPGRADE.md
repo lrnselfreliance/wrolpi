@@ -27,3 +27,4 @@
 
 1. Run the upgrade script
     * `sudo /bin/bash /opt/wrolpi/upgrade.sh`
+    * (If the upgrade script does not exist, run the installation script:  `sudo /bin/bash /opt/wrolpi/install.sh`)

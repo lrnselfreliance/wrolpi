@@ -115,14 +115,22 @@ export function Dashboard() {
     </Segment>;
     let getterModal;
     if (selectedGetter === 'downloads') {
-        getterModal = <Modal open={true} closeIcon onClose={() => handleSetGetter(null, null)}>
+        getterModal = <Modal closeIcon
+            open={true}
+            centered={false}
+            onClose={() => handleSetGetter(null, null)}
+        >
             <ModalHeader>Downloads</ModalHeader>
             <ModalContent>
                 <DownloadMenu disabled={gettersDisabled}/>
             </ModalContent>
         </Modal>;
     } else if (selectedGetter === 'upload') {
-        getterModal = <Modal open={true} closeIcon onClose={() => handleSetGetter(null, null)}>
+        getterModal = <Modal closeIcon
+            open={true}
+            centered={false}
+            onClose={() => handleSetGetter(null, null)}
+        >
             <ModalHeader>Upload</ModalHeader>
             <ModalContent>
                 <Upload disabled={gettersDisabled}/>

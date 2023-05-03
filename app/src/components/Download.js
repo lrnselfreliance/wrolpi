@@ -395,7 +395,9 @@ export function DownloadMenu({onOpen, disabled}) {
 
     const localOnOpen = (name) => {
         setDownloader(name);
-        onOpen(name)
+        if (onOpen) {
+            onOpen(name);
+        }
     }
 
     let body = (<>

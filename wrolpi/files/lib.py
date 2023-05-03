@@ -590,7 +590,7 @@ async def upsert_directories(parent_directories, directories):
 
 
 @optional_session
-async def search_directories(name: str, excluded: List[str] = None, limit: int = 20, session: Session = None) \
+async def search_directories_by_name(name: str, excluded: List[str] = None, limit: int = 20, session: Session = None) \
         -> List[Directory]:
     """Find the Directories whose names contain the `name` string."""
     excluded = excluded or []

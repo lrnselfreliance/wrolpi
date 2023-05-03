@@ -126,17 +126,18 @@ async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
         return response.empty()
 
     from modules.videos.channel import lib as channels_lib
-    channel_directories = channels_lib.search_channels_by_directory(name=body.name)
-    channel_directories = [dict(path=i.directory, name=i.name) for i in channel_directories]
+    channels = channels_lib.search_channels_by_name(name=body.name)
+    channel_directories = [dict(path=i.directory, name=i.name) for i in channels]
     channel_paths = [i['path'] for i in channel_directories]
 
     from modules.archive import lib as archives_lib
-    domain_directories = archives_lib.search_domains_by_directory(name=body.name)
-    domain_directories = [dict(path=i.directory, domain=i.domain) for i in domain_directories]
+    domains = archives_lib.search_domains_by_name(name=body.name)
+    domain_directories = [dict(path=i.directory, domain=i.domain) for i in domains]
     domain_paths = [i['path'] for i in domain_directories]
 
+    # Get all directories that match but do not contain the above directories.
     from wrolpi.files.models import Directory
-    directories: List[Directory] = await lib.search_directories(
+    directories: List[Directory] = await lib.search_directories_by_name(
         name=body.name,
         excluded=list(map(str, channel_paths + domain_paths)))
 

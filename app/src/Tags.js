@@ -32,6 +32,7 @@ import _ from "lodash";
 import {HexColorPicker} from "react-colorful";
 import {useRecurringTimeout} from "./hooks/customHooks";
 import {Media} from "./contexts/contexts";
+import {Link} from "react-router-dom";
 
 export const TagsContext = React.createContext({
     NameToTagLabel: null,
@@ -109,9 +110,9 @@ export function useTags() {
         }
         return <Label.Group tag>
             {tagNames.map(i =>
-                <a key={i} href={`/?tag=${i}`} style={{marginLeft: '0.3em', marginRight: '0.3em'}}>
+                <Link key={i} to={`/?tag=${i}`} style={{marginLeft: '0.3em', marginRight: '0.3em'}}>
                     <NameToTagLabel name={i} {...props}/>
-                </a>
+                </Link>
             )}
         </Label.Group>
     }

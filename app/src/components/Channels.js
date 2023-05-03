@@ -45,7 +45,7 @@ import {
     Table
 } from "./Theme";
 import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
-import {Media} from "../contexts/contexts";
+import {Media, ThemeContext} from "../contexts/contexts";
 import {SortableTable} from "./SortableTable";
 import {ChannelPlaceholder} from "./Placeholder";
 import {toast} from "react-semantic-toasts-2";
@@ -436,10 +436,11 @@ export function NewChannel(props) {
 }
 
 function ChannelRow({channel}) {
-    const navigate = useNavigate();
-
-    const editTo = `/videos/channel/${channel.id}/edit`;
     const videosTo = `/videos/channel/${channel.id}/video`;
+
+    const {inverted} = React.useContext(ThemeContext);
+    const editTo = `/videos/channel/${channel.id}/edit`;
+    const buttonClass = `ui button secondary ${inverted ? 'inverted' : ''}`;
 
     return <TableRow>
         <TableCell>
@@ -455,7 +456,7 @@ function ChannelRow({channel}) {
             {channel.url && channel.download_frequency ? secondsToFrequency(channel.download_frequency) : null}
         </TableCell>
         <TableCell textAlign='right'>
-            <Button secondary onClick={() => navigate(editTo)}>Edit</Button>
+            <Link className={buttonClass} to={editTo}>Edit</Link>
         </TableCell>
     </TableRow>;
 }

@@ -1,6 +1,7 @@
-__version__ = '0.10.2-beta'
-
+import pathlib
 import subprocess
+
+__version__ = (pathlib.Path(__file__).parent / 'version.txt').read_text()
 
 
 def git_revision():

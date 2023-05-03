@@ -15,7 +15,7 @@ import {
     TableHeaderCell,
     TableRow,
 } from "semantic-ui-react";
-import {contrastingColor} from "./components/Common";
+import {contrastingColor, scrollToTopOfElement} from "./components/Common";
 import {
     Button,
     FormInput,
@@ -200,7 +200,8 @@ function EditTagsModal() {
         setTagColor(color || DEFAULT_TAG_COLOR);
         setTagId(id);
         // Scroll to top of Edit Modal.
-        document.getElementById('editModalContent').scrollTop = 0;
+        const editModalContent = document.getElementById('editModalContent');
+        scrollToTopOfElement(editModalContent);
     }
 
     const localSaveTag = async () => {

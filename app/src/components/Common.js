@@ -359,6 +359,13 @@ export function scrollToTop() {
     });
 }
 
+export function scrollToTopOfElement(element, smooth=true) {
+    element.scroll({
+        top: 0,
+        behavior: smooth ? 'smooth' : 'auto',
+    });
+}
+
 export function SearchInput({
                                 searchStr,
                                 onSubmit,

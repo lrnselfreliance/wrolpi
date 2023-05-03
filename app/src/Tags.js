@@ -31,7 +31,7 @@ import {
 import _ from "lodash";
 import {HexColorPicker} from "react-colorful";
 import {useRecurringTimeout} from "./hooks/customHooks";
-import {Media} from "./contexts/contexts";
+import {Media, ThemeContext} from "./contexts/contexts";
 import {Link} from "react-router-dom";
 
 export const TagsContext = React.createContext({
@@ -173,11 +173,12 @@ function EditTagRow({tag, onDelete, onEdit}) {
 
 function EditTagsModal() {
     const {fetchTags, tags} = React.useContext(TagsContext);
+    const {inverted} = React.useContext(ThemeContext);
 
-    const [open, setOpen] = useState(false);
-    const [tagId, setTagId] = useState(null);
-    const [tagName, setTagName] = useState('');
-    const [tagColor, setTagColor] = useState(DEFAULT_TAG_COLOR);
+    const [open, setOpen] = React.useState(false);
+    const [tagId, setTagId] = React.useState(null);
+    const [tagName, setTagName] = React.useState('');
+    const [tagColor, setTagColor] = React.useState(DEFAULT_TAG_COLOR);
     const textColor = contrastingColor(tagColor);
 
     const localOnClose = () => {
@@ -198,6 +199,8 @@ function EditTagsModal() {
         setTagName(name);
         setTagColor(color || DEFAULT_TAG_COLOR);
         setTagId(id);
+        // Scroll to top of Edit Modal.
+        document.getElementById('editModalContent').scrollTop = 0;
     }
 
     const localSaveTag = async () => {
@@ -223,7 +226,7 @@ function EditTagsModal() {
                onClose={localOnClose}
         >
             <ModalHeader>Edit Tags</ModalHeader>
-            <ModalContent>
+            <div className={`scrolling content ${inverted ? 'inverted' : ''}`} id='editModalContent'>
                 <Label.Group tag>
                     <Label size='large' style={{backgroundColor: tagColor, color: textColor}}>
                         {tagName || 'Example Tag'}
@@ -270,7 +273,7 @@ function EditTagsModal() {
                         {content}
                     </TableBody>
                 </Table>
-            </ModalContent>
+            </div>
         </Modal>
         <Button onClick={() => setOpen(true)} color='violet'>
             Edit

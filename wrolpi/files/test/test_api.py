@@ -364,10 +364,27 @@ def test_post_search_directories(test_session, test_client, make_files_structure
     content = {'name': 'di'}
     request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
-    # All directories contain "di", but directories filters out the Channel and Domain directories.
-    assert response.json['directories'] == [{'name': 'dir3', 'path': 'dir3'}, {'name': 'dir4', 'path': 'dir4'}]
-    assert response.json['channel_directories'] == [{'name': 'Channel Name', 'path': 'dir1'}, ]
-    assert response.json['domain_directories'] == [{'domain': 'example.com', 'path': 'dir2'}, ]
+    # All directories contain "di".  The names of the Channel and Directory do not match.
+    assert response.json['directories'] == [{'name': 'dir1', 'path': 'dir1'}, {'name': 'dir2', 'path': 'dir2'},
+                                            {'name': 'dir3', 'path': 'dir3'}, {'name': 'dir4', 'path': 'dir4'}]
+    assert response.json['channel_directories'] == []
+    assert response.json['domain_directories'] == []
+
+    content = {'name': 'Chan'}
+    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    # Channel name matches.
+    assert response.json['directories'] == []
+    assert response.json['channel_directories'] == [{'name': 'Channel Name', 'path': 'dir1'}]
+    assert response.json['domain_directories'] == []
+
+    content = {'name': 'exam'}
+    request, response = test_client.post('/api/files/search_directories', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    # Domain name matches.
+    assert response.json['directories'] == []
+    assert response.json['channel_directories'] == []
+    assert response.json['domain_directories'] == [{'domain': 'example.com', 'path': 'dir2'}]
 
 
 def test_post_upload_directory(test_session, test_client, test_directory, make_files_structure, make_multipart_form):

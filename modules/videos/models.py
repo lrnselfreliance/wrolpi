@@ -247,7 +247,7 @@ class Video(ModelHelper, Base):
 
     @property
     def caption_files(self) -> List[dict]:
-        return self.file_group.my_files('text/srt') + self.file_group.my_files('text/vtt')
+        return self.file_group.my_files('text/vtt') + self.file_group.my_files('text/srt')
 
     @property
     def caption_paths(self) -> List[pathlib.Path]:
@@ -258,14 +258,14 @@ class Video(ModelHelper, Base):
         caption_paths = self.caption_paths
         # Some SRT files are more supported than others, these are their preferred order.
         caption_text = None
-        if english_srt := [i for i in caption_paths if i.name.endswith('.en.srt')]:
-            caption_text = read_captions(english_srt[0])
-        elif srt := [i for i in caption_paths if i.name.endswith('.srt')]:
-            caption_text = read_captions(srt[0])
-        elif english_vtt := [i for i in caption_paths if i.name.endswith('.en.vtt')]:
+        if english_vtt := [i for i in caption_paths if i.name.endswith('.en.vtt')]:
             caption_text = read_captions(english_vtt[0])
         elif vtt := [i for i in caption_paths if i.name.endswith('.vtt')]:
             caption_text = read_captions(vtt[0])
+        elif english_srt := [i for i in caption_paths if i.name.endswith('.en.srt')]:
+            caption_text = read_captions(english_srt[0])
+        elif srt := [i for i in caption_paths if i.name.endswith('.srt')]:
+            caption_text = read_captions(srt[0])
 
         return caption_text
 

@@ -175,8 +175,8 @@ class FileGroup(ModelHelper, Base):
         return self.my_files('image/')
 
     def my_subtitle_files(self) -> List[dict]:
-        """Return all my Files that have text/srt or text/vtt mimetype."""
-        return self.my_files('text/srt', 'text/vtt')
+        """Return all my Files that have text/vtt or text/srt mimetype."""
+        return self.my_files('text/vtt', 'text/srt')
 
     def my_text_files(self) -> List[dict]:
         """Return all my Files that have a text mimetype.  But, do not include subtitle files."""

@@ -226,19 +226,34 @@ class FileGroup(ModelHelper, Base):
     def from_paths(cls, session: Session, *paths: pathlib.Path) -> 'FileGroup':
         """Create a new FileGroup which contains the provided file paths."""
         from wrolpi.files.lib import get_primary_file, get_mimetype
-        file_group = FileGroup()
 
-        primary_path = get_primary_file(paths)
+        existing_groups = session.query(FileGroup).filter(FileGroup.primary_path.in_(list(map(str, paths)))).all()
+        if len(existing_groups) == 0:
+            # These paths have not been used previously, create a new FileGroup.
+            file_group = FileGroup()
+            primary_path = get_primary_file(paths)
+            file_group.primary_path = primary_path
+            file_group.append_files(*paths)
+            file_group.mimetype = get_mimetype(file_group.primary_path)
+            session.add(file_group)
+        elif len(existing_groups) == 1:
+            # Found one FileGroup with these paths, no need to create a new FileGroup.
+            file_group = existing_groups[0]
+            primary_path = file_group.primary_path
+        else:
+            # Multiple FileGroups contain these paths as primary.
+            primary_path = get_primary_file(paths)
+            file_group: FileGroup = next(filter(lambda i: i.primary_path == primary_path, existing_groups), None)
+            if not file_group:
+                file_group = FileGroup.from_paths(session, primary_path)
+            file_group.merge(existing_groups)
+
         if not isinstance(primary_path, pathlib.Path):
             raise ValueError('Cannot create FileGroup without a primary path.')
 
-        file_group.append_files(*paths)
-        file_group.primary_path = primary_path
-        file_group.mimetype = get_mimetype(file_group.primary_path)
         file_group.modification_datetime = from_timestamp(max(i.stat().st_mtime for i in paths))
         file_group.size = sum(i.stat().st_size for i in paths)
 
-        session.add(file_group)
         return file_group
 
     @staticmethod
@@ -250,6 +265,29 @@ class FileGroup(ModelHelper, Base):
     @property
     def tag_names(self) -> List[str]:
         return [i.tag.name for i in self.tag_files]
+
+    def merge(self, file_groups: List['FileGroup']):
+        """Consume the files and Tags of the provided FileGroups and attach them to this FileGroup.  Delete the provided
+        FileGroups."""
+        session = Session.object_session(self)
+
+        collected_files = self.files.copy()
+        for file_group in file_groups:
+            if file_group.primary_path == self.primary_path:
+                # Don't merge myself.
+                continue
+
+            for file in file_group.files:
+                if file['path'] not in self.my_paths():
+                    collected_files.append(file)
+            # Move any applied Tags.
+            for tag_file in file_group.tag_files:
+                if tag_file.tag.name not in self.tag_names:
+                    # Preserve the created at.
+                    self.add_tag(tag_file.tag).created_at = tag_file.created_at
+            session.delete(file_group)
+
+        self.files = collected_files
 
 
 class Directory(ModelHelper, Base):

@@ -204,11 +204,7 @@ class Video(ModelHelper, Base):
 
     @staticmethod
     def from_paths(session: Session, *paths: pathlib.Path) -> 'Video':
-        str_paths = list(map(str, paths))
-        file_group = session.query(FileGroup).filter(FileGroup.primary_path == any_(str_paths)).one_or_none()
-        if not file_group:
-            # This video has not been downloaded previously.
-            file_group = FileGroup.from_paths(session, *paths)
+        file_group = FileGroup.from_paths(session, *paths)
 
         # Video may have been downloaded previously.
         video = session.query(Video).filter(Video.file_group_id == file_group.id).one_or_none()

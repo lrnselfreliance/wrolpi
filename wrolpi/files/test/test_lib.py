@@ -1,5 +1,6 @@
 import asyncio
 import json
+import pathlib
 import shutil
 import zipfile
 from datetime import datetime
@@ -515,7 +516,8 @@ def test_group_files_by_stem(make_files_structure, test_directory):
     assert list(lib.group_files_by_stem(files)) == [
         [test_directory / 'bar.txt'],
         [test_directory / 'baz.txt'],
-        [test_directory / 'foo.info.json', test_directory / 'foo.live_chat.json', test_directory / 'foo.mp4', test_directory / 'foo.txt'],
+        [test_directory / 'foo.info.json', test_directory / 'foo.live_chat.json', test_directory / 'foo.mp4',
+         test_directory / 'foo.txt'],
     ]
 
 
@@ -636,12 +638,35 @@ async def test_refresh_directories(test_session, test_directory, assert_director
     assert_directories({'foo', 'baz'})
 
 
-def test_file_group_primary_path_is_unique(test_session, test_directory):
-    """You cannot create a FileGroup that shares a path"""
-    path = test_directory / 'file.txt'
-    path.touch()
+def test_file_group_merge(test_session, test_directory, make_files_structure, tag_factory, video_bytes, srt_file3):
+    """A FileGroup can be created from multiple existing FileGroups.  Any Tags applied to the existing groups will be
+    migrated."""
+    vid, srt = make_files_structure({
+        'vid.mp4': video_bytes,
+        'vid.srt': (PROJECT_DIR / 'test/example3.en.srt').read_text(),
+    })
+    one, two = tag_factory(), tag_factory()
+    vid_group = FileGroup.from_paths(test_session, vid)
+    srt_group = FileGroup.from_paths(test_session, srt)
+    test_session.add_all([vid_group, srt_group])
+    test_session.flush([vid_group, srt_group])
+    vid_tag_file = vid_group.add_tag(one, test_session)
+    srt_tag_file = srt_group.add_tag(two, test_session)
+    test_session.flush([vid_tag_file, srt_tag_file])
+    tag_file_created_at = vid_tag_file.created_at
+    srt_file_created_at = srt_tag_file.created_at
+    test_session.commit()
 
-    one = FileGroup.from_paths(test_session, path)
-    two = FileGroup.from_paths(test_session, path)
-    with pytest.raises(sqlalchemy.exc.IntegrityError):
-        test_session.commit()
+    # Both FileGroups are merged.
+    vid = FileGroup.from_paths(test_session, vid, srt)
+    test_session.commit()
+    assert {i['path'].name for i in vid.files} == {'vid.mp4', 'vid.srt'}
+
+    assert test_session.query(FileGroup).count() == 1
+    assert set(vid.tag_names) == {'one', 'two'}
+    assert {i['path'].name for i in vid.files} == {'vid.mp4', 'vid.srt'}
+    # TagFile.created_at is preserved.
+    assert [i for i in vid.tag_files if i.tag.name == 'one'][0].created_at == tag_file_created_at
+    assert [i for i in vid.tag_files if i.tag.name == 'two'][0].created_at == srt_file_created_at
+    # Size is combined
+    assert vid.size > len(video_bytes)

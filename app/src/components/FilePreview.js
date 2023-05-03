@@ -1,11 +1,7 @@
 import React from "react";
 import _ from "lodash";
-import {
-    Grid,
-    Header as SHeader,
-    Image,
-} from "semantic-ui-react";
-import {TagsSelector} from "../Tags";
+import {Grid, Header as SHeader, Image,} from "semantic-ui-react";
+import {TagsProvider, TagsSelector} from "../Tags";
 import {Media} from "../contexts/contexts";
 import {encodeMediaPath} from "./Common";
 import {addTag, fetchFile, removeTag} from "../api";
@@ -152,7 +148,7 @@ export const FilePreviewContext = React.createContext({
 
 const MAXIMUM_TEXT_SIZE = 5_000_000;
 
-export function FilePreviewWrapper({children}) {
+export function FilePreviewProvider({children}) {
     const [previewFile, setPreviewFile] = React.useState(null);
     const [previewModal, setPreviewModal] = React.useState(null);
     const [callbacks, setCallbacks] = React.useState(null);

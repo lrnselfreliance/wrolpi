@@ -717,6 +717,14 @@ export const useStatusInterval = () => {
     return {status, fetchStatus};
 }
 
+export const StatusProvider = (props) => {
+    const value = useStatusInterval();
+
+    return <StatusContext.Provider value={value}>
+        {props.children}
+    </StatusContext.Provider>
+}
+
 
 export const useVideoStatistics = () => {
     const [statistics, setStatistics] = useState({});

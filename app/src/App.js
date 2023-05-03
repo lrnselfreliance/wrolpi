@@ -10,16 +10,16 @@ import {MoreRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/Inventory";
 import {ArchiveRoute} from "./components/Archive";
 import {FilesRoute} from "./components/Files";
-import {useStatusInterval} from "./hooks/customHooks";
+import {StatusProvider} from "./hooks/customHooks";
 import {MapRoute} from "./components/Map";
 import {MediaContextProvider, mediaStyles, StatusContext, ThemeContext} from "./contexts/contexts";
-import {Header, ThemeWrapper} from "./components/Theme";
+import {Header, ThemeProvider} from "./components/Theme";
 import {Dashboard} from "./Dashboard";
 import {Donate} from "./components/Donate";
 import {useEventsInterval} from "./Events";
 import {SemanticToastContainer} from "react-semantic-toasts-2";
-import {FilePreviewWrapper} from "./components/FilePreview";
-import {TagsContext, useTagsInterval} from "./Tags";
+import {FilePreviewProvider} from "./components/FilePreview";
+import {TagsProvider} from "./Tags";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);
@@ -76,24 +76,21 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
 </Route>));
 
 export default function App() {
-    const statusValue = useStatusInterval();
-    const tagsValue = useTagsInterval();
-
     useEventsInterval();
 
-    return <ThemeWrapper>
-        <TagsContext.Provider value={tagsValue}>
-            <FilePreviewWrapper>
+    return <ThemeProvider>
+        <TagsProvider>
+            <FilePreviewProvider>
                 {/* Context and style to handle switching between mobile/computer. */}
                 <style>{mediaStyles}</style>
                 {/* Toasts can be on any page. */}
                 <SemanticToastContainer position='top-right'/>
                 <MediaContextProvider>
-                    <StatusContext.Provider value={statusValue}>
+                    <StatusProvider>
                         <RouterProvider router={router}/>
-                    </StatusContext.Provider>
+                    </StatusProvider>
                 </MediaContextProvider>
-            </FilePreviewWrapper>
-        </TagsContext.Provider>
-    </ThemeWrapper>
+            </FilePreviewProvider>
+        </TagsProvider>
+    </ThemeProvider>
 }

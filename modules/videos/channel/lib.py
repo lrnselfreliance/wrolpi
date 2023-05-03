@@ -201,7 +201,7 @@ def download_channel(id_: int):
 @optional_session
 def search_channels_by_directory(name: str, limit: int = 5, session: Session = None) -> List[Channel]:
     channels = session.query(Channel) \
-        .filter(Channel.directory.ilike(f'%{name}%')) \
+        .filter(Channel.name.ilike(f'%{name}%')) \
         .order_by(asc(Channel.name)) \
         .limit(limit) \
         .all()

@@ -32,7 +32,7 @@ import _ from "lodash";
 import {HexColorPicker} from "react-colorful";
 import {useRecurringTimeout} from "./hooks/customHooks";
 import {Media, ThemeContext} from "./contexts/contexts";
-import {Link} from "react-router-dom";
+import {Link, useNavigate} from "react-router-dom";
 
 export const TagsContext = React.createContext({
     NameToTagLabel: null,
@@ -104,16 +104,30 @@ export function useTags() {
         </Label.Group>
     }
 
+    const TagLabelLink = ({name, props}) => {
+        const to = `/?tag=${name}`;
+        const style = {marginLeft: '0.3em', marginRight: '0.3em'};
+        try {
+            // We prefer to use Link to avoid reloading the page, check if React Router is available, so we can use it.
+            useNavigate();
+            return <Link to={to} style={style}>
+                <NameToTagLabel name={name} {...props}/>
+            </Link>
+        } catch {
+            // React Router is not available, use anchor.
+            return <a href={to} style={style}>
+                <NameToTagLabel name={name} {...props}/>
+            </a>
+        }
+    }
+
     const TagsLinkGroup = ({tagNames, ...props}) => {
         if (!tagNames || tagNames.length === 0) {
             return <React.Fragment/>;
         }
+
         return <Label.Group tag>
-            {tagNames.map(i =>
-                <Link key={i} to={`/?tag=${i}`} style={{marginLeft: '0.3em', marginRight: '0.3em'}}>
-                    <NameToTagLabel name={i} {...props}/>
-                </Link>
-            )}
+            {tagNames.map(i => <TagLabelLink key={i} name={i} props={props}/>)}
         </Label.Group>
     }
 
@@ -227,7 +241,7 @@ function EditTagsModal() {
                onClose={localOnClose}
         >
             <ModalHeader>Edit Tags</ModalHeader>
-            <div className={`scrolling content ${inverted ? 'inverted' : ''}`} id='editModalContent'>
+            <div className={`content scrolling ${inverted}`} id='editModalContent'>
                 <Label.Group tag>
                     <Label size='large' style={{backgroundColor: tagColor, color: textColor}}>
                         {tagName || 'Example Tag'}
@@ -458,4 +472,12 @@ export const TagsDropdown = ({value = [], onChange, ...props}) => {
                      value={activeTags}
                      {...props}
     />
+}
+
+export const TagsProvider = (props) => {
+    const tagsValue = useTagsInterval();
+
+    return <TagsContext.Provider value={tagsValue}>
+        {props.children}
+    </TagsContext.Provider>
 }

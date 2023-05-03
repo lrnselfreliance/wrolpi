@@ -38,7 +38,7 @@ export const defaultTheme = lightTheme;
 export const systemTheme = 'system';
 export const themeSessionKey = 'color-scheme';
 
-export function ThemeWrapper({children, ...props}) {
+export function ThemeProvider({children, ...props}) {
     if (!_.isEmpty(props)) {
         console.log(props);
         console.error('ThemeWrapper does not support props!');

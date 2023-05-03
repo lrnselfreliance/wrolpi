@@ -440,7 +440,7 @@ function ChannelRow({channel}) {
 
     const {inverted} = React.useContext(ThemeContext);
     const editTo = `/videos/channel/${channel.id}/edit`;
-    const buttonClass = `ui button secondary ${inverted ? 'inverted' : ''}`;
+    const buttonClass = `ui button secondary ${inverted}`;
 
     return <TableRow>
         <TableCell>

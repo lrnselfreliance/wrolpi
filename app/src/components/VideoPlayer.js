@@ -183,7 +183,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         >
             <source src={videoUrl} type="video/mp4"/>
             {/* Only WebVTT captions can be displayed. */}
-            {captionUrls.map(i => <track kind="captions" label="English" src={i} srcLang="en" default/>)}
+            {captionUrls.map(i => <track key={i} kind="captions" label="English" src={i} srcLang="en" default/>)}
         </video>
 
         <Container style={{marginTop: '1em'}}>

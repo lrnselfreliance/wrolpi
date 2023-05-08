@@ -135,9 +135,15 @@ def main():
 
     # Hotspot/throttle are not supported in Docker containers.
     if not DOCKERIZED and config.hotspot_on_startup:
-        admin.enable_hotspot()
+        try:
+            admin.enable_hotspot()
+        except Exception as e:
+            logger.error('Failed to enable hotspot', exc_info=e)
     if not DOCKERIZED and config.throttle_on_startup:
-        admin.throttle_cpu_on()
+        try:
+            admin.throttle_cpu_on()
+        except Exception as e:
+            logger.error('Failed to throttle CPU', exc_info=e)
 
     check_media_directory()
 

@@ -57,6 +57,7 @@ fi
 check_directory /opt/wrolpi "The WROLPi directory exists" "The WROLPi directory does not exist at /opt/wrolpi"
 check_directory /opt/wrolpi-blobs "The WROLPi blobs directory exists" "The WROLPi blobs directory does not exist at /opt/wrolpi-blobs"
 check_file /opt/wrolpi/main.py "The WROLPi main script exists" "The WROLPi main script does not exist at /opt/wrolpi/main.py"
+check_file ${MEDIA_DIRECTORY}/config/wrolpi.yaml "The WROLPi config file exists" "The WROLPi config file does not exist"
 
 echo
 # Postgresql
@@ -101,7 +102,7 @@ echo
 # API
 
 if [ -f /opt/wrolpi/venv/bin/python3 ]; then
-  echo "OK: WROLPi virtual environment exists"
+  echo "OK: WROLPi Python virtual environment exists"
 
   if /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py -h >/dev/null; then
     echo 'OK: WROLPi main can be run'
@@ -110,7 +111,7 @@ if [ -f /opt/wrolpi/venv/bin/python3 ]; then
   fi
 
 else
-  echo "FAILED: WROLPi virtual environment does not exist"
+  echo "FAILED: WROLPi Python virtual environment does not exist"
 fi
 
 if systemctl list-unit-files "*wrolpi-api*" >/dev/null; then
@@ -225,6 +226,11 @@ fi
 
 if curl -s http://0.0.0.0/media/ | grep "Index of" >/dev/null; then
   echo "OK: Media directory files are served by nginx"
+  if curl -s -I http://0.0.0.0/media/config/wrolpi.yaml | grep '200 OK' >/dev/null; then
+    echo "OK: Config can be fetched from nginx"
+  else
+    echo "FAILED: Media directory files are not being served"
+  fi
 else
   echo "FAILED: Media directory files are not being served"
 fi

@@ -120,6 +120,7 @@ def upgrade():
         ('Medical', '#4a869c'),
         ('Navigation', '#1ab3ce'),
         ('Nuclear', '#0dff00'),
+        ('Pests', '#050068'),
         ('Power', '#D837FF'),
         ('Radio', '#134cbb'),
         ('Schooling', '#6d752e'),

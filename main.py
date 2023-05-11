@@ -211,7 +211,7 @@ async def periodic_downloads(app: Sanic):
         download_manager.disable()
         return
 
-    async with flags.wait_for_flag(flags.db_up):
+    async with flags.db_up.wait_for():
         download_manager.enable()
         app.add_task(download_manager.perpetual_download())
 
@@ -224,7 +224,7 @@ async def start_workers(app: Sanic):
         download_manager.stop()
         return
 
-    async with flags.wait_for_flag(flags.db_up):
+    async with flags.db_up.wait_for():
         download_manager.start_workers()
 
 

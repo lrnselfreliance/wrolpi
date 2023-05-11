@@ -103,9 +103,7 @@ class Flag:
         """Wait for this Flag to be set."""
         logger.debug(f'Waiting for flag {self.name}')
         async with wait_for_flag(self, timeout=timeout):
-            logger.debug(f'Entered flag {self.name}')
             yield
-            logger.debug(f'Exiting flag {self.name}')
 
 
 # Set by `check_db_is_up`.

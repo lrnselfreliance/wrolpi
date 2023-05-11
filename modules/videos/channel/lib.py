@@ -26,20 +26,17 @@ async def get_minimal_channels() -> List[dict]:
         # Get all channels, even if they don't have videos.
         stmt = '''
             SELECT
-                c.id, name, directory, url, download_frequency, info_date,
-                (select next_download from download d where d.url=c.url) AS next_download
+                c.id, name, directory, c.url, download_frequency,
+                COUNT(v.id) as video_count,
+                SUM(fg.size)::BIGINT AS size
             FROM
                 channel AS c
-            ORDER BY LOWER(name)
+                LEFT JOIN video v on c.id = v.channel_id
+                LEFT JOIN file_group fg on fg.id = v.file_group_id
+            GROUP BY 1, 2, 3, 4, 5
         '''
         curs.execute(stmt)
-        channels = list(map(dict, curs.fetchall()))
-
-    video_counts = await get_channels_video_count()
-
-    for channel in channels:
-        channel_id = channel['id']
-        channel['video_count'] = video_counts[channel_id]
+        channels = sorted([dict(i) for i in curs.fetchall()], key=lambda i: i['name'].lower())
 
     return channels
 

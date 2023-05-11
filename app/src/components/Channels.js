@@ -18,7 +18,6 @@ import {
     DirectoryInput,
     frequencyOptions,
     humanFileSize,
-    isoDatetimeToString,
     RequiredAsterisk,
     secondsToFrequency,
     Toggle,
@@ -450,10 +449,10 @@ function ChannelRow({channel}) {
             {channel.video_count}
         </TableCell>
         <TableCell>
-            {channel.url && channel.info_date ? isoDatetimeToString(channel.info_date) : null}
+            {channel.url && channel.download_frequency ? secondsToFrequency(channel.download_frequency) : null}
         </TableCell>
         <TableCell>
-            {channel.url && channel.download_frequency ? secondsToFrequency(channel.download_frequency) : null}
+            {channel.size ? humanFileSize(channel.size) : null}
         </TableCell>
         <TableCell textAlign='right'>
             <Link className={buttonClass} to={editTo}>Edit</Link>
@@ -520,8 +519,8 @@ export function Channels() {
     const headers = [
         {key: 'name', text: 'Name', sortBy: 'name', width: 8},
         {key: 'video_count', text: 'Videos', sortBy: 'video_count', width: 2},
-        {key: 'last_update', text: 'Last Update', sortBy: 'info_date', width: 2},
         {key: 'download_frequency', text: 'Download Frequency', sortBy: 'download_frequency', width: 2},
+        {key: 'size', text: 'Size', sortBy: 'size', width: 2},
         {key: 'manage', text: 'Manage', width: 2},
     ];
     const mobileHeaders = [

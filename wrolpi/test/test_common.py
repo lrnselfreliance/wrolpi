@@ -284,6 +284,11 @@ def test_zig_zag(low, high, expected):
         ('foo&', 'foo&'),
         ('foo%', 'foo'),
         ('foo!', 'foo'),
+        ('fo\no', 'foo'),
+        ('fo\ro', 'foo'),
+        ('foo\r', 'foo'),
+        ('foo\r', 'foo'),
+        ('foo ', 'foo'),
     ]
 )
 def test_escape_file_name(name, expected):

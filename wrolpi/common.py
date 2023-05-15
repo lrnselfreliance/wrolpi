@@ -775,11 +775,14 @@ def get_files_and_directories(directory: Path):
 
 # These characters are invalid in Windows or Linux.
 INVALID_FILE_CHARS = re.compile(r'[/<>:\|"\\\?\*%!\n\r]')
+SPACE_FILE_CHARS = re.compile(r'(  +)|(\t+)')
 
 
 def escape_file_name(name: str) -> str:
     """Remove any invalid characters in a file name."""
-    return INVALID_FILE_CHARS.sub('', name).strip()
+    name = SPACE_FILE_CHARS.sub(' ', name)
+    name = INVALID_FILE_CHARS.sub('', name)
+    return name.strip()
 
 
 def native_only(func: callable):

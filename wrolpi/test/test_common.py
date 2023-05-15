@@ -286,13 +286,22 @@ def test_zig_zag(low, high, expected):
         ('foo!', 'foo'),
         ('fo\no', 'foo'),
         ('fo\ro', 'foo'),
-        ('foo\r', 'foo'),
-        ('foo\r', 'foo'),
+        ('fo\n\no\n', 'foo'),
+        ('fo\r\ro\r', 'foo'),
         ('foo ', 'foo'),
+        ('foo ', 'foo'),
+        # Some whitespace characters are preserved as spaces.
+        ('fo\to', 'fo o'),
+        ('fo\t\to\t', 'fo o'),
+        ('fo  o', 'fo o'),
+        ('fo   o', 'fo o'),
+        ('fo    o', 'fo o'),
     ]
 )
 def test_escape_file_name(name, expected):
-    assert common.escape_file_name(name) == expected
+    result = common.escape_file_name(name)
+    if result != expected:
+        raise AssertionError(f'Escape of {repr(name)}: {repr(result)} != {repr(expected)}')
 
 
 @pytest.mark.parametrize(

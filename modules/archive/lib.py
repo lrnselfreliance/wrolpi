@@ -367,12 +367,20 @@ def get_domains():
 
 
 ARCHIVE_ORDERS = {
-    'date': 'a.archive_datetime ASC, LOWER(fg.primary_path) ASC',
-    '-date': 'a.archive_datetime DESC NULLS LAST, LOWER(fg.primary_path) DESC',
+    'date': 'a.archive_datetime ASC',
+    '-date': 'a.archive_datetime DESC NULLS LAST',
     'rank': '2 DESC, a.archive_datetime DESC',
     '-rank': '2 ASC, a.archive_datetime ASC',
     'size': 'fg.size ASC, LOWER(fg.primary_path) ASC',
     '-size': 'fg.size DESC NULLS LAST, LOWER(fg.primary_path) DESC',
+}
+ORDER_GROUP_BYS = {
+    'date': 'a.archive_datetime',
+    '-date': 'a.archive_datetime',
+    'rank': 'a.archive_datetime',
+    '-rank': 'a.archive_datetime',
+    'size': 'fg.size, fg.primary_path',
+    '-size': 'fg.size, fg.primary_path',
 }
 
 
@@ -380,24 +388,27 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
                     headline: bool = False) \
         -> Tuple[List[dict], int]:
     # Always filter FileGroups to Archives.
-    wheres = ["fg.model = 'archive'"]
+    wheres = []
     joins = []
+    group_by = 'a.file_group_id'
 
     params = dict(search_str=search_str, offset=int(offset), limit=int(limit))
-    order_by = '1 DESC'
+    order_by = 'id DESC'
 
+    select_columns = ''
     if search_str:
         # A search_str was provided by the user, modify the query to filter by it.
-        select_columns = 'ts_rank(fg.textsearch, websearch_to_tsquery(%(search_str)s)), COUNT(*) OVER() AS total'
+        select_columns = 'ts_rank(fg.textsearch, websearch_to_tsquery(%(search_str)s)) AS rank,' \
+                         ' COUNT(*) OVER() AS total'
         wheres.append('fg.textsearch @@ websearch_to_tsquery(%(search_str)s)')
         params['search_str'] = search_str
-    else:
-        # No search_str provided.  Get path and total only.  Don't join the "file" to speed up query.
-        select_columns = 'fg.id, COUNT(*) OVER() AS total'
+        joins = ['LEFT JOIN file_group fg ON fg.id = a.file_group_id']
+        group_by = f'{group_by}, rank'
 
     if order:
         try:
             order_by = ARCHIVE_ORDERS[order]
+            group_by = f'{group_by}, {ORDER_GROUP_BYS[order]}'
         except KeyError:
             raise InvalidOrderBy(f'Invalid order by: {order}')
 
@@ -413,6 +424,7 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
                 ts_headline(fg.b_text, websearch_to_tsquery(%(search_str)s)) AS "b_headline",
                 ts_headline(fg.c_text, websearch_to_tsquery(%(search_str)s)) AS "c_headline",
                 ts_headline(fg.d_text, websearch_to_tsquery(%(search_str)s)) AS "d_headline"'''
+        group_by = f'{group_by}, title_headline, b_headline, c_headline, d_headline'
     else:
         headline = ''
 
@@ -426,14 +438,14 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
     join = '\n'.join(joins)
     stmt = f'''
             SELECT
-                fg.id -- always get `file_group.id` for `handle_file_group_search_results`
+                a.file_group_id AS id, -- always get `file_group.id` for `handle_file_group_search_results`
+                COUNT(*) OVER() AS total
                 {select_columns}
                 {headline}
-            FROM file_group fg
-            LEFT JOIN archive a ON a.file_group_id = fg.id
+            FROM archive a
             {join}
             {where}
-            GROUP BY fg.id, a.archive_datetime
+            GROUP BY {group_by}
             ORDER BY {order_by}
             OFFSET %(offset)s LIMIT %(limit)s
         '''.strip()

@@ -1,6 +1,8 @@
 import json
 from http import HTTPStatus
 
+from modules.archive import lib
+
 
 def check_results(test_client, data, ids):
     request, response = test_client.post('/api/archive/search', content=json.dumps(data))
@@ -12,6 +14,16 @@ def check_results(test_client, data, ids):
         assert file_groups, f'Expected {len(ids)} archives but did not receive any'
     assert [i['id'] for i in response.json['file_groups']] == ids, \
         f'{response.json["file_groups"][0]["id"]}..{response.json["file_groups"][-1]["id"]}'
+
+
+def test_archives_search_order(test_session, archive_directory, archive_factory, test_client):
+    """Search using all orders."""
+    archive_factory('example.com', 'https://example.com/one', 'my archive', 'foo bar qux')
+    for order_by in lib.ARCHIVE_ORDERS:
+        data = {'search_str': 'foo', 'order_by': order_by}
+        request, response = test_client.post('/api/archive/search', content=json.dumps(data))
+        if not response.status_code == HTTPStatus.OK:
+            raise AssertionError(str(response.json))
 
 
 def test_archives_search(test_session, archive_directory, archive_factory, test_client):

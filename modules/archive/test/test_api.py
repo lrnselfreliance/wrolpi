@@ -25,6 +25,11 @@ def test_archives_search_order(test_session, archive_directory, archive_factory,
         if not response.status_code == HTTPStatus.OK:
             raise AssertionError(str(response.json))
 
+        data = {'search_str': None, 'order_by': order_by}
+        request, response = test_client.post('/api/archive/search', content=json.dumps(data))
+        if not response.status_code == HTTPStatus.OK:
+            raise AssertionError(str(response.json))
+
 
 def test_archives_search(test_session, archive_directory, archive_factory, test_client):
     """Archives can be searched by their title and their contents."""

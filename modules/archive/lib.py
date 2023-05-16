@@ -382,6 +382,7 @@ ORDER_GROUP_BYS = {
     'size': 'fg.size, fg.primary_path',
     '-size': 'fg.size, fg.primary_path',
 }
+FILE_ORDERS = ['size', '-size']
 
 
 def search_archives(search_str: str, domain: str, limit: int, offset: int, order: str, tag_names: List[str],
@@ -409,6 +410,8 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
         try:
             order_by = ARCHIVE_ORDERS[order]
             group_by = f'{group_by}, {ORDER_GROUP_BYS[order]}'
+            if order in FILE_ORDERS:
+                joins = ['LEFT JOIN file_group fg ON fg.id = a.file_group_id']
         except KeyError:
             raise InvalidOrderBy(f'Invalid order by: {order}')
 

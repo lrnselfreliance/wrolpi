@@ -159,6 +159,7 @@ async def archive_modeler():
 
                 with slow_logger(1, f'Modeling archive took %(elapsed)s seconds: {file_group}', logger__=logger):
                     if archive:
+                        archive: Archive
                         try:
                             archive_id = archive.id
                             archive.validate()

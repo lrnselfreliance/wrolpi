@@ -122,15 +122,15 @@ def upgrade():
         ('Nuclear', '#0dff00'),
         ('Pests', '#050068'),
         ('Power', '#D837FF'),
+        ('Primitive', '#A18A62'),
         ('Radio', '#134cbb'),
         ('Schooling', '#6d752e'),
         ('Security', '#333333'),
         ('Shelter', '#625641'),
         ('Social', '#490c73'),
-        ('Survival', '#A18A62'),
         ('Tools', '#f0d730'),
-        ('Water', '#291BC2'),
-        ('WROL', '#4700ab')
+        ('WROL', '#4700ab'),
+        ('Water', '#291BC2')
     ''')
 
     session.execute('UPDATE wrolpi_flag SET refresh_complete = false')

@@ -224,13 +224,13 @@ class Archive(Base, ModelHelper):
         self.domain_id = domain.id if domain else None
 
     def apply_singlefile_title(self):
-        """Get the title from the Singlefile, if its missing."""
+        """Get the title from the Singlefile, if it's missing."""
         from modules.archive.lib import get_title_from_html
         if self.singlefile_path and not self.file_group.title:
             self.file_group.title = get_title_from_html(self.singlefile_path.read_text())
 
     def validate(self):
-        """Fill in any missing data about this Archive from it's files."""
+        """Fill in any missing data about this Archive from its files."""
         try:
             self.read_readability_data()
             self.read_singlefile_data()

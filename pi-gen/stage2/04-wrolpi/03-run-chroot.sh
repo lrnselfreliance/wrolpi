@@ -11,6 +11,10 @@ alias ll='ls -lh'
 alias la='ll -a'
 EOF
 
+# Create WROLPi user.  This user will own the media directory, API, and App.
+# The `pi` user will be the maintainer's user.
+grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
+
 # Change default postgresql port to 5432.
 sed -i 's/port = 5433/port = 5432/' /etc/postgresql/13/main/postgresql.conf
 
@@ -31,7 +35,7 @@ cd /opt/wrolpi/app
 npm install
 npm run build
 
-chown -R ${FIRST_USER_NAME}:${FIRST_USER_NAME} /opt/wrolpi
+chown -R wrolpi:wrolpi /opt/wrolpi
 
 # Configure nginx.
 cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
@@ -53,7 +57,7 @@ EOF
 chmod 660 /etc/sudoers.d/90-wrolpi
 
 [ -d /media/wrolpi ] || mkdir /media/wrolpi
-chown ${FIRST_USER_NAME}:${FIRST_USER_NAME} /media/wrolpi
+chown wrolpi:wrolpi /media/wrolpi
 
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-app.service /etc/systemd/system/

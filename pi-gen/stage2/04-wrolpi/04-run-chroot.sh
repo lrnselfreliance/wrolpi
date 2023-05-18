@@ -8,27 +8,28 @@ if [ ! -d /opt/openstreetmap-carto ]; then
   git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto
 fi
 (cd /opt/openstreetmap-carto && git fetch && git checkout master && git reset --hard origin/master && git pull --ff)
-chown -R ${FIRST_USER_NAME}:${FIRST_USER_NAME} /opt/openstreetmap-carto
+chown -R wrolpi:wrolpi /opt/openstreetmap-carto
 cd /opt/openstreetmap-carto
 if [[ ! -f /opt/openstreetmap-carto/mapnik.xml || ! -s /opt/openstreetmap-carto/mapnik.xml ]]; then
   /usr/bin/carto project.mml >/opt/openstreetmap-carto/mapnik.xml
 fi
 
 # WROLPi user can access WROLPi and Map database.
-cat >/home/wrolpi/.pgpass <<'EOF'
+cat >/home/pi/.pgpass <<'EOF'
 127.0.0.1:5432:gis:_renderd:wrolpi
 127.0.0.1:5432:wrolpi:wrolpi:wrolpi
 EOF
-cat >/home/wrolpi/wrolpi.desktop <<'EOF'
+cat >/home/pi/Deskop/wrolpi.desktop <<'EOF'
 [Desktop Entry]
 Encoding=UTF-8
 Name=WROLPi App
 Type=Link
-URL=http://locahost
+URL=http://127.0.0.1
 Icon=/opt/wrolpi/icon.png
 EOF
-chown -R ${FIRST_USER_NAME}:${FIRST_USER_NAME} /home/wrolpi
-chmod 0600 /home/wrolpi/.pgpass
+chown -R pi:pi /home/pi
+chmod 0600 /home/pi/.pgpass
+usermod -aG wrolpi pi
 
 # Configure renderd.
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
@@ -47,6 +48,16 @@ usermod -aG _renderd wrolpi
 
 [ -d /var/cache/renderd/tiles ] || mkdir /var/cache/renderd/tiles
 chown -R _renderd:_renderd /var/cache/renderd/tiles
+
+# Create the media directory for the wrolpi user.
+echo '/dev/sda1 /media/wrolpi auto defaults,nofail 0 0' | tee -a /etc/fstab
+mkdir -p /media/wrolpi
+cat >/home/wrolpi/.pgpass <<'EOF'
+127.0.0.1:5432:gis:_renderd:wrolpi
+127.0.0.1:5432:wrolpi:wrolpi:wrolpi
+EOF
+chmod 0600 /home/wrolpi/.pgpass
+chown -R wrolpi:wrolpi /media/wrolpi /home/wrolpi
 
 set +x
 

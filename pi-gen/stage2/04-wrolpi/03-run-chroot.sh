@@ -14,6 +14,7 @@ EOF
 # Create WROLPi user.  This user will own the media directory, API, and App.
 # The `pi` user will be the maintainer's user.
 grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
+usermod -aG pi wrolpi
 
 # Change default postgresql port to 5432.
 sed -i 's/port = 5433/port = 5432/' /etc/postgresql/13/main/postgresql.conf

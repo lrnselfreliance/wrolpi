@@ -694,7 +694,7 @@ def tag_names_to_sub_select(names: List[str]) -> Tuple[str, dict]:
             LEFT JOIN tag t on t.id = tf.tag_id
         GROUP BY file_group_id
         -- Match only FileGroups that have at least all the Tag names.
-        HAVING array_agg(t.name) @> %(tag_names)s::VARCHAR[]
+        HAVING array_agg(t.name)::TEXT[] @> %(tag_names)s::TEXT[]
     '''
     return stmt, dict(tag_names=names)
 

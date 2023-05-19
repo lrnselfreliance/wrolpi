@@ -13,7 +13,7 @@
    * `mkdir stage2/04-wrolpi/files`
 6. Convert a map PBF file to your initial map DB dump:
    * `docker run --rm -v /home/user/district-of-columbia-230111.osm.pbf:/data/region.osm.pbf lrnselfreliance/osm-map-dumper | gzip > /home/user/pi-gen/stage2/04-wrolpi/files/district-of-columbia-230111.dump.gz`
-7. Run the build:
-   * `sudo /bin/bash ./build.sh -c config.txt`
+7. Run the build (log to build.log):
+   * `sudo /bin/bash ./build.sh -c config.txt 2>&1 | tee build.log`
 
 Your final image should be in `pi-gen/work/WROLPi/export-image/`

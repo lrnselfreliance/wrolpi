@@ -5,7 +5,6 @@ import pytest
 import yaml
 
 from wrolpi import tags
-from wrolpi.dates import now
 from wrolpi.errors import FileGroupIsTagged
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup

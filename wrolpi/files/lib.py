@@ -648,10 +648,10 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         wheres.append('model = %(model)s')
 
     if tags:
-        where_, params_, join_ = tag_names_to_clauses(tags)
-        wheres.append(where_)
+        # Filter all FileGroups by those that have been tagged with the provided tag names.
+        tags_stmt, params_ = tag_names_to_sub_select(tags)
         params.update(params_)
-        joins.append(join_)
+        wheres.append(f'fg.id = ANY({tags_stmt})')
 
     if search_str and headline:
         headline = ''',
@@ -681,24 +681,22 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
     return results, total
 
 
-def tag_names_to_clauses(tags: List[str]):
-    """Create the SQL necessary to filter the `file_group` table by the provided Tag names."""
-    params = dict()
+def tag_names_to_sub_select(names: List[str]) -> Tuple[str, dict]:
+    """Create the SQL necessary to filter FileGroup by the provided Tag names."""
+    if not names:
+        return '', dict()
 
-    if not tags:
-        return '', params, ''
-
-    where_tags = []
-    joins = []
-    for idx, tag_name in enumerate(tags):
-        where_tags.append(f't{idx}.name = %(tag_name{idx})s')
-        params[f'tag_name{idx}'] = tag_name
-        joins.append(f'LEFT JOIN tag_file tf{idx} ON tf{idx}.file_group_id = fg.id '
-                     f'LEFT JOIN tag t{idx} ON t{idx}.id = tf{idx}.tag_id')
-    where_tags = ' AND '.join(where_tags)
-    wheres = f'({where_tags})'
-    join = '\n'.join(joins)
-    return wheres, params, join
+    stmt = '''
+        SELECT
+            tf.file_group_id
+        FROM
+            tag_file tf
+            LEFT JOIN tag t on t.id = tf.tag_id
+        GROUP BY file_group_id
+        -- Match only FileGroups that have at least all the Tag names.
+        HAVING array_agg(t.name) @> %(tag_names)s::VARCHAR[]
+    '''
+    return stmt, dict(tag_names=names)
 
 
 def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List[dict], int]:

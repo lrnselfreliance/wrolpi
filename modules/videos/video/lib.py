@@ -7,7 +7,7 @@ from modules.videos.models import Video
 from wrolpi.common import run_after, logger
 from wrolpi.db import get_db_session, optional_session
 from wrolpi.errors import UnknownVideo
-from wrolpi.files.lib import handle_file_group_search_results, tag_names_to_clauses
+from wrolpi.files.lib import handle_file_group_search_results, tag_names_to_sub_select
 from ..lib import save_channels_config
 
 logger.getChild(__name__)
@@ -102,10 +102,10 @@ def search_videos(
         select_columns = 'fg.id, COUNT(*) OVER() AS total'
 
     if tag_names:
-        where_, params_, join_ = tag_names_to_clauses(tag_names)
-        wheres.append(where_)
+        # Filter all FileGroups by those that have been tagged with the provided tag names.
+        tags_stmt, params_ = tag_names_to_sub_select(tag_names)
         params.update(params_)
-        joins.append(join_)
+        wheres.append(f'fg.id = ANY({tags_stmt})')
 
     if search_str and headline:
         headline = ''',

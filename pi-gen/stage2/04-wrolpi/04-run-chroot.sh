@@ -7,6 +7,7 @@ set -x
 if [ ! -d /opt/openstreetmap-carto ]; then
   git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto
 fi
+git config --global --add safe.directory /opt/openstreetmap-carto
 (cd /opt/openstreetmap-carto && git fetch && git checkout master && git reset --hard origin/master && git pull --ff)
 chown -R wrolpi:wrolpi /opt/openstreetmap-carto
 cd /opt/openstreetmap-carto
@@ -15,11 +16,12 @@ if [[ ! -f /opt/openstreetmap-carto/mapnik.xml || ! -s /opt/openstreetmap-carto/
 fi
 
 # WROLPi user can access WROLPi and Map database.
+mkdir -p /home/pi/Desktop
 cat >/home/pi/.pgpass <<'EOF'
 127.0.0.1:5432:gis:_renderd:wrolpi
 127.0.0.1:5432:wrolpi:wrolpi:wrolpi
 EOF
-cat >/home/pi/Deskop/wrolpi.desktop <<'EOF'
+cat >/home/pi/Desktop/wrolpi.desktop <<'EOF'
 [Desktop Entry]
 Encoding=UTF-8
 Name=WROLPi App

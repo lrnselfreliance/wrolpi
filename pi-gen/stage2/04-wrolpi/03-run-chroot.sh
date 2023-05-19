@@ -24,6 +24,7 @@ single-file --version || npm i -g serve@12.0.1 single-file-cli@1.0.15 readabilit
 # Put the latest WROLPi release in /opt/wrolpi.
 rm -rf /opt/wrolpi
 git clone -b release https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
+git config --global --add safe.directory /opt/wrolpi
 
 # Install Python requirements.
 pip3 install --upgrade pip

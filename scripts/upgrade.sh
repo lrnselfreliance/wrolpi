@@ -7,3 +7,7 @@
 cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
 cp /opt/wrolpi/50x.html /var/www/50x.html
 /usr/sbin/nginx -s reload
+
+# Update systemd files.
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
+/usr/bin/systemctl daemon-reload

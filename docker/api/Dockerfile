@@ -15,5 +15,5 @@ COPY modules /opt/wrolpi/modules
 COPY requirements.txt /opt/wrolpi/requirements.txt
 RUN pip3 install -r /opt/wrolpi/requirements.txt
 
-ENTRYPOINT [ "python3", "/opt/wrolpi/main.py"]
+ENTRYPOINT [ "python3", "-OO", "/opt/wrolpi/main.py"]
 CMD ["api", "--host", "0.0.0.0" ]

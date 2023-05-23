@@ -65,8 +65,11 @@ def extract_captions(path: pathlib.Path) -> Optional[str]:
     with tempfile.TemporaryDirectory() as directory:
         directory = pathlib.Path(directory)
         file_path = directory / 'captions.vtt'
+
+        if file_path.exists():
+            raise FileNotFoundError(f'Cannot not extract captions when file already exists {path}')
+
         cmd = (FFMPEG_BIN, '-i', str(path.absolute()), file_path)
-        assert not file_path.exists()
         try:
             subprocess.check_call(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         except subprocess.SubprocessError:

@@ -25,6 +25,7 @@ export class Settings extends React.Component {
             hotspot_password: null,
             hotspot_ssid: null,
             hotspot_status: null,
+            ignore_outdated_zims: null,
             throttle_on_startup: null,
             throttle_status: null,
         }
@@ -46,6 +47,7 @@ export class Settings extends React.Component {
                 hotspot_password: settings.hotspot_password,
                 hotspot_ssid: settings.hotspot_ssid,
                 hotspot_status: settings.hotspot_status,
+                ignore_outdated_zims: settings.ignore_outdated_zims,
                 throttle_on_startup: settings.throttle_on_startup,
                 throttle_status: settings.throttle_status,
             }, this.handleHotspotChange);
@@ -64,6 +66,7 @@ export class Settings extends React.Component {
             hotspot_on_startup: this.state.hotspot_on_startup,
             hotspot_password: this.state.hotspot_password,
             hotspot_ssid: this.state.hotspot_ssid,
+            ignore_outdated_zims: this.state.ignore_outdated_zims,
             throttle_on_startup: this.state.throttle_on_startup,
         }
         await saveSettings(settings);
@@ -111,6 +114,7 @@ export class Settings extends React.Component {
             hotspot_on_startup,
             hotspot_password,
             hotspot_ssid,
+            ignore_outdated_zims,
             pending,
             qrCodeValue,
             throttle_on_startup,
@@ -160,6 +164,15 @@ export class Settings extends React.Component {
                                 disabled={disabled || throttle_on_startup === null}
                                 checked={throttle_on_startup === true}
                                 onChange={checked => this.handleInputChange(null, 'throttle_on_startup', checked)}
+                            />
+                        </div>
+
+                        <div style={{margin: '0.5em'}}>
+                            <Toggle
+                                label='Ignore outdated Zims'
+                                disabled={disabled || ignore_outdated_zims === null}
+                                checked={ignore_outdated_zims === true}
+                                onChange={checked => this.handleInputChange(null, 'ignore_outdated_zims', checked)}
                             />
                         </div>
 

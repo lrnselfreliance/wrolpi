@@ -4,7 +4,7 @@ import pathlib
 from pathlib import Path
 from typing import Optional, Dict, List, Union
 
-from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, BigInteger, any_
+from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship, Session, deferred
 from sqlalchemy.orm.collections import InstrumentedList
 

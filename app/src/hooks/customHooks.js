@@ -11,6 +11,7 @@ import {
     getDownloads,
     getFiles,
     getInventory,
+    getOutdatedZims,
     getSettings,
     getStatistics,
     getStatus,
@@ -20,6 +21,8 @@ import {
     searchArchives,
     searchDirectories,
     searchVideos,
+    searchZim,
+    searchZims,
     setHotspot,
     setThrottle,
 } from "../api";
@@ -27,13 +30,18 @@ import {createSearchParams, useSearchParams} from "react-router-dom";
 import {enumerate, filterToMimetypes, humanFileSize, secondsToFullDuration} from "../components/Common";
 import {StatusContext} from "../contexts/contexts";
 import {toast} from "react-semantic-toasts-2";
+import {useSearch} from "../components/Search";
 
 const calculatePage = (offset, limit) => {
     return offset && limit ? Math.round((offset / limit) + 1) : 1;
 }
 
 const calculateTotalPages = (total, limit) => {
-    return total && limit ? Math.round(total / limit) : 1;
+    // Return the total divided by the limit, but always at least 1.
+    if (!total || !limit || total < limit) {
+        return 1;
+    }
+    return Math.round(total / limit) + 1;
 }
 
 export const useRecurringTimeout = (callback, delay) => {
@@ -147,11 +155,12 @@ export const useArchive = (archiveId) => {
     return {archiveFile: archiveFileGroup, history, fetchArchive};
 }
 
-export const usePages = (defaultLimit) => {
+export const usePages = (defaultLimit = 24, totalPages = 0) => {
     const {searchParams, updateQuery} = useQuery();
     const offset = searchParams.get('o') || 0;
     const limit = parseInt(searchParams.get('l') || defaultLimit || 24);
     const [activePage, setActivePage] = useState(calculatePage(offset, limit));
+    const [totalPages_, setTotalPages] = useState(totalPages);
 
     const setLimit = (value) => {
         setPage(1);
@@ -159,12 +168,22 @@ export const usePages = (defaultLimit) => {
     }
 
     const setPage = (value) => {
+        console.debug(`setPage ${value}`);
         setActivePage(value);
         value = value - 1;  // Page really starts as 0.
         updateQuery({o: value * limit});
     }
 
-    return {offset, limit, setLimit, activePage, setPage};
+    const setTotal = (total) => {
+        const newTotalPages = calculateTotalPages(total, limit);
+        console.log('newTotalPages', newTotalPages);
+        setTotalPages(newTotalPages);
+    }
+
+    // Used for useEffect.
+    const effect = JSON.stringify({offset, limit, activePage});
+
+    return {offset, limit, setLimit, activePage, setPage, totalPages: totalPages_, setTotal, effect};
 }
 
 export const useSearchArchives = (defaultLimit) => {
@@ -403,18 +422,17 @@ export const useChannels = () => {
 }
 
 export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) => {
-    const {searchParams, updateQuery} = useQuery();
-    const limit = searchParams.get('l') || defaultLimit;
-    const offset = searchParams.get('o') || 0;
-    const searchStr = searchParams.get('q');
-    const filter = searchParams.get('filter');
-    const model_ = searchParams.get('model');
-    const activeTags = searchParams.getAll('tag');
+    const {
+        activeTags,
+        pages,
+        searchStr,
+        filter,
+        model: model_,
+        setSearchStr
+    } = useSearch(defaultLimit, emptySearch, model);
     const {view} = useSearchView();
 
     const [searchFiles, setSearchFiles] = useState(null);
-    const [totalPages, setTotalPages] = useState(0);
-    const [activePage, setActivePage] = useState(calculatePage(offset, limit));
     const headline = view === 'headline';
 
     const localSearchFiles = async () => {
@@ -423,13 +441,13 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
         }
         const mimetypes = filterToMimetypes(filter);
         setSearchFiles(null);
-        setTotalPages(0);
         try {
             let [file_groups, total] = await filesSearch(
-                offset, limit, searchStr, mimetypes, model || model_, activeTags, headline);
+                pages.offset, pages.limit, searchStr, mimetypes, model || model_, activeTags, headline);
             setSearchFiles(file_groups);
-            setTotalPages(calculateTotalPages(total, limit));
+            pages.setTotal(total);
         } catch (e) {
+            pages.setTotal(0);
             console.error(e);
             toast({
                 type: 'error',
@@ -442,25 +460,16 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
 
     useEffect(() => {
         localSearchFiles();
-    }, [searchStr, limit, offset, activePage, filter, model, model_, JSON.stringify(activeTags), headline]);
+    }, [searchStr, pages.effect, filter, model, model_, JSON.stringify(activeTags), headline]);
 
-    const setPage = (i) => {
-        i = parseInt(i);
-        let l = parseInt(limit);
-        updateQuery({o: (l * i) - l})
-        setActivePage(i);
-    }
-
-    const setSearchStr = (value) => {
-        updateQuery({q: value, o: null});
-    }
-
-    const setLimit = (value) => {
-        setActivePage(1);
-        updateQuery({l: value, o: 0});
-    }
-
-    return {searchFiles, totalPages, limit, searchStr, filter, setSearchStr, activePage, setPage, setLimit, activeTags};
+    return {
+        searchFiles,
+        searchStr,
+        filter,
+        setSearchStr,
+        pages,
+        activeTags
+    };
 }
 
 export const useBrowseFiles = () => {
@@ -928,6 +937,106 @@ export const useUploadFile = () => {
     }, [JSON.stringify(files)]);
 
     return {files, setFiles: handleFilesChange, progresses, destination, setDestination, doClear, doUpload}
+}
+
+export const useSearchZims = (defaultLimit) => {
+    const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit);
+    const {searchParams, updateQuery} = useQuery();
+    const searchStr = searchParams.get('q') || '';
+
+    const [zims, setZims] = useState(null);
+    const [totalPages, setTotalPages] = useState(0);
+
+    const localSearchZims = async () => {
+        setZims(null);
+        try {
+            let [zims_,] = await searchZims(offset, limit, searchStr);
+            setZims(zims_);
+        } catch (e) {
+            console.error(e);
+            toast({
+                type: 'error',
+                title: 'Unexpected server response',
+                description: 'Could not get archives',
+                time: 5000,
+            });
+            setZims([]);
+        }
+    }
+
+    useEffect(() => {
+        localSearchZims();
+    }, [searchStr, limit, activePage, setZims]);
+
+    const setSearchStr = (value) => {
+        updateQuery({q: value, o: 0, order: undefined});
+    }
+
+    const setOrderBy = (value) => {
+        setPage(1);
+        updateQuery({order: value});
+    }
+
+    return {
+        zims,
+        limit,
+        setLimit,
+        offset,
+        setOrderBy,
+        totalPages,
+        activePage,
+        setPage,
+        searchStr,
+        setSearchStr,
+        fetchArchives: localSearchZims,
+    }
+}
+
+
+export const useSearchZim = (searchStr, zimId, active, activeTags, defaultLimit = 10) => {
+    const [zim, setZim] = useState(null);
+    const pages = usePages(defaultLimit);
+    const [loading, setLoading] = useState(false);
+
+    const localFetchSearch = async () => {
+        if (!active) {
+            return;
+        }
+        setLoading(true);
+        try {
+            const zim = await searchZim(pages.offset, pages.limit, searchStr, zimId, activeTags);
+            setZim(zim);
+            pages.setTotal(zim.estimate);
+        } catch (e) {
+            pages.setTotal(0);
+            console.error(`Failed to search Zim ${zimId}`);
+            console.error(e);
+        }
+        setLoading(false);
+    }
+
+    useEffect(() => {
+        localFetchSearch();
+    }, [active, searchStr, JSON.stringify(activeTags), pages.effect]);
+
+    return {zim, fetchSearch: localFetchSearch, pages, loading}
+}
+
+export const useOutdatedZims = () => {
+    const [outdated, setOutdated] = useState(null);
+    const [current, setCurrent] = useState(null);
+
+    const localFetchOutdatedZims = async () => {
+        const zims = await getOutdatedZims();
+        setOutdated(zims['outdated']);
+        setCurrent(zims['current']);
+    }
+
+    useEffect(() => {
+        localFetchOutdatedZims();
+    }, []);
+
+    return {outdated, current}
 }
 
 export const useVINDecoder = (defaultVINNumber = '') => {

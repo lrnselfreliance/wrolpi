@@ -1,12 +1,13 @@
 import React from "react";
 import _ from "lodash";
 import {Grid, Header as SHeader, Image,} from "semantic-ui-react";
-import {TagsProvider, TagsSelector} from "../Tags";
+import {TagsSelector} from "../Tags";
 import {Media} from "../contexts/contexts";
 import {encodeMediaPath} from "./Common";
-import {addTag, fetchFile, removeTag} from "../api";
+import {fetchFile, tagFileGroup, untagFileGroup} from "../api";
 import {StlViewer} from "react-stl-viewer";
 import {Button, Modal, ModalActions, ModalContent, ModalHeader} from "./Theme";
+import {toast} from "react-semantic-toasts-2";
 
 function getMediaPathURL(previewFile) {
     if (previewFile['primary_path']) {
@@ -26,9 +27,9 @@ function getDownloadPathURL(previewFile) {
 
 function getEpubViewerURL(previewFile) {
     if (previewFile['primary_path']) {
-        return `/epub.html?url=download/${encodeMediaPath(previewFile['primary_path'])}`;
+        return `/epub/epub.html?url=download/${encodeMediaPath(previewFile['primary_path'])}`;
     } else {
-        return `/epub.html?url=download/${encodeMediaPath(previewFile['path'])}`;
+        return `/epub/epub.html?url=download/${encodeMediaPath(previewFile['path'])}`;
     }
 }
 
@@ -65,7 +66,7 @@ function getImageModal(previewFile) {
 
 function getEpubModal(previewFile) {
     const downloadURL = getDownloadPathURL(previewFile);
-    const viewerUrl = `/epub.html?url=${downloadURL}`;
+    const viewerUrl = `/epub/epub.html?url=${downloadURL}`;
     return <ModalContent>
         <div className='full-height'>
             <iframe title='textModal' src={viewerUrl}
@@ -138,6 +139,15 @@ function getSTLModal(previewFile) {
     </React.Fragment>
 }
 
+function getGenericModal(previewFile) {
+    const path = previewFile.primary_path ?? previewFile.path;
+    const name = path.replace(/^.*[\\\/]/, '');
+
+    return <React.Fragment>
+        <ModalHeader>{name}</ModalHeader>
+    </React.Fragment>
+}
+
 export const FilePreviewContext = React.createContext({
     previewFile: null,
     setPreviewFile: null,
@@ -183,29 +193,28 @@ export function FilePreviewProvider({children}) {
     }
 
     const localAddTag = async (name) => {
-        await addTag(previewFile, name);
+        await tagFileGroup(previewFile, name);
         await localFetchFile();
     }
 
     const localRemoveTag = async (name) => {
-        await removeTag(previewFile, name);
+        await untagFileGroup(previewFile, name);
         await localFetchFile();
     }
 
-    function setModalContent(content, url, downloadURL) {
-        let openButton;
-        if (url) {
-            openButton = <Button color='blue' as='a' href={url}>Open</Button>;
-        }
+    function setModalContent(content, url, downloadURL, path) {
+        const openButton = url ? <Button color='blue' as='a' href={url}>Open</Button> : null;
         const closeButton = <Button onClick={handleClose}>Close</Button>;
         const tagsDisplay = <TagsSelector selectedTagNames={previewFile['tags']} onAdd={localAddTag}
                                           onRemove={localRemoveTag}/>;
-        let downloadButton;
-        if (downloadURL) {
-            downloadButton = <Button color='yellow' as='a' href={downloadURL} floated='left'>
-                Download
-            </Button>;
-        }
+        const downloadButton = downloadURL ?
+            <Button color='yellow' as='a' href={downloadURL} floated='left'>Download</Button>
+            : null;
+        const pathContent = path ? <ModalContent>
+                <pre>{path}</pre>
+            </ModalContent>
+            : null;
+        console.log('path', path);
 
         setPreviewModal(<Modal closeIcon
                                size='fullscreen'
@@ -213,6 +222,7 @@ export function FilePreviewProvider({children}) {
                                onClose={e => handleClose(e)}
         >
             {content}
+            {pathContent}
             <ModalActions>
                 <Media at='mobile'>
                     <Grid>
@@ -244,41 +254,47 @@ export function FilePreviewProvider({children}) {
         setPreviewModal(null);
         if (previewFile && !_.isObject(previewFile)) {
             console.error(`Unknown previewFile type: ${typeof previewFile}`);
+            toast({
+                type: 'error',
+                title: 'Cannot preview file',
+                description: 'Cannot preview file',
+                time: 5000,
+            });
             return;
         }
 
         if (previewFile && !_.isEmpty(previewFile)) {
             const {mimetype, size} = previewFile;
             const path = previewFile['primary_path'] || previewFile['path'];
+            console.debug('Previewing file', previewFile);
             const lowerPath = path.toLowerCase();
-            console.debug(`useFilePreview path=${previewFile['path']} mimetype=${mimetype}`);
             const url = getMediaPathURL(previewFile);
             const downloadURL = getDownloadPathURL(previewFile);
             if (mimetype.startsWith('text/') && size > MAXIMUM_TEXT_SIZE) {
                 // Large text files should be downloaded.
                 window.open(downloadURL);
             } else if (mimetype.startsWith('text/') || mimetype.startsWith('application/json')) {
-                setModalContent(getIframeModal(previewFile), url, downloadURL);
+                setModalContent(getIframeModal(previewFile), url, downloadURL, path);
             } else if (mimetype.startsWith('video/')) {
-                setModalContent(getVideoModal(previewFile), url, downloadURL);
+                setModalContent(getVideoModal(previewFile), url, downloadURL, path);
             } else if (mimetype.startsWith('audio/')) {
-                setModalContent(getAudioModal(previewFile), url, downloadURL);
+                setModalContent(getAudioModal(previewFile), url, downloadURL, path);
             } else if (mimetype.startsWith('application/epub')) {
                 const viewerURL = getEpubViewerURL(previewFile);
-                setModalContent(getEpubModal(previewFile), viewerURL, downloadURL);
+                setModalContent(getEpubModal(previewFile), viewerURL, downloadURL, path);
             } else if (mimetype.startsWith('application/pdf')) {
-                setModalContent(getIframeModal(previewFile), url, downloadURL);
+                setModalContent(getIframeModal(previewFile), url, downloadURL, path);
             } else if (mimetype.startsWith('image/')) {
-                setModalContent(getImageModal(previewFile), url);
+                setModalContent(getImageModal(previewFile), url, null, path);
             } else if (mimetype.startsWith('model/stl')) {
-                setModalContent(getSTLModal(previewFile), null, downloadURL);
+                setModalContent(getSTLModal(previewFile), null, downloadURL, path);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.mp3')) {
-                setModalContent(getAudioModal(previewFile), url, downloadURL);
+                setModalContent(getAudioModal(previewFile), url, downloadURL, path);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.stl')) {
-                setModalContent(getSTLModal(previewFile), null, downloadURL);
+                setModalContent(getSTLModal(previewFile), null, downloadURL, path);
             } else {
                 // No special handler for this file type, just open it.
-                window.open(downloadURL);
+                setModalContent(getGenericModal(previewFile), url, downloadURL, path);
             }
         }
     }, [previewFile]);

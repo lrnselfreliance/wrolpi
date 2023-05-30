@@ -9,7 +9,7 @@ from sanic.signals import Event
 
 from wrolpi import flags, BEFORE_STARTUP_FUNCTIONS
 from wrolpi import root_api, admin
-from wrolpi.common import logger, get_config, import_modules, check_media_directory, limit_concurrent, \
+from wrolpi.common import logger, get_config, check_media_directory, limit_concurrent, \
     wrol_mode_enabled, cancel_refresh_tasks, set_log_level
 from wrolpi.downloader import download_manager, import_downloads_config
 from wrolpi.root_api import api_app
@@ -66,7 +66,6 @@ def launch_interactive_shell():
     import code
     from wrolpi.db import get_db_session
 
-    modules = import_modules()
     with get_db_session() as session:
         code.interact(banner=INTERACTIVE_BANNER, local=locals())
 
@@ -147,8 +146,8 @@ def main():
 
     check_media_directory()
 
-    # Import the API in every module.  Each API should attach itself to `root_api`.
-    import_modules()
+    # Import modules before calling BEFORE_STARTUP_FUNCTIONS.
+    import modules  # noqa
 
     # Run the startup functions
     for func in BEFORE_STARTUP_FUNCTIONS:
@@ -171,6 +170,9 @@ async def startup(app: Sanic):
 
     flags.init_flags()
     await import_downloads_config()
+
+    from modules.zim.lib import flag_outdated_zim_files
+    flag_outdated_zim_files()
 
 
 @api_app.after_server_start

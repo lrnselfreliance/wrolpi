@@ -9,7 +9,6 @@ from modules.videos.models import Video
 from modules.videos.video.lib import get_video_for_app
 from wrolpi.dates import now
 from wrolpi.errors import API_ERRORS, WROLModeEnabled
-from wrolpi.root_api import api_app
 
 
 def test_get_video_prev_next(test_session, channel_factory, video_factory):
@@ -121,7 +120,10 @@ def test_video_delete(test_client, test_session, test_directory, channel_factory
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
-def test_wrol_mode(test_directory, simple_channel, simple_video, wrol_mode_fixture, test_download_manager, tag_factory):
+@pytest.mark.asyncio
+async def test_wrol_mode(test_async_client, test_directory, simple_channel, simple_video, wrol_mode_fixture,
+                         test_download_manager,
+                         tag_factory):
     """Many methods are blocked when WROL Mode is enabled."""
     channel = dumps(dict(name=simple_channel.name, directory=str(simple_channel.directory)))
     tag = tag_factory()
@@ -129,32 +131,32 @@ def test_wrol_mode(test_directory, simple_channel, simple_video, wrol_mode_fixtu
     wrol_mode_fixture(True)
 
     # Can't create, update, or delete a channel.
-    _, resp = api_app.test_client.post('/api/videos/channels', content=channel)
+    _, resp = await test_async_client.post('/api/videos/channels', content=channel)
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
-    _, resp = api_app.test_client.put(f'/api/videos/channels/{simple_channel.id}', content=channel)
+    _, resp = await test_async_client.put(f'/api/videos/channels/{simple_channel.id}', content=channel)
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
-    _, resp = api_app.test_client.delete(f'/api/videos/channels/{simple_channel.id}')
+    _, resp = await test_async_client.delete(f'/api/videos/channels/{simple_channel.id}')
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
 
     # Can't delete a video
-    _, resp = api_app.test_client.delete(f'/api/videos/video/{simple_video.id}')
+    _, resp = await test_async_client.delete(f'/api/videos/video/{simple_video.id}')
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
 
     # Can't refresh or download
-    _, resp = api_app.test_client.post('/api/files/refresh')
+    _, resp = await test_async_client.post('/api/files/refresh')
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
-    _, resp = api_app.test_client.post(f'/api/videos/channels/download/{simple_channel.id}')
+    _, resp = await test_async_client.post(f'/api/videos/channels/download/{simple_channel.id}')
     assert resp.status_code == HTTPStatus.FORBIDDEN
     assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
 
     # THE REST OF THESE METHODS ARE ALLOWED
     content = dict(video_id=simple_video.id, tag_name=tag.name)
-    _, resp = api_app.test_client.post('/api/videos/tag', content=json.dumps(content))
+    _, resp = await test_async_client.post('/api/videos/tag', content=json.dumps(content))
     assert resp.status_code == HTTPStatus.NO_CONTENT
 
     assert test_download_manager.stopped.is_set()

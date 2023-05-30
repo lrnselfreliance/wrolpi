@@ -1,7 +1,6 @@
 import pytest
 
 from modules.videos.models import Video
-from wrolpi.dates import now
 from wrolpi.errors import FileGroupIsTagged
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup

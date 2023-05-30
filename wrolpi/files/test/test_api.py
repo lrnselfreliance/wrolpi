@@ -5,6 +5,7 @@ from unittest import mock
 import pytest
 
 from wrolpi.errors import API_ERRORS, WROLModeEnabled
+from wrolpi.files import lib
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
 from wrolpi.test.common import assert_dict_contains
@@ -111,41 +112,46 @@ def test_list_files_api(test_session, test_client, make_files_structure, test_di
     check_get_files(['videos', 'archives'], expected)
 
 
-def test_delete_file(test_client, make_files_structure, test_directory):
+def test_delete_file(test_session, test_client, make_files_structure, test_directory):
     files = ['bar.txt', 'baz/']
     make_files_structure(files)
 
-    request, response = test_client.post('/api/files/delete', content=json.dumps({'file': 'bar.txt'}))
+    # Delete a file.
+    request, response = test_client.post('/api/files/delete', content=json.dumps({'paths': ['bar.txt']}))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not (test_directory / 'bar.txt').is_file()
     assert (test_directory / 'baz').is_dir()
 
-    request, response = test_client.post('/api/files/delete', content=json.dumps({'file': 'baz'}))
-    assert response.status_code == HTTPStatus.BAD_REQUEST
+    # Delete a directory.
+    request, response = test_client.post('/api/files/delete', content=json.dumps({'paths': ['baz']}))
+    assert response.status_code == HTTPStatus.NO_CONTENT
     assert not (test_directory / 'bar.txt').is_file()
-    assert (test_directory / 'baz').is_dir()
+    assert not (test_directory / 'baz').is_dir()
 
-    request, response = test_client.post('/api/files/delete', content=json.dumps({'file': 'bad file'}))
+    request, response = test_client.post('/api/files/delete', content=json.dumps({'paths': ['bad file']}))
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
 @pytest.mark.parametrize(
-    'file', [
-        '',
+    'paths', [
+        [],
+        ['', ],
     ]
 )
-def test_delete_invalid_file(test_client, file):
-    with mock.patch('wrolpi.files.api.lib.delete_file') as mock_delete_file:
-        request, response = test_client.post('/api/files/delete', content=json.dumps({'file': file}))
+def test_delete_invalid_file(test_client, paths):
+    """Some paths must be passed."""
+    with mock.patch('wrolpi.files.api.lib.delete') as mock_delete_file:
+        request, response = test_client.post('/api/files/delete', content=json.dumps({'paths': paths}))
         assert response.status_code == HTTPStatus.BAD_REQUEST
         mock_delete_file.assert_not_called()
 
 
-def test_delete_wrol_mode(test_client, wrol_mode_fixture):
+@pytest.mark.asyncio
+async def test_delete_wrol_mode(test_async_client, wrol_mode_fixture):
     """Can't delete a file when WROL Mode is enabled."""
     wrol_mode_fixture(True)
 
-    request, response = test_client.post('/api/files/delete', content=json.dumps({'file': 'foo'}))
+    request, response = await test_async_client.post('/api/files/delete', content=json.dumps({'paths': ['foo', ]}))
     assert response.status_code == HTTPStatus.FORBIDDEN
     assert response.json['code'] == API_ERRORS[WROLModeEnabled]['code']
 
@@ -453,3 +459,114 @@ def test_post_upload(test_session, test_client, test_directory, make_files_struc
     assert (test_directory / 'uploads/foo.txt').read_text() == 'foobar'
 
     assert test_session.query(FileGroup).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_directory_crud(test_session, test_async_client, test_directory, assert_directories, assert_files):
+    """A directory can be created in a subdirectory.  Errors are returned if there are conflicts."""
+    foo = test_directory / 'foo'
+    foo.mkdir()
+    await lib.refresh_files()
+    assert_directories({'foo', })
+
+    # Create a subdirectory.
+    content = dict(path='foo/bar')
+    request, response = await test_async_client.post('/api/files/directory', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.CREATED
+    assert (test_directory / 'foo/bar').is_dir()
+    assert_directories({'foo', 'foo/bar'})
+
+    # Cannot create twice.
+    content = dict(path='foo/bar')
+    request, response = await test_async_client.post('/api/files/directory', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.CONFLICT
+    assert (test_directory / 'foo/bar').is_dir()
+    assert_directories({'foo', 'foo/bar'})
+
+    # Create a file to be deleted.
+    (test_directory / 'foo/bar/asdf.txt').write_text('asdf')
+
+    # Can get information about a directory.
+    request, response = await test_async_client.post('/api/files/get_directory', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['path'] == 'foo/bar'
+    assert response.json['size'] == 4
+    assert response.json['file_count'] == 1
+
+    # Can rename the directory.
+    content = dict(path='foo/bar', new_name='baz')
+    request, response = await test_async_client.post('/api/files/rename', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert not (test_directory / 'foo/bar').exists()
+    assert (test_directory / 'foo/baz').exists()
+    assert (test_directory / 'foo/baz/asdf.txt').exists()
+
+    # Deletion is recursive.
+    assert (test_directory / 'foo/baz/asdf.txt').is_file()
+    content = dict(path='foo/baz')
+    request, response = await test_async_client.post('/api/files/delete_directory', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert not (test_directory / 'foo/baz').exists()
+    assert not (test_directory / 'foo/baz/asdf.txt').exists()
+    # Only top directory is left.
+    assert_directories({'foo', })
+
+
+@pytest.mark.asyncio
+async def test_move(test_session, test_directory, make_files_structure, test_async_client):
+    foo, bar = make_files_structure({
+        'foo/bar.txt': 'bar',
+        'baz.txt': 'baz',
+    })
+
+    # qux directory does not exist
+    content = dict(paths=['foo', 'baz.txt'], destination='qux')
+    request, response = await test_async_client.post('/api/files/move', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NOT_FOUND
+
+    (test_directory / 'qux').mkdir()
+
+    # mv foo baz.txt qux
+    content = dict(paths=['foo', 'baz.txt'], destination='qux')
+    request, response = await test_async_client.post('/api/files/move', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert not foo.exists()
+    assert (test_directory / 'qux/foo/bar.txt').is_file()
+
+    # mv foo/bar.txt qux
+    content = dict(paths=['qux/foo/bar.txt', ], destination='qux')
+    request, response = await test_async_client.post('/api/files/move', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert not foo.exists()
+    assert (test_directory / 'qux/bar.txt').is_file()
+    assert (test_directory / 'qux/foo').is_dir()
+
+
+@pytest.mark.asyncio
+async def test_rename(test_session, test_directory, make_files_structure, test_async_client):
+    foo, = make_files_structure({
+        'foo/bar/baz.txt': 'asdf',
+    })
+
+    # mv foo/bar/baz.txt foo/bar/qux.txt
+    content = dict(path='foo/bar/baz.txt', new_name='qux.txt')
+    request, response = await test_async_client.post('/api/files/rename', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert not foo.exists()
+    assert (test_directory / 'foo/bar/qux.txt').is_file()
+    assert (test_directory / 'foo/bar/qux.txt').read_text() == 'asdf'
+
+
+@pytest.mark.asyncio
+async def test_rename_directory(test_session, test_directory, make_files_structure, test_async_client):
+    make_files_structure({
+        'foo/bar/baz.txt': 'asdf',
+    })
+
+    # mv foo/bar/baz.txt foo/bar/qux.txt
+    content = dict(path='foo/bar', new_name='qux')
+    request, response = await test_async_client.post('/api/files/rename', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert not (test_directory / 'foo/bar').exists()
+    assert (test_directory / 'foo/qux/baz.txt').is_file()
+    assert (test_directory / 'foo/qux/baz.txt').read_text() == 'asdf'

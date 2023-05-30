@@ -21,6 +21,7 @@ class SettingsRequest:
     hotspot_password: Optional[str] = None
     hotspot_ssid: Optional[str] = None
     hotspot_status: Optional[bool] = None
+    ignore_outdated_zims: Optional[bool] = None
     media_directory: Optional[str] = None
     throttle_on: Optional[bool] = None
     throttle_on_startup: Optional[bool] = None
@@ -88,6 +89,7 @@ class NotifyRequest:
 class VINDecoderRequest:
     vin_number: str
 
+
 @dataclass
 class VIN:
     country: str
@@ -120,3 +122,9 @@ class VIN:
 @dataclass
 class VINDecoderResponse:
     vin: VIN
+
+
+@dataclass
+class SearchEstimateRequest:
+    search_str: Optional[str] = None
+    tag_names: List[str] = field(default_factory=lambda: list())

@@ -509,10 +509,10 @@ def test_refresh_archives(test_session, test_directory, test_client, make_files_
     assert response.json['file_groups'], 'No files matched "text"'
     assert response.json['file_groups'][0]['model'] == 'archive', 'Returned file was not an archive'
     assert response.json['file_groups'][0]['data'].get('readability_path') == \
-           'archive/example.com/2021-10-05-16-20-10_NA.readability.html',\
+           'archive/example.com/2021-10-05-16-20-10_NA.readability.html', \
         'Could not find readability html file'
     assert response.json['file_groups'][0]['data'].get('readability_txt_path') == \
-           'archive/example.com/2021-10-05-16-20-10_NA.readability.txt',\
+           'archive/example.com/2021-10-05-16-20-10_NA.readability.txt', \
         'Could not find readability text file containing "text"'
     assert response.json['file_groups'][0]['data']['archive_datetime'], 'Archive has no datetime'
 

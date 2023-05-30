@@ -5,7 +5,7 @@ from http import HTTPStatus
 import pytest
 
 from wrolpi.files.ebooks import EBook, EPUB_MIMETYPE
-from wrolpi.files.lib import refresh_files
+from wrolpi.files.lib import refresh_files, move
 from wrolpi.files.models import FileGroup
 from wrolpi.test.common import assert_dict_contains
 
@@ -132,3 +132,34 @@ async def test_discover_calibre_cover(test_session, test_directory, example_epub
     assert ebook.cover_path.stat().st_size != 292579
     # Metadata and cover were deleted from the FileGroups.
     assert test_session.query(FileGroup).count() == 1
+
+
+@pytest.mark.asyncio
+async def test_move_ebook(test_session, test_directory, example_epub, image_file, tag_factory):
+    """An ebook is re-indexed when moved."""
+    tag = tag_factory()
+    shutil.move(image_file, example_epub.with_suffix('.jpg'))
+    await refresh_files()
+
+    ebook: EBook = test_session.query(EBook).one()
+    assert ebook.cover_path
+    assert_dict_contains(ebook.file_group.data, dict(creator='roland'))
+    assert sorted([i['path'] for i in ebook.file_group.files]) == [
+        test_directory / 'ebook example.epub',
+        test_directory / 'ebook example.jpg',
+    ]
+    ebook.file_group.add_tag(tag)
+    test_session.commit()
+
+    new_directory = test_directory / 'new'
+    new_directory.mkdir()
+    await move(new_directory, ebook.file_group.primary_path)
+
+    ebook: EBook = test_session.query(EBook).one()
+    assert ebook.file_group.primary_path == test_directory / 'new/ebook example.epub'
+    assert ebook.cover_path
+    assert_dict_contains(ebook.file_group.data, dict(creator='roland'))
+    assert sorted([i['path'] for i in ebook.file_group.files]) == [
+        test_directory / 'new/ebook example.epub',
+        test_directory / 'new/ebook example.jpg',
+    ]

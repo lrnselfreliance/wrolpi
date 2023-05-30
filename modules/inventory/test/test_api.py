@@ -1,6 +1,8 @@
 import json
 from http import HTTPStatus
 
+import pytest
+
 from modules.inventory import Item
 from modules.inventory.inventory import save_item
 
@@ -73,33 +75,34 @@ def test_item_api(test_session, init_test_inventory, test_client):
         assert response.status_code == HTTPStatus.NO_CONTENT, response.json
 
 
-def test_inventory_api(test_session, test_client):
+@pytest.mark.asyncio
+async def test_inventory_api(test_session, test_async_client):
     """An Inventory can be created."""
     inventory = dict(name='foo')
-    request, response = test_client.post('/api/inventory', content=json.dumps(inventory))
+    request, response = await test_async_client.post('/api/inventory', content=json.dumps(inventory))
     assert response.status_code == HTTPStatus.CREATED, response.status_code
 
-    request, response = test_client.get('/api/inventory')
+    request, response = await test_async_client.get('/api/inventory')
     assert response.status_code == HTTPStatus.OK
     inventory = response.json['inventories'][0]
     inventory_id = inventory['id']
 
-    request, response = test_client.get(f'/api/inventory/{inventory_id}')
+    request, response = await test_async_client.get(f'/api/inventory/{inventory_id}')
     assert response.status_code == HTTPStatus.OK
 
-    request, response = test_client.get('/api/inventory/categories')
+    request, response = await test_async_client.get('/api/inventory/categories')
     assert response.status_code == HTTPStatus.OK
 
-    request, response = test_client.get('/api/inventory/brands')
+    request, response = await test_async_client.get('/api/inventory/brands')
     assert response.status_code == HTTPStatus.OK
 
     inventory = dict(name='new name')
-    request, response = test_client.put(f'/api/inventory/{inventory_id}', content=json.dumps(inventory))
+    request, response = await test_async_client.put(f'/api/inventory/{inventory_id}', content=json.dumps(inventory))
     assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
 
-    request, response = test_client.delete(f'/api/inventory/{inventory_id}')
+    request, response = await test_async_client.delete(f'/api/inventory/{inventory_id}')
     assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
 
-    request, response = test_client.get('/api/inventory')
+    request, response = await test_async_client.get('/api/inventory')
     assert response.status_code == HTTPStatus.OK
     assert len(response.json['inventories']) == 0

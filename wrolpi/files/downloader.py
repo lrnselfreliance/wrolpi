@@ -1,103 +1,19 @@
-import asyncio
 import pathlib
-import re
 import traceback
 from abc import ABC
-from dataclasses import dataclass
-from http import HTTPStatus
 from typing import List
-from urllib.parse import urlparse
 
-import aiohttp
-
-from wrolpi.common import get_media_directory, logger, background_task
+from wrolpi.common import get_media_directory, logger, background_task, get_download_info, \
+    download_file
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
-
-__all__ = ['get_download_info', 'download_file', 'FileDownloader', 'file_downloader']
-
 from wrolpi.files.models import FileGroup
-
 from wrolpi.vars import PYTEST
 
+__all__ = ['FileDownloader', 'file_downloader']
+
 logger = logger.getChild(__name__)
-
-
-@dataclass
-class DownloadFileInfo:
-    name: str = None
-    size: int = None
-    type: str = None
-    accept_ranges: str = None
-
-
-FILENAME_MATCHER = re.compile(r'.*filename="(.*)"')
-
-
-async def get_download_info(url: str, timeout: int = 60) -> DownloadFileInfo:
-    """Gets information (name, size, etc.) about a downloadable file at the provided URL."""
-    timeout = aiohttp.ClientTimeout(total=timeout) if timeout is not None else None
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.head(url) as response:
-            info = DownloadFileInfo(
-                type=response.headers.get('Content-Type'),
-                size=int(response.headers['Content-Length']) * 8 if 'Content-Length' in response.headers else None,
-                accept_ranges=response.headers.get('Accept-Ranges'),
-            )
-
-            disposition = response.headers.get('Content-Disposition')
-
-            if disposition and 'filename' in disposition:
-                if (match := FILENAME_MATCHER.match(disposition)) and (groups := match.groups()):
-                    info.name = groups[0]
-            else:
-                # No Content-Disposition with filename, use the URL name.
-                parsed = urlparse(url)
-                info.name = parsed.path.split('/')[-1]
-
-            return info
-
-
-async def download_file(url: str, info: DownloadFileInfo, output_path: pathlib.Path):
-    """Uses aiohttp to download an HTTP file.
-
-    Attempts to resume the file if `output_path` already exists.
-    """
-    logger.debug(f'Starting download of file {repr(str(url))}')
-
-    if output_path.is_file() and info.size == (output_path.stat().st_size * 8):
-        logger.warning(f'Already downloaded {repr(str(url))} to {repr(str(output_path))}')
-        return
-
-    if info.accept_ranges == 'bytes' or not output_path.is_file():
-        with open(output_path, 'ab') as fh:
-            headers = dict()
-            # Check the position of append, if it is 0 then we do not need to resume.
-            position = fh.tell()
-            if position:
-                headers['Range'] = f'bytes={position}-'
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as response:
-                    if response.status == HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE:
-                        logger.warning(f'Server responded with 416, file is probably already downloaded')
-                        return
-
-                    if position and response.status != HTTPStatus.PARTIAL_CONTENT:
-                        raise UnrecoverableDownloadError(
-                            f'Tried to resume {repr(str(url))} but got status {response.status}')
-
-                    # May or may not be using Range.  Append each chunk to the output file.
-                    async for data in response.content.iter_any():
-                        fh.write(data)
-
-                        # TODO this cannot be canceled.
-                        # Sleep to catch cancel.
-                        await asyncio.sleep(0)
-    elif output_path.is_file():
-        # TODO support downloading files that cannot be resumed.
-        raise UnrecoverableDownloadError(f'Cannot resume download {url}')
 
 
 class FileDownloader(Downloader, ABC):
@@ -135,7 +51,7 @@ class FileDownloader(Downloader, ABC):
         output_path = destination / info.name
 
         try:
-            await download_file(download.url, info, output_path)
+            await download_file(download.url, output_path, info)
             background_task(save_and_tag(output_path, download.settings.get('tag_names')))
 
             return DownloadResult(

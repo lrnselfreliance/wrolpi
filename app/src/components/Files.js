@@ -9,7 +9,6 @@ import {
     Dropdown,
     Form,
     Image,
-    Label,
     PlaceholderLine,
     TableCell,
     TableHeaderCell,
@@ -28,6 +27,7 @@ import {
     PageContainer,
     Paginator,
     PreviewLink,
+    TagIcon,
     textEllipsis,
     useTitle
 } from "./Common";
@@ -40,7 +40,7 @@ import {
     useSearchView
 } from "../hooks/customHooks";
 import {Route, Routes} from "react-router-dom";
-import {CardPlacholder} from "./Placeholder";
+import {CardPlaceholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
@@ -72,7 +72,7 @@ function EbookCard({file}) {
 
     const downloadUrl = `/download/${encodeMediaPath(file.primary_path)}`;
     const isEpub = file['mimetype'].startsWith('application/epub');
-    const viewerUrl = isEpub ? `/epub.html?url=${downloadUrl}` : null;
+    const viewerUrl = isEpub ? `/epub/epub.html?url=${downloadUrl}` : null;
 
     const color = mimetypeColor(file.mimetype);
     return <Card color={color}>
@@ -125,7 +125,7 @@ function FileCard({file}) {
         file.mimetype.startsWith('application/epub') || file.mimetype.startsWith('application/x-mobipocket-ebook')
     );
 
-    if (file.model === 'video') {
+    if (file.model === 'video' && 'video' in file) {
         return <VideoCard key={file['primary_path']} file={file}/>;
     } else if (file.model === 'archive') {
         return <ArchiveCard key={file['primary_path']} file={file}/>;
@@ -167,7 +167,7 @@ export function FileCards({files}) {
     } else if (files && files.length === 0) {
         return <Segment>No results!</Segment>
     } else {
-        return <CardGroupCentered><CardPlacholder/></CardGroupCentered>
+        return <CardGroupCentered><CardPlaceholder/></CardGroupCentered>
     }
 }
 
@@ -269,9 +269,7 @@ export function FileTable({files, selectOn, onSelect, footer, selectedKeys}) {
 
 export function FileRowTagIcon({file}) {
     if (file.tags && file.tags.length) {
-        return <Label circular color='green' style={{padding: '0.5em', marginRight: '0.5em'}}>
-            <Icon name='tag' style={{margin: 0}}/>
-        </Label>;
+        return <TagIcon/>;
     }
 }
 
@@ -431,10 +429,10 @@ export function TagsQuerySelector({onChange}) {
     const {searchParams, updateQuery} = useQuery();
     const activeTags = searchParams.getAll('tag');
 
-    const localOnChange = (name) => {
-        updateQuery({'tag': name});
+    const localOnChange = (tagNames) => {
+        updateQuery({'tag': tagNames});
         if (onChange) {
-            onChange(name);
+            onChange(tagNames);
         }
     }
 
@@ -464,16 +462,16 @@ export function FilesSearchView({
         {key: 'model', text: '3D Model', value: 'model'},
     ];
 
-    const {searchFiles, totalPages, activePage, setPage} = useSearchFiles(24, emptySearch, model);
+    const {searchFiles, pages} = useSearchFiles(24, emptySearch, model);
 
     const {body, paginator, selectButton, viewButton, limitDropdown, tagQuerySelector} = FilesView(
         searchFiles,
-        activePage,
-        totalPages,
+        pages.activePage,
+        pages.totalPages,
         null,
         null,
         null,
-        setPage,
+        pages.setPage,
         true,
     );
 
@@ -597,7 +595,7 @@ export function FilesRefreshButton() {
     </Button>;
 }
 
-export function DirectoryRefreshButton({directory}) {
+export function DirectoryRefreshButton({paths}) {
     const {status} = useContext(StatusContext);
     const refreshing = status && status['flags'] && status['flags'].indexOf('refreshing') >= 0;
     const refreshingDirectory = status && status['flags'] && status['flags'].indexOf('refreshing_directory') >= 0;
@@ -606,7 +604,7 @@ export function DirectoryRefreshButton({directory}) {
 
     const handleClick = async () => {
         setLoading(true);
-        await refreshDirectoryFiles(directory);
+        await refreshDirectoryFiles(paths);
     }
 
     // Clear loading when global refresh event completes.
@@ -620,6 +618,6 @@ export function DirectoryRefreshButton({directory}) {
                    disabled={loading || refreshing || refreshingDirectory}
     >
         <Icon name='refresh'/>
-        Refresh Directory
+        Refresh
     </Button>
 }

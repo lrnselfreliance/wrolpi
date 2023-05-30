@@ -71,8 +71,8 @@ function DownloadMessage() {
             </p>
 
             <p><b>Download only the areas you need</b>. Large regions like all of Asia, or the entire
-                planet are most likely <b>too large</b> and won't render quickly. I recommend only
-                importing files less than 1GB on a Raspberry Pi.</p>
+                planet are most likely <b>too large</b> and won't render quickly. It is recommend to only
+                import files less than 1GB on a Raspberry Pi.</p>
 
             <p>Only <b>*.osm.pbf</b> files are supported!</p>
 
@@ -235,7 +235,6 @@ class ManageMap extends React.Component {
         return <PageContainer>
             <WROLModeMessage content='Cannot modify Map'/>
             <DockerMapImportWarning/>
-            <DownloadMessage/>
             <SlowImportMessage/>
             <Loader size='large' active={import_running} inline='centered'>
                 {importingMessage}
@@ -263,6 +262,7 @@ class ManageMap extends React.Component {
                     </TableRow>
                 </TableFooter>
             </Table>
+            <DownloadMessage/>
         </PageContainer>
     }
 }

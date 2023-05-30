@@ -105,7 +105,7 @@ export function useTags() {
     }
 
     const TagLabelLink = ({name, props}) => {
-        const to = `/?tag=${name}`;
+        const to = `/search?tag=${name}`;
         const style = {marginLeft: '0.3em', marginRight: '0.3em'};
         try {
             // We prefer to use Link to avoid reloading the page, check if React Router is available, so we can use it.
@@ -438,40 +438,6 @@ export const TagsDashboard = () => {
 
         <EditTagsModal/>
     </Segment>
-}
-
-export const TagsDropdown = ({value = [], onChange, ...props}) => {
-    const {tagNames} = React.useContext(TagsContext);
-    const [activeTags, setActiveTags] = React.useState(value);
-
-    const handleChange = (e, {value}) => {
-        if (e) {
-            e.preventDefault();
-        }
-        if (!value) {
-            setActiveTags([]);
-            onChange([]);
-        } else {
-            setActiveTags(value);
-            onChange(value);
-        }
-    }
-
-    let options = [{key: null, text: '', value: ''}];
-    if (tagNames && tagNames.length > 0) {
-        const tagOptions = tagNames.map(i => {
-            return {key: i, text: i, value: i}
-        })
-        options = [...options, ...tagOptions];
-    }
-
-    return <Dropdown multiple selection clearable fluid
-                     options={options}
-                     placeholder='Tags'
-                     onChange={handleChange}
-                     value={activeTags}
-                     {...props}
-    />
 }
 
 export const TagsProvider = (props) => {

@@ -76,9 +76,12 @@ def upgrade():
         ) STORED
     )''')
 
-    session.execute('ALTER TABLE video ADD COLUMN file_group_id BIGINT REFERENCES file_group(id) ON DELETE CASCADE NOT NULL UNIQUE')
-    session.execute('ALTER TABLE ebook ADD COLUMN file_group_id BIGINT REFERENCES file_group(id) ON DELETE CASCADE NOT NULL UNIQUE')
-    session.execute('ALTER TABLE archive ADD COLUMN file_group_id BIGINT REFERENCES file_group(id) ON DELETE CASCADE NOT NULL UNIQUE')
+    session.execute(
+        'ALTER TABLE video ADD COLUMN file_group_id BIGINT REFERENCES file_group(id) ON DELETE CASCADE NOT NULL UNIQUE')
+    session.execute(
+        'ALTER TABLE ebook ADD COLUMN file_group_id BIGINT REFERENCES file_group(id) ON DELETE CASCADE NOT NULL UNIQUE')
+    session.execute(
+        'ALTER TABLE archive ADD COLUMN file_group_id BIGINT REFERENCES file_group(id) ON DELETE CASCADE NOT NULL UNIQUE')
 
     session.execute('''
     CREATE TABLE tag (

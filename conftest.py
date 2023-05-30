@@ -1,6 +1,5 @@
-# Import conftest for test fixtures
-from wrolpi.common import import_modules
+from modules.archive.conftest import *  # noqa
+from modules.inventory.conftest import *  # noqa
+from modules.videos.conftest import *  # noqa
+from modules.zim.conftest import *  # noqa
 from wrolpi.conftest import *  # noqa
-
-# Import modules and their conftest.py.
-import_modules()

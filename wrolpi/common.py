@@ -2,6 +2,7 @@ import asyncio
 import atexit
 import contextlib
 import inspect
+import json
 import logging
 import multiprocessing
 import os
@@ -12,9 +13,11 @@ import sys
 import tempfile
 from asyncio import Task
 from copy import deepcopy
+from dataclasses import dataclass
 from datetime import datetime, date
 from decimal import Decimal
 from functools import wraps
+from http import HTTPStatus
 from itertools import islice, filterfalse, tee
 from multiprocessing import Lock, Manager
 from pathlib import Path
@@ -24,15 +27,16 @@ from urllib.parse import urlparse, urlunsplit
 
 import aiohttp
 import yaml
+from aiohttp import ClientResponse
+from bs4 import BeautifulSoup
 from sqlalchemy import types
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
-from wrolpi.dates import now, from_timestamp
-from wrolpi.errors import WROLModeEnabled, NativeOnly
-from wrolpi.vars import PYTEST, MODULES_DIR, \
-    DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY
+from wrolpi.dates import now, from_timestamp, seconds_to_timestamp
+from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError
+from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY
 
 logger = logging.getLogger()
 ch = logging.StreamHandler()
@@ -68,62 +72,69 @@ def log_level_context(level):
 
 
 __all__ = [
-    'logger',
-    'set_log_level',
     'Base',
-    'ModelHelper',
-    'get_model_by_table_name',
-    'tsvector',
-    'compile_tsvector',
-    'WROLPI_CONFIG',
-    'sanitize_link',
     'ConfigFile',
-    'get_config',
-    'set_test_config',
-    'wrol_mode_enabled',
-    'wrol_mode_check',
-    'enable_wrol_mode',
-    'disable_wrol_mode',
-    'insert_parameter',
-    'iterify',
-    'date_range',
-    'remove_whitespace',
-    'run_after',
-    'set_test_media_directory',
-    'get_media_directory',
-    'check_media_directory',
-    'get_absolute_media_path',
-    'get_relative_to_media_directory',
-    'get_files_and_directories',
-    'minimize_dict',
-    'make_media_directory',
-    'extract_domain',
-    'import_modules',
-    'api_param_limiter',
-    'partition',
-    'chdir',
-    'zig_zag',
-    'walk',
-    'escape_file_name',
-    'native_only',
-    'recursive_map',
+    'DownloadFileInfo',
+    'DownloadFileInfoLink',
+    'ModelHelper',
+    'WROLPI_CONFIG',
+    'aiohttp_get',
+    'aiohttp_head',
     'aiohttp_post',
-    'register_modeler',
+    'api_param_limiter',
     'apply_modelers',
-    'register_refresh_cleanup',
     'apply_refresh_cleanup',
-    'match_paths_to_suffixes',
-    'chunks',
-    'chunks_by_stem',
-    'timer',
-    'cum_timer',
-    'limit_concurrent',
-    'truncate_object_bytes',
     'background_task',
-    'get_warn_once',
-    'truncate_generator_bytes',
     'cancel_refresh_tasks',
     'cancelable_wrapper',
+    'chdir',
+    'check_media_directory',
+    'chunks',
+    'chunks_by_stem',
+    'compile_tsvector',
+    'cum_timer',
+    'date_range',
+    'disable_wrol_mode',
+    'download_file',
+    'enable_wrol_mode',
+    'escape_file_name',
+    'extract_domain',
+    'extract_headlines',
+    'extract_html_text',
+    'get_absolute_media_path',
+    'get_config',
+    'get_download_info',
+    'get_files_and_directories',
+    'get_media_directory',
+    'get_model_by_table_name',
+    'get_relative_to_media_directory',
+    'get_warn_once',
+    'insert_parameter',
+    'iterify',
+    'limit_concurrent',
+    'logger',
+    'make_media_directory',
+    'match_paths_to_suffixes',
+    'minimize_dict',
+    'native_only',
+    'partition',
+    'recursive_map',
+    'register_modeler',
+    'register_refresh_cleanup',
+    'remove_whitespace',
+    'run_after',
+    'sanitize_link',
+    'set_log_level',
+    'set_test_config',
+    'set_test_media_directory',
+    'timer',
+    'truncate_generator_bytes',
+    'truncate_object_bytes',
+    'tsvector',
+    'walk',
+    'wrol_mode_check',
+    'wrol_mode_enabled',
+    'zig_zag',
 ]
 
 # Base is used for all SQLAlchemy models.
@@ -278,6 +289,7 @@ class WROLPiConfig(ConfigFile):
         hotspot_on_startup=True,
         hotspot_password='wrolpi hotspot',
         hotspot_ssid='WROLPi',
+        ignore_outdated_zims=False,
         throttle_on_startup=False,
         wrol_mode=False,
     )
@@ -329,6 +341,14 @@ class WROLPiConfig(ConfigFile):
     @hotspot_ssid.setter
     def hotspot_ssid(self, value: str):
         self.update({'hotspot_ssid': value})
+
+    @property
+    def ignore_outdated_zims(self) -> bool:
+        return self._config['ignore_outdated_zims']
+
+    @ignore_outdated_zims.setter
+    def ignore_outdated_zims(self, value: bool):
+        self.update({'ignore_outdated_zims': value})
 
     @property
     def throttle_on_startup(self) -> bool:
@@ -626,22 +646,6 @@ def extract_domain(url):
     return domain
 
 
-def import_modules():
-    """Import all WROLPi Modules in the modules directory.  Raise an ImportError if there are no modules."""
-    modules = [i.name for i in MODULES_DIR.iterdir() if
-               i.is_dir() and not (i.name.startswith('_') or i.name.startswith('.'))]
-    imported = []
-    for module_name in modules:
-        module = f'modules.{module_name}.api'
-        logger_.debug(f'Importing {module}')
-        try:
-            __import__(module, globals(), locals(), [], 0)
-            imported.append(module_name)
-        except ImportError as e:
-            logger_.fatal(f'Unable to import {module}', exc_info=e)
-    return imported
-
-
 def api_param_limiter(maximum: int, default: int = 20) -> callable:
     """Create a function which restricts the maximum number that can be returned.
     Useful for restricting API limit params.
@@ -817,12 +821,231 @@ def recursive_map(obj: Any, func: callable):
     return func(obj)
 
 
+@contextlib.asynccontextmanager
+async def aiohttp_session(timeout: int = None):
+    """Convenience function because aiohttp timeout cannot be None."""
+    if timeout:
+        timeout = aiohttp.ClientTimeout(total=timeout) if timeout else None
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            yield session
+    else:
+        async with aiohttp.ClientSession() as session:
+            yield session
+
+
 async def aiohttp_post(url: str, json_, timeout: int = None) -> Tuple[Dict, int]:
-    """Perform an async aiohttp post request.  Return the json contents."""
-    timeout = aiohttp.ClientTimeout(total=timeout) if timeout else None
-    async with aiohttp.ClientSession(timeout=timeout) as session:
+    """Perform an async aiohttp POST request.  Return the json contents."""
+    async with aiohttp_session(timeout) as session:
         async with session.post(url, json=json_) as response:
             return await response.json(), response.status
+
+
+async def aiohttp_get(url: str, timeout: int = None, headers: dict = None) -> Tuple[bytes, int]:
+    """Perform an async aiohttp GET request.  Return the contents."""
+    async with aiohttp_session(timeout) as session:
+        async with session.get(url, headers=headers) as response:
+            return await response.content.read(), response.status
+
+
+async def aiohttp_head(url: str, timeout: int = None) -> Tuple[ClientResponse, int]:
+    """Perform an async aiohttp HEAD request.  Return the contents."""
+    async with aiohttp_session(timeout) as session:
+        async with session.head(url) as response:
+            return response, response.status
+
+
+async def speed_test(url: str) -> int:
+    """Request the last megabyte of the provided url, return the content length divided by the time elapsed (speed)."""
+    response, status = await aiohttp_head(url)
+    content_length = response.headers['Content-Length']
+    start_bytes = int(content_length) - 10485760
+    range_ = f'bytes={start_bytes}-{content_length}'
+    start_time = datetime.now()
+    content, status = await aiohttp_get(url, headers={'Range': range_})
+    elapsed = int((datetime.now() - start_time).total_seconds())
+    return len(content) // elapsed
+
+
+async def get_fastest_mirror(urls: List[str]) -> str:
+    """Perform a speed test on each URL, return the fastest."""
+    fastest_url = urls[0]
+    fastest_speed = 0
+    for url in urls:
+        try:
+            speed = await speed_test(url)
+        except Exception as e:
+            logger.error(f'Speedtest of {url} failed', exc_info=e)
+            continue
+
+        if speed > fastest_speed:
+            fastest_url = url
+
+    return fastest_url
+
+
+@dataclass
+class DownloadFileInfoLink:
+    """Represents an HTTP "Link" Header."""
+    url: str
+    rel: str
+    type: str
+    priority: int
+    geo: str
+
+
+@dataclass
+class DownloadFileInfo:
+    """Information about a file that can be downloaded."""
+    name: str = None
+    size: int = None
+    type: str = None
+    accept_ranges: str = None
+    status: int = None
+    location: str = None
+    links: List[DownloadFileInfoLink] = None
+
+
+FILENAME_MATCHER = re.compile(r'.*filename="(.*)"')
+
+
+async def get_download_info(url: str, timeout: int = 60) -> DownloadFileInfo:
+    """Gets information (name, size, etc.) about a downloadable file at the provided URL."""
+    response, status = await aiohttp_head(url, timeout)
+    try:
+        links = response.headers.getall('Link')
+    except KeyError:
+        links = None
+
+    new_links = list()
+    if links:
+        # Convert "Link" header strings to DownloadFileInfoLink.
+        for idx, link in enumerate(links):
+            url, *props = link.split(';')
+            url = url[1:-1]
+            properties = dict()
+            for prop in props:
+                name, value = prop.strip().split('=')
+                properties[name] = value
+            new_links.append(DownloadFileInfoLink(
+                url,
+                properties.get('rel').strip() if 'rel' in properties else None,
+                properties.get('type').strip() if 'type' in properties else None,
+                int(properties.get('pri').strip()) if 'pri' in properties else None,
+                properties.get('geo').strip() if 'geo' in properties else None,
+            ))
+
+    info = DownloadFileInfo(
+        type=response.headers.get('Content-Type'),
+        size=int(response.headers['Content-Length']) if 'Content-Length' in response.headers else None,
+        accept_ranges=response.headers.get('Accept-Ranges'),
+        status=response.status,
+        location=response.headers.get('Location'),
+        links=new_links,
+    )
+
+    disposition = response.headers.get('Content-Disposition')
+
+    if disposition and 'filename' in disposition:
+        if (match := FILENAME_MATCHER.match(disposition)) and (groups := match.groups()):
+            info.name = groups[0]
+    else:
+        # No Content-Disposition with filename, use the URL name.
+        parsed = urlparse(url)
+        info.name = parsed.path.split('/')[-1]
+
+    return info
+
+
+download_logger = logger_.getChild('download')
+
+
+async def download_file(url: str, output_path: pathlib.Path = None, info: DownloadFileInfo = None,
+                        timeout: int = 7 * 24 * 60 * 60):
+    """Uses aiohttp to download an HTTP file.  Performs a speed test when mirrors are found, downloads from the fastest
+    mirror.
+
+    Attempts to resume the file if `output_path` already exists.
+
+    @warning: Timeout default is a week because of large downloads.
+    """
+    info = info or await get_download_info(url, timeout)
+
+    if output_path.is_file() and info.size == output_path.stat().st_size:
+        download_logger.warning(f'Already downloaded {repr(str(url))} to {repr(str(output_path))}')
+        return
+
+    if info.links and (mirror_urls := [i.url for i in info.links if i.rel == 'duplicate']):
+        # Mirrors are available, find the fastest.
+        download_logger.info(f'Performing download speed test on mirrors: {mirror_urls}')
+        url = await get_fastest_mirror(mirror_urls)
+        info = await get_download_info(url, timeout)
+
+    total_size = info.size
+
+    download_logger.info(f'Starting download of {url} with {total_size} total bytes')
+    if info.accept_ranges == 'bytes' or not output_path.is_file():
+        with output_path.open('ab') as fh:
+            headers = dict()
+            # Check the position of append, if it is 0 then we do not need to resume.
+            position = fh.tell()
+            if position:
+                headers['Range'] = f'bytes={position}-'
+
+            async with aiohttp_session(timeout=timeout) as session:
+                async with session.get(url, headers=headers) as response:
+                    response: ClientResponse
+                    if response.status == HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE:
+                        download_logger.warning(f'Server responded with 416, file is probably already downloaded')
+                        return
+
+                    if position and response.status != HTTPStatus.PARTIAL_CONTENT:
+                        raise UnrecoverableDownloadError(
+                            f'Tried to resume {repr(str(url))} but got status {response.status}')
+
+                    # May or may not be using Range.  Append each chunk to the output file.
+                    last_report = datetime.now()
+                    bytes_received = 0
+                    async for data in response.content.iter_any():
+                        fh.write(data)
+
+                        bytes_received += len(data)
+                        if (elapsed := (datetime.now() - last_report).total_seconds()) > 10:
+                            # Report download speed every 10 seconds.
+                            bytes_per_second = int(bytes_received // elapsed)
+                            download_logger.debug(f'{bytes_received=} {elapsed=} {bytes_per_second=}')
+                            size = fh.tell()
+                            bytes_remaining = total_size - size
+                            seconds_remaining = bytes_remaining // bytes_per_second
+                            percent = int((size / total_size) * 100)
+                            download_logger.info(
+                                f'Downloading {url} at'
+                                f' rate={human_bandwidth(bytes_per_second)}'
+                                f' estimate={seconds_to_timestamp(seconds_remaining)}')
+                            download_logger.debug(f'Downloading {url} {total_size=} {size=} {percent=}')
+                            last_report = datetime.now()
+                            bytes_received = 0
+
+                        # TODO this cannot be canceled.
+                        # Sleep to catch cancel.
+                        await asyncio.sleep(0)
+    elif output_path.is_file():
+        # TODO support downloading files that cannot be resumed.
+        raise UnrecoverableDownloadError(f'Cannot resume download {url}')
+
+
+def human_bandwidth(bps: int) -> str:
+    """Convert bits per second to a more readable format.
+
+    >>> human_bandwidth(2000)
+    # '2 Kbps'
+    """
+    units = ['bps', 'Kbps', 'Mbps', 'Gbps', 'Tbps']
+    unit = 0
+    while bps > 1000 and unit <= len(units):
+        bps /= 1000
+        unit += 1
+
+    return f'{int(bps)} {units[unit]}'
 
 
 modelers = []
@@ -1189,3 +1412,48 @@ def url_strip_host(url: str) -> str:
     url = urlparse(url)
     url = urlunsplit(('', '', url.path, url.query, url.fragment))
     return url or '/'
+
+
+def extract_html_text(html: str) -> str:
+    soup = BeautifulSoup(html, features='html.parser')
+
+    # kill all script and style elements
+    for script in soup(["script", "style"]):
+        script.extract()  # rip it out
+
+    text = soup.body.get_text()
+
+    # break into lines and remove leading and trailing space on each
+    lines = (line.strip() for line in text.splitlines())
+    # break multi-headlines into a line each
+    chunks_ = (phrase.strip() for line in lines for phrase in line.split("  "))
+    # drop blank lines
+    text = '\n'.join(chunk for chunk in chunks_ if chunk)
+
+    return text
+
+
+def extract_headlines(entries: List[str], search_str: str) -> List[Tuple[str, float]]:
+    """Use Postgres to extract Headlines and ranks of the `search_str` from the provided entries."""
+    from wrolpi.db import get_db_curs
+
+    source = json.dumps([{'content': i} for i in entries])
+    with get_db_curs() as curs:
+        stmt = '''
+        WITH vectored AS (
+            -- Convert the "source" json to a recordset.
+            with source as (select * from json_to_recordset(%s::json) AS (content TEXT))
+            select
+                to_tsvector('english'::regconfig, source.content) AS vector,
+                source.content
+            from source
+        )
+        SELECT
+            ts_headline(vectored.content, websearch_to_tsquery(%s), 'MaxFragments=10, MaxWords=8, MinWords=7'),
+            ts_rank(vectored.vector, websearch_to_tsquery(%s))
+        FROM vectored
+        '''
+        curs.execute(stmt, [source, search_str, search_str])
+        headlines = [tuple(i) for i in curs.fetchall()]
+
+    return headlines

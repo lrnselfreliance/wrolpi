@@ -92,6 +92,15 @@ services:
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:80' ]
 
+  zim:
+    build:
+      context: .
+      dockerfile: docker/zim/Dockerfile
+    volumes:
+      - './test:/media/wrolpi'
+    ports:
+      - '8085:8085'
+
 volumes:
   openstreetmap-data:
     external: true

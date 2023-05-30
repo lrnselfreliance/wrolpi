@@ -10,11 +10,12 @@ const links = [
     {text: 'Videos', to: '/videos', key: 'videos'},
     {text: 'Archive', to: '/archive', key: 'archive'},
     {text: 'Map', to: '/map', key: 'map'},
+    {text: 'Zim', to: '/zim', key: 'zim'},
     {text: 'Files', to: '/files', key: 'files'},
-    {text: 'Inventory', to: '/inventory', key: 'inventory'},
     {
         text: 'More', key: 'more',
         links: [
+            {text: 'Inventory', to: '/inventory', key: 'inventory'},
             {to: '/more/otp', text: 'One Time Pad', end: true},
             {to: '/more/statistics', text: 'Statistics', end: true},
             {to: '/more/vin', text: 'VIN Decoder', end: true},

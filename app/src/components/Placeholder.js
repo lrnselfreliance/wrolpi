@@ -3,7 +3,7 @@ import React, {useContext} from "react";
 import {ThemeContext} from "../contexts/contexts";
 import {Card, Placeholder} from "./Theme";
 
-export function CardPlacholder() {
+export function CardPlaceholder() {
     const {s} = useContext(ThemeContext);
 
     return <Card>
@@ -22,7 +22,7 @@ export function CardPlacholder() {
 
 export function VideoPlaceholder() {
     return <CardGroup doubling stackable>
-        <CardPlacholder/>
+        <CardPlaceholder/>
     </CardGroup>
 }
 
@@ -35,6 +35,14 @@ export function ChannelPlaceholder() {
 
 export function ProgressPlaceholder() {
     return <Placeholder style={{marginBottom: '1em'}}>
+        <PlaceholderLine/>
+        <PlaceholderLine/>
+    </Placeholder>
+}
+
+export function TextPlaceholder() {
+    return <Placeholder style={{marginBottom: '1em'}}>
+        <PlaceholderLine/>
         <PlaceholderLine/>
         <PlaceholderLine/>
     </Placeholder>

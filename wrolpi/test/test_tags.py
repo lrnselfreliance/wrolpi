@@ -121,15 +121,15 @@ def test_tags_crud(test_session, test_client, example_pdf, assert_tags_config):
     assert response.json['tags'] == list()
 
     # Tags can be created.
-    content = dict(name='foo', color='#123456')
+    content = dict(name='jardín', color='#123456')
     request, response = test_client.post('/api/tag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.CREATED
-    assert_tags_config(tags={'foo': {'color': '#123456'}})
+    assert_tags_config(tags={'jardín': {'color': '#123456'}})
 
     # The tag can be retrieved.
     request, response = test_client.get('/api/tag')
     assert response.status_code == HTTPStatus.OK
-    assert response.json['tags'] == [dict(name='foo', color='#123456', id=1, count=0)]
+    assert response.json['tags'] == [dict(name='jardín', color='#123456', id=1, count=0)]
 
     # Apply the tag to the PDF.
     tag = test_session.query(tags.Tag).one()
@@ -137,18 +137,18 @@ def test_tags_crud(test_session, test_client, example_pdf, assert_tags_config):
     test_session.commit()
 
     # The tag can be updated.
-    content = dict(name='bar', color='#000000')
+    content = dict(name='ガーデン', color='#000000')
     request, response = test_client.post('/api/tag/1', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     request, response = test_client.get('/api/tag')
-    assert response.json['tags'] == [dict(name='bar', color='#000000', id=1, count=1)]
-    assert_tags_config(tags={'bar': {'color': '#000000'}})
+    assert response.json['tags'] == [dict(name='ガーデン', color='#000000', id=1, count=1)]
+    assert_tags_config(tags={'ガーデン': {'color': '#000000'}})
 
     # Conflicting names return an error.
-    content = dict(name='bar', color='#111111')
+    content = dict(name='ガーデン', color='#111111')
     request, response = test_client.post('/api/tag', content=json.dumps(content))
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert_tags_config(tags={'bar': {'color': '#000000'}})
+    assert_tags_config(tags={'ガーデン': {'color': '#000000'}})
 
     # Cannot delete Tag that is used.
     request, response = test_client.delete('/api/tag/1')
@@ -191,10 +191,11 @@ def test_import_empty_tags_config(test_session, test_tags_config):
 async def test_import_tags_config(test_session, test_directory, test_tags_config, example_singlefile):
     with test_tags_config.open('wt') as fh:
         data = dict(
-            tags={'Foo': {'color': '#123456'}},
+            # Tag names can contain Unicode characters.
+            tags={'🔫': {'color': '#123456'}},
             tag_files=[
-                ('Foo', str(example_singlefile.relative_to(test_directory)), '2000-01-01 01:01:01'),
-                ('Foo', 'does not exist', None),
+                ('🔫', str(example_singlefile.relative_to(test_directory)), '2000-01-01 01:01:01'),
+                ('🔫', 'does not exist', None),
             ],
         )
         yaml.dump(data, fh)
@@ -210,8 +211,9 @@ async def test_import_tags_config(test_session, test_directory, test_tags_config
 
     tags.import_tags_config(test_session)
 
-    # 'Foo' Tag was created.
+    # '🔫' Tag was created.
     assert test_session.query(tags.Tag).count() == 1
+    assert test_session.query(tags.Tag).one().name == '🔫'
 
     file_group: FileGroup = test_session.query(FileGroup).one()
     assert file_group.tag_files, 'File was not tagged during import.'

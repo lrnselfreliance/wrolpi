@@ -120,7 +120,7 @@ async def test_download_get_downloader(test_session, test_download_manager, test
 
 
 @pytest.mark.asyncio
-def test_calculate_next_download(test_session, test_download_manager, fake_now):
+async def test_calculate_next_download(test_session, test_download_manager, fake_now):
     fake_now(datetime(2000, 1, 1))
     download = Download()
     download.frequency = DownloadFrequency.weekly
@@ -300,7 +300,8 @@ async def test_process_runner_timeout(test_directory):
     assert 2 < elapsed.total_seconds() < 4
 
 
-def test_crud_download(test_client, test_session, test_download_manager, test_downloader):
+@pytest.mark.asyncio
+async def test_crud_download(test_async_client, test_session, test_download_manager, test_downloader):
     """Test the ways that Downloads can be created."""
     body = dict(
         urls='https://example.com',
@@ -308,7 +309,7 @@ def test_crud_download(test_client, test_session, test_download_manager, test_do
         frequency=DownloadFrequency.weekly,
         excluded_urls='example.org,something',
     )
-    request, response = test_client.post('/api/download', content=json.dumps(body))
+    request, response = await test_async_client.post('/api/download', content=json.dumps(body))
     assert response.status_code == HTTPStatus.NO_CONTENT, response.body
 
     download: Download = test_session.query(Download).one()
@@ -318,20 +319,20 @@ def test_crud_download(test_client, test_session, test_download_manager, test_do
     assert download.frequency == DownloadFrequency.weekly
     assert download.settings['excluded_urls'] == ['example.org', 'something']
 
-    request, response = test_client.get('/api/download')
+    request, response = await test_async_client.get('/api/download')
     assert response.status_code == HTTPStatus.OK
     assert 'recurring_downloads' in response.json
     assert [i['url'] for i in response.json['recurring_downloads']] == ['https://example.com']
 
-    request, response = test_client.delete('/api/download/123')
+    request, response = await test_async_client.delete('/api/download/123')
     assert response.status_code == HTTPStatus.NOT_FOUND
     assert test_session.query(Download).count() == 1
 
-    request, response = test_client.delete(f'/api/download/{download.id}')
+    request, response = await test_async_client.delete(f'/api/download/{download.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert test_session.query(Download).count() == 0
 
-    request, response = test_client.delete(f'/api/download/{download.id}')
+    request, response = await test_async_client.delete(f'/api/download/{download.id}')
     assert response.status_code == HTTPStatus.NOT_FOUND
     assert test_session.query(Download).count() == 0
 

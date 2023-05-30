@@ -1,4 +1,5 @@
 import pathlib
+import shutil
 from http import HTTPStatus
 from multiprocessing import Manager
 from typing import List
@@ -8,11 +9,13 @@ from sanic import response, Request
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
-from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_media_directory, logger, background_task
-from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed
+from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_media_directory, logger, \
+    background_task, walk
+from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict
 from wrolpi.root_api import get_blueprint, json_response
 from . import lib, schema
 from ..schema import JSONErrorResponse
+from ..vars import PYTEST
 
 bp = get_blueprint('Files', '/api/files')
 
@@ -50,9 +53,10 @@ async def get_file(_: Request, body: schema.FileRequest):
 )
 @validate(schema.DeleteRequest)
 async def delete_file(_: Request, body: schema.DeleteRequest):
-    if not body.file:
-        raise InvalidFile('file cannot be empty')
-    lib.delete_file(body.file)
+    paths = [i for i in body.paths if i]
+    if not paths:
+        raise InvalidFile('paths cannot be empty')
+    lib.delete(*paths)
     return response.empty()
 
 
@@ -147,6 +151,125 @@ async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
         'domain_directories': domain_directories
     }
     return json_response(body)
+
+
+@bp.post('/get_directory')
+@openapi.definition(
+    summary='Get data about a directory',
+    body=schema.Directory,
+)
+@validate(schema.Directory)
+async def post_get_directory(_: Request, body: schema.Directory):
+    path = get_media_directory() / body.path
+    size = 0
+    file_count = 0
+    directory_count = 0
+    for file in walk(path):
+        if file.is_file():
+            size += file.stat().st_size
+            file_count += 1
+        elif file.is_dir():
+            directory_count += 1
+    body = {
+        'path': path,
+        'size': size,
+        'file_count': file_count,
+        'directory_count': directory_count,
+    }
+    return json_response(body)
+
+
+@bp.post('/directory')
+@openapi.definition(
+    summary='Create a directory in the media directory.',
+    body=schema.Directory,
+)
+@validate(schema.Directory)
+async def post_create_directory(_: Request, body: schema.Directory):
+    path = get_media_directory() / body.path
+    try:
+        path.mkdir()
+    except FileExistsError:
+        raise FileConflict(f'{path} already exists')
+
+    if PYTEST:
+        await lib.refresh_files([path, ])
+    else:
+        background_task(lib.refresh_files([path, ]))
+
+    return response.empty(HTTPStatus.CREATED)
+
+
+@bp.post('/move')
+@openapi.definition(
+    summary='Move a file/directory into another directory in the media directory.',
+    body=schema.Move,
+)
+@validate(schema.Move)
+async def post_move(_: Request, body: schema.Move):
+    destination = get_media_directory() / body.destination
+    if not destination.is_dir():
+        raise UnknownDirectory(f'Cannot move files into {destination} because it does not exist')
+    sources = [get_media_directory() / i for i in body.paths]
+    for source in sources:
+        if not source.exists():
+            raise FileNotFoundError(f'Cannot find {source} to move')
+
+    try:
+        await lib.move(destination, *sources)
+    except Exception as e:
+        raise FileConflict(f'Failed to move {sources} to {destination}') from e
+
+    return response.empty(HTTPStatus.NO_CONTENT)
+
+
+@bp.post('/rename')
+@openapi.definition(
+    summary='Rename a file/directory in-place.',
+    body=schema.Rename,
+)
+@validate(schema.Rename)
+async def post_rename(_: Request, body: schema.Rename):
+    path = get_media_directory() / body.path
+    new_path = path.with_name(body.new_name)
+    if not path.exists():
+        raise FileNotFoundError(f'Cannot rename path {str(repr(path))} because it does not exist')
+    elif new_path.exists():
+        raise FileConflict(f'File already exists: {new_path}')
+
+    try:
+        await lib.rename(path, body.new_name)
+    except Exception as e:
+        logger.error(f'Failed to rename {path} to {new_path}', exc_info=e)
+        raise FileConflict(f'Failed to rename {path} to {new_path}') from e
+
+    if PYTEST:
+        await lib.refresh_files([path, new_path])
+    else:
+        background_task(lib.refresh_files([path, new_path]))
+
+    return response.empty(HTTPStatus.NO_CONTENT)
+
+
+@bp.post('/delete_directory')
+@openapi.definition(
+    summary='Delete a directory in the media directory.',
+    body=schema.Directory,
+)
+@validate(schema.Directory)
+async def delete_directory(_: Request, body: schema.Directory):
+    path = get_media_directory() / body.path
+    if path.is_dir():
+        shutil.rmtree(path)
+    else:
+        raise FileNotFoundError(f'No directory found: {path}')
+
+    if PYTEST:
+        await lib.refresh_files([path, ])
+    else:
+        background_task(lib.refresh_files([path, ]))
+
+    return response.empty()
 
 
 @bp.post('/tag')

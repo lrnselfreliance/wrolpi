@@ -11,6 +11,7 @@ import shutil
 import tempfile
 import zipfile
 from abc import ABC
+from datetime import datetime
 from itertools import zip_longest
 from typing import List, Callable, Union, Dict, Sequence
 from typing import Tuple, Set
@@ -22,7 +23,8 @@ import pytest
 import sqlalchemy
 import yaml
 from PIL import Image
-from sanic_testing.testing import SanicTestClient
+from sanic_testing.reusable import ReusableClient
+from sanic_testing.testing import SanicASGITestClient
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -120,10 +122,11 @@ def test_config(test_directory) -> pathlib.Path:
 ROUTES_ATTACHED = False
 
 
-@pytest.fixture(autouse=True)
-def test_client() -> SanicTestClient:
-    """
-    Get a Sanic Test Client with all default routes attached.
+@pytest.fixture()
+def test_client() -> ReusableClient:
+    """Get a Reusable Sanic Test Client with all default routes attached.
+
+    (A non-reusable client would turn on for each request)
     """
     global ROUTES_ATTACHED
     if ROUTES_ATTACHED is False:
@@ -132,7 +135,22 @@ def test_client() -> SanicTestClient:
             api_app.blueprint(bp)
         ROUTES_ATTACHED = True
 
-    yield api_app.test_client
+    client = ReusableClient(api_app)
+    with client:
+        yield client
+
+
+@pytest.fixture()
+def test_async_client() -> SanicASGITestClient:
+    """Get an Async Sanic Test Client with all default routes attached."""
+    global ROUTES_ATTACHED
+    if ROUTES_ATTACHED is False:
+        # Attach any blueprints for the test.
+        for bp in BLUEPRINTS:
+            api_app.blueprint(bp)
+        ROUTES_ATTACHED = True
+
+    yield SanicASGITestClient(api_app)
 
 
 @pytest.fixture
@@ -163,6 +181,7 @@ async def test_download_manager(
 @pytest.fixture
 def fake_now():
     try:
+        set_test_now(datetime(2000, 1, 1))
         yield set_test_now
     finally:
         # reset now() to its original functionality.
@@ -277,6 +296,11 @@ def vtt_file2(test_directory) -> pathlib.Path:
     destination = test_directory / f'{uuid4()}.en.vtt'
     shutil.copy(PROJECT_DIR / 'test/example2.en.vtt', destination)
     yield destination
+
+
+@pytest.fixture
+def srt_text() -> str:
+    return (PROJECT_DIR / 'test/example3.en.srt').read_text()
 
 
 @pytest.fixture
@@ -407,10 +431,13 @@ def tag_factory(test_session):
     names = ['one', 'two', 'three', 'four', 'five', 'six']
     count = 1
 
-    def factory() -> Tag:
-        tag = Tag(name=names.pop(0), color=f'#{str(count) * 6}')
+    def factory(name: str = None) -> Tag:
+        if not name:
+            name = names.pop(0)
+        tag = Tag(name=name, color=f'#{str(count) * 6}')
         test_session.add(tag)
         test_session.commit()
+        test_session.flush([tag, ])
         return tag
 
     return factory

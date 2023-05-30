@@ -20,7 +20,8 @@ from wrolpi.common import get_media_directory, logger, extract_domain, chdir, es
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import UnknownArchive, InvalidOrderBy
-from wrolpi.files.lib import handle_file_group_search_results, tag_names_to_sub_select
+from wrolpi.files.lib import handle_file_group_search_results
+from wrolpi.tags import tag_names_to_file_group_sub_select
 from wrolpi.vars import DOCKERIZED, PYTEST
 
 logger = logger.getChild(__name__)
@@ -417,7 +418,7 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
 
     if tag_names:
         # Filter all FileGroups by those that have been tagged with the provided tag names.
-        tags_stmt, params_ = tag_names_to_sub_select(tag_names)
+        tags_stmt, params_ = tag_names_to_file_group_sub_select(tag_names)
         params.update(params_)
         wheres.append(f'fg.id = ANY({tags_stmt})')
 

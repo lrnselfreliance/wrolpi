@@ -14,7 +14,7 @@ class FileRequest:
 
 @dataclass
 class DeleteRequest:
-    file: str
+    paths: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -54,3 +54,20 @@ class TagFileGroupPost:
     tag_id: Optional[int] = None
     file_group_id: Optional[int] = None
     file_group_primary_path: Optional[str] = None
+
+
+@dataclass
+class Directory:
+    path: str
+
+
+@dataclass
+class Move:
+    destination: str
+    paths: List[str] = field(default_factory=list)
+
+
+@dataclass
+class Rename:
+    path: str
+    new_name: str

@@ -110,31 +110,6 @@ class PytestCase:
         assert len(a) == len(b), f'{len(a)=} != {len(b)=}'
 
 
-class ExtendedTestCase(PytestCase, unittest.TestCase):
-    """
-    Add any specialized test methods to this class.
-    """
-    pass
-
-
-class TestAPI(ExtendedTestCase):
-
-    def setUp(self) -> None:
-        self.tmp_dir = tempfile.TemporaryDirectory()
-        self.tmp_path = pathlib.Path(self.tmp_dir.name)
-        set_test_media_directory(self.tmp_path)
-
-    def tearDown(self) -> None:
-        set_test_media_directory(None)
-
-    def assertHTTPStatus(self, response, status: int):
-        self.assertEqual(response.status_code, status)
-
-    assertOK = partialmethod(assertHTTPStatus, status=HTTPStatus.OK)
-    assertCONFLICT = partialmethod(assertHTTPStatus, status=HTTPStatus.CONFLICT)
-    assertNO_CONTENT = partialmethod(assertHTTPStatus, status=HTTPStatus.NO_CONTENT)
-
-
 @contextmanager
 def build_test_directories(paths: List[str], tmp_dir: pathlib.Path = None) -> pathlib.Path:
     """

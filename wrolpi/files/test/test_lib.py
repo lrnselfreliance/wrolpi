@@ -14,39 +14,80 @@ from PIL import Image
 
 from wrolpi.common import timer
 from wrolpi.dates import now, from_timestamp
-from wrolpi.errors import InvalidFile, UnknownDirectory
+from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged
 from wrolpi.files import lib, indexers
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
 from wrolpi.vars import PROJECT_DIR
 
 
-def test_delete_file(make_files_structure, test_directory):
+def test_delete(test_session, make_files_structure, test_directory):
     """
     File in the media directory can be deleted.
     """
-    files = [
+    make_files_structure([
         'archives/foo.txt',
         'bar.txt',
         'baz/',
-    ]
-    make_files_structure(files)
+    ])
 
-    lib.delete_file('bar.txt')
+    lib.delete('bar.txt')
     assert (test_directory / 'archives/foo.txt').is_file()
-    assert not (test_directory / 'bar.txt').is_file()
+    assert not (test_directory / 'bar.txt').exists()
     assert (test_directory / 'baz').is_dir()
 
-    lib.delete_file('archives/foo.txt')
-    assert not (test_directory / 'archives/foo.txt').is_file()
-    assert not (test_directory / 'bar.txt').is_file()
+    lib.delete('archives/foo.txt')
+    assert not (test_directory / 'archives/foo.txt').exists()
+    assert not (test_directory / 'bar.txt').exists()
+
+    # Can also delete directories.
+    lib.delete('baz')
+    assert not (test_directory / 'baz').exists()
 
     with pytest.raises(InvalidFile):
-        lib.delete_file('baz')
-    with pytest.raises(InvalidFile):
-        lib.delete_file('does not exist')
+        lib.delete('does not exist')
 
-    assert (test_directory / 'baz').is_dir()
+    # Cannot delete the media directory.
+    with pytest.raises(InvalidFile):
+        lib.delete('.')
+
+
+def test_delete_link(test_session, test_directory):
+    """Links can be deleted."""
+    foo, bar = test_directory / 'foo', test_directory / 'bar'
+    foo.touch()
+    bar.symlink_to(foo)
+
+    lib.delete(bar)
+
+
+@pytest.mark.asyncio
+async def test_delete_tagged(test_session, make_files_structure, tag_factory, video_bytes):
+    """Cannot delete a file that has been tagged."""
+    tag = tag_factory()
+    make_files_structure({'foo/bar.txt': 'asdf', 'foo/bar.mp4': video_bytes})
+    await lib.refresh_files()
+    # Both files end up in a group.
+    bar = test_session.query(FileGroup).one()
+    bar.add_tag(tag)
+    test_session.commit()
+
+    # Neither file can be deleted.
+    with pytest.raises(FileGroupIsTagged):
+        lib.delete('foo/bar.txt')
+    with pytest.raises(FileGroupIsTagged):
+        lib.delete('foo/bar.mp4')
+    with pytest.raises(FileGroupIsTagged):
+        lib.delete('foo')
+
+
+@pytest.mark.asyncio
+async def test_delete_nested(test_session, make_files_structure):
+    """Refuse to delete nested files in case user mis-clicks."""
+    make_files_structure(['foo/bar'])
+
+    with pytest.raises(InvalidFile):
+        lib.delete('foo', 'foo/bar')
 
 
 @pytest.mark.parametrize(
@@ -638,3 +679,168 @@ def test_file_group_merge(test_session, test_directory, make_files_structure, ta
     assert [i for i in vid.tag_files if i.tag.name == 'two'][0].created_at == srt_file_created_at
     # Size is combined
     assert vid.size > len(video_bytes)
+
+
+@pytest.mark.asyncio
+async def test_move(test_session, test_directory, make_files_structure, video_bytes, singlefile_contents_factory):
+    """files.lib.move behaves likes posix mv"""
+    make_files_structure({
+        'foo/bar/video.mp4': video_bytes,
+        'foo/bar/baz/archive.html': (singlefile_text := singlefile_contents_factory()),
+        'foo/bytes.txt': b'text',
+        'foo/text.txt': 'text',
+    })
+    foo = test_directory / 'foo'
+    qux = test_directory / 'qux'
+
+    # mv foo qux
+    plan = await lib.move(qux, foo)
+    plan = [(str(i.relative_to(test_directory)), str(j.relative_to(test_directory))) for i, j in plan]
+    # The deepest files are moved first.
+    assert plan == [('foo/bar/baz/archive.html', 'qux/foo/bar/baz/archive.html'),
+                    ('foo/bar/video.mp4', 'qux/foo/bar/video.mp4'),
+                    ('foo/bar/baz', 'qux/foo/bar/baz'),
+                    ('foo/text.txt', 'qux/foo/text.txt'),
+                    ('foo/bytes.txt', 'qux/foo/bytes.txt'),
+                    ('foo/bar', 'qux/foo/bar'),
+                    ]
+    # Files were moved.
+    assert (qux / 'foo/bar/video.mp4').is_file() and (qux / 'foo/bar/video.mp4').read_bytes() == video_bytes
+    assert (qux / 'foo/bar/baz/archive.html').is_file() \
+           and (qux / 'foo/bar/baz/archive.html').read_text() == singlefile_text
+    assert (qux / 'foo/bytes.txt').is_file() and (qux / 'foo/bytes.txt').read_bytes() == b'text'
+    assert (qux / 'foo/text.txt').is_file() and (qux / 'foo/text.txt').read_text() == 'text'
+    # Directories were moved.
+    assert not foo.exists()
+
+
+@pytest.mark.asyncio
+async def test_move_files(test_session, test_directory, make_files_structure):
+    """Files can be moved using files.lib.move."""
+    one, two = make_files_structure({
+        'foo/one.txt': 'one',
+        'two.txt': 'two',
+    })
+    dest = test_directory / 'dest'
+
+    await lib.move(dest, one, two)
+    # one.txt is moved out of foo.
+    assert (dest / 'one.txt').read_text() == 'one'
+    assert (dest / 'two.txt').read_text() == 'two'
+
+
+@pytest.mark.asyncio
+async def test_move_directory(test_session, test_directory, make_files_structure, assert_directories):
+    """A Directory record is deleted when it's directory is deleted."""
+    make_files_structure({
+        'foo/one.txt': 'one',
+    })
+    await lib.refresh_files()
+    assert_directories({'foo'})
+
+    bar = test_directory / 'bar'
+    await lib.rename(test_directory / 'foo', 'bar')
+    assert (bar / 'one.txt').read_text() == 'one'
+    assert_directories({'bar'})
+
+
+count = 0
+
+
+@pytest.mark.asyncio
+async def test_move_error(test_session, test_directory, make_files_structure, video_bytes, singlefile_contents_factory):
+    """Files are restored when a move fails."""
+    make_files_structure({
+        'foo/bar/video.mp4': video_bytes,
+        'foo/bar/baz/archive.html': (singlefile_text := singlefile_contents_factory()),
+        'foo/bytes.txt': b'text',
+        'foo/text.txt': 'text',
+    })
+    foo = test_directory / 'foo'
+    qux = test_directory / 'qux'
+
+    def mock_shutil_move(*args, **kwargs):
+        # Mock the `shutil.move` with this function which will unexpectedly fail on the 3rd call.
+        global count
+        count += 1
+        if count == 3:
+            raise FileNotFoundError('fake file move failure')
+        return shutil.move(*args, **kwargs)
+
+    with mock.patch('wrolpi.files.lib.shutil.move', mock_shutil_move), pytest.raises(FileNotFoundError):
+        await lib.move(qux, foo)
+    # The move failed, the files should be moved back.
+    # foo was not deleted.
+    assert foo.is_dir()
+    assert (foo / 'bar/baz/archive.html').is_file() and (foo / 'bar/baz/archive.html').read_text() == singlefile_text
+    assert (foo / 'bar/video.mp4').is_file() and (foo / 'bar/video.mp4').read_bytes() == video_bytes
+    assert (foo / 'bytes.txt').is_file() and (foo / 'bytes.txt').read_bytes() == b'text'
+    assert (foo / 'text.txt').is_file() and (foo / 'text.txt').read_text() == 'text'
+    # Destination did not exist on move, so it was deleted.
+    assert not qux.exists()
+
+
+@pytest.mark.asyncio
+async def test_file_group_move(test_session, make_files_structure, test_directory, video_bytes, srt_text):
+    """Test FileGroup's move method"""
+    video, srt = make_files_structure({
+        'video.mp4': video_bytes,
+        'video.srt': srt_text,
+    })
+    await lib.refresh_files()
+    file_group: FileGroup = test_session.query(FileGroup).one()
+    assert file_group.indexed is True
+
+    (test_directory / 'foo').mkdir()
+    new_path = test_directory / 'foo/video.mp4'
+    file_group.move(new_path)
+
+    new_srt = new_path.with_suffix('.srt')
+    assert new_path.read_bytes() == video_bytes
+    assert new_srt.read_text() == srt_text
+    assert not video.is_file()
+    assert not srt.is_file()
+    # Moved files must be re-indexed.
+    assert file_group.indexed is False
+
+
+@pytest.mark.asyncio
+async def test_move_tagged(test_session, test_directory, make_files_structure, tag_factory):
+    """A FileGroup's tag is preserved when moved or renamed."""
+    tag = tag_factory()
+    foo, bar, = make_files_structure({
+        'foo/foo.txt': 'foo',
+        'foo/bar.txt': 'bar',
+    })
+    await lib.refresh_files()
+    bar_file_group, foo_file_group = test_session.query(FileGroup).order_by(FileGroup.primary_path)
+    bar_file_group.add_tag(tag)
+    test_session.commit()
+
+    qux = test_directory / 'qux'
+    qux.mkdir()
+
+    # Move both files into qux.  The Tag should also be moved.
+    await lib.move(qux, bar, foo)
+    new_foo = qux / 'foo.txt'
+    new_bar = qux / 'bar.txt'
+    # Files were moved.
+    assert new_foo.read_text() == 'foo'
+    assert new_bar.read_text() == 'bar'
+    assert (test_directory / 'foo').is_dir()
+    assert not (test_directory / 'foo/foo.txt').exists()
+    assert not (test_directory / 'foo/bar.txt').exists()
+    # Tag was moved.
+    bar_file_group, foo_file_group = test_session.query(FileGroup).order_by(FileGroup.primary_path)
+    assert bar_file_group.primary_path == new_bar == bar_file_group.files[0]['path']
+    assert bar_file_group.primary_path.is_file()
+    assert bar_file_group.tag_files
+    # foo.txt was not tagged, but was moved.
+    assert not foo_file_group.tag_files
+    assert foo_file_group.primary_path.is_file()
+    assert foo_file_group.primary_path == new_foo == foo_file_group.files[0]['path']
+
+    # Rename "bar.txt" to "baz.txt"
+    await lib.rename(new_bar, 'baz.txt')
+    baz = new_bar.with_name('baz.txt')
+    assert baz.read_text() == 'bar'

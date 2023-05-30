@@ -113,17 +113,15 @@ function VideosPage() {
     }
 
     const onSelect = (path, checked) => {
-        if (checked && path) {
-            setSelectedVideos([...selectedVideos, path]);
-        } else if (path) {
-            setSelectedVideos(selectedVideos.filter(i => i !== path));
-        }
+        const newSelectedVideos = checked && path ? [...selectedVideos, path] : selectedVideos.filter(i => i !== path);
+        console.debug(`Selected Videos: ${newSelectedVideos}`);
+        setSelectedVideos(newSelectedVideos);
     }
 
     const onDelete = async (e) => {
         e.preventDefault();
         setDeleteOpen(false);
-        const videoIds = videos.filter(i => selectedVideos.indexOf(i['path']) >= 0).map(i => i['video']['id']);
+        const videoIds = videos.filter(i => selectedVideos.indexOf(i['primary_path']) >= 0).map(i => i['video']['id']);
         await deleteVideos(videoIds);
         await fetchVideos();
         setSelectedVideos([]);

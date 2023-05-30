@@ -34,7 +34,7 @@ import {
     textEllipsis,
     useTitle
 } from "./Common";
-import {addTag, deleteArchives, postDownload, removeTag} from "../api";
+import {deleteArchives, postDownload, tagFileGroup, untagFileGroup} from "../api";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {useArchive, useDomains, useSearchArchives, useSearchDomain} from "../hooks/customHooks";
@@ -146,12 +146,12 @@ function ArchivePage() {
     }
 
     const localAddTag = async (name) => {
-        await addTag(archiveFile, name);
+        await tagFileGroup(archiveFile, name);
         await fetchArchive();
     }
 
     const localRemoveTag = async (name) => {
-        await removeTag(archiveFile, name);
+        await untagFileGroup(archiveFile, name);
         await fetchArchive();
     }
 
@@ -359,7 +359,8 @@ function Archives() {
     const onDelete = async (e) => {
         e.preventDefault();
         setDeleteOpen(false);
-        const archiveIds = archives.filter(i => selectedArchives.indexOf(i['path']) >= 0).map(i => i['archive']['id']);
+        const archiveIds = archives.filter(i => selectedArchives.indexOf(i['primary_path']) >= 0)
+            .map(i => i['archive']['id']);
         await deleteArchives(archiveIds);
         await fetchArchives();
         setSelectedArchives([]);

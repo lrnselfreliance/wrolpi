@@ -1,4 +1,4 @@
-import pathlib
+import inspect
 import types
 from contextlib import contextmanager
 from functools import wraps
@@ -6,9 +6,9 @@ from typing import ContextManager, Tuple, List, Union, Type, Generator
 
 import psycopg2
 import psycopg2.extensions
+import sqlalchemy
 import sqlalchemy.exc
 from psycopg2._psycopg import cursor
-from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import NullPool
 
@@ -40,14 +40,15 @@ def get_db_args(dbname: str = None):
 # This engine is used to modify the databases.
 connect_args = dict(application_name='wrolpi_api_super')
 postgres_args = get_db_args('postgres')
-postgres_engine = create_engine('postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**postgres_args),
-                                execution_options={'isolation_level': 'AUTOCOMMIT'}, connect_args=connect_args)
+postgres_engine = sqlalchemy.create_engine(
+    'postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**postgres_args),
+    execution_options={'isolation_level': 'AUTOCOMMIT'}, connect_args=connect_args)
 
 # This engine is used for all normal tasks (except testing).
 db_args = get_db_args()
 connect_args = dict(application_name='wrolpi_api', connect_timeout=1)
 uri = 'postgresql://{user}:{password}@{host}:{port}/{dbname}'.format(**db_args)
-engine = create_engine(uri, poolclass=NullPool, connect_args=connect_args)
+engine = sqlalchemy.create_engine(uri, poolclass=NullPool, connect_args=connect_args)
 session_maker = sessionmaker(bind=engine)
 
 LOGGED_ARGS = False
@@ -69,7 +70,7 @@ def _get_db_session():
     return engine, session
 
 
-def get_db_context() -> Tuple[create_engine, Session]:
+def get_db_context() -> Tuple[sqlalchemy.create_engine, Session]:
     """
     Get a DB engine and session.
     """
@@ -122,7 +123,7 @@ def get_db_curs(commit: bool = False):
             connection.rollback()
 
 
-def optional_session(commit: Union[callable, bool] = False):
+def optional_session(commit: Union[callable, bool] = False) -> callable:
     """
     Wraps a function, if a Session is passed it will be used.  Otherwise, a new session will be
     created and passed to the function.
@@ -140,22 +141,34 @@ def optional_session(commit: Union[callable, bool] = False):
 
     def call_func(func, session, args, kwargs):
         if session:
-            return func(*args, session=session, **kwargs)
+            result = func(*args, session=session, **kwargs)
+            if commit:
+                session.commit()
         else:
             with get_db_session() as session:
-                return func(*args, session=session, **kwargs)
+                result = func(*args, session=session, **kwargs)
+                if commit:
+                    session.commit()
+        return result
 
     def wrapper(*w_args, **w_kwargs):
         if len(w_args) == 1 and len(w_kwargs) == 0 and callable(w_args[0]):
             func = w_args[0]
 
-            @wraps(func)
-            def wrapped(*args, session: Session = None, **kwargs):
-                session, args, kwargs = find_session(*args, session=session, **kwargs)
-                return call_func(func, session, args, kwargs)
+            if inspect.iscoroutinefunction(func):
+                @wraps(func)
+                async def wrapped(*args, session: Session = None, **kwargs):
+                    session, args, kwargs = find_session(*args, session=session, **kwargs)
+                    return await call_func(func, session, args, kwargs)
+            else:
+                @wraps(func)
+                def wrapped(*args, session: Session = None, **kwargs):
+                    session, args, kwargs = find_session(*args, session=session, **kwargs)
+                    return call_func(func, session, args, kwargs)
 
             return wrapped
         else:
+            # No params were passed to this wrapper, `commit` is actually the function we are wrapping.
             session_, w_args, w_kwargs = find_session(*w_args, **w_kwargs)
             return call_func(commit, session_, w_args, w_kwargs)
 
@@ -165,7 +178,7 @@ def optional_session(commit: Union[callable, bool] = False):
 @optional_session
 def get_ranked_models(ranked_primary_keys: List, model: Type[Base], session: Session = None) -> List[Base]:
     """Get all objects whose primary keys are in the `ranked_primary_keys`, preserve their order."""
-    pkey = inspect(model).primary_key[0]
+    pkey = sqlalchemy.inspect(model).primary_key[0]
     pkey_name = pkey.name
     results = list(session.query(model).filter(pkey.in_(ranked_primary_keys)).all())
     results = sorted(results, key=lambda i: ranked_primary_keys.index(getattr(i, pkey_name)))

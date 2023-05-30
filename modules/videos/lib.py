@@ -1,5 +1,4 @@
 import contextlib
-import datetime
 import functools
 import html
 import pathlib

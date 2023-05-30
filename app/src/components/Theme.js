@@ -186,8 +186,8 @@ export function Divider({...props}) {
 }
 
 export function Header(props) {
-    const {t, inverted} = useContext(ThemeContext);
-    props = defaultGrey({...t, ...props}, inverted);
+    const {t} = useContext(ThemeContext);
+    props = {...t, ...props};
     return <SHeader {...props}/>
 }
 

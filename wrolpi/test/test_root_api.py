@@ -2,6 +2,7 @@ import json
 from http import HTTPStatus
 from itertools import zip_longest
 
+import pytest
 from mock import mock
 
 from wrolpi.admin import HotspotStatus
@@ -9,162 +10,168 @@ from wrolpi.common import get_config
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Download, get_download_manager_config
 from wrolpi.root_api import api_app
-from wrolpi.test.common import TestAPI, wrap_test_db, skip_circleci
+from wrolpi.test.common import skip_circleci, assert_dict_contains
 
 
-class TestRootAPI(TestAPI):
+@pytest.mark.asyncio
+async def test_index(test_session, test_async_client):
+    """
+    Index should have some details in an HTML response
+    """
+    request, response = await test_async_client.get('/')
+    assert response.status_code == HTTPStatus.OK
+    assert b'html' in response.body
 
-    @wrap_test_db
-    def test_index(self):
-        """
-        Index should have some details in an HTML response
-        """
-        request, response = api_app.test_client.get('/')
+    request, response = await test_async_client.get('/api')
+    assert response.status_code == HTTPStatus.OK
+    assert b'html' in response.body
+
+
+@pytest.mark.asyncio
+async def test_valid_regex(test_session, test_async_client):
+    """
+    The endpoint should only return valid if the regex is valid.
+    """
+    data = {'regex': 'foo'}
+    request, response = await test_async_client.post('/api/valid_regex', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.OK
+    assert json.loads(response.body) == {'valid': True, 'regex': 'foo'}
+
+    data = {'regex': '.*(title match).*'}
+    request, response = await test_async_client.post('/api/valid_regex', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.OK
+    assert json.loads(response.body) == {'valid': True, 'regex': '.*(title match).*'}
+
+    data = {'regex': '.*(missing parenthesis.*'}
+    request, response = await test_async_client.post('/api/valid_regex', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert json.loads(response.body) == {'valid': False, 'regex': '.*(missing parenthesis.*'}
+
+
+@pytest.mark.asyncio
+async def test_get_settings(test_session, test_async_client):
+    with mock.patch('wrolpi.admin.CPUFREQ_INFO_BIN', '/usr/bin/cpufreq-info'), \
+            mock.patch('wrolpi.admin.NMCLI_BIN', '/usr/bin/nmcli'):
+        request, response = await test_async_client.get('/api/settings')
         assert response.status_code == HTTPStatus.OK
-        assert b'html' in response.body
 
-        request, response = api_app.test_client.get('/api')
-        assert response.status_code == HTTPStatus.OK
-        assert b'html' in response.body
 
-    def test_echo(self):
-        """
-        Echo should send back a JSON object with our request details.
-        """
-        request, response = api_app.test_client.get('/api/echo?hello=world')
-        assert response.status_code == HTTPStatus.OK
-        self.assertDictContains(response.json['form'], {})
-        assert response.json['method'] == 'GET', 'Method was not GET'
-        assert response.json['json'] is None, 'JSON was not empty'
-        assert response.json['args'] == {'hello': ['world']}
+@pytest.mark.asyncio
+async def test_get_downloads(test_session, test_async_client):
+    request, response = await test_async_client.get('/api/download')
+    assert_dict_contains(response.json, {'once_downloads': [], 'recurring_downloads': []})
 
-        data = {'foo': 'bar'}
-        request, response = api_app.test_client.post('/api/echo', content=json.dumps(data))
-        assert response.status_code == HTTPStatus.OK
-        self.assertDictContains(response.json['form'], {})
-        assert response.json['method'] == 'POST', 'Method was not POST'
-        assert response.json['json'] == data, 'JSON was not data'
-        assert response.json['args'] == {}
+    d1 = Download(url='https://example.com/1', status='complete')
+    d2 = Download(url='https://example.com/2', status='pending')
+    d3 = Download(url='https://example.com/3', status='deferred')
+    d4 = Download(url='https://example.com/4', status='deferred')
+    d5 = Download(url='https://example.com/5', status='new')
+    d6 = Download(url='https://example.com/6', status='deferred', frequency=60)
+    d7 = Download(url='https://example.com/7', status='pending', frequency=60)
+    test_session.add_all([d1, d2, d3, d4, d5, d6, d7])
+    test_session.commit()
 
-    def test_valid_regex(self):
-        """
-        The endpoint should only return valid if the regex is valid.
-        """
-        data = {'regex': 'foo'}
-        request, response = api_app.test_client.post('/api/valid_regex', content=json.dumps(data))
-        assert response.status_code == HTTPStatus.OK
-        assert json.loads(response.body) == {'valid': True, 'regex': 'foo'}
+    request, response = await test_async_client.get('/api/download')
+    expected = [
+        {'url': 'https://example.com/2', 'status': 'pending'},
+        {'url': 'https://example.com/5', 'status': 'new'},
+        {'url': 'https://example.com/3', 'status': 'deferred'},
+        {'url': 'https://example.com/4', 'status': 'deferred'},
+        {'url': 'https://example.com/1', 'status': 'complete'},
+    ]
+    for download, expected in zip_longest(response.json['once_downloads'], expected):
+        assert_dict_contains(download, expected)
+    expected = [
+        {'url': 'https://example.com/7', 'status': 'pending'},
+        {'url': 'https://example.com/6', 'status': 'deferred'},
+    ]
+    for download, expected in zip_longest(response.json['recurring_downloads'], expected):
+        assert_dict_contains(download, expected)
 
-        data = {'regex': '.*(title match).*'}
-        request, response = api_app.test_client.post('/api/valid_regex', content=json.dumps(data))
-        assert response.status_code == HTTPStatus.OK
-        assert json.loads(response.body) == {'valid': True, 'regex': '.*(title match).*'}
 
-        data = {'regex': '.*(missing parenthesis.*'}
-        request, response = api_app.test_client.post('/api/valid_regex', content=json.dumps(data))
-        assert response.status_code == HTTPStatus.BAD_REQUEST
-        assert json.loads(response.body) == {'valid': False, 'regex': '.*(missing parenthesis.*'}
+@pytest.mark.asyncio
+async def test_downloads_sorter_recurring(test_async_client, test_session):
+    downloads = [
+        dict(status='complete', frequency=1),
+        dict(status='complete', frequency=2, next_download='2020-01-01T00:00:01+00:00'),
+        dict(status='complete', frequency=2, next_download='2020-01-01T00:00:02+00:00'),
+        dict(status='pending', frequency=1),
+        dict(status='pending', frequency=4),
+        dict(status='failed', frequency=1),
+        dict(status='failed', frequency=1),
+    ]
+    for download in downloads:
+        test_session.add(Download(url='https://example.com', **download))
+    test_session.commit()
 
-    @wrap_test_db
-    def test_get_settings(self):
-        with mock.patch('wrolpi.admin.CPUFREQ_INFO_BIN', '/usr/bin/cpufreq-info'), \
-                mock.patch('wrolpi.admin.NMCLI_BIN', '/usr/bin/nmcli'):
-            request, response = api_app.test_client.get('/api/settings')
-            self.assertOK(response)
+    expected = [
+        dict(status='pending', frequency=1),
+        dict(status='pending', frequency=4),
+        dict(status='failed', frequency=1),
+        dict(status='failed'),
+        dict(status='complete', frequency=2, next_download='2020-01-01T00:00:01+00:00'),
+        dict(status='complete', frequency=2, next_download='2020-01-01T00:00:02+00:00'),
+        dict(status='complete', frequency=1),
+    ]
+    request, response = await test_async_client.get('/api/download')
+    recurring_downloads = response.json['recurring_downloads']
+    for d1, d2 in zip_longest(expected, recurring_downloads):
+        assert_dict_contains(d2, d1)
 
-    @wrap_test_db
-    def test_get_downloads(self):
-        request, response = api_app.test_client.get('/api/download')
-        self.assertDictContains(response.json, {'once_downloads': [], 'recurring_downloads': []})
 
-        with get_db_session(commit=True) as session:
-            d1 = Download(url='https://example.com/1', status='complete')
-            d2 = Download(url='https://example.com/2', status='pending')
-            d3 = Download(url='https://example.com/3', status='deferred')
-            d4 = Download(url='https://example.com/4', status='deferred')
-            d5 = Download(url='https://example.com/5', status='new')
-            d6 = Download(url='https://example.com/6', status='deferred', frequency=60)
-            d7 = Download(url='https://example.com/7', status='pending', frequency=60)
-            session.add_all([d1, d2, d3, d4, d5, d6, d7])
+@pytest.mark.asyncio
+async def test_downloads_sorter(test_async_client, test_session):
+    downloads = [
+        dict(status='complete', last_successful_download='2020-01-01T00:00:01+00:00'),
+        dict(status='complete', last_successful_download='2020-01-01T00:00:03+00:00'),
+        dict(status='complete', last_successful_download='2020-01-01T00:00:02+00:00'),
+        # last_successful_download are equal, so id is used next.
+        dict(status='pending', last_successful_download='2020-01-01T00:00:01+00:00', url='1'),
+        dict(status='pending', last_successful_download='2020-01-01T00:00:01+00:00', url='2'),
 
-        request, response = api_app.test_client.get('/api/download')
-        expected = [
-            {'url': 'https://example.com/2', 'status': 'pending'},
-            {'url': 'https://example.com/5', 'status': 'new'},
-            {'url': 'https://example.com/3', 'status': 'deferred'},
-            {'url': 'https://example.com/4', 'status': 'deferred'},
-            {'url': 'https://example.com/1', 'status': 'complete'},
-        ]
-        for download, expected in zip_longest(response.json['once_downloads'], expected):
-            self.assertDictContains(download, expected)
-        expected = [
-            {'url': 'https://example.com/7', 'status': 'pending'},
-            {'url': 'https://example.com/6', 'status': 'deferred'},
-        ]
-        for download, expected in zip_longest(response.json['recurring_downloads'], expected):
-            self.assertDictContains(download, expected)
+        dict(status='pending', last_successful_download='2020-01-01T00:00:04+00:00'),
+        dict(status='failed'),
+        dict(status='failed', last_successful_download='2020-01-01T00:00:01+00:00'),
+    ]
+    for download in downloads:
+        test_session.add(Download(url=download.pop('url', 'https://example.com'), **download))
+    test_session.commit()
 
-    @wrap_test_db
-    def test_downloads_sorter(self):
-        with get_db_session(commit=True) as session:
-            downloads = [
-                dict(status='complete', last_successful_download='2020-01-01T00:00:01+00:00'),
-                dict(status='complete', last_successful_download='2020-01-01T00:00:03+00:00'),
-                dict(status='complete', last_successful_download='2020-01-01T00:00:02+00:00'),
-                # last_successful_download are equal, so id is used next.
-                dict(status='pending', last_successful_download='2020-01-01T00:00:01+00:00', url='1'),
-                dict(status='pending', last_successful_download='2020-01-01T00:00:01+00:00', url='2'),
+    expected = [
+        dict(status='pending', last_successful_download='2020-01-01T00:00:04+00:00'),
+        dict(status='pending', last_successful_download='2020-01-01T00:00:01+00:00', url='1'),
+        dict(status='pending', last_successful_download='2020-01-01T00:00:01+00:00', url='2'),
+        dict(status='failed'),
+        dict(status='failed', last_successful_download='2020-01-01T00:00:01+00:00'),
+        dict(status='complete', last_successful_download='2020-01-01T00:00:03+00:00'),
+        dict(status='complete', last_successful_download='2020-01-01T00:00:02+00:00'),
+        dict(status='complete', last_successful_download='2020-01-01T00:00:01+00:00'),
+    ]
+    request, response = await test_async_client.get('/api/download')
+    once_downloads = response.json['once_downloads']
+    for d1, d2 in zip_longest(expected, once_downloads):
+        assert_dict_contains(d2, d1)
 
-                dict(status='pending', last_successful_download='2020-01-01T00:00:04+00:00'),
-                dict(status='failed'),
-                dict(status='failed', last_successful_download='2020-01-01T00:00:01+00:00'),
-            ]
-            for download in downloads:
-                session.add(Download(url=download.pop('url', 'https://example.com'), **download))
 
-        expected = [
-            dict(status='pending', last_successful_download='2020-01-01T00:00:04+00:00'),
-            dict(status='pending', last_successful_download='2020-01-01T00:00:01+00:00', url='1'),
-            dict(status='pending', last_successful_download='2020-01-01T00:00:01+00:00', url='2'),
-            dict(status='failed'),
-            dict(status='failed', last_successful_download='2020-01-01T00:00:01+00:00'),
-            dict(status='complete', last_successful_download='2020-01-01T00:00:03+00:00'),
-            dict(status='complete', last_successful_download='2020-01-01T00:00:02+00:00'),
-            dict(status='complete', last_successful_download='2020-01-01T00:00:01+00:00'),
-        ]
-        request, response = api_app.test_client.get('/api/download')
-        once_downloads = response.json['once_downloads']
-        for d1, d2 in zip_longest(expected, once_downloads):
-            self.assertDictContains(d2, d1)
+@pytest.mark.asyncio
+async def test_echo(test_async_client):
+    """
+    Echo should send back a JSON object with our request details.
+    """
+    request, response = await test_async_client.get('/api/echo?hello=world')
+    assert response.status_code == HTTPStatus.OK
+    assert_dict_contains(response.json['form'], {})
+    assert response.json['method'] == 'GET', 'Method was not GET'
+    assert response.json['json'] is None, 'JSON was not empty'
+    assert response.json['args'] == {'hello': ['world']}
 
-    @wrap_test_db
-    def test_downloads_sorter_recurring(self):
-        with get_db_session(commit=True) as session:
-            downloads = [
-                dict(status='complete', frequency=1),
-                dict(status='complete', frequency=2, next_download='2020-01-01T00:00:01+00:00'),
-                dict(status='complete', frequency=2, next_download='2020-01-01T00:00:02+00:00'),
-                dict(status='pending', frequency=1),
-                dict(status='pending', frequency=4),
-                dict(status='failed', frequency=1),
-                dict(status='failed', frequency=1),
-            ]
-            for download in downloads:
-                session.add(Download(url='https://example.com', **download))
-
-        expected = [
-            dict(status='pending', frequency=1),
-            dict(status='pending', frequency=4),
-            dict(status='failed', frequency=1),
-            dict(status='failed'),
-            dict(status='complete', frequency=2, next_download='2020-01-01T00:00:01+00:00'),
-            dict(status='complete', frequency=2, next_download='2020-01-01T00:00:02+00:00'),
-            dict(status='complete', frequency=1),
-        ]
-        request, response = api_app.test_client.get('/api/download')
-        recurring_downloads = response.json['recurring_downloads']
-        for d1, d2 in zip_longest(expected, recurring_downloads):
-            self.assertDictContains(d2, d1)
+    data = {'foo': 'bar'}
+    request, response = await test_async_client.post('/api/echo', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.OK
+    assert_dict_contains(response.json['form'], {})
+    assert response.json['method'] == 'POST', 'Method was not POST'
+    assert response.json['json'] == data, 'JSON was not data'
+    assert response.json['args'] == {}
 
 
 def test_hotspot_settings(test_session, test_client, test_config):
@@ -234,16 +241,17 @@ def test_throttle_toggle(test_session, test_client, test_config):
     assert response.json['throttle_status'] == 'ondemand'
 
 
-def test_clear_downloads(test_session, test_client, test_config, test_download_manager_config):
-    with get_db_session(commit=True) as session:
-        d1 = Download(url='https://example.com/1', status='complete')
-        d2 = Download(url='https://example.com/2', status='pending')
-        d3 = Download(url='https://example.com/3', status='deferred')
-        d4 = Download(url='https://example.com/4', status='new')
-        d5 = Download(url='https://example.com/5', status='failed')
-        d6 = Download(url='https://example.com/6', status='failed', frequency=60)
-        d7 = Download(url='https://example.com/7', status='complete', frequency=60)
-        session.add_all([d1, d2, d3, d4, d5, d6, d7])
+@pytest.mark.asyncio
+async def test_clear_downloads(test_session, test_async_client, test_config, test_download_manager_config):
+    d1 = Download(url='https://example.com/1', status='complete')
+    d2 = Download(url='https://example.com/2', status='pending')
+    d3 = Download(url='https://example.com/3', status='deferred')
+    d4 = Download(url='https://example.com/4', status='new')
+    d5 = Download(url='https://example.com/5', status='failed')
+    d6 = Download(url='https://example.com/6', status='failed', frequency=60)
+    d7 = Download(url='https://example.com/7', status='complete', frequency=60)
+    test_session.add_all([d1, d2, d3, d4, d5, d6, d7])
+    test_session.commit()
 
     def check_downloads(response_, once_downloads_, recurring_downloads_, status_code=None):
         if status_code:
@@ -261,7 +269,7 @@ def test_clear_downloads(test_session, test_client, test_config, test_download_m
             assert download['status'] == recurring_download['status']
 
     # All created downloads are present.
-    request, response = api_app.test_client.get('/api/download')
+    request, response = await test_async_client.get('/api/download')
     once_downloads = [
         {'url': 'https://example.com/2', 'status': 'pending'},
         {'url': 'https://example.com/5', 'status': 'failed'},
@@ -276,9 +284,9 @@ def test_clear_downloads(test_session, test_client, test_config, test_download_m
     check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
 
     # Once "complete" download is removed.
-    request, response = api_app.test_client.post('/api/download/clear_completed')
+    request, response = await test_async_client.post('/api/download/clear_completed')
     assert response.status_code == HTTPStatus.NO_CONTENT
-    request, response = api_app.test_client.get('/api/download')
+    request, response = await test_async_client.get('/api/download')
     once_downloads = [
         {'url': 'https://example.com/2', 'status': 'pending'},
         {'url': 'https://example.com/5', 'status': 'failed'},
@@ -288,9 +296,9 @@ def test_clear_downloads(test_session, test_client, test_config, test_download_m
     check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
 
     # Failed "once" download is removed, recurring failed is not removed.
-    request, response = api_app.test_client.post('/api/download/clear_failed')
+    request, response = await test_async_client.post('/api/download/clear_failed')
     assert response.status_code == HTTPStatus.NO_CONTENT
-    request, response = api_app.test_client.get('/api/download')
+    request, response = await test_async_client.get('/api/download')
     once_downloads = [
         {'url': 'https://example.com/2', 'status': 'pending'},
         {'url': 'https://example.com/4', 'status': 'new'},
@@ -302,9 +310,10 @@ def test_clear_downloads(test_session, test_client, test_config, test_download_m
     assert get_download_manager_config().skip_urls == ['https://example.com/5', ]
 
 
-def test_get_status(test_client, test_session):
+@pytest.mark.asyncio
+async def test_get_status(test_async_client, test_session):
     """Get the server status information."""
-    request, response = test_client.get('/api/status')
+    request, response = await test_async_client.get('/api/status')
     assert response.status_code == HTTPStatus.OK
     assert 'cpu_info' in response.json and isinstance(response.json['cpu_info'], dict)
     assert 'load' in response.json and isinstance(response.json['load'], dict)
@@ -360,17 +369,18 @@ def test_get_global_statistics(test_session, test_client):
     assert response.json['global_statistics']['db_size'] > 1
 
 
-def test_post_vin_number_decoder(test_client):
+@pytest.mark.asyncio
+async def test_post_vin_number_decoder(test_async_client):
     """A VIN number can be decoded."""
     # Invalid VIN number.
     content = dict(vin_number='5N1NJ01CXST00000')
-    request, response = test_client.post('/api/vin_number_decoder', content=json.dumps(content))
+    request, response = await test_async_client.post('/api/vin_number_decoder', content=json.dumps(content))
     assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json == dict()
 
     # Test VIN from vininfo.
     content = dict(vin_number='5N1NJ01CXST000001')
-    request, response = test_client.post('/api/vin_number_decoder', content=json.dumps(content))
+    request, response = await test_async_client.post('/api/vin_number_decoder', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     assert response.json['vin'] == {'body': 'Sedan, 4-Door, Standard Body Truck',
                                     'country': 'United States',
@@ -382,3 +392,23 @@ def test_post_vin_number_decoder(test_client):
                                     'serial': None,
                                     'transmission': None,
                                     'years': '1995'}
+
+
+def test_search_str_estimate(test_session, test_client, test_directory, test_zim, example_pdf):
+    """Get the search result estimates."""
+    test_session.commit()
+
+    request, response = test_client.post('/api/files/refresh')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    content = dict(search_str='example')
+    request, response = test_client.post('/api/search_estimate', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+
+    assert response.json['file_groups'] == 1
+    assert len(response.json['zims']) == 1
+    assert_dict_contains(response.json['zims'][0],
+                         dict(
+                             estimate=1,
+                             path=str(test_zim.path.relative_to(test_directory)),
+                         ))

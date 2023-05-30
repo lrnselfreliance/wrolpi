@@ -2,11 +2,13 @@ import asyncio
 import datetime
 import functools
 import glob
+import itertools
 import json
 import multiprocessing
 import os
 import pathlib
 import re
+import shutil
 import subprocess
 from itertools import zip_longest
 from pathlib import Path
@@ -21,14 +23,14 @@ from wrolpi import flags
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
     partition, cancelable_wrapper, \
-    get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task
+    get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk
 from wrolpi.dates import now, from_timestamp
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
-from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag
+from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged
 from wrolpi.events import Events
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.lang import ISO_639_CODES
-from wrolpi.tags import TagFile, Tag
+from wrolpi.tags import TagFile, Tag, tag_names_to_file_group_sub_select
 from wrolpi.vars import PYTEST
 
 try:
@@ -42,8 +44,9 @@ except ImportError:
 
 logger = logger.getChild(__name__)
 
-__all__ = ['list_directories_contents', 'delete_file', 'split_path_stem_and_suffix', 'refresh_files', 'search_files',
-           'get_mimetype', 'split_file_name_words', 'get_primary_file']
+__all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 'refresh_files', 'search_files',
+           'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics', 'estimate_search',
+           'move', 'rename', 'remove_directory']
 
 
 @optional_session
@@ -131,12 +134,41 @@ def list_directories_contents(directories_: List[str]) -> Dict:
 
 
 @wrol_mode_check
-def delete_file(file: str):
-    """Delete a file in the media directory."""
-    file = get_media_directory() / file
-    if file.is_dir() or not file.is_file():
-        raise InvalidFile(f'Invalid file {file}')
-    file.unlink()
+def delete(*paths: Union[str, pathlib.Path]):
+    """
+    Delete a file or directory in the media directory.
+
+    This will refuse to delete any files (or files in the directories) that have been tagged."""
+    media_directory = get_media_directory()
+    paths = [media_directory / i for i in paths]
+    if any(i == media_directory for i in paths):
+        raise InvalidFile(f'Cannot delete the media directory')
+    for path in paths:
+        if not path.is_dir() and not path.is_file():
+            raise InvalidFile(f'Cannot delete {path} because it is not a file or a directory.')
+    if len(paths) > 1:
+        for p1, p2 in itertools.permutations(paths):
+            if str(p2).startswith(str(p1)):
+                raise InvalidFile(f'Cannot deleted nested paths')
+    with get_db_session() as session:
+        # Search for any files that have been tagged.
+        for path in paths:
+            query = session.query(FileGroup, TagFile) \
+                .join(TagFile, TagFile.file_group_id == FileGroup.id)
+            if path.is_file():
+                # Could be deleting a file in a FileGroup that has been tagged.
+                stem, _ = split_path_stem_and_suffix(path)
+                query = query.filter(FileGroup.primary_path.like(f'{path.parent}/{stem}%'))
+            else:
+                # Search for any FileGroups that have been tagged under this directory.
+                query = query.filter(FileGroup.primary_path.like(f'{path}/%'))
+            for (file_group, tag_file) in query:
+                raise FileGroupIsTagged(f"Cannot delete {file_group} because it is tagged")
+    for path in paths:
+        if path.is_dir():
+            remove_directory(path)
+        else:
+            path.unlink()
 
 
 FILE_NAME_REGEX = re.compile(r'[_ .]')
@@ -194,7 +226,6 @@ def get_mimetype(path: Path) -> str:
         output = subprocess.check_output(cmd)
         output = output.decode()
         mimetype = output.split(' ')[-1].strip()
-        return mimetype
     else:
         mimetype = mime.from_file(path)
     mimetype = _mimetype_suffix_map(path, mimetype)
@@ -432,6 +463,7 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
         if deleted:
             # Delete any paths that do not exist.
             deleted_files = ' OR '.join([curs.mogrify('primary_path = %s', (str(i),)).decode() for i in deleted])
+
         idempotency = curs.mogrify('%s', (idempotency,)).decode()
         wheres = f' ( (idempotency != {idempotency} OR idempotency is null) AND ({wheres}))' if wheres else ''
         stmt = f'''
@@ -651,7 +683,7 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
 
     if tags:
         # Filter all FileGroups by those that have been tagged with the provided tag names.
-        tags_stmt, params_ = tag_names_to_sub_select(tags)
+        tags_stmt, params_ = tag_names_to_file_group_sub_select(tags)
         params.update(params_)
         wheres.append(f'fg.id = ANY({tags_stmt})')
 
@@ -681,24 +713,6 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
 
     results, total = handle_file_group_search_results(stmt, params)
     return results, total
-
-
-def tag_names_to_sub_select(names: List[str]) -> Tuple[str, dict]:
-    """Create the SQL necessary to filter FileGroup by the provided Tag names."""
-    if not names:
-        return '', dict()
-
-    stmt = '''
-        SELECT
-            tf.file_group_id
-        FROM
-            tag_file tf
-            LEFT JOIN tag t on t.id = tf.tag_id
-        GROUP BY file_group_id
-        -- Match only FileGroups that have at least all the Tag names.
-        HAVING array_agg(t.name)::TEXT[] @> %(tag_names)s::TEXT[]
-    '''
-    return stmt, dict(tag_names=names)
 
 
 def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List[dict], int]:
@@ -938,7 +952,8 @@ def get_refresh_progress():
     with get_db_curs() as curs:
         curs.execute('''
             SELECT
-                COUNT(id) AS "total_file_groups",
+                -- Sum all the files in each FileGroup.
+                SUM(json_array_length(files)) AS "total_file_groups",
                 COUNT(id) FILTER (WHERE indexed IS TRUE) AS "indexed",
                 COUNT(id) FILTER (WHERE indexed IS FALSE) AS "unindexed",
                 COUNT(id) FILTER (WHERE model IS NOT NULL) AS "modeled"
@@ -962,3 +977,196 @@ def get_refresh_progress():
         )
 
     return status
+
+
+async def estimate_search(search_str: str, tag_names: List[str]):
+    with get_db_curs() as curs:
+        if search_str and tag_names:
+            params = dict(search_str=search_str, tag_names=tag_names)
+            stmt = '''
+            SELECT COUNT(*) OVER() AS estimate
+            FROM file_group
+                LEFT JOIN tag_file tf on file_group.id = tf.file_group_id
+            WHERE textsearch @@ websearch_to_tsquery(%(search_str)s)
+                AND tf.tag_id IN (select id from tag where name = ANY(%(tag_names)s))
+            '''
+        elif tag_names:
+            params = dict(tag_names=tag_names)
+            stmt = '''
+            SELECT COUNT(*) OVER() AS estimate
+            FROM file_group
+                LEFT JOIN tag_file tf on file_group.id = tf.file_group_id
+            WHERE tf.tag_id IN (select id from tag where name = ANY(%(tag_names)s))'''
+        else:
+            params = dict(search_str=search_str)
+            stmt = '''
+            SELECT COUNT(*) OVER() AS estimate
+            FROM file_group
+            WHERE textsearch @@ websearch_to_tsquery(%(search_str)s)
+            '''
+        curs.execute(stmt, params)
+        result = curs.fetchone()
+        if result:
+            return int(result['estimate'])
+        return 0
+
+
+def _move(destination: pathlib.Path, *sources: pathlib.Path) -> List[Tuple[pathlib.Path, pathlib.Path]]:
+    media_directory = get_media_directory()
+    for source in sources:
+        if not str(source).startswith(str(media_directory)):
+            raise FileNotFoundError(f'{source} is not within the media directory')
+    if not str(destination).startswith(str(media_directory)):
+        raise FileNotFoundError(f'{destination} is not within the media directory')
+
+    destination_existed = destination.is_dir()
+
+    # [ (pathlib.Path('source'), pathlib.Path('destination')), ... ]
+    plan = list()
+    unique_paths = set()
+    # Get all files that need to be moved.  Check for destination conflicts.
+    for source in sources:
+        if source.is_dir():
+            # Recursively move the directory's files.
+            for path in walk(source):
+                new_file = destination / path.relative_to(media_directory)
+                if new_file.exists():
+                    raise FileConflict(f'Cannot move {path} to {new_file} because it already exists')
+                if path not in unique_paths:
+                    plan.append((path, new_file))
+                    unique_paths.add(path)
+        elif source.is_file():
+            # Move all files associated with the source file.
+            for file in glob_shared_stem(source):
+                new_file = destination / file.name
+                if new_file.exists():
+                    raise FileConflict(f'Cannot move {file} to {new_file} because it already exists')
+                if file not in unique_paths:
+                    plan.append((file, new_file))
+                    unique_paths.add(file)
+
+    logger.info(f'Executing move plan with {len(plan)} steps.')
+
+    # Track the steps performed so they can be reversed.
+    revert_plan = list()
+
+    def do_plan(plan_):
+        # Move deepest files first.
+        plan_ = sorted(plan_, key=lambda i: (len(i[0].parents), i[0].name), reverse=True)
+        for old_file, new_file in plan_:  # noqa
+            new_file.parent.mkdir(parents=True, exist_ok=True)
+            logger.debug(f'Moving {old_file} to {new_file}')
+            # if not new_file.exists():
+            shutil.move(str(old_file), str(new_file))
+            logger.debug(f'Moved {old_file} to {new_file}')
+            revert_plan.append((new_file, old_file))
+        # Move is complete.
+        return plan_
+
+    try:
+        plan = do_plan(plan)
+        for source in sources:
+            if source.is_dir():
+                remove_directory(source)
+        logger.info(f'Move execution completed')
+        return plan
+    except Exception as e:
+        logger.error(f'Move failed', exc_info=e)
+        # Move files back.
+        do_plan(revert_plan)
+        # Delete the directories that were created.
+        directories = sorted(walk(destination), key=lambda i: len(i.parents), reverse=True)
+        for path in directories:
+            if path.is_dir():
+                remove_directory(path)
+        # Remove destination only if it did not exist at the start.
+        if destination.is_dir() and destination_existed is False:
+            remove_directory(destination)
+        raise
+
+
+def remove_directory(directory: pathlib.Path):
+    """Remove a directory (only if it is empty) remove it's Directory record."""
+    if directory.is_dir():
+        directory.rmdir()
+    with get_db_curs(commit=True) as curs:
+        stmt = 'DELETE FROM directory WHERE path=%s'
+        curs.execute(stmt, (str(directory),))
+
+
+async def move(destination: pathlib.Path, *sources: pathlib.Path) -> List[Tuple[pathlib.Path, pathlib.Path]]:
+    """Moves a file or directory (recursively), preserving applied Tags.
+
+    If the move fails at any point, the files will be returned to their previous locations.
+
+    Returns a list of tuples, the first Path in the tuple is the file's old location, the second Path is where the file
+    was moved.
+    """
+    # Move the files first, if this fails it will revert itself and raise an error.
+    plan = _move(destination, *sources)
+
+    # Files were moved, migrate any Tags.
+    plan_map = {old: new for old, new in plan}
+    with get_db_session(commit=True) as session:
+        old_file_paths = list(plan_map.keys())
+        old_files: List[Tuple[FileGroup, TagFile]] = session.query(FileGroup, TagFile) \
+            .filter(FileGroup.primary_path.in_(old_file_paths)) \
+            .join(TagFile, TagFile.file_group_id == FileGroup.id).all()
+        logger.info(f'Moving {len(old_files)} tagged files')
+        for old_file, _ in old_files:
+            try:
+                new_file_path = plan_map[old_file.primary_path]
+                logger.info(f'Moving tagged file {old_file.primary_path} to {new_file_path}')
+                old_file.move(new_file_path, move_files=False)
+            except KeyError as e:
+                # Got a duplicate?
+                logger.error('Error during tag migration', exc_info=e)
+        session.commit()
+
+    if PYTEST:
+        await refresh_files([destination, *sources])
+    else:
+        background_task(refresh_files([destination, *sources]))
+
+    return plan
+
+
+async def rename_file(path: pathlib.Path, new_name: str) -> pathlib.Path:
+    """Rename a file (and it's associated files).  Preserve any tags."""
+    new_path = path.with_name(new_name)
+    if not path.exists():
+        raise FileNotFoundError(f'Cannot find {path} to rename')
+    if new_path.exists():
+        raise FileConflict(f'Cannot rename {path} because {new_path} already exists')
+
+    with get_db_session(commit=True) as session:
+        fg = session.query(FileGroup).filter(FileGroup.primary_path == path).one_or_none()
+        if not fg:
+            # File wasn't yet in the DB.
+            fg = FileGroup.from_paths(session, path)
+        fg.move(new_path)
+
+    return new_path
+
+
+async def rename_directory(directory: pathlib.Path, new_name: str) -> pathlib.Path:
+    """Rename a directory.  This is done by moving all files into the new directory, and removing the old directory."""
+    new_directory = directory.with_name(new_name)
+    if new_directory.exists():
+        raise FileConflict(f'Cannot rename {directory} to {new_directory} because it already exists.')
+
+    # Move all paths into the new directory.
+    paths = list(directory.iterdir())
+    await move(new_directory, *paths)
+    # Remove the old directory.
+    remove_directory(directory)
+
+    return new_directory
+
+
+async def rename(path: pathlib.Path, new_name: str) -> pathlib.Path:
+    """Rename a directory or file.  Preserve any tags."""
+    if path.is_dir():
+        return await rename_directory(path, new_name)
+
+    return await rename_file(path, new_name)

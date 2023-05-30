@@ -6,7 +6,10 @@ import {Table} from "./Theme";
 export class SortableTable extends React.Component {
     constructor(props) {
         super(props);
-        this.state = {sortColumn: null, direction: 'ascending'};
+        this.state = {
+            sortColumn: props.defaultSortColumn || null,
+            direction: props.defaultDirection || 'ascending',
+        };
     }
 
     changeSort = (key) => {

@@ -2,14 +2,13 @@ import json
 from http import HTTPStatus
 from pathlib import Path
 
-import mock.mock
 import pytest
 
 from modules.videos.models import Video, Channel
 from modules.videos.video import lib as video_lib
 from wrolpi.db import get_db_curs
 from wrolpi.downloader import DownloadFrequency, Download
-from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
+from wrolpi.files.lib import refresh_files
 from wrolpi.files.models import FileGroup
 
 
@@ -53,12 +52,12 @@ def test_refresh_videos(test_client, test_session, test_directory, simple_channe
                            with_info_json=True, with_poster_ext='jpg')
     test_session.commit()
     video1.file_group.size = video1.file_group.data = None
-    video1.file_group.files = list()
+    video1.file_group.paths = list()
     # video2 is in the test directory.
     video2 = video_factory(channel_id=simple_channel.id, with_video_file=True, with_info_json=True,
                            with_poster_ext='jpg')
     video2.file_group.data = None
-    video2.file_group.files = []
+    video2.file_group.paths = []
     test_session.commit()
 
     assert not video1.file_group.size, 'video1 should not have size during creation'

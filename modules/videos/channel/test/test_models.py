@@ -1,8 +1,3 @@
-import pytest
-
-from modules.videos import Channel
-
-
 def test_delete_channel_no_url(test_session, test_client, channel_factory):
     """
     A Channel can be deleted even if it has no URL.

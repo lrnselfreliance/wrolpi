@@ -9,6 +9,7 @@ beautifulsoup4==4.12.2
 cachetools==5.3.0
 ebooklib==0.18
 feedparser==6.0.10
+libzim==3.1.0
 mock==5.0.2
 psutil==5.9.5
 psycopg2-binary==2.9.6

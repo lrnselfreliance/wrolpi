@@ -3,8 +3,6 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Union, Optional
 
-from wrolpi.dates import from_timestamp
-
 
 @dataclass
 class ItemPostRequest:

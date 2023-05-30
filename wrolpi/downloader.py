@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import json
 import logging
 import multiprocessing
 import os
@@ -10,9 +9,7 @@ from abc import ABC
 from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 from enum import Enum
-from functools import partial
 from itertools import filterfalse
-from operator import attrgetter
 from queue import Empty
 from typing import List, Dict, Generator, Iterable
 from typing import Tuple, Optional
@@ -45,6 +42,7 @@ class DownloadFrequency(int, Enum):
     biweekly = weekly * 2
     days30 = daily * 30
     days90 = daily * 90
+    days180 = daily * 180
 
 
 @dataclass
@@ -371,7 +369,6 @@ class DownloadManager:
                     result = DownloadResult(success=False, error=str(traceback.format_exc()))
                     try_again = False
                 except Exception as e:
-
                     worker_logger.warning(f'Failed to download {url}.  Will be tried again later.', exc_info=e)
                     result = DownloadResult(success=False, error=str(traceback.format_exc()))
 
@@ -503,7 +500,7 @@ class DownloadManager:
             return downloader
         raise InvalidDownload(f'Cannot find downloader with name {name}')
 
-    def get_or_create_download(self, url: str, session: Session) -> Download:
+    def get_or_create_download(self, url: str, session: Session, reset_attempts: bool = False) -> Download:
         """Get a Download by its URL, if it cannot be found create one."""
         if not url:
             raise ValueError('Download must have a URL')
@@ -511,8 +508,11 @@ class DownloadManager:
         download = self.get_download(session, url=url)
         if not download:
             if url in get_download_manager_config().skip_urls:
-                raise InvalidDownload(
-                    f'Refusing to download {url} because it is in the download_manager.yaml skip list')
+                if reset_attempts is True:
+                    self.remove_from_skip_list(url)
+                else:
+                    raise InvalidDownload(
+                        f'Refusing to download {url} because it is in the download_manager.yaml skip list')
             download = Download(url=url, status='new')
             session.add(download)
             session.flush()
@@ -1086,6 +1086,9 @@ async def import_downloads_config(session: Session):
         logger.warning(f'Refusing to import downloads config when DB is not up.')
         return
 
+    from modules.zim.lib import zim_download_url_to_name
+    from modules.zim.models import ZimSubscription
+
     try:
         logger.warning('Importing downloads in config')
 
@@ -1122,6 +1125,29 @@ async def import_downloads_config(session: Session):
         session.commit()
     except Exception as e:
         logger.error('Failed to import downloads', exc_info=e)
+        raise
+
+    try:
+        # Claim any Kiwix subscriptions for ZimSubscription(s).
+        downloads: List[Download] = session.query(Download)
+        need_commit = False
+        for download in downloads:
+            if not download.url.startswith('https://download.kiwix.org/') or not download.frequency:
+                # ZimSubscription requires download.kiwix.org AND a frequency.
+                continue
+
+            name, language = zim_download_url_to_name(download.url)
+            subscription = session.query(ZimSubscription).filter_by(name=name, language=language).one_or_none()
+            if not subscription:
+                subscription = ZimSubscription(name=name, language=language)
+            subscription.change_download(download.url, download.frequency, session=session)
+            session.add(subscription)
+            need_commit = True
+
+        if need_commit:
+            session.commit()
+    except Exception as e:
+        logger.error('Failed to restore ZimSubscriptions', exc_info=e)
         raise
 
 

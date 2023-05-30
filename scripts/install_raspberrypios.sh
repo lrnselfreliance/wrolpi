@@ -10,6 +10,7 @@ set -e
 apt install -y \
   apt-transport-https \
   ca-certificates \
+  calibre \
   chromium \
   chromium-driver \
   cpufrequtils \
@@ -19,6 +20,8 @@ apt install -y \
   gnupg-agent \
   hostapd \
   htop \
+  kiwix \
+  kiwix-tools \
   libpq-dev \
   network-manager \
   nginx-doc \
@@ -30,7 +33,8 @@ apt install -y \
   python3-pip \
   python3-venv \
   software-properties-common \
-  vim
+  vim \
+  zim-tools
 
 # Install npm.
 npm --version || curl -fsSL https://deb.nodesource.com/setup_18.x | bash -

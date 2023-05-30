@@ -4,7 +4,6 @@ import multiprocessing
 import os
 import pathlib
 import tempfile
-import unittest
 from datetime import date, datetime
 from decimal import Decimal
 from itertools import zip_longest
@@ -102,88 +101,86 @@ def test_insert_parameter():
     pytest.raises(TypeError, common.insert_parameter, func, 'bar', 'bar', (1,), {})
 
 
-class TestCommon(unittest.TestCase):
+def test_date_range():
+    # A single step results in the start.
+    result = common.date_range(date(1970, 1, 1), date(1970, 1, 2), 1)
+    assert result == [
+        date(1970, 1, 1),
+    ]
 
-    def test_date_range(self):
-        # A single step results in the start.
-        result = common.date_range(date(1970, 1, 1), date(1970, 1, 2), 1)
-        assert result == [
-            date(1970, 1, 1),
-        ]
+    # Many steps on a single day results in the same day.
+    result = common.date_range(date(1970, 1, 1), date(1970, 1, 1), 5)
+    assert result == [
+        date(1970, 1, 1),
+        date(1970, 1, 1),
+        date(1970, 1, 1),
+        date(1970, 1, 1),
+        date(1970, 1, 1),
+    ]
 
-        # Many steps on a single day results in the same day.
-        result = common.date_range(date(1970, 1, 1), date(1970, 1, 1), 5)
-        assert result == [
-            date(1970, 1, 1),
-            date(1970, 1, 1),
-            date(1970, 1, 1),
-            date(1970, 1, 1),
-            date(1970, 1, 1),
-        ]
+    # Many steps on a single datetime results in a range of times.
+    result = common.date_range(datetime(1970, 1, 1), datetime(1970, 1, 1, 23, 59, 59), 5)
+    assert result == [
+        datetime(1970, 1, 1, 0, 0),
+        datetime(1970, 1, 1, 4, 47, 59, 800000),
+        datetime(1970, 1, 1, 9, 35, 59, 600000),
+        datetime(1970, 1, 1, 14, 23, 59, 400000),
+        datetime(1970, 1, 1, 19, 11, 59, 200000),
+    ]
 
-        # Many steps on a single datetime results in a range of times.
-        result = common.date_range(datetime(1970, 1, 1), datetime(1970, 1, 1, 23, 59, 59), 5)
-        assert result == [
-            datetime(1970, 1, 1, 0, 0),
-            datetime(1970, 1, 1, 4, 47, 59, 800000),
-            datetime(1970, 1, 1, 9, 35, 59, 600000),
-            datetime(1970, 1, 1, 14, 23, 59, 400000),
-            datetime(1970, 1, 1, 19, 11, 59, 200000),
-        ]
+    # common.date_range is not inclusive, like range().
+    result = common.date_range(date(1970, 1, 1), date(1970, 1, 5), 4)
+    assert result == [
+        date(1970, 1, 1),
+        date(1970, 1, 2),
+        date(1970, 1, 3),
+        date(1970, 1, 4),
+    ]
 
-        # common.date_range is not inclusive, like range().
-        result = common.date_range(date(1970, 1, 1), date(1970, 1, 5), 4)
-        assert result == [
-            date(1970, 1, 1),
-            date(1970, 1, 2),
-            date(1970, 1, 3),
-            date(1970, 1, 4),
-        ]
+    # Reversed dates are supported.
+    result = common.date_range(date(1970, 1, 5), date(1970, 1, 1), 4)
+    assert result == [
+        date(1970, 1, 5),
+        date(1970, 1, 4),
+        date(1970, 1, 3),
+        date(1970, 1, 2),
+    ]
 
-        # Reversed dates are supported.
-        result = common.date_range(date(1970, 1, 5), date(1970, 1, 1), 4)
-        assert result == [
-            date(1970, 1, 5),
-            date(1970, 1, 4),
-            date(1970, 1, 3),
-            date(1970, 1, 2),
-        ]
+    # Large date spans are supported.
+    result = common.date_range(date(1970, 1, 1), date(2020, 5, 1), 4)
+    assert result == [
+        date(1970, 1, 1),
+        date(1982, 8, 1),
+        date(1995, 3, 2),
+        date(2007, 10, 1),
+    ]
 
-        # Large date spans are supported.
-        result = common.date_range(date(1970, 1, 1), date(2020, 5, 1), 4)
-        assert result == [
-            date(1970, 1, 1),
-            date(1982, 8, 1),
-            date(1995, 3, 2),
-            date(2007, 10, 1),
-        ]
+    result = common.date_range(datetime(1970, 1, 1, 0, 0, 0), datetime(1970, 1, 1, 10, 0), 8)
+    assert result == [
+        datetime(1970, 1, 1, 0, 0),
+        datetime(1970, 1, 1, 1, 15),
+        datetime(1970, 1, 1, 2, 30),
+        datetime(1970, 1, 1, 3, 45),
+        datetime(1970, 1, 1, 5, 0),
+        datetime(1970, 1, 1, 6, 15),
+        datetime(1970, 1, 1, 7, 30),
+        datetime(1970, 1, 1, 8, 45),
+    ]
 
-        result = common.date_range(datetime(1970, 1, 1, 0, 0, 0), datetime(1970, 1, 1, 10, 0), 8)
-        assert result == [
-            datetime(1970, 1, 1, 0, 0),
-            datetime(1970, 1, 1, 1, 15),
-            datetime(1970, 1, 1, 2, 30),
-            datetime(1970, 1, 1, 3, 45),
-            datetime(1970, 1, 1, 5, 0),
-            datetime(1970, 1, 1, 6, 15),
-            datetime(1970, 1, 1, 7, 30),
-            datetime(1970, 1, 1, 8, 45),
-        ]
-
-        # More steps than days
-        result = common.date_range(date(1970, 1, 1), date(1970, 1, 7), 10)
-        assert result == [
-            date(1970, 1, 1),
-            date(1970, 1, 1),
-            date(1970, 1, 2),
-            date(1970, 1, 2),
-            date(1970, 1, 3),
-            date(1970, 1, 4),
-            date(1970, 1, 4),
-            date(1970, 1, 5),
-            date(1970, 1, 5),
-            date(1970, 1, 6),
-        ]
+    # More steps than days
+    result = common.date_range(date(1970, 1, 1), date(1970, 1, 7), 10)
+    assert result == [
+        date(1970, 1, 1),
+        date(1970, 1, 1),
+        date(1970, 1, 2),
+        date(1970, 1, 2),
+        date(1970, 1, 3),
+        date(1970, 1, 4),
+        date(1970, 1, 4),
+        date(1970, 1, 5),
+        date(1970, 1, 5),
+        date(1970, 1, 6),
+    ]
 
 
 @pytest.mark.parametrize(
@@ -667,3 +664,58 @@ def test_resolve_generators2():
 )
 def test_url_strip_host(url, expected):
     assert common.url_strip_host(url) == expected
+
+
+@pytest.mark.parametrize(
+    'search_str,expected', [
+        ('jump', [('<b>jumps</b> over the lazy brown', 0.06079271), ('<b>jumped</b> over the lazy', 0.06079271)]),
+        ('brown', [('over the lazy <b>brown</b>', 0.06079271), ('The fox jumped over the lazy dog', 0.0)]),
+    ]
+)
+def test_extract_headlines(test_session, search_str, expected):
+    entries = [
+        'The fox jumps over the lazy brown dog.',
+        'The fox jumped over the lazy dog.',
+    ]
+    assert common.extract_headlines(entries, search_str) == expected
+
+
+def test_extract_html_text():
+    html = '''<html>
+
+<script>
+// This should be ignored.
+console.log('hello');
+</script>
+
+<body>
+    <h1>Header</h1>
+    <p>Word word word word word word word word word</p>
+    <ul>
+        <li>Item 1</li>
+        <li>Item 2</li>
+    </ul>
+    <p>Another example paragraph</p>
+    Paragraph outside an element.
+</body>
+</html>'''
+    assert common.extract_html_text(html) == '''Header
+Word word word word word word word word word
+Item 1
+Item 2
+Another example paragraph
+Paragraph outside an element.'''
+
+
+@pytest.mark.parametrize(
+    'bps,expected', [
+        (100, '100 bps'),
+        (2000, '2 Kbps'),
+        (7777777, '7 Mbps'),
+        (777777777, '777 Mbps'),
+        (7777777777, '7 Gbps'),
+        (77777777777, '77 Gbps'),
+    ]
+)
+def test_human_bandwidth(bps, expected):
+    assert common.human_bandwidth(bps) == expected

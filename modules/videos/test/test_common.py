@@ -1,17 +1,13 @@
 import pathlib
 import subprocess
 import tempfile
-from datetime import datetime
-from typing import List
 from unittest import mock
 
 import pytest
-import pytz
 from PIL import Image
 
 from modules.videos.models import Channel, Video
-from wrolpi.common import get_absolute_media_path, sanitize_link
-from wrolpi.dates import  now
+from wrolpi.common import get_absolute_media_path
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.vars import PROJECT_DIR
 from .. import common

@@ -4,14 +4,13 @@ import pathlib
 import re
 import traceback
 from abc import ABC
-from typing import Tuple, List, Optional, Dict
+from typing import Tuple, List, Dict
 from urllib.parse import urlparse
 
 import yt_dlp.utils
 from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
 from yt_dlp.extractor import YoutubeTabIE  # noqa
-from yt_dlp.utils import UnsupportedError, DownloadError
 
 from wrolpi.cmd import YT_DLP_BIN
 from wrolpi.common import logger, get_media_directory, escape_file_name, resolve_generators, background_task

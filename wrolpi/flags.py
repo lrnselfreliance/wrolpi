@@ -110,6 +110,10 @@ class Flag:
 db_up = Flag('db_up')
 # The global refresh is running.
 refreshing = Flag('refreshing')
+# Outdated Zims need to be removed.
+outdated_zims = Flag('outdated_zims', store_db=True)
+# Kiwix server needs to be restarted.
+kiwix_restart = Flag('kiwix_restart')
 
 # Steps of refreshing.
 refresh_counting = Flag('refresh_counting')
@@ -154,6 +158,10 @@ def get_flags() -> List[str]:
         flags.append('singlefile_installed')
     if yt_dlp_installed.is_set():
         flags.append('yt_dlp_installed')
+    if outdated_zims.is_set():
+        flags.append('outdated_zims')
+    if kiwix_restart.is_set():
+        flags.append('kiwix_restart')
     return flags
 
 
@@ -161,9 +169,12 @@ class WROLPiFlag(Base):
     __tablename__ = 'wrolpi_flag'
     id = Column(Integer, primary_key=True)
     refresh_complete = Column(Boolean, default=False)
+    outdated_zims = Column(Boolean, default=False)
 
     def __repr__(self):
-        return f'<WROLPiFlag refresh_complete={self.refresh_complete}>'
+        return f'<WROLPiFlag' \
+               f' refresh_complete={self.refresh_complete}' \
+               f' outdated_zims={self.outdated_zims}>'
 
 
 def check_db_is_up():
@@ -178,7 +189,7 @@ def check_db_is_up():
             cmd = ['ping', '-w', '1', '-c', '1', db_host]
             subprocess.check_call(cmd, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
         except Exception as e:
-            logger.debug(f'Unable to resolve database host {db_host}')
+            logger.debug(f'Unable to resolve database host {db_host}', exc_info=e)
             db_up.clear()
             return
 
@@ -212,6 +223,10 @@ def init_flags():
                 refresh_complete.set()
             else:
                 refresh_complete.clear()
+            if flags.outdated_zims is True:
+                outdated_zims.set()
+            else:
+                outdated_zims.clear()
 
     FLAGS_INITIALIZED.set()
 

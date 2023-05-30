@@ -20,6 +20,7 @@ import {useEventsInterval} from "./Events";
 import {SemanticToastContainer} from "react-semantic-toasts-2";
 import {FilePreviewProvider} from "./components/FilePreview";
 import {TagsProvider} from "./Tags";
+import {ZimRoute} from "./components/Zim";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);
@@ -63,6 +64,7 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     errorElement={<PageNotFound/>}
 >
     <Route index element={<Dashboard/>}/>
+    <Route path='search/*' element={<Dashboard/>}/>
     <Route path='donate' element={<Donate/>}/>
     <Route path='videos/video/:videoId' exact element={<VideoWrapper/>}/>
     <Route path='videos/channel/:channelId/video/:videoId' exact element={<VideoWrapper/>}/>
@@ -72,6 +74,7 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     <Route path="inventory/*" element={<InventoryRoute/>}/>
     <Route path='archive/*' element={<ArchiveRoute/>}/>
     <Route path='map/*' element={<MapRoute/>}/>
+    <Route path='zim/*' element={<ZimRoute/>}/>
     <Route path='files/*' element={<FilesRoute/>}/>
 </Route>));
 

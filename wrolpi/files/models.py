@@ -1,4 +1,6 @@
+import copy
 import pathlib
+import shutil
 from datetime import datetime
 from typing import List, Type, Optional
 
@@ -288,6 +290,28 @@ class FileGroup(ModelHelper, Base):
             session.delete(file_group)
 
         self.files = collected_files
+
+    def move(self, new_primary_path: pathlib.Path, move_files: bool = True):
+        """Move all files in this group to a new location."""
+        from wrolpi.files.lib import split_path_stem_and_suffix
+        if move_files and new_primary_path.exists():
+            raise FileExistsError(f'Cannot move {self} to {new_primary_path} because it already exists.')
+
+        new_name, _ = split_path_stem_and_suffix(new_primary_path, full=True)
+        # Need a deepcopy because changes to self.files are ignored otherwise.
+        new_files = copy.deepcopy(self.files)
+        for idx, file in enumerate(new_files):
+            _, suffix = split_path_stem_and_suffix(file['path'])
+            new_path = pathlib.Path(f'{new_name}{suffix}')
+            if move_files:
+                shutil.move(file['path'], new_path)
+            new_files[idx]['path'] = new_path
+        self.files = new_files
+        self.primary_path = new_primary_path
+        # Need to re-index for self.data.
+        self.indexed = False
+        # Flush the changes to the FileGroup.
+        Session.object_session(self).flush([self, ])
 
 
 class Directory(ModelHelper, Base):

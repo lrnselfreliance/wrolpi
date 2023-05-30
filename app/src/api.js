@@ -1,4 +1,4 @@
-import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, emptyToNull, OTP_API, VIDEOS_API} from "./components/Common";
+import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, emptyToNull, OTP_API, VIDEOS_API, ZIM_API} from "./components/Common";
 import {toast} from "react-semantic-toasts-2";
 
 function timeoutPromise(ms, promise) {
@@ -146,6 +146,15 @@ export async function getVideo(video_id) {
 }
 
 export async function deleteVideos(videoIds) {
+    if (!videoIds || videoIds.length === 0) {
+        toast({
+            type: 'error',
+            title: 'Empty request',
+            description: 'Unable to delete Videos because no IDs were passed.',
+            time: 5000,
+        });
+    }
+    console.debug(`Deleting Videos: ${videoIds}`);
     const i = videoIds.join(',');
     let response = await apiDelete(`${VIDEOS_API}/video/${i}`);
     if (response.status !== 204) {
@@ -342,6 +351,15 @@ export async function deleteItems(itemIds) {
 }
 
 export async function deleteArchives(archiveIds) {
+    if (!archiveIds || archiveIds.length === 0) {
+        toast({
+            type: 'error',
+            title: 'Empty request',
+            description: 'Unable to delete Archives because no IDs were passed.',
+            time: 5000,
+        });
+    }
+    console.debug(`Deleting Archives: ${archiveIds}`);
     let i = archiveIds.join(',');
     try {
         return await apiDelete(`${API_URI}/archive/${i}`);
@@ -521,8 +539,8 @@ export async function refreshFiles() {
     return await apiPost(`${API_URI}/files/refresh`);
 }
 
-export async function refreshDirectoryFiles(directory) {
-    let body = {paths: [directory]};
+export async function refreshDirectoryFiles(paths) {
+    let body = {paths: paths};
     try {
         return await apiPost(`${API_URI}/files/refresh`, body);
     } catch (e) {
@@ -536,6 +554,21 @@ export async function refreshDirectoryFiles(directory) {
     }
 }
 
+export async function makeDirectory(path) {
+    const body = {path: path};
+    try {
+        await apiPost(`${API_URI}/files/directory`, body);
+    } catch (e) {
+        console.error(e);
+        toast({
+            type: 'error',
+            title: 'Unable to create directory',
+            description: 'Failed to create directory.  See server logs.',
+            time: 5000,
+        });
+    }
+}
+
 export async function getFiles(directories) {
     console.debug(`getFiles ${directories}`);
     let body = {directories: directories || []};
@@ -544,9 +577,18 @@ export async function getFiles(directories) {
     return files;
 }
 
-export async function deleteFile(file) {
-    let body = {file: file};
-    await apiPost(`${API_URI}/files/delete`, body);
+export async function deleteFile(paths) {
+    let body = {paths: paths};
+    const response = await apiPost(`${API_URI}/files/delete`, body);
+    if (response.status === 409) {
+        const content = await response.json();
+        toast({
+            type: 'error',
+            title: 'Delete error',
+            description: content['message'],
+            time: 5000,
+        });
+    }
 }
 
 export async function fetchFilesProgress() {
@@ -702,7 +744,7 @@ export async function getTags() {
     }
 }
 
-export async function addTag(fileGroup, name) {
+export async function tagFileGroup(fileGroup, name) {
     const body = {tag_name: name};
 
     const {id, primary_path, path} = fileGroup;
@@ -721,7 +763,7 @@ export async function addTag(fileGroup, name) {
     }
 }
 
-export async function removeTag(fileGroup, name) {
+export async function untagFileGroup(fileGroup, name) {
     const body = {tag_name: name};
 
     const {id, primary_path, path} = fileGroup;
@@ -817,13 +859,118 @@ export async function searchDirectories(name) {
     }
 }
 
-export async function uploadFiles(files, destination) {
-    const data = new FormData();
-    for (let i = 0; i < files.length; i++) {
-        data.append('file', files[i]);
+export async function renamePath(path, newName) {
+    const body = {path, new_name: newName};
+    const response = await apiPost(`${API_URI}/files/rename`, body);
+    if (response.status !== 204) {
+        toast({type: 'error', title: 'Error', description: 'Failed to rename!', time: 5000});
     }
-    data.append('destination', destination);
-    console.log(data);
+}
+
+export async function movePaths(destination, paths) {
+    const body = {destination, paths};
+    const response = await apiPost(`${API_URI}/files/move`, body);
+    if (response.status !== 204) {
+        const content = await response.json();
+        toast({type: 'error', title: 'Error', description: content['api_error'], time: 5000});
+    }
+}
+
+export async function fetchZims() {
+    const response = await apiGet(`${API_URI}/zim`);
+    if (response.status === 200) {
+        const content = await response.json();
+        return {
+            zims: content['zims'],
+        }
+    } else {
+        toast({type: 'error', title: 'Error', description: 'Cannot fetch Zims', time: 5000});
+    }
+}
+
+export async function fetchZimSubscriptions() {
+    const response = await apiGet(`${API_URI}/zim/subscribe`);
+    if (response.status === 200) {
+        const content = await response.json();
+        return {
+            subscriptions: content['subscriptions'],
+            catalog: content['catalog'],
+            iso_639_codes: content['iso_639_codes'],
+        }
+    } else {
+        toast({type: 'error', title: 'Error', description: 'Cannot fetch Zim Subscriptions', time: 5000});
+    }
+}
+
+export async function searchZims(offset, limit, searchStr) {
+    offset = parseInt(offset || 0);
+    limit = parseInt(limit || DEFAULT_LIMIT);
+    let body = {offset, limit};
+    if (searchStr) {
+        body['search_str'] = searchStr;
+    }
+
+    console.debug('searching zims', body);
+    let response = await apiPost(`${ZIM_API}/search`, body);
+    if (response.status === 200) {
+        let data = await response.json();
+        return [data['zims'],];
+    } else {
+        toast({
+            type: 'error',
+            title: 'Unable to search zims',
+            description: 'Cannot search zims.  See server logs.',
+            time: 5000,
+        });
+        return [[], 0];
+    }
+}
+
+export async function searchZim(offset, limit, searchStr, zimId, activeTags) {
+    offset = parseInt(offset || 0);
+    limit = parseInt(limit || DEFAULT_LIMIT);
+    let body = {offset, limit, search_str: searchStr, tag_names: activeTags || []};
+
+    console.debug(`Searching Zim ${zimId} for: ${searchStr} tags: ${activeTags}`);
+    let response = await apiPost(`${ZIM_API}/search/${zimId}`, body);
+    if (response.status === 200) {
+        const content = await response.json();
+        const zim = content['zim'];
+        const searchLength = zim['search'].length;
+        console.debug(`Got ${searchLength} results for Zim ${zimId}`);
+        return content['zim'];
+    }
+}
+
+export async function tagZimEntry(zim_id, zim_entry, name) {
+    const body = {tag_name: name, zim_id: zim_id, zim_entry: zim_entry};
+
+    const uri = `${API_URI}/zim/tag`;
+    let response = await apiPost(uri, body);
+    if (response.status !== 201) {
+        console.error('Failed to add tag');
+    }
+}
+
+export async function untagZimEntry(zim_id, zim_entry, name) {
+    const body = {tag_name: name, zim_id: zim_id, zim_entry: zim_entry};
+
+    const uri = `${API_URI}/zim/untag`;
+    let response = await apiPost(uri, body);
+    if (response.status !== 201) {
+        console.error('Failed to add tag');
+    }
+}
+
+export async function zimSubscribe(name, language) {
+    const body = {name, language};
+    const response = await apiPost(`${API_URI}/zim/subscribe`, body);
+    return response.status === 201;
+}
+
+export async function zimUnsubscribe(id) {
+    const response = await apiDelete(`${API_URI}/zim/subscribe/${id}`);
+    return response.status === 204;
 }
 
 export async function fetchDecoded(vinNumber) {
@@ -836,4 +983,48 @@ export async function fetchDecoded(vinNumber) {
         console.error('Invalid VIN Number');
         return null;
     }
+}
+
+export async function searchEstimate(search_str, tagNames) {
+    const body = {search_str: search_str, tag_names: tagNames};
+    const response = await apiPost(`${API_URI}/search_estimate`, body);
+    if (response.status === 200) {
+        const content = await response.json();
+        const zims = content['zims'];
+        let zimSum = 0;
+        zims.map(i => zimSum += i['estimate']);
+        return {
+            file_groups: content['file_groups'],
+            zims: zims,
+            zimSum: zimSum,
+        }
+    }
+}
+
+export async function getOutdatedZims() {
+    const response = await apiGet(`${API_URI}/zim/outdated`);
+    if (response.status === 200) {
+        const content = await response.json();
+        return {
+            outdated: content['outdated'],
+            current: content['current'],
+        }
+    } else {
+        toast({
+            type: 'error',
+            title: 'Unable to fetch',
+            description: 'Cannot fetch outdated Zims.  See server logs.',
+            time: 5000,
+        });
+    }
+}
+
+export async function deleteOutdatedZims() {
+    const response = await apiDelete(`${API_URI}/zim/outdated`);
+    return response.status === 204;
+}
+
+export async function ignoreOutdatedZims() {
+    const response = await apiPost(`${API_URI}/zim/outdated`);
+    return response.status === 204;
 }

@@ -1,9 +1,7 @@
 import {LoadStatistic, PageContainer, SearchInput, useTitle} from "./components/Common";
-import {useQuery} from "./hooks/customHooks";
 import React, {useContext, useState} from "react";
 import {StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
-import {FilesSearchView} from "./components/Files";
 import {
     Button,
     Divider,
@@ -15,7 +13,7 @@ import {
     Statistic,
     StatisticGroup
 } from "./components/Theme";
-import {Link} from "react-router-dom";
+import {Link, useNavigate} from "react-router-dom";
 import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
 import {ProgressPlaceholder} from "./components/Placeholder";
 import {GridColumn, GridRow, Icon, Message} from "semantic-ui-react";
@@ -24,8 +22,13 @@ import {refreshFiles} from "./api";
 import _ from "lodash";
 import {TagsDashboard} from "./Tags";
 import {Upload} from "./components/Upload";
+import {SearchView, useSearch} from "./components/Search";
+import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
+import {useSettings} from "./hooks/customHooks";
 
 function FlagsMessages({flags}) {
+    const {settings, fetchSettings} = useSettings();
+
     if (!flags) {
         return <></>
     }
@@ -33,6 +36,7 @@ function FlagsMessages({flags}) {
     let refreshing;
     let refreshRequired;
     let dbDown;
+    let kiwixRestart;
 
     // Do not tell the maintainer to refresh the files if they are already refreshing.
     if (flags.indexOf('refreshing') >= 0) {
@@ -55,6 +59,10 @@ function FlagsMessages({flags}) {
         </Message>;
     }
 
+    if (flags.indexOf('kiwix_restart') >= 0) {
+        kiwixRestart = <KiwixRestartMessage/>;
+    }
+
     if (flags.indexOf('db_up') === -1) {
         dbDown = <Message icon error>
             <Icon name='exclamation'/>
@@ -68,20 +76,18 @@ function FlagsMessages({flags}) {
     return <>
         {refreshing}
         {dbDown || refreshRequired}
+        {settings && settings['ignore_outdated_zims'] === false && flags.indexOf('outdated_zims') >= 0 ?
+            <OutdatedZimsMessage onClick={fetchSettings}/> : null}
+        {kiwixRestart}
     </>
 }
 
 export function Dashboard() {
     useTitle('Dashboard');
 
-    const {searchParams, updateQuery} = useQuery();
-    const searchStr = searchParams.get('q');
-    const activeTags = searchParams.getAll('tag');
-    const setSearchStr = (value) => {
-        updateQuery({q: value, o: null});
-    }
-
+    const {searchStr, setSearchStr, activeTags} = useSearch();
     const {status} = useContext(StatusContext);
+    const navigate = useNavigate();
     const wrol_mode = status ? status['wrol_mode'] : null;
 
     // Getters are Downloads or Uploads.
@@ -116,9 +122,9 @@ export function Dashboard() {
     let getterModal;
     if (selectedGetter === 'downloads') {
         getterModal = <Modal closeIcon
-            open={true}
-            centered={false}
-            onClose={() => handleSetGetter(null, null)}
+                             open={true}
+                             centered={false}
+                             onClose={() => handleSetGetter(null, null)}
         >
             <ModalHeader>Download from the Internet</ModalHeader>
             <ModalContent>
@@ -127,9 +133,9 @@ export function Dashboard() {
         </Modal>;
     } else if (selectedGetter === 'upload') {
         getterModal = <Modal closeIcon
-            open={true}
-            centered={false}
-            onClose={() => handleSetGetter(null, null)}
+                             open={true}
+                             centered={false}
+                             onClose={() => handleSetGetter(null, null)}
         >
             <ModalHeader>Upload from your device</ModalHeader>
             <ModalContent>
@@ -141,7 +147,7 @@ export function Dashboard() {
     // Only show dashboard parts if not searching.
     let body;
     if (searchStr || (activeTags && activeTags.length > 0)) {
-        body = <FilesSearchView/>;
+        body = <SearchView/>;
     } else {
         body = <>
             {!wrol_mode && getter}
@@ -161,6 +167,7 @@ export function Dashboard() {
                                  size='large'
                                  placeholder='Search everywhere...'
                                  actionIcon='search'
+                                 onClear={() => navigate('/')}
                                  style={{marginBottom: '2em'}}
                     />
                 </Grid.Column>

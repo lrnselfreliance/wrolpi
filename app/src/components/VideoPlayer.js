@@ -1,5 +1,5 @@
 import React, {useContext, useState} from 'react';
-import {addTag, deleteVideos, removeTag} from "../api";
+import {tagFileGroup, deleteVideos, untagFileGroup} from "../api";
 import {Link, useNavigate, useParams} from "react-router-dom";
 import _ from "lodash";
 import {
@@ -159,12 +159,12 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     const tabMenu = theme === darkTheme ? {inverted: true, attached: true} : {attached: true};
 
     const localAddTag = async (name) => {
-        await addTag(videoFile, name);
+        await tagFileGroup(videoFile, name);
         await fetchVideo();
     }
 
     const localRemoveTag = async (name) => {
-        await removeTag(videoFile, name);
+        await untagFileGroup(videoFile, name);
         await fetchVideo();
     }
 

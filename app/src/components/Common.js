@@ -1,6 +1,6 @@
 import React, {useContext, useEffect, useState} from "react";
-import {Button as SButton, ButtonGroup, Card, Container, IconGroup, Input, Pagination, Search} from 'semantic-ui-react';
-import {Link, NavLink, useNavigate} from "react-router-dom";
+import {ButtonGroup, Card, Container, IconGroup, Input, Label, Pagination, Search} from 'semantic-ui-react';
+import {Link, NavLink, useNavigate, useSearchParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {
     useDirectories,
@@ -23,7 +23,8 @@ import {
     Modal,
     ModalActions,
     ModalContent,
-    ModalDescription, ModalHeader,
+    ModalDescription,
+    ModalHeader,
     Popup,
     Statistic
 } from "./Theme";
@@ -36,6 +37,7 @@ export const API_URI = process.env && process.env.REACT_APP_API_URI ? process.en
 export const VIDEOS_API = `${API_URI}/videos`;
 export const ARCHIVES_API = `${API_URI}/archive`;
 export const OTP_API = `${API_URI}/otp`;
+export const ZIM_API = `${API_URI}/zim`;
 export const DEFAULT_LIMIT = 20;
 export const NAME = process.env && process.env.REACT_APP_NAME ? process.env.REACT_APP_NAME : null;
 
@@ -215,7 +217,7 @@ export const rssFrequencyOptions = [{key: 'once', text: 'Once', value: 0}, {
     key: 'daily', text: 'Daily', value: 86400
 }, {key: 'weekly', text: 'Weekly', value: 604800}, {key: 'biweekly', text: 'Biweekly', value: 1209600}, {
     key: '30days', text: '30 Days', value: 2592000
-}, {key: '90days', text: '90 Days', value: 7776000},];
+}, {key: '90days', text: '90 Days', value: 7776000}, {key: '180days', text: '180 Days', value: 15552000}];
 
 export function secondsToFrequency(seconds) {
     for (let i = 0; i < Object.keys(rssFrequencyOptions).length; i++) {
@@ -359,7 +361,7 @@ export function scrollToTop() {
     });
 }
 
-export function scrollToTopOfElement(element, smooth=true) {
+export function scrollToTopOfElement(element, smooth = true) {
     element.scroll({
         top: 0,
         behavior: smooth ? 'smooth' : 'auto',
@@ -375,6 +377,7 @@ export function SearchInput({
                                 actionIcon,
                                 clearable,
                                 autoFocus = false,
+                                onClear = null,
                                 ...props
                             }) {
     let [value, setValue] = useState(searchStr || '');
@@ -384,6 +387,9 @@ export function SearchInput({
         // Clear the input when the "clear" button is clicked, search again.
         setValue('');
         onSubmit('');
+        if (onClear) {
+            onClear();
+        }
     }
 
     const localOnSubmit = (e) => {
@@ -437,9 +443,15 @@ export function textEllipsis(str, maxLength = 100, {side = "end", ellipsis = "..
 }
 
 export function TabLinks({links}) {
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    const getTo = (to) => {
+        return `${to}?${searchParams.toString()}`;
+    }
+
     return <Menu tabular>
         {links.map((link) => <NavLink
-            to={link.to}
+            to={getTo(link.to)}
             className='item'
             style={{padding: '1em'}}
             key={link.to}
@@ -771,6 +783,12 @@ export function mimetypeIconName(mimetype, lowerPath = '') {
             } else if (lowerPath.endsWith('.azw3')) {
                 return 'book';
             }
+        } else if (mimetype.startsWith('application/vnd.openxmlformats-officedocument.spreadsheetml.') || mimetype.startsWith('application/vnd.ms-excel') || mimetype.startsWith('application/vnd.oasis.opendocument.spreadsheet')) {
+            return 'file excel'
+        } else if (mimetype.startsWith('application/vnd.openxmlformats-officedocument.wordprocessingml.') || mimetype.startsWith('application/msword') || mimetype.startsWith('application/vnd.oasis.opendocument.text')) {
+            return 'file word'
+        } else if (mimetype.startsWith('application/vnd.openxmlformats-officedocument.presentationml.') || mimetype.startsWith('application/vnd.ms-powerpoint') || mimetype.startsWith('application/vnd.oasis.opendocument.presentation')) {
+            return 'file powerpoint'
         }
     }
     if (lowerPath.endsWith('.pem')) {
@@ -1162,4 +1180,14 @@ export function SortButton({sorts = []}) {
             <Button content={selectedSort['text']} onClick={() => setOpen(true)}/>
         </ButtonGroup>
     </>
+}
+
+export function TagIcon() {
+    return <Label circular color='green' style={{padding: '0.5em', marginRight: '0.5em'}}>
+        <Icon name='tag' style={{margin: 0}}/>
+    </Label>
+}
+
+export function normalizeEstimate(estimate) {
+    return estimate > 999 ? '>999' : estimate;
 }

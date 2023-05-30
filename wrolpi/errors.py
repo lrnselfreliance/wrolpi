@@ -172,6 +172,30 @@ class FileUploadFailed(APIError):
     pass
 
 
+class UnknownZim(APIError):
+    pass
+
+
+class UnknownZimEntry(APIError):
+    pass
+
+
+class UnknownZimTagEntry(APIError):
+    pass
+
+
+class UnknownZimSubscription(APIError):
+    pass
+
+
+class FileConflict(APIError):
+    pass
+
+
+class DirectoryConflict(APIError):
+    pass
+
+
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {
@@ -379,5 +403,30 @@ API_ERRORS = {
         'code': next(error_codes),
         'message': 'Failed to upload file',
         'status': HTTPStatus.BAD_REQUEST,
+    },
+    UnknownZim: {
+        'code': next(error_codes),
+        'message': 'Failed to find the Zim',
+        'status': HTTPStatus.NOT_FOUND,
+    },
+    UnknownZimEntry: {
+        'code': next(error_codes),
+        'message': 'Failed to find the Zim entry at that path',
+        'status': HTTPStatus.NOT_FOUND,
+    },
+    UnknownZimTagEntry: {
+        'code': next(error_codes),
+        'message': 'Failed to find the TagZimEntry',
+        'status': HTTPStatus.NOT_FOUND,
+    },
+    UnknownZimSubscription: {
+        'code': next(error_codes),
+        'message': 'Failed to find the ZimSubscription',
+        'status': HTTPStatus.NOT_FOUND,
+    },
+    FileConflict: {
+        'code': next(error_codes),
+        'message': 'File/directory already exists',
+        'status': HTTPStatus.CONFLICT,
     },
 }

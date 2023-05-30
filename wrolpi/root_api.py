@@ -26,7 +26,7 @@ from wrolpi.dates import now, strptime
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, API_ERRORS, APIError, ValidationError, HotspotError, InvalidDownload
 from wrolpi.events import get_events, Events
-from wrolpi.files.lib import get_file_statistics
+from wrolpi.files.lib import get_file_statistics, estimate_search
 from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
     truthy_arg
 from wrolpi.version import __version__
@@ -148,6 +148,7 @@ def get_settings(_: Request):
         'hotspot_password': config.hotspot_password,
         'hotspot_ssid': config.hotspot_ssid,
         'hotspot_status': admin.hotspot_status().name,
+        'ignore_outdated_zims': config.ignore_outdated_zims,
         'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.
         'throttle_on_startup': config.throttle_on_startup,
         'throttle_status': admin.throttle_status().name,
@@ -455,6 +456,45 @@ async def post_vin_number_decoder(_: Request, body: schema.VINDecoderRequest):
         serial=detail_to_json(vin.details, 'serial'),
     )
     return json_response(dict(vin=vin))
+
+
+@api_bp.post('/search_estimate')
+@validate(schema.SearchEstimateRequest)
+async def post_search_estimate(_: Request, body: schema.SearchEstimateRequest):
+    """Estimates the count of items of a search (FileGroups, Zim articles, etc.).
+
+    If tag_names are provided, then the estimates are actual counts."""
+    from modules.zim.models import Zims
+
+    if not body.search_str and not body.tag_names:
+        return response.empty(HTTPStatus.BAD_REQUEST)
+
+    file_groups_estimate = await estimate_search(body.search_str, body.tag_names)
+
+    if body.tag_names:
+        # Get actual count of entries tagged with the tag names.
+        zims_estimates = list()
+        for zim, count in Zims.entries_with_tags(body.tag_names).items():
+            d = dict(
+                estimate=count,
+                **zim.__json__(),
+            )
+            zims_estimates.append(d)
+    else:
+        # Get estimates using libzim.
+        zims_estimates = list()
+        for zim, estimate in Zims.estimate(body.search_str).items():
+            d = dict(
+                estimate=estimate,
+                **zim.__json__(),
+            )
+            zims_estimates.append(d)
+
+    ret = dict(
+        file_groups=file_groups_estimate,
+        zims=zims_estimates,
+    )
+    return json_response(ret)
 
 
 class CustomJSONEncoder(json.JSONEncoder):

@@ -122,6 +122,12 @@ Install WROLPi onto a fresh Raspberry Pi.
 
 # Charter
 
+## Guiding Principals
+
+1. Storage is cheaper than power.
+2. Two is one, one is none.
+3. In WROL mode, run silently.
+
 ## Physical properties
 
 1. A WROLPi instance should be capable of running with a minimal of hardware:
@@ -129,7 +135,7 @@ Install WROLPi onto a fresh Raspberry Pi.
     * SD card
     * External USB hard drive
     * Power supply and cables
-    * WiFi USER device such as a phone, tablet, or laptop.
+    * Wi-Fi USER device such as a phone, tablet, or laptop.
 2. A WROLPi instance should consume a minimal amount of electricity during WROL event. It is expected power will be
    scarce when WROLPi is needed most.
 

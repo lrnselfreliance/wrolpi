@@ -332,7 +332,8 @@ def test_channel_by_id(test_session, test_client, simple_channel, simple_video):
     assert response.status_code == HTTPStatus.OK
 
 
-def test_channel_crud(test_session, test_client, test_directory, test_download_manager):
+@pytest.mark.asyncio
+async def test_channel_crud(test_session, test_async_client, test_directory, test_download_manager):
     channel_directory = test_directory / 'channel directory'
     channel_directory.mkdir()
 
@@ -344,15 +345,15 @@ def test_channel_crud(test_session, test_client, test_directory, test_download_m
     )
 
     # Channel doesn't exist
-    request, response = test_client.get('/api/videos/channels/examplechannel1')
+    request, response = await test_async_client.get('/api/videos/channels/examplechannel1')
     assert response.status_code == HTTPStatus.NOT_FOUND, f'Channel exists: {response.json}'
 
     # Create it
-    request, response = test_client.post('/api/videos/channels', content=json.dumps(new_channel))
+    request, response = await test_async_client.post('/api/videos/channels', content=json.dumps(new_channel))
     assert response.status_code == HTTPStatus.CREATED, response.json
     location = response.headers['Location']
 
-    request, response = test_client.get(location)
+    request, response = await test_async_client.get(location)
     assert response.status_code == HTTPStatus.OK, response.json
     created = response.json['channel']
     assert created
@@ -369,13 +370,13 @@ def test_channel_crud(test_session, test_client, test_directory, test_download_m
         f'Channel directory is absolute: {created["directory"]}'
 
     # Can't create it again
-    request, response = test_client.post('/api/videos/channels', content=json.dumps(new_channel))
+    request, response = await test_async_client.post('/api/videos/channels', content=json.dumps(new_channel))
     assert response.status_code == HTTPStatus.BAD_REQUEST
 
-    def put_and_fetch(new_channel_):
-        request, response = test_client.put(location, content=json.dumps(new_channel))
+    async def put_and_fetch(new_channel_):
+        request, response = await test_async_client.put(location, content=json.dumps(new_channel))
         assert response.status_code == HTTPStatus.NO_CONTENT, response.status_code
-        request, response = test_client.get(location)
+        request, response = await test_async_client.get(location)
         assert response.status_code == HTTPStatus.OK
         channel = response.json['channel']
         return channel
@@ -384,7 +385,7 @@ def test_channel_crud(test_session, test_client, test_directory, test_download_m
     new_channel['name'] = 'Example Channel 2'
     new_channel['directory'] = str(new_channel['directory'])  # noqa
     new_channel['download_frequency'] = 60
-    channel = put_and_fetch(new_channel)
+    channel = await put_and_fetch(new_channel)
     assert channel['id'] == 1
     assert channel['name'] == 'Example Channel 2'
     assert channel['directory'] == channel_directory.name
@@ -397,22 +398,22 @@ def test_channel_crud(test_session, test_client, test_directory, test_download_m
 
     # Update with no download frequency.
     new_channel['download_frequency'] = None
-    channel = put_and_fetch(new_channel)
+    channel = await put_and_fetch(new_channel)
     assert channel['download_frequency'] is None
     # Download was deleted.
     assert len(test_download_manager.get_downloads(test_session)) == 0
 
     # Can't update channel that doesn't exist
-    request, response = test_client.put('/api/videos/channels/doesnt_exist',
-                                        content=json.dumps(new_channel))
+    request, response = await test_async_client.put('/api/videos/channels/doesnt_exist',
+                                                    content=json.dumps(new_channel))
     assert response.status_code == HTTPStatus.NOT_FOUND
 
     # Delete the new channel
-    request, response = test_client.delete(location)
+    request, response = await test_async_client.delete(location)
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Cant delete it again
-    request, response = test_client.delete(location)
+    request, response = await test_async_client.delete(location)
     assert response.status_code == HTTPStatus.NOT_FOUND
 
 
@@ -433,8 +434,9 @@ def test_channel_creation_with_download(test_client, test_session, test_director
     assert download.sub_downloader == 'video'
 
 
-def test_change_channel_url(test_client, test_session, test_download_manager, download_channel,
-                            test_download_manager_config):
+@pytest.mark.asyncio
+async def test_change_channel_url(test_async_client, test_session, test_download_manager, download_channel,
+                                  test_download_manager_config):
     # Change the Channel's URL.
     download_channel.update({'url': 'https://example.com/new-url'})
     test_session.commit()

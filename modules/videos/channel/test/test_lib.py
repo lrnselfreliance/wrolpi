@@ -1,14 +1,10 @@
-import asyncio
-from unittest import mock
-
 import pytest
 
 from modules.videos import schema
 from modules.videos.channel import lib
 from modules.videos.lib import save_channels_config, import_channels_config
-from modules.videos.models import Channel, Video
+from modules.videos.models import Channel
 from wrolpi.errors import UnknownChannel
-from wrolpi.files.lib import refresh_files
 
 
 @pytest.mark.parametrize('params', [

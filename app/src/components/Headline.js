@@ -8,14 +8,14 @@ import _ from "lodash";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {FileRowTagIcon} from "./Files";
 
-const HeadlineParagraph = ({headline}) => {
+export const HeadlineText = ({headline, openTag = '<u>', closeTag = '</u>'}) => {
     const {s} = React.useContext(ThemeContext);
     if (headline) {
-        headline = headline.replaceAll('<b>', '<b><u>');
-        headline = headline.replaceAll('</b>', '</b></u>');
+        headline = headline.replaceAll('<b>', openTag);
+        headline = headline.replaceAll('</b>', closeTag);
         headline = headline.replaceAll('\n', '<br/>');
         // Postgres inserts <b>...</b> tags which we will use.
-        return <p {...s} dangerouslySetInnerHTML={{__html: headline}}></p>
+        return <span {...s} dangerouslySetInnerHTML={{__html: headline}}></span>
     }
 }
 
@@ -33,18 +33,18 @@ const FileHeadline = ({file, to}) => {
 
     let header = title || name;
     if (title_headline) {
-        header = <PreviewLink file={file}><HeadlineParagraph headline={title_headline}/></PreviewLink>;
+        header = <PreviewLink file={file}><HeadlineText headline={title_headline}/></PreviewLink>;
     }
     if (to) {
-        header = <Link to={to}><HeadlineParagraph headline={title_headline}/></Link>
+        header = <Link to={to}><HeadlineText headline={title_headline}/></Link>
     }
 
     let body = <p><small>No highlights available.</small></p>;
     if (b_headline || c_headline || d_headline) {
         body = <>
-            <HeadlineParagraph headline={b_headline}/>
-            <HeadlineParagraph headline={c_headline}/>
-            <HeadlineParagraph headline={d_headline}/>
+            <HeadlineText headline={b_headline}/>
+            <HeadlineText headline={c_headline}/>
+            <HeadlineText headline={d_headline}/>
         </>;
     }
 

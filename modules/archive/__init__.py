@@ -1,7 +1,7 @@
 import asyncio
 import json
 from abc import ABC
-from typing import Tuple, List
+from typing import List
 
 from sqlalchemy import not_
 from sqlalchemy.orm import Session

@@ -37,11 +37,22 @@
 <h2>Can't start the services?</h2>
 <p>You can view the media directory by <a id="media_link" href="/media">navigating to /media</a></p>
 
+<p>The API may be available <a id="api_link" href="#">by navigating to port 8081</a></p>
+
 <p>The map may be available <a id="map_link" href="#">by navigating to port 8084</a></p>
 
+<p>Kiwix may be available <a id="kiwix_link" href="#">by navigating to port 8085</a></p>
+
 <script>
-    // Get the current hostname (probably an IP) link to my :8084 above.
+    // Get the current hostname (probably an IP) link to my other ports above.
     let hostname = window.location.hostname;
+
+    let api_a = document.getElementById('map_link');
+    if (api_a) {
+        let api_url = `http://${hostname}:8081`;
+        api_a.setAttribute('href', api_url);
+        api_a.textContent = `by navigating to ${api_url}`;
+    }
 
     let media_a = document.getElementById('media_link');
     if (media_a) {
@@ -55,6 +66,13 @@
         let map_url = `http://${hostname}:8084`;
         map_a.setAttribute('href', map_url);
         map_a.textContent = `by navigating to ${map_url}`;
+    }
+
+    let kiwix_a = document.getElementById('map_link');
+    if (kiwix_a) {
+        let kiwix_url = `http://${hostname}:8085`;
+        kiwix_a.setAttribute('href', kiwix_url);
+        kiwix_a.textContent = `by navigating to ${kiwix_url}`;
     }
 </script>
 

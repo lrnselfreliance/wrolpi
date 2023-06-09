@@ -120,7 +120,7 @@ export function Dashboard() {
             centered={false}
             onClose={() => handleSetGetter(null, null)}
         >
-            <ModalHeader>Downloads</ModalHeader>
+            <ModalHeader>Download from the Internet</ModalHeader>
             <ModalContent>
                 <DownloadMenu disabled={gettersDisabled}/>
             </ModalContent>
@@ -131,7 +131,7 @@ export function Dashboard() {
             centered={false}
             onClose={() => handleSetGetter(null, null)}
         >
-            <ModalHeader>Upload</ModalHeader>
+            <ModalHeader>Upload from your device</ModalHeader>
             <ModalContent>
                 <Upload disabled={gettersDisabled}/>
             </ModalContent>

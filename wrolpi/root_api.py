@@ -109,6 +109,7 @@ index_html = '''
 '''
 
 
+@api_app.get('/')
 @api_bp.get('/')
 async def index(_):
     return response.html(index_html)

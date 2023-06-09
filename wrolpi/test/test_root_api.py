@@ -6,7 +6,6 @@ from mock import mock
 
 from wrolpi.admin import HotspotStatus
 from wrolpi.common import get_config
-from wrolpi.dates import strptime
 from wrolpi.db import get_db_session
 from wrolpi.downloader import Download, get_download_manager_config
 from wrolpi.root_api import api_app
@@ -21,6 +20,10 @@ class TestRootAPI(TestAPI):
         Index should have some details in an HTML response
         """
         request, response = api_app.test_client.get('/')
+        assert response.status_code == HTTPStatus.OK
+        assert b'html' in response.body
+
+        request, response = api_app.test_client.get('/api')
         assert response.status_code == HTTPStatus.OK
         assert b'html' in response.body
 

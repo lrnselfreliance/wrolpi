@@ -197,9 +197,13 @@ class VideoDownloader(Downloader, ABC):
         channel = None
         if channel_name or source_channel_id:
             # Try to find the channel via info_json from yt-dlp.
-            channel = get_or_create_channel(source_id=source_channel_id, url=channel_url, name=channel_name)
-            if channel:
-                found_channel = 'yt_dlp'
+            try:
+                channel = get_or_create_channel(source_id=source_channel_id, url=channel_url, name=channel_name)
+                if channel:
+                    found_channel = 'yt_dlp'
+            except UnknownChannel:
+                # Can't find a channel, use the no channel directory.
+                pass
 
         settings = download.settings or dict()
         local_channel_id = settings.get('channel_id')
@@ -392,7 +396,7 @@ def get_or_create_channel(source_id: str = None, url: str = None, name: str = No
         pass
 
     if not name:
-        raise ValueError(f'Cannot create channel without a name')
+        raise UnknownChannel(f'Cannot create channel without a name')
 
     # Channel does not exist.  Create one in the video directory.
     channel_directory = get_videos_directory() / escape_file_name(name)

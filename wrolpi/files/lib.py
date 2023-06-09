@@ -153,6 +153,8 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
             return MOBI_MIMETYPE
         if suffix.endswith('.stl'):
             return 'model/stl'
+        if suffix.endswith('.mp4'):
+            return 'video/mp4'
     if suffix.endswith('.hgt'):
         return 'application/octet-stream'
     if mimetype == 'text/plain':

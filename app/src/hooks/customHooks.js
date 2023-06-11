@@ -1,5 +1,6 @@
 import {useContext, useEffect, useRef, useState} from "react";
 import {
+    fetchDecoded,
     fetchDomains,
     fetchFilesProgress,
     filesSearch,
@@ -927,4 +928,30 @@ export const useUploadFile = () => {
     }, [JSON.stringify(files)]);
 
     return {files, setFiles: handleFilesChange, progresses, destination, setDestination, doClear, doUpload}
+}
+
+export const useVINDecoder = (defaultVINNumber = '') => {
+    const [value, setValue] = useState(defaultVINNumber);
+    // The response vin from the API.
+    const [vin, setVin] = useState(null);
+
+    const localFetchDecoded = async () => {
+        if (!value) {
+            return;
+        }
+
+        try {
+            const vin = await fetchDecoded(value);
+            setVin(vin);
+        } catch (e) {
+            console.error('Failed to decode VIN number');
+            setVin(null);
+        }
+    }
+
+    useEffect(() => {
+        localFetchDecoded();
+    }, [value]);
+
+    return {value, setValue, vin}
 }

@@ -17,6 +17,7 @@ const links = [
         links: [
             {to: '/more/otp', text: 'One Time Pad', end: true},
             {to: '/more/statistics', text: 'Statistics', end: true},
+            {to: '/more/vin', text: 'VIN Decoder', end: true},
         ]
     },
 ];

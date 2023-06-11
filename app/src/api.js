@@ -825,3 +825,15 @@ export async function uploadFiles(files, destination) {
     data.append('destination', destination);
     console.log(data);
 }
+
+export async function fetchDecoded(vinNumber) {
+    const body = {vin_number: vinNumber};
+    const response = await apiPost(`${API_URI}/vin_number_decoder`, body);
+    if (response.status === 200) {
+        const content = await response.json();
+        return content['vin'];
+    } else if (response.status === 400) {
+        console.error('Invalid VIN Number');
+        return null;
+    }
+}

@@ -358,3 +358,27 @@ def test_get_downloaders(test_client):
 def test_get_global_statistics(test_session, test_client):
     request, response = test_client.get('/api/statistics')
     assert response.json['global_statistics']['db_size'] > 1
+
+
+def test_post_vin_number_decoder(test_client):
+    """A VIN number can be decoded."""
+    # Invalid VIN number.
+    content = dict(vin_number='5N1NJ01CXST00000')
+    request, response = test_client.post('/api/vin_number_decoder', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.json == dict()
+
+    # Test VIN from vininfo.
+    content = dict(vin_number='5N1NJ01CXST000001')
+    request, response = test_client.post('/api/vin_number_decoder', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['vin'] == {'body': 'Sedan, 4-Door, Standard Body Truck',
+                                    'country': 'United States',
+                                    'engine': 'VH45DE',
+                                    'manufacturer': 'Nissan',
+                                    'model': 'Maxima',
+                                    'plant': 'Tochigi, Oppama',
+                                    'region': 'North America',
+                                    'serial': None,
+                                    'transmission': None,
+                                    'years': '1995'}

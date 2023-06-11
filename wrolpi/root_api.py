@@ -7,12 +7,15 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Union
 
+import vininfo.exceptions
 from sanic import Sanic, response, Blueprint, __version__ as sanic_version
 from sanic.blueprint_group import BlueprintGroup
 from sanic.request import Request
 from sanic.response import HTTPResponse
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
+from vininfo import Vin
+from vininfo.details._base import VinDetails
 
 from wrolpi import admin, status, flags, schema
 from wrolpi import tags
@@ -419,6 +422,39 @@ async def post_notify(_: Request, body: schema.NotifyRequest):
     url = url_strip_host(body.url)
     Events.send_user_notify(body.message, url)
     return response.empty(HTTPStatus.CREATED)
+
+
+@api_bp.post('/vin_number_decoder')
+@validate(schema.VINDecoderRequest)
+async def post_vin_number_decoder(_: Request, body: schema.VINDecoderRequest):
+    try:
+        vin = Vin(body.vin_number)
+    except vininfo.exceptions.VininfoException:
+        return json_response({}, HTTPStatus.BAD_REQUEST)
+
+    def detail_to_json(details: VinDetails, key: str):
+        if details:
+            attr = getattr(details, key)
+            if attr and attr.name:
+                name = attr.name
+                if isinstance(name, list):
+                    return ', '.join(str(i) for i in name)
+                else:
+                    return name
+
+    vin = schema.VIN(
+        country=vin.country,
+        manufacturer=vin.manufacturer,
+        region=vin.region,
+        years=','.join(map(str, vin.years)),
+        body=detail_to_json(vin.details, 'body'),
+        engine=detail_to_json(vin.details, 'engine'),
+        model=detail_to_json(vin.details, 'model'),
+        plant=detail_to_json(vin.details, 'plant'),
+        transmission=detail_to_json(vin.details, 'transmission'),
+        serial=detail_to_json(vin.details, 'serial'),
+    )
+    return json_response(dict(vin=vin))
 
 
 class CustomJSONEncoder(json.JSONEncoder):

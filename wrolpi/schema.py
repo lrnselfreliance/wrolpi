@@ -82,3 +82,41 @@ class DeleteTagRequest:
 class NotifyRequest:
     message: str
     url: str = None
+
+
+@dataclass
+class VINDecoderRequest:
+    vin_number: str
+
+@dataclass
+class VIN:
+    country: str
+    manufacturer: str
+    region: str
+    years: str
+    body: str = None
+    engine: str = None
+    model: str = None
+    plant: str = None
+    transmission: str = None
+    serial: str = None
+
+    def __json__(self):
+        d = dict(
+            country=self.country,
+            manufacturer=self.manufacturer,
+            region=self.region,
+            years=self.years,
+            body=self.body,
+            engine=self.engine,
+            model=self.model,
+            plant=self.plant,
+            transmission=self.transmission,
+            serial=self.serial,
+        )
+        return d
+
+
+@dataclass
+class VINDecoderResponse:
+    vin: VIN

@@ -70,14 +70,6 @@ EOF
 chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi
 chmod 0600 /home/wrolpi/.pgpass
 
-# Allow pi user to access database.
-cat >/home/pi/.pgpass <<'EOF'
-127.0.0.1:5432:gis:_renderd:wrolpi
-127.0.0.1:5432:wrolpi:wrolpi:wrolpi
-EOF
-chown -R pi:pi /home/pi
-chmod 0600 /home/pi/.pgpass
-
 # Give WROLPi group a few privileged commands via sudo without password.
 cat >/etc/sudoers.d/90-wrolpi <<'EOF'
 %wrolpi ALL=(ALL) NOPASSWD:/usr/bin/nmcli,/usr/bin/cpufreq-set

@@ -11,7 +11,7 @@ from wrolpi.files.models import FileGroup
 from wrolpi.vars import FILE_MAX_PDF_SIZE, PYTEST, FILE_MAX_TEXT_SIZE
 
 try:
-    from PyPDF2 import PdfReader
+    from pypdf import PdfReader
 except ImportError:
     PdfReader = None
 

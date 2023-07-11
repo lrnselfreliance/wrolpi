@@ -1,6 +1,6 @@
 Pillow==9.5.0
 Pint==0.21
-PyPDF2[crypto]==3.0.1
+pypdf==3.12.1
 PyYAML==6.0
 SQLAlchemy[asyncio]==1.3.22
 aiohttp==3.8.4

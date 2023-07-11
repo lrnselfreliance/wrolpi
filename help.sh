@@ -213,6 +213,16 @@ check_file /opt/wrolpi-blobs/gis-map.dump.gz "Map initialization blob exists" "M
 check_file /var/www/html/leaflet.js "Leaflet.js exists" "Leaflet.js does not exist"
 
 echo
+# Kiwix
+
+check_file /media/wrolpi/zims/library.xml "The kiwix library file exists" "The kiwix library file does not exist at /media/wrolpi/zims/library.xml"
+if curl -s http://0.0.0.0:8085 2>/dev/null | grep -i kiwix >/dev/null; then
+  echo "OK: Kiwix app responded"
+else
+  echo "FAILED: Kiwix app did not respond"
+fi
+
+echo
 # Media Directory
 
 check_directory "${MEDIA_DIRECTORY}" "The media directory exists" "The media directory does not exist at ${MEDIA_DIRECTORY}"

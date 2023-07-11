@@ -108,6 +108,11 @@ class KiwixZimDownloader(Downloader):
         else:
             background_task(refresh_files([output_path, ]))
 
+        # Restart Kiwix serve, so it finds the new zim file.
+        return_code = await lib.restart_kiwix()
+        if return_code != 0:
+            logger.error(f'Failed to restart kiwix')
+
         # Location is just the generic Kiwix viewer.
         return DownloadResult(success=True, location='/zim')
 

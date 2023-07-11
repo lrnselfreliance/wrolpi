@@ -22,9 +22,9 @@ sed -i 's/port = 5433/port = 5432/' /etc/postgresql/13/main/postgresql.conf
 # Install Node console commands.
 single-file --version || npm i -g serve@12.0.1 single-file-cli@1.0.15 readability-extractor@0.0.6 carto@1.2.0
 
-# Put the latest WROLPi release in /opt/wrolpi.
+# Put the latest WROLPi master in /opt/wrolpi.
 rm -rf /opt/wrolpi
-git clone -b release https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
+git clone -b master https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
 git config --global --add safe.directory /opt/wrolpi
 
 # Install Python requirements.
@@ -36,6 +36,14 @@ python3 -m venv /opt/wrolpi/venv
 cd /opt/wrolpi/app
 npm install
 npm run build
+
+# Add wrolpi database password to pi user
+cat >/home/pi/.pgpass <<'EOF'
+127.0.0.1:5432:gis:_renderd:wrolpi
+127.0.0.1:5432:wrolpi:wrolpi:wrolpi
+EOF
+chown -R pi:pi /home/pi
+chmod 0600 /home/pi/.pgpass
 
 chown -R wrolpi:wrolpi /opt/wrolpi
 
@@ -49,6 +57,9 @@ cat >/etc/sudoers.d/90-wrolpi <<'EOF'
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart renderd.service
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop renderd.service
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl start renderd.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart wrolpi-kiwix.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-kiwix.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-kiwix.service
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart wrolpi-api.service
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-api.service
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-api.service
@@ -63,10 +74,12 @@ chown wrolpi:wrolpi /media/wrolpi
 
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-app.service /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-kiwix.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 
 systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service
+systemctl enable wrolpi-kiwix.service
 
 # NetworkManager for the hotspot.
 systemctl enable NetworkManager

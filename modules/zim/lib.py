@@ -482,3 +482,19 @@ def flag_kiwix_restart():
         flags.kiwix_restart.set()
     else:
         logger.debug(f'Not setting kiwix_restart flag because this is not Dockerized')
+
+
+async def restart_kiwix():
+    if DOCKERIZED:
+        logger.warning('Unable to restart Kiwix serve because it is in a docker container')
+        return
+
+    logger.info('Restarting Kiwix serve')
+
+    cmd = f'sudo /usr/bin/systemctl restart wrolpi-kiwix.service'
+    proc = await asyncio.create_subprocess_shell(cmd)
+    stdout, stderr = await proc.communicate()
+    logger.debug(f'systemctl returned {proc.returncode}')
+    if proc.returncode != 0 and stderr:
+        logger.debug(stderr)
+    return proc.returncode

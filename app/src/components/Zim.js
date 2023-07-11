@@ -479,7 +479,7 @@ class ManageZim extends React.Component {
                 <PlaceholderLine/>
             </PlaceholderHeader>
         </Placeholder>;
-        if (subscriptions && Object.keys(subscriptions).length > 0) {
+        if (catalog && catalog.length > 0) {
             kiwixCatalog = <SortableTable
                 defaultSortColumn='name'
                 data={catalog}

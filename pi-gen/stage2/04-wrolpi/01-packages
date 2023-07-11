@@ -20,6 +20,8 @@ gdal-bin
 git
 gnupg-agent
 hostapd
+kiwix
+kiwix-tools
 libagg-dev
 libapache2-mod-tile
 libboost-all-dev
@@ -75,3 +77,4 @@ ttf-unifont
 unzip
 vim
 wget
+zim-tools

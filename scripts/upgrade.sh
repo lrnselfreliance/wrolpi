@@ -11,3 +11,5 @@ cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
 cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
 cp /opt/wrolpi/50x.html /var/www/50x.html
 /usr/sbin/nginx -s reload
+
+chown -R wrolpi:wrolpi /opt/wrolpi

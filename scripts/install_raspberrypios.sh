@@ -6,7 +6,7 @@ set -e
 
 # Update if we haven't updated in the last day.
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
-# Install dependencies used in pi-gen.
+# Install dependencies.
 apt-get install -y \
   apt-transport-https \
   ca-certificates \

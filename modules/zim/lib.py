@@ -477,12 +477,12 @@ def flag_outdated_zim_files():
 
 
 async def restart_kiwix():
+    if PYTEST:
+        logger.warning('Unable to restart Kiwix serve because we are testing')
+        return
     if DOCKERIZED:
         logger.warning('Setting Kiwix restart because this is in a docker container')
         flags.kiwix_restart.set()
-        return
-    if PYTEST:
-        logger.warning('Unable to restart Kiwix serve because we are testing')
         return
 
     logger.info('Restarting Kiwix serve')

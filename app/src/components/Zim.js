@@ -316,8 +316,8 @@ export const ZimSearchView = ({estimates}) => {
 }
 
 const ViewerMessage = () => {
-    return <Message warning icon>
-        <SIcon name='warning'/>
+    return <Message info icon>
+        <SIcon name='hand point right'/>
         <Message.Content>
             <p>You can view your Zim files using the Kiwix app, or at <a href={VIEWER_URL}>{VIEWER_URL}</a></p>
         </Message.Content>

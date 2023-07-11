@@ -6,8 +6,8 @@ set -e
 
 # Update if we haven't updated in the last day.
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
-# Install dependencies
-apt install -y \
+# Install dependencies used in pi-gen.
+apt-get install -y \
   apt-transport-https \
   ca-certificates \
   calibre \
@@ -38,7 +38,7 @@ apt install -y \
 
 # Install npm.
 npm --version || curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-apt install -y nodejs
+apt-get install -y nodejs
 node -v
 npm -v
 
@@ -70,12 +70,31 @@ EOF
 chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi
 chmod 0600 /home/wrolpi/.pgpass
 
+# Allow pi user to access database.
+[ -d /home/pi ] && (
+  cat >/home/pi/.pgpass <<'EOF'
+127.0.0.1:5432:gis:_renderd:wrolpi
+127.0.0.1:5432:wrolpi:wrolpi:wrolpi
+EOF
+  chown -R pi:pi /home/pi
+  chmod 0600 /home/pi/.pgpass
+)
+
 # Give WROLPi group a few privileged commands via sudo without password.
 cat >/etc/sudoers.d/90-wrolpi <<'EOF'
 %wrolpi ALL=(ALL) NOPASSWD:/usr/bin/nmcli,/usr/bin/cpufreq-set
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart renderd.service
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop renderd.service
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl start renderd.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart wrolpi-kiwix.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-kiwix.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-kiwix.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart wrolpi-api.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-api.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-api.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart wrolpi-app.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-app.service
+%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-app.service
 EOF
 chmod 660 /etc/sudoers.d/90-wrolpi
 # Verify this new file is valid.
@@ -88,13 +107,16 @@ chown wrolpi:wrolpi /media/wrolpi
 # Install the systemd services
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-app.service /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-kiwix.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 /usr/bin/systemctl daemon-reload
 systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service
+systemctl enable wrolpi-kiwix.service
 # Stop the services so the user has to start them again.  We don't want to run outdated services when updating.
 systemctl stop wrolpi-api.service
 systemctl stop wrolpi-app.service
+systemctl stop wrolpi-kiwix.service
 
 # Configure Postgresql.  Do this after the API is stopped.
 sudo -u postgres psql -c '\l' | grep wrolpi || (
@@ -110,6 +132,8 @@ sudo -u postgres psql -c "alter user wrolpi with superuser"
 
 # Install map only if that script hasn't finished.
 [ -f /var/www/html/leaflet.css ] || /opt/wrolpi/scripts/install_map_raspberrypios.sh
+
+chown -R wrolpi:wrolpi /opt/wrolpi
 
 set +x
 

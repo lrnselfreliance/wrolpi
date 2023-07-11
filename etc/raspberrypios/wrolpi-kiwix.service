@@ -1,0 +1,12 @@
+[Unit]
+Description=WROLPi Kiwix APP
+PartOf=wrolpi.target
+
+[Service]
+ExecStart=/opt/wrolpi/scripts/start_kiwix_serve.sh
+Group=wrolpi
+User=wrolpi
+WorkingDirectory=/opt/wrolpi/
+
+[Install]
+WantedBy=default.target

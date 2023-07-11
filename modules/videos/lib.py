@@ -201,12 +201,12 @@ class ChannelsConfig(ConfigFile):
 
     @property
     def favorites(self) -> dict:
-        warnings.warn('Favorites have bee moved to Tags', DeprecationWarning)
+        warnings.warn('Favorites have been moved to Tags', DeprecationWarning)
         return self._config['favorites']
 
     @favorites.setter
     def favorites(self, value: dict):
-        warnings.warn('Favorites have bee moved to Tags', DeprecationWarning)
+        warnings.warn('Favorites have been moved to Tags', DeprecationWarning)
         self.update({'favorites': value})
 
 

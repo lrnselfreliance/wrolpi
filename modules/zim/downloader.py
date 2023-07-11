@@ -87,8 +87,6 @@ class KiwixZimDownloader(Downloader):
 
         # Notify the maintainer if outdated Zim files are lying around.
         lib.flag_outdated_zim_files()
-        # Notify the maintainer to restart Kiwix container.
-        lib.flag_kiwix_restart()
 
         output_size = output_path.stat().st_size
         if download_info.size and output_size != download_info.size:

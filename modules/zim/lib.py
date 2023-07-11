@@ -461,7 +461,7 @@ async def remove_outdated_zim_files(path: pathlib.Path = None):
     else:
         background_task(refresh_files(outdated))
 
-    flag_kiwix_restart()
+    await restart_kiwix()
 
 
 @register_refresh_cleanup
@@ -476,17 +476,13 @@ def flag_outdated_zim_files():
         flags.outdated_zims.clear()
 
 
-def flag_kiwix_restart():
-    """Set `kiwix_restart` Flag only if running in Docker."""
-    if DOCKERIZED:
-        flags.kiwix_restart.set()
-    else:
-        logger.debug(f'Not setting kiwix_restart flag because this is not Dockerized')
-
-
 async def restart_kiwix():
     if DOCKERIZED:
-        logger.warning('Unable to restart Kiwix serve because it is in a docker container')
+        logger.warning('Setting Kiwix restart because this is in a docker container')
+        flags.kiwix_restart.set()
+        return
+    if PYTEST:
+        logger.warning('Unable to restart Kiwix serve because we are testing')
         return
 
     logger.info('Restarting Kiwix serve')

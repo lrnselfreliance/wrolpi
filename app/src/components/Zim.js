@@ -517,7 +517,7 @@ class ManageZim extends React.Component {
     }
 }
 
-function ZimApp() {
+function ZimViewer() {
     return <iframe
         title='zim'
         src={VIEWER_URL}
@@ -541,7 +541,7 @@ export function ZimRoute() {
     return <div style={{marginTop: '2em'}}>
         <TabLinks links={links}/>
         <Routes>
-            <Route path='/' exact element={<ZimApp/>}/>
+            <Route path='/' exact element={<ZimViewer/>}/>
             <Route path='manage' exact element={<ManageZim/>}/>
         </Routes>
     </div>

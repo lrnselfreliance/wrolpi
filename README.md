@@ -29,34 +29,36 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 * [Try WROLPi](#try-wrolpi)
 * [Debian 11 Install](#debian-11-install)
 * [Raspberry Pi Install](#raspberrypi-install)
+* [Raspberry Pi Image Install](#raspberry-pi-image-install)
 * [Charter](#charter)
 * [Upgrading WROLPi](UPGRADE.md)
-* [Join](#charter)
+* [Join](#join)
 
 # Features
 
 - [x] Videos
-- [x] Web Archive
+- [x] Web Archives
 - [x] Maps
+- [x] Wikipedia
 - [x] File search
 - [x] eBooks (EPUB / PDFs)
 - [x] Wi-Fi Hotspot
 - [x] Universal search
 - [x] Food Inventory management
 - [x] One-Time pad generator, encrypter/decrypter
-- [ ] Synchronizer and/or duplicator
+- [ ] Synchronizer/duplicator
 - [ ] Food storage calculator
 
 ## Module features matrix
 
-| **Module**         | **Search** | **View** | **Download** |
-|--------------------|:-----------|----------|--------------|
-| Videos             | yes        | yes      | yes          |
-| Web Archives       | yes        | yes      | yes          |
-| eBooks (EPUB/PDFs) | yes        | yes      | planned      |
-| Map                | planned    | yes      | planned      |
-| Wikis              | planned    | planned  | planned      |
-| Podcasts/Audio     | planned    | planned  | planned      |
+| **Module**     | **View** | **Search** | **Download** | **Project**                                                |
+|----------------|----------|:-----------|--------------|------------------------------------------------------------|
+| Videos         | yes      | yes        | yes          | [yt-dlp](https://github.com/yt-dlp/yt-dlp)                 |
+| Web Archives   | yes      | yes        | yes          | [Singlefile](https://github.com/gildas-lormeau/SingleFile) |
+| Wikipedia      | yes      | yes        | yes          | [Kiwix](https://www.kiwix.org)                             |
+| eBooks         | yes      | yes        | planned      | EPUB/PDF                                                   |
+| Map            | yes      | planned    | planned      | [OpenStreetMap](https://www.openstreetmap.org)             |
+| Podcasts/Audio | yes      | planned    | planned      |                                                            |
 
 # Demo
 
@@ -64,7 +66,7 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 
 # Download
 
-Images are available on [wrolpi.org](https://wrolpi.org)
+Images are available at [wrolpi.org](https://wrolpi.org)
 
 # Try WROLPi!
 
@@ -72,22 +74,22 @@ You can try out WROLPi by running the docker containers.
 
 1. [Install docker-ce](https://docs.docker.com/install/linux/docker-ce/debian/) and
    [docker-compose](https://docs.docker.com/compose/install/)
-2. Copy the latest WROLPi code
+2. Copy the latest WROLPi code.
     * `git clone https://github.com/lrnselfreliance/wrolpi.git`
-3. Change directory into the code base
+3. Change directory into the code base.
     * `cd wrolpi`
-4. Build the containers
+4. Build the containers.
     * `docker-compose build --parallel`
-5. Create volumes
+5. Create volumes.
     * `docker volume create --name=openstreetmap-data`
     * `docker volume create --name=openstreetmap-rendered-tiles`
 6. Start the database.
     * `docker-compose up -d db`
-7. Initialize the database
+7. Initialize the database.
     * `docker-compose run --rm api db upgrade`
-8. Start the docker containers
+8. Start the docker containers.
     * `docker-compose up`
-9. Browse to WROLPi
+9. Browse to WROLPi.
     * http://0.0.0.0:8080
 
 # Debian 11 Install
@@ -97,11 +99,11 @@ Install WROLPi onto a fresh Debian 11 system.
 **Warning: this will clobber anything else on the system!  Do not run this installation script elsewhere!**
 
 1. Install [Debian 11](https://www.debian.org/) onto a laptop or other computer.
-2. Get the WROLPi installation script
+2. Get the WROLPi installation script.
     * `wget https://raw.githubusercontent.com/lrnselfreliance/wrolpi/release/install.sh -O /tmp/install.sh`
-3. Run the installation script
+3. Run the installation script.
     * `sudo /bin/bash /tmp/install.sh`
-4. Start WROLPi
+4. Start WROLPi.
     * `sudo systemctl start wrolpi.target`
 5. Browse to the IP address of your WROLPi!
 
@@ -112,13 +114,25 @@ Install WROLPi onto a fresh Raspberry Pi.
 **Warning: this will clobber anything else on the Raspberry Pi!  Do not run this installation script elsewhere!**
 
 1. Install [Raspberry Pi OS](https://www.raspberrypi.com/software/operating-systems/) onto a RaspberryPi.
-2. Get the WROLPi installation script
+2. Get the WROLPi installation script.
     * `wget https://raw.githubusercontent.com/lrnselfreliance/wrolpi/release/install.sh -O /tmp/install.sh`
-3. Run the installation script
+3. Run the installation script.
     * `sudo /bin/bash /tmp/install.sh`
-4. Start WROLPi
+4. Start WROLPi.
     * `sudo systemctl start wrolpi.target`
 5. Join the Hotspot or browse to the IP address of your WROLPi!
+
+# Raspberry Pi Image Install
+
+Steps necessary to initialize your WROLPi after installing the images from wrolpi.org
+
+1. Download and copy a pre-built image from https://wrolpi.org onto an SD card.
+2. Boot the Raspberry Pi, login with username pi and password wrolpi.
+3. Modify fstab to mount your external drive to /media/wrolpi (modify this command to match your system).
+    * `echo '/dev/sda1 /media/wrolpi auto defaults,nofail 0 0' | sudo tee -a /etc/fstab`
+4. Run the database creation script: `sudo bash /opt/wrolpi/scripts/create_db.sh`
+5. Reboot `sudo reboot`
+6. Join the Hotspot or browse to the IP address of your WROLPi!
 
 # Charter
 

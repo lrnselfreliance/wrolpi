@@ -36,10 +36,12 @@ def simple_channel(test_session, test_directory) -> Channel:
 def channel_factory(test_session, test_directory):
     """Create a random Channel with a directory, but no frequency."""
 
-    def factory(source_id: str = None, download_frequency: DownloadFrequency = None, url: str = None, name: str = None):
+    def factory(source_id: str = None, download_frequency: DownloadFrequency = None, url: str = None, name: str = None,
+                directory: pathlib.Path = None):
         name = name or str(uuid4())
-        directory = test_directory / name
-        directory.mkdir()
+        directory = directory or test_directory / name
+        if not directory.is_dir():
+            directory.mkdir()
         channel = Channel(
             directory=directory,  # noqa
             name=name,

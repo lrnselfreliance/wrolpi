@@ -80,6 +80,12 @@ def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None,
         if list(conflicts):
             raise ChannelSourceIdConflict()
 
+    # Assure that this Channel's directory is not in another Channel's directory.
+    directory_str = str(directory)
+    for channel in session.query(Channel).filter(Channel.id != id_):
+        if directory_str.startswith(str(channel.directory)) or str(channel.directory).startswith(directory_str):
+            raise ChannelDirectoryConflict()
+
 
 def duration_to_seconds(duration: str) -> int:
     """Convert ffmpeg duration to seconds"""

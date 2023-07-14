@@ -22,6 +22,8 @@ from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
+__all__ = ['Video', 'Channel']
+
 
 class Video(ModelHelper, Base):
     __tablename__ = 'video'
@@ -326,8 +328,12 @@ class Channel(ModelHelper, Base):
     def delete_with_videos(self):
         """Delete all Video records (but not video files) related to this Channel.  Then delete the Channel."""
         session = Session.object_session(self)
-        # Delete the video records, but not the video files!
-        session.query(Video).filter_by(channel_id=self.id).delete()
+
+        # Disown the videos.
+        videos = session.query(Video).filter_by(channel_id=self.id)
+        for video in videos:
+            video.channel = None
+
         if self.url and (download := self.get_download()):
             session.delete(download)
 

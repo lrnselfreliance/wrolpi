@@ -446,13 +446,19 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
             files.extend(new_files)
             if len(files) >= 100:
                 # Wait until there are enough files to perform the upsert.
-                _upsert_files(files, idempotency)
+                try:
+                    _upsert_files(files, idempotency)
+                except Exception as e:
+                    logger.error(f'Failed to upsert files', exc_info=e)
                 files = list()
             # Sleep to catch cancel.
             await asyncio.sleep(0)
         if files:
             # Not enough files for the chunks above, finish what is left.
-            _upsert_files(files, idempotency)
+            try:
+                _upsert_files(files, idempotency)
+            except Exception as e:
+                logger.error(f'Failed to upsert files', exc_info=e)
 
     with get_db_curs(commit=True) as curs:
         wheres = ''

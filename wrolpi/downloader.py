@@ -1105,7 +1105,7 @@ async def import_downloads_config(session: Session):
                 existing.next_download = download['next_download']
                 existing.status = download['status']
                 existing.sub_downloader = download['sub_downloader']
-                existing.settings = download['settings'] or dict()
+                existing.settings = download.get('settings') or dict()
 
         for download in downloads_by_url.values():
             # These downloads are new, import them.

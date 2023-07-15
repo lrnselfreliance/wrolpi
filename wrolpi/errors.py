@@ -192,10 +192,6 @@ class FileConflict(APIError):
     pass
 
 
-class DirectoryConflict(APIError):
-    pass
-
-
 error_codes = iter(range(1, 1000))
 
 API_ERRORS = {

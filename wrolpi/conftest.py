@@ -35,7 +35,7 @@ from wrolpi.dates import set_test_now
 from wrolpi.db import postgres_engine, get_db_args
 from wrolpi.downloader import DownloadManager, DownloadResult, Download, Downloader, \
     downloads_manager_config_context
-from wrolpi.files.models import Directory
+from wrolpi.files.models import Directory, FileGroup
 from wrolpi.root_api import BLUEPRINTS, api_app
 from wrolpi.tags import Tag
 from wrolpi.vars import PROJECT_DIR
@@ -341,8 +341,8 @@ def example_mobi(test_directory) -> pathlib.Path:
 
 
 @pytest.fixture
-def make_files_structure(test_directory) -> Callable[[Union[List, Dict]], List[pathlib.Path]]:
-    def create_files(paths: List) -> List[pathlib.Path]:
+def make_files_structure(test_directory) -> Callable:
+    def create_files(paths: List, file_groups: bool = False, session: Session = None) -> List[pathlib.Path]:
         files = []
 
         @iterify(list)
@@ -366,6 +366,11 @@ def make_files_structure(test_directory) -> Callable[[Union[List, Dict]], List[p
                     path.write_text(content)
                 elif isinstance(content, bytes):
                     path.write_bytes(content)
+
+        if file_groups:
+            for idx, path in enumerate(files):
+                fg = FileGroup.from_paths(session, path)
+                files[idx] = fg
         return files
 
     return create_files

@@ -257,10 +257,11 @@ async def post_rename(_: Request, body: schema.Rename):
     body=schema.Directory,
 )
 @validate(schema.Directory)
+@wrol_mode_check
 async def delete_directory(_: Request, body: schema.Directory):
     path = get_media_directory() / body.path
     if path.is_dir():
-        shutil.rmtree(path)
+        lib.delete_directory(path, recursive=True)
     else:
         raise FileNotFoundError(f'No directory found: {path}')
 

@@ -543,7 +543,7 @@ async def test_move(test_session, test_directory, make_files_structure, test_asy
 
 
 @pytest.mark.asyncio
-async def test_rename(test_session, test_directory, make_files_structure, test_async_client):
+async def test_rename_file(test_session, test_directory, make_files_structure, test_async_client):
     foo, = make_files_structure({
         'foo/bar/baz.txt': 'asdf',
     })
@@ -570,3 +570,30 @@ async def test_rename_directory(test_session, test_directory, make_files_structu
     assert not (test_directory / 'foo/bar').exists()
     assert (test_directory / 'foo/qux/baz.txt').is_file()
     assert (test_directory / 'foo/qux/baz.txt').read_text() == 'asdf'
+
+
+@pytest.mark.asyncio
+async def test_delete_directory_tagged(test_session, test_directory, make_files_structure, test_async_client,
+                                       tag_factory, insert_file_group):
+    """Cannot delete a directory if it contained a tagged FileGroup."""
+    bar, = make_files_structure({
+        'foo/bar.txt': 'bar'
+    }, file_groups=True, session=test_session)
+    bar: FileGroup
+    tag = tag_factory()
+    bar.add_tag(tag)
+    test_session.commit()
+
+    # Cannot deleted tagged file.
+    content = dict(path=str(bar.primary_path.parent))
+    request, response = await test_async_client.post('/api/files/delete_directory', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.CONFLICT
+    assert (test_directory / 'foo').is_dir()
+
+    # Remove tag, directory is deleted recursively.
+    bar.remove_tag(tag)
+    test_session.commit()
+    content = dict(path=str(bar.primary_path.parent))
+    request, response = await test_async_client.post('/api/files/delete_directory', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert not (test_directory / 'foo').exists()

@@ -46,7 +46,7 @@ logger = logger.getChild(__name__)
 
 __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 'refresh_files', 'search_files',
            'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics', 'estimate_search',
-           'move', 'rename', 'remove_directory']
+           'move', 'rename', 'delete_directory']
 
 
 @optional_session
@@ -166,7 +166,7 @@ def delete(*paths: Union[str, pathlib.Path]):
                 raise FileGroupIsTagged(f"Cannot delete {file_group} because it is tagged")
     for path in paths:
         if path.is_dir():
-            remove_directory(path)
+            delete_directory(path)
         else:
             path.unlink()
 
@@ -1073,7 +1073,7 @@ def _move(destination: pathlib.Path, *sources: pathlib.Path) -> List[Tuple[pathl
         plan = do_plan(plan)
         for source in sources:
             if source.is_dir():
-                remove_directory(source)
+                delete_directory(source)
         logger.info(f'Move execution completed')
         return plan
     except Exception as e:
@@ -1084,16 +1084,27 @@ def _move(destination: pathlib.Path, *sources: pathlib.Path) -> List[Tuple[pathl
         directories = sorted(walk(destination), key=lambda i: len(i.parents), reverse=True)
         for path in directories:
             if path.is_dir():
-                remove_directory(path)
+                delete_directory(path)
         # Remove destination only if it did not exist at the start.
         if destination.is_dir() and destination_existed is False:
-            remove_directory(destination)
+            delete_directory(destination)
         raise
 
 
-def remove_directory(directory: pathlib.Path):
-    """Remove a directory (only if it is empty) remove it's Directory record."""
-    if directory.is_dir():
+def delete_directory(directory: pathlib.Path, recursive: bool = False):
+    """Remove a directory, remove it's Directory record.
+
+    Will refuse to delete a directory if it contains Tagged Files."""
+    if recursive:
+        with get_db_session() as session:
+            tagged = session.query(FileGroup) \
+                .filter(FileGroup.primary_path.like(f'{directory}/%')) \
+                .join(TagFile, TagFile.file_group_id == FileGroup.id) \
+                .limit(1).one_or_none()
+            if tagged:
+                raise FileGroupIsTagged()
+        shutil.rmtree(directory)
+    else:
         directory.rmdir()
     with get_db_curs(commit=True) as curs:
         stmt = 'DELETE FROM directory WHERE path=%s'
@@ -1165,7 +1176,7 @@ async def rename_directory(directory: pathlib.Path, new_name: str) -> pathlib.Pa
     paths = list(directory.iterdir())
     await move(new_directory, *paths)
     # Remove the old directory.
-    remove_directory(directory)
+    delete_directory(directory)
 
     return new_directory
 

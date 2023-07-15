@@ -50,18 +50,18 @@
     // Get the current hostname (probably an IP) link to my other ports above.
     let hostname = window.location.hostname;
 
-    let api_a = document.getElementById('map_link');
+    let media_a = document.getElementById('media_link');
+    if (media_a) {
+        let media_url = `http://${hostname}:8080/media`;
+        media_a.setAttribute('href', media_url);
+        media_a.textContent = `by navigating to ${media_url}`;
+    }
+
+    let api_a = document.getElementById('api_link');
     if (api_a) {
         let api_url = `http://${hostname}:8081`;
         api_a.setAttribute('href', api_url);
         api_a.textContent = `by navigating to ${api_url}`;
-    }
-
-    let media_a = document.getElementById('media_link');
-    if (media_a) {
-        let media_url = `http://${hostname}/media`;
-        media_a.setAttribute('href', media_url);
-        media_a.textContent = `by navigating to ${media_url}`;
     }
 
     let map_a = document.getElementById('map_link');
@@ -71,7 +71,7 @@
         map_a.textContent = `by navigating to ${map_url}`;
     }
 
-    let kiwix_a = document.getElementById('map_link');
+    let kiwix_a = document.getElementById('kiwix_link');
     if (kiwix_a) {
         let kiwix_url = `http://${hostname}:8085`;
         kiwix_a.setAttribute('href', kiwix_url);

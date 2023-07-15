@@ -86,6 +86,7 @@ services:
       - ${WEB_HOST-0.0.0.0}:${WEB_PORT-8080}:80
     volumes:
       - './nginx.dev.conf:/etc/nginx/nginx.conf'
+      - './50x.html:/var/www/50x.html'
       - './icon.ico:/etc/nginx/favicon.ico'
       - './icon.png:/etc/nginx/icon.png'
       - './test:/opt/media'

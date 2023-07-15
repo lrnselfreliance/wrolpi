@@ -150,7 +150,7 @@ def test_async_client() -> SanicASGITestClient:
             api_app.blueprint(bp)
         ROUTES_ATTACHED = True
 
-    yield SanicASGITestClient(api_app)
+    return SanicASGITestClient(api_app)
 
 
 @pytest.fixture

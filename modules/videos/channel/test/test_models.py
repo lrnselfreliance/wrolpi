@@ -55,7 +55,7 @@ async def test_nested_channel_directories(test_session, test_async_client, test_
     request, response = await test_async_client.post('/api/videos/channels', content=json.dumps(content))
     assert response.status == HTTPStatus.BAD_REQUEST
     assert response.json['cause'] and \
-           response.json['cause']['error'] == 'The directory is already used by another channel.'
+           response.json['cause']['summary'] == 'The directory is already used by another channel.'
 
     # Channel 3 cannot be above Channel 1's directory.
     content = dict(
@@ -65,4 +65,4 @@ async def test_nested_channel_directories(test_session, test_async_client, test_
     request, response = await test_async_client.post('/api/videos/channels', content=json.dumps(content))
     assert response.status == HTTPStatus.BAD_REQUEST
     assert response.json['cause'] and \
-           response.json['cause']['error'] == 'The directory is already used by another channel.'
+           response.json['cause']['summary'] == 'The directory is already used by another channel.'

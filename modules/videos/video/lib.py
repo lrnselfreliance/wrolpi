@@ -6,7 +6,7 @@ from sqlalchemy.orm.exc import NoResultFound
 from modules.videos.models import Video
 from wrolpi.common import run_after, logger
 from wrolpi.db import get_db_session, optional_session
-from wrolpi.errors import UnknownVideo
+from ..errors import UnknownVideo
 from wrolpi.files.lib import handle_file_group_search_results, tag_names_to_file_group_sub_select
 from ..lib import save_channels_config
 

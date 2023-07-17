@@ -36,8 +36,9 @@ async function apiCall(url, method, body, ms = 60_000) {
         }
         // Request encountered an error.
         let copy = response.clone();
-        let code = (await copy.json())['code'];
-        if (response.status === 403 && code === 17) {
+        const content = await copy.json();
+        const code = content['code'];
+        if (response.status === 403 && code === 'WROL_MODE_ENABLED') {
             toast({
                 type: 'error',
                 title: 'WROL Mode is enabled!',
@@ -234,7 +235,7 @@ export async function downloadChannel(channelId) {
     let response = await apiPost(url);
     if (response.status === 400) {
         const json = await response.json();
-        if (json['code'] === 30) {
+        if (json['code'] === 'INVALID_DOWNLOAD') {
             toast({
                 type: 'error',
                 title: 'Cannot Download!',
@@ -585,7 +586,7 @@ export async function deleteFile(paths) {
         toast({
             type: 'error',
             title: 'Delete error',
-            description: content['message'],
+            description: content['message'] || content['summary'],
             time: 5000,
         });
     }
@@ -614,12 +615,13 @@ export async function setHotspot(on) {
     if (response.status === 204) {
         return null;
     } else {
-        let code = (await response.json())['code'];
-        if (code === 34) {
+        const content = await response.json();
+        const code = content['code'];
+        if (code === 'NATIVE_ONLY') {
             toast({
                 type: 'error',
                 title: 'Unsupported!',
-                description: 'Hotspot is only supported on a Raspberry Pi!',
+                description: 'Hotspot is only supported outside Docker!',
                 time: 5000,
             });
         } else {
@@ -645,8 +647,9 @@ export async function setThrottle(on) {
     if (response.status === 204) {
         return null;
     } else {
-        let code = (await response.json())['code'];
-        if (code === 34) {
+        const content = await response.json();
+        const code = content['code'];
+        if (code === 'NATIVE_ONLY') {
             toast({
                 type: 'error',
                 title: 'Unsupported!',
@@ -810,9 +813,9 @@ export async function deleteTag(id, name) {
     let response = await apiDelete(uri);
     if (response.status === 400) {
         const content = await response.json();
-        if (content['code'] === 38) {
+        if (content['code'] === 'USED_TAG') {
             toast({
-                type: 'error', title: 'Error!', description: content['message'], time: 5000,
+                type: 'error', title: 'Error!', description: content['error'] || content['summary'], time: 5000,
             })
         }
     } else if (response.status !== 204) {

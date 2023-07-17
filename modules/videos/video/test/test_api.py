@@ -8,7 +8,7 @@ import pytest
 from modules.videos.models import Video
 from modules.videos.video.lib import get_video_for_app
 from wrolpi.dates import now
-from wrolpi.errors import API_ERRORS, WROLModeEnabled
+from wrolpi.errors import WROLModeEnabled
 
 
 def test_get_video_prev_next(test_session, channel_factory, video_factory):
@@ -133,26 +133,26 @@ async def test_wrol_mode(test_async_client, test_directory, simple_channel, simp
     # Can't create, update, or delete a channel.
     _, resp = await test_async_client.post('/api/videos/channels', content=channel)
     assert resp.status_code == HTTPStatus.FORBIDDEN
-    assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+    assert resp.json['code'] == 'WROL_MODE_ENABLED'
     _, resp = await test_async_client.put(f'/api/videos/channels/{simple_channel.id}', content=channel)
     assert resp.status_code == HTTPStatus.FORBIDDEN
-    assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+    assert resp.json['code'] == 'WROL_MODE_ENABLED'
     _, resp = await test_async_client.delete(f'/api/videos/channels/{simple_channel.id}')
     assert resp.status_code == HTTPStatus.FORBIDDEN
-    assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+    assert resp.json['code'] == 'WROL_MODE_ENABLED'
 
     # Can't delete a video
     _, resp = await test_async_client.delete(f'/api/videos/video/{simple_video.id}')
     assert resp.status_code == HTTPStatus.FORBIDDEN
-    assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+    assert resp.json['code'] == 'WROL_MODE_ENABLED'
 
     # Can't refresh or download
     _, resp = await test_async_client.post('/api/files/refresh')
     assert resp.status_code == HTTPStatus.FORBIDDEN
-    assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+    assert resp.json['code'] == 'WROL_MODE_ENABLED'
     _, resp = await test_async_client.post(f'/api/videos/channels/download/{simple_channel.id}')
     assert resp.status_code == HTTPStatus.FORBIDDEN
-    assert resp.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+    assert resp.json['code'] == 'WROL_MODE_ENABLED'
 
     # THE REST OF THESE METHODS ARE ALLOWED
     content = dict(video_id=simple_video.id, tag_name=tag.name)

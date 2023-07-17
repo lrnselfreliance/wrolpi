@@ -891,7 +891,7 @@ export const useUploadFile = () => {
                 } else if (xhr.status === 400) {
                     handleProgress(file.name, totalChunks, totalChunks, 'conflicting', file.type);
                     const data = JSON.parse(xhr.responseText);
-                    if (data['code'] === 41) {
+                    if (data['code'] === 'FILE_UPLOAD_FAILED') {
                         console.error('File already exists. Giving up.');
                     }
                 } else {

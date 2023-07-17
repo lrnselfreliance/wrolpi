@@ -17,8 +17,7 @@ from wrolpi.captions import FFMPEG_BIN
 from wrolpi.cmd import FFPROBE_BIN
 from wrolpi.common import logger, get_media_directory
 from wrolpi.db import get_db_session, get_db_curs
-from wrolpi.errors import ChannelNameConflict, ChannelURLConflict, \
-    ChannelDirectoryConflict, ChannelSourceIdConflict
+from .errors import ChannelNameConflict, ChannelURLConflict, ChannelDirectoryConflict, ChannelSourceIdConflict
 from wrolpi.vars import DEFAULT_FILE_PERMISSIONS
 from .models import Channel
 

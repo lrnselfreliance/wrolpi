@@ -3,7 +3,7 @@ from functools import partial
 from typing import Dict
 
 from wrolpi.common import chunks, remove_whitespace, logger
-from wrolpi.errors import InvalidOTP, InvalidPlaintext, InvalidCiphertext
+from modules.otp.errors import InvalidOTP, InvalidPlaintext, InvalidCiphertext
 
 # These are the only characters we support.
 

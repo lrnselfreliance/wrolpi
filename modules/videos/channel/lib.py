@@ -8,7 +8,8 @@ from sqlalchemy.orm.exc import NoResultFound
 from wrolpi.common import run_after, logger, \
     get_media_directory
 from wrolpi.db import get_db_curs, optional_session
-from wrolpi.errors import UnknownChannel, UnknownDirectory, APIError, ValidationError, InvalidDownload
+from wrolpi.errors import UnknownDirectory, APIError, ValidationError, InvalidDownload
+from ..errors import UnknownChannel
 from .. import schema
 from ..common import check_for_channel_conflicts
 from ..lib import save_channels_config

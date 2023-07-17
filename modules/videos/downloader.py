@@ -18,7 +18,8 @@ from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.db import optional_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
-from wrolpi.errors import UnknownChannel, ChannelURLEmpty, UnrecoverableDownloadError
+from wrolpi.errors import UnrecoverableDownloadError
+from .errors import UnknownChannel, ChannelURLEmpty
 from wrolpi.files.lib import glob_shared_stem
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel

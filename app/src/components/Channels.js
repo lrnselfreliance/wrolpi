@@ -187,19 +187,19 @@ function ChannelPage({create, header}) {
             // Some error occurred.
             let error = await response.json();
             let cause = error.cause;
-            if (error.code === 3 || (cause && cause.code === 3)) {
+            if (error.code === 'UNKNOWN_DIRECTORY' || (cause && cause.code === 'UNKNOWN_DIRECTORY')) {
                 setErrorMessage(
                     'Invalid directory',
                     'This directory does not exist.',
                     'directory',
                 );
-            } else if (cause && cause.code === 7) {
+            } else if (cause && cause.code === 'CHANNEL_DIRECTORY_CONFLICT') {
                 setErrorMessage(
                     'Invalid directory',
                     'This directory is already used by another channel',
                     'directory',
                 );
-            } else if (cause && cause.code === 5) {
+            } else if (cause && cause.code === 'CHANNEL_NAME_CONFLICT') {
                 setErrorMessage(
                     'Invalid name',
                     'This channel name is already taken',

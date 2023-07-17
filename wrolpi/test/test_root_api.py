@@ -7,9 +7,9 @@ from mock import mock
 
 from wrolpi.admin import HotspotStatus
 from wrolpi.common import get_config
-from wrolpi.db import get_db_session
 from wrolpi.downloader import Download, get_download_manager_config
-from wrolpi.root_api import api_app
+from wrolpi.errors import ValidationError, SearchEmpty
+from wrolpi.root_api import json_error_handler
 from wrolpi.test.common import skip_circleci, assert_dict_contains
 
 
@@ -193,7 +193,7 @@ def test_hotspot_settings(test_session, test_client, test_config):
         mock_admin.enable_hotspot.return_value = False
         request, response = test_client.patch('/api/settings', content=json.dumps({'hotspot_status': True}))
         assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR, response.json
-        assert response.json['code'] == 35
+        assert response.json['code'] == 'HOTSPOT_ERROR'
         mock_admin.enable_hotspot.assert_called_once()
 
         # Turning off the hotspot succeeds.
@@ -207,7 +207,7 @@ def test_hotspot_settings(test_session, test_client, test_config):
         mock_admin.disable_hotspot.return_value = False
         request, response = test_client.patch('/api/settings', content=json.dumps({'hotspot_status': False}))
         assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR, response.json
-        assert response.json['code'] == 35
+        assert response.json['code'] == 'HOTSPOT_ERROR'
         mock_admin.disable_hotspot.assert_called_once()
 
         mock_admin.enable_hotspot.reset_mock()
@@ -223,6 +223,16 @@ def test_hotspot_settings(test_session, test_client, test_config):
         assert config.hotspot_ssid == 'new ssid'
         # Changing the password restarts the hotspot.
         mock_admin.enable_hotspot.assert_called_once()
+
+        # Hotspot password must be at least 8 characters.
+        mock_admin.disable_hotspot.return_value = True
+        content = {'hotspot_password': '1234567', 'hotspot_ssid': 'new ssid'}
+        request, response = test_client.patch('/api/settings', content=json.dumps(content))
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json == {'code': 'HOTSPOT_PASSWORD_TOO_SHORT',
+                                 'error': '',
+                                 'summary': 'Hotspot password must be at least 8 characters'
+                                 }
 
 
 @skip_circleci
@@ -412,3 +422,42 @@ def test_search_str_estimate(test_session, test_client, test_directory, test_zim
                              estimate=1,
                              path=str(test_zim.path.relative_to(test_directory)),
                          ))
+
+
+def test_recursive_errors():
+    """Errors are reported recursively."""
+
+    def one():
+        raise ValueError('Some error outside WROLPi')
+
+    def two():
+        try:
+            one()
+        except Exception as e:
+            raise SearchEmpty('A more specific error') from e
+
+    def three():
+        try:
+            two()
+        except Exception as e:
+            raise ValidationError('A broad error') from e
+
+    try:
+        three()
+    except Exception as e:
+        response = json_error_handler(None, e)
+        assert json.loads(response.body.decode()) == {
+            'code': 'VALIDATION_ERROR',
+            'error': 'A broad error',
+            'summary': 'Could not validate the contents of the request',
+            'cause': {
+                'code': 'SEARCH_EMPTY',
+                'error': 'A more specific error',
+                'summary': 'Search is empty, search_str must have content.',
+                'cause': {
+                    'code': None,
+                    'error': 'Some error outside WROLPi',
+                    'summary': None,
+                },
+            },
+        }

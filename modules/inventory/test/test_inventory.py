@@ -10,7 +10,7 @@ from pint import Quantity
 
 from wrolpi.common import Base
 from wrolpi.db import get_db_session
-from wrolpi.errors import NoInventories, InventoriesVersionMismatch
+from ..errors import NoInventories, InventoriesVersionMismatch
 from wrolpi.test.common import PytestCase
 from .. import init
 from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \

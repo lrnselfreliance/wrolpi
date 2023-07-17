@@ -15,7 +15,7 @@ from wrolpi.common import Base, extract_html_text, logger, get_relative_to_media
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs
 from wrolpi.downloader import Download, download_manager
-from wrolpi.errors import UnknownZimEntry, UnknownZimTagEntry
+from modules.zim.errors import UnknownZimEntry, UnknownZimTagEntry
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag, tag_names_to_zim_sub_select

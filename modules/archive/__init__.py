@@ -10,7 +10,8 @@ from wrolpi.common import logger, register_modeler, register_refresh_cleanup, li
     slow_logger
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
-from wrolpi.errors import UnrecoverableDownloadError, InvalidArchive
+from wrolpi.errors import UnrecoverableDownloadError
+from .errors import InvalidArchive
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST
 from . import lib

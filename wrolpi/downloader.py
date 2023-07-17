@@ -62,17 +62,17 @@ class Download(ModelHelper, Base):  # noqa
     url = Column(String, nullable=False)
 
     attempts = Column(Integer, default=0)
-    downloader = Column(Text)
-    error = Column(Text)
-    frequency = Column(Integer)
-    info_json = Column(JSONB)
+    downloader = Column(Text)  # 'videos', 'archive', 'kiwix_zim', etc.
+    sub_downloader = Column(Text)  # The downloader any returned downloads should be sent.
+    error = Column(Text)  # traceback from an error during downloading.
+    frequency = Column(Integer)  # seconds between re-downloading.
+    info_json = Column(JSONB)  # information retrieve WHILE downloading (from yt-dlp)
     last_successful_download = Column(TZDateTime)
-    location = Column(Text)
+    location = Column(Text)  # Relative App URL where the item is downloaded
     next_download = Column(TZDateTime)
-    settings = Column(JSONB)
-    status = Column(String, default='new')
-    sub_downloader = Column(Text)
-    _manager = None
+    settings = Column(JSONB)  # information about how the download should happen (destination, etc.)
+    status = Column(String, default='new')  # 'new', 'pending', 'complete', 'failed', 'deferred'
+    _manager: 'DownloadManager' = None
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

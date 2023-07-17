@@ -8,7 +8,7 @@ from pint import Quantity
 from wrolpi import before_startup
 from wrolpi.common import logger, Base, ConfigFile
 from wrolpi.db import get_db_session
-from wrolpi.errors import NoInventories, InventoriesVersionMismatch
+from .errors import NoInventories, InventoriesVersionMismatch
 from .inventory import unit_registry, get_items, get_inventories, increment_inventories_version, \
     get_inventories_version
 from .models import Inventory, Item

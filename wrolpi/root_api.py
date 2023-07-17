@@ -24,7 +24,8 @@ from wrolpi.common import logger, get_config, wrol_mode_enabled, Base, get_media
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host
 from wrolpi.dates import now, strptime
 from wrolpi.downloader import download_manager
-from wrolpi.errors import WROLModeEnabled, API_ERRORS, APIError, ValidationError, HotspotError, InvalidDownload
+from wrolpi.errors import WROLModeEnabled, APIError, HotspotError, InvalidDownload, \
+    HotspotPasswordTooShort
 from wrolpi.events import get_events, Events
 from wrolpi.files.lib import get_file_statistics, estimate_search
 from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
@@ -174,6 +175,9 @@ def update_settings(_: Request, body: schema.SettingsRequest):
         # Enable WROL Mode
         enable_wrol_mode()
         return response.empty()
+
+    if body.hotspot_password and len(body.hotspot_password) < 8:
+        raise HotspotPasswordTooShort()
 
     # Remove any keys with None values, then save the config.
     config = {k: v for k, v in body.__dict__.items() if v is not None}
@@ -547,23 +551,31 @@ def json_response(*a, **kwargs) -> HTTPResponse:
     return resp
 
 
-def json_error_handler(request: Request, exception: Exception):
-    error = API_ERRORS[type(exception)]
-    if isinstance(exception, ValidationError):
-        body = dict(error='Could not validate the contents of the request', code=error['code'])
+def get_error_json(exception: BaseException):
+    """Return a JSON representation of the Exception instance."""
+    if isinstance(exception, APIError):
+        # Error especially defined for WROLPi.
+        body = dict(error=str(exception), summary=exception.summary, code=exception.code)
     else:
-        body = dict(message=str(exception), api_error=error['message'], code=error['code'])
-    if cause := exception.__cause__:
-        try:
-            cause = API_ERRORS[type(cause)]
-            body['cause'] = dict(error=cause['message'], code=cause['code'])
-        except KeyError:
-            # Cause was not an APIError.
-            logger.error(f'Could not find cause {cause}')
-    logger.debug(f'API returning JSON error {exception=}'
-                 f' error={body.get("api_error") or body.get("error")}'
-                 f' code={body["code"]}')
-    return json_response(body, error['status'])
+        # Not a WROLPi APIError error.
+        body = dict(
+            error=str(exception),
+            summary=None,
+            code=None,
+        )
+    if exception.__cause__:
+        # This exception was caused by another, follow the stack.
+        body['cause'] = get_error_json(exception.__cause__)
+    return body
+
+
+def json_error_handler(request: Request, exception: APIError):
+    body = get_error_json(exception)
+    error = repr(str(body["error"]))
+    summary = repr(str(body["summary"]))
+    code = body['code']
+    logger.debug(f'API returning JSON error {exception=} {error=} {summary=} {code=}')
+    return json_response(body, exception.status)
 
 
 api_app.error_handler.add(APIError, json_error_handler)

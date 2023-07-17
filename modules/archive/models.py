@@ -11,7 +11,7 @@ from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi.common import ModelHelper, Base, logger
 from wrolpi.dates import TZDateTime
-from wrolpi.errors import InvalidArchive
+from modules.archive import InvalidArchive
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag, TagFile

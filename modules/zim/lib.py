@@ -17,7 +17,7 @@ from wrolpi.common import register_modeler, logger, extract_html_text, extract_h
     register_refresh_cleanup, background_task
 from wrolpi.db import get_db_session, optional_session, get_db_curs
 from wrolpi.downloader import DownloadFrequency
-from wrolpi.errors import UnknownZim, UnknownZimSubscription
+from modules.zim.errors import UnknownZim, UnknownZimSubscription
 from wrolpi.files.lib import refresh_files
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, DOCKERIZED

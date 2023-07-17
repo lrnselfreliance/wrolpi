@@ -4,7 +4,7 @@ from unittest import mock
 
 import pytest
 
-from wrolpi.errors import API_ERRORS, WROLModeEnabled
+from wrolpi.errors import WROLModeEnabled
 from wrolpi.files import lib
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
@@ -153,7 +153,7 @@ async def test_delete_wrol_mode(test_async_client, wrol_mode_fixture):
 
     request, response = await test_async_client.post('/api/files/delete', content=json.dumps({'paths': ['foo', ]}))
     assert response.status_code == HTTPStatus.FORBIDDEN
-    assert response.json['code'] == API_ERRORS[WROLModeEnabled]['code']
+    assert response.json['code'] == 'WROL_MODE_ENABLED'
 
 
 def test_files_search(test_session, test_client, make_files_structure, assert_files_search):

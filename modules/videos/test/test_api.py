@@ -150,7 +150,7 @@ def test_api_download_channel(test_session, test_client, simple_channel):
     # simple_channel does not have a download record.
     request, response = test_client.post(f'/api/videos/channels/download/{simple_channel.id}')
     assert response.status_code == HTTPStatus.BAD_REQUEST, response.json
-    assert 'not have a download' in response.json['message']
+    assert 'not have a download' in response.json['error']
 
     # Add a download frequency to the channel, this should also create a download.
     simple_channel.update(dict(download_frequency=DownloadFrequency.daily))

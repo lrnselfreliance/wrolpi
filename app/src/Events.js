@@ -16,6 +16,13 @@ function handleEvents(events) {
         const {event, message, subject, dt, url} = e;
         document.dispatchEvent(new CustomEvent(apiEventName, {detail: e}));
 
+        if (event === 'directory_refresh') {
+            eventToast(
+                'Refresh started',
+                message,
+            );
+        }
+
         if (subject && newestEvents[subject] && newestEvents[subject] > dt) {
             console.debug(`Already handled newer event of "${subject}".`);
             return;
@@ -35,6 +42,18 @@ function handleEvents(events) {
                 'info',
                 10_000,
                 () => window.open(url, '_self'));
+        }
+
+        if (event === 'deleted') {
+            eventToast('Successful Delete', message, 'warning');
+        }
+
+        if (event === 'created') {
+            eventToast('Successful Creation', message, 'success');
+        }
+
+        if (event === 'tagged') {
+            eventToast('Successful tag', message, 'success');
         }
 
         if (subject) {

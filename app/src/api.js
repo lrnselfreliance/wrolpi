@@ -244,6 +244,7 @@ export async function downloadChannel(channelId) {
             });
         }
     }
+    return response;
 }
 
 export async function refreshChannel(channelId) {

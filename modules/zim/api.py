@@ -115,14 +115,15 @@ async def get_zim_subscriptions(_: Request):
 @bp.post('/subscribe')
 @openapi.definition(
     summary='Subscribe to a particular Kiwix Zim',
-    body=schema.TagZimSubscribe,
+    body=schema.ZimSubscribeRequest,
 )
-@validate(schema.TagZimSubscribe)
-async def post_zim_subscribe(_: Request, body: schema.TagZimSubscribe):
+@validate(schema.ZimSubscribeRequest)
+async def post_zim_subscribe(_: Request, body: schema.ZimSubscribeRequest):
     await lib.subscribe(body.name, body.language)
     if download_manager.disabled.is_set() or download_manager.stopped.is_set():
         # Downloads are disabled, warn the user.
         Events.send_downloads_disabled('Download created. But, downloads are disabled.')
+    Events.send_created(f'Zim subscription created')
     return response.empty(HTTPStatus.CREATED)
 
 
@@ -132,6 +133,7 @@ async def post_zim_subscribe(_: Request, body: schema.TagZimSubscribe):
 )
 async def delete_zim_subscription(_: Request, subscription_id: int):
     await lib.unsubscribe(subscription_id)
+    Events.send_deleted(f'Zim subscription deleted')
     return response.empty(HTTPStatus.NO_CONTENT)
 
 
@@ -151,6 +153,8 @@ async def get_outdated_zims(_: Request):
     summary='Remove all outdated Zims, if any.'
 )
 async def delete_outdated_zims(_: Request):
-    await lib.remove_outdated_zim_files()
-    lib.flag_outdated_zim_files()
+    deleted_count = await lib.remove_outdated_zim_files()
+    if deleted_count:
+        lib.flag_outdated_zim_files()
+        Events.send_deleted(f'Deleted {deleted_count} outdated Zims')
     return response.empty(HTTPStatus.NO_CONTENT)

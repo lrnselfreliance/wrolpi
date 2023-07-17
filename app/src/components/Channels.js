@@ -219,7 +219,19 @@ function ChannelPage({create, header}) {
 
     const handleDownloadChannel = async (e) => {
         e.preventDefault();
-        return await downloadChannel(channelId);
+        try {
+            const response = await downloadChannel(channelId);
+            if (response.status === 204) {
+                toast({
+                    type: 'success',
+                    title: 'Download Created',
+                    description: 'Channel download has been started.',
+                    time: 5000,
+                });
+            }
+        } catch (e) {
+            console.error(e);
+        }
     }
 
     const handleRefreshChannel = async (e) => {

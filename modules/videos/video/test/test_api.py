@@ -155,9 +155,9 @@ async def test_wrol_mode(test_async_client, test_directory, simple_channel, simp
     assert resp.json['code'] == 'WROL_MODE_ENABLED'
 
     # THE REST OF THESE METHODS ARE ALLOWED
-    content = dict(video_id=simple_video.id, tag_name=tag.name)
-    _, resp = await test_async_client.post('/api/videos/tag', content=json.dumps(content))
-    assert resp.status_code == HTTPStatus.NO_CONTENT
+    content = dict(file_group_id=simple_video.file_group_id, tag_name=tag.name)
+    _, resp = await test_async_client.post('/api/files/tag', content=json.dumps(content))
+    assert resp.status_code == HTTPStatus.CREATED
 
     assert test_download_manager.stopped.is_set()
 

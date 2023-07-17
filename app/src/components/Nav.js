@@ -17,8 +17,8 @@ const links = [
         links: [
             {text: 'Inventory', to: '/inventory', key: 'inventory'},
             {to: '/more/otp', text: 'One Time Pad', end: true},
-            {to: '/more/statistics', text: 'Statistics', end: true},
             {to: '/more/vin', text: 'VIN Decoder', end: true},
+            {to: '/more/statistics', text: 'Statistics', end: true},
         ]
     },
 ];

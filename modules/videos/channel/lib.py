@@ -176,22 +176,25 @@ def create_channel(session: Session, data: schema.ChannelPostRequest, return_dic
 def delete_channel(session: Session, *, channel_id: int):
     try:
         channel = session.query(Channel).filter_by(id=channel_id).one()
+        channel_dict = channel.dict()
     except NoResultFound:
         raise UnknownChannel()
 
     channel.delete_with_videos()
 
     session.commit()
+    return channel_dict
 
 
 def download_channel(id_: int):
     """Create a Download record for a Channel's entire catalog.  Start downloading."""
-    channel = get_channel(channel_id=id_, return_dict=False)
+    channel: Channel = get_channel(channel_id=id_, return_dict=False)
     session = Session.object_session(channel)
     download = channel.get_download()
     if not download:
         raise InvalidDownload(f'Channel {channel.name} does not have a download!')
     download.renew(reset_attempts=True)
+    logger.info(f'Created download for {channel} with {download}')
     session.commit()
 
 

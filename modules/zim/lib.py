@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound  # noqa
 
 from modules.zim import kiwix
+from modules.zim.errors import UnknownZim, UnknownZimSubscription
 from modules.zim.kiwix import KIWIX_CATALOG
 from modules.zim.models import Zim, Zims, TagZimEntry, ZimSubscription
 from wrolpi import flags
@@ -17,7 +18,6 @@ from wrolpi.common import register_modeler, logger, extract_html_text, extract_h
     register_refresh_cleanup, background_task
 from wrolpi.db import get_db_session, optional_session, get_db_curs
 from wrolpi.downloader import DownloadFrequency
-from modules.zim.errors import UnknownZim, UnknownZimSubscription
 from wrolpi.files.lib import refresh_files
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, DOCKERIZED
@@ -449,12 +449,14 @@ def find_outdated_zim_files(path: pathlib.Path = None) -> Tuple[List[pathlib.Pat
     return sorted(outdated_files), sorted(current_files)
 
 
-async def remove_outdated_zim_files(path: pathlib.Path = None):
+async def remove_outdated_zim_files(path: pathlib.Path = None) -> int:
     """Deletes all old Zim files."""
     outdated, _ = find_outdated_zim_files(path)
     logger.info(f'Deleting {len(outdated)} outdated Zim files: {outdated}')
+    deleted_count = 0
     for file in outdated:
         file.unlink()
+        deleted_count += 1
 
     if PYTEST:
         await refresh_files(outdated)
@@ -462,6 +464,8 @@ async def remove_outdated_zim_files(path: pathlib.Path = None):
         background_task(refresh_files(outdated))
 
     await restart_kiwix()
+
+    return deleted_count
 
 
 @register_refresh_cleanup

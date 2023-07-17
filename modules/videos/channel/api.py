@@ -8,13 +8,15 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import logger, wrol_mode_check, make_media_directory, \
-    get_media_directory, run_after
-from ..errors import UnknownChannel
+    get_media_directory, run_after, get_relative_to_media_directory
+from wrolpi.downloader import download_manager
+from wrolpi.events import Events
 from wrolpi.root_api import json_response
 from wrolpi.schema import JSONErrorResponse
 from wrolpi.vars import PYTEST
 from . import lib
 from .. import schema, Channel
+from ..errors import UnknownChannel
 from ..lib import save_channels_config
 
 channel_bp = Blueprint('Channel', url_prefix='/api/videos/channels')
@@ -59,6 +61,8 @@ def channel_post(_: Request, body: schema.ChannelPostRequest):
     if not PYTEST:
         asyncio.ensure_future(channel.refresh_files())
 
+    Events.send_created(f'Created Channel: {channel.name}')
+
     return response.json({'success': 'Channel created successfully'}, HTTPStatus.CREATED,
                          {'Location': f'/api/videos/channels/{channel.id}'})
 
@@ -85,7 +89,8 @@ def channel_update(_: Request, channel_id: int, body: schema.ChannelPutRequest):
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
 def channel_delete(_: Request, channel_id: int):
-    lib.delete_channel(channel_id=channel_id)
+    channel = lib.delete_channel(channel_id=channel_id)
+    Events.send_deleted(f'Deleted Channel: {channel["name"]}')
     return response.raw('', HTTPStatus.NO_CONTENT)
 
 
@@ -99,6 +104,8 @@ def channel_refresh(_: Request, channel_id: int):
         raise UnknownChannel()
 
     asyncio.ensure_future(channel.refresh_files())
+    directory = get_relative_to_media_directory(channel.directory)
+    Events.send_directory_refresh(f'Refreshing: {directory}')
     return response.empty()
 
 
@@ -108,4 +115,7 @@ def channel_refresh(_: Request, channel_id: int):
 @wrol_mode_check
 def channel_download(_: Request, channel_id: int):
     lib.download_channel(channel_id)
+    if download_manager.disabled.is_set():
+        # Warn the user that downloads are disabled.
+        Events.send_downloads_disabled('Channel download created. But downloads are disabled.')
     return response.empty()

@@ -84,7 +84,7 @@ class ZimSubscriptions:
 
 
 @dataclass
-class TagZimSubscribe:
+class ZimSubscribeRequest:
     name: str
     language: str
 

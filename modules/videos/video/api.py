@@ -7,6 +7,7 @@ from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import logger, wrol_mode_check, run_after
 from wrolpi.errors import InvalidOrderBy, ValidationError
+from wrolpi.events import Events
 from wrolpi.root_api import json_response
 from wrolpi.schema import JSONErrorResponse
 from . import lib
@@ -66,4 +67,6 @@ def video_delete(_: Request, video_ids: str):
         raise ValidationError('Unable to parse video ids')
 
     lib.delete_videos(*video_ids)
+
+    Events.send_deleted(f'Deleted {len(video_ids)} videos')
     return response.raw('', HTTPStatus.NO_CONTENT)

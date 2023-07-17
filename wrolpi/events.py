@@ -53,6 +53,18 @@ class Events:
     def send_user_notify(message: str, url: str = None):
         send_event('user_notify_message', message, subject='user_notify', url=url)
 
+    @staticmethod
+    def send_directory_refresh(message: str = None):
+        send_event('directory_refresh', message, subject='refresh')
+
+    @staticmethod
+    def send_deleted(message: str = None):
+        send_event('deleted', message, subject='deleted')
+
+    @staticmethod
+    def send_created(message: str = None):
+        send_event('created', message, subject='created')
+
 
 def log_event(event: str, message: str = None, action: str = None, subject: str = None):
     log = f'{event=}'

@@ -5,6 +5,7 @@ import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {DarkModeToggle, HotspotStatusIcon, NAME} from "./Common";
 import {ShareButton} from "./Share";
+import {useWROLMode} from "../hooks/customHooks";
 
 const links = [
     {text: 'Videos', to: '/videos', key: 'videos'},
@@ -56,11 +57,10 @@ function NavIcon(props) {
 }
 
 export function NavBar() {
-    const {status} = React.useContext(StatusContext);
-    const wrol_mode = status ? status['wrol_mode'] : null;
+    const wrolModeEnabled = useWROLMode();
     const wrolpiIcon = <img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/>;
     const name = NAME || wrolpiIcon;
-    const topNavText = wrol_mode ? <>{name}&nbsp; <Icon name='lock'/></> : name;
+    const topNavText = wrolModeEnabled ? <>{name}&nbsp; <Icon name='lock'/></> : name;
     const {i} = React.useContext(ThemeContext);
 
     const homeLink = <NavLink className='item' to='/' style={{paddingTop: 0, paddingBottom: 0}}>

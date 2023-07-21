@@ -15,6 +15,7 @@ import {
     TableRow
 } from "semantic-ui-react";
 import {
+    APIButton,
     BackButton,
     CardLink,
     cardTitleWrapper,
@@ -45,10 +46,9 @@ import {Media, ThemeContext} from "../contexts/contexts";
 import {Button, Card, CardIcon, Header, Loader, Placeholder, Segment} from "./Theme";
 import {SortableTable} from "./SortableTable";
 import {taggedImageLabel, TagsSelector} from "../Tags";
+import {toast} from "react-semantic-toasts-2";
 
 function ArchivePage() {
-    const [deleteOpen, setDeleteOpen] = useState(false);
-    const [updateOpen, setUpdateOpen] = useState(false);
     const navigate = useNavigate();
     const {archiveId} = useParams();
     const {archiveFile, history, fetchArchive} = useArchive(archiveId);
@@ -88,35 +88,41 @@ function ArchivePage() {
         null;
 
     const localDeleteArchive = async () => {
-        setDeleteOpen(false);
         await deleteArchives([data.id]);
+        toast({
+            type: 'success',
+            title: 'Archive Deleted',
+            description: 'Archive was successfully deleted.',
+            time: 2000,
+        })
         navigate(-1);
     }
     const localUpdateArchive = async () => {
-        setUpdateOpen(false);
         await postDownload(data.url, 'archive');
+        toast({
+            type: 'success',
+            title: 'Archive Downloading',
+            description: 'Archive update has been scheduled.',
+            time: 2000,
+        })
     }
 
-    const updateButton = (<>
-        <Button color='green' onClick={() => setUpdateOpen(true)} content='Update'/>
-        <Confirm
-            open={updateOpen}
-            content='Download the latest version of this URL?'
-            confirmButton='Update'
-            onCancel={() => setUpdateOpen(false)}
-            onConfirm={localUpdateArchive}
-        />
-    </>);
-    const deleteButton = (<>
-        <Button color='red' onClick={() => setDeleteOpen(true)} content='Delete' aria-label='Delete'/>
-        <Confirm
-            open={deleteOpen}
-            content='Are you sure you want to delete this archive? All files will be deleted'
-            confirmButton='Delete'
-            onCancel={() => setDeleteOpen(false)}
-            onConfirm={localDeleteArchive}
-        />
-    </>);
+    const updateButton = <APIButton
+        text='Update'
+        color='green'
+        confirmContent='Download the latest version of this URL?'
+        confirmButton='Update'
+        onClick={localUpdateArchive}
+        obeyWROLMode={true}
+    >Update</APIButton>;
+    const deleteButton = <APIButton
+        text='Delete'
+        color='red'
+        confirmContent='Are you sure you want to delete this archive? All files will be deleted'
+        confirmButton='Delete'
+        onClick={localDeleteArchive}
+        obeyWROLMode={true}
+    >Delete</APIButton>;
 
     let historyList = <Loader active/>;
     if (history && history.length === 0) {
@@ -323,7 +329,7 @@ export function SearchDomain() {
     return <></>
 }
 
-function Archives() {
+function ArchivesPage() {
     const [selectedArchives, setSelectedArchives] = useState([]);
     const [deleteOpen, setDeleteOpen] = useState(false);
 
@@ -497,7 +503,7 @@ export function ArchiveRoute() {
     return <PageContainer>
         <TabLinks links={links}/>
         <Routes>
-            <Route path='/' element={<Archives/>}/>
+            <Route path='/' element={<ArchivesPage/>}/>
             <Route path='domains' element={<DomainsPage/>}/>
             <Route path=':archiveId' element={<ArchivePage/>}/>
         </Routes>

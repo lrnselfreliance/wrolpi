@@ -54,7 +54,7 @@ function CoinRow({header, qrCodeValue, address, buttonColor}) {
     </>
 }
 
-export function Donate() {
+export function DonatePage() {
     useTitle('Donate');
 
     return <PageContainer>

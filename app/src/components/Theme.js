@@ -173,11 +173,11 @@ export function Accordion(props) {
     return <SAccordion {...props}/>
 }
 
-export function Button(props) {
+export const Button = React.forwardRef((props, ref) => {
     const {i, inverted} = useContext(ThemeContext);
     props = defaultGrey({...i, ...props}, inverted);
-    return <SButton {...props}/>
-}
+    return <SButton ref={ref} {...props}/>
+});
 
 export function Divider({...props}) {
     const {i} = useContext(ThemeContext);

@@ -82,7 +82,13 @@ export async function createChannel(channel) {
 }
 
 export async function deleteChannel(channelId) {
-    return apiDelete(`${VIDEOS_API}/channels/${channelId}`);
+    const response = await apiDelete(`${VIDEOS_API}/channels/${channelId}`);
+    if (response.status !== 204) {
+        const content = await response.json();
+        console.error(content);
+        throw Error(content);
+    }
+    return response;
 }
 
 export async function getChannels() {
@@ -155,16 +161,13 @@ export async function deleteVideos(videoIds) {
             time: 5000,
         });
     }
-    console.debug(`Deleting Videos: ${videoIds}`);
+    console.info(`Deleting Videos: ${videoIds}`);
     const i = videoIds.join(',');
     let response = await apiDelete(`${VIDEOS_API}/video/${i}`);
     if (response.status !== 204) {
-        toast({
-            type: 'error',
-            title: 'Unexpected server response',
-            description: 'Failed to delete videos.  See server logs.',
-            time: 5000,
-        });
+        const content = response.json();
+        console.error(content);
+        throw Error(content);
     }
 }
 
@@ -249,7 +252,7 @@ export async function downloadChannel(channelId) {
 
 export async function refreshChannel(channelId) {
     let url = `${VIDEOS_API}/channels/refresh/${channelId}`;
-    await fetch(url, {method: 'POST'});
+    return await fetch(url, {method: 'POST'});
 }
 
 export async function encryptOTP(otp, plaintext) {
@@ -361,15 +364,13 @@ export async function deleteArchives(archiveIds) {
             time: 5000,
         });
     }
-    console.debug(`Deleting Archives: ${archiveIds}`);
+    console.log(`Deleting Archives: ${archiveIds}`);
     let i = archiveIds.join(',');
-    try {
-        return await apiDelete(`${API_URI}/archive/${i}`);
-    } catch (e) {
-        console.error(e);
-        toast({
-            type: 'error', title: 'Unexpected server response', description: 'Unable to delete archives', time: 5000,
-        });
+    const response = await apiDelete(`${API_URI}/archive/${i}`);
+    if (response.status !== 204) {
+        const content = await response.json();
+        console.debug(content);
+        throw Error(content['error']);
     }
 }
 
@@ -462,7 +463,11 @@ export async function postDownload(urls, downloader, frequency, sub_downloader, 
         body['tag_names'] = tagNames;
     }
     let response = await apiPost(`${API_URI}/download`, body);
-    return response;
+    if (response.status !== 204) {
+        const content = await response.json();
+        console.error(content);
+        throw Error(content['error']);
+    }
 }
 
 export async function killDownload(download_id) {

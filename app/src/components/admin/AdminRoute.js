@@ -5,7 +5,7 @@ import {PageContainer, TabLinks, Toggle} from "../Common";
 import {Route, Routes} from "react-router-dom";
 import {ThemeContext} from "../../contexts/contexts";
 import {Header, Loader, Segment} from "../Theme";
-import {Downloads} from "./Downloads";
+import {DownloadsPage} from "./Downloads";
 import {Settings} from "./Settings";
 import {Status} from "./Status";
 
@@ -65,7 +65,7 @@ class WROLMode extends React.Component {
     }
 }
 
-export default function Admin() {
+export default function AdminRoute() {
 
     const links = [
         {text: 'Downloads', to: '/admin', key: 'admin', end: true},
@@ -77,7 +77,7 @@ export default function Admin() {
     return <PageContainer>
         <TabLinks links={links}/>
         <Routes>
-            <Route path='/' exact element={<Downloads/>}/>
+            <Route path='/' exact element={<DownloadsPage/>}/>
             <Route path='settings' exact element={<Settings/>}/>
             <Route path='status' exact element={<Status/>}/>
             <Route path='wrol' exact element={<WROLMode/>}/>

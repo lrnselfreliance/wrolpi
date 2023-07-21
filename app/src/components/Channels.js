@@ -14,6 +14,7 @@ import {
 } from "semantic-ui-react";
 import {createChannel, deleteChannel, downloadChannel, refreshChannel, updateChannel, validateRegex} from "../api";
 import {
+    APIButton,
     BackButton,
     DirectoryInput,
     frequencyOptions,
@@ -26,7 +27,6 @@ import {
 } from "./Common";
 import {Link, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import Confirm from "semantic-ui-react/dist/commonjs/addons/Confirm";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {useChannel, useChannels} from "../hooks/customHooks";
 import _ from "lodash";
@@ -75,7 +75,6 @@ function ChannelStatistics({statistics}) {
 
 function ChannelPage({create, header}) {
     const [disabled, setDisabled] = useState(false);
-    const [deleteOpen, setDeleteOpen] = useState(false);
     const [validRegex, setValidRegex] = useState(true);
     const [activeIndex, setActiveIndex] = useState(-1);
     const [errors, setErrors] = useState({});
@@ -133,7 +132,9 @@ function ChannelPage({create, header}) {
     }
 
     const handleSubmit = async (e) => {
-        e.preventDefault();
+        if (e) {
+            e.preventDefault();
+        }
         const body = {
             name: channel.name,
             directory: channel.directory,
@@ -180,7 +181,11 @@ function ChannelPage({create, header}) {
                 );
             } else {
                 await fetchChannel();
-                setSuccessMessage('Channel updated', 'Your channel was updated');
+                toast({
+                    type: 'success',
+                    title: 'Channel updated',
+                    description: 'The channel was updated',
+                })
             }
 
         } else if (response) {
@@ -218,7 +223,9 @@ function ChannelPage({create, header}) {
     }
 
     const handleDownloadChannel = async (e) => {
-        e.preventDefault();
+        if (e) {
+            e.preventDefault();
+        }
         try {
             const response = await downloadChannel(channelId);
             if (response.status === 204) {
@@ -235,23 +242,29 @@ function ChannelPage({create, header}) {
     }
 
     const handleRefreshChannel = async (e) => {
-        e.preventDefault();
-        return await refreshChannel(channelId);
-    }
-
-    const handleDeleteConfirm = async () => {
-        setDeleteOpen(false);
-        let response = await deleteChannel(channelId);
-        if (response.status === 204) {
-            navigate('/videos/channel');
-        } else {
-            setSuccessMessage('Failed to delete', 'Failed to delete this channel, check logs.');
+        if (e) {
+            e.preventDefault();
+        }
+        const response = await refreshChannel(channelId);
+        if (response.status !== 204) {
+            toast({
+                type: 'error',
+                title: 'Failed to refresh',
+                description: "Failed to refresh this channel's directory",
+                time: 5000,
+            })
         }
     }
 
-    const handleDeleteButton = (e) => {
-        e.preventDefault();
-        setDeleteOpen(true);
+    const handleDelete = async () => {
+        try {
+            let response = await deleteChannel(channelId);
+            if (response.status === 204) {
+                navigate('/videos/channel');
+            }
+        } catch (e) {
+            setErrorMessage('Failed to delete', 'Failed to delete this channel, check logs.');
+        }
     }
 
     return <>
@@ -266,7 +279,6 @@ function ChannelPage({create, header}) {
             <WROLModeMessage content='Channel page is disabled while WROL Mode is enabled.'/>
             <Form
                 id="editChannel"
-                onSubmit={handleSubmit}
                 error={error}
                 success={success}
                 autoComplete="off"
@@ -391,39 +403,39 @@ function ChannelPage({create, header}) {
                         <Grid.Column>
                             {!create &&
                                 <>
-                                    <Button color='red' onClick={handleDeleteButton} size='small'>
-                                        Delete
-                                    </Button>
-                                    <Confirm
-                                        open={deleteOpen}
-                                        content='Are you sure you want to delete this channel?  No video files will be deleted.'
+                                    <APIButton
+                                        color='red'
+                                        size='small'
+                                        confirmContent='Are you sure you want to delete this channel?  No video files will be deleted.'
                                         confirmButton='Delete'
-                                        onCancel={() => setDeleteOpen(false)}
-                                        onConfirm={handleDeleteConfirm}
-                                    />
-                                    <Button
+                                        onClick={handleDelete}
+                                        obeyWROLMode={true}
+                                    >Delete</APIButton>
+                                    <APIButton
                                         color='green'
                                         size='small'
                                         onClick={handleDownloadChannel}
                                         disabled={!channel.url || !channel.download_frequency}
-                                    >
-                                        Download
-                                    </Button>
-                                    <Button color='blue' size='small' onClick={handleRefreshChannel}>
-                                        Refresh
-                                    </Button>
+                                        obeyWROLMode={true}
+                                    >Download</APIButton>
+                                    <APIButton
+                                        color='blue'
+                                        size='small'
+                                        onClick={handleRefreshChannel}
+                                        obeyWROLMode={true}
+                                    >Refresh</APIButton>
                                 </>
                             }
                         </Grid.Column>
                         <Grid.Column>
-                            <Button
+                            <APIButton
                                 color='violet'
                                 size='big'
-                                type="submit"
                                 floated='right'
-                            >
-                                {disabled ? <Loader active inline/> : 'Save'}
-                            </Button>
+                                onClick={handleSubmit}
+                                disabled={disabled}
+                                obeyWROLMode={true}
+                            >Save</APIButton>
                         </Grid.Column>
                     </Grid.Row>
                 </Grid>

@@ -1,10 +1,8 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect} from "react";
 import {deleteTag, getTags, saveTag} from "./api";
 import {
-    Confirm,
     Dimmer,
     Divider,
-    Dropdown,
     Form,
     Grid,
     Label,
@@ -15,7 +13,7 @@ import {
     TableHeaderCell,
     TableRow,
 } from "semantic-ui-react";
-import {contrastingColor, scrollToTopOfElement} from "./components/Common";
+import {APIButton, contrastingColor, scrollToTopOfElement} from "./components/Common";
 import {
     Button,
     FormInput,
@@ -150,18 +148,15 @@ export const useTagsInterval = () => {
 
 function EditTagRow({tag, onDelete, onEdit}) {
     const {NameToTagLabel} = React.useContext(TagsContext);
-    const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
     const {name, color, id, count} = tag;
 
     const deleteConfirm = <>
-        <Button color='red' onClick={() => setConfirmDeleteOpen(true)} icon='trash'/>
-        <Confirm
-            id={`confirm${name}`}
-            open={confirmDeleteOpen}
-            content={`Are you sure you want to delete: ${name}?`}
+        <APIButton
+            icon='trash'
+            color='red'
+            confirmContent={`Are you sure you want to delete: ${name}?`}
             confirmButton='Delete'
-            onCancel={() => setConfirmDeleteOpen(false)}
-            onConfirm={async () => onDelete(id, name)}
+            onClick={async () => onDelete(id, name)}
         />
     </>;
     const editButton = <Button primary onClick={() => onEdit(name, color, id)} icon='edit'/>;
@@ -259,14 +254,13 @@ function EditTagsModal() {
 
                 <HexColorPicker color={tagColor} onChange={setTagColor} style={{marginTop: '1em'}}/>
 
-                <Button color='violet'
-                        size='big'
-                        onClick={localSaveTag}
-                        style={{marginTop: '2em'}}
-                        disabled={!!!tagName}
-                >
-                    Save
-                </Button>
+                <APIButton
+                    color='violet'
+                    size='big'
+                    onClick={localSaveTag}
+                    style={{marginTop: '2em'}}
+                    disabled={!!!tagName}
+                >Save</APIButton>
 
                 <Divider/>
                 <Table striped basic='very' unstackable>

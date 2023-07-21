@@ -1,4 +1,4 @@
-import {useOutdatedZims, useSearchZim} from "../hooks/customHooks";
+import {useOutdatedZims, useSearchZim, useWROLMode} from "../hooks/customHooks";
 import {
     Accordion,
     Button,
@@ -31,6 +31,7 @@ import {
 } from "semantic-ui-react";
 import React, {useContext, useState} from "react";
 import {
+    APIButton,
     encodeMediaPath,
     humanFileSize,
     normalizeEstimate,
@@ -55,7 +56,7 @@ import {
 } from "../api";
 import {useSearch} from "./Search";
 import {TagsQuerySelector} from "./Files";
-import {ThemeContext} from "../contexts/contexts";
+import {StatusContext, ThemeContext} from "../contexts/contexts";
 import {Link, Route, Routes} from "react-router-dom";
 import {SortableTable} from "./SortableTable";
 import {toast} from "react-semantic-toasts-2";
@@ -70,10 +71,7 @@ export const OutdatedZimsMessage = ({onClick}) => {
     const onOpen = () => setOpen(true);
     const onClose = () => setOpen(false);
 
-    const handleDelete = async (e) => {
-        if (e) {
-            e.preventDefault();
-        }
+    const handleDelete = async () => {
         try {
             const success = await deleteOutdatedZims();
             if (success) {
@@ -96,10 +94,7 @@ export const OutdatedZimsMessage = ({onClick}) => {
         }
     }
 
-    const handleIgnore = async (e) => {
-        if (e) {
-            e.preventDefault();
-        }
+    const handleIgnore = async () => {
         const config = {ignore_outdated_zims: true};
         await saveSettings(config);
         if (onClick) {
@@ -138,13 +133,19 @@ export const OutdatedZimsMessage = ({onClick}) => {
                     {modalContent}
                 </ModalContent>
                 <ModalActions>
-                    <Button color='red' floated='left' onClick={handleDelete}>Delete</Button>
+                    <APIButton
+                        color='red'
+                        floated='left'
+                        onClick={handleDelete}
+                    >Delete</APIButton>
                     <Button onClick={onClose}>Close</Button>
                 </ModalActions>
             </Modal>
 
             <Link to='/files?folders=zims'><SButton>Delete Manually</SButton></Link>
-            <SButton secondary onClick={handleIgnore}>Ignore Forever</SButton>
+            <APIButton secondary
+                       onClick={handleIgnore}
+            >Ignore Forever</APIButton>
         </Message.Content>
     </Message>
 }
@@ -333,10 +334,9 @@ const ZimCatalogItemRow = ({item, subscriptions, iso_639_codes, fetchSubscriptio
     const [pending, setPending] = useState(false);
     const languageChange = subscription ? langauge !== subscription['language'] : false;
 
-    const handleButton = async (e) => {
-        if (e) {
-            e.preventDefault();
-        }
+    const wrolModeEnabled = useWROLMode();
+
+    const handleButton = async () => {
         let success = false;
         try {
             setPending(true);
@@ -375,14 +375,18 @@ const ZimCatalogItemRow = ({item, subscriptions, iso_639_codes, fetchSubscriptio
                                        placeholder='Language'
                                        options={languageOptions}
                                        value={langauge}
+                                       disabled={wrolModeEnabled}
                                        onChange={handleLanguageChange}
     />;
 
-    const subscribeButton = <Button
+    const subscribeButton = <APIButton
+        color='grey'
         disabled={pending}
-        onClick={handleButton}>
+        onClick={handleButton}
+        obeyWROLMode={true}
+    >
         {subscription && !languageChange ? 'Unsubscribe' : 'Subscribe'}
-    </Button>
+    </APIButton>
 
     return <TableRow key={name}>
         <TableCell>{name}</TableCell>

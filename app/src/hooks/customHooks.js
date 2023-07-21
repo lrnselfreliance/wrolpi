@@ -1064,3 +1064,9 @@ export const useVINDecoder = (defaultVINNumber = '') => {
 
     return {value, setValue, vin}
 }
+
+export const useWROLMode = () => {
+    // Returns the current boolean WROL Mode, during fetch this returns null.
+    const {status} = useContext(StatusContext);
+    return status ? status.wrol_mode : null;
+}

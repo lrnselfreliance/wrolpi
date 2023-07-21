@@ -2,6 +2,7 @@ import React from "react";
 import {clearCompletedDownloads, clearFailedDownloads, deleteDownload, killDownload, postDownload} from "../../api";
 import {Link} from "react-router-dom";
 import {
+    APIButton,
     DisableDownloadsToggle,
     isoDatetimeToElapsedPopup,
     secondsToFrequency,
@@ -40,45 +41,35 @@ function ClearCompleteDownloads({callback}) {
     }
 
     return <>
-        <Button
+        <APIButton
             onClick={localClearDownloads}
             disabled={disabled}
             color='yellow'
-        >Clear Completed</Button>
+            obeyWROLMode={true}
+        >Clear Completed</APIButton>
     </>
 }
 
 function ClearFailedDownloads({callback}) {
-    const [open, setOpen] = React.useState(false);
-    const [disabled, setDisabled] = React.useState(false);
-
     async function localDeleteFailed() {
-        setDisabled(true);
         try {
             await clearFailedDownloads();
         } finally {
-            setDisabled(false);
-            setOpen(false);
             if (callback) {
                 callback()
             }
         }
     }
 
-    return <>
-        <Button
-            onClick={() => setOpen(true)}
-            disabled={disabled}
-            color='red'
-        >Clear Failed</Button>
-        <Confirm
-            open={open}
-            content='Are you sure you want to delete failed downloads?  They will not be retried.'
-            confirmButton='Delete'
-            onCancel={() => setOpen(false)}
-            onConfirm={localDeleteFailed}
-        />
-    </>
+    return <APIButton
+        color='red'
+        onClick={localDeleteFailed}
+        confirmContent='Are you sure you want to delete failed downloads?  They will not be retried.'
+        confirmButton='Delete'
+        obeyWROLMode={true}
+    >
+        Clear Failed
+    </APIButton>
 }
 
 class DownloadRow extends React.Component {
@@ -104,10 +95,7 @@ class DownloadRow extends React.Component {
         this.setState({deleteOpen: false});
     }
 
-    handleDelete = async (e) => {
-        if (e) {
-            e.preventDefault();
-        }
+    handleDelete = async () => {
         const {id} = this.props;
         try {
             await deleteDownload(id);
@@ -144,13 +132,13 @@ class DownloadRow extends React.Component {
         </Modal>;
 
         const deleteButton = <>
-            <Button icon='trash' onClick={this.openDelete} color='red'/>
-            <Confirm
-                open={deleteOpen}
-                content='Are you sure you want to delete this download?'
+            <APIButton
+                color='red'
+                icon='trash'
+                confirmContent='Are you sure you want to delete this download?'
                 confirmButton='Delete'
-                onCancel={this.closeDelete}
-                onConfirm={this.handleDelete}
+                onClick={this.handleDelete}
+                obeyWROLMode={true}
             />
         </>;
 
@@ -184,62 +172,29 @@ class StoppableRow extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            stopOpen: false,
-            startOpen: false,
             errorModalOpen: false,
-            deleteOpen: false,
         };
     }
 
-    openDelete = () => {
-        this.setState({deleteOpen: true});
-    }
-
-    closeDelete = () => {
-        this.setState({deleteOpen: false});
-    }
-
-    openStop = () => {
-        this.setState({stopOpen: true});
-    }
-
-    closeStop = () => {
-        this.setState({stopOpen: false});
-    }
-
-    openStart = () => {
-        this.setState({startOpen: true});
-    }
-
-    closeStart = () => {
-        this.setState({startOpen: false});
-    }
-
-    handleDelete = async (e) => {
-        e.preventDefault();
+    handleDelete = async () => {
         await deleteDownload(this.props.id);
-        this.closeDelete();
         await this.props.fetchDownloads();
     };
 
-    handleStop = async (e) => {
-        e.preventDefault();
+    handleStop = async () => {
         await killDownload(this.props.id);
-        this.closeStop();
         await this.props.fetchDownloads();
     };
 
-    handleStart = async (e) => {
-        e.preventDefault();
+    handleStart = async () => {
         let downloader = this.props.downloader;
         await postDownload(`${this.props.url}`, downloader);
-        this.closeStart();
         await this.props.fetchDownloads();
     };
 
     render() {
         let {url, last_successful_download, status, location, error} = this.props;
-        let {stopOpen, startOpen, errorModalOpen, deleteOpen} = this.state;
+        let {errorModalOpen} = this.state;
 
         // Open downloads (/download), or external links in an anchor.
         const link = location && !location.startsWith('/download') ?
@@ -251,38 +206,33 @@ class StoppableRow extends React.Component {
         if (status === 'pending' || status === 'new') {
             buttonCell = (
                 <TableCell>
-                    <Button
-                        onClick={this.openStop}
+                    <APIButton
                         color='red'
-                    >Stop</Button>
-                    <Confirm
-                        open={stopOpen}
-                        content='Are you sure you want to stop this download?  It will not be retried.'
+                        onClick={this.handleStop}
+                        confirmContent='Are you sure you want to stop this download?  It will not be retried.'
                         confirmButton='Stop'
-                        onCancel={this.closeStop}
-                        onConfirm={this.handleStop}
-                    />
+                        obeyWROLMode={true}
+                    >Stop</APIButton>
                 </TableCell>
             );
         } else if (status === 'failed' || status === 'deferred') {
             buttonCell = (
                 <TableCell>
-                    <Button icon='trash' onClick={this.openDelete} color='red'/>
-                    <Confirm
-                        open={deleteOpen}
-                        content='Are you sure you want to delete this download?'
+                    <APIButton
+                        color='red'
+                        icon='trash'
+                        onClick={this.handleDelete}
+                        confirmContent='Are you sure you want to delete this download?'
                         confirmButton='Delete'
-                        onCancel={this.closeDelete}
-                        onConfirm={this.handleDelete}
+                        obeyWROLMode={true}
                     />
-                    <Button onClick={this.openStart} color='green'>Retry</Button>
-                    <Confirm
-                        open={startOpen}
-                        content='Are you sure you want to restart this download?'
+                    <APIButton
+                        color='green'
+                        confirmContent='Are you sure you want to restart this download?'
                         confirmButton='Start'
-                        onCancel={this.closeStart}
-                        onConfirm={this.handleStart}
-                    />
+                        onClick={this.handleStart}
+                        obeyWROLMode={true}
+                    >Retry</APIButton>
                 </TableCell>
             );
         } else if (status === 'complete' && location) {
@@ -296,18 +246,12 @@ class StoppableRow extends React.Component {
             completedAtCell = (
                 <Modal
                     closeIcon
-                    onClose={() => this.setState({errorModalOpen: false})}
-                    onOpen={() => this.setState({errorModalOpen: true})}
-                    open={errorModalOpen}
                     trigger={<Button icon='exclamation circle' color='red'/>}
                 >
                     <ModalHeader>Download Error</ModalHeader>
                     <ModalContent>
                         <pre style={{overflowX: 'scroll'}}>{error}</pre>
                     </ModalContent>
-                    <ModalActions>
-                        <SButton onClick={() => this.setState({errorModalOpen: false})}>Close</SButton>
-                    </ModalActions>
                 </Modal>
             )
         }
@@ -379,7 +323,7 @@ export function RecurringDownloadsTable({downloads, fetchDownloads}) {
     }
 }
 
-export function Downloads() {
+export function DownloadsPage() {
     useTitle('Downloads');
 
     const {onceDownloads, recurringDownloads, fetchDownloads} = useDownloads();

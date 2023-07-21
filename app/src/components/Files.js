@@ -37,7 +37,8 @@ import {
     useQuery,
     useSearchFiles,
     useSearchFilter,
-    useSearchView
+    useSearchView,
+    useWROLMode
 } from "../hooks/customHooks";
 import {Route, Routes} from "react-router-dom";
 import {CardPlaceholder} from "./Placeholder";
@@ -572,6 +573,7 @@ export function FilesRoute() {
 
 export function FilesRefreshButton() {
     const {status} = useContext(StatusContext);
+    const wrolModeEnabled = useWROLMode();
     const refreshing = status && status['flags'] && status['flags'].indexOf('refreshing') >= 0;
     const refreshingDirectory = status && status['flags'] && status['flags'].indexOf('refreshing_directory') >= 0;
 
@@ -589,7 +591,7 @@ export function FilesRefreshButton() {
                    labelPosition='left'
                    loading={loading || refreshing || refreshingDirectory}
                    onClick={handleClick}
-                   disabled={loading || refreshing}>
+                   disabled={wrolModeEnabled || loading || refreshing}>
         <Icon name='refresh'/>
         Refresh All
     </Button>;
@@ -599,6 +601,7 @@ export function DirectoryRefreshButton({paths}) {
     const {status} = useContext(StatusContext);
     const refreshing = status && status['flags'] && status['flags'].indexOf('refreshing') >= 0;
     const refreshingDirectory = status && status['flags'] && status['flags'].indexOf('refreshing_directory') >= 0;
+    const wrolModeEnabled = useWROLMode();
 
     const [loading, setLoading] = React.useState(false);
 
@@ -615,7 +618,7 @@ export function DirectoryRefreshButton({paths}) {
                    labelPosition='left'
                    loading={loading || refreshing || refreshingDirectory}
                    onClick={handleClick}
-                   disabled={loading || refreshing || refreshingDirectory}
+                   disabled={wrolModeEnabled || loading || refreshing || refreshingDirectory}
     >
         <Icon name='refresh'/>
         Refresh

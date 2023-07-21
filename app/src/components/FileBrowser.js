@@ -1,7 +1,6 @@
 import {Button, Header, Icon, Modal, ModalActions, ModalContent, ModalHeader, Placeholder, Table} from "./Theme";
 import {
     Checkbox,
-    Confirm,
     IconGroup,
     Input,
     PlaceholderLine,
@@ -12,14 +11,15 @@ import {
     TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
-import {DirectorySearch, FileIcon, humanFileSize} from "./Common";
+import {APIButton, DirectorySearch, FileIcon, humanFileSize} from "./Common";
 import React, {useEffect, useState} from "react";
 import {deleteFile, makeDirectory, movePaths, renamePath} from "../api";
 import _ from 'lodash';
 import {SortableTable} from "./SortableTable";
-import {useBrowseFiles, useMediaDirectory} from "../hooks/customHooks";
+import {useBrowseFiles, useMediaDirectory, useWROLMode} from "../hooks/customHooks";
 import {DirectoryRefreshButton, FileRowTagIcon, FilesRefreshButton} from "./Files";
 import {FilePreviewContext} from "./FilePreview";
+import {StatusContext} from "../contexts/contexts";
 
 function depthIndentation(path) {
     // Repeated spaces for every folder a path is in.
@@ -139,6 +139,7 @@ export function FileBrowser() {
     const selectedPathsCount = selectedPaths ? selectedPaths.length : 0;
 
     const {browseFiles, openFolders, setOpenFolders, fetchFiles} = useBrowseFiles();
+    const wrolModeEnabled = useWROLMode();
 
     const headers = [
         {key: 'select', text: ''},
@@ -195,21 +196,19 @@ export function FileBrowser() {
                     <DirectoryRefreshButton paths={selectedPaths}/>
                     : <FilesRefreshButton/>
                 }
-                <Button icon='trash'
-                        color='red'
-                        onClick={() => setDeleteOpen(true)}
-                        disabled={selectedPathsCount === 0}
-                />
-                <Confirm
-                    open={deleteOpen}
-                    content='Are you sure you want to delete these files?'
-                    onConfirm={onDelete}
-                    onCancel={() => setDeleteOpen(false)}
+                <APIButton
+                    icon='trash'
+                    color='red'
+                    confirmContent='Are you sure you want to delete these files?'
+                    confirmButton='Delete'
+                    onClick={onDelete}
+                    disabled={selectedPathsCount === 0}
+                    obeyWROLMode={true}
                 />
                 <Button icon='text cursor'
                         color='yellow'
                         onClick={() => setRenameOpen(true)}
-                        disabled={selectedPathsCount !== 1}
+                        disabled={wrolModeEnabled || selectedPathsCount !== 1}
                 />
                 {selectedPathsCount === 1 ?
                     <RenameModal
@@ -221,7 +220,7 @@ export function FileBrowser() {
                     /> : null}
                 <Button icon='move'
                         color='violet'
-                        disabled={selectedPathsCount === 0}
+                        disabled={wrolModeEnabled || selectedPathsCount === 0}
                         onClick={() => setMoveOpen(true)}
                 />
                 {selectedPathsCount > 0 ?
@@ -233,7 +232,7 @@ export function FileBrowser() {
                 <Button
                     color='blue'
                     onClick={() => setMakeDirectoryOpen(true)}
-                    disabled={selectedPaths && selectedPaths.length > 1}
+                    disabled={wrolModeEnabled || selectedPaths && selectedPaths.length > 1}
                     style={{paddingLeft: '1em', paddingRight: '0.8em'}}
                 >
                     <IconGroup>
@@ -246,6 +245,7 @@ export function FileBrowser() {
                     onClose={() => setMakeDirectoryOpen(false)}
                     parent={selectedPaths.length ? selectedPaths[0] : null}
                     onSubmit={handleMakeDirectory}
+                    disabled={wrolModeEnabled}
                 />
             </TableHeaderCell>
         </TableRow>

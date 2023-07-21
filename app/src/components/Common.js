@@ -1,5 +1,17 @@
 import React, {useContext, useEffect, useState} from "react";
-import {ButtonGroup, Card, Container, IconGroup, Input, Label, Pagination, Search} from 'semantic-ui-react';
+import {
+    Button as SButton,
+    ButtonGroup,
+    Card,
+    Confirm,
+    Container,
+    IconGroup,
+    Input,
+    Label,
+    Pagination,
+    Search,
+    Transition
+} from 'semantic-ui-react';
 import {Link, NavLink, useNavigate, useSearchParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {
@@ -8,7 +20,8 @@ import {
     useSearchDirectories,
     useSearchOrder,
     useSettings,
-    useThrottle
+    useThrottle,
+    useWROLMode
 } from "../hooks/customHooks";
 import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
 import {
@@ -419,10 +432,9 @@ export function SearchInput({
 }
 
 export function WROLModeMessage({content}) {
-    const {status} = useContext(StatusContext);
-    const wrol_mode = status ? status.wrol_mode : null;
+    const wrolModeEnabled = useWROLMode();
 
-    if (wrol_mode) {
+    if (wrolModeEnabled) {
         return <Message icon='lock' header='WROL Mode Enabled' content={content}/>
     }
     return null;
@@ -674,6 +686,7 @@ export function DisableDownloadsToggle() {
     const {status, fetchStatus} = React.useContext(StatusContext);
 
     const {downloads} = status ? status : {downloads: null};
+    const wrolModeEnabled = useWROLMode();
 
     const setDownloads = async (enable) => {
         setPending(true);
@@ -690,7 +703,7 @@ export function DisableDownloadsToggle() {
     return <Form>
         <Toggle
             label={on === true ? 'Downloading Enabled' : 'Downloading Disabled'}
-            disabled={pending || downloads === null}
+            disabled={wrolModeEnabled || pending || downloads === null}
             checked={on === true}
             onChange={setDownloads}
         />
@@ -1190,4 +1203,166 @@ export function TagIcon() {
 
 export function normalizeEstimate(estimate) {
     return estimate > 999 ? '>999' : estimate;
+}
+
+export function useAPIButton(
+    color = 'violet',
+    size = 'medium',
+    floated,
+    onClick,
+    disabled,
+    confirmContent,
+    confirmButton,
+    themed = true,
+    obeyWROLMode = false,
+    icon = null,
+    props
+) {
+    props = props || {};
+    const ref = React.useRef();
+
+    const [confirmOpen, setConfirmOpen] = React.useState(false);
+    const [pending, setPending] = React.useState(false);
+    const [animation, setAnimation] = React.useState('jiggle');
+    const [animationVisible, setAnimationVisible] = React.useState(true);
+    const [showSuccess, setShowSuccess] = React.useState(false);
+    const [showFailure, setShowFailure] = React.useState(false);
+
+    const wrolModeEnabled = useWROLMode();
+
+    // Disable when API call is pending, or button is disabled.
+    disabled = pending || disabled;
+    // Disable when WROL Mode is enabled, otherwise normal disabled.
+    disabled = obeyWROLMode ? wrolModeEnabled || disabled : disabled;
+
+    const reset = () => {
+        setShowSuccess(false);
+        setShowFailure(false);
+    };
+
+    const setSuccess = () => {
+        setShowSuccess(true);
+        setAnimation('pulse');
+        setAnimationVisible(!animationVisible);
+        setTimeout(reset, 2000);
+    }
+
+    const setFailure = () => {
+        setShowFailure(true);
+        setAnimation('shake');
+        setAnimationVisible(!animationVisible);
+        setTimeout(reset, 2000);
+    }
+
+    const handleAPICall = async () => {
+        // Handle when user clicks button, or clicks confirm.
+        setPending(true);
+        try {
+            await onClick();
+            setSuccess();
+        } catch (e) {
+            console.log(e);
+            setFailure();
+        }
+        setPending(false);
+    }
+
+    const localOnClick = async (e) => {
+        if (e) {
+            e.preventDefault();
+        }
+
+        if (confirmContent) {
+            // Clicking button opens confirm.
+            setConfirmOpen(true);
+        } else if (onClick) {
+            // No <Confirm/> send the API request.
+            await handleAPICall();
+        } else {
+            throw Error('No onClick defined!');
+        }
+    }
+
+    const localOnConfirm = async () => {
+        // User clicked the "OK" button in the <Confirm/>.
+        setConfirmOpen(false);
+
+        if (onClick) {
+            await handleAPICall();
+        }
+    }
+
+    // Create button with or without theme.  Pass all props to the <Button/> (except props.children).
+    const buttonArgs = {color, onClick: localOnClick, disabled, loading: pending, size, floated, ...props};
+
+    let buttonContent = <>{props.children}</>;
+    if (icon) {
+        // Send Icon as Button properties.
+        buttonContent = null;
+        buttonArgs['icon'] = showSuccess ? 'check' : showFailure ? 'close' : icon;
+    } else if (showSuccess || showFailure) {
+        // Show ✔ or ✖ overtop the contents after API call has completed.
+        buttonContent = <>
+            <Icon style={{position: 'absolute'}} name={showSuccess ? 'check' : 'close'}/>
+            {/* Keep contents to avoid resizing button */}
+            <div style={{opacity: 0}}>{buttonContent}</div>
+        </>
+    }
+
+    let button = themed ?
+        <Button ref={ref} {...buttonArgs}>{buttonContent}</Button>
+        : <SButton ref={ref} {...buttonArgs}>{buttonContent}</SButton>;
+    // Wrap button in <Transition/> to show success or failure animations.
+    button = <Transition animation={animation} duration={500} visible={animationVisible}>
+        {button}
+    </Transition>;
+
+    if (confirmContent) {
+        // Wrap button with <Confirm/>
+        button = <>
+            {button}
+            <Confirm open={confirmOpen}
+                     content={confirmContent}
+                     onClose={() => setConfirmOpen(false)}
+                     onCancel={() => setConfirmOpen(false)}
+                     onConfirm={localOnConfirm}
+            />
+        </>
+    }
+
+    button = <>
+        {button}
+    </>
+
+    return {button, ref}
+}
+
+export function APIButton({
+                              color,
+                              size,
+                              floated,
+                              onClick,
+                              disabled,
+                              confirmContent,
+                              confirmButton,
+                              themed,
+                              obeyWROLMode,
+                              icon,
+                              ...props
+                          }) {
+    const {button} = useAPIButton(
+        color,
+        size,
+        floated,
+        onClick,
+        disabled,
+        confirmContent,
+        confirmButton,
+        themed,
+        obeyWROLMode,
+        icon,
+        props
+    );
+
+    return button;
 }

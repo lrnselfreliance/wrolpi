@@ -3,7 +3,7 @@ import './App.css';
 import {NavBar} from "./components/Nav";
 import {createBrowserRouter, createRoutesFromElements, Link, Outlet, Route, RouterProvider} from "react-router-dom";
 import {VideosRoute, VideoWrapper} from "./components/Videos";
-import Admin from "./components/admin/Admin";
+import AdminRoute from "./components/admin/AdminRoute";
 import {Container} from "semantic-ui-react";
 import 'semantic-ui-offline/semantic.min.css';
 import {MoreRoute} from "./components/Apps";
@@ -14,8 +14,8 @@ import {StatusProvider} from "./hooks/customHooks";
 import {MapRoute} from "./components/Map";
 import {MediaContextProvider, mediaStyles, StatusContext, ThemeContext} from "./contexts/contexts";
 import {Header, ThemeProvider} from "./components/Theme";
-import {Dashboard} from "./Dashboard";
-import {Donate} from "./components/Donate";
+import {DashboardPage} from "./DashboardPage";
+import {DonatePage} from "./components/DonatePage";
 import {useEventsInterval} from "./Events";
 import {SemanticToastContainer} from "react-semantic-toasts-2";
 import {FilePreviewProvider} from "./components/FilePreview";
@@ -63,13 +63,13 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     element={<Root/>}
     errorElement={<PageNotFound/>}
 >
-    <Route index element={<Dashboard/>}/>
-    <Route path='search/*' element={<Dashboard/>}/>
-    <Route path='donate' element={<Donate/>}/>
+    <Route index element={<DashboardPage/>}/>
+    <Route path='search/*' element={<DashboardPage/>}/>
+    <Route path='donate' element={<DonatePage/>}/>
     <Route path='videos/video/:videoId' exact element={<VideoWrapper/>}/>
     <Route path='videos/channel/:channelId/video/:videoId' exact element={<VideoWrapper/>}/>
     <Route path="videos/*" element={<VideosRoute/>}/>
-    <Route path="admin/*" element={<Admin/>}/>
+    <Route path="admin/*" element={<AdminRoute/>}/>
     <Route path="more/*" element={<MoreRoute/>}/>
     <Route path="inventory/*" element={<InventoryRoute/>}/>
     <Route path='archive/*' element={<ArchiveRoute/>}/>

@@ -1,6 +1,6 @@
 import React, {useContext, useState} from "react";
 import {getDownloaders, postDownload} from "../api";
-import {DirectorySearch, frequencyOptions, HelpPopup, rssFrequencyOptions, WROLModeMessage} from "./Common";
+import {APIButton, DirectorySearch, frequencyOptions, HelpPopup, rssFrequencyOptions, WROLModeMessage} from "./Common";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {ThemeContext} from "../contexts/contexts";
@@ -146,7 +146,11 @@ class Downloader extends React.Component {
                 {withSearchDirectory ? destinationRequired ? directorySearch : advancedAccordion : null}
 
                 <Button content='Cancel' onClick={this.props.clearSelected}/>
-                <Button primary style={{marginTop: '1em'}} disabled={disabled}>Download</Button>
+                <APIButton
+                    disabled={disabled}
+                    onClick={this.submitDownload}
+                    style={{marginTop: '0.5em'}}
+                >Download</APIButton>
                 {submitted && viewDownloads}
             </Form>)}
         </ThemeContext.Consumer>
@@ -230,12 +234,10 @@ class ChannelDownload extends React.Component {
             {frequency === 0 && onceMessage}
 
             <Button content='Cancel' onClick={this.props.clearSelected}/>
-            <Button
-                color='blue'
-                content='Download'
+            <APIButton
                 onClick={this.handleSubmit}
                 disabled={buttonDisabled}
-            />
+            >Download</APIButton>
             {pending && <Loader active={pending}/>}
             {success && <Icon name='check'/>}
         </Form>

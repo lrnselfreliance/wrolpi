@@ -1,3 +1,4 @@
+import asyncio
 from http import HTTPStatus
 
 from sanic import response, Request

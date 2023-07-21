@@ -267,7 +267,7 @@ class ManageMap extends React.Component {
     }
 }
 
-function MapApp() {
+function MapPage() {
     return <iframe
         title='map'
         src={`http://${window.location.hostname}:8084/`}
@@ -290,7 +290,7 @@ export function MapRoute() {
     return <div style={{marginTop: '2em'}}>
         <TabLinks links={links}/>
         <Routes>
-            <Route path='/' exact element={<MapApp/>}/>
+            <Route path='/' exact element={<MapPage/>}/>
             <Route path='manage' exact element={<ManageMap/>}/>
         </Routes>
     </div>

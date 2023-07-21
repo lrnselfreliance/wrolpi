@@ -3,7 +3,7 @@ import {getSettings, saveSettings} from "../../api";
 import {Button, Form, FormGroup, FormInput, Header, Loader, Modal, ModalContent, ModalHeader, Segment} from "../Theme";
 import {Container, Dimmer, Icon} from "semantic-ui-react";
 import {ThemeContext} from "../../contexts/contexts";
-import {HelpPopup, HotspotToggle, ThrottleToggle, Toggle, WROLModeMessage} from "../Common";
+import {APIButton, HelpPopup, HotspotToggle, ThrottleToggle, Toggle, WROLModeMessage} from "../Common";
 import QRCode from "react-qr-code";
 
 export class Settings extends React.Component {
@@ -57,7 +57,9 @@ export class Settings extends React.Component {
     }
 
     async handleSubmit(e) {
-        e.preventDefault();
+        if (e) {
+            e.preventDefault();
+        }
         this.setState({disabled: true, pending: true});
         let settings = {
             download_on_startup: this.state.download_on_startup,
@@ -228,9 +230,13 @@ export class Settings extends React.Component {
 
                         <br/>
 
-                        <Button color='violet' type="submit" disabled={disabled} size='large'>
-                            Save
-                        </Button>
+                        <APIButton
+                            color='violet'
+                            size='big'
+                            onClick={this.handleSubmit}
+                            obeyWROLMode={true}
+                            disabled={disabled}
+                        >Save</APIButton>
 
                         <Dimmer active={pending}>
                             <Loader active={pending} size='large'/>

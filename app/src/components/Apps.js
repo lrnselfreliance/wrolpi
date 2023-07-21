@@ -2,7 +2,7 @@ import React, {useContext} from 'react';
 import {Divider, Input, SegmentGroup, StatisticLabel, StatisticValue, TableCell, TableRow} from "semantic-ui-react";
 import {Link, Route, Routes} from "react-router-dom";
 import {decryptOTP, encryptOTP} from "../api";
-import {humanFileSize, mimetypeColor, PageContainer, toLocaleString, useTitle} from "./Common";
+import {APIButton, humanFileSize, mimetypeColor, PageContainer, toLocaleString, useTitle} from "./Common";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, Header, Loader, Segment, Statistic, StatisticGroup, Table, TextArea} from "./Theme";
 import {useStatistics, useVINDecoder} from "../hooks/customHooks";
@@ -15,14 +15,9 @@ class Encrypt extends React.Component {
         }
     }
 
-    handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            let {otp, plaintext, ciphertext} = await encryptOTP(this.state.otp, this.state.plaintext);
-            this.setState({otp, plaintext, ciphertext});
-        } catch (e) {
-            console.error(e);
-        }
+    handleSubmit = async () => {
+        let {otp, plaintext, ciphertext} = await encryptOTP(this.state.otp, this.state.plaintext);
+        this.setState({otp, plaintext, ciphertext});
     }
 
     handleInputChange = async (event, {name, value}) => {
@@ -30,6 +25,8 @@ class Encrypt extends React.Component {
     }
 
     render() {
+        const disabled = !(this.state.otp && this.state.plaintext);
+
         return <>
             <Header as='h2'>Encrypt</Header>
             <SegmentGroup>
@@ -59,7 +56,10 @@ class Encrypt extends React.Component {
                 </Segment>
             </SegmentGroup>
             <br/>
-            <Button color='violet' onClick={this.handleSubmit}>Encrypt</Button>
+            <APIButton
+                disabled={disabled}
+                onClick={this.handleSubmit}
+            >Encrypt</APIButton>
         </>
     }
 }
@@ -68,18 +68,13 @@ class Decrypt extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            otp: '', plaintext: '', ciphertext: '',
+            otp: '', plaintext: '', ciphertext: ''
         }
     }
 
-    handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            let {otp, plaintext, ciphertext} = await decryptOTP(this.state.otp, this.state.ciphertext);
-            this.setState({otp, plaintext, ciphertext});
-        } catch (e) {
-            console.error(e);
-        }
+    handleSubmit = async () => {
+        let {otp, plaintext, ciphertext} = await decryptOTP(this.state.otp, this.state.ciphertext);
+        this.setState({otp, plaintext, ciphertext});
     }
 
     handleInputChange = async (event, {name, value}) => {
@@ -87,6 +82,8 @@ class Decrypt extends React.Component {
     }
 
     render() {
+        const disabled = !(this.state.otp && this.state.ciphertext);
+
         return <>
             <Header as='h2'>Decrypt</Header>
             <SegmentGroup>
@@ -115,8 +112,13 @@ class Decrypt extends React.Component {
                     <pre>{this.state.plaintext || 'Enter the encrypted message above'}</pre>
                 </Segment>
             </SegmentGroup>
+
             <br/>
-            <Button color='violet' onClick={this.handleSubmit}>Decrypt</Button>
+
+            <APIButton
+                disabled={disabled}
+                onClick={this.handleSubmit}
+            >Decrypt</APIButton>
         </>
     }
 }

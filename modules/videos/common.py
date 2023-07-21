@@ -17,8 +17,8 @@ from wrolpi.captions import FFMPEG_BIN
 from wrolpi.cmd import FFPROBE_BIN
 from wrolpi.common import logger, get_media_directory
 from wrolpi.db import get_db_session, get_db_curs
-from .errors import ChannelNameConflict, ChannelURLConflict, ChannelDirectoryConflict, ChannelSourceIdConflict
 from wrolpi.vars import DEFAULT_FILE_PERMISSIONS
+from .errors import ChannelNameConflict, ChannelURLConflict, ChannelDirectoryConflict, ChannelSourceIdConflict
 from .models import Channel
 
 logger = logger.getChild(__name__)
@@ -80,9 +80,10 @@ def check_for_channel_conflicts(session: Session, id_=None, url=None, name=None,
             raise ChannelSourceIdConflict()
 
     # Assure that this Channel's directory is not in another Channel's directory.
-    directory_str = str(directory)
+    directory = f'{directory}/'
     for channel in session.query(Channel).filter(Channel.id != id_):
-        if directory_str.startswith(str(channel.directory)) or str(channel.directory).startswith(directory_str):
+        channel_directory = f'{channel.directory}/'
+        if directory.startswith(channel_directory) or channel_directory.startswith(directory):
             raise ChannelDirectoryConflict()
 
 

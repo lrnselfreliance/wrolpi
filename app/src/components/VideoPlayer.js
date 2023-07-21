@@ -1,8 +1,9 @@
-import React, {useContext, useState} from 'react';
-import {tagFileGroup, deleteVideos, untagFileGroup} from "../api";
+import React, {useContext} from 'react';
+import {deleteVideos, tagFileGroup, untagFileGroup} from "../api";
 import {Link, useNavigate, useParams} from "react-router-dom";
 import _ from "lodash";
 import {
+    APIButton,
     BackButton,
     encodeMediaPath,
     humanFileSize,
@@ -12,7 +13,6 @@ import {
     PreviewPath,
     useTitle
 } from "./Common";
-import {Confirm} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Container from "semantic-ui-react/dist/commonjs/elements/Container";
 import {VideoPlaceholder} from "./Placeholder";
@@ -44,7 +44,6 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
 
     const navigate = useNavigate();
     const videoRef = React.useRef();
-    let [deleteOpen, setDeleteOpen] = useState(false);
 
     useTitle(videoFile === null || videoFile === undefined ? null : videoFile.video.title);
     let video;
@@ -69,13 +68,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     }
 
     const handleDeleteVideo = async (video_id) => {
-        try {
-            await deleteVideos([video_id])
-            setDeleteOpen(false);
-        } catch (e) {
-            setDeleteOpen(false);
-            throw e;
-        }
+        await deleteVideos([video_id])
         navigate(-1);
     }
 
@@ -198,24 +191,17 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                 </h3>
 
                 <p>
-                    <a href={downloadUrl} target='_blank' rel='noopener noreferrer'>
-                        <Button style={{margin: '0.5em'}}>
-                            <Icon name='download'/>
-                            Download
-                        </Button>
-                    </a>
-                    <Button
+                    <Button as='a' href={downloadUrl}>
+                        <Icon name='download'/>
+                        Download
+                    </Button>
+                    <APIButton
                         color='red'
-                        onClick={() => setDeleteOpen(true)}
-                        style={{margin: '0.5em'}}
-                    >Delete</Button>
-                    <Confirm
-                        open={deleteOpen}
-                        content='Are you sure you want to delete this video?  All files related to this video will be deleted. It will not be downloaded again!'
+                        confirmContent='Are you sure you want to delete this video?  All files related to this video will be deleted. It will not be downloaded again!'
                         confirmButton='Delete'
-                        onCancel={() => setDeleteOpen(false)}
-                        onConfirm={() => handleDeleteVideo(video.id)}
-                    />
+                        onClick={async () => await handleDeleteVideo(video.id)}
+                        obeyWROLMode={true}
+                    >Delete</APIButton>
                 </p>
                 <br/>
             </Segment>

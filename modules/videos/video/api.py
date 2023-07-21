@@ -1,3 +1,4 @@
+import asyncio
 from http import HTTPStatus
 
 from sanic import response, Blueprint
@@ -60,7 +61,7 @@ async def search(_: Request, body: schema.VideoSearchRequest):
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
 @run_after(lib.save_channels_config)
-def video_delete(_: Request, video_ids: str):
+async def video_delete(_: Request, video_ids: str):
     try:
         video_ids = [int(i) for i in str(video_ids).split(',')]
     except Exception:
@@ -69,4 +70,4 @@ def video_delete(_: Request, video_ids: str):
     lib.delete_videos(*video_ids)
 
     Events.send_deleted(f'Deleted {len(video_ids)} videos')
-    return response.raw('', HTTPStatus.NO_CONTENT)
+    return response.empty()

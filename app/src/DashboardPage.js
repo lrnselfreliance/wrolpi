@@ -24,7 +24,7 @@ import {TagsDashboard} from "./Tags";
 import {Upload} from "./components/Upload";
 import {SearchView, useSearch} from "./components/Search";
 import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
-import {useSettings} from "./hooks/customHooks";
+import {useSettings, useWROLMode} from "./hooks/customHooks";
 
 function FlagsMessages({flags}) {
     const {settings, fetchSettings} = useSettings();
@@ -82,13 +82,14 @@ function FlagsMessages({flags}) {
     </>
 }
 
-export function Dashboard() {
+export function DashboardPage() {
     useTitle('Dashboard');
+
+    const navigate = useNavigate();
 
     const {searchStr, setSearchStr, activeTags} = useSearch();
     const {status} = useContext(StatusContext);
-    const navigate = useNavigate();
-    const wrol_mode = status ? status['wrol_mode'] : null;
+    const wrolModeEnabled = useWROLMode();
 
     // Getters are Downloads or Uploads.
     const [selectedGetter, setSelectedGetter] = useState(null);
@@ -150,7 +151,7 @@ export function Dashboard() {
         body = <SearchView/>;
     } else {
         body = <>
-            {!wrol_mode && getter}
+            {!wrolModeEnabled && getter}
             {getterModal}
             <TagsDashboard/>
             <DashboardStatus/>

@@ -193,6 +193,10 @@ textarea.otp {
     background-color: #171616 !important;
 }
 
+.modal.inverted i.close {
+    color: #DDDDDD !important;
+}
+
 .clickable {
     cursor: pointer;
 }

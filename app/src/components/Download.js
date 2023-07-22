@@ -179,8 +179,7 @@ class ChannelDownload extends React.Component {
         this.setState({frequency: value, success: false});
     }
 
-    handleSubmit = async (e) => {
-        e.preventDefault();
+    handleSubmit = async () => {
         this.setState({disabled: true, pending: true, success: null, error: null});
         const {url, frequency} = this.state;
         if (!url) {
@@ -289,8 +288,7 @@ class RSSDownload extends ChannelDownload {
         this.setState({[name]: value});
     }
 
-    handleSubmit = async (e) => {
-        e.preventDefault();
+    handleSubmit = async () => {
         this.setState({disabled: true, pending: true, success: null, error: null});
         const {url, frequency, sub_downloader, excludedURLs} = this.state;
         if (!url) {

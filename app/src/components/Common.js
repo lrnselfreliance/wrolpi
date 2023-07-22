@@ -1295,7 +1295,7 @@ export function useAPIButton(
     // Create button with or without theme.  Pass all props to the <Button/> (except props.children).
     const buttonArgs = {color, onClick: localOnClick, disabled, loading: pending, size, floated, ...props};
 
-    let buttonContent = <>{props.children}</>;
+    let buttonContent = props.children || null;
     if (icon) {
         // Send Icon as Button properties.
         buttonContent = null;

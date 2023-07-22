@@ -37,6 +37,7 @@ async function apiCall(url, method, body, ms = 60_000) {
         // Request encountered an error.
         let copy = response.clone();
         const content = await copy.json();
+        console.debug('API error response json', content);
         const code = content['code'];
         if (response.status === 403 && code === 'WROL_MODE_ENABLED') {
             toast({
@@ -463,11 +464,7 @@ export async function postDownload(urls, downloader, frequency, sub_downloader, 
         body['tag_names'] = tagNames;
     }
     let response = await apiPost(`${API_URI}/download`, body);
-    if (response.status !== 204) {
-        const content = await response.json();
-        console.error(content);
-        throw Error(content['error']);
-    }
+    return response;
 }
 
 export async function killDownload(download_id) {

@@ -129,6 +129,7 @@ async def take_screenshot(url: str) -> bytes:
 
         path = pathlib.Path(f'{tmp_dir}/screenshot.png')
         if not path.is_file():
+            logger.warning(f'Screenshot command did not create screenshot of {url}')
             return b''
 
         size = os.path.getsize(path)
@@ -151,15 +152,30 @@ def prepare_bytes(b: bytes) -> str:
 async def post_archive(request: Request):
     url = request.json['url']
     try:
-        singlefile, screenshot = await asyncio.gather(call_single_file(url), take_screenshot(url))
-        with tempfile.NamedTemporaryFile('wb') as fh:
+        singlefile = await call_single_file(url)
+        # Use html suffix so chrome screenshot recognizes it as an HTML file.
+        with tempfile.NamedTemporaryFile('wb', suffix='.html') as fh:
             fh.write(singlefile)
+            readability = None
             try:
                 readability = await extract_readability(fh.name, url)
             except Exception as e:
                 # Readability had error, but its is not required.
                 logger.error(f'Failed to get readability', exc_info=e)
-                readability = None
+
+            screenshot = None
+            try:
+                # Screenshot the local singlefile, if that fails try the URL.
+                screenshot = await take_screenshot(f'file://{fh.name}')
+            except Exception as e:
+                logger.error(f'Failed to take screenshot of {fh.name}', exc_info=e)
+
+            if not screenshot:
+                logger.warning(f'Failed to screenshot local singlefile attempting to screenshot: {url}')
+                try:
+                    screenshot = await take_screenshot(url)
+                except Exception as e:
+                    logger.error(f'Failed to take screenshot of {url}', exc_info=e)
 
         # Compress for smaller response.
         singlefile = prepare_bytes(singlefile)

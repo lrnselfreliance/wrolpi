@@ -50,6 +50,7 @@ libtool
 libxml2-dev
 lua5.1
 mapnik-utils
+netcat
 network-manager
 nginx-doc
 nginx-full

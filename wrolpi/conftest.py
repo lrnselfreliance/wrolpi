@@ -13,7 +13,7 @@ import zipfile
 from abc import ABC
 from datetime import datetime
 from itertools import zip_longest
-from typing import List, Callable, Union, Dict, Sequence
+from typing import List, Callable, Dict, Sequence
 from typing import Tuple, Set
 from unittest import mock
 from unittest.mock import MagicMock
@@ -241,8 +241,17 @@ def test_downloader(test_download_manager):
 @pytest.fixture
 def video_file(test_directory) -> pathlib.Path:
     """Return a copy of the example Big Buck Bunny video in the `test_directory`."""
-    destination = test_directory / f'{uuid4()}.mp4'
+    destination = test_directory / f'video-{uuid4()}.mp4'
     shutil.copy(PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4', destination)
+
+    yield destination
+
+
+@pytest.fixture
+def corrupted_video_file(test_directory) -> pathlib.Path:
+    """Return a copy of a corrupted video file in the `test_directory`."""
+    destination = test_directory / f'corrupted-{uuid4()}.mp4'
+    shutil.copy(PROJECT_DIR / 'test/corrupted.mp4', destination)
 
     yield destination
 

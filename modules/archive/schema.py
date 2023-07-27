@@ -19,8 +19,14 @@ class ArchiveDict:
 
 @dataclass
 class DomainDict:
-    id: int
     domain: str
+    url_count: int
+    size: int
+
+
+@dataclass
+class GetDomainsResponse:
+    domains: List[DomainDict]
 
 
 @dataclass

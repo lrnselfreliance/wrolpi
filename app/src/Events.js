@@ -16,6 +16,8 @@ function handleEvents(events) {
         const {event, message, subject, dt, url} = e;
         document.dispatchEvent(new CustomEvent(apiEventName, {detail: e}));
 
+        console.debug(`Got event: ${event}`);
+
         if (event === 'directory_refresh') {
             eventToast(
                 'Refresh started',
@@ -26,7 +28,7 @@ function handleEvents(events) {
         if (subject && newestEvents[subject] && newestEvents[subject] > dt) {
             console.debug(`Already handled newer event of "${subject}".`);
             return;
-        } else if (event === 'global_refresh_completed') {
+        } else if (event === 'refresh_completed') {
             eventToast('Refresh completed', 'All files have been refreshed.');
         }
 

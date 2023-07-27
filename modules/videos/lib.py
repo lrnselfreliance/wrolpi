@@ -119,7 +119,11 @@ def validate_video(video: Video, channel_generate_poster: bool):
 
     if video_path and not video.duration:
         # Duration was not retrieved during poster generation.
-        video.duration = get_video_duration(video_path)
+        if video.ffprobe_json and (video_streams := video.get_streams_by_codec_type('video')):
+            video.duration = float(video_streams[0]['duration'])
+        else:
+            # Slowest method.
+            video.duration = get_video_duration(video_path)
 
     if video_path and not video.caption_paths and video.file_group.d_text and not EXTRACT_SUBTITLES:
         # Caption file was deleted, clear out old captions.

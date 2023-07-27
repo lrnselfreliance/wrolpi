@@ -46,7 +46,7 @@ logger = logger.getChild(__name__)
 
 __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 'refresh_files', 'search_files',
            'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics', 'estimate_search',
-           'move', 'rename', 'delete_directory']
+           'move', 'rename', 'delete_directory', 'handle_file_group_search_results']
 
 
 @optional_session
@@ -407,6 +407,8 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
             need_index = [i[0] for i in curs.fetchall() if i[1] is False]
             if need_index:
                 refresh_logger.info(f'Invalidated indexes of {len(need_index)} file groups')
+            else:
+                logger.debug(f'Upserted {len(chunk)} files')
 
             if non_primary_files:
                 # New files may have been added which change what primary paths exist.  Delete any file_groups which
@@ -561,8 +563,8 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
         if refreshing_all_files:
             # Only set refresh_complete flag if all files have been refreshed.
             flags.refresh_complete.set()
-            if send_events:
-                Events.send_global_refresh_completed()
+        if send_events:
+            Events.send_refresh_completed()
 
 
 async def apply_indexers():
@@ -888,7 +890,7 @@ def group_files_by_stem(files: List[pathlib.Path], pre_sorted: bool = False) -> 
     @param files: A list of paths to be grouped.  All paths must be in the same directory!
     @param pre_sorted: This function requires the files to be sorted, it will sort them by default.
     """
-    files = sorted(files) if not pre_sorted else files
+    files = sorted(files) if not pre_sorted else files.copy()
     file = files.pop(0)
     group = [file, ]
     prev_stem, _ = split_path_stem_and_suffix(file)

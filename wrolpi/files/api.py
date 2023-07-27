@@ -389,7 +389,7 @@ async def post_upload(request: Request):
     if chunk_num == total_chunks:
         # File upload is complete.
         del UPLOADED_FILES[output_str]
-        background_task(lib.refresh_files([output]))
+        background_task(lib.refresh_files([output.parent]))
         return response.empty(HTTPStatus.CREATED)
 
     # Request the next chunk.

@@ -23,6 +23,7 @@ apt-get install -y \
   kiwix \
   kiwix-tools \
   libpq-dev \
+  netcat \
   network-manager \
   nginx-doc \
   nginx-full \

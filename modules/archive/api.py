@@ -4,6 +4,7 @@ from http import HTTPStatus
 from sanic import response, Request
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
+from sanic_ext.extensions.openapi.definitions import Response
 
 from wrolpi.common import logger, wrol_mode_check, api_param_limiter
 from wrolpi.errors import ValidationError
@@ -43,7 +44,9 @@ async def delete_archive(_: Request, archive_ids: str):
 
 
 @bp.get('/domains')
-async def fetch_domains(_: Request):
+@openapi.summary('Get a list of all Domains and their Archive statistics')
+@openapi.response(200, schema.GetDomainsResponse, "The list of domains")
+async def get_domains(_: Request):
     domains = lib.get_domains()
     return json_response({'domains': domains, 'totals': {'domains': len(domains)}})
 

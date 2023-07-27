@@ -8,12 +8,12 @@ from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, Fore
 from sqlalchemy.orm import relationship, Session, deferred
 from sqlalchemy.orm.collections import InstrumentedList
 
+from modules.videos.errors import UnknownVideo
 from wrolpi.captions import read_captions
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task
 from wrolpi.dates import now, TZDateTime
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.downloader import Download, download_manager
-from modules.videos.errors import UnknownVideo
 from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
@@ -35,6 +35,7 @@ class Video(ModelHelper, Base):
     url = Column(String)
     view_count = Column(Integer)
     viewed = Column(TZDateTime)
+    ffprobe_json = deferred(Column(JSON))
 
     channel_id = Column(Integer, ForeignKey('channel.id'))
     channel = relationship('Channel', primaryjoin='Video.channel_id==Channel.id', back_populates='videos')
@@ -44,7 +45,7 @@ class Video(ModelHelper, Base):
     def __repr__(self):
         v = None
         if self.video_path:
-            v = self.video_path.relative_to(get_media_directory())
+            v = repr(str(self.video_path.relative_to(get_media_directory())))
         return f'<Video id={self.id} title={repr(self.file_group.title)} path={v} channel={self.channel_id} ' \
                f'source_id={repr(self.source_id)}>'
 
@@ -55,12 +56,20 @@ class Video(ModelHelper, Base):
         if self.channel:
             channel = dict(id=self.channel.id, name=self.channel.name)
 
+        codec_names = []
+        codec_types = []
+        if self.ffprobe_json:
+            codec_names = [i['codec_name'] for i in self.ffprobe_json['streams']]
+            codec_types = [i['codec_type'] for i in self.ffprobe_json['streams']]
+
         # Put live data in "video" instead of "data" to avoid confusion on the frontend.
         d['video'] = dict(
             caption=self.file_group.d_text,
             caption_files=self.caption_files,
             channel=channel,
             channel_id=self.channel_id,
+            codec_names=codec_names,
+            codec_types=codec_types,
             description=self.file_group.c_text or self.get_video_description(),
             duration=self.duration,
             id=self.id,
@@ -198,6 +207,8 @@ class Video(ModelHelper, Base):
             validate_video(self, self.channel.generate_posters if self.channel else False)
         except Exception as e:
             logger.warning(f'Failed to validate video {self}', exc_info=e)
+            if PYTEST:
+                raise
 
         self.file_group.model = Video.__tablename__
         self.file_group.a_text = self.file_group.title
@@ -288,6 +299,46 @@ class Video(ModelHelper, Base):
     def add_tag(self, tag_or_tag_name: Union[Tag, str]) -> TagFile:
         tag = Tag.find_by_name(tag_or_tag_name) if isinstance(tag_or_tag_name, str) else tag_or_tag_name
         return self.file_group.add_tag(tag)
+
+    async def get_ffprobe_json(self) -> dict:
+        """Return the ffprobe json object if previously stored.
+
+        Runs ffprobe if this data does not yet exist."""
+        if not self.video_path:
+            raise RuntimeError(f'Cannot get ffprobe json without video file: {self}')
+
+        if not self.ffprobe_json:
+            from modules.videos.common import ffprobe_json
+            self.ffprobe_json = await ffprobe_json(self.video_path)
+            self.flush()
+
+        return self.ffprobe_json
+
+    def get_streams_by_codec_name(self, codec_name: str) -> List[dict]:
+        """Return all data about all streams which match the codec_name.
+
+        >>> video = Video()
+        >>> video.get_streams_by_codec_name('h264')
+        [ {'codec_name': 'h264', ...} ]
+        """
+        if not self.ffprobe_json:
+            raise RuntimeError(f'ffprobe data has not been extracted, call Video.get_ffprobe_json().')
+
+        streams = [i for i in self.ffprobe_json['streams'] if i['codec_name'] == codec_name]
+        return streams
+
+    def get_streams_by_codec_type(self, codec_type: str) -> List[dict]:
+        """Return all data about all streams which match the codec_type.
+
+        >>> video = Video()
+        >>> video.get_streams_by_codec_type('video')
+        [ {'codec_type': 'video', ...} ]
+        """
+        if not self.ffprobe_json:
+            raise RuntimeError(f'ffprobe data has not been extracted, call Video.get_ffprobe_json().')
+
+        streams = [i for i in self.ffprobe_json['streams'] if i['codec_type'] == codec_type]
+        return streams
 
 
 class Channel(ModelHelper, Base):

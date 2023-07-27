@@ -22,8 +22,8 @@ class Events:
         send_event('global_refresh_started', message, subject='refresh')
 
     @staticmethod
-    def send_global_refresh_completed(message: str = None):
-        send_event('global_refresh_completed', message, subject='refresh')
+    def send_refresh_completed(message: str = None):
+        send_event('refresh_completed', message, subject='refresh')
 
     @staticmethod
     def send_global_refresh_modeling_completed(message: str = None):

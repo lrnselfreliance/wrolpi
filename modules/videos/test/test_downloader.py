@@ -366,6 +366,8 @@ async def test_download_result(test_session, test_directory, video_download_mana
         mock_prepare_filename.return_value = [video_file, {'id': 'foo'}]
         video_download_manager.create_download('https://example.com', video_downloader.name)
         await video_download_manager.wait_for_all_downloads()
+        # Sleep to allow background tasks to finish.
+        await asyncio.sleep(1)
 
     download: Download = test_session.query(Download).one()
     assert download.url == 'https://example.com'

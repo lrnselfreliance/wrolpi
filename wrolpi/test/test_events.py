@@ -28,7 +28,7 @@ def test_events_api_feed(test_session, test_client, example_pdf):
     assert (result := response.json.get('events'))
 
     expected = [
-        dict(event='global_refresh_completed', subject='refresh'),
+        dict(event='refresh_completed', subject='refresh'),
         dict(event='global_after_refresh_completed', subject='refresh'),
         dict(event='global_refresh_indexing_completed', subject='refresh'),
         dict(event='global_refresh_modeling_completed', subject='refresh'),

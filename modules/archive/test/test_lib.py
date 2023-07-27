@@ -12,7 +12,7 @@ from modules.archive import lib
 from modules.archive.lib import get_or_create_domain, get_new_archive_files, delete_archives, do_archive, get_domains
 from modules.archive.models import Archive, Domain
 from wrolpi.db import get_db_session
-from wrolpi.files.lib import refresh_files
+from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 from wrolpi.root_api import CustomJSONEncoder
 from wrolpi.test.common import skip_circleci
@@ -94,7 +94,7 @@ async def test_archive_title(test_session, archive_factory, singlefile_contents_
     test_session.query(FileGroup).delete()
     test_session.commit()
 
-    await refresh_files()
+    await files_lib.refresh_files()
 
     assert test_session.query(FileGroup).count() == 1
     assert test_session.query(Archive).count() == 1
@@ -108,7 +108,7 @@ async def test_archive_title(test_session, archive_factory, singlefile_contents_
     # Delete JSON file.
     archive1.readability_json_path.unlink()
     test_session.delete(archive1)
-    await refresh_files()
+    await files_lib.refresh_files()
 
     archive1: Archive = test_session.query(Archive).one()
     assert archive1.url == 'https://example.com/singlefile-url'
@@ -117,7 +117,7 @@ async def test_archive_title(test_session, archive_factory, singlefile_contents_
     # Clear out title and URL from Singlefile.
     archive1.singlefile_path.write_text(singlefile_contents_factory('', ''))
     test_session.delete(archive1)
-    await refresh_files()
+    await files_lib.refresh_files()
 
     # No title/URL could be found.
     archive1: Archive = test_session.query(Archive).one()
@@ -207,7 +207,7 @@ async def test_fills_contents_with_refresh(test_client, test_session, archive_fa
     assert not archive4.file_group.d_text
 
     # Fill the contents.
-    await refresh_files()
+    await files_lib.refresh_files()
     # The archives will be renamed with their title.
     archive1, archive2, archive3, archive4 = test_session.query(Archive).order_by(Archive.id)
     assert not archive4.file_group.d_text
@@ -536,7 +536,7 @@ async def test_refresh_archives_index(test_session, test_directory, test_client,
         'archive/example.com/2021-10-05-16-20-10_NA.readability.html': '<html></html>',
     })
 
-    await refresh_files()
+    await files_lib.refresh_files()
 
     archive: Archive = test_session.query(Archive).one()
     assert archive.singlefile_path == singlefile
@@ -545,32 +545,22 @@ async def test_refresh_archives_index(test_session, test_directory, test_client,
     assert archive.file_group.indexed is True
 
 
-def test_refresh_archives_invalid_file(test_session, test_directory, test_client, make_files_structure):
-    """
-    Invalid Archives should be removed during refresh.
-    """
-    *_, bogus_path = make_files_structure({
-        '2022-09-04-16-20-11_The Title.html': '<html></html>',
+@pytest.mark.asyncio
+async def test_refresh_archives_deleted_singlefile(test_session, make_files_structure, singlefile_contents_factory):
+    """Removing a Singlefile file from a FileGroup makes that group no longer an Archive."""
+    singlefile, readability = make_files_structure({
+        '2022-09-04-16-20-11_The Title.html': singlefile_contents_factory(),
         '2022-09-04-16-20-11_The Title.readability.json': '{"url": "https://example.com"}',
-        'bogus file': None,
     })
-    test_client.post('/api/files/refresh')
-    assert test_session.query(FileGroup).count() == 2  # One bogus file, one archive group.
-    assert test_session.query(Archive).count() == 1  # Only one real archive.
+    await files_lib.refresh_files()
+    assert test_session.query(FileGroup).one().model == 'archive'
+    assert test_session.query(Archive).count() == 1
 
-    # Create an invalid Archive, it should be removed during refresh.
-    bogus_file: FileGroup = test_session.query(FileGroup).filter_by(primary_path=bogus_path).one()
-    bogus_file.model = 'archive'
-    archive = Archive(file_group=bogus_file)
-    test_session.add(archive)
-    test_session.commit()
-    assert test_session.query(FileGroup).count() == 2
-    assert test_session.query(Archive).count() == 2
-
-    test_client.post('/api/files/refresh')
-    assert test_session.query(FileGroup).count() == 2, 'More files in DB than we created'
-    assert test_session.query(Archive).count() == 1, 'The bogus Archive was not removed'
-    assert bogus_file.model is None, 'Model was not removed'
+    # Remove singlefile, FileGroup is no longer an Archive.
+    singlefile.unlink()
+    await files_lib.refresh_files()
+    assert test_session.query(FileGroup).one().model is None
+    assert test_session.query(Archive).count() == 0
 
 
 @pytest.mark.parametrize(

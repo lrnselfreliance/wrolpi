@@ -1,6 +1,7 @@
 import datetime
 import json
 import pathlib
+from typing import List
 from uuid import uuid4
 
 import pytest
@@ -28,9 +29,11 @@ def archive_factory(test_session, archive_directory, make_files_structure):
     now = time_generator()
 
     def _(domain: str = None, url: str = None, title: str = 'NA', contents: str = None,
-          singlefile_contents: str = None) -> Archive:
+          singlefile_contents: str = None, tag_names: List[str] = None) -> Archive:
         if domain:
             assert '/' not in domain
+
+        tag_names = tag_names or list()
 
         title = title or str(uuid4())
         domain_dir = domain or title
@@ -76,6 +79,9 @@ def archive_factory(test_session, archive_directory, make_files_structure):
         archive.archive_datetime = next(now)
         archive.domain = domain
         archive.validate()
+
+        for tag_name in tag_names:
+            archive.add_tag(tag_name)
 
         return archive
 

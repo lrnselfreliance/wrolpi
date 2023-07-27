@@ -37,6 +37,9 @@ async def video_modeler():
                         session.add(video)
                         session.flush([video])
                     video_id = video.id
+                    # Extract ffprobe data.
+                    await video.get_ffprobe_json()
+                    # Validate and index subtitles.
                     video.validate()
                 except Exception as e:
                     if PYTEST:

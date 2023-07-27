@@ -37,7 +37,7 @@ import {
     useQuery,
     useSearchFiles,
     useSearchFilter,
-    useSearchView,
+    useSearchView, useStatusFlag,
     useWROLMode
 } from "../hooks/customHooks";
 import {Route, Routes} from "react-router-dom";
@@ -62,7 +62,7 @@ import {SelectableTable} from "./Tables";
 import {VideoCard, VideoRowCells} from "./Videos";
 import _ from 'lodash';
 import {FileBrowser} from "./FileBrowser";
-import {refreshDirectoryFiles, refreshFiles} from "../api";
+import {refreshFiles} from "../api";
 import {useSubscribeEventName} from "../Events";
 import {TagsSelector} from "../Tags";
 import {Headlines} from "./Headline";
@@ -571,26 +571,37 @@ export function FilesRoute() {
     </PageContainer>;
 }
 
-export function FilesRefreshButton() {
-    const {status} = useContext(StatusContext);
+const useRefresh = () => {
+    const refreshing = useStatusFlag('refreshing');
+    const refreshingDirectory = useStatusFlag('refreshing_directory');
     const wrolModeEnabled = useWROLMode();
-    const refreshing = status && status['flags'] && status['flags'].indexOf('refreshing') >= 0;
-    const refreshingDirectory = status && status['flags'] && status['flags'].indexOf('refreshing_directory') >= 0;
 
     const [loading, setLoading] = React.useState(false);
 
-    const handleClick = async () => {
+    const localRefreshFiles = async (paths) => {
         setLoading(true);
-        await refreshFiles();
+        await refreshFiles(paths);
     }
 
     // Clear loading when global refresh event completes.
-    useSubscribeEventName('global_refresh_completed', () => setLoading(false));
+    useSubscribeEventName('refresh_completed', () => setLoading(false));
+
+    return {
+        refreshing,
+        refreshingDirectory,
+        wrolModeEnabled,
+        loading,
+        refreshFiles: localRefreshFiles,
+    }
+}
+
+export function FilesRefreshButton() {
+    const {refreshing, refreshingDirectory, wrolModeEnabled, loading, refreshFiles} = useRefresh();
 
     return <Button icon
                    labelPosition='left'
                    loading={loading || refreshing || refreshingDirectory}
-                   onClick={handleClick}
+                   onClick={() => refreshFiles()}
                    disabled={wrolModeEnabled || loading || refreshing}>
         <Icon name='refresh'/>
         Refresh All
@@ -598,26 +609,12 @@ export function FilesRefreshButton() {
 }
 
 export function DirectoryRefreshButton({paths}) {
-    const {status} = useContext(StatusContext);
-    const refreshing = status && status['flags'] && status['flags'].indexOf('refreshing') >= 0;
-    const refreshingDirectory = status && status['flags'] && status['flags'].indexOf('refreshing_directory') >= 0;
-    const wrolModeEnabled = useWROLMode();
-
-    const [loading, setLoading] = React.useState(false);
-
-    const handleClick = async () => {
-        setLoading(true);
-        await refreshDirectoryFiles(paths);
-    }
-
-    // Clear loading when global refresh event completes.
-    useSubscribeEventName('global_refresh_completed', () => setLoading(false));
-    useSubscribeEventName('directory_refresh_completed', () => setLoading(false));
+    const {refreshing, refreshingDirectory, wrolModeEnabled, loading, refreshFiles} = useRefresh();
 
     return <Button icon
                    labelPosition='left'
                    loading={loading || refreshing || refreshingDirectory}
-                   onClick={handleClick}
+                   onClick={() => refreshFiles(paths)}
                    disabled={wrolModeEnabled || loading || refreshing || refreshingDirectory}
     >
         <Icon name='refresh'/>

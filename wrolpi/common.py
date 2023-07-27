@@ -34,6 +34,7 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
+from wrolpi import dates
 from wrolpi.dates import now, from_timestamp, seconds_to_timestamp
 from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError
 from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY
@@ -114,6 +115,8 @@ __all__ = [
     'limit_concurrent',
     'logger',
     'make_media_directory',
+    'split_lines_by_length',
+    'slow_logger',
     'match_paths_to_suffixes',
     'minimize_dict',
     'native_only',
@@ -162,6 +165,10 @@ class ModelHelper:
     @staticmethod
     def get_by_id(id_: int, session: Session = None) -> Optional[Base]:
         raise NotImplementedError('This model has not defined this method.')
+
+    def flush(self):
+        """A convenience function which flushes this record using its DB Session."""
+        Session.object_session(self).flush([self])
 
 
 def get_model_by_table_name(table_name):
@@ -1079,6 +1086,7 @@ def register_refresh_cleanup(func: callable):
 
 async def apply_refresh_cleanup():
     for func in REFRESH_CLEANUP:
+        start = dates.now()
         try:
             logger_.info(f'Applying refresh cleanup {func.__name__}')
             func()
@@ -1086,6 +1094,9 @@ async def apply_refresh_cleanup():
             logger.error(f'Refresh cleanup {func.__name__} failed!', exc_info=e)
             if PYTEST:
                 raise
+        finally:
+            elapsed = (dates.now() - start).total_seconds()
+            logger.warning(f'After refresh cleanup {func.__name__} took {int(elapsed)} seconds')
         # Sleep to catch cancel.
         await asyncio.sleep(0)
 
@@ -1167,6 +1178,7 @@ def timer(name):
 
 @contextlib.contextmanager
 def slow_logger(max_seconds: int, message: str, logger__=logger, level=logging.WARNING):
+    """Only logs when the context duration exceeds the `max_seconds`."""
     before = now()
     try:
         yield

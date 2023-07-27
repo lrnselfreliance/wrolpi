@@ -19,11 +19,11 @@ from wrolpi.db import get_db_session
 from wrolpi.db import optional_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
-from .errors import UnknownChannel, ChannelURLEmpty
 from wrolpi.files.lib import glob_shared_stem
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
 from .common import get_no_channel_directory, get_videos_directory, update_view_counts
+from .errors import UnknownChannel, ChannelURLEmpty
 from .lib import get_downloader_config
 from .models import Video, Channel
 from .schema import ChannelPostRequest
@@ -310,6 +310,20 @@ class VideoDownloader(Downloader, ABC):
                     for name in tag_names:
                         if name not in existing_names:
                             video.add_tag(name)
+
+                # Check that video is valid.
+                await video.get_ffprobe_json()
+                if not video.get_streams_by_codec_type('video'):
+                    return DownloadResult(
+                        success=False,
+                        error='Video was downloaded but did not contain video stream',
+                    )
+                if not video.get_streams_by_codec_type('audio'):
+                    return DownloadResult(
+                        success=False,
+                        error='Video was downloaded but did not contain audio stream',
+                    )
+                session.commit()
 
         except UnrecoverableDownloadError:
             raise

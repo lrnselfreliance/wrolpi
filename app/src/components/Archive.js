@@ -131,11 +131,11 @@ function ArchivePage() {
         historyList = <FileCards files={history}/>;
     }
 
-    const domain = data.domain ? data.domain.domain : null;
+    const domain = data.domain ? data.domain : null;
     let domainHeader;
     if (domain) {
         const domainUrl = `/archive?domain=${domain}`;
-        domainHeader = <Header as='h5'>
+        domainHeader = <Header as='h4'>
             <CardLink to={domainUrl}>
                 {domain}
             </CardLink>
@@ -272,7 +272,7 @@ export function DomainsPage() {
         filteredDomains = domains.filter(i => re.test(i['domain']));
     }
 
-    const row = ({domain, url_count}) => {
+    const domainRow = ({domain, url_count, size}) => {
         return <TableRow key={domain}>
             <TableCell>
                 <Link to={`/archive?domain=${domain}`}>
@@ -280,12 +280,14 @@ export function DomainsPage() {
                 </Link>
             </TableCell>
             <TableCell>{url_count}</TableCell>
+            <TableCell>{humanFileSize(size)}</TableCell>
         </TableRow>
     }
 
     const headers = [
         {key: 'domain', text: 'Domain', sortBy: 'domain', width: 12},
         {key: 'archives', text: 'Archives', sortBy: 'url_count', width: 2},
+        {key: 'Size', text: 'Size', sortBy: 'size', width: 2},
     ];
 
     return <>
@@ -298,7 +300,7 @@ export function DomainsPage() {
         <SortableTable
             tableProps={{unstackable: true}}
             data={filteredDomains}
-            rowFunc={(i, sortData) => row(i)}
+            rowFunc={(i, sortData) => domainRow(i)}
             rowKey='domain'
             tableHeaders={headers}
         />
@@ -362,11 +364,10 @@ function ArchivesPage() {
         }
     }
 
-    const onDelete = async (e) => {
-        e.preventDefault();
+    const onDelete = async () => {
         setDeleteOpen(false);
         const archiveIds = archives.filter(i => selectedArchives.indexOf(i['primary_path']) >= 0)
-            .map(i => i['archive']['id']);
+            .map(i => i['data']['id']);
         await deleteArchives(archiveIds);
         await fetchArchives();
         setSelectedArchives([]);
@@ -383,18 +384,13 @@ function ArchivesPage() {
     }
 
     const selectElm = <div style={{marginTop: '0.5em'}}>
-        <Button
+        <APIButton
             color='red'
             disabled={_.isEmpty(selectedArchives)}
-            onClick={() => setDeleteOpen(true)}
-        >Delete</Button>
-        <Confirm
-            open={deleteOpen}
-            content='Are you sure you want to delete these archives files?  This cannot be undone.'
             confirmButton='Delete'
-            onCancel={() => setDeleteOpen(false)}
-            onConfirm={onDelete}
-        />
+            confirmContent='Are you sure you want to delete these archives files?  This cannot be undone.'
+            onClick={onDelete}
+        >Delete</APIButton>
         <Button
             color='grey'
             onClick={invertSelection}

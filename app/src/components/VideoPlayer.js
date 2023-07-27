@@ -21,6 +21,7 @@ import {ThemeContext} from "../contexts/contexts";
 import {Button, darkTheme, Header, Icon, Segment, Tab, TabPane} from "./Theme";
 import {VideoCard} from "./Videos";
 import {TagsSelector} from "../Tags";
+import {Label} from "semantic-ui-react";
 
 const MEDIA_PATH = '/media';
 
@@ -109,6 +110,9 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
 
             <h3>Censored</h3>
             <p>{video.censored ? 'Yes' : 'No'}</p>
+
+            <h3>Codec Names</h3>
+            <>{video.codec_names ? video.codec_names.map(i => <Label>{i}</Label>) : 'N/A'}</>
         </TabPane>
     }
 
@@ -133,7 +137,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
 
             <h4>Caption Files</h4>
             {caption_files &&
-                caption_files.map(i => <PreviewPath key={i['path']} {...i}>{i['path']}</PreviewPath>)
+                caption_files.map(i => <p key={i['path']}><PreviewPath {...i}>{i['path']}</PreviewPath></p>)
             }
 
             <h4>Poster File</h4>
@@ -161,6 +165,13 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         await fetchVideo();
     }
 
+    let videoSource = <source src={videoUrl}/>;
+    if (video.codec_names && video.codec_names.indexOf('mp4') >= 0) {
+        videoSource = <source src={videoUrl} type="video/mp4"/>
+    } else if (video.codec_names && video.codec_names.indexOf('vp9') >= 0) {
+        videoSource = <source src={videoUrl} type='video/mp4;codecs="vp9, vorbis"'/>
+    }
+
     return <>
         <Container style={{margin: '1em'}}>
             <BackButton/>
@@ -174,7 +185,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                style={{maxWidth: '100%'}}
                ref={videoRef}
         >
-            <source src={videoUrl} type="video/mp4"/>
+            {videoSource}
             {/* Only WebVTT captions can be displayed. */}
             {captionUrls.map(i => <track key={i} kind="captions" label="English" src={i} srcLang="en" default/>)}
         </video>

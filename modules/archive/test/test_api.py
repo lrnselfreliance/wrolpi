@@ -1,6 +1,8 @@
 import json
 from http import HTTPStatus
 
+import pytest
+
 from modules.archive import lib
 
 
@@ -77,6 +79,26 @@ def test_archives_search(test_session, archive_directory, archive_factory, test_
     data = {'search_str': 'qux', 'order_by': 'bad order_by'}
     request, response = test_client.post('/api/archive/search', content=json.dumps(data))
     assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.asyncio
+async def test_search_archive_tags(test_session, test_async_client, archive_factory, tag_factory):
+    """Tagged Archives can be searched."""
+    tag = tag_factory()
+    archive_factory(domain='example.com', tag_names=[tag.name, ])
+    test_session.commit()
+
+    content = {'search_str': '', 'domain': 'example.com', 'tag_names': [tag.name, ]}
+    request, response = await test_async_client.post('/api/archive/search', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file_groups']
+    assert response.json['totals']['file_groups'] == 1
+
+    content = {'search_str': '', 'domain': 'example.com', 'tag_names': ['does not exist', ]}
+    request, response = await test_async_client.post('/api/archive/search', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file_groups'] == []
+    assert response.json['totals']['file_groups'] == 0
 
 
 def test_archives_search_headline(test_session, archive_directory, archive_factory, test_client):
@@ -179,6 +201,7 @@ def test_archive_and_domain_crud(test_session, test_client, archive_factory):
     request, response = test_client.get(f'/api/archive/domains')
     assert response.status_code == HTTPStatus.OK
     assert response.json['domains'][0]['domain'] == 'example.com'
+    assert response.json['domains'][0]['size'] == 116
 
     # Deleting works.
     request, response = test_client.delete(f'/api/archive/{archive1.id}')

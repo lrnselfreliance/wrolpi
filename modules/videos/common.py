@@ -1,13 +1,15 @@
+import asyncio
 import json
 import os
 import pathlib
 import re
+import shlex
 import subprocess
 import tempfile
 from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import PIL
 from PIL import Image
@@ -163,6 +165,50 @@ def is_valid_poster(poster_path: Path) -> bool:
             pass
 
     return False
+
+
+async def ffprobe_json(video_path: Union[Path, str]) -> dict:
+    """Extract video file metadata using ffprobe.
+
+    >>> ffprobe_json('video')
+    {
+        'chapters': [],
+        'format': {},
+        'streams': [
+            {},
+        ],
+    }
+    """
+    cmd = f'{FFPROBE_BIN}' \
+          f' -print_format json' \
+          f' -loglevel quiet' \
+          f' -show_streams' \
+          f' -show_format' \
+          f' -show_chapters' \
+          f' {shlex.quote(str(video_path.absolute()))}'
+
+    try:
+        proc = await asyncio.create_subprocess_shell(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = await proc.communicate()
+    except Exception as e:
+        logger.error(f'Failed to run ffprobe json', exc_info=e)
+        raise
+
+    if proc.returncode != 0:
+        raise RuntimeError(f'Got non-zero exit code: {proc.returncode}')
+
+    try:
+        content = json.loads(stdout.decode().strip())
+    except Exception as e:
+        logger.debug(stdout.decode())
+        logger.error(f'Failed to load ffprobe json', exc_info=e)
+        raise
+
+    if content == dict():
+        # Data is empty, video may be corrupt.
+        raise RuntimeError('ffprobe data was empty')
+
+    return content
 
 
 def get_video_duration(video_path: Path) -> int:

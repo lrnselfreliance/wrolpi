@@ -541,6 +541,7 @@ export function CardPoster({to, file}) {
     const {s} = useContext(ThemeContext);
     // Used to center posters in CardIcon.
     const style = {display: 'flex', justifyContent: 'center', ...s['style']};
+    const navigate = useNavigate();
 
     const cardTagIcon = <div className="ui green left corner label">
         <i aria-hidden="true" className="tag icon"></i>
@@ -549,8 +550,27 @@ export function CardPoster({to, file}) {
 
     let posterPath = findPosterPath(file);
 
-    if (!posterPath) {
-        // No poster, use a FileIcon.
+    if (!posterPath && to && (to.startsWith('/download/') || to.startsWith('/media/'))) {
+        // No poster, link is to download a file directly.
+        return <ExternalCardLink to={to}>
+            <CardIcon onClick={() => {
+                window.location.href = to;
+                return null
+            }}>
+                {imageLabel}
+                <FileIcon file={file}/>
+            </CardIcon>
+        </ExternalCardLink>
+    } else if (!posterPath && to) {
+        // No poster, link to the full page.
+        return <Link to={to}>
+            <CardIcon onClick={() => navigate(to)}>
+                {imageLabel}
+                <FileIcon file={file}/>
+            </CardIcon>
+        </Link>
+    } else if (!posterPath) {
+        // No poster, no to, use a Preview.
         return <PreviewLink file={file}>
             <CardIcon>
                 {imageLabel}

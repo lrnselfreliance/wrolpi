@@ -1,6 +1,7 @@
 import React, {useContext, useEffect, useState} from 'react';
 import {Link, Route, Routes, useParams} from "react-router-dom";
 import {
+    APIButton,
     CardLink,
     CardPoster,
     cardTitleWrapper,
@@ -13,6 +14,7 @@ import {
     isoDatetimeToString,
     mimetypeColor,
     PageContainer,
+    PreviewLink,
     scrollToTop,
     SearchInput,
     SortButton,
@@ -25,7 +27,6 @@ import {
     CardContent,
     CardDescription,
     CardHeader,
-    Confirm,
     Container,
     Image,
     PlaceholderHeader,
@@ -60,7 +61,6 @@ function VideosPage() {
     const {channelId} = useParams();
     const {searchParams} = useQuery();
     const [selectedVideos, setSelectedVideos] = useState([]);
-    const [deleteOpen, setDeleteOpen] = useState(false);
 
     let searchOrder = defaultVideoOrder;
     if (searchParams.get('order')) {
@@ -118,9 +118,7 @@ function VideosPage() {
         setSelectedVideos(newSelectedVideos);
     }
 
-    const onDelete = async (e) => {
-        e.preventDefault();
-        setDeleteOpen(false);
+    const onDelete = async () => {
         const videoIds = videos.filter(i => selectedVideos.indexOf(i['primary_path']) >= 0).map(i => i['video']['id']);
         await deleteVideos(videoIds);
         await fetchVideos();
@@ -138,18 +136,13 @@ function VideosPage() {
     }
 
     const selectElm = <div style={{marginTop: '0.5em'}}>
-        <Button
+        <APIButton
             color='red'
             disabled={_.isEmpty(selectedVideos)}
-            onClick={() => setDeleteOpen(true)}
-        >Delete</Button>
-        <Confirm
-            open={deleteOpen}
-            content='Are you sure you want to delete these video files?  This cannot be undone.'
             confirmButton='Delete'
-            onCancel={() => setDeleteOpen(false)}
-            onConfirm={onDelete}
-        />
+            confirmContent='Are you sure you want to delete these video files?  This cannot be undone.'
+            onClick={onDelete}
+        >Delete</APIButton>
         <Button
             color='grey'
             onClick={() => invertSelection()}
@@ -290,17 +283,34 @@ export function VideoCard({file}) {
     const {video} = file;
     const {s} = useContext(ThemeContext);
 
-    let video_url = `/videos/video/${video.id}`;
+    // Default to video FilePreview for lone video files.
+    let video_url;
+
     const upload_date = isoDatetimeToString(video.upload_date);
     // A video may not have a channel.
     const channel = video.channel ? video.channel : null;
     let channel_url = null;
     if (channel) {
+        // Link to Video in the Channel if possible.
         channel_url = `/videos/channel/${channel.id}/video`;
         video_url = `/videos/channel/${channel.id}/video/${video.id}`;
+    } else if (file.files.length > 1) {
+        // No Channel, but the video has multiple files (subtitles, etc.).  Use the full VideoPage.
+        video_url = `/videos/video/${video.id}`
     }
 
     let poster = <CardPoster to={video_url} file={file}/>;
+
+    let header = <p {...s}>{cardTitleWrapper(file.title || file.name || video.stem || video.video_path)}</p>;
+    if (video_url) {
+        // Link to Channel-Video page or Video page.
+        header = <Link to={video_url} className="no-link-underscore card-link">{header}</Link>;
+    } else {
+        // Video is just a lone video file.
+        header = <PreviewLink file={file}>
+            {header}
+        </PreviewLink>;
+    }
 
     const color = mimetypeColor(file.mimetype);
     return <Card color={color}>
@@ -309,9 +319,7 @@ export function VideoCard({file}) {
         <CardContent {...s}>
             <CardHeader>
                 <Container textAlign='left'>
-                    <Link to={video_url} className="no-link-underscore card-link">
-                        <p {...s}>{cardTitleWrapper(file.title || file.name || video.stem || video.video_path)}</p>
-                    </Link>
+                    {header}
                 </Container>
             </CardHeader>
             <CardDescription>

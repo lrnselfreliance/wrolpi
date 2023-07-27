@@ -1,3 +1,4 @@
+import asyncio
 import json
 import pathlib
 import tempfile
@@ -275,16 +276,14 @@ async def test_channel_download_requires_refresh(test_session, download_channel,
     vid = video_factory(channel_id=download_channel.id, with_video_file=True, with_poster_ext='jpg')
     vid.url = 'https://example.com/1'
     d = download_channel.get_download()
+    d.next_download = None
     test_session.commit()
     assert not d.next_download
 
     def assert_refreshed(expected: bool):
         channel: Channel = test_session.query(Channel).one()
         assert channel.refreshed == expected
-        if expected:
-            assert channel.info_json
-        else:
-            assert not channel.info_json
+        assert bool(channel.info_json) == expected
 
     assert_refreshed(False)
     test_session.commit()
@@ -307,6 +306,8 @@ async def test_channel_download_requires_refresh(test_session, download_channel,
                                           'channel_id': 'the id', 'id': 'the id'}
         await video_download_manager.do_downloads()
         await video_download_manager.wait_for_all_downloads()
+        # Give time for background tasks to finish.  :(
+        await asyncio.sleep(1)
 
     # Channel was refreshed before downloading videos.
     assert_refreshed(True)

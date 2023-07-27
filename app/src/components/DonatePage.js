@@ -61,6 +61,22 @@ export function DonatePage() {
         <Segment>
             <Header as='h1'>Donate</Header>
             <Header as='h3'>We appreciate any support you can provide to WROLPi!</Header>
+
+            <p>
+                <Button
+                    size='huge'
+                    icon='paypal'
+                    as='a'
+                    color='blue'
+                    href='https://www.paypal.com/donate/?hosted_button_id=ZH2CN92SMJ66N'
+                    label={{
+                        basic: true,
+                        content: 'Donate on PayPal',
+                        color: 'blue'
+                    }}
+                />
+            </p>
+
             <CoinRow header='Monero' qrCodeValue={moneroContent} address={moneroAddress} buttonColor='orange'/>
             <CoinRow header='Litecoin' qrCodeValue={litecoinContent} address={litecoinAddress} buttonColor='grey'/>
             <CoinRow header='Ethereum' qrCodeValue={ethereumContent} address={ethereumAddress} buttonColor='blue'/>

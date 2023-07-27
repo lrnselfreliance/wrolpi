@@ -11,11 +11,11 @@ from wrolpi.common import logger, register_modeler, register_refresh_cleanup, li
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
-from .errors import InvalidArchive
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST
 from . import lib
 from .api import bp  # noqa
+from .errors import InvalidArchive
 from .lib import is_singlefile_file, get_title_from_html
 from .models import Archive, Domain
 
@@ -193,34 +193,6 @@ async def archive_modeler():
 @register_refresh_cleanup
 @limit_concurrent(1)
 def archive_cleanup():
-    # Process all Archives that have not been validated.  Delete any that no longer exist, or are not real Archives.
-    # Validate all other Archives.
-    logger.info('Searching for invalid Archives')
-    offset = 0
-    limit = 100
-    while True:
-        with get_db_session(commit=True) as session:
-            archives: List[Archive] = session.query(Archive).order_by(Archive.id).limit(limit).offset(offset)
-            processed = 0
-            deleted = 0
-            for archive in archives:
-                processed += 1
-                singlefile_path = archive.singlefile_path
-                if not singlefile_path:
-                    archive.file_group.model = None
-                    session.delete(archive)
-                    deleted += 1
-                    continue
-                if not lib.is_singlefile_file(singlefile_path):
-                    # Archive is not a real archive.
-                    archive.singlefile_file.model = None
-                    session.delete(archive)
-                    deleted += 1
-            if processed < limit:
-                # Validated all archives.
-                break
-            offset += (limit - deleted)
-
     with get_db_session(commit=True) as session:
         # Remove any Domains without any Archives.
         domain_ids = [i[0] for i in session.execute('SELECT DISTINCT domain_id FROM archive') if i[0]]

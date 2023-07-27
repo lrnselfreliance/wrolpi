@@ -539,23 +539,17 @@ export async function filesSearch(offset, limit, searchStr, mimetypes, model, ta
     }
 }
 
-export async function refreshFiles() {
-    return await apiPost(`${API_URI}/files/refresh`);
-}
-
-export async function refreshDirectoryFiles(paths) {
-    let body = {paths: paths};
-    try {
-        return await apiPost(`${API_URI}/files/refresh`, body);
-    } catch (e) {
-        console.error(e);
-        toast({
-            type: 'error',
-            title: 'Unable to refresh directory',
-            description: 'Cannot refresh the files in the directory.  See server logs.',
-            time: 5000,
-        });
+export async function refreshFiles(paths) {
+    let response;
+    if (paths && paths.constructor === Array) {
+        const body = {paths};
+        console.debug(`Refreshing: ${paths}`);
+        response = await apiPost(`${API_URI}/files/refresh`, body);
+    } else {
+        console.debug(`Refreshing all files`);
+        response = await apiPost(`${API_URI}/files/refresh`);
     }
+    return response;
 }
 
 export async function makeDirectory(path) {

@@ -9,6 +9,7 @@ from PIL import Image
 from modules.videos.models import Channel, Video
 from wrolpi.common import get_absolute_media_path
 from wrolpi.downloader import Download, DownloadFrequency
+from wrolpi.files import lib as files_lib
 from wrolpi.vars import PROJECT_DIR
 from .. import common
 from ..common import convert_image, update_view_counts, get_video_duration, generate_video_poster, is_valid_poster
@@ -204,3 +205,28 @@ def test_check_for_video_corruption(video_file, test_directory):
         assert common.check_for_video_corruption(video_file) is True
         mock_subprocess.run().stderr = b'Some stderr is fine'
         assert common.check_for_video_corruption(video_file) is False
+
+
+@pytest.mark.asyncio
+async def test_ffprobe_json(video_file, corrupted_video_file):
+    content = await common.ffprobe_json(video_file)
+    assert not content['chapters']
+    assert content['format']['duration'] == '5.312000'
+    assert content['format']['size'] == '1056318'
+    assert content['streams']
+    assert content['streams'][0]['codec_name'] == 'h264'
+
+    with pytest.raises(RuntimeError):
+        await common.ffprobe_json(corrupted_video_file)
+
+
+@pytest.mark.asyncio
+async def test_video_ffprobe_json(test_session, video_file):
+    """ffprobe data is extracted when a video is modeled."""
+    with mock.patch('modules.videos.lib.get_video_duration') as mock_get_video_duration:
+        mock_get_video_duration.side_effect = Exception('duration should be from ffprobe json')
+        await files_lib.refresh_files()
+
+    video = test_session.query(Video).one()
+    assert video.ffprobe_json
+    assert video.duration

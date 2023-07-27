@@ -184,10 +184,10 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
              {'path': srt_file3, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'text/srt'},
              {'path': video_file, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'},
          ]},
-        {'primary_path': bar, 'idempotency': idempotency,
+        {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,
          'files': [{'path': bar, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}]
          },
-        {'primary_path': baz, 'idempotency': idempotency,
+        {'primary_path': baz, 'idempotency': idempotency, 'indexed': False,
          'files': [{'path': baz, 'size': 8, 'suffix': '.txt', 'mimetype': 'text/plain'}]
          },
     ])
@@ -211,10 +211,10 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
              {'path': srt_file3, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'text/srt'},
              {'path': video_file, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'},
          ]},
-        {'primary_path': bar, 'idempotency': idempotency,
+        {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,
          'files': [{'path': bar, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}],
          },
-        {'primary_path': baz, 'idempotency': idempotency,
+        {'primary_path': baz, 'idempotency': idempotency, 'indexed': False,
          'files': [{'path': baz, 'size': 7, 'suffix': '.txt', 'mimetype': 'text/plain'}],
          },
     ])
@@ -224,6 +224,17 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     lib._upsert_files([video_file, bar, baz], idempotency)
     video_file_group: FileGroup = test_session.query(FileGroup).filter_by(primary_path=str(video_file)).one()
     assert len(video_file_group.files) == 1, 'SRT file was not removed from files'
+    assert_file_groups([
+        # Video is no longer indexed because SRT was removed.
+        {'primary_path': video_file, 'idempotency': idempotency, 'modification_datetime': foo_mtime, 'indexed': False,
+         'files': [{'path': video_file, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'}]},
+        {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,
+         'files': [{'path': bar, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}],
+         },
+        {'primary_path': baz, 'idempotency': idempotency, 'indexed': False,
+         'files': [{'path': baz, 'size': 7, 'suffix': '.txt', 'mimetype': 'text/plain'}],
+         },
+    ])
 
 
 @pytest.mark.asyncio

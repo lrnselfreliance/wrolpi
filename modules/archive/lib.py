@@ -20,7 +20,6 @@ from wrolpi.common import get_media_directory, logger, extract_domain, chdir, es
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import UnknownArchive, InvalidOrderBy
-from wrolpi.files.lib import handle_file_group_search_results
 from wrolpi.tags import tag_names_to_file_group_sub_select
 from wrolpi.vars import DOCKERIZED, PYTEST
 
@@ -356,14 +355,15 @@ def is_singlefile_file(path: pathlib.Path) -> bool:
 def get_domains():
     with get_db_curs() as curs:
         stmt = '''
-            SELECT domains.domain AS domain, COUNT(a.id) AS url_count
+            SELECT domains.domain AS domain, COUNT(a.id) AS url_count, SUM(fg.size)::BIGINT AS size
             FROM domains
-            LEFT JOIN archive a on domains.id = a.domain_id
+                LEFT JOIN archive a on domains.id = a.domain_id
+                LEFT JOIN file_group fg on fg.id = a.file_group_id
             GROUP BY domains.domain
             ORDER BY domains.domain
         '''
         curs.execute(stmt)
-        domains = list(map(dict, curs.fetchall()))
+        domains = [dict(i) for i in curs.fetchall()]
         return domains
 
 
@@ -421,6 +421,7 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
         tags_stmt, params_ = tag_names_to_file_group_sub_select(tag_names)
         params.update(params_)
         wheres.append(f'fg.id = ANY({tags_stmt})')
+        joins = ['LEFT JOIN file_group fg ON fg.id = a.file_group_id']
 
     if search_str and headline:
         headline = ''',
@@ -455,6 +456,7 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
         '''.strip()
     logger.debug(stmt, params)
 
+    from wrolpi.files.lib import handle_file_group_search_results
     results, total = handle_file_group_search_results(stmt, params)
     return results, total
 

@@ -735,6 +735,11 @@ export const StatusProvider = (props) => {
     </StatusContext.Provider>
 }
 
+export const useStatusFlag = (flag) => {
+    const {status} = useContext(StatusContext);
+    return status && status['flags'] && status['flags'].indexOf(flag) >= 0;
+}
+
 
 export const useVideoStatistics = () => {
     const [statistics, setStatistics] = useState({});

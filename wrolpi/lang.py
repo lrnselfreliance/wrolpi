@@ -158,6 +158,7 @@ ISO_639_CODES = {
     "ell": "Greek, Modern (1453-)",
     "elx": "Elamite",
     "en": "English",
+    "en-GB": "British English",  # Not official
     "eng": "English",
     "enm": "English, Middle (1100-1500)",
     "eo": "Esperanto",

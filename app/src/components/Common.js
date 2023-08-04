@@ -550,55 +550,52 @@ export function CardPoster({to, file}) {
 
     let posterPath = findPosterPath(file);
 
-    if (!posterPath && to && (to.startsWith('/download/') || to.startsWith('/media/'))) {
-        // No poster, link is to download a file directly.
-        return <ExternalCardLink to={to}>
-            <CardIcon onClick={() => {
-                window.location.href = to;
-                return null
-            }}>
-                {imageLabel}
-                <FileIcon file={file}/>
-            </CardIcon>
-        </ExternalCardLink>
-    } else if (!posterPath && to) {
-        // No poster, link to the full page.
-        return <Link to={to}>
-            <CardIcon onClick={() => navigate(to)}>
-                {imageLabel}
-                <FileIcon file={file}/>
-            </CardIcon>
-        </Link>
-    } else if (!posterPath) {
-        // No poster, no to, use a Preview.
-        return <PreviewLink file={file}>
-            <CardIcon>
-                {imageLabel}
-                <FileIcon file={file}/>
-            </CardIcon>
-        </PreviewLink>
-    }
+    if (posterPath) {
+        // FileGroup has a poster (screenshot/thumbnail) file.
+        posterPath = `/media/${encodeMediaPath(posterPath)}`;
 
-    posterPath = `/media/${encodeMediaPath(posterPath)}`;
+        const image = <>
+            {/* Replicate <Image label/> but with maxHeight applied to image */}
+            {imageLabel}
+            <img alt='poster' src={posterPath} style={{maxHeight: '163px', width: 'auto'}}/>
+        </>;
 
-    const image = <>
-        {/* Replicate <Image label/> but with maxHeight applied to image */}
-        {imageLabel}
-        <img alt='poster' src={posterPath} style={{maxHeight: '163px', width: 'auto'}}/>
-    </>;
-
-    if (to) {
-        // Link using React Router.
-        return <Link to={to} style={style}>
-            {image}
-        </Link>
-    } else {
-        // Preview the file.
-        return <div style={style}>
-            <PreviewLink file={file}>
+        if (to) {
+            // Link within this App.
+            console.debug(`${file['primary_path']} link with poster`);
+            return <Link to={to} style={style}>
                 {image}
+            </Link>
+        } else {
+            // Preview the file.
+            console.debug(`${file['primary_path']} preview with poster`);
+            return <div style={style}>
+                <PreviewLink file={file}>
+                    {image}
+                </PreviewLink>
+            </div>
+        }
+    } else {
+        // FileGroup has no poster.
+        if (!to || (to.startsWith('/media/') || to.startsWith('/download/'))) {
+            // "to" is a downloadable file outside the app, preview the file.
+            console.debug(`${file['primary_path']} preview no poster`);
+            return <PreviewLink file={file}>
+                <CardIcon>
+                    {imageLabel}
+                    <FileIcon file={file}/>
+                </CardIcon>
             </PreviewLink>
-        </div>
+        } else if (!posterPath && to) {
+            // Link to the full page in this App.
+            console.debug(`${file['primary_path']} link no poster`);
+            return <Link to={to}>
+                <CardIcon onClick={() => navigate(to)}>
+                    {imageLabel}
+                    <FileIcon file={file}/>
+                </CardIcon>
+            </Link>
+        }
     }
 }
 

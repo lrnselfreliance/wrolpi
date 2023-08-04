@@ -140,6 +140,7 @@ function getSTLModal(previewFile) {
 }
 
 function getGenericModal(previewFile) {
+    // No special handler for this file type, just open it.
     const path = previewFile.primary_path ?? previewFile.path;
     const name = path.replace(/^.*[\\\/]/, '');
 
@@ -214,7 +215,7 @@ export function FilePreviewProvider({children}) {
                 <pre>{path}</pre>
             </ModalContent>
             : null;
-        console.log('path', path);
+        console.log('Previewing', path);
 
         setPreviewModal(<Modal closeIcon
                                size='fullscreen'

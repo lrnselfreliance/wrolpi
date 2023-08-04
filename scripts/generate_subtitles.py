@@ -115,8 +115,9 @@ if __name__ == '__main__':
         logger.setLevel(logging.WARNING)
     elif args.v == 1:
         logger.setLevel(logging.INFO)
-    elif args.v > 1:
+    elif args.v >= 2:
         logger.setLevel(logging.DEBUG)
+        logger.debug(f'Debug logging')
 
     main(
         args.files,

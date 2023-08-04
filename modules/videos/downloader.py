@@ -49,6 +49,8 @@ PREFERRED_VIDEO_FORMAT = ','.join([
     'mp4-480p',
     'bestvideo*+bestaudio/best',  # Download the highest resolution as a last resort (can be quite large).
 ])
+PREFERRED_CAPTION_FORMAT = 'vtt'
+PREFERRED_POSTER_FORMAT = 'jpg'
 
 
 def extract_info(url: str, ydl: YoutubeDL = YDL, process=False) -> dict:
@@ -257,6 +259,9 @@ class VideoDownloader(Downloader, ABC):
                 '--match-filter', '!is_live',  # Do not attempt to download Live videos.
                 '--write-subs',
                 '--write-auto-subs',
+                '--sub-format', PREFERRED_CAPTION_FORMAT,
+                '--convert-subs', PREFERRED_CAPTION_FORMAT,
+                '--convert-thumbnails', PREFERRED_POSTER_FORMAT,
                 '--write-thumbnail',
                 '--write-info-json',
                 '--merge-output-format', PREFERRED_VIDEO_EXTENSION,

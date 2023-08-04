@@ -69,6 +69,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('directory', type=pathlib.Path,
                         help='The directory which contains SRT files to convert.')
+    parser.add_argument('-d', '--delete', default=False, action='store_true',
+                        help='Delete duplicate SRT files without prompting.')
+    parser.add_argument('-i', '--ignore-errors', default=False, action='store_true',
+                        help='Ignore errors and continue converting.')
     parser.add_argument('-v', action='count')
     args = parser.parse_args()
 
@@ -87,4 +91,4 @@ if __name__ == '__main__':
         sys.exit(1)
 
     for srt_file_ in find_srt_files(directory_):
-        convert_srt_to_vtt(srt_file_)
+        convert_srt_to_vtt(srt_file_, ask_delete=not args.delete, throw=not args.ignore_errors)

@@ -40,6 +40,33 @@ function videoFileLink(path, directory = false) {
     }
 }
 
+export function CaptionTrack({src, ...props}) {
+    if (src.endsWith('.de.vtt')) {
+        return <track kind="captions" label="German" src={src} srcLang="de" {...props}/>
+    } else if (src.endsWith('.es.vtt')) {
+        return <track kind="captions" label="Spanish" src={src} srcLang="es" {...props}/>
+    } else if (src.endsWith('.fr.vtt')) {
+        return <track kind="captions" label="French" src={src} srcLang="fr" {...props}/>
+    } else if (src.endsWith('.id.vtt')) {
+        return <track kind="captions" label="Indonesian" src={src} srcLang="id" {...props}/>
+    } else if (src.endsWith('.it.vtt')) {
+        return <track kind="captions" label="Italian" src={src} srcLang="it" {...props}/>
+    } else if (src.endsWith('.ja.vtt')) {
+        return <track kind="captions" label="Japanese" src={src} srcLang="ja" {...props}/>
+    } else if (src.endsWith('.pl.vtt')) {
+        return <track kind="captions" label="Polish" src={src} srcLang="pl" {...props}/>
+    } else if (src.endsWith('.pt.vtt')) {
+        return <track kind="captions" label="Portuguese" src={src} srcLang="pt" {...props}/>
+    } else if (src.endsWith('.ro.vtt')) {
+        return <track kind="captions" label="Romanian" src={src} srcLang="ro" {...props}/>
+    }  else if (src.endsWith('.ru.vtt')) {
+        return <track kind="captions" label="Russian" src={src} srcLang="ru" {...props}/>
+    } else if (src.endsWith('.th.vtt')) {
+        return <track kind="captions" label="Thai" src={src} srcLang="th" {...props}/>
+    }
+    return <track kind="captions" label="English" src={src} srcLang="en" default {...props}/>
+}
+
 function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     const {theme} = useContext(ThemeContext);
 
@@ -187,7 +214,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         >
             {videoSource}
             {/* Only WebVTT captions can be displayed. */}
-            {captionUrls.map(i => <track key={i} kind="captions" label="English" src={i} srcLang="en" default/>)}
+            {captionUrls.map(i => <CaptionTrack key={i} src={i}/>)}
         </video>
 
         <Container style={{marginTop: '1em'}}>

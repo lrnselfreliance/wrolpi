@@ -406,9 +406,9 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
             curs.execute(stmt)
             need_index = [i[0] for i in curs.fetchall() if i[1] is False]
             if need_index:
-                refresh_logger.info(f'Invalidated indexes of {len(need_index)} file groups')
+                refresh_logger.info(f'Invalidated indexes of {len(need_index)} file groups near {str(chunk[0])}')
             else:
-                logger.debug(f'Upserted {len(chunk)} files')
+                logger.debug(f'Upserted {len(chunk)} files near {str(chunk[0])}')
 
             if non_primary_files:
                 # New files may have been added which change what primary paths exist.  Delete any file_groups which

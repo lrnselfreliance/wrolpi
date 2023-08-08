@@ -886,9 +886,22 @@ class DownloadManager:
             curs.execute(stmt)
             once_downloads = list(map(dict, curs.fetchall()))
 
+            stmt = '''
+                SELECT
+                    COUNT(id) FILTER (
+                        WHERE frequency IS NULL
+                        AND (status = 'pending' OR status = 'new')
+                        )
+                FROM
+                    download
+            '''
+            curs.execute(stmt)
+            pending_once_downloads = curs.fetchone()[0]
+
         data = dict(
             recurring_downloads=recurring_downloads,
             once_downloads=once_downloads,
+            pending_once_downloads=pending_once_downloads,
         )
         return data
 

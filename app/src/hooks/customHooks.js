@@ -551,12 +551,14 @@ export const useHotspot = () => {
 export const useDownloads = () => {
     const [onceDownloads, setOnceDownloads] = useState(null);
     const [recurringDownloads, setRecurringDownloads] = useState(null);
+    const [pendingOnceDownloads, setPendingOnceDownloads] = useState(null);
 
     const fetchDownloads = async () => {
         try {
             const data = await getDownloads();
             setOnceDownloads(data['once_downloads']);
             setRecurringDownloads(data['recurring_downloads']);
+            setPendingOnceDownloads(data['pending_once_downloads']);
         } catch (e) {
             console.error(e);
         }
@@ -564,7 +566,7 @@ export const useDownloads = () => {
 
     useRecurringTimeout(fetchDownloads, 3 * 1000);
 
-    return {onceDownloads, recurringDownloads, fetchDownloads}
+    return {onceDownloads, recurringDownloads, pendingOnceDownloads, fetchDownloads}
 }
 
 export const useThrottle = () => {

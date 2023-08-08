@@ -44,7 +44,8 @@ async def video_modeler():
                 except Exception as e:
                     if PYTEST:
                         raise
-                    logger.error(f'Unable to model Video {video_id=}', exc_info=e)
+                    i = video.file_group.primary_path if video.file_group else video_id
+                    logger.error(f'Unable to model Video {i=}', exc_info=e)
 
                 file_group.indexed = True
 

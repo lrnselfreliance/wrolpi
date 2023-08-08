@@ -20,6 +20,7 @@ apt-get install -y \
   gnupg-agent \
   hostapd \
   htop \
+  iotop \
   kiwix \
   kiwix-tools \
   libpq-dev \
@@ -34,6 +35,7 @@ apt-get install -y \
   python3-pip \
   python3-venv \
   software-properties-common \
+  tmux \
   vim \
   zim-tools
 

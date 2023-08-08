@@ -20,6 +20,7 @@ gdal-bin
 git
 gnupg-agent
 hostapd
+iotop
 kiwix
 kiwix-tools
 libagg-dev
@@ -74,6 +75,7 @@ python3-venv
 renderd
 software-properties-common
 tar
+tmux
 ttf-unifont
 unzip
 vim

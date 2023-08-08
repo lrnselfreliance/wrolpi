@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from wrolpi.captions import FFMPEG_BIN
 from wrolpi.cmd import FFPROBE_BIN
 from wrolpi.common import logger, get_media_directory
+from wrolpi.dates import seconds_to_timestamp
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.vars import DEFAULT_FILE_PERMISSIONS
 from .errors import ChannelNameConflict, ChannelURLConflict, ChannelDirectoryConflict, ChannelSourceIdConflict
@@ -118,24 +119,45 @@ def get_duration_from_ffmpeg(stderr: str) -> int:
     return duration
 
 
-def generate_video_poster(video_path: Path) -> Tuple[Path, Optional[int]]:
-    """Create a poster (aka thumbnail) next to the provided video_path.  Also returns the video duration."""
-    poster_path = video_path.with_suffix('.jpg')
-    cmd = (FFMPEG_BIN, '-n', '-i', str(video_path), '-f', 'mjpeg', '-vframes', '1', '-ss', '00:00:05.000',
-           str(poster_path))
-    if poster_path.exists():
-        # Poster already exists.
-        return poster_path, None
+def ffmpeg_poster(video_path: Path, poster_path: Path, seconds: int):
+    """Use ffmpeg to create a poster file from a video file at a particular time of the video.
+
+    Returns stderr so data about the command can be extracted."""
+    timestamp = seconds_to_timestamp(seconds)
+    cmd = (FFMPEG_BIN, '-ss', timestamp, '-n', '-i', video_path, '-f', 'mjpeg', '-vframes', '1', poster_path)
     try:
         proc = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         stderr = proc.stderr.decode()
-        logger.info(f'Generated poster at {poster_path}')
     except subprocess.CalledProcessError as e:
-        logger.warning(f'FFMPEG poster generation failed with stdout: {e.stdout.decode()}')
-        logger.warning(f'FFMPEG poster generation failed with stdout: {e.stderr.decode()}')
+        logger.error(f'Failed to create video poster', exc_info=e)
         raise
-    if not poster_path.exists():
-        raise Exception(f'Failed to find generated poster! {poster_path}')
+
+    return stderr
+
+
+def ffmpeg_video_complete(video_path: Path, seconds: int = None) -> bool:
+    """Checks if video file is complete by taking screenshot from the end of the video."""
+    seconds = seconds or get_video_duration(video_path) - 5
+    with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as fh:
+        path = Path(fh.name)
+        path.unlink()
+        try:
+            ffmpeg_poster(video_path, path, seconds)
+            return True
+        except Exception:
+            return False
+        finally:
+            path.unlink()
+
+
+def generate_video_poster(video_path: Path, seconds: int = 5) -> Tuple[Path, Optional[int]]:
+    """Create a poster (aka thumbnail) next to the provided video_path.  Also returns the video duration."""
+    poster_path = video_path.with_suffix('.jpg')
+    if poster_path.exists():
+        # Poster already exists.
+        return poster_path, None
+
+    stderr = ffmpeg_poster(video_path, poster_path, seconds)
 
     duration = get_duration_from_ffmpeg(stderr)
     return poster_path, duration

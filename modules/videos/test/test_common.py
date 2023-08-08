@@ -123,9 +123,10 @@ def test_generate_video_poster(video_file):
     A poster can be generated from a video file.
     """
     poster_path = video_file.with_suffix('.jpg')
-    generate_video_poster(video_file)
+    _, duration = generate_video_poster(video_file)
     assert poster_path.is_file(), f'{poster_path} was not created!'
     assert poster_path.stat().st_size > 0
+    assert duration == 5
 
 
 def test_import_channel_downloads(test_session, channel_factory, test_channels_config):

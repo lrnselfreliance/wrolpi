@@ -22,7 +22,7 @@ from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.lib import glob_shared_stem
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
-from .common import get_no_channel_directory, get_videos_directory, update_view_counts
+from .common import get_no_channel_directory, get_videos_directory, update_view_counts, ffmpeg_video_complete
 from .errors import UnknownChannel, ChannelURLEmpty
 from .lib import get_downloader_config
 from .models import Video, Channel
@@ -168,6 +168,9 @@ class VideoDownloader(Downloader, ABC):
     """Downloads a single video.
 
     Store the video in its channel's directory, otherwise store it in `videos/NO CHANNEL`.
+
+    Videos are validated in a few ways.  A video file is valid when it has a complete video stream and an audio stream.
+    A complete video stream is validated by taking a screenshot at the end of the video.
     """
     name = 'video'
     pretty_name = 'Videos'
@@ -298,6 +301,12 @@ class VideoDownloader(Downloader, ABC):
                 return DownloadResult(
                     success=False,
                     error=error,
+                )
+
+            if not ffmpeg_video_complete(video_path):
+                return DownloadResult(
+                    success=False,
+                    error='Video was incomplete',
                 )
 
             with get_db_session(commit=True) as session:

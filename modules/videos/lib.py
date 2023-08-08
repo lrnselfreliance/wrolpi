@@ -119,8 +119,11 @@ def validate_video(video: Video, channel_generate_poster: bool):
 
     if video_path and not video.duration:
         # Duration was not retrieved during poster generation.
-        if video.ffprobe_json and (video_streams := video.get_streams_by_codec_type('video')):
-            video.duration = float(video_streams[0]['duration'])
+        if video.ffprobe_json:
+            if duration := video.ffprobe_json['format'].get('duration'):
+                video.duration = float(duration)
+            elif video_streams := video.get_streams_by_codec_type('video'):
+                video.duration = float(video_streams[0]['duration'])
         else:
             # Slowest method.
             video.duration = get_video_duration(video_path)

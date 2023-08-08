@@ -33,6 +33,7 @@ class Video(ModelHelper, Base):
     source_id = Column(String)
     upload_date: datetime.datetime = Column(TZDateTime)
     url = Column(String)
+    validated = Column(Boolean, default=False)
     view_count = Column(Integer)
     viewed = Column(TZDateTime)
     ffprobe_json = deferred(Column(JSON))
@@ -86,12 +87,13 @@ class Video(ModelHelper, Base):
         )
         return d
 
-    def delete(self):
+    def delete(self, add_to_skip_list: bool = True):
         """Remove all files and File records related to this video.  Delete this Video record.
         Add it to it's Channel's skip list."""
         self.file_group.delete()
 
-        self.add_to_skip_list()
+        if add_to_skip_list:
+            self.add_to_skip_list()
         session = Session.object_session(self)
         session.delete(self)
 
@@ -339,6 +341,10 @@ class Video(ModelHelper, Base):
 
         streams = [i for i in self.ffprobe_json['streams'] if i['codec_type'] == codec_type]
         return streams
+
+    def detect_is_complete(self):
+        from modules.videos.common import ffmpeg_video_complete
+        return ffmpeg_video_complete(self.video_path)
 
 
 class Channel(ModelHelper, Base):

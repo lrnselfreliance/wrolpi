@@ -77,22 +77,7 @@ class DownloadRow extends React.Component {
         super(props);
         this.state = {
             errorModalOpen: false,
-            deleteOpen: false,
         }
-    }
-
-    openDelete = (e) => {
-        if (e) {
-            e.preventDefault();
-        }
-        this.setState({deleteOpen: true});
-    }
-
-    closeDelete = (e) => {
-        if (e) {
-            e.preventDefault();
-        }
-        this.setState({deleteOpen: false});
     }
 
     handleDelete = async () => {
@@ -100,7 +85,6 @@ class DownloadRow extends React.Component {
         try {
             await deleteDownload(id);
         } finally {
-            this.closeDelete();
             if (this.props.fetchDownloads) {
                 this.props.fetchDownloads();
             }
@@ -109,7 +93,7 @@ class DownloadRow extends React.Component {
 
     render() {
         let {url, frequency, last_successful_download, status, location, next_download, error} = this.props;
-        const {errorModalOpen, deleteOpen} = this.state;
+        const {errorModalOpen} = this.state;
 
         const link = location ?
             (text) => <Link to={location}>{text}</Link> :
@@ -171,9 +155,6 @@ class DownloadRow extends React.Component {
 class StoppableRow extends React.Component {
     constructor(props) {
         super(props);
-        this.state = {
-            errorModalOpen: false,
-        };
     }
 
     handleDelete = async () => {
@@ -194,7 +175,6 @@ class StoppableRow extends React.Component {
 
     render() {
         let {url, last_successful_download, status, location, error} = this.props;
-        let {errorModalOpen} = this.state;
 
         // Open downloads (/download), or external links in an anchor.
         const link = location && !location.startsWith('/download') ?
@@ -326,13 +306,15 @@ export function RecurringDownloadsTable({downloads, fetchDownloads}) {
 export function DownloadsPage() {
     useTitle('Downloads');
 
-    const {onceDownloads, recurringDownloads, fetchDownloads} = useDownloads();
+    const {onceDownloads, recurringDownloads, pendingOnceDownloads, fetchDownloads} = useDownloads();
+
+    const pendingOnceDownloadsSpan = pendingOnceDownloads > 0 ? <span>({pendingOnceDownloads})</span> : null;
 
     return <>
         <WROLModeMessage content='Downloads are disabled because WROL Mode is enabled.'/>
         <DisableDownloadsToggle/>
 
-        <Header as='h1'>Downloads</Header>
+        <Header as='h1'>Downloads {pendingOnceDownloadsSpan}</Header>
         <OnceDownloadsTable downloads={onceDownloads} fetchDownloads={fetchDownloads}/>
 
         <Header as='h1'>Recurring Downloads</Header>

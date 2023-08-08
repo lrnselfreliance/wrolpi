@@ -193,11 +193,6 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     }
 
     let videoSource = <source src={videoUrl}/>;
-    if (video.codec_names && video.codec_names.indexOf('mp4') >= 0) {
-        videoSource = <source src={videoUrl} type="video/mp4"/>
-    } else if (video.codec_names && video.codec_names.indexOf('vp9') >= 0) {
-        videoSource = <source src={videoUrl} type='video/mp4;codecs="vp9, vorbis"'/>
-    }
 
     return <>
         <Container style={{margin: '1em'}}>

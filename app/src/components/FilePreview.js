@@ -33,7 +33,7 @@ function getEpubViewerURL(previewFile) {
     }
 }
 
-function getIframeModal(previewFile) {
+function getIframePreviewModal(previewFile) {
     const url = getMediaPathURL(previewFile);
     return <ModalContent>
         <div className='full-height'>
@@ -47,7 +47,7 @@ function getIframeModal(previewFile) {
     </ModalContent>
 }
 
-function getImageModal(previewFile) {
+function getImagePreviewModal(previewFile) {
     const path = previewFile.primary_path ?? previewFile.path;
     const url = getMediaPathURL(previewFile);
     // Get the file name from the absolute path.
@@ -64,7 +64,7 @@ function getImageModal(previewFile) {
     </React.Fragment>
 }
 
-function getEpubModal(previewFile) {
+function getEpubPreviewModal(previewFile) {
     const downloadURL = getDownloadPathURL(previewFile);
     const viewerUrl = `/epub/epub.html?url=${downloadURL}`;
     return <ModalContent>
@@ -77,11 +77,10 @@ function getEpubModal(previewFile) {
     </ModalContent>
 }
 
-function getVideoModal(previewFile) {
+function getVideoPreviewModal(previewFile) {
     const url = getMediaPathURL(previewFile);
     const path = previewFile.primary_path ?? previewFile.path;
     const name = path.replace(/^.*[\\\/]/, '');
-    const type = previewFile.mimetype ? previewFile.mimetype : 'video/mp4';
     return <React.Fragment>
         <ModalHeader>
             {name}
@@ -94,13 +93,13 @@ function getVideoModal(previewFile) {
                    playsInline={true}
                    style={{maxWidth: '100%'}}
             >
-                <source src={url} type={type}/>
+                <source src={url}/>
             </video>
         </ModalContent>
     </React.Fragment>
 }
 
-function getAudioModal(previewFile) {
+function getAudioPreviewModal(previewFile) {
     const url = getMediaPathURL(previewFile);
     const path = previewFile.primary_path ?? previewFile.path;
     const name = path.replace(/^.*[\\\/]/, '');
@@ -123,7 +122,7 @@ function getAudioModal(previewFile) {
     </React.Fragment>
 }
 
-function getSTLModal(previewFile) {
+function getSTLPreviewModal(previewFile) {
     const url = getMediaPathURL(previewFile);
     const path = previewFile.primary_path ?? previewFile.path;
     const name = path.replace(/^.*[\\\/]/, '');
@@ -139,7 +138,7 @@ function getSTLModal(previewFile) {
     </React.Fragment>
 }
 
-function getGenericModal(previewFile) {
+function getGenericPreviewModal(previewFile) {
     // No special handler for this file type, just open it.
     const path = previewFile.primary_path ?? previewFile.path;
     const name = path.replace(/^.*[\\\/]/, '');
@@ -275,27 +274,27 @@ export function FilePreviewProvider({children}) {
                 // Large text files should be downloaded.
                 window.open(downloadURL);
             } else if (mimetype.startsWith('text/') || mimetype.startsWith('application/json')) {
-                setModalContent(getIframeModal(previewFile), url, downloadURL, path);
+                setModalContent(getIframePreviewModal(previewFile), url, downloadURL, path);
             } else if (mimetype.startsWith('video/')) {
-                setModalContent(getVideoModal(previewFile), url, downloadURL, path);
+                setModalContent(getVideoPreviewModal(previewFile), url, downloadURL, path);
             } else if (mimetype.startsWith('audio/')) {
-                setModalContent(getAudioModal(previewFile), url, downloadURL, path);
+                setModalContent(getAudioPreviewModal(previewFile), url, downloadURL, path);
             } else if (mimetype.startsWith('application/epub')) {
                 const viewerURL = getEpubViewerURL(previewFile);
-                setModalContent(getEpubModal(previewFile), viewerURL, downloadURL, path);
+                setModalContent(getEpubPreviewModal(previewFile), viewerURL, downloadURL, path);
             } else if (mimetype.startsWith('application/pdf')) {
-                setModalContent(getIframeModal(previewFile), url, downloadURL, path);
+                setModalContent(getIframePreviewModal(previewFile), url, downloadURL, path);
             } else if (mimetype.startsWith('image/')) {
-                setModalContent(getImageModal(previewFile), url, null, path);
+                setModalContent(getImagePreviewModal(previewFile), url, null, path);
             } else if (mimetype.startsWith('model/stl')) {
-                setModalContent(getSTLModal(previewFile), null, downloadURL, path);
+                setModalContent(getSTLPreviewModal(previewFile), null, downloadURL, path);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.mp3')) {
-                setModalContent(getAudioModal(previewFile), url, downloadURL, path);
+                setModalContent(getAudioPreviewModal(previewFile), url, downloadURL, path);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.stl')) {
-                setModalContent(getSTLModal(previewFile), null, downloadURL, path);
+                setModalContent(getSTLPreviewModal(previewFile), null, downloadURL, path);
             } else {
                 // No special handler for this file type, just open it.
-                setModalContent(getGenericModal(previewFile), url, downloadURL, path);
+                setModalContent(getGenericPreviewModal(previewFile), url, downloadURL, path);
             }
         }
     }, [previewFile]);

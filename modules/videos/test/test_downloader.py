@@ -319,7 +319,7 @@ def test_channel_download_no_download(test_session, video_download_manager, simp
 @pytest.mark.asyncio
 async def test_video_download(test_session, test_directory, simple_channel, video_download_manager,
                               mock_video_process_runner, image_file):
-    """A video download is performed, files are associated."""
+    """A video download is performed, files are grouped."""
     simple_channel.source_id = example_video_json['channel_id']
     simple_channel.directory = test_directory / 'videos/channel name'
     simple_channel.directory.mkdir(parents=True)

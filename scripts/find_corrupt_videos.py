@@ -7,37 +7,28 @@ will be prompted to delete it.
 import argparse
 import asyncio
 import logging
+import pathlib
+import subprocess
 import sys
+import tempfile
+from http import HTTPStatus
 from typing import List
 
+import aiohttp
+from sqlalchemy.orm import Session
 from yt_dlp.utils import YoutubeDLError
 
-from modules.videos.downloader import VideoDownloader, extract_info
-from modules.videos.models import Video
+from modules.videos.downloader import extract_info, VideoDownloader
+from modules.videos.models import Video, Channel
+from wrolpi.dates import seconds_to_timestamp
 from wrolpi.db import get_db_session, get_db_curs
-from wrolpi.downloader import download_manager
 
 logger = logging.getLogger()
 
 
-def get_total_corrupted_videos() -> int:
-    with get_db_curs() as curs:
-        stmt = '''
-            WITH all_videos AS (
-                select v.id, array_agg(s ->> 'codec_type')::TEXT[] AS codec_types
-                from video v
-                         cross join lateral json_array_elements(ffprobe_json -> 'streams') s
-                group by v.id)
-            SELECT COUNT(all_videos.id)
-            FROM all_videos
-            WHERE NOT all_videos.codec_types @> '{audio,video}'::TEXT[]
-        '''
-        curs.execute(stmt)
-        return int(curs.fetchone()[0])
-
-
-def get_corrupt_videos(limit: int, offset: int) -> List[dict]:
-    params = dict(limit=limit, offset=offset)
+def get_incomplete_videos(limit: int, offset: int, channel_id: int) -> List[dict]:
+    """Returns Video records that do not have both video and audio streams."""
+    params = dict(limit=limit, offset=offset, channel_id=channel_id)
     with get_db_curs() as curs:
         stmt = '''
             WITH all_videos AS (
@@ -46,6 +37,7 @@ def get_corrupt_videos(limit: int, offset: int) -> List[dict]:
                 select v.id, array_agg(s ->> 'codec_type')::TEXT[] AS codec_types
                 from video v
                          cross join lateral json_array_elements(ffprobe_json -> 'streams') s
+                         where channel_id = %(channel_id)s
                 group by v.id)
             SELECT all_videos.id AS video_id, fg.primary_path, all_videos.codec_types
             FROM all_videos
@@ -62,16 +54,26 @@ def get_corrupt_videos(limit: int, offset: int) -> List[dict]:
         return [dict(i) for i in curs.fetchall()]
 
 
-def iterate_corrupt_videos() -> List[dict]:
+def iterate_incomplete_videos(channel_id: int = None) -> List[dict]:
     limit = 20
     offset = 0
-    while True:
-        videos = get_corrupt_videos(limit, offset)
-        offset += limit
-        if len(videos) < limit:
-            # Ran out of corrupt videos.
-            break
-        yield videos
+    with get_db_session() as session:
+        channel_ids = [channel_id, ] if channel_id else [int(i[0]) for i in session.query(Channel.id)]
+        found = False
+        for channel_id in channel_ids:
+            channel_id: int
+            while True:
+                videos = get_incomplete_videos(limit, offset, channel_id)
+                offset += limit
+                if videos:
+                    yield videos
+                if len(videos) < limit:
+                    # Ran out of corrupt videos.
+                    if found:
+                        logger.debug(f'Ran out of corrupt videos for {channel_id=}')
+                    else:
+                        logger.debug(f'No corrupt videos for {channel_id=}')
+                    break
 
 
 def confirm(msg: str) -> bool:
@@ -86,47 +88,103 @@ def confirm(msg: str) -> bool:
             return False
 
 
-async def find_corrupt_videos():
-    total_corrupted = get_total_corrupted_videos()
-    count = 0
+def can_be_downloaded(url: str) -> bool:
+    try:
+        extract_info(url)
+        return True
+    except YoutubeDLError:
+        return False
 
+
+async def create_download(url: str, downloader: str):
+    json_ = {'urls': url, 'downloader': downloader}
+    async with aiohttp.ClientSession() as session:
+        async with session.post('http://127.0.0.1:8080/api/download', json=json_) as response:
+            if response.status == HTTPStatus.NO_CONTENT:
+                logger.info(f'Created download for {url}')
+            else:
+                raise Exception(f'Failed to create download for {url}')
+
+
+async def download_or_ask_delete(video: Video, session: Session, delete_message: str):
+    if video.url and can_be_downloaded(video.url):
+        await create_download(video.url, VideoDownloader.name)
+        # Always re-download when possible.
+        do_delete = True
+    else:
+        logger.error(f'Video cannot be downloaded: {video.url or video}')
+        do_delete = confirm(delete_message)
+
+    if do_delete:
+        logger.debug(f'Deleting {video}')
+        video.delete(add_to_skip_list=False)
+        session.commit()
+
+
+async def find_corrupt_videos(channel_id: int = None):
     with get_db_session() as session:
-        for chunk in iterate_corrupt_videos():
+        for chunk in iterate_incomplete_videos(channel_id=channel_id):
             video_ids = [i['video_id'] for i in chunk]
             videos = session.query(Video).filter(Video.id.in_(video_ids)).all()
             for video in videos:
-                print()
-                print(f'Video (remaining: {total_corrupted - count}): {video}')
-                count += 1
-                streams = (await video.get_ffprobe_json())['streams']
-                codec_names = [i['codec_name'] for i in streams]
-                print(f'codecs: {codec_names}')
+                path = video.video_path
+                await download_or_ask_delete(video, session, f'Missing audio. {path}  Delete? (y/N)')
 
-                url = video.url
-                if url:
-                    try:
-                        extract_info(url)
-                        print(f'Re-downloading')
-                        download_manager.create_download(url, VideoDownloader.name, session=session)
-                        video.delete()
+    with get_db_session() as session:
+        videos = session.query(Video).filter(Video.validated == False)  # noqa
+        if channel_id:
+            videos = videos.filter(Video.channel_id == channel_id)
+        for video in videos:
+            if not video.duration:
+                logger.warning(f'No duration for {video}')
+                continue
+            if video.duration > 5:
+                timestamp = seconds_to_timestamp(video.duration - 5)
+            else:
+                timestamp = seconds_to_timestamp(video.duration - 1)
+            # Create a screenshot from the end of the video.  If this fails, the video is corrupt.
+            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as fh:
+                fh = pathlib.Path(fh.name)
+                fh.unlink()
+                try:
+                    cmd = (
+                        'ffmpeg', '-n',
+                        '-ss', timestamp,
+                        '-i', str(video.video_path),
+                        '-f', 'mjpeg',
+                        '-vframes', '1',
+                        '-q:v', '2',
+                        str(fh),
+                    )
+                    proc = subprocess.run(cmd, check=True, capture_output=True, timeout=10)
+                    if fh.is_file() and fh.stat().st_size:
+                        logger.debug(f'{video.video_path.name} is valid')
+                        video.validated = True
                         session.commit()
+                        fh.unlink()
                         continue
-                    except YoutubeDLError:
-                        logger.error(f'Video cannot be downloaded: {url}')
-                        if confirm(f'Delete?  (y/N)'):
-                            video.delete()
-                            session.commit()
-                            continue
+                except subprocess.CalledProcessError as e:
+                    logger.error(f'Failed to generate poster for {video.video_path}', exc_info=e)
 
-                if confirm('Delete?  (y/N)'):
-                    video.delete()
-                    session.commit()
+            path = video.video_path
+            await download_or_ask_delete(video, session, f'Corrupt video. {path}  Delete? (y/N)')
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
+    parser.add_argument('-v', action='count')
+    parser.add_argument('-c', '--channel-id', type=int,
+                        help='The id of the channel to search')
     args = parser.parse_args()
 
+    if args.v == 0:
+        logger.setLevel(logging.WARNING)
+    elif args.v == 1:
+        logger.setLevel(logging.INFO)
+    elif args.v >= 2:
+        logger.setLevel(logging.DEBUG)
+        logger.debug(f'Debug logging')
+
     loop = asyncio.get_event_loop()
-    coro = find_corrupt_videos()
+    coro = find_corrupt_videos(channel_id=args.channel_id)
     loop.run_until_complete(coro)

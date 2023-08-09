@@ -18,6 +18,7 @@ import aiohttp
 from sqlalchemy.orm import Session
 from yt_dlp.utils import YoutubeDLError
 
+from modules.videos.common import ffmpeg_video_complete
 from modules.videos.downloader import extract_info, VideoDownloader
 from modules.videos.models import Video, Channel
 from wrolpi.dates import seconds_to_timestamp
@@ -138,33 +139,11 @@ async def find_corrupt_videos(channel_id: int = None):
             if not video.duration:
                 logger.warning(f'No duration for {video}')
                 continue
-            if video.duration > 5:
-                timestamp = seconds_to_timestamp(video.duration - 5)
-            else:
-                timestamp = seconds_to_timestamp(video.duration - 1)
-            # Create a screenshot from the end of the video.  If this fails, the video is corrupt.
-            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as fh:
-                fh = pathlib.Path(fh.name)
-                fh.unlink()
-                try:
-                    cmd = (
-                        'ffmpeg', '-n',
-                        '-ss', timestamp,
-                        '-i', str(video.video_path),
-                        '-f', 'mjpeg',
-                        '-vframes', '1',
-                        '-q:v', '2',
-                        str(fh),
-                    )
-                    proc = subprocess.run(cmd, check=True, capture_output=True, timeout=10)
-                    if fh.is_file() and fh.stat().st_size:
-                        logger.debug(f'{video.video_path.name} is valid')
-                        video.validated = True
-                        session.commit()
-                        fh.unlink()
-                        continue
-                except subprocess.CalledProcessError as e:
-                    logger.error(f'Failed to generate poster for {video.video_path}', exc_info=e)
+            if ffmpeg_video_complete(video.video_path):
+                logger.debug(f'{video.video_path.name} is valid')
+                video.validated = True
+                session.commit()
+                continue
 
             path = video.video_path
             await download_or_ask_delete(video, session, f'Corrupt video. {path}  Delete? (y/N)')

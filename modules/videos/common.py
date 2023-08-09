@@ -147,7 +147,8 @@ def ffmpeg_video_complete(video_path: Path, seconds: int = None) -> bool:
         except Exception:
             return False
         finally:
-            path.unlink()
+            if path.is_file():
+                path.unlink()
 
 
 def generate_video_poster(video_path: Path, seconds: int = 5) -> Tuple[Path, Optional[int]]:

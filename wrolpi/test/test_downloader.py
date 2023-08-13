@@ -84,6 +84,28 @@ async def test_create_downloads(test_session, test_download_manager, test_downlo
     assert_download_urls({'https://example.com/1', 'https://example.com/2'})
 
 
+@pytest.mark.asyncio
+async def test_recreate_download(test_session, test_download_manager, test_downloader, tag_factory):
+    """Settings are preserved when a Download is restarted."""
+    tag = tag_factory()
+    settings = {'tag_names': [tag.name, ]}
+
+    # Create download with settings initially.
+    test_download_manager.create_downloads(['https://example.com/1', ], test_downloader.name, settings=settings)
+    download: Download = test_session.query(Download).one()
+    assert download.settings == settings
+
+    # Restarting download does not remove settings.
+    test_download_manager.create_downloads(['https://example.com/1', ], test_downloader.name, settings=None)
+    download: Download = test_session.query(Download).one()
+    assert download.settings == settings
+
+    # Settings can be overwritten when not None.
+    test_download_manager.create_downloads(['https://example.com/1', ], test_downloader.name, settings=dict())
+    download: Download = test_session.query(Download).one()
+    assert download.settings == dict()
+
+
 def test_downloader_must_have_name():
     """
     A Downloader class must have a name.

@@ -325,7 +325,7 @@ class VideoDownloader(Downloader, ABC):
                         if name not in existing_names:
                             video.add_tag(name)
 
-                # Check that video is valid.
+                # Check that video has both audio and video streams.
                 await video.get_ffprobe_json()
                 if not video.get_streams_by_codec_type('video'):
                     return DownloadResult(

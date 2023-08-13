@@ -115,6 +115,9 @@ def get_cpu_info_psutil() -> CPUInfo:
     high_temperature = int(temp.get(name)[0].high or 0)
     critical_temperature = int(temp.get(name)[0].critical or 0)
 
+    if high_temperature and high_temperature == critical_temperature:
+        high_temperature = critical_temperature - 25
+
     info = CPUInfo(
         cores=psutil.cpu_count(logical=True),
         cur_frequency=int(cpu_freq.current),

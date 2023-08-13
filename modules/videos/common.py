@@ -136,15 +136,24 @@ def ffmpeg_poster(video_path: Path, poster_path: Path, seconds: int):
 
 
 def ffmpeg_video_complete(video_path: Path, seconds: int = None) -> bool:
-    """Checks if video file is complete by taking screenshot from the end of the video."""
-    seconds = seconds or get_video_duration(video_path) - 5
+    """Checks if video file is complete by taking screenshot from the end of the video.
+
+    @raise FileNotFoundError: raised if the video file does not exist.
+    """
+    if not video_path.is_file():
+        raise FileNotFoundError(f'Video file not found: {video_path}')
+
     with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as fh:
         path = Path(fh.name)
         path.unlink()
         try:
+            seconds = seconds or get_video_duration(video_path) - 5
             ffmpeg_poster(video_path, path, seconds)
             return True
-        except Exception:
+        except subprocess.CalledProcessError:
+            return False
+        except TypeError:
+            # "N/A" duration.
             return False
         finally:
             if path.is_file():
@@ -234,7 +243,7 @@ async def ffprobe_json(video_path: Union[Path, str]) -> dict:
     return content
 
 
-def get_video_duration(video_path: Path) -> int:
+def get_video_duration(video_path: Path) -> Optional[int]:
     """Get the duration of a video in seconds.  Do this using ffprobe."""
     if not isinstance(video_path, Path):
         video_path = Path(video_path)
@@ -252,8 +261,10 @@ def get_video_duration(video_path: Path) -> int:
         logger.warning(f'FFPROBE failed to get duration with stdout: {e.stdout.decode()}')
         logger.warning(f'FFPROBE failed to get duration with stderr: {e.stderr.decode()}')
         raise
-    stdout = proc.stdout.decode()
-    duration = int(Decimal(stdout.strip()))
+    stdout = proc.stdout.decode().strip()
+    if stdout == 'N/A':
+        return None
+    duration = int(Decimal(stdout))
     return duration
 
 

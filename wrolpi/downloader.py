@@ -516,6 +516,7 @@ class DownloadManager:
             download = Download(url=url, status='new')
             session.add(download)
             session.flush()
+        print(f'{download.settings=}')
         download.manager = self
         return download
 
@@ -545,7 +546,7 @@ class DownloadManager:
                 download.renew(reset_attempts=reset_attempts)
                 download.downloader = downloader_name
                 download.sub_downloader = sub_downloader_name
-                download.settings = settings
+                download.settings = settings if settings is not None else download.settings
                 downloads.append(download)
 
         try:

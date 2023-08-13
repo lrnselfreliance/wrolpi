@@ -21,7 +21,7 @@ def test_get_absolute_media_path():
     assert str(path).endswith('videos')
 
 
-def test_get_video_duration(test_directory):
+def test_get_video_duration(test_directory, corrupted_video_file):
     """
     Video duration can be retrieved from the video file.
     """
@@ -35,6 +35,9 @@ def test_get_video_duration(test_directory):
         empty_file = test_directory / 'empty.mp4'
         empty_file.touch()
         get_video_duration(empty_file)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        get_video_duration(corrupted_video_file)
 
 
 def test_convert_image():

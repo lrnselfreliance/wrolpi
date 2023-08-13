@@ -115,7 +115,14 @@ def get_cpu_info_psutil() -> CPUInfo:
     high_temperature = int(temp.get(name)[0].high or 0)
     critical_temperature = int(temp.get(name)[0].critical or 0)
 
+    # Temperatures my not exist.
+    if not high_temperature:
+        high_temperature = 60
+    if not critical_temperature:
+        critical_temperature = 95
+
     if high_temperature and high_temperature == critical_temperature:
+        # Display yellow warning before red warning.
         high_temperature = critical_temperature - 25
 
     info = CPUInfo(

@@ -7,10 +7,8 @@ will be prompted to delete it.
 import argparse
 import asyncio
 import logging
-import pathlib
 import subprocess
 import sys
-import tempfile
 from http import HTTPStatus
 from typing import List
 
@@ -21,8 +19,8 @@ from yt_dlp.utils import YoutubeDLError
 from modules.videos.common import ffmpeg_video_complete
 from modules.videos.downloader import extract_info, VideoDownloader
 from modules.videos.models import Video, Channel
-from wrolpi.dates import seconds_to_timestamp
 from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.errors import FileGroupIsTagged
 
 logger = logging.getLogger()
 
@@ -97,29 +95,32 @@ def can_be_downloaded(url: str) -> bool:
         return False
 
 
-async def create_download(url: str, downloader: str):
+async def create_download(url: str, downloader: str, message: str):
     json_ = {'urls': url, 'downloader': downloader}
     async with aiohttp.ClientSession() as session:
         async with session.post('http://127.0.0.1:8080/api/download', json=json_) as response:
             if response.status == HTTPStatus.NO_CONTENT:
-                logger.info(f'Created download for {url}')
+                logger.info(f'Created download for {url} because {message}')
             else:
                 raise Exception(f'Failed to create download for {url}')
 
 
-async def download_or_ask_delete(video: Video, session: Session, delete_message: str):
+async def download_or_ask_delete(video: Video, session: Session, message: str):
     if video.url and can_be_downloaded(video.url):
-        await create_download(video.url, VideoDownloader.name)
+        await create_download(video.url, VideoDownloader.name, message)
         # Always re-download when possible.
         do_delete = True
     else:
         logger.error(f'Video cannot be downloaded: {video.url or video}')
-        do_delete = confirm(delete_message)
+        do_delete = confirm(f'{message}  Delete? (y/N)')
 
     if do_delete:
         logger.debug(f'Deleting {video}')
-        video.delete(add_to_skip_list=False)
-        session.commit()
+        try:
+            video.delete(add_to_skip_list=False)
+            session.commit()
+        except FileGroupIsTagged:
+            logger.debug(f'Cannot delete {video} because it is tagged.')
 
 
 async def find_corrupt_videos(channel_id: int = None):
@@ -128,25 +129,44 @@ async def find_corrupt_videos(channel_id: int = None):
             video_ids = [i['video_id'] for i in chunk]
             videos = session.query(Video).filter(Video.id.in_(video_ids)).all()
             for video in videos:
-                path = video.video_path
-                await download_or_ask_delete(video, session, f'Missing audio. {path}  Delete? (y/N)')
+                await download_or_ask_delete(video, session, f'Missing audio. {video.video_path}')
 
     with get_db_session() as session:
         videos = session.query(Video).filter(Video.validated == False)  # noqa
         if channel_id:
             videos = videos.filter(Video.channel_id == channel_id)
         for video in videos:
-            if not video.duration:
-                logger.warning(f'No duration for {video}')
+            video: Video
+            if not video.video_path.is_file():
+                await download_or_ask_delete(video, session, f'Video does not exist: {video.video_path}')
                 continue
-            if ffmpeg_video_complete(video.video_path):
+            if video.url:
+                for path in video.file_group.my_paths():
+                    if not path.is_file() and path.name.endswith('.srt'):
+                        files = [i for i in video.file_group.my_files() if i['path'] != path]
+                        video.file_group.files = files
+                        session.commit()
+                        logger.info(f'Removed non-existent srt: {video.video_path}')
+                if not all(i.is_file() for i in video.file_group.my_paths()):
+                    await create_download(video.url, VideoDownloader.name,
+                                          f'Video is missing {path}: {video.video_path}')
+                    continue
+
+            is_complete = False
+            try:
+                is_complete = ffmpeg_video_complete(video.video_path)
+            except FileNotFoundError:
+                pass
+            except subprocess.CalledProcessError:
+                pass
+
+            if is_complete:
                 logger.debug(f'{video.video_path.name} is valid')
                 video.validated = True
                 session.commit()
                 continue
 
-            path = video.video_path
-            await download_or_ask_delete(video, session, f'Corrupt video. {path}  Delete? (y/N)')
+            await download_or_ask_delete(video, session, f'Corrupt video. {video.video_path}')
 
 
 if __name__ == '__main__':

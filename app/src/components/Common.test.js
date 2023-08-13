@@ -1,6 +1,6 @@
 import React from "react";
-import {getByTestId, render, screen} from '@testing-library/react';
-import {DisableDownloadsToggle} from "./Common";
+import {getByTestId, queryByTestId, render, screen} from '@testing-library/react';
+import {CPUTemperatureIcon, DisableDownloadsToggle} from "./Common";
 import {StatusContext} from "../contexts/contexts";
 import {startDownloads} from "../components/Common";
 
@@ -53,4 +53,36 @@ test('DownloadsToggle is on if downloading is On', async () => {
     // Text is "enabled" when downloading is On.
     const label = getByTestId(container, 'toggle-label');
     expect(label).toHaveTextContent('Downloading Enabled');
+});
+
+test('CPUTemperatureIcon high', async () => {
+    const statusValue = {status: {cpu_info: {temperature: 80, high_temperature: 75, critical_temperature: 90}}};
+    const {container} = render(<StatusContext.Provider value={statusValue}>
+        <CPUTemperatureIcon/>
+    </StatusContext.Provider>);
+
+    const icon = getByTestId(container, 'cpuTemperatureIcon');
+    expect(icon).toHaveClass('thermometer');
+    expect(icon).toHaveClass('half');
+});
+
+test('CPUTemperatureIcon critical', async () => {
+    const statusValue = {status: {cpu_info: {temperature: 100, high_temperature: 75, critical_temperature: 90}}};
+    const {container} = render(<StatusContext.Provider value={statusValue}>
+        <CPUTemperatureIcon/>
+    </StatusContext.Provider>);
+
+    const icon = getByTestId(container, 'cpuTemperatureIcon');
+    expect(icon).toHaveClass('thermometer');
+    expect(icon).not.toHaveClass('half');
+});
+
+test('CPUTemperatureIcon hidden', async () => {
+    const statusValue = {status: {cpu_info: {temperature: 35, high_temperature: 75, critical_temperature: 90}}};
+    const {container} = render(<StatusContext.Provider value={statusValue}>
+        <CPUTemperatureIcon/>
+    </StatusContext.Provider>);
+
+    const icon = queryByTestId(container, 'cpuTemperatureIcon');
+    expect(icon).toBeNull();
 });

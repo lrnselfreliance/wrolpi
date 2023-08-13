@@ -61,20 +61,16 @@ function DiskBandwidth({name, bytes_read_ps, bytes_write_ps}) {
     </Grid>
 }
 
-function CPUTemperatureStatistic({value, high_temperature, critical_temperature, ...props}) {
-    if (!value) {
+function CPUTemperatureStatistic({temperature, high_temperature, critical_temperature, ...props}) {
+    if (!temperature) {
         return <Statistic label='Temp C°' value='?'/>
     }
-    if (critical_temperature && critical_temperature === high_temperature) {
-        // Critical and high are equal, manually change it so high changes color before critical.
-        high_temperature = critical_temperature - 25;
-    }
-    if ((critical_temperature && value >= critical_temperature) || (!critical_temperature && value >= 75)) {
+    if ((critical_temperature && temperature >= critical_temperature) || (!critical_temperature && temperature >= 75)) {
         props['color'] = 'red';
-    } else if ((high_temperature && value >= high_temperature) || (!high_temperature && value >= 55)) {
+    } else if ((high_temperature && temperature >= high_temperature) || (!high_temperature && temperature >= 55)) {
         props['color'] = 'orange';
     }
-    return <Statistic label='Temp C°' value={value} {...props}/>
+    return <Statistic label='Temp C°' value={temperature} {...props}/>
 }
 
 export function BandwidthProgress({label = '', bytes, maxBytes, ...props}) {
@@ -186,7 +182,7 @@ export function Status() {
                 <CPUUsageProgress value={percent} label='CPU Usage'/>
                 <StatisticGroup>
                     <CPUTemperatureStatistic
-                        value={temperature}
+                        temperature={temperature}
                         high_temperature={high_temperature}
                         critical_temperature={critical_temperature}
                     />
@@ -217,7 +213,7 @@ export function Status() {
                 <CPUUsageProgress value={percent} label='CPU Usage'/>
                 <StatisticGroup size='mini'>
                     <CPUTemperatureStatistic
-                        value={temperature}
+                        temperature={temperature}
                         high_temperature={high_temperature}
                         critical_temperature={critical_temperature}
                         style={{marginRight: 0}}

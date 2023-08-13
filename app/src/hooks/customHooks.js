@@ -1,4 +1,4 @@
-import {useContext, useEffect, useRef, useState} from "react";
+import React, {useContext, useEffect, useRef, useState} from "react";
 import {
     fetchDecoded,
     fetchDomains,
@@ -740,6 +740,15 @@ export const StatusProvider = (props) => {
 export const useStatusFlag = (flag) => {
     const {status} = useContext(StatusContext);
     return status && status['flags'] && status['flags'].indexOf(flag) >= 0;
+}
+
+export const useCPUTemperature = () => {
+    const {status} = React.useContext(StatusContext);
+    const temperature = status && status['cpu_info'] ? status['cpu_info']['temperature'] : 0;
+    const high_temperature = status && status['cpu_info'] ? status['cpu_info']['high_temperature'] : 75;
+    const critical_temperature = status && status['cpu_info'] ? status['cpu_info']['critical_temperature'] : 85;
+
+    return {temperature, high_temperature, critical_temperature}
 }
 
 

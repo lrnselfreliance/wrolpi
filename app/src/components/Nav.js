@@ -3,7 +3,7 @@ import {NavLink} from "react-router-dom";
 import {Dropdown, Menu} from "semantic-ui-react";
 import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {DarkModeToggle, HotspotStatusIcon, NAME} from "./Common";
+import {DarkModeToggle, HotspotStatusIcon, NAME, CPUTemperatureIcon} from "./Common";
 import {ShareButton} from "./Share";
 import {useWROLMode} from "../hooks/customHooks";
 
@@ -52,7 +52,7 @@ function MenuLink({link}) {
     }
 }
 
-function NavIcon(props) {
+function NavIconWrapper(props) {
     return <div style={{margin: '0.8em'}}>{props.children}</div>
 }
 
@@ -67,9 +67,10 @@ export function NavBar() {
         {topNavText}
     </NavLink>;
     const icons = <React.Fragment>
-        <NavIcon><ShareButton/></NavIcon>
-        <NavIcon><HotspotStatusIcon/></NavIcon>
-        <NavIcon><DarkModeToggle/></NavIcon>
+        <NavIconWrapper><CPUTemperatureIcon/></NavIconWrapper>
+        <NavIconWrapper><ShareButton/></NavIconWrapper>
+        <NavIconWrapper><HotspotStatusIcon/></NavIconWrapper>
+        <NavIconWrapper><DarkModeToggle/></NavIconWrapper>
     </React.Fragment>;
 
     return <>

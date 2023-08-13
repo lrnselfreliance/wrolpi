@@ -15,6 +15,7 @@ import {
 import {Link, NavLink, useNavigate, useSearchParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import {
+    useCPUTemperature,
     useDirectories,
     useHotspot,
     useSearchDirectories,
@@ -918,6 +919,25 @@ export function HotspotStatusIcon() {
         </a>
         {modal}
     </>
+}
+
+export function CPUTemperatureIcon({size = 'large'}) {
+    // Returns an Icon only if temperature is too high.
+    const {temperature, high_temperature, critical_temperature} = useCPUTemperature();
+
+    if (temperature < high_temperature) {
+        // Temperature is not a problem.
+        return null;
+    }
+
+    let icon;
+    if (temperature >= critical_temperature) {
+        icon = <Icon data-testid='cpuTemperatureIcon' name='thermometer' size={size} color='red'/>;
+    } else if (temperature >= high_temperature) {
+        icon = <Icon data-testid='cpuTemperatureIcon' name='thermometer half' size={size} color='yellow'/>;
+    }
+
+    return <Popup content={`CPU: ${temperature}°C`} trigger={icon}/>
 }
 
 export function useTitle(title) {

@@ -134,7 +134,7 @@ def list_directories_contents(directories_: List[str]) -> Dict:
 
 
 @wrol_mode_check
-def delete(*paths: Union[str, pathlib.Path]):
+async def delete(*paths: Union[str, pathlib.Path]):
     """
     Delete a file or directory in the media directory.
 
@@ -166,9 +166,15 @@ def delete(*paths: Union[str, pathlib.Path]):
                 raise FileGroupIsTagged(f"Cannot delete {file_group} because it is tagged")
     for path in paths:
         if path.is_dir():
-            delete_directory(path)
+            delete_directory(path, recursive=True)
         else:
             path.unlink()
+
+    coro = refresh_files(paths)
+    if PYTEST:
+        await coro
+    else:
+        background_task(coro)
 
 
 FILE_NAME_REGEX = re.compile(r'[_ .]')

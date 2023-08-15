@@ -1,5 +1,4 @@
 import pathlib
-import shutil
 from http import HTTPStatus
 from multiprocessing import Manager
 from typing import List
@@ -48,7 +47,8 @@ async def get_file(_: Request, body: schema.FileRequest):
 
 @bp.post('/delete')
 @openapi.definition(
-    summary='Delete a single file.  Returns an error if WROL Mode is enabled.',
+    summary='Delete files or directories.  Directories are deleted recursively.'
+            '  Returns an error if WROL Mode is enabled.',
     body=schema.DeleteRequest,
 )
 @validate(schema.DeleteRequest)
@@ -56,7 +56,7 @@ async def delete_file(_: Request, body: schema.DeleteRequest):
     paths = [i for i in body.paths if i]
     if not paths:
         raise InvalidFile('paths cannot be empty')
-    lib.delete(*paths)
+    await lib.delete(*paths)
     return response.empty()
 
 
@@ -249,28 +249,6 @@ async def post_rename(_: Request, body: schema.Rename):
         background_task(lib.refresh_files([path, new_path]))
 
     return response.empty(HTTPStatus.NO_CONTENT)
-
-
-@bp.post('/delete_directory')
-@openapi.definition(
-    summary='Delete a directory in the media directory.',
-    body=schema.Directory,
-)
-@validate(schema.Directory)
-@wrol_mode_check
-async def delete_directory(_: Request, body: schema.Directory):
-    path = get_media_directory() / body.path
-    if path.is_dir():
-        lib.delete_directory(path, recursive=True)
-    else:
-        raise FileNotFoundError(f'No directory found: {path}')
-
-    if PYTEST:
-        await lib.refresh_files([path, ])
-    else:
-        background_task(lib.refresh_files([path, ]))
-
-    return response.empty()
 
 
 @bp.post('/tag')

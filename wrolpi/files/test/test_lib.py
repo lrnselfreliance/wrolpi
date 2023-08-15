@@ -21,7 +21,8 @@ from wrolpi.tags import TagFile
 from wrolpi.vars import PROJECT_DIR
 
 
-def test_delete(test_session, make_files_structure, test_directory):
+@pytest.mark.asyncio
+async def test_delete(test_session, make_files_structure, test_directory):
     """
     File in the media directory can be deleted.
     """
@@ -31,34 +32,35 @@ def test_delete(test_session, make_files_structure, test_directory):
         'baz/',
     ])
 
-    lib.delete('bar.txt')
+    await lib.delete('bar.txt')
     assert (test_directory / 'archives/foo.txt').is_file()
     assert not (test_directory / 'bar.txt').exists()
     assert (test_directory / 'baz').is_dir()
 
-    lib.delete('archives/foo.txt')
+    await lib.delete('archives/foo.txt')
     assert not (test_directory / 'archives/foo.txt').exists()
     assert not (test_directory / 'bar.txt').exists()
 
     # Can also delete directories.
-    lib.delete('baz')
+    await lib.delete('baz')
     assert not (test_directory / 'baz').exists()
 
     with pytest.raises(InvalidFile):
-        lib.delete('does not exist')
+        await lib.delete('does not exist')
 
     # Cannot delete the media directory.
     with pytest.raises(InvalidFile):
-        lib.delete('.')
+        await lib.delete('.')
 
 
-def test_delete_link(test_session, test_directory):
+@pytest.mark.asyncio
+async def test_delete_link(test_session, test_directory):
     """Links can be deleted."""
     foo, bar = test_directory / 'foo', test_directory / 'bar'
     foo.touch()
     bar.symlink_to(foo)
 
-    lib.delete(bar)
+    await lib.delete(bar)
 
 
 @pytest.mark.asyncio
@@ -74,11 +76,11 @@ async def test_delete_tagged(test_session, make_files_structure, tag_factory, vi
 
     # Neither file can be deleted.
     with pytest.raises(FileGroupIsTagged):
-        lib.delete('foo/bar.txt')
+        await lib.delete('foo/bar.txt')
     with pytest.raises(FileGroupIsTagged):
-        lib.delete('foo/bar.mp4')
+        await lib.delete('foo/bar.mp4')
     with pytest.raises(FileGroupIsTagged):
-        lib.delete('foo')
+        await lib.delete('foo')
 
 
 @pytest.mark.asyncio
@@ -87,7 +89,7 @@ async def test_delete_nested(test_session, make_files_structure):
     make_files_structure(['foo/bar'])
 
     with pytest.raises(InvalidFile):
-        lib.delete('foo', 'foo/bar')
+        await lib.delete('foo', 'foo/bar')
 
 
 @pytest.mark.parametrize(

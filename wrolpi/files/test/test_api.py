@@ -4,7 +4,6 @@ from unittest import mock
 
 import pytest
 
-from wrolpi.errors import WROLModeEnabled
 from wrolpi.files import lib
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
@@ -113,7 +112,7 @@ def test_list_files_api(test_session, test_client, make_files_structure, test_di
 
 
 def test_delete_file(test_session, test_client, make_files_structure, test_directory):
-    files = ['bar.txt', 'baz/']
+    files = ['bar.txt', 'baz/', 'foo']
     make_files_structure(files)
 
     # Delete a file.
@@ -503,8 +502,8 @@ async def test_directory_crud(test_session, test_async_client, test_directory, a
 
     # Deletion is recursive.
     assert (test_directory / 'foo/baz/asdf.txt').is_file()
-    content = dict(path='foo/baz')
-    request, response = await test_async_client.post('/api/files/delete_directory', content=json.dumps(content))
+    content = dict(paths=['foo/baz', ])
+    request, response = await test_async_client.post('/api/files/delete', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
     assert not (test_directory / 'foo/baz').exists()
     assert not (test_directory / 'foo/baz/asdf.txt').exists()
@@ -573,27 +572,16 @@ async def test_rename_directory(test_session, test_directory, make_files_structu
 
 
 @pytest.mark.asyncio
-async def test_delete_directory_tagged(test_session, test_directory, make_files_structure, test_async_client,
-                                       tag_factory, insert_file_group):
-    """Cannot delete a directory if it contained a tagged FileGroup."""
-    bar, = make_files_structure({
-        'foo/bar.txt': 'bar'
-    }, file_groups=True, session=test_session)
-    bar: FileGroup
-    tag = tag_factory()
-    bar.add_tag(tag)
-    test_session.commit()
+async def test_delete_directory_recursive(test_session, test_directory, make_files_structure, test_async_client,
+                                          assert_files):
+    make_files_structure(['dir/foo', 'dir/bar', 'empty'])
+    await lib.refresh_files()
+    assert test_session.query(FileGroup).count() == 3
 
-    # Cannot deleted tagged file.
-    content = dict(path=str(bar.primary_path.parent))
-    request, response = await test_async_client.post('/api/files/delete_directory', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.CONFLICT
-    assert (test_directory / 'foo').is_dir()
-
-    # Remove tag, directory is deleted recursively.
-    bar.remove_tag(tag)
-    test_session.commit()
-    content = dict(path=str(bar.primary_path.parent))
-    request, response = await test_async_client.post('/api/files/delete_directory', content=json.dumps(content))
+    content = {'paths': ['dir/', ]}
+    request, response = await test_async_client.post('/api/files/delete', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert not (test_directory / 'foo').exists()
+    assert test_session.query(FileGroup).count() == 1
+
+    empty = test_session.query(FileGroup).one()
+    assert empty.primary_path.name == 'empty'

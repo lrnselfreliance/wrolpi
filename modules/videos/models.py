@@ -33,7 +33,6 @@ class Video(ModelHelper, Base):
     source_id = Column(String)
     upload_date: datetime.datetime = Column(TZDateTime)
     url = Column(String)
-    validated = Column(Boolean, default=False)
     view_count = Column(Integer)
     viewed = Column(TZDateTime)
     ffprobe_json = deferred(Column(JSON))

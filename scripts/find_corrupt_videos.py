@@ -132,7 +132,7 @@ async def find_corrupt_videos(channel_id: int = None):
                 await download_or_ask_delete(video, session, f'Missing audio. {video.video_path}')
 
     with get_db_session() as session:
-        videos = session.query(Video).filter(Video.validated == False)  # noqa
+        videos = session.query(Video)  # noqa
         if channel_id:
             videos = videos.filter(Video.channel_id == channel_id)
         for video in videos:
@@ -162,8 +162,6 @@ async def find_corrupt_videos(channel_id: int = None):
 
             if is_complete:
                 logger.debug(f'{video.video_path.name} is valid')
-                video.validated = True
-                session.commit()
                 continue
 
             await download_or_ask_delete(video, session, f'Corrupt video. {video.video_path}')

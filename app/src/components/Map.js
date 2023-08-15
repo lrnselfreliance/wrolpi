@@ -1,5 +1,5 @@
 import React, {useContext} from "react";
-import {HelpPopup, humanFileSize, PageContainer, TabLinks, useTitle, WROLModeMessage} from "./Common";
+import {APIButton, HelpPopup, humanFileSize, PageContainer, TabLinks, useTitle, WROLModeMessage} from "./Common";
 import {Route, Routes} from "react-router-dom";
 import {getMapImportStatus, importMapFiles} from "../api";
 import {
@@ -16,7 +16,7 @@ import {
     TableRow
 } from "semantic-ui-react";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {Button, Loader, Placeholder, Table} from "./Theme";
+import {Loader, Placeholder, Table} from "./Theme";
 import {StatusContext} from "../contexts/contexts";
 import _ from "lodash";
 
@@ -134,7 +134,9 @@ class ManageMap extends React.Component {
     }
 
     import = async (e) => {
-        e.preventDefault();
+        if (e) {
+            e.preventDefault();
+        }
 
         this.setState({'ready': false});
         const {files, selectedPaths} = this.state;
@@ -200,13 +202,13 @@ class ManageMap extends React.Component {
             : null;
 
         let disabled = dockerized || _.isEmpty(files) || import_running;
-        let importButton = <Button
+        let importButton = <APIButton
             color='violet'
             disabled={disabled}
             onClick={this.import}
         >
             {!_.isEmpty(selectedPaths) ? 'Import Selected' : 'Import All'}
-        </Button>;
+        </APIButton>;
 
         let rows;
         if (!files) {

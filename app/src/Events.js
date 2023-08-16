@@ -29,7 +29,7 @@ function handleEvents(events) {
             console.debug(`Already handled newer event of "${subject}".`);
             return;
         } else if (event === 'refresh_completed') {
-            eventToast('Refresh completed', 'All files have been refreshed.');
+            eventToast('Refresh completed', 'Files have been refreshed.');
         }
 
         if (event === 'downloads_disabled') {

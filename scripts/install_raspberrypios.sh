@@ -98,6 +98,7 @@ cat >/etc/sudoers.d/90-wrolpi <<'EOF'
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart wrolpi-app.service
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-app.service
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-app.service
+%wrolpi ALL= NOPASSWD:/opt/wrolpi/scripts/clear_map_cache.sh
 EOF
 chmod 660 /etc/sudoers.d/90-wrolpi
 # Verify this new file is valid.

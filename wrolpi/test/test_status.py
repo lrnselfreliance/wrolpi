@@ -8,20 +8,13 @@ from wrolpi import status
 
 @pytest.mark.asyncio
 async def test_get_load():
-    """Minimum laod testing because this will fail in docker, etc."""
+    """Test reading load information from /proc/loadavg."""
     load = await status.get_load()
     assert isinstance(load, status.SystemLoad)
-    assert load.minute_1 is not None and isinstance(load.minute_1, Decimal)
-    assert load.minute_5 is not None and isinstance(load.minute_5, Decimal)
-    assert load.minute_15 is not None and isinstance(load.minute_15, Decimal)
 
-    with mock.patch('wrolpi.status.get_load_psutil') as mock_get_load_psutil:
-        # Fallback to subprocess when psutil is not available.
-        mock_get_load_psutil.side_effect = Exception('testing no psutil')
-        load = await status.get_load()
-        assert isinstance(load, status.SystemLoad)
-        assert load.minute_1 is not None
-        assert isinstance(load.minute_1, Decimal)
+    assert isinstance(load.minute_1, Decimal) and load.minute_1 >= 0
+    assert isinstance(load.minute_5, Decimal) and load.minute_5 >= 0
+    assert isinstance(load.minute_15, Decimal) and load.minute_15 >= 0
 
 
 @pytest.mark.asyncio

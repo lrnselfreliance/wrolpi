@@ -48,27 +48,16 @@ def get_load_psutil() -> SystemLoad:
     return load
 
 
+LOAD_AVG_FILE = pathlib.Path('/proc/loadavg')
+
+
 async def get_load() -> SystemLoad:
-    try:
-        return get_load_psutil()
-    except Exception as e:
-        warn_once(e)
-
-    # Fallback to using `uptime` to fetch load information.
-    proc = await asyncio.subprocess.create_subprocess_shell(
-        str(UPTIME_BIN),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
-
-    stdout = stdout.strip()
-    if proc.returncode != 0 or not stdout:
-        logger.warning(f'{UPTIME_BIN} exited with {proc.returncode} or was empty')
-        return SystemLoad()
-
-    stdout = stdout.decode()
-    load = SystemLoad(*[Decimal(i) for i in LOAD_REGEX.search(stdout).groups()])
+    """Read loadavg file and return the 1, 5, and 15 minute system loads."""
+    # Read load information from proc file.
+    # Example:  0.99 1.06 1.02 1/2305 43879
+    loadavg = LOAD_AVG_FILE.read_text()
+    load_1, load_5, load_15, *_ = loadavg.split(' ')
+    load = SystemLoad(Decimal(load_1), Decimal(load_5), Decimal(load_15))
     return load
 
 

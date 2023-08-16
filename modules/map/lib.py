@@ -216,7 +216,8 @@ def get_import_status(session: Session = None) -> List[MapFile]:
     return map_paths
 
 
-MOD_TILE_CACHE_DIR = Path('/var/lib/mod_tile/ajt')
+MOD_TILE_CACHE_DIR1 = Path('/var/lib/mod_tile/ajt')
+MOD_TILE_CACHE_DIR2 = Path('/var/cache/renderd/tiles/ajt')
 
 
 @wrol_mode_check
@@ -227,5 +228,7 @@ async def clear_mod_tile():
 
     logger.warning('Clearing map tile cache files')
 
-    if MOD_TILE_CACHE_DIR.is_dir():
-        await asyncio.create_subprocess_shell(f'rm -r {MOD_TILE_CACHE_DIR}')
+    if MOD_TILE_CACHE_DIR1.is_dir():
+        await asyncio.create_subprocess_shell(f'rm -r {MOD_TILE_CACHE_DIR1}')
+    if MOD_TILE_CACHE_DIR2.is_dir():
+        await asyncio.create_subprocess_shell(f'rm -r {MOD_TILE_CACHE_DIR2}')

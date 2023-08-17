@@ -12,11 +12,11 @@ import {
 } from "../Common";
 import {
     Button as SButton,
-    Confirm,
     Loader,
     PlaceholderLine,
     TableBody,
     TableCell,
+    TableFooter,
     TableHeader,
     TableHeaderCell,
     TableRow
@@ -26,14 +26,10 @@ import {useDownloads} from "../../hooks/customHooks";
 import _ from "lodash";
 
 function ClearCompleteDownloads({callback}) {
-    const [disabled, setDisabled] = React.useState(false);
-
     async function localClearDownloads() {
-        setDisabled(true);
         try {
             await clearCompletedDownloads();
         } finally {
-            setDisabled(false);
             if (callback) {
                 callback()
             }
@@ -43,7 +39,6 @@ function ClearCompleteDownloads({callback}) {
     return <>
         <APIButton
             onClick={localClearDownloads}
-            disabled={disabled}
             color='yellow'
             obeyWROLMode={true}
         >Clear Completed</APIButton>
@@ -254,8 +249,6 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
         return <Segment>No downloads are scheduled.</Segment>;
     } else if (downloads) {
         return <>
-            <ClearCompleteDownloads callback={fetchDownloads}/>
-            <ClearFailedDownloads callback={fetchDownloads}/>
             <Table>
                 <TableHeader>
                     <TableRow>
@@ -267,6 +260,14 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
                 <TableBody>
                     {downloads.map(i => <StoppableRow fetchDownloads={fetchDownloads} key={i.id} {...i}/>)}
                 </TableBody>
+                <TableFooter>
+                    <TableRow>
+                        <TableHeaderCell colSpan={3}>
+                            <ClearCompleteDownloads callback={fetchDownloads}/>
+                            <ClearFailedDownloads callback={fetchDownloads}/>
+                        </TableHeaderCell>
+                    </TableRow>
+                </TableFooter>
             </Table>
         </>;
     } else {

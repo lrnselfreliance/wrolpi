@@ -78,7 +78,7 @@ def video_cleanup():
             SET
                 channel_id = c.id
             FROM channel c
-            LEFT JOIN file_group fg ON fg.primary_path LIKE c.directory || '/%'::VARCHAR
+                LEFT JOIN file_group fg ON fg.primary_path LIKE c.directory || '/%'::VARCHAR
             WHERE
              v.channel_id IS NULL
              AND fg.id = v.file_group_id

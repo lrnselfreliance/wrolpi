@@ -161,7 +161,15 @@ class ChannelDownload extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            url: '', frequency: 604800, pending: false, disabled: false, ready: false, error: null, success: null,
+            advancedOpen: false,
+            destination: null,
+            disabled: false,
+            error: null,
+            frequency: 604800,
+            pending: false,
+            ready: false,
+            success: null,
+            url: '',
         };
         this.freqOptions = [{key: 'once', text: 'Once', value: 0}, ...frequencyOptions.slice(1),];
         this.handleUrlChange = this.handleUrlChange.bind(this);
@@ -181,12 +189,13 @@ class ChannelDownload extends React.Component {
 
     handleSubmit = async () => {
         this.setState({disabled: true, pending: true, success: null, error: null});
-        const {url, frequency} = this.state;
+        const {url, frequency, destination} = this.state;
         if (!url) {
             this.setState({error: 'URL is required'});
             return;
         }
-        let response = await postDownload(url, 'video_channel', frequency);
+        let response = await postDownload(url, 'video_channel', frequency,
+            null, null, destination);
         if (response.status === 204) {
             this.setState({pending: false, disabled: false, success: true, url: '', ready: false});
         } else {
@@ -196,8 +205,15 @@ class ChannelDownload extends React.Component {
         }
     }
 
+    toggleAdvancedAccordion = (e) => {
+        if (e) {
+            e.preventDefault();
+        }
+        this.setState({advancedOpen: !this.state.advancedOpen});
+    }
+
     render() {
-        const {ready, disabled, url, error, frequency, pending, success} = this.state;
+        const {advancedOpen, ready, disabled, url, error, frequency, pending, success} = this.state;
         const buttonDisabled = !ready || disabled;
 
         const onceMessage = (<Message>
@@ -206,6 +222,17 @@ class ChannelDownload extends React.Component {
                 all videos in a Playlist, and when you do not want to download any videos added to the playlist
                 in the future.</Message.Content>
         </Message>);
+
+        const directorySearch = <div style={{marginTop: '1em'}}>
+            <SForm.Field>
+                <label>
+                    Destination
+                    <HelpPopup
+                        content="Always download videos into this directory, rather than the Channel's directory."/>
+                </label>
+                <DirectorySearch onSelect={i => this.setState({destination: i})}/>
+            </SForm.Field>
+        </div>;
 
         return <Form>
             <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
@@ -231,6 +258,18 @@ class ChannelDownload extends React.Component {
             />
 
             {frequency === 0 && onceMessage}
+
+            <Accordion>
+                <AccordionTitle active={advancedOpen} onClick={this.toggleAdvancedAccordion}>
+                    <Icon name='dropdown'/>
+                    Advanced
+                </AccordionTitle>
+                <AccordionContent active={advancedOpen}>
+                    {directorySearch}
+                </AccordionContent>
+            </Accordion>
+
+            <br/>
 
             <Button content='Cancel' onClick={this.props.clearSelected}/>
             <APIButton

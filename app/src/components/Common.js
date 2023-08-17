@@ -752,12 +752,12 @@ export function mimetypeColor(mimetype) {
             return 'pink'
         } else if (mimetype.startsWith('text/html')) {
             return 'green'
-        } else if (mimetype.startsWith('application/zip') || mimetype.startsWith('application/zlib') || mimetype.startsWith('application/x-7z-compressed') || mimetype.startsWith('application/x-bzip2') || mimetype.startsWith('application/x-xz')) {
-            return 'purple'
-        } else if (mimetype.startsWith('application/epub') || mimetype.startsWith('application/x-mobipocket-ebook')) {
+        } else if (mimetype.startsWith('application/epub')) {
             return 'yellow'
         } else if (mimetype.startsWith('audio/')) {
             return 'violet'
+        } else if (isZipMimetype(mimetype)) {
+            return 'purple'
         }
     } catch (e) {
         console.error(e);

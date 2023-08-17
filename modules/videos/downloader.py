@@ -103,7 +103,15 @@ class ChannelDownloader(Downloader, ABC):
         channel.dict()  # get all attributes while we have the session.
 
         location = f'/videos/channel/{channel.id}/video' if channel and channel.id else None
-        settings = dict(channel_id=channel.id, channel_url=download.url) if channel else None
+
+        # The settings to send to the VideoDownloader.
+        settings = dict()
+        if channel:
+            settings.update(dict(channel_id=channel.id, channel_url=download.url))
+        # Downloads will inherit the destination, if defined.
+        destination = download.settings.get('destination') if download.settings else None
+        if destination:
+            settings['destination'] = destination
 
         is_a_playlist = self.is_a_playlist(info)
         try:
@@ -211,15 +219,19 @@ class VideoDownloader(Downloader, ABC):
                 pass
 
         settings = download.settings or dict()
+        destination = settings.get('destination')
+        if not channel and destination:
+            # Destination may override the real Channel.
+            channel = get_channel(directory=destination, return_dict=False)
+            found_channel = 'download_settings_directory'
+
         local_channel_id = settings.get('channel_id')
         channel_url = settings.get('channel_url')
-        destination = settings.get('destination')
-        if not channel and (local_channel_id or channel_url or destination):
+        if not channel and (local_channel_id or channel_url):
             # Could not find channel via yt-dlp info_json, use info from ChannelDownloader if it created this Download.
             logger.info(f'Using download.settings to find channel')
             try:
-                channel = get_channel(channel_id=local_channel_id, url=channel_url, directory=destination,
-                                      return_dict=False)
+                channel = get_channel(channel_id=local_channel_id, url=channel_url, return_dict=False)
             except UnknownChannel:
                 # We do not need a Channel if we have a destination directory.
                 if not destination:
@@ -234,6 +246,8 @@ class VideoDownloader(Downloader, ABC):
             logger.debug(f'Found {channel} using yt_dlp')
         elif found_channel == 'download_settings':
             logger.info(f'Found {channel} using Download.settings')
+        elif found_channel == 'download_settings_directory':
+            logger.info(f'Found {channel} using Download.settings directory')
         else:
             logger.warning('Could not find channel')
 

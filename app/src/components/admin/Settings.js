@@ -153,15 +153,6 @@ export class Settings extends React.Component {
 
                         <div style={{margin: '0.5em'}}>
                             <Toggle
-                                label='WiFi Hotspot on Startup'
-                                disabled={disabled || hotspot_on_startup === null}
-                                checked={hotspot_on_startup === true}
-                                onChange={checked => this.handleInputChange(null, 'hotspot_on_startup', checked)}
-                            />
-                        </div>
-
-                        <div style={{margin: '0.5em'}}>
-                            <Toggle
                                 label='CPU Power-save on Startup'
                                 disabled={disabled || throttle_on_startup === null}
                                 checked={throttle_on_startup === true}

@@ -8,12 +8,12 @@ from sqlalchemy.orm import Session
 
 from modules.map.models import MapFile
 from wrolpi import flags
-from wrolpi.cmd import BASH_BIN
-from wrolpi.common import get_media_directory, walk, logger, wrol_mode_check
+from wrolpi.cmd import SUDO_BIN
+from wrolpi.common import get_media_directory, walk, logger
 from wrolpi.dates import now, timedelta_to_timestamp, seconds_to_timestamp
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.events import Events
-from wrolpi.vars import PYTEST, PROJECT_DIR
+from wrolpi.vars import PROJECT_DIR
 
 logger = logger.getChild(__name__)
 
@@ -156,8 +156,6 @@ async def import_files(paths: List[str]):
                         map_file.imported = True
         finally:
             if any_success:
-                # A map was imported, remove the tile cache files.
-                await clear_mod_tile()
                 Events.send_map_import_complete(f'Map import completed; took {seconds_to_timestamp(total_elapsed)}')
             else:
                 Events.send_map_import_failed(f'Map import failed!  See server logs.')
@@ -193,7 +191,8 @@ async def run_import_command(*paths: Path) -> int:
                 raise ValueError('Invalid PBF file')
 
     paths = ' '.join(str(i) for i in paths)
-    cmd = f'{BASH_BIN} {PROJECT_DIR}/scripts/import_map.sh {paths}'
+    # Run with sudo so renderd can be restarted.
+    cmd = f'{SUDO_BIN} {PROJECT_DIR}/scripts/import_map.sh {paths}'
     import_logger.warning(f'Running map import command: {cmd}')
     start = now()
     proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
@@ -223,19 +222,6 @@ def get_import_status(session: Session = None) -> List[MapFile]:
 
     session.commit()
     return map_paths
-
-
-@wrol_mode_check
-async def clear_mod_tile():
-    """Remove all cached map tile files.
-
-    @warning: Uses sudo to clear the files and restart the renderd service."""
-    if PYTEST:
-        return
-
-    logger.warning('Clearing map tile cache files')
-
-    await asyncio.create_subprocess_shell(f'sudo /opt/wrolpi/scripts/clear_map_cache.sh')
 
 
 # Bps calculated using many tests on a well-cooled RPi4.

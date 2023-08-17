@@ -24,14 +24,23 @@ if [ ${HAS_ICE_SHEET} = false ]; then
   exit 4
 fi
 
+# Re-execute this script if it wasn't called with sudo.
+if [ $EUID != 0 ]; then
+  sudo "$0" "$@"
+  exit $?
+fi
+
 function cleanup() {
   if [ -f ${MERGED_TMP_FILE} ]; then
     rm ${MERGED_TMP_FILE}
   fi
+  systemctl restart renderd
 }
 
 trap cleanup EXIT
 cleanup
+
+systemctl stop renderd
 
 if [[ ${1} == *.osm.pbf ]]; then
   # Import PBF files.
@@ -93,3 +102,7 @@ else
   echo "WROLPi: Cannot import unknown map file"
   exit 8
 fi
+
+# Clear map tile cache only after successful import.
+[ -d /var/lib/mod_tile/ajt ] && rm -rf /var/lib/mod_tile/ajt
+[ -d /var/cache/renderd/tiles/ajt ] && rm -rf /var/cache/renderd/tiles/ajt

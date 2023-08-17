@@ -114,6 +114,8 @@ refreshing = Flag('refreshing')
 outdated_zims = Flag('outdated_zims', store_db=True)
 # Kiwix server needs to be restarted.
 kiwix_restart = Flag('kiwix_restart')
+# Map Importing
+map_importing = Flag('map_importing')
 
 # Steps of refreshing.
 refresh_counting = Flag('refresh_counting')

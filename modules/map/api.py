@@ -6,6 +6,7 @@ from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from modules.map import lib, schema
+from wrolpi import flags
 from wrolpi.common import wrol_mode_check, get_media_directory, background_task
 from wrolpi.errors import ValidationError
 from wrolpi.root_api import get_blueprint, json_response
@@ -22,7 +23,7 @@ bp = get_blueprint('Map', '/api/map')
 @validate(schema.ImportPost)
 @wrol_mode_check
 async def import_pbfs(_: Request, body: schema.ImportPost):
-    if lib.IMPORT_EVENT.is_set():
+    if flags.map_importing.is_set():
         return response.json({'error': 'Map import already running'}, HTTPStatus.CONFLICT)
 
     paths = [i for i in body.files if i]
@@ -48,7 +49,7 @@ def get_files_status(_: Request):
     body = dict(
         files=paths,
         pending=pending,
-        import_running=lib.IMPORT_EVENT.is_set(),
+        import_running=flags.map_importing.is_set(),
         dockerized=DOCKERIZED,
     )
     return json_response(body, HTTPStatus.OK)

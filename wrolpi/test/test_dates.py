@@ -6,7 +6,7 @@ from sqlalchemy import Column, Integer
 
 from wrolpi import dates
 from wrolpi.common import Base
-from wrolpi.dates import TZDateTime, timedelta_to_timestamp
+from wrolpi.dates import TZDateTime, timedelta_to_timestamp, seconds_to_timestamp
 from wrolpi.db import get_db_session, get_db_curs
 
 
@@ -54,6 +54,18 @@ def test_TZDateTime(test_session):
 
     # DB is incremented by one hour.
     assert_raw_datetime('2021-10-05T23:20:10.346823')
+
+
+@pytest.mark.parametrize('td,expected', [
+    (0, '00:00:00'),
+    (1, '00:00:01'),
+    (60, '00:01:00'),
+    (61, '00:01:01'),
+    (65, '00:01:05'),
+    (24 * 60 * 60, '1d 00:00:00'),
+])
+def test_seconds_to_timestamp(td, expected):
+    assert seconds_to_timestamp(td) == expected
 
 
 @pytest.mark.parametrize('td,expected', [

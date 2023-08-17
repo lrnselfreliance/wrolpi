@@ -516,7 +516,6 @@ class DownloadManager:
             download = Download(url=url, status='new')
             session.add(download)
             session.flush()
-        print(f'{download.settings=}')
         download.manager = self
         return download
 

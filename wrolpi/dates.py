@@ -68,7 +68,15 @@ def from_timestamp(timestamp: float) -> datetime:
 
 
 def seconds_to_timestamp(seconds: Union[int, float]) -> str:
-    """Convert an integer into a timestamp string."""
+    """Convert an integer into a timestamp string.
+
+    >>> seconds_to_timestamp(5)
+    # '00:00:05'
+    >>> seconds_to_timestamp(60)
+    # '00:01:00'
+    >>> seconds_to_timestamp(86400)
+    # '1d 00:00:00'
+    """
     seconds = int(seconds)
     weeks, seconds = divmod(seconds, Seconds.week)
     days, seconds = divmod(seconds, Seconds.day)

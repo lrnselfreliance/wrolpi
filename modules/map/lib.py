@@ -1,21 +1,22 @@
 import asyncio
 import subprocess
-from multiprocessing import Event, Manager
+from multiprocessing import Manager
 from pathlib import Path
 from typing import List
 
 from sqlalchemy.orm import Session
 
 from modules.map.models import MapFile
+from wrolpi import flags
 from wrolpi.cmd import BASH_BIN
 from wrolpi.common import get_media_directory, walk, logger, wrol_mode_check
-from wrolpi.dates import now, timedelta_to_timestamp
+from wrolpi.dates import now, timedelta_to_timestamp, seconds_to_timestamp
 from wrolpi.db import optional_session, get_db_session
+from wrolpi.events import Events
 from wrolpi.vars import PYTEST, PROJECT_DIR
 
 logger = logger.getChild(__name__)
 
-IMPORT_EVENT = Event()
 IMPORTING = Manager().dict(dict(
     pending=None,
 ))
@@ -81,87 +82,93 @@ import_logger = logger.getChild('import')
 
 
 async def import_files(paths: List[str]):
-    if IMPORT_EVENT.is_set():
+    if flags.map_importing.is_set():
         import_logger.error('Map import already running...')
         return
 
-    paths = [get_media_directory() / i for i in paths]
-    import_logger.warning(f'Importing: {", ".join(map(str, paths))}')
+    with flags.map_importing:
+        paths = [get_media_directory() / i for i in paths]
+        import_logger.warning(f'Importing: {", ".join(map(str, paths))}')
 
-    dumps = [i for i in paths if i.suffix == '.dump']
-    pbfs = [i for i in paths if i.suffix == '.pbf']
+        dumps = [i for i in paths if i.suffix == '.dump']
+        pbfs = [i for i in paths if i.suffix == '.pbf']
 
-    any_success = False
-    try:
-        IMPORT_EVENT.set()
-        if pbfs:
-            success = False
-            try:
-                IMPORTING.update(dict(
-                    pending=list(pbfs),
-                ))
-                await run_import_command(*pbfs)
-                success = True
-                any_success = True
-            except Exception as e:
-                import_logger.warning('Failed to run import', exc_info=e)
-            finally:
-                IMPORTING.update(dict(
-                    pending=None,
-                ))
+        total_elapsed = 0
 
-            if success:
-                with get_db_session(commit=True) as session:
-                    # Any previously imported PBFs are no longer imported.
-                    for pbf_path in pbfs:
-                        pbf_file = get_or_create_map_file(pbf_path, session)
-                        pbf_file.imported = True
-                    for pbf_file in session.query(MapFile):
-                        pbf_file.imported = pbf_file.path in pbfs
+        any_success = False
+        try:
+            if pbfs:
+                success = False
+                try:
+                    IMPORTING.update(dict(
+                        pending=list(pbfs),
+                    ))
+                    total_elapsed += await run_import_command(*pbfs)
+                    success = True
+                    any_success = True
+                except Exception as e:
+                    import_logger.warning('Failed to run import', exc_info=e)
+                finally:
+                    IMPORTING.update(dict(
+                        pending=None,
+                    ))
 
-        for path in dumps:
-            # Import each dump individually.
-            if not path.is_file():
-                import_logger.fatal(f'Map file does not exist! {path}')
-                continue
+                if success:
+                    with get_db_session(commit=True) as session:
+                        # Any previously imported PBFs are no longer imported.
+                        for pbf_path in pbfs:
+                            pbf_file = get_or_create_map_file(pbf_path, session)
+                            pbf_file.imported = True
+                        for pbf_file in session.query(MapFile):
+                            pbf_file.imported = pbf_file.path in pbfs
 
-            with get_db_session() as session:
-                map_file = session.query(MapFile).filter_by(path=path).one_or_none()
-                if map_file and map_file.imported:
-                    # Don't import a map file twice.
-                    import_logger.debug(f'{path} is already imported')
+            for path in dumps:
+                # Import each dump individually.
+                if not path.is_file():
+                    import_logger.fatal(f'Map file does not exist! {path}')
                     continue
 
-            success = False
-            try:
-                IMPORTING.update(dict(
-                    pending=str(path),
-                ))
-                await run_import_command(path)
-                success = True
-                any_success = True
-            except Exception as e:
-                import_logger.warning('Failed to run import', exc_info=e)
-            finally:
-                IMPORTING.update(dict(
-                    pending=None,
-                ))
+                with get_db_session() as session:
+                    map_file = session.query(MapFile).filter_by(path=path).one_or_none()
+                    if map_file and map_file.imported:
+                        # Don't import a map file twice.
+                        import_logger.debug(f'{path} is already imported')
+                        continue
 
-            if success:
-                with get_db_session(commit=True) as session:
-                    map_file = get_or_create_map_file(path, session)
-                    map_file.imported = True
-    finally:
-        if any_success:
-            # A map was imported, remove the tile cache files.
-            await clear_mod_tile()
-        IMPORT_EVENT.clear()
+                success = False
+                try:
+                    IMPORTING.update(dict(
+                        pending=str(path),
+                    ))
+                    total_elapsed += await run_import_command(path)
+                    success = True
+                    any_success = True
+                except Exception as e:
+                    import_logger.warning('Failed to run import', exc_info=e)
+                finally:
+                    IMPORTING.update(dict(
+                        pending=None,
+                    ))
+
+                if success:
+                    with get_db_session(commit=True) as session:
+                        map_file = get_or_create_map_file(path, session)
+                        map_file.imported = True
+        finally:
+            if any_success:
+                # A map was imported, remove the tile cache files.
+                await clear_mod_tile()
+                Events.send_map_import_complete(f'Map import completed; took {seconds_to_timestamp(total_elapsed)}')
+            else:
+                Events.send_map_import_failed(f'Map import failed!  See server logs.')
 
 
-async def run_import_command(*paths: Path):
+async def run_import_command(*paths: Path) -> int:
     """Run the map import script on the provided paths.
 
     Can only import a single *.dump file, or a list of *.osm.pbf files.  They cannot be mixed.
+
+    @return: The seconds elapsed during import.
     """
     paths = [i.absolute() for i in paths]
     dumps = [i for i in paths if i.suffix == '.dump']
@@ -203,6 +210,8 @@ async def run_import_command(*paths: Path):
             import_logger.error(line[:500])
         raise ValueError(f'Importing map file failed with return code {proc.returncode}')
 
+    return int(elapsed.total_seconds())
+
 
 @optional_session
 def get_import_status(session: Session = None) -> List[MapFile]:
@@ -227,3 +236,12 @@ async def clear_mod_tile():
     logger.warning('Clearing map tile cache files')
 
     await asyncio.create_subprocess_shell(f'sudo /opt/wrolpi/scripts/clear_map_cache.sh')
+
+
+# Bps calculated using many tests on a well-cooled RPi4.
+RPI4_PBF_BYTES_PER_SECOND = 61879
+
+
+def seconds_to_import(size_in_bytes: int) -> int:
+    """Attempt to predict how long it will take an RPi4 to import a given PBF file."""
+    return max(int(size_in_bytes // RPI4_PBF_BYTES_PER_SECOND), 0)

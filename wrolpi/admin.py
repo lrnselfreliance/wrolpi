@@ -156,6 +156,7 @@ async def restart():
         cmd = f'{SUDO_BIN} reboot'
         proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE,
                                                      stdout=asyncio.subprocess.PIPE)
+        stdout, stderr = await proc.communicate()
     except subprocess.CalledProcessError as e:
         raise RestartFailed() from e
 
@@ -174,6 +175,7 @@ async def shutdown():
         cmd = f'{SUDO_BIN} poweroff'
         proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE,
                                                      stdout=asyncio.subprocess.PIPE)
+        stdout, stderr = await proc.communicate()
     except subprocess.CalledProcessError as e:
         raise ShutdownFailed() from e
 

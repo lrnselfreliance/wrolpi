@@ -11,6 +11,8 @@ from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi.common import ModelHelper, Base, logger
 from wrolpi.dates import TZDateTime
+from wrolpi.db import optional_session
+from wrolpi.errors import UnknownArchive
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag, TagFile
@@ -42,6 +44,24 @@ class Archive(Base, ModelHelper):
             return f'<Archive id={self.id} url={self.url} singlefile={repr(str(self.singlefile_path))} ' \
                    f'domain={self.domain.domain}>'
         return f'<Archive id={self.id} url={self.url} singlefile={repr(str(self.singlefile_path))}>'
+
+    @staticmethod
+    @optional_session
+    def get_by_id(id_: int, session: Session = None) -> Optional[Base]:
+        """Attempt to find an Archive with the provided id.  Returns None if it cannot be found."""
+        archive = session.query(Archive).filter_by(id=id_).one_or_none()
+        return archive
+
+    @staticmethod
+    @optional_session
+    def find_by_id(id_: int, session: Session = None) -> Base:
+        """Find an Archive with the provided id, raises an exception when no Archive is found.
+
+        @raise UnknownArchive: if the Archive can not be found"""
+        archive = Archive.get_by_id(id_, session=session)
+        if not archive:
+            raise UnknownArchive(f'Cannot find Archive with id {id_}')
+        return archive
 
     def my_paths(self, *mimetypes: str) -> List[pathlib.Path]:
         return self.file_group.my_paths(*mimetypes)

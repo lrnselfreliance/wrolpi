@@ -260,7 +260,7 @@ class FileGroup(ModelHelper, Base):
 
     @staticmethod
     @optional_session
-    def find_by_path(path, session) -> Optional['FileGroup']:
+    def get_by_path(path, session) -> Optional['FileGroup']:
         file_group = session.query(FileGroup).filter(FileGroup.primary_path == str(path)).one_or_none()
         return file_group
 

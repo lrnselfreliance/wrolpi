@@ -104,7 +104,7 @@ def test_refresh_videos(test_client, test_session, test_directory, simple_channe
     video1_video_path = str(video1.video_path)
     video1.poster_path.unlink()
     test_client.post('/api/files/refresh')
-    video1 = Video.find_by_path(video1_video_path, test_session)
+    video1 = Video.get_by_path(video1_video_path, test_session)
     assert not video1.poster_path
 
 
@@ -136,9 +136,9 @@ def test_channels_with_videos(test_session, test_client, test_directory, channel
     assert test_session.query(Video).count() == 3, 'Did not find correct amount of video files.'
     assert {i[0] for i in test_session.query(Channel.name)} == {'channel1', 'channel2'}, 'Channels were changed.'
 
-    vid1 = Video.find_by_path(vid1_path)
-    vid2 = Video.find_by_path(vid2_path)
-    vid3 = Video.find_by_path(vid3_path)
+    vid1 = Video.get_by_path(vid1_path)
+    vid2 = Video.get_by_path(vid2_path)
+    vid3 = Video.get_by_path(vid3_path)
 
     assert vid1.channel == channel1
     assert vid2.channel == channel2

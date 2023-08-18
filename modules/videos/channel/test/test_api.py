@@ -38,7 +38,9 @@ def test_get_video(test_client, test_session, simple_channel, video_factory):
     # Test that a 404 is returned when no video exists
     _, response = test_client.get('/api/videos/video/10')
     assert response.status_code == HTTPStatus.NOT_FOUND, response.json
-    assert response.json == {'code': 'UNKNOWN_VIDEO', 'summary': 'The video could not be found.', 'error': ''}
+    assert response.json == {'code': 'UNKNOWN_VIDEO',
+                             'error': 'Cannot find Video with id 10',
+                             'summary': 'The video could not be found.'}
 
     # Get the video info we inserted
     _, response = test_client.get('/api/videos/video/1')

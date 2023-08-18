@@ -172,17 +172,13 @@ def create_channel(session: Session, data: schema.ChannelPostRequest, return_dic
 
 
 @run_after(save_channels_config)
-@optional_session
+@optional_session(commit=True)
 def delete_channel(session: Session, *, channel_id: int):
-    try:
-        channel = session.query(Channel).filter_by(id=channel_id).one()
-        channel_dict = channel.dict()
-    except NoResultFound:
-        raise UnknownChannel()
+    channel = Channel.find_by_id(channel_id, session=session)
 
+    channel_dict = channel.dict()
     channel.delete_with_videos()
 
-    session.commit()
     return channel_dict
 
 

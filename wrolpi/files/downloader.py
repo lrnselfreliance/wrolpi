@@ -77,7 +77,7 @@ async def save_and_tag(file: pathlib.Path, tag_names: List[str] = None):
     tag_names = tag_names or list()
 
     with get_db_session(commit=True) as session:
-        file_group = FileGroup.find_by_path(file)
+        file_group = FileGroup.get_by_path(file)
         if not file_group:
             file_group = FileGroup.from_paths(session, file)
             session.commit()

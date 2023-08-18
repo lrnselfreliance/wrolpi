@@ -81,7 +81,7 @@ def simple_video(test_session, test_directory, simple_channel, video_file) -> Vi
     video = Video.from_paths(test_session, video_path)
     video.channel = simple_channel
     test_session.commit()
-    video = test_session.query(Video).filter_by(id=video.id).one()
+    video = Video.find_by_id(video.id, session=test_session)
     return video
 
 

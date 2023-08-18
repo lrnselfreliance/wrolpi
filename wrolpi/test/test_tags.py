@@ -67,8 +67,8 @@ async def test_tags_file_group(test_session, make_files_structure, tag_factory, 
 async def test_tags_config_(test_session, test_directory, tag_factory, example_pdf, video_file, test_tags_config):
     """Test that the config is updated when a FileGroup is tagged."""
     await files_lib.refresh_files()
-    pdf: FileGroup = FileGroup.find_by_path(example_pdf, test_session)
-    video: FileGroup = FileGroup.find_by_path(video_file, test_session)
+    pdf: FileGroup = FileGroup.get_by_path(example_pdf, test_session)
+    video: FileGroup = FileGroup.get_by_path(video_file, test_session)
     tag1 = tag_factory()
     tag2 = tag_factory()
     test_session.commit()

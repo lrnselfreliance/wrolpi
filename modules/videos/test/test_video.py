@@ -79,8 +79,8 @@ async def test_video_channel_refresh(test_session, test_directory, channel_facto
     assert test_session.query(Video).count() == 2
 
     # The video is associated with `simple_channel` because its file is in the Channel's directory.
-    video1: Video = Video.find_by_path(video1_path, test_session)
-    video2: Video = Video.find_by_path(video2_path, test_session)
+    video1: Video = Video.get_by_path(video1_path, test_session)
+    video2: Video = Video.get_by_path(video2_path, test_session)
     assert video1.channel == channel
     assert not video2.channel
     assert video1.__json__()['video']['channel']

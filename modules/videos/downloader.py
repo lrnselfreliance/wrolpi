@@ -505,9 +505,7 @@ def update_channel_catalog(channel: Channel, info: dict):
 def _find_all_missing_videos(channel_id: id) -> List[Tuple]:
     """Get all Video entries which don't have the required media files (i.e. hasn't been downloaded)."""
     with get_db_session() as session:
-        channel: Channel = Channel.get_by_id(channel_id)
-        if not channel:
-            raise UnknownChannel(f'Cannot find channel with id {channel_id}')
+        channel: Channel = Channel.find_by_id(channel_id)
 
         def resolve_url(entry: dict) -> str:
             parsed = urlparse(entry.get('webpage_url') or entry['url'])

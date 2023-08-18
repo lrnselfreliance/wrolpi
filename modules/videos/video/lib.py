@@ -1,24 +1,15 @@
 from typing import Tuple, Optional, List, Dict
 
 from sqlalchemy.orm import Session
-from sqlalchemy.orm.exc import NoResultFound
 
 from modules.videos.models import Video
 from wrolpi.common import run_after, logger
 from wrolpi.db import get_db_session, optional_session
-from ..errors import UnknownVideo
 from wrolpi.files.lib import handle_file_group_search_results, tag_names_to_file_group_sub_select
+from ..errors import UnknownVideo
 from ..lib import save_channels_config
 
 logger.getChild(__name__)
-
-
-def get_video(session: Session, video_id: int) -> Video:
-    try:
-        video = session.query(Video).filter_by(id=video_id).one()
-        return video
-    except NoResultFound:
-        raise UnknownVideo()
 
 
 def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dict]]:
@@ -26,7 +17,7 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
     Get a Video, with it's prev/next videos.  Mark the Video as viewed.
     """
     with get_db_session(commit=True) as session:
-        video = get_video(session, video_id)
+        video = Video.find_by_id(video_id, session=session)
         video.set_viewed()
         previous_video, next_video = video.get_surrounding_videos()
 

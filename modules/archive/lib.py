@@ -304,9 +304,7 @@ def get_title_from_html(html: str, url: str = None) -> str:
 @optional_session
 def get_archive(session, archive_id: int) -> Archive:
     """Get an Archive."""
-    archive = session.query(Archive).filter_by(id=archive_id).one_or_none()
-    if not archive:
-        raise UnknownArchive(f'Could not find archive with id: {archive_id}')
+    archive = Archive.find_by_id(archive_id, session=session)
     return archive
 
 

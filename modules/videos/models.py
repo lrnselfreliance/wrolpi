@@ -8,7 +8,7 @@ from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, Fore
 from sqlalchemy.orm import relationship, Session, deferred
 from sqlalchemy.orm.collections import InstrumentedList
 
-from modules.videos.errors import UnknownVideo
+from modules.videos.errors import UnknownVideo, UnknownChannel
 from wrolpi.captions import read_captions
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task
 from wrolpi.dates import now, TZDateTime
@@ -192,8 +192,8 @@ class Video(ModelHelper, Base):
                 break
 
         # Fetch the videos by id, if they exist.
-        previous_video = session.query(Video).filter_by(id=previous_id).one() if previous_id else None
-        next_video = session.query(Video).filter_by(id=next_id).one() if next_id else None
+        previous_video = Video.find_by_id(previous_id, session) if previous_id else None
+        next_video = Video.find_by_id(next_id, session) if next_id else None
 
         return previous_video, next_video
 
@@ -285,7 +285,7 @@ class Video(ModelHelper, Base):
 
     @staticmethod
     @optional_session
-    def find_by_path(path, session: Session) -> Optional['Video']:
+    def get_by_path(path, session: Session) -> Optional['Video']:
         video = session.query(Video) \
             .join(FileGroup, FileGroup.id == Video.file_group_id) \
             .filter(FileGroup.primary_path == path).one_or_none()
@@ -293,8 +293,20 @@ class Video(ModelHelper, Base):
 
     @staticmethod
     @optional_session
-    def find_by_id(id_: int, session: Session) -> Optional['Video']:
+    def get_by_id(id_: int, session: Session = None) -> Optional['Video']:
+        """Attempt to find a Video with the provided id.  Returns None if it cannot be found."""
         video = session.query(Video).filter(Video.id == id_).one_or_none()
+        return video
+
+    @staticmethod
+    @optional_session
+    def find_by_id(id_: int, session: Session = None) -> 'Video':
+        """Find a Video with the provided id, raises an exception if it cannot be found.
+
+        @raise UnknownVideo: if the Video can not be found"""
+        video = Video.get_by_id(id_, session)
+        if not video:
+            raise UnknownVideo(f'Cannot find Video with id {id_}')
         return video
 
     def add_tag(self, tag_or_tag_name: Union[Tag, str]) -> TagFile:
@@ -535,5 +547,17 @@ class Channel(ModelHelper, Base):
     @staticmethod
     @optional_session
     def get_by_id(id_: int, session: Session = None) -> Optional['Channel']:
+        """Attempt to find a Channel with the provided id.  Returns None if it cannot be found."""
         channel = session.query(Channel).filter_by(id=id_).one_or_none()
+        return channel
+
+    @staticmethod
+    @optional_session
+    def find_by_id(id_: int, session: Session = None) -> 'Channel':
+        """Find a Channel with the provided id, raises an exception when no Channel is found.
+
+        @raise UnknownChannel: if the channel can not be found"""
+        channel = Channel.get_by_id(id_, session=session)
+        if not channel:
+            raise UnknownChannel(f'Cannot find channel with id {id_}')
         return channel

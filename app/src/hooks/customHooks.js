@@ -1086,3 +1086,8 @@ export const useWROLMode = () => {
     const {status} = useContext(StatusContext);
     return status ? status.wrol_mode : null;
 }
+
+export const useDockerized = () => {
+    const {status} = React.useContext(StatusContext);
+    return status && status['dockerized'] === true;
+}

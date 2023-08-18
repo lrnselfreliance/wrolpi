@@ -1363,6 +1363,7 @@ export function useAPIButton(
                      onClose={() => setConfirmOpen(false)}
                      onCancel={() => setConfirmOpen(false)}
                      onConfirm={localOnConfirm}
+                     confirmButton={confirmButton}
             />
         </>
     }

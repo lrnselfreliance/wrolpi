@@ -1024,7 +1024,20 @@ export async function deleteOutdatedZims() {
     return response.status === 204;
 }
 
-export async function ignoreOutdatedZims() {
-    const response = await apiPost(`${API_URI}/zim/outdated`);
-    return response.status === 204;
+export async function postShutdown() {
+    const response = await apiPost(`${API_URI}/shutdown`);
+    if (response.status !== 204) {
+        // Return the error.
+        return await response.json();
+    }
+    return null
+}
+
+export async function postRestart() {
+    const response = await apiPost(`${API_URI}/restart`);
+    if (response.status !== 204) {
+        // Return the error.
+        return await response.json();
+    }
+    return null
 }

@@ -25,7 +25,7 @@ from wrolpi.common import logger, get_config, wrol_mode_enabled, Base, get_media
 from wrolpi.dates import now, strptime
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, APIError, HotspotError, InvalidDownload, \
-    HotspotPasswordTooShort
+    HotspotPasswordTooShort, ShutdownFailed, RestartFailed
 from wrolpi.events import get_events, Events
 from wrolpi.files.lib import get_file_statistics, estimate_search
 from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
@@ -499,6 +499,24 @@ async def post_search_estimate(_: Request, body: schema.SearchEstimateRequest):
         zims=zims_estimates,
     )
     return json_response(ret)
+
+
+@api_bp.post('/restart')
+async def post_restart(_: Request):
+    if DOCKERIZED:
+        raise RestartFailed(f'Cannot restart when running in Docker')
+
+    await admin.restart()
+    return response.empty(HTTPStatus.NO_CONTENT)
+
+
+@api_bp.post('/shutdown')
+async def post_shutdown(_: Request):
+    if DOCKERIZED:
+        raise ShutdownFailed(f'Cannot shutdown when running in Docker')
+
+    await admin.shutdown()
+    return response.empty(HTTPStatus.NO_CONTENT)
 
 
 class CustomJSONEncoder(json.JSONEncoder):

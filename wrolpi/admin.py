@@ -1,8 +1,10 @@
+import asyncio
 import enum
 import subprocess
 
 from wrolpi.cmd import NMCLI_BIN, CPUFREQ_INFO_BIN, SUDO_BIN, CPUFREQ_SET_BIN
 from wrolpi.common import logger, WROLPI_CONFIG, get_warn_once
+from wrolpi.errors import RestartFailed, ShutdownFailed
 from wrolpi.vars import DEFAULT_CPU_FREQUENCY, DOCKERIZED
 
 logger = logger.getChild(__name__)
@@ -141,3 +143,39 @@ def throttle_cpu_off() -> bool:
     except FileNotFoundError:
         if not DOCKERIZED:
             logger.error('Could not disable CPU throttle', exc_info=True)
+
+
+async def restart():
+    """Restart the WROLPi.
+
+    @raise RestartFailed: If restart is not possible, or if sudo command failed."""
+    if DOCKERIZED:
+        raise RestartFailed('Cannot restart because we are dockerized')
+
+    try:
+        cmd = f'{SUDO_BIN} reboot'
+        proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE,
+                                                     stdout=asyncio.subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        raise RestartFailed() from e
+
+    if proc.returncode != 0:
+        raise RestartFailed(f'Got return code {proc.returncode}')
+
+
+async def shutdown():
+    """Shutdown the WROLPi.
+
+    @raise ShutdownFailed: If shutdown is not possible, or if sudo command failed."""
+    if DOCKERIZED:
+        raise ShutdownFailed('Cannot shutdown because we are dockerized')
+
+    try:
+        cmd = f'{SUDO_BIN} poweroff'
+        proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE,
+                                                     stdout=asyncio.subprocess.PIPE)
+    except subprocess.CalledProcessError as e:
+        raise ShutdownFailed() from e
+
+    if proc.returncode != 0:
+        raise ShutdownFailed(f'Got return code {proc.returncode}')

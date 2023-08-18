@@ -119,3 +119,15 @@ class HotspotPasswordTooShort(APIError):
     code = 'HOTSPOT_PASSWORD_TOO_SHORT'
     summary = 'Hotspot password must be at least 8 characters'
     status = HTTPStatus.BAD_REQUEST
+
+
+class RestartFailed(APIError):
+    code = 'RESTART_FAILED'
+    summary = 'Unable to restart the WROLPi'
+    status = HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+class ShutdownFailed(APIError):
+    code = 'SHUTDOWN_FAILED'
+    summary = 'Unable to shutdown the WROLPi'
+    status = HTTPStatus.INTERNAL_SERVER_ERROR

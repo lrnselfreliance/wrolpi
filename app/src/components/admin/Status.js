@@ -1,9 +1,12 @@
 import {Header, Progress, Segment, Statistic, StatisticGroup} from "../Theme";
 import React, {useContext} from "react";
-import {humanBandwidth, humanFileSize, LoadStatistic, useTitle} from "../Common";
+import {APIButton, humanBandwidth, humanFileSize, LoadStatistic, useTitle} from "../Common";
 import {ProgressPlaceholder} from "../Placeholder";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {Media, StatusContext} from "../../contexts/contexts";
+import {useDockerized} from "../../hooks/customHooks";
+import {postRestart, postShutdown} from "../../api";
+import {toast} from "react-semantic-toasts-2";
 
 function DriveInfo({used, size, percent, mount}) {
     let color;
@@ -142,6 +145,109 @@ export function CPUUsageProgress({value, label}) {
     return <Progress percent={value} progress color={color} label={label}/>
 }
 
+export function ShutdownButton() {
+    const dockerized = useDockerized();
+
+    const handleShutdown = async () => {
+        try {
+            const response = await postShutdown();
+            if (response && response['code'] === 'SHUTDOWN_FAILED') {
+                toast({
+                    title: 'Shutdown Failed',
+                    description: response['error'],
+                    time: 5000,
+                    type: "error",
+                })
+            } else if (response && response['code'] === 'NATIVE_ONLY') {
+                toast({
+                    title: 'Shutdown Failed',
+                    description: 'Cannot shutdown while running in Docker',
+                    time: 5000,
+                    type: "error",
+                })
+            } else if (response !== null) {
+                toast({
+                    title: 'Shutdown Failed',
+                    description: 'Unknown error when attempting shutdown',
+                    time: 5000,
+                    type: "error",
+                })
+            }
+        } catch (e) {
+            toast({
+                title: 'Shutdown Failed',
+                description: 'Failed to request WROLPi shutdown',
+                time: 5000,
+                type: "error",
+            })
+            throw e;
+        }
+    }
+
+    return <APIButton
+        size='huge'
+        color='red'
+        onClick={handleShutdown}
+        confirmContent='Are you sure you want to turn off your WROLPi?'
+        confirmButton='Shutdown'
+        disabled={dockerized}
+    >
+        Shutdown
+    </APIButton>
+}
+
+export function RestartButton() {
+    const dockerized = useDockerized();
+
+    const handleRestart = async () => {
+        try {
+            const response = await postRestart();
+            if (response && response['code'] === 'SHUTDOWN_FAILED') {
+                toast({
+                    title: 'Restart Failed',
+                    description: response['error'],
+                    time: 5000,
+                    type: "error",
+                })
+            } else if (response && response['code'] === 'NATIVE_ONLY') {
+                toast({
+                    title: 'Restart Failed',
+                    description: 'Cannot restart while running in Docker',
+                    time: 5000,
+                    type: "error",
+                })
+            } else if (response !== null) {
+                toast({
+                    title: 'Restart Failed',
+                    description: 'Unknown error when attempting restart',
+                    time: 5000,
+                    type: "error",
+                })
+            }
+        } catch (e) {
+            toast({
+                title: 'Restart Failed',
+                description: 'Failed to request WROLPi restart',
+                time: 5000,
+                type: "error",
+            })
+            throw e;
+        }
+    }
+
+    return <APIButton
+        size='huge'
+        color='yellow'
+        onClick={handleRestart}
+        confirmContent='Are you sure you want to restart your WROLPi?'
+        confirmButton='Restart'
+        disabled={dockerized}
+    >
+        Restart
+    </APIButton>
+}
+
+
 export function Status() {
     useTitle('Status');
 
@@ -238,6 +344,11 @@ export function Status() {
             <Segment>
                 <Header as='h2'>Drive Bandwidth</Header>
                 {disk_bandwidth.map((disk) => <DiskBandwidth key={disk['name']} {...disk}/>)}
+            </Segment>
+
+            <Segment>
+                <RestartButton/>
+                <ShutdownButton/>
             </Segment>
         </Media>
     </>

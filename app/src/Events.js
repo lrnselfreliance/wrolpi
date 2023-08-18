@@ -32,6 +32,14 @@ function handleEvents(events) {
             eventToast('Refresh completed', 'Files have been refreshed.');
         }
 
+        if (event === 'shutdown') {
+            eventToast('Shutdown', message, 'warning');
+        }
+
+        if (event === 'shutdown_failed') {
+            eventToast('Shutdown Failed', message, 'error');
+        }
+
         if (event === 'downloads_disabled') {
             eventToast('Downloads Disabled', message, 'info');
         }

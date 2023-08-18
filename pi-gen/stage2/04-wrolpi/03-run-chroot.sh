@@ -67,8 +67,7 @@ cat >/etc/sudoers.d/90-wrolpi <<'EOF'
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-app.service
 %wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-app.service
 %wrolpi ALL= NOPASSWD:/opt/wrolpi/scripts/import_map.sh
-%wrolpi ALL= NOPASSWD:/usr/sbin/poweroff
-%wrolpi ALL= NOPASSWD:/usr/sbin/reboot
+%wrolpi ALL= NOPASSWD:/usr/sbin/shutdown
 EOF
 chmod 660 /etc/sudoers.d/90-wrolpi
 

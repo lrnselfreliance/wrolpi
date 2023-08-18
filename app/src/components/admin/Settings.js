@@ -21,6 +21,13 @@ export function ShutdownButton() {
                     time: 5000,
                     type: "error",
                 })
+            } else if (response && response['code'] === 'NATIVE_ONLY') {
+                toast({
+                    title: 'Shutdown Failed',
+                    description: 'Cannot shutdown while running in Docker',
+                    time: 5000,
+                    type: "error",
+                })
             } else if (response !== null) {
                 toast({
                     title: 'Shutdown Failed',
@@ -58,10 +65,17 @@ export function RestartButton() {
     const handleRestart = async () => {
         try {
             const response = await postRestart();
-            if (response && response['code'] === 'RESTART_FAILED') {
+            if (response && response['code'] === 'SHUTDOWN_FAILED') {
                 toast({
                     title: 'Restart Failed',
                     description: response['error'],
+                    time: 5000,
+                    type: "error",
+                })
+            } else if (response && response['code'] === 'NATIVE_ONLY') {
+                toast({
+                    title: 'Restart Failed',
+                    description: 'Cannot restart while running in Docker',
                     time: 5000,
                     type: "error",
                 })

@@ -73,6 +73,14 @@ class Events:
     def send_map_import_failed(message: str = None):
         send_event('map_import_failed', message, subject='map')
 
+    @staticmethod
+    def send_shutdown(message: str = None):
+        send_event('shutdown', message, subject='shutdown')
+
+    @staticmethod
+    def send_shutdown_failed(message: str = None):
+        send_event('shutdown_failed', message, subject='shutdown')
+
 
 def log_event(event: str, message: str = None, action: str = None, subject: str = None):
     log = f'{event=}'

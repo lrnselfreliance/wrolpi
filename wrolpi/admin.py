@@ -3,8 +3,9 @@ import enum
 import subprocess
 
 from wrolpi.cmd import NMCLI_BIN, CPUFREQ_INFO_BIN, SUDO_BIN, CPUFREQ_SET_BIN
-from wrolpi.common import logger, WROLPI_CONFIG, get_warn_once
-from wrolpi.errors import RestartFailed, ShutdownFailed
+from wrolpi.common import logger, WROLPI_CONFIG, get_warn_once, background_task
+from wrolpi.errors import ShutdownFailed
+from wrolpi.events import Events
 from wrolpi.vars import DEFAULT_CPU_FREQUENCY, DOCKERIZED
 
 logger = logger.getChild(__name__)
@@ -53,7 +54,7 @@ def enable_hotspot():
     logger.info(f'Hotspot status: {status}')
 
     if status == HotspotStatus.connected:
-        logger.info('Hotspot already connected.  Restarting hotspot.')
+        logger.info('Hotspot already connected.  Rebooting hotspot.')
         disable_hotspot()
         return enable_hotspot()
     elif status == HotspotStatus.disconnected:
@@ -145,39 +146,39 @@ def throttle_cpu_off() -> bool:
             logger.error('Could not disable CPU throttle', exc_info=True)
 
 
-async def restart():
-    """Restart the WROLPi.
+async def shutdown(reboot: bool = False, delay: int = 10):
+    """Shutdown or reboot the WROLPi.  Schedules an asyncio sleep to delay the shutdown.
 
-    @raise RestartFailed: If restart is not possible, or if sudo command failed."""
+    @raise ShutdownFailed: If not possible, or if sudo command failed."""
     if DOCKERIZED:
-        raise RestartFailed('Cannot restart because we are dockerized')
+        raise ShutdownFailed('Cannot Reboot because we are dockerized')
 
-    try:
-        cmd = f'{SUDO_BIN} reboot'
-        proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE,
-                                                     stdout=asyncio.subprocess.PIPE)
-        stdout, stderr = await proc.communicate()
-    except subprocess.CalledProcessError as e:
-        raise RestartFailed() from e
+    reboot = '--reboot' if reboot else ''
 
-    if proc.returncode != 0:
-        raise RestartFailed(f'Got return code {proc.returncode}')
+    async def _():
+        await asyncio.sleep(delay)
 
+        try:
+            cmd = f'{SUDO_BIN} shutdown {reboot}'
+            proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE,
+                                                         stdout=asyncio.subprocess.PIPE)
+            stdout, stderr = await proc.communicate()
+        except subprocess.CalledProcessError as e:
+            if reboot:
+                Events.send_shutdown_failed('Reboot failed')
+            else:
+                Events.send_shutdown_failed('Shutdown failed')
+            raise ShutdownFailed() from e
 
-async def shutdown():
-    """Shutdown the WROLPi.
+        if proc.returncode != 0:
+            if reboot:
+                Events.send_shutdown_failed('Reboot failed')
+            else:
+                Events.send_shutdown_failed('Shutdown failed')
+            raise ShutdownFailed(f'Got return code {proc.returncode}')
 
-    @raise ShutdownFailed: If shutdown is not possible, or if sudo command failed."""
-    if DOCKERIZED:
-        raise ShutdownFailed('Cannot shutdown because we are dockerized')
-
-    try:
-        cmd = f'{SUDO_BIN} poweroff'
-        proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE,
-                                                     stdout=asyncio.subprocess.PIPE)
-        stdout, stderr = await proc.communicate()
-    except subprocess.CalledProcessError as e:
-        raise ShutdownFailed() from e
-
-    if proc.returncode != 0:
-        raise ShutdownFailed(f'Got return code {proc.returncode}')
+    background_task(_())
+    if reboot:
+        Events.send_shutdown(f'Reboot in {delay} seconds')
+    else:
+        Events.send_shutdown(f'Shutdown in {delay} seconds')

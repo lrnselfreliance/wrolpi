@@ -133,13 +133,12 @@ class Video(ModelHelper, Base):
 
     def get_surrounding_videos(self):
         """
-        Get the previous and next videos around this video.  The videos must be in the same channel.
+        Get the previous and next videos around this Video.  The videos must be in the same Channel.
 
         Example:
             >>> vid1 = Video(id=1, upload_date=10)
             >>> vid2 = Video(id=2, upload_date=20)
             >>> vid3 = Video(id=3, upload_date=30)
-            >>> vid4 = Video(id=4)
 
             >>> vid1.get_surrounding_videos()
             (None, vid2)
@@ -147,38 +146,54 @@ class Video(ModelHelper, Base):
             (vid1, vid3)
             >>> vid3.get_surrounding_videos()
             (vid2, None)
-            Video 4 has no upload date, so we can't place it in order.
-            >>> vid4.get_surrounding_videos()
-            (None, None)
         """
         session = Session.object_session(self)
 
-        if not self.upload_date:
-            # We can't place a video that has no upload date.
-            return None, None
-
         with get_db_curs() as curs:
-            query = '''
+            if self.upload_date:
+                # Get videos next to this Video's upload date.
+                stmt = '''
+                        WITH numbered_videos AS (
+                            SELECT id,
+                                ROW_NUMBER() OVER (ORDER BY upload_date ASC) AS row_number
+                            FROM video
+                            WHERE
+                                channel_id = %(channel_id)s
+                                AND upload_date IS NOT NULL
+                        )
+                        SELECT id
+                        FROM numbered_videos
+                        WHERE row_number IN (
+                            SELECT row_number+i
+                            FROM numbered_videos
+                            CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
+                            WHERE
+                            id = %(video_id)s
+                        )
+                '''
+            else:
+                # No videos near this Video with upload dates, recommend the files next to this Video.
+                # Only recommend videos in the same Channel (or similarly without a Channel).
+                channel_where = 'WHERE v.channel_id = %(channel_id)s' if self.channel_id \
+                    else 'WHERE v.channel_id IS NULL'
+                stmt = f'''
                     WITH numbered_videos AS (
-                        SELECT id,
-                            ROW_NUMBER() OVER (ORDER BY upload_date ASC) AS row_number
-                        FROM video
-                        WHERE
-                            channel_id = %(channel_id)s
-                            AND upload_date IS NOT NULL
+                        SELECT v.id, ROW_NUMBER() OVER (ORDER BY fg.primary_path) AS row_number
+                        FROM
+                            video v
+                            LEFT JOIN file_group fg on fg.id = v.file_group_id
+                        {channel_where}
                     )
-
                     SELECT id
                     FROM numbered_videos
                     WHERE row_number IN (
                         SELECT row_number+i
                         FROM numbered_videos
                         CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
-                        WHERE
-                        id = %(video_id)s
                     )
-            '''
-            curs.execute(query, dict(channel_id=self.channel_id, video_id=self.id))
+                '''
+            curs.execute(stmt, dict(channel_id=self.channel_id, video_id=self.id))
+
             results = [i[0] for i in curs.fetchall()]
 
         # Assign the returned ID's to their respective positions relative to the ID that matches the video_id.

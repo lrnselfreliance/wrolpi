@@ -59,7 +59,7 @@ export function CaptionTrack({src, ...props}) {
         return <track kind="captions" label="Portuguese" src={src} srcLang="pt" {...props}/>
     } else if (src.endsWith('.ro.vtt')) {
         return <track kind="captions" label="Romanian" src={src} srcLang="ro" {...props}/>
-    }  else if (src.endsWith('.ru.vtt')) {
+    } else if (src.endsWith('.ru.vtt')) {
         return <track kind="captions" label="Russian" src={src} srcLang="ru" {...props}/>
     } else if (src.endsWith('.th.vtt')) {
         return <track kind="captions" label="Thai" src={src} srcLang="th" {...props}/>
@@ -194,6 +194,22 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
 
     let videoSource = <source src={videoUrl}/>;
 
+    let prevNextVideosSegment = <Segment><p>No related videos found.</p></Segment>;
+    if (prevFile || nextFile) {
+        prevNextVideosSegment = <Segment>
+            <Grid columns={2} stackable>
+                <Grid.Row>
+                    <Grid.Column textAlign='left'>
+                        {prevFile && <><Header as='h3'>Older</Header><VideoCard file={prevFile}/></>}
+                    </Grid.Column>
+                    <Grid.Column textAlign='left'>
+                        {nextFile && <><Header as='h3'>Newer</Header><VideoCard file={nextFile}/></>}
+                    </Grid.Column>
+                </Grid.Row>
+            </Grid>
+        </Segment>
+    }
+
     return <>
         <Container style={{margin: '1em'}}>
             <BackButton/>
@@ -245,18 +261,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
 
             <Tab menu={tabMenu} panes={tabPanes}/>
 
-            <Segment>
-                <Grid columns={2} stackable>
-                    <Grid.Row>
-                        <Grid.Column textAlign='left'>
-                            {prevFile && <><Header as='h3'>Older</Header><VideoCard file={prevFile}/></>}
-                        </Grid.Column>
-                        <Grid.Column textAlign='left'>
-                            {nextFile && <><Header as='h3'>Newer</Header><VideoCard file={nextFile}/></>}
-                        </Grid.Column>
-                    </Grid.Row>
-                </Grid>
-            </Segment>
+            {prevNextVideosSegment}
         </Container>
     </>
 }

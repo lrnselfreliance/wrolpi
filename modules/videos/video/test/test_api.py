@@ -8,7 +8,6 @@ import pytest
 from modules.videos.models import Video
 from modules.videos.video.lib import get_video_for_app
 from wrolpi.dates import now
-from wrolpi.errors import WROLModeEnabled
 
 
 def test_get_video_prev_next(test_session, channel_factory, video_factory):
@@ -41,7 +40,7 @@ def test_get_video_prev_next(test_session, channel_factory, video_factory):
         (1, (None, 'vid2')),
         (2, ('vid1', 'vid4')),
         (4, ('vid2', None)),  # 7 has no upload_date, so it doesn't come after 4.
-        (7, (None, None)),  # 7 has no upload_date, so we don't know the order of it.
+        (7, ('vid4', None)),  # 7 has no upload_date, so we get the video next to it's file.
         # Channel 3 has only one video.
         (9, (None, None)),
         # Channel 2 was inserted out of order.
@@ -49,7 +48,8 @@ def test_get_video_prev_next(test_session, channel_factory, video_factory):
         (3, ('vid5', 'vid6')),
         (8, ('vid6', None)),
         # Channel 4's videos have no upload date, so we don't know what is previous/next.
-        (10, (None, None)),
+        (10, (None, 'vid11')),
+        (11, ('vid10', None)),
     ]
 
     for id_, (prev_title, next_title) in tests:
@@ -68,6 +68,44 @@ def test_get_video_prev_next(test_session, channel_factory, video_factory):
                 assert next_video and next_video.file_group.title == next_title
         except AssertionError as e:
             raise AssertionError(f'Assert failed for {id_=} {prev_title=} {next_title=}') from e
+
+
+def test_get_video_prev_next_no_upload_date(test_session, video_factory, channel_factory):
+    """
+    Previous and Next Videos should be those next to a Video file when videos do not have upload dates.
+    """
+    channel1, channel2 = channel_factory(), channel_factory()
+    vid0, vid1, vid2, vid3, vid4, vid5 = video_factory(channel2.id, title='vid0'), \
+        video_factory(channel1.id, title='vid1'), \
+        video_factory(channel1.id, title='vid2'), \
+        video_factory(channel1.id, title='vid3'), \
+        video_factory(title='vid4'), \
+        video_factory(title='vid5')
+    test_session.commit()
+
+    # Channel 2 has only 1 video.
+    prev, next_ = vid0.get_surrounding_videos()
+    assert prev is None
+    assert next_ is None
+
+    # Channel 1 has 3 videos, finally getting surrounding videos.
+    prev, next_ = vid1.get_surrounding_videos()
+    assert prev is None
+    assert next_ == vid2
+    prev, next_ = vid2.get_surrounding_videos()
+    assert prev == vid1
+    assert next_ == vid3
+    prev, next_ = vid3.get_surrounding_videos()
+    assert prev == vid2
+    assert next_ is None
+
+    # Videos without a channel
+    prev, next_ = vid4.get_surrounding_videos()
+    assert prev is None
+    assert next_ is vid5
+    prev, next_ = vid5.get_surrounding_videos()
+    assert prev == vid4
+    assert next_ is None
 
 
 def test_get_video_for_app(test_session, simple_channel, simple_video):

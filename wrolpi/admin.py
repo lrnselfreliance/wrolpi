@@ -159,7 +159,8 @@ async def shutdown(reboot: bool = False, delay: int = 10):
         await asyncio.sleep(delay)
 
         try:
-            cmd = f'{SUDO_BIN} shutdown {reboot}'
+            # Call shutdown (or reboot) with no delay now that we have slept.
+            cmd = f'{SUDO_BIN} shutdown {reboot} 0'
             proc = await asyncio.create_subprocess_shell(cmd, stderr=asyncio.subprocess.PIPE,
                                                          stdout=asyncio.subprocess.PIPE)
             stdout, stderr = await proc.communicate()

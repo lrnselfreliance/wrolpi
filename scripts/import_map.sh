@@ -17,8 +17,10 @@ if [ "${1}" == "" ]; then
   exit 3
 fi
 
+set -x
+
 HAS_ICE_SHEET=false
-psql gis -c '\d' | grep icesheet_polygons && HAS_ICE_SHEET=true
+sudo -u postgres psql gis -c '\d' | grep icesheet_polygons && HAS_ICE_SHEET=true
 if [ ${HAS_ICE_SHEET} = false ]; then
   echo "WROLPi: Missing icesheet_polygons.  Run reset_map.sh"
   exit 4
@@ -34,6 +36,7 @@ function cleanup() {
   if [ -f ${MERGED_TMP_FILE} ]; then
     rm ${MERGED_TMP_FILE}
   fi
+  # Renderd must be restarted to forget the cache.
   systemctl restart renderd
 }
 
@@ -67,30 +70,30 @@ if [[ ${1} == *.osm.pbf ]]; then
     pbf_path=${MERGED_TMP_FILE}
   fi
 
-  # Import as wrolpi user (the user running this script), then change ownership to _renderd.
-  nice -n 18 osm2pgsql -d gis --create --slim -G --hstore \
+  # Import as postgres user, then change ownership to _renderd.
+  nice -n 18 sudo -u postgres osm2pgsql -d gis --create --slim -G --hstore \
     --tag-transform-script /opt/openstreetmap-carto/openstreetmap-carto.lua \
     -C ${MAX_CACHE} \
     --number-processes 3 \
     -S /opt/openstreetmap-carto/openstreetmap-carto.style \
     "${pbf_path}"
   # Assign all data to _renderd so the map can be rendered.
-  psql -d gis -c 'ALTER TABLE external_data OWNER TO _renderd'
-  psql -d gis -c 'ALTER TABLE geography_columns OWNER TO _renderd'
-  psql -d gis -c 'ALTER TABLE geometry_columns OWNER TO _renderd'
-  psql -d gis -c "ALTER TABLE icesheet_outlines OWNER TO _renderd"
-  psql -d gis -c "ALTER TABLE icesheet_polygons OWNER TO _renderd"
-  psql -d gis -c "ALTER TABLE ne_100m_admin_0_boundary_lines_land OWNER TO _renderd"
-  psql -d gis -c "ALTER TABLE planet_osm_line OWNER TO _renderd"
-  psql -d gis -c "ALTER TABLE planet_osm_nodes OWNER TO _renderd"
-  psql -d gis -c "ALTER TABLE planet_osm_point OWNER TO _renderd"
-  psql -d gis -c "ALTER TABLE planet_osm_polygon OWNER TO _renderd"
-  psql -d gis -c "ALTER TABLE planet_osm_rels OWNER TO _renderd"
-  psql -d gis -c "ALTER TABLE planet_osm_roads OWNER TO _renderd"
-  psql -d gis -c "ALTER TABLE planet_osm_ways OWNER TO _renderd"
-  psql -d gis -c "ALTER TABLE simplified_water_polygons OWNER TO _renderd"
-  psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO _renderd"
-  psql -d gis -c "ALTER TABLE water_polygons OWNER TO _renderd"
+  sudo -u postgres psql -d gis -c 'ALTER TABLE external_data OWNER TO _renderd'
+  sudo -u postgres psql -d gis -c 'ALTER TABLE geography_columns OWNER TO _renderd'
+  sudo -u postgres psql -d gis -c 'ALTER TABLE geometry_columns OWNER TO _renderd'
+  sudo -u postgres psql -d gis -c "ALTER TABLE icesheet_outlines OWNER TO _renderd"
+  sudo -u postgres psql -d gis -c "ALTER TABLE icesheet_polygons OWNER TO _renderd"
+  sudo -u postgres psql -d gis -c "ALTER TABLE ne_100m_admin_0_boundary_lines_land OWNER TO _renderd"
+  sudo -u postgres psql -d gis -c "ALTER TABLE planet_osm_line OWNER TO _renderd"
+  sudo -u postgres psql -d gis -c "ALTER TABLE planet_osm_nodes OWNER TO _renderd"
+  sudo -u postgres psql -d gis -c "ALTER TABLE planet_osm_point OWNER TO _renderd"
+  sudo -u postgres psql -d gis -c "ALTER TABLE planet_osm_polygon OWNER TO _renderd"
+  sudo -u postgres psql -d gis -c "ALTER TABLE planet_osm_rels OWNER TO _renderd"
+  sudo -u postgres psql -d gis -c "ALTER TABLE planet_osm_roads OWNER TO _renderd"
+  sudo -u postgres psql -d gis -c "ALTER TABLE planet_osm_ways OWNER TO _renderd"
+  sudo -u postgres psql -d gis -c "ALTER TABLE simplified_water_polygons OWNER TO _renderd"
+  sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO _renderd"
+  sudo -u postgres psql -d gis -c "ALTER TABLE water_polygons OWNER TO _renderd"
 elif [[ ${1} == *.dump ]]; then
   if [ ! -f "${1}" ]; then
     echo "WROLPi: File does not exist! ${1}"
@@ -99,10 +102,12 @@ elif [[ ${1} == *.dump ]]; then
   # Import a Postgresql dump.
   nice -n 18 pg_restore -j3 --no-owner -d gis -U _renderd -h 127.0.0.1 "${1}"
 else
-  echo "WROLPi: Cannot import unknown map file"
+  echo "WROLPi: Cannot import unknown file"
   exit 8
 fi
 
 # Clear map tile cache only after successful import.
 [ -d /var/lib/mod_tile/ajt ] && rm -rf /var/lib/mod_tile/ajt
 [ -d /var/cache/renderd/tiles/ajt ] && rm -rf /var/cache/renderd/tiles/ajt
+
+# Renderd is restarted in cleanup trap.

@@ -91,7 +91,7 @@ cat >/etc/sudoers.d/90-wrolpi <<'EOF'
 %wrolpi ALL= NOPASSWD:/opt/wrolpi/scripts/import_map.sh
 %wrolpi ALL= NOPASSWD:/usr/sbin/shutdown
 EOF
-chmod 660 /etc/sudoers.d/90-wrolpi
+chmod 0440 /etc/sudoers.d/90-wrolpi
 # Verify this new file is valid.
 visudo -c -f /etc/sudoers.d/90-wrolpi
 

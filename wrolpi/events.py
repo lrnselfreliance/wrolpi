@@ -1,6 +1,6 @@
 import multiprocessing
 
-__all__ = ['Events', 'get_events', 'send_event']
+__all__ = ['Events', 'get_events']
 
 from datetime import datetime
 

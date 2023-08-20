@@ -563,13 +563,11 @@ export function CardPoster({to, file}) {
 
         if (to) {
             // Link within this App.
-            console.debug(`${file['primary_path']} link with poster`);
             return <Link to={to} style={style}>
                 {image}
             </Link>
         } else {
             // Preview the file.
-            console.debug(`${file['primary_path']} preview with poster`);
             return <div style={style}>
                 <PreviewLink file={file}>
                     {image}
@@ -580,7 +578,6 @@ export function CardPoster({to, file}) {
         // FileGroup has no poster.
         if (!to || (to.startsWith('/media/') || to.startsWith('/download/'))) {
             // "to" is a downloadable file outside the app, preview the file.
-            console.debug(`${file['primary_path']} preview no poster`);
             return <PreviewLink file={file}>
                 <CardIcon>
                     {imageLabel}
@@ -589,7 +586,6 @@ export function CardPoster({to, file}) {
             </PreviewLink>
         } else if (!posterPath && to) {
             // Link to the full page in this App.
-            console.debug(`${file['primary_path']} link no poster`);
             return <Link to={to}>
                 <CardIcon onClick={() => navigate(to)}>
                     {imageLabel}

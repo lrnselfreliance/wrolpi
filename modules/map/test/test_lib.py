@@ -65,3 +65,16 @@ async def test_run_import_command(test_directory, mock_create_subprocess_shell):
     with pytest.raises(ValueError) as e:
         await lib.run_import_command(dump_file, dump_file)
     assert 'more than one' in str(e)
+
+
+@pytest.mark.parametrize('size,expected', [
+    (0, 0),
+    (-1, 0),
+    (17737381, 286),
+    (63434267, 1025),
+    (87745484, 1418),
+    (136372996, 2203),
+    (116318111, 1879),
+])
+def test_seconds_to_import_rpi4(size, expected):
+    assert lib.seconds_to_import(size) == expected

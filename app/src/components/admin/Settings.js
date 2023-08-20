@@ -1,10 +1,114 @@
 import React from "react";
-import {getSettings, saveSettings} from "../../api";
+import {getSettings, postRestart, postShutdown, saveSettings} from "../../api";
 import {Button, Form, FormGroup, FormInput, Header, Loader, Modal, ModalContent, ModalHeader, Segment} from "../Theme";
 import {Container, Dimmer, Icon} from "semantic-ui-react";
 import {ThemeContext} from "../../contexts/contexts";
 import {APIButton, HelpPopup, HotspotToggle, ThrottleToggle, Toggle, WROLModeMessage} from "../Common";
 import QRCode from "react-qr-code";
+import {useDockerized} from "../../hooks/customHooks";
+import {toast} from "react-semantic-toasts-2";
+
+export function ShutdownButton() {
+    const dockerized = useDockerized();
+
+    const handleShutdown = async () => {
+        try {
+            const response = await postShutdown();
+            if (response && response['code'] === 'SHUTDOWN_FAILED') {
+                toast({
+                    title: 'Shutdown Failed',
+                    description: response['error'],
+                    time: 5000,
+                    type: "error",
+                })
+            } else if (response && response['code'] === 'NATIVE_ONLY') {
+                toast({
+                    title: 'Shutdown Failed',
+                    description: 'Cannot shutdown while running in Docker',
+                    time: 5000,
+                    type: "error",
+                })
+            } else if (response !== null) {
+                toast({
+                    title: 'Shutdown Failed',
+                    description: 'Unknown error when attempting shutdown',
+                    time: 5000,
+                    type: "error",
+                })
+            }
+        } catch (e) {
+            toast({
+                title: 'Shutdown Failed',
+                description: 'Failed to request WROLPi shutdown',
+                time: 5000,
+                type: "error",
+            })
+            throw e;
+        }
+    }
+
+    return <APIButton
+        size='huge'
+        color='red'
+        onClick={handleShutdown}
+        confirmContent='Are you sure you want to turn off your WROLPi?'
+        confirmButton='Shutdown'
+        disabled={dockerized}
+    >
+        Shutdown
+    </APIButton>
+}
+
+export function RestartButton() {
+    const dockerized = useDockerized();
+
+    const handleRestart = async () => {
+        try {
+            const response = await postRestart();
+            if (response && response['code'] === 'SHUTDOWN_FAILED') {
+                toast({
+                    title: 'Restart Failed',
+                    description: response['error'],
+                    time: 5000,
+                    type: "error",
+                })
+            } else if (response && response['code'] === 'NATIVE_ONLY') {
+                toast({
+                    title: 'Restart Failed',
+                    description: 'Cannot restart while running in Docker',
+                    time: 5000,
+                    type: "error",
+                })
+            } else if (response !== null) {
+                toast({
+                    title: 'Restart Failed',
+                    description: 'Unknown error when attempting restart',
+                    time: 5000,
+                    type: "error",
+                })
+            }
+        } catch (e) {
+            toast({
+                title: 'Restart Failed',
+                description: 'Failed to request WROLPi restart',
+                time: 5000,
+                type: "error",
+            })
+            throw e;
+        }
+    }
+
+    return <APIButton
+        size='huge'
+        color='yellow'
+        onClick={handleRestart}
+        confirmContent='Are you sure you want to restart your WROLPi?'
+        confirmButton='Restart'
+        disabled={dockerized}
+    >
+        Restart
+    </APIButton>
+}
 
 export class SettingsPage extends React.Component {
 
@@ -230,6 +334,12 @@ export class SettingsPage extends React.Component {
                         </Dimmer>
 
                     </Form>
+                </Segment>
+
+                <Segment>
+                    <Header as='h3'>Control WROLPi</Header>
+                    <RestartButton/>
+                    <ShutdownButton/>
                 </Segment>
             </Container>}
         </ThemeContext.Consumer>

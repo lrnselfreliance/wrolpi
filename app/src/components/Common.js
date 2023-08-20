@@ -1162,6 +1162,7 @@ export const encodeMediaPath = (path) => {
     // Replace % first to avoid replacing the other replacements.
     path = path.replaceAll('%', '%25');
 
+    path = path.replaceAll('&', '%26');
     path = path.replaceAll('#', '%23');
     path = path.replaceAll(' ', '%20');
     return path

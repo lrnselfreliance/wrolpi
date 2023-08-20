@@ -27,9 +27,9 @@ function getDownloadPathURL(previewFile) {
 
 function getEpubViewerURL(previewFile) {
     if (previewFile['primary_path']) {
-        return `/epub/epub.html?url=download/${encodeMediaPath(previewFile['primary_path'])}`;
+        return `/epub/epub.html?url=/download/${encodeMediaPath(previewFile['primary_path'])}`;
     } else {
-        return `/epub/epub.html?url=download/${encodeMediaPath(previewFile['path'])}`;
+        return `/epub/epub.html?url=/download/${encodeMediaPath(previewFile['path'])}`;
     }
 }
 

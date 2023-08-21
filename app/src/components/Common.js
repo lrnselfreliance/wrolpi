@@ -1163,6 +1163,7 @@ export const encodeMediaPath = (path) => {
     path = path.replaceAll('%', '%25');
 
     path = path.replaceAll('&', '%26');
+    path = path.replaceAll('=', '%3d');
     path = path.replaceAll('#', '%23');
     path = path.replaceAll(' ', '%20');
     return path

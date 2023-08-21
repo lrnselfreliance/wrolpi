@@ -26,15 +26,12 @@ function getDownloadPathURL(previewFile) {
 }
 
 function getEpubViewerURL(previewFile) {
-    if (previewFile['primary_path']) {
-        return `/epub/epub.html?url=/download/${encodeMediaPath(previewFile['primary_path'])}`;
-    } else {
-        return `/epub/epub.html?url=/download/${encodeMediaPath(previewFile['path'])}`;
-    }
+    let url = previewFile['primary_path'] ?? previewFile['path'];
+    return `/epub/epub.html?url=/media/${encodeMediaPath(url)}`
 }
 
-function getIframePreviewModal(previewFile) {
-    const url = getMediaPathURL(previewFile);
+function getIframePreviewModal(previewFile, url) {
+    url = url || getMediaPathURL(previewFile);
     return <ModalContent>
         <div className='full-height'>
             <iframe title='textModal' src={url}
@@ -62,19 +59,6 @@ function getImagePreviewModal(previewFile) {
             </a>
         </ModalContent>
     </React.Fragment>
-}
-
-function getEpubPreviewModal(previewFile) {
-    const downloadURL = getDownloadPathURL(previewFile);
-    const viewerUrl = `/epub/epub.html?url=${downloadURL}`;
-    return <ModalContent>
-        <div className='full-height'>
-            <iframe title='textModal' src={viewerUrl}
-                    style={{
-                        height: '100%', width: '100%', border: 'none', position: 'absolute', top: 0,
-                    }}/>
-        </div>
-    </ModalContent>
 }
 
 function getVideoPreviewModal(previewFile) {
@@ -215,6 +199,8 @@ export function FilePreviewProvider({children}) {
             </ModalContent>
             : null;
         console.log('Previewing', path);
+        console.log('Preview Download URL', downloadURL);
+        console.log('Preview Open URL', url);
 
         setPreviewModal(<Modal closeIcon
                                size='fullscreen'
@@ -281,7 +267,7 @@ export function FilePreviewProvider({children}) {
                 setModalContent(getAudioPreviewModal(previewFile), url, downloadURL, path);
             } else if (mimetype.startsWith('application/epub')) {
                 const viewerURL = getEpubViewerURL(previewFile);
-                setModalContent(getEpubPreviewModal(previewFile), viewerURL, downloadURL, path);
+                setModalContent(getIframePreviewModal(previewFile, viewerURL), viewerURL, downloadURL, path);
             } else if (mimetype.startsWith('application/pdf')) {
                 setModalContent(getIframePreviewModal(previewFile), url, downloadURL, path);
             } else if (mimetype.startsWith('image/')) {

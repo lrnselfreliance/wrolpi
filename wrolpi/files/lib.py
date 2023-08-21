@@ -327,7 +327,7 @@ def get_primary_file(files: Union[Tuple[pathlib.Path], List[pathlib.Path]]) -> U
         if mimetype.startswith('image/'):
             return file
 
-    logger.debug(f'Cannot find primary file for group: {files}')
+    refresh_logger.debug(f'Cannot find primary file for group: {files}')
 
     # Can't find a typical primary file.
     return files
@@ -414,7 +414,7 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
             if need_index:
                 refresh_logger.info(f'Invalidated indexes of {len(need_index)} file groups near {str(chunk[0])}')
             else:
-                logger.debug(f'Upserted {len(chunk)} files near {str(chunk[0])}')
+                refresh_logger.debug(f'Upserted {len(chunk)} files near {str(chunk[0])}')
 
             if non_primary_files:
                 # New files may have been added which change what primary paths exist.  Delete any file_groups which
@@ -457,7 +457,7 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
                 try:
                     _upsert_files(files, idempotency)
                 except Exception as e:
-                    logger.error(f'Failed to upsert files', exc_info=e)
+                    refresh_logger.error(f'Failed to upsert files', exc_info=e)
                 files = list()
             # Sleep to catch cancel.
             await asyncio.sleep(0)
@@ -466,7 +466,7 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
             try:
                 _upsert_files(files, idempotency)
             except Exception as e:
-                logger.error(f'Failed to upsert files', exc_info=e)
+                refresh_logger.error(f'Failed to upsert files', exc_info=e)
 
     with get_db_curs(commit=True) as curs:
         wheres = ''

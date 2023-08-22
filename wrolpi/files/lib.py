@@ -431,8 +431,10 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
     Will refuse to refresh when the media directory is empty."""
     try:
         next(get_media_directory().iterdir())
-    except:
+    except StopIteration:
         # We don't want to delete a bunch of files which would exist if the drive was mounted.
+        raise UnknownDirectory(f'Refusing to refresh because media directory is empty or does not exist.')
+    except FileNotFoundError:
         raise UnknownDirectory(f'Refusing to refresh because media directory is empty or does not exist.')
 
     if not paths:

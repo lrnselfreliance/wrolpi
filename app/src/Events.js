@@ -5,7 +5,7 @@ import {toast} from "react-semantic-toasts-2";
 
 const apiEventName = 'apiEvent';
 
-function eventToast(title, description, type = 'success', time = 5000, onClick = null) {
+function eventToast(title, description, type = 'info', time = 5000, onClick = null) {
     toast({type: type, title: title, description: description, time: time, onClick: onClick});
 }
 
@@ -22,6 +22,7 @@ function handleEvents(events) {
             eventToast(
                 'Refresh started',
                 message,
+                'info',
             );
         }
 
@@ -29,7 +30,7 @@ function handleEvents(events) {
             console.debug(`Already handled newer event of "${subject}".`);
             return;
         } else if (event === 'refresh_completed') {
-            eventToast('Refresh completed', 'Files have been refreshed.');
+            eventToast('Refresh completed', 'Files have been refreshed.', 'success');
         }
 
         if (event === 'shutdown') {
@@ -41,11 +42,11 @@ function handleEvents(events) {
         }
 
         if (event === 'downloads_disabled') {
-            eventToast('Downloads Disabled', message, 'info');
+            eventToast('Downloads Disabled', message);
         }
 
         if (event === 'map_import_complete') {
-            eventToast('Map import completed', message, 'info');
+            eventToast('Map import completed', message, 'success');
         }
 
         if (event === 'map_import_failed') {

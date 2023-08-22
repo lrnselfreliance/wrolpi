@@ -1304,7 +1304,7 @@ def background_task(coro) -> Task:
         try:
             await coro
         except Exception as e:
-            logger.error('Background task had error', exc_info=e)
+            logger.error('Background task had error:', exc_info=e)
 
     task = asyncio.create_task(error_logger())
     BACKGROUND_TASKS.add(task)

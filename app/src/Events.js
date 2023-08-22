@@ -44,6 +44,14 @@ function handleEvents(events) {
             eventToast('Downloads Disabled', message, 'info');
         }
 
+        if (event === 'map_import_complete') {
+            eventToast('Map import completed', message, 'info');
+        }
+
+        if (event === 'map_import_failed') {
+            eventToast('Map import failed', message, 'error');
+        }
+
         if (event === 'user_notify_message') {
             console.log(message, url);
             eventToast(

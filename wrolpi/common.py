@@ -924,6 +924,7 @@ FILENAME_MATCHER = re.compile(r'.*filename="(.*)"')
 async def get_download_info(url: str, timeout: int = 60) -> DownloadFileInfo:
     """Gets information (name, size, etc.) about a downloadable file at the provided URL."""
     response, status = await aiohttp_head(url, timeout)
+    logger_.debug(f'{response.headers=}')
     try:
         links = response.headers.getall('Link')
     except KeyError:
@@ -993,6 +994,7 @@ async def download_file(url: str, output_path: pathlib.Path = None, info: Downlo
         url = await get_fastest_mirror(mirror_urls)
         info = await get_download_info(url, timeout)
 
+    logger_.debug(f'Final DownloadInfo fetched {info}')
     total_size = info.size
 
     download_logger.info(f'Starting download of {url} with {total_size} total bytes')
@@ -1075,7 +1077,7 @@ async def apply_modelers():
         try:
             await modeler()
         except Exception as e:
-            logger.error(f'Modeler {modeler.__name__} raised error', exc_info=e)
+            logger_.error(f'Modeler {modeler.__name__} raised error', exc_info=e)
             if PYTEST:
                 raise
         # Sleep to catch cancel.
@@ -1097,12 +1099,12 @@ async def apply_refresh_cleanup():
             logger_.info(f'Applying refresh cleanup {func.__name__}')
             func()
         except Exception as e:
-            logger.error(f'Refresh cleanup {func.__name__} failed!', exc_info=e)
+            logger_.error(f'Refresh cleanup {func.__name__} failed!', exc_info=e)
             if PYTEST:
                 raise
         finally:
             elapsed = (dates.now() - start).total_seconds()
-            logger.warning(f'After refresh cleanup {func.__name__} took {int(elapsed)} seconds')
+            logger_.warning(f'After refresh cleanup {func.__name__} took {int(elapsed)} seconds')
         # Sleep to catch cancel.
         await asyncio.sleep(0)
 
@@ -1304,7 +1306,7 @@ def background_task(coro) -> Task:
         try:
             await coro
         except Exception as e:
-            logger.error('Background task had error:', exc_info=e)
+            logger_.error('Background task had error:', exc_info=e)
 
     task = asyncio.create_task(error_logger())
     BACKGROUND_TASKS.add(task)
@@ -1343,7 +1345,7 @@ REFRESH_TASKS: List[Task] = []
 async def cancel_refresh_tasks():
     """Cancel all refresh tasks, if any."""
     if REFRESH_TASKS:
-        logger.warning(f'Canceling {len(REFRESH_TASKS)} refreshes')
+        logger_.warning(f'Canceling {len(REFRESH_TASKS)} refreshes')
         for task in REFRESH_TASKS:
             task.cancel()
         await asyncio.gather(*REFRESH_TASKS)

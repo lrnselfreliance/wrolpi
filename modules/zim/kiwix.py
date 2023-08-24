@@ -57,7 +57,7 @@ KIWIX_CATALOG = [
     {
         'name': 'Wikipedia (mini)',
         'languages': WIKIPEDIA_LANGUAGES,
-        'size': 13 * 1073741824,
+        'size': 54 * 1073741824,
     },
     {
         'name': 'Wikipedia (no images)',

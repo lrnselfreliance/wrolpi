@@ -25,8 +25,6 @@ import {
     PlaceholderHeader,
     PlaceholderLine,
     TableCell,
-    TableFooter,
-    TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
 import React, {useContext, useState} from "react";
@@ -56,7 +54,7 @@ import {
 } from "../api";
 import {useSearch} from "./Search";
 import {TagsQuerySelector} from "./Files";
-import {StatusContext, ThemeContext} from "../contexts/contexts";
+import {ThemeContext} from "../contexts/contexts";
 import {Link, Route, Routes} from "react-router-dom";
 import {SortableTable} from "./SortableTable";
 import {toast} from "react-semantic-toasts-2";
@@ -320,6 +318,10 @@ const ViewerMessage = () => {
     return <Message info icon>
         <SIcon name='hand point right'/>
         <Message.Content>
+            <p>More Zim files are available from the full Kiwix library&nbsp;
+                <a href='https://download.kiwix.org/'>https://download.kiwix.org/</a>
+            </p>
+
             <p>You can view your Zim files using the Kiwix app, or at <a href={VIEWER_URL}>{VIEWER_URL}</a></p>
         </Message.Content>
     </Message>
@@ -495,15 +497,6 @@ class ManageZim extends React.Component {
                 />}
                 rowKey='name'
                 tableHeaders={kiwixCatalogHeaders}
-                footer={<TableFooter>
-                    <TableRow>
-                        <TableHeaderCell colSpan={4}>
-                            <p>More Zim files are available from the full Kiwix library&nbsp;
-                                <a href='https://download.kiwix.org/'>https://download.kiwix.org/</a>
-                            </p>
-                        </TableHeaderCell>
-                    </TableRow>
-                </TableFooter>}
             />
         }
 

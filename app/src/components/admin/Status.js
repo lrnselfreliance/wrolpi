@@ -255,12 +255,12 @@ export function StatusPage() {
 
             <Segment>
                 <Header as='h2'>Drive Usage</Header>
-                {drives.map((drive) => <DriveInfo key={drive['mount']} {...drive}/>)}
+                {drives.map(drive => <DriveInfo key={drive['mount']} {...drive}/>)}
             </Segment>
 
             <Segment>
                 <Header as='h2'>Drive Bandwidth</Header>
-                {disk_bandwidth.map((disk) => <DiskBandwidth key={disk['name']} {...disk}/>)}
+                {disk_bandwidth.map(disk => <DiskBandwidth key={disk['name']} {...disk}/>)}
             </Segment>
         </Media>
     </>

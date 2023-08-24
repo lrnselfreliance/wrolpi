@@ -32,6 +32,7 @@ import {
     APIButton,
     encodeMediaPath,
     humanFileSize,
+    InfoMessage,
     normalizeEstimate,
     PageContainer,
     Paginator,
@@ -315,16 +316,13 @@ export const ZimSearchView = ({estimates}) => {
 }
 
 const ViewerMessage = () => {
-    return <Message info icon>
-        <SIcon name='hand point right'/>
-        <Message.Content>
-            <p>More Zim files are available from the full Kiwix library&nbsp;
-                <a href='https://download.kiwix.org/'>https://download.kiwix.org/</a>
-            </p>
+    return <InfoMessage>
+        <p>More Zim files are available from the full Kiwix library&nbsp;
+            <a href='https://download.kiwix.org/'>https://download.kiwix.org/</a>
+        </p>
 
-            <p>You can view your Zim files using the Kiwix app, or at <a href={VIEWER_URL}>{VIEWER_URL}</a></p>
-        </Message.Content>
-    </Message>
+        <p>You can view your Zim files using the Kiwix app, or at <a href={VIEWER_URL}>{VIEWER_URL}</a></p>
+    </InfoMessage>
 }
 
 const ZimCatalogItemRow = ({item, subscriptions, iso_639_codes, fetchSubscriptions}) => {

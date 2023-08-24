@@ -1,5 +1,14 @@
 import React, {useContext} from "react";
-import {APIButton, HelpPopup, humanFileSize, PageContainer, TabLinks, useTitle, WROLModeMessage} from "./Common";
+import {
+    APIButton,
+    HelpPopup,
+    humanFileSize,
+    InfoMessage,
+    PageContainer,
+    TabLinks,
+    useTitle,
+    WROLModeMessage
+} from "./Common";
 import {Route, Routes} from "react-router-dom";
 import {getMapImportStatus, importMapFiles} from "../api";
 import {
@@ -59,26 +68,23 @@ function DockerMapImportWarning() {
 }
 
 function DownloadMessage() {
-    return <Message info icon>
-        <SIcon name='question'/>
-        <Message.Content>
-            <Message.Header>
-                Where do I get map files?
-            </Message.Header>
+    return <InfoMessage>
+        <Message.Header>
+            Where do I get map files?
+        </Message.Header>
 
-            <p>You can download map files from&nbsp;
-                <a href='https://download.geofabrik.de/'>https://download.geofabrik.de/</a>
-            </p>
+        <p>You can download map files from&nbsp;
+            <a href='https://download.geofabrik.de/'>https://download.geofabrik.de/</a>
+        </p>
 
-            <p><b>Download only the areas you need</b>. Large regions like all of Asia, or the entire
-                planet are most likely <b>too large</b> and won't render quickly. It is recommend to only
-                import files less than 1GB on a Raspberry Pi.</p>
+        <p><b>Download only the areas you need</b>. Large regions like all of Asia, or the entire
+            planet are most likely <b>too large</b> and won't render quickly. It is recommend to only
+            import files less than 1GB on a Raspberry Pi.</p>
 
-            <p>Only <b>*.osm.pbf</b> files are supported!</p>
+        <p>Only <b>*.osm.pbf</b> files are supported!</p>
 
-            <p>Place downloaded map files into <b>map/pbf</b> so they can be imported here.</p>
-        </Message.Content>
-    </Message>
+        <p>Place downloaded map files into <b>map/pbf</b> so they can be imported here.</p>
+    </InfoMessage>
 }
 
 function SlowImportMessage() {

@@ -5,6 +5,7 @@ import {
     Card,
     Confirm,
     Container,
+    Icon as SIcon,
     IconGroup,
     Input,
     Label,
@@ -1401,4 +1402,13 @@ export function APIButton({
     );
 
     return button;
+}
+
+export function InfoMessage({children}) {
+    return <Message info icon>
+        <SIcon name='question'/>
+        <Message.Content>
+            {children}
+        </Message.Content>
+    </Message>
 }

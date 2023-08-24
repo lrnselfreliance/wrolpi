@@ -7,7 +7,7 @@ import {ThemeContext} from "../../contexts/contexts";
 import {Header, Loader, Segment} from "../Theme";
 import {DownloadsPage} from "./Downloads";
 import {SettingsPage} from "./Settings";
-import {Status} from "./Status";
+import {StatusPage} from "./Status";
 
 class WROLMode extends React.Component {
 
@@ -79,7 +79,7 @@ export default function AdminRoute() {
         <Routes>
             <Route path='/' exact element={<DownloadsPage/>}/>
             <Route path='settings' exact element={<SettingsPage/>}/>
-            <Route path='status' exact element={<Status/>}/>
+            <Route path='status' exact element={<StatusPage/>}/>
             <Route path='wrol' exact element={<WROLMode/>}/>
         </Routes>
     </PageContainer>

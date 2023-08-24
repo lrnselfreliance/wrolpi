@@ -126,24 +126,41 @@ export function BandwidthProgressCombined({bandwidth, ...props}) {
     return <BandwidthProgress label={bandwidth['name']} bytes={combined} maxBytes={maxBytes} {...props}/>
 }
 
-export function CPUUsageProgress({value, label}) {
-    if (value === null) {
+export function CPUUsageProgress({percent, label}) {
+    if (percent === null) {
         return <Progress progress={0} color='grey' label='Average CPU Usage ERROR' disabled/>
     }
 
     let color = 'black';
-    if (value >= 90) {
+    if (percent >= 90) {
         color = 'red';
-    } else if (value >= 70) {
+    } else if (percent >= 70) {
         color = 'brown';
-    } else if (value >= 50) {
+    } else if (percent >= 50) {
         color = 'orange';
     }
-    return <Progress percent={value} progress color={color} label={label}/>
+    return <Progress percent={percent} progress color={color} label={label}/>
+}
+
+export function MemoryUsageProgress({percent, label}) {
+    if (percent === null) {
+        return <Progress progress={0} color='grey' label='Memory Usage' disabled/>
+    }
+
+    let color = 'black';
+    let size = 'small';
+    if (percent >= 90) {
+        color = 'red';
+        size = 'large';
+    } else if (percent >= 70) {
+        color = 'orange';
+        size = 'large';
+    }
+    return <Progress percent={percent} progress color={color} label={label} size={size}/>
 }
 
 
-export function Status() {
+export function StatusPage() {
     useTitle('Status');
 
     const {status} = useContext(StatusContext);
@@ -159,9 +176,10 @@ export function Status() {
     let bandwidth;
     let drives = [];
     let disk_bandwidth = [];
+    let memoryPercent;
 
     if (status && status['cpu_info']) {
-        const {cpu_info, load} = status;
+        const {cpu_info, load, memory_stats} = status;
         percent = cpu_info['percent'];
         cores = cpu_info['cores'];
         temperature = cpu_info['temperature'];
@@ -175,12 +193,15 @@ export function Status() {
         drives = status['drives'];
         bandwidth = status['bandwidth'];
         disk_bandwidth = status['disk_bandwidth'];
+
+        memoryPercent = Math.round(memory_stats['used'] / memory_stats['total'] * 100);
     }
 
     return <>
         <Media at='mobile'>
             <Segment>
-                <CPUUsageProgress value={percent} label='CPU Usage'/>
+                <CPUUsageProgress percent={percent} label='CPU Usage'/>
+                <MemoryUsageProgress percent={memoryPercent} label='RAM Usage'/>
                 <StatisticGroup>
                     <CPUTemperatureStatistic
                         temperature={temperature}
@@ -211,7 +232,8 @@ export function Status() {
         </Media>
         <Media greaterThanOrEqual='tablet'>
             <Segment>
-                <CPUUsageProgress value={percent} label='CPU Usage'/>
+                <CPUUsageProgress percent={percent} label='CPU Usage'/>
+                <MemoryUsageProgress percent={memoryPercent} label='RAM Usage'/>
                 <StatisticGroup size='mini'>
                     <CPUTemperatureStatistic
                         temperature={temperature}

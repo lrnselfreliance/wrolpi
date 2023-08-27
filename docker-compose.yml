@@ -99,6 +99,7 @@ services:
       dockerfile: docker/zim/Dockerfile
     volumes:
       - './test:/media/wrolpi'
+      - './docker/zim/entrypoint.sh:/entrypoint.sh'
     ports:
       - '8085:8085'
 

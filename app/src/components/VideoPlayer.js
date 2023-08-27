@@ -150,28 +150,30 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     };
 
     const {poster_file, info_json_file} = video;
-    let filesPane = {
+    const filesPane = {
         menuItem: 'Files', render: () => <TabPane>
             <h3>Video File</h3>
             {videoFileLink(video['video_path'])}
 
             <h4>Info JSON File</h4>
             {info_json_file &&
-                <PreviewPath
-                    path={info_json_file['path']}
-                    mimetype={info_json_file['mimetype']}>{info_json_file['path']}</PreviewPath>
+                <PreviewPath path={info_json_file['path']} mimetype={info_json_file['mimetype']} taggable={false}>
+                    {info_json_file['path']}
+                </PreviewPath>
             }
 
             <h4>Caption Files</h4>
             {caption_files &&
-                caption_files.map(i => <p key={i['path']}><PreviewPath {...i}>{i['path']}</PreviewPath></p>)
+                caption_files.map(i => <p key={i['path']}><PreviewPath {...i} taggable={false}>
+                    {i['path']}
+                </PreviewPath></p>)
             }
 
             <h4>Poster File</h4>
             {poster_file &&
-                <PreviewPath
-                    path={poster_file['path']}
-                    mimetype={poster_file['mimetype']}>{poster_file['path']}</PreviewPath>
+                <PreviewPath path={poster_file['path']} mimetype={poster_file['mimetype']} taggable={false}>
+                    {poster_file['path']}
+                </PreviewPath>
             }
 
             <h4>Directory</h4>
@@ -179,7 +181,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         </TabPane>
     }
 
-    let tabPanes = [descriptionPane, aboutPane, filesPane, captionsPane];
+    const tabPanes = [descriptionPane, aboutPane, filesPane, captionsPane];
     const tabMenu = theme === darkTheme ? {inverted: true, attached: true} : {attached: true};
 
     const localAddTag = async (name) => {

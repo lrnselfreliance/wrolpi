@@ -28,6 +28,7 @@ import {
     mimetypeColor,
     PageContainer,
     PreviewLink,
+    PreviewPath,
     SearchInput,
     SortButton,
     TabLinks,
@@ -42,15 +43,29 @@ import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
 import {Media, ThemeContext} from "../contexts/contexts";
-import {Button, Card, CardIcon, Header, Icon, Loader, Placeholder, Segment} from "./Theme";
+import {Button, Card, CardIcon, darkTheme, Header, Loader, Placeholder, Segment, Tab, TabPane} from "./Theme";
 import {SortableTable} from "./SortableTable";
 import {taggedImageLabel, TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
+
+function archiveFileLink(path, directory = false) {
+    if (path) {
+        const href = directory ?
+            `/media/${encodeMediaPath(path)}/`
+            : `/media/${encodeMediaPath(path)}`;
+        return <a href={href} target='_blank' rel='noopener noreferrer'>
+            <pre>{path}</pre>
+        </a>
+    } else {
+        return <p>Unknown</p>
+    }
+}
 
 function ArchivePage() {
     const navigate = useNavigate();
     const {archiveId} = useParams();
     const {archiveFile, history, fetchArchive} = useArchive(archiveId);
+    const {theme} = useContext(ThemeContext);
 
     let title;
     if (archiveFile && archiveFile.archive) {
@@ -113,7 +128,10 @@ function ArchivePage() {
         confirmButton='Update'
         onClick={localUpdateArchive}
         obeyWROLMode={true}
-    >Update</APIButton>;
+        style={{marginTop: '0.5em'}}
+    >
+        Update
+    </APIButton>;
     const deleteButton = <APIButton
         text='Delete'
         color='red'
@@ -121,7 +139,9 @@ function ArchivePage() {
         confirmButton='Delete'
         onClick={localDeleteArchive}
         obeyWROLMode={true}
-    >Delete</APIButton>;
+    >
+        Delete
+    </APIButton>;
 
     let historyList = <Loader active/>;
     if (history && history.length === 0) {
@@ -131,23 +151,13 @@ function ArchivePage() {
     }
 
     const domain = data.domain ? data.domain : null;
-    let domainHeader;
+    let domainHeader = <p>Unknown</p>;
     if (domain) {
         const domainUrl = `/archive?domain=${domain}`;
         domainHeader = <Header as='h4'>
             <CardLink to={domainUrl}>
                 {domain}
             </CardLink>
-        </Header>;
-    }
-
-    let urlHeader;
-    if (data.url) {
-        urlHeader = <Header as='h5'>
-            <ExternalCardLink to={data.url}>
-                <Icon name='external'/>
-                {textEllipsis(data.url)}
-            </ExternalCardLink>
         </Header>;
     }
 
@@ -161,6 +171,54 @@ function ArchivePage() {
         await fetchArchive();
     }
 
+    const aboutPane = {
+        menuItem: 'About', render: () => <TabPane>
+            <Header as={'h3'}>Domain</Header>
+            {domainHeader}
+
+            <Header as='h3'>Size</Header>
+            {humanFileSize(size)}
+
+            <Header as={'h3'}>URL</Header>
+            <p>{data.url ? <a href={data.url}>{data.url}</a> : 'N/A'}</p>
+        </TabPane>
+    };
+
+    const localPreviewPath = (path, mimetype) => {
+        if (path) {
+            return <PreviewPath path={path} mimetype={mimetype} taggable={false}>{path}</PreviewPath>
+        } else {
+            return 'Unknown'
+        }
+    }
+
+    const filesPane = {
+        menuItem: 'Files', render: () => <TabPane>
+            <Header as={'h3'}>Singlefile File</Header>
+            {localPreviewPath(data.singlefile_path, 'text/html')}
+
+            <Header as={'h3'}>Readability File</Header>
+            {localPreviewPath(data.readability_path, 'text/html')}
+
+            <Header as={'h3'}>Readability Text File</Header>
+            {localPreviewPath(data.readability_txt_path, 'text/plain')}
+
+            <Header as={'h3'}>Readability JSON File</Header>
+            {localPreviewPath(data.readability_json_path, 'application/json')}
+
+            <Header as={'h3'}>Screenshot File</Header>
+            {data.screenshot_path ?
+                archiveFileLink(data.screenshot_path)
+                : 'Unknown'}
+
+            <Header as={'h3'}>Directory</Header>
+            {archiveFileLink(archiveFile.directory, true)}
+        </TabPane>
+    };
+
+    const tabPanes = [aboutPane, filesPane];
+    const tabMenu = theme === darkTheme ? {inverted: true, attached: true} : {attached: true};
+
     return <>
         <BackButton/>
 
@@ -170,12 +228,7 @@ function ArchivePage() {
                 <Header as='h2'>{textEllipsis(archiveFile.title || data.url)}</Header>
             </ExternalCardLink>
             <Header as='h3'>{isoDatetimeToString(data.archive_datetime)}</Header>
-            {domainHeader}
-            {urlHeader}
-            <Header as='h5'>{humanFileSize(size)}</Header>
 
-            {singlefileButton}
-            {readabilityLink}
             {updateButton}
             {deleteButton}
         </Segment>
@@ -183,6 +236,8 @@ function ArchivePage() {
         <Segment>
             <TagsSelector selectedTagNames={archiveFile['tags']} onAdd={localAddTag} onRemove={localRemoveTag}/>
         </Segment>
+
+        <Tab menu={tabMenu} panes={tabPanes}/>
 
         <Segment>
             <HelpHeader

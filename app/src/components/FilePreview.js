@@ -186,11 +186,13 @@ export function FilePreviewProvider({children}) {
         await localFetchFile();
     }
 
-    function setModalContent(content, url, downloadURL, path) {
+    function setModalContent(content, url, downloadURL, path, taggable = true) {
         const openButton = url ? <Button color='blue' as='a' href={url}>Open</Button> : null;
         const closeButton = <Button onClick={handleClose}>Close</Button>;
-        const tagsDisplay = <TagsSelector selectedTagNames={previewFile['tags']} onAdd={localAddTag}
-                                          onRemove={localRemoveTag}/>;
+        const tagsDisplay = taggable ?
+            <TagsSelector selectedTagNames={previewFile['tags']} onAdd={localAddTag}
+                          onRemove={localRemoveTag}/>
+            : null;
         const downloadButton = downloadURL ?
             <Button color='yellow' as='a' href={downloadURL} floated='left'>Download</Button>
             : null;
@@ -250,7 +252,7 @@ export function FilePreviewProvider({children}) {
         }
 
         if (previewFile && !_.isEmpty(previewFile)) {
-            const {mimetype, size} = previewFile;
+            const {mimetype, size, taggable} = previewFile;
             const path = previewFile['primary_path'] || previewFile['path'];
             console.debug('Previewing file', previewFile);
             const lowerPath = path.toLowerCase();
@@ -260,27 +262,27 @@ export function FilePreviewProvider({children}) {
                 // Large text files should be downloaded.
                 window.open(downloadURL);
             } else if (mimetype.startsWith('text/') || mimetype.startsWith('application/json')) {
-                setModalContent(getIframePreviewModal(previewFile), url, downloadURL, path);
+                setModalContent(getIframePreviewModal(previewFile), url, downloadURL, path, taggable);
             } else if (mimetype.startsWith('video/')) {
-                setModalContent(getVideoPreviewModal(previewFile), url, downloadURL, path);
+                setModalContent(getVideoPreviewModal(previewFile), url, downloadURL, path, taggable);
             } else if (mimetype.startsWith('audio/')) {
-                setModalContent(getAudioPreviewModal(previewFile), url, downloadURL, path);
+                setModalContent(getAudioPreviewModal(previewFile), url, downloadURL, path, taggable);
             } else if (mimetype.startsWith('application/epub')) {
                 const viewerURL = getEpubViewerURL(previewFile);
-                setModalContent(getIframePreviewModal(previewFile, viewerURL), viewerURL, downloadURL, path);
+                setModalContent(getIframePreviewModal(previewFile, viewerURL), viewerURL, downloadURL, path, taggable);
             } else if (mimetype.startsWith('application/pdf')) {
-                setModalContent(getIframePreviewModal(previewFile), url, downloadURL, path);
+                setModalContent(getIframePreviewModal(previewFile), url, downloadURL, path, taggable);
             } else if (mimetype.startsWith('image/')) {
-                setModalContent(getImagePreviewModal(previewFile), url, null, path);
+                setModalContent(getImagePreviewModal(previewFile), url, null, path, taggable);
             } else if (mimetype.startsWith('model/stl')) {
-                setModalContent(getSTLPreviewModal(previewFile), null, downloadURL, path);
+                setModalContent(getSTLPreviewModal(previewFile), null, downloadURL, path, taggable);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.mp3')) {
-                setModalContent(getAudioPreviewModal(previewFile), url, downloadURL, path);
+                setModalContent(getAudioPreviewModal(previewFile), url, downloadURL, path, taggable);
             } else if (mimetype.startsWith('application/octet-stream') && lowerPath.endsWith('.stl')) {
-                setModalContent(getSTLPreviewModal(previewFile), null, downloadURL, path);
+                setModalContent(getSTLPreviewModal(previewFile), null, downloadURL, path, taggable);
             } else {
                 // No special handler for this file type, just open it.
-                setModalContent(getGenericPreviewModal(previewFile), url, downloadURL, path);
+                setModalContent(getGenericPreviewModal(previewFile), url, downloadURL, path, taggable);
             }
         }
     }, [previewFile]);

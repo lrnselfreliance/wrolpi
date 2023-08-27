@@ -209,8 +209,8 @@ export function PreviewLink({file, children, className, ...props}) {
     </span>
 }
 
-export function PreviewPath({path, mimetype, ...props}) {
-    return <PreviewLink file={{path, mimetype}} {...props}/>
+export function PreviewPath({path, mimetype, taggable = true, ...props}) {
+    return <PreviewLink file={{path, mimetype, taggable}} {...props}/>
 }
 
 export function RequiredAsterisk() {

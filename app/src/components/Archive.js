@@ -4,7 +4,6 @@ import {
     CardDescription,
     CardHeader,
     CardMeta,
-    Confirm,
     Container,
     Dropdown,
     Image,
@@ -43,7 +42,7 @@ import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
 import {Media, ThemeContext} from "../contexts/contexts";
-import {Button, Card, CardIcon, Header, Loader, Placeholder, Segment} from "./Theme";
+import {Button, Card, CardIcon, Header, Icon, Loader, Placeholder, Segment} from "./Theme";
 import {SortableTable} from "./SortableTable";
 import {taggedImageLabel, TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
@@ -146,6 +145,7 @@ function ArchivePage() {
     if (data.url) {
         urlHeader = <Header as='h5'>
             <ExternalCardLink to={data.url}>
+                <Icon name='external'/>
                 {textEllipsis(data.url)}
             </ExternalCardLink>
         </Header>;

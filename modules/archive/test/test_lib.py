@@ -24,7 +24,7 @@ def make_fake_request_archive(readability=True, screenshot=True, title=True):
             Image.new('RGB', (1, 1), color='grey').save(fh)
             fh.seek(0)
             image = fh.read()
-        singlefile = '<html><!--\n Page saved with SingleFile\ntest single-file\nジにてこちら\n<title>some title</title></html>'
+        singlefile = '<html><!--\n Page saved with SingleFile-->\ntest single-file\nジにてこちら\n<title>some title</title></html>'
         r = dict(
             content=f'<html>test readability content</html>',
             textContent='test readability textContent',
@@ -298,15 +298,35 @@ async def test_new_archive(test_session, fake_now):
         assert archive1.url is not None
         assert archive1.domain is not None
 
-        # The actual files were dumped and read correctly.
-        with open(archive1.singlefile_path) as fh:
-            assert fh.read() == '<html><!--\n Page saved with SingleFile\ntest single-file\nジにてこちら\n<title>some title</title></html>'
-        with open(archive1.readability_path) as fh:
-            assert fh.read() == '<html>test readability content</html>'
+        # The actual files were dumped and read correctly.  The HTML/JSON files are reformatted.
+        assert archive1.singlefile_path.read_text() == '''<html>
+ <!--
+ Page saved with SingleFile-->
+ <body>
+  <p>
+   test single-file
+ジにてこちら
+  </p>
+  <title>
+   some title
+  </title>
+ </body>
+</html>
+'''
+        assert archive1.readability_path.read_text() == '''<html>
+ <body>
+  <p>
+   test readability content
+  </p>
+ </body>
+</html>
+'''
         with open(archive1.readability_txt_path) as fh:
             assert fh.read() == 'test readability textContent'
-        with open(archive1.readability_json_path) as fh:
-            assert json.load(fh) == {'title': 'ジにてこちら', 'url': 'https://example.com'}
+        assert archive1.readability_json_path.read_text() == '''{
+  "title": "\\u30b8\\u306b\\u3066\\u3053\\u3061\\u3089",
+  "url": "https://example.com"
+}'''
 
         fake_now(datetime(2000, 1, 2))
         archive2 = await do_archive('https://example.com')
@@ -613,7 +633,9 @@ async def test_archive_download_index(test_session, test_directory, image_file):
 
     assert isinstance(archive, lib.Archive), 'Did not get an archive'
     assert archive.singlefile_path and archive.singlefile_path.exists() and \
-           archive.singlefile_path.read_text() == singlefile, 'Singlefile was not stored'
+           archive.singlefile_path.read_text() == \
+           '<html>\n <head>\n  <title>\n   the singlefile\n  </title>\n </head>\n</html>\n', \
+        'Singlefile was not formatted'
     assert archive.readability_path and archive.readability_path.exists()
     assert archive.readability_json_path
     assert archive.readability_txt_path and archive.readability_txt_path.exists()

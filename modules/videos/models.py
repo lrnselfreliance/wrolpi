@@ -276,7 +276,8 @@ class Video(ModelHelper, Base):
 
     @property
     def caption_files(self) -> List[dict]:
-        return self.file_group.my_files('text/vtt') + self.file_group.my_files('text/srt')
+        return self.file_group.my_files('text/vtt') + self.file_group.my_files('text/srt') \
+            + self.file_group.my_files('application/x-subrip')
 
     @property
     def caption_paths(self) -> List[pathlib.Path]:

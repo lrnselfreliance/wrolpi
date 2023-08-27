@@ -1,5 +1,6 @@
 import asyncio
 import ctypes.wintypes
+import json
 import multiprocessing
 import os
 import pathlib
@@ -719,3 +720,65 @@ Paragraph outside an element.'''
 )
 def test_human_bandwidth(bps, expected):
     assert common.human_bandwidth(bps) == expected
+
+
+def test_format_json_file():
+    with tempfile.TemporaryDirectory() as d:
+        with tempfile.NamedTemporaryFile(suffix='.json', dir=d) as fh:
+            file = pathlib.Path(fh.name)
+            file.write_text(json.dumps({
+                'one': 1,
+                'two': 2,
+                'three': 3,
+                'four': 4,
+                'five': 5,
+                'six': 6,
+                'seven': 7,
+                'eight': 8,
+                'nine': 9,
+                'ten': 10,
+            }))
+            # Only one file was created.
+            assert len(list(file.parent.iterdir())) == 1
+
+            unformatted = '{"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}'
+            assert file.read_text() == unformatted
+
+            common.format_json_file(file)
+            assert file.read_text() == '''{
+  "one": 1,
+  "two": 2,
+  "three": 3,
+  "four": 4,
+  "five": 5,
+  "six": 6,
+  "seven": 7,
+  "eight": 8,
+  "nine": 9,
+  "ten": 10
+}'''
+            # The copy was deleted.
+            assert len(list(file.parent.iterdir())) == 1
+
+
+def test_format_html_file():
+    with tempfile.NamedTemporaryFile() as fh:
+        file = pathlib.Path(fh.name)
+        unformatted = '<html><!--Comment--><head><title>Title</title><body>Body</body></html>'
+        file.write_text(unformatted)
+
+        assert file.read_text() == unformatted
+
+        common.format_html_file(file)
+        assert file.read_text() == '''<html>
+ <!--Comment-->
+ <head>
+  <title>
+   Title
+  </title>
+ </head>
+ <body>
+  Body
+ </body>
+</html>
+'''

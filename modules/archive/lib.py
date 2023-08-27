@@ -16,7 +16,8 @@ from sqlalchemy.orm import Session
 
 from modules.archive.models import Domain, Archive
 from wrolpi.cmd import READABILITY_BIN, SINGLE_FILE_BIN, CHROMIUM
-from wrolpi.common import get_media_directory, logger, extract_domain, chdir, escape_file_name, aiohttp_post
+from wrolpi.common import get_media_directory, logger, extract_domain, chdir, escape_file_name, aiohttp_post, \
+    format_html_string, split_lines_by_length
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import UnknownArchive, InvalidOrderBy
@@ -238,15 +239,18 @@ async def do_archive(url: str) -> Archive:
     if readability:
         # Write the readability parts to their own files.  Write what is left after pops to the JSON file.
         with archive_files.readability.open('wt') as fh:
-            fh.write(readability.pop('content'))
+            content = format_html_string(readability.pop('content'))
+            fh.write(content)
         with archive_files.readability_txt.open('wt') as fh:
             readability_txt = readability.pop('textContent')
+            readability_txt = split_lines_by_length(readability_txt)
             fh.write(readability_txt)
     else:
         # No readability was returned, so there are no files.
         archive_files.readability_txt = archive_files.readability = None
 
     # Store the single-file HTML in its own file.
+    singlefile = format_html_string(singlefile)
     archive_files.singlefile.write_text(singlefile)
 
     if screenshot:
@@ -258,7 +262,7 @@ async def do_archive(url: str) -> Archive:
     readability = readability or {}
     readability['url'] = url
     with archive_files.readability_json.open('wt') as fh:
-        fh.write(json.dumps(readability))
+        fh.write(json.dumps(readability, indent=2))
 
     # Create any File models that we can, index them all.
     paths = (

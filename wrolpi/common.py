@@ -1477,3 +1477,45 @@ def extract_headlines(entries: List[str], search_str: str) -> List[Tuple[str, fl
         headlines = [tuple(i) for i in curs.fetchall()]
 
     return headlines
+
+
+def format_json_file(file: pathlib.Path, indent: int = 2):
+    """Reformat the contents of a JSON file to include indentation to increase readability."""
+    if not indent or indent <= 0:
+        raise RuntimeError('Ident must be greater than 0')
+    if not file or not file.is_file():
+        raise RuntimeError(f'File does not exist: {file}')
+
+    with file.open('rt') as fh:
+        content = json.load(fh)
+
+    copy = file.with_suffix('.json2')
+    try:
+        with copy.open('wt') as fh:
+            json.dump(content, fh, indent=indent)
+        copy.rename(file)
+    finally:
+        if copy.is_file():
+            copy.unlink()
+
+
+def format_html_string(html: str) -> str:
+    soup = BeautifulSoup(html)
+    return soup.prettify()
+
+
+def format_html_file(file: pathlib.Path):
+    """Reformat the contents of an HTML file to include indentation to increase readability."""
+    if not file or not file.is_file():
+        raise RuntimeError(f'File does not exist: {file}')
+
+    pretty = format_html_string(file.read_text())
+
+    copy = file.with_suffix('.html2')
+    try:
+        with copy.open('wt') as fh:
+            fh.write(pretty)
+        copy.rename(file)
+    finally:
+        if copy.is_file():
+            copy.unlink()

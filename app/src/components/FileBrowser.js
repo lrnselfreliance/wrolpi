@@ -19,7 +19,6 @@ import {SortableTable} from "./SortableTable";
 import {useBrowseFiles, useMediaDirectory, useWROLMode} from "../hooks/customHooks";
 import {DirectoryRefreshButton, FileRowTagIcon, FilesRefreshButton} from "./Files";
 import {FilePreviewContext} from "./FilePreview";
-import {StatusContext} from "../contexts/contexts";
 
 function depthIndentation(path) {
     // Repeated spaces for every folder a path is in.

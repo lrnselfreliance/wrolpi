@@ -183,7 +183,7 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     assert_file_groups([
         {'primary_path': video_file, 'idempotency': idempotency, 'modification_datetime': foo_mtime, 'indexed': False,
          'files': [
-             {'path': srt_file3, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'text/srt'},
+             {'path': srt_file3, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'application/x-subrip'},
              {'path': video_file, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'},
          ]},
         {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,
@@ -210,7 +210,7 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     assert_file_groups([
         {'primary_path': video_file, 'idempotency': idempotency, 'modification_datetime': foo_mtime, 'indexed': True,
          'files': [
-             {'path': srt_file3, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'text/srt'},
+             {'path': srt_file3, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'application/x-subrip'},
              {'path': video_file, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'},
          ]},
         {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,

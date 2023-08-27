@@ -13,7 +13,8 @@ from yt_dlp import YoutubeDL
 from yt_dlp.extractor import YoutubeTabIE  # noqa
 
 from wrolpi.cmd import YT_DLP_BIN
-from wrolpi.common import logger, get_media_directory, escape_file_name, resolve_generators, background_task
+from wrolpi.common import logger, get_media_directory, escape_file_name, resolve_generators, background_task, \
+    format_json_file
 from wrolpi.dates import now
 from wrolpi.db import get_db_session
 from wrolpi.db import optional_session
@@ -330,6 +331,9 @@ class VideoDownloader(Downloader, ABC):
                 video.source_id = entry['id']
                 video.channel_id = channel_id
                 video_id = video.id
+
+                if video.info_json_path:
+                    format_json_file(video.info_json_path)
 
                 session.commit()
 

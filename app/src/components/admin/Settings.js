@@ -102,7 +102,7 @@ export function RestartButton() {
         size='huge'
         color='yellow'
         onClick={handleRestart}
-        confirmContent='Are you sure you want to restart your WROLPi?'
+        confirmContent='Are you sure you want to reboot your WROLPi?'
         confirmButton='Restart'
         disabled={dockerized}
     >

@@ -87,15 +87,10 @@ function ArchivePage() {
 
     const singlefileUrl = data.singlefile_path ? `/media/${encodeMediaPath(data.singlefile_path)}` : null;
     const screenshotUrl = data.screenshot_path ? `/media/${encodeMediaPath(data.screenshot_path)}` : null;
-    const readabilityUrl = data.readability_path;
 
     const singlefileButton = <ExternalCardLink to={singlefileUrl}>
         <Button content='View' color='violet'/>
     </ExternalCardLink>;
-
-    const readabilityLink = readabilityUrl ?
-        <PreviewLink file={{path: readabilityUrl, mimetype: 'text/html'}}><Button content='Article'/></PreviewLink> :
-        <Button disabled content='Article'/>;
 
     const screenshot = screenshotUrl ?
         <Image src={screenshotUrl} size='large' style={{marginTop: '1em', marginBottom: '1em'}}/> :
@@ -229,6 +224,7 @@ function ArchivePage() {
             </ExternalCardLink>
             <Header as='h3'>{isoDatetimeToString(data.archive_datetime)}</Header>
 
+            {singlefileButton}
             {updateButton}
             {deleteButton}
         </Segment>

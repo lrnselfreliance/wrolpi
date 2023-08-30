@@ -220,6 +220,9 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
             return 'application/vnd.amazon.mobi8-ebook'
         if suffix.endswith('.obj'):
             return 'model/obj'
+    if mimetype == 'application/x-subrip':
+        # Fallback to old mimetype.
+        return 'text/srt'
     return mimetype
 
 

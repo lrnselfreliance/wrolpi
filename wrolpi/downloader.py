@@ -524,29 +524,28 @@ class DownloadManager:
                          reset_attempts: bool = False, sub_downloader_name: str = None, settings: dict = None) \
             -> List[Download]:
         """Schedule all URLs for download.  If one cannot be downloaded, none will be added."""
-        if not all(urls):
+        if not urls or not all(urls):
             raise ValueError('Download must have a URL')
 
         downloads = []
         # Throws an error if no downloader is found.
         self.get_downloader_by_name(downloader_name)
 
-        with session.transaction:
-            for url in urls:
-                if url in get_download_manager_config().skip_urls and reset_attempts:
-                    # User manually entered this download, remove it from the skip list.
-                    self.remove_from_skip_list(url)
-                elif url in get_download_manager_config().skip_urls:
-                    self.log_warning(f'Skipping {url} because it is in the download_manager.yaml skip list.')
-                    continue
+        for url in urls:
+            if url in get_download_manager_config().skip_urls and reset_attempts:
+                # User manually entered this download, remove it from the skip list.
+                self.remove_from_skip_list(url)
+            elif url in get_download_manager_config().skip_urls:
+                self.log_warning(f'Skipping {url} because it is in the download_manager.yaml skip list.')
+                continue
 
-                download = self.get_or_create_download(url, session)
-                # Download may have failed, try again.
-                download.renew(reset_attempts=reset_attempts)
-                download.downloader = downloader_name
-                download.sub_downloader = sub_downloader_name
-                download.settings = settings if settings is not None else download.settings
-                downloads.append(download)
+            download = self.get_or_create_download(url, session, reset_attempts=reset_attempts)
+            # Download may have failed, try again.
+            download.renew(reset_attempts=reset_attempts)
+            download.downloader = downloader_name
+            download.sub_downloader = sub_downloader_name
+            download.settings = settings if settings is not None else download.settings
+            downloads.append(download)
 
         try:
             # Start downloading ASAP.

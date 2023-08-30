@@ -7,45 +7,13 @@ import pytest
 from yt_dlp.utils import UnsupportedError
 
 from modules.videos.channel.lib import download_channel
-from modules.videos.downloader import find_all_missing_videos, VideoDownloader, \
+from modules.videos.downloader import VideoDownloader, \
     get_or_create_channel, channel_downloader, video_downloader
 from modules.videos.models import Channel, Video
 from wrolpi.downloader import Download, DownloadResult
 from wrolpi.errors import InvalidDownload
 from wrolpi.test.common import skip_circleci
 from wrolpi.vars import PROJECT_DIR
-
-
-@pytest.mark.asyncio
-async def test_find_all_missing_videos(test_session, channel_factory, video_factory, image_file):
-    channel1 = channel_factory(url='some url')
-    channel1.info_json = {'entries': [{'id': 'foo', 'view_count': 0, 'webpage_url': 'https://example.com'}]}
-    test_session.commit()
-
-    missing = [i async for i in find_all_missing_videos(channel1.id)]
-    assert len(missing) == 1
-
-    # The video returned is the one we faked.
-    id_, source_id, entry = missing[0]
-    # No Video.id because the video is missing.
-    assert id_ is None
-    # The fake entry we added is regurgitated back.
-    assert entry == channel1.info_json['entries'][0]
-
-    # Create a video without a poster, attempt to download it.
-    video = video_factory(channel_id=channel1.id, with_video_file=True)
-    channel1.info_json = {'entries': [
-        {'id': 'foo', 'view_count': 0, 'webpage_url': 'https://example.com'},
-        {'id': video.source_id, 'view_count': 0, 'webpage_url': 'https://example.com/new'},
-    ]}
-    test_session.commit()
-
-    missing = [i async for i in find_all_missing_videos(channel1.id)]
-    assert len(missing) == 2
-
-    _, new = missing
-    assert new == (video.id, video.source_id, channel1.info_json['entries'][1])
-
 
 example_video_json = {
     'age_limit': 0,
@@ -304,16 +272,15 @@ def test_bad_downloader(test_session, video_download_manager):
         video_download_manager.create_download('https://example.com', downloader_name='bad downloader')
 
 
-def test_channel_download_no_download(test_session, video_download_manager, simple_channel):
+@pytest.mark.asyncio
+async def test_channel_download_no_frequency(test_session, video_download_manager, simple_channel):
     """
-    A Channel without an existing Download cannot be downloaded.  This is to avoid the situation where a single
-    video has been downloaded in a Channel, but the User has not requested downloading of all videos in the channel.
+    A Channel without a download frequency creates a once-download.
     """
     # simple_channel has no download record.
     assert video_download_manager.get_downloads(test_session) == []
 
-    with pytest.raises(InvalidDownload):
-        download_channel(simple_channel.id)
+    download_channel(simple_channel.id)
 
 
 @pytest.mark.asyncio

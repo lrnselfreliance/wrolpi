@@ -147,16 +147,14 @@ def test_channels_with_videos(test_session, test_client, test_directory, channel
 
 def test_api_download_channel(test_session, test_client, simple_channel):
     """A Channel download (a catalog update) can be triggered via the API."""
-    # simple_channel does not have a download record.
-    request, response = test_client.post(f'/api/videos/channels/download/{simple_channel.id}')
-    assert response.status_code == HTTPStatus.BAD_REQUEST, response.json
-    assert 'not have a download' in response.json['error']
+    assert test_session.query(Download).count() == 0
 
     # Add a download frequency to the channel, this should also create a download.
     simple_channel.update(dict(download_frequency=DownloadFrequency.daily))
     test_session.commit()
     request, response = test_client.post(f'/api/videos/channels/download/{simple_channel.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT, response.json
+    assert test_session.query(Download).count() == 1
 
 
 def test_api_download(test_session, test_client, test_directory):

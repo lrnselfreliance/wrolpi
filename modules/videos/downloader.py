@@ -5,7 +5,6 @@ import re
 import traceback
 from abc import ABC
 from typing import Tuple, List, Dict
-from urllib.parse import urlparse
 
 import yt_dlp.utils
 from sqlalchemy.orm import Session
@@ -24,11 +23,11 @@ from wrolpi.files.lib import glob_shared_stem
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
 from .common import get_no_channel_directory, get_videos_directory, update_view_counts, ffmpeg_video_complete
-from .errors import UnknownChannel, ChannelURLEmpty
+from .errors import UnknownChannel
 from .lib import get_downloader_config
 from .models import Video, Channel
 from .schema import ChannelPostRequest
-from .video_url_resolver import normalize_youtube_shorts_url, video_url_resolver
+from .video_url_resolver import normalize_youtube_shorts_url
 
 logger = logger.getChild(__name__)
 ydl_logger = logger.getChild('youtube-dl')
@@ -163,13 +162,21 @@ class ChannelDownloader(Downloader, ABC):
             # Only download Videos that have matching titles.
             match_regex = re.compile(channel.match_regex)
             downloads = [i for i in downloads if (title := i.get('title')) and match_regex.match(title)]
+
+        # Do not request videos in the skip list.
+        skip_download_videos = channel.skip_download_videos or []
+        downloads = [i for i in downloads if i['id'] not in skip_download_videos]
+
         # Prefer `webpage_url` before `url` for all entries.
         downloads = [i.get('webpage_url') or i.get('url') for i in downloads]
+
         # YouTube Shorts are handled specially.
         downloads = [normalize_youtube_shorts_url(i) for i in downloads]
+
         # Only download those that have not yet been downloaded.
         already_downloaded = [i.url for i in video_downloader.already_downloaded(*downloads)]
         downloads = [i for i in downloads if i not in already_downloaded]
+
         return downloads
 
 
@@ -504,82 +511,6 @@ def update_channel_catalog(channel: Channel, info: dict):
 
     # Update all view counts using the latest from the Channel's info_json.
     background_task(update_view_counts(channel_id))
-
-
-def _find_all_missing_videos(channel_id: id) -> List[Tuple]:
-    """Get all Video entries which don't have the required media files (i.e. hasn't been downloaded)."""
-    with get_db_session() as session:
-        channel: Channel = Channel.find_by_id(channel_id)
-
-        def resolve_url(entry: dict) -> str:
-            parsed = urlparse(entry.get('webpage_url') or entry['url'])
-            domain = parsed.hostname
-            url_ = video_url_resolver(domain, entry)
-            url_ = normalize_youtube_shorts_url(url_)
-            return url_
-
-        info_json = channel.info_json
-        # (source_id, url, channel_id)
-        channel_videos = [(i['id'], resolve_url(i), channel_id) for i in info_json['entries']]
-
-        video_source_ids = [i[0] for i in channel_videos]
-        videos_with_source_id = list(session.query(Video).filter(Video.source_id.in_(video_source_ids)))
-        found_source_ids = set()
-        missing_files = []
-        for video in videos_with_source_id:
-            found_source_ids |= {video.source_id, }
-            if not video.poster_path:
-                missing_files.append(video)
-            elif not video.video_path:
-                missing_files.append(video)
-
-        missing_source_ids = set(video_source_ids) - found_source_ids
-        for source_id in missing_source_ids:
-            yield None, source_id, channel_id
-
-        for video in missing_files:
-            yield video.id, video.source_id, channel_id
-
-
-async def find_all_missing_videos(channel_id: int = None):
-    """
-    Find all videos that don't have a video file, but are found in the DB (taken from the channel's info_json).
-
-    Yields a Channel Dict object, our Video id, and the "entry" of the video from the channel's info_json['entries'].
-    """
-    channel: Channel = get_channel(channel_id=channel_id, return_dict=False)
-    if not channel.url:
-        raise ChannelURLEmpty('No URL for this channel')
-
-    # Check that the channel has some videos.  We can't be sure what is missing if we don't know what we have.
-    if channel.refreshed is False:
-        # Refresh this channel's videos.
-        await channel.refresh_files()
-
-    match_regex = re.compile(channel.match_regex) if channel.match_regex else None
-
-    # Convert the channel video entries into a form that allows them to be quickly retrieved without searching through
-    # the entire entries list.
-    channel_entries = {i['id']: i for i in channel.info_json['entries']}
-    # Yield all videos not skipped.
-    missing_videos = _find_all_missing_videos(channel_id)
-    for video_id, source_id, channel_id in missing_videos:
-        if channel.skip_download_videos and source_id in channel.skip_download_videos:
-            # This video has been marked to skip.
-            continue
-
-        try:
-            missing_video = channel_entries[source_id]
-        except KeyError:
-            logger.warning(f'Video {channel.name} / {source_id} is not in {channel.name} info_json')
-            continue
-
-        if not match_regex:
-            # No title match regex, yield all videos.
-            yield video_id, source_id, missing_video
-        if match_regex and missing_video['title'] and match_regex.match(missing_video['title']):
-            # Title matches the regex.
-            yield video_id, source_id, missing_video
 
 
 UNRECOVERABLE_ERRORS = {

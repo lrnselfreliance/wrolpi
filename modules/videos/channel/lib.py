@@ -7,11 +7,12 @@ from sqlalchemy.orm.exc import NoResultFound
 
 from wrolpi.common import run_after, logger, \
     get_media_directory
-from wrolpi.db import get_db_curs, optional_session
-from wrolpi.errors import UnknownDirectory, APIError, ValidationError, InvalidDownload
-from ..errors import UnknownChannel
+from wrolpi.db import get_db_curs, optional_session, get_db_session
+from wrolpi.downloader import download_manager
+from wrolpi.errors import UnknownDirectory, APIError, ValidationError
 from .. import schema
 from ..common import check_for_channel_conflicts
+from ..errors import UnknownChannel
 from ..lib import save_channels_config
 from ..models import Channel
 
@@ -182,16 +183,22 @@ def delete_channel(session: Session, *, channel_id: int):
     return channel_dict
 
 
-def download_channel(id_: int):
+def download_channel(id_: int, reset_attempts: bool = False):
     """Create a Download record for a Channel's entire catalog.  Start downloading."""
+    from modules.videos.downloader import ChannelDownloader, VideoDownloader
     channel: Channel = get_channel(channel_id=id_, return_dict=False)
-    session = Session.object_session(channel)
-    download = channel.get_download()
-    if not download:
-        raise InvalidDownload(f'Channel {channel.name} does not have a download!')
-    download.renew(reset_attempts=True)
+    with get_db_session(commit=True) as session:
+        download = channel.get_download()
+        if not download and channel.url:
+            # Channel does not have recurring download, schedule a once-download.
+            download = download_manager.create_download(
+                session=session,
+                url=channel.url,
+                downloader_name=ChannelDownloader.name,
+                sub_downloader_name=VideoDownloader.name,
+                reset_attempts=reset_attempts,
+            )
     logger.info(f'Created download for {channel} with {download}')
-    session.commit()
 
 
 @optional_session

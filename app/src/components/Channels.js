@@ -415,7 +415,6 @@ function ChannelPage({create, header}) {
                                         color='green'
                                         size='small'
                                         onClick={handleDownloadChannel}
-                                        disabled={!channel.url || !channel.download_frequency}
                                         obeyWROLMode={true}
                                     >Download</APIButton>
                                     <APIButton

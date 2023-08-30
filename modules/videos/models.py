@@ -100,6 +100,8 @@ class Video(ModelHelper, Base):
         """Add this video to it's Channel's skip list."""
         if self.channel and self.source_id:
             self.channel.add_video_to_skip_list(self.source_id)
+        if self.url:
+            download_manager.add_to_skip_list(self.url)
 
     def set_viewed(self):
         self.viewed = now()
@@ -494,8 +496,8 @@ class Channel(ModelHelper, Base):
         if not self.url:
             return None
 
-        session = Session.object_session(self)
-        download = session.query(Download).filter_by(url=self.url).one_or_none()
+        session: Session = Session.object_session(self)
+        download = download_manager.get_download(session, url=self.url)
         return download
 
     def __json__(self):

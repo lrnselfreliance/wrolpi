@@ -114,7 +114,7 @@ def channel_refresh(_: Request, channel_id: int):
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
 def channel_download(_: Request, channel_id: int):
-    lib.download_channel(channel_id)
+    lib.download_channel(channel_id, reset_attempts=True)
     if download_manager.disabled.is_set():
         # Warn the user that downloads are disabled.
         Events.send_downloads_disabled('Channel download created. But downloads are disabled.')

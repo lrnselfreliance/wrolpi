@@ -23,6 +23,9 @@ async def test_get_cpu_info():
     info = await status.get_cpu_info()
     assert isinstance(info, status.CPUInfo)
     assert isinstance(info.percent, int)
+    assert isinstance(info.temperature, int)
+    assert isinstance(info.high_temperature, int)
+    assert isinstance(info.critical_temperature, int)
 
     with mock.patch('wrolpi.status.get_cpu_info_psutil') as mock_get_cpu_info_psutil:
         # Fallback to subprocess when psutil is not available.
@@ -30,6 +33,7 @@ async def test_get_cpu_info():
         info = await status.get_cpu_info()
         assert isinstance(info, status.CPUInfo)
         assert isinstance(info.percent, int)
+        assert info.temperature >= 0
 
 
 @pytest.mark.asyncio

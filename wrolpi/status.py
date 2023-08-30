@@ -3,6 +3,7 @@ import asyncio
 import multiprocessing
 import pathlib
 import re
+import statistics
 import subprocess
 from dataclasses import dataclass
 from decimal import Decimal
@@ -99,10 +100,11 @@ def get_cpu_info_psutil() -> CPUInfo:
     # Prefer "coretemp", fallback to the first temperature.
     temp = psutil.sensors_temperatures()
     name = 'coretemp' if 'coretemp' in temp else list(temp.keys())[0]
-    # Temperatures may be None.
-    temperature = int(temp.get(name)[0].current or 0)
-    high_temperature = int(temp.get(name)[0].high or 0)
-    critical_temperature = int(temp.get(name)[0].critical or 0)
+    # Temperatures may be None.  Get average temperatures from CPU because one core may be hot.
+    temperatures = temp.get(name)
+    temperature = statistics.median([i.current or 0 for i in temperatures])
+    high_temperature = statistics.median([i.high or 0 for i in temperatures])
+    critical_temperature = statistics.median([i.critical or 0 for i in temperatures])
 
     # Temperatures my not exist.
     if not high_temperature:
@@ -120,9 +122,9 @@ def get_cpu_info_psutil() -> CPUInfo:
         min_frequency=int(cpu_freq.min),
         max_frequency=int(cpu_freq.max),
         percent=int(percent),
-        temperature=temperature,
-        high_temperature=high_temperature,
-        critical_temperature=critical_temperature,
+        temperature=int(temperature),
+        high_temperature=int(high_temperature),
+        critical_temperature=int(critical_temperature),
     )
     return info
 

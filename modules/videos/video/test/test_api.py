@@ -114,7 +114,7 @@ def test_get_video_for_app(test_session, simple_channel, simple_video):
 
 
 @pytest.mark.asyncio
-def test_video_delete(test_client, test_session, test_directory, channel_factory, video_factory):
+async def test_video_delete(test_client, test_session, test_directory, channel_factory, video_factory):
     """Video.delete() removes the video's files, but leave the DB record."""
     channel1, channel2 = channel_factory(), channel_factory()
     vid1 = video_factory(channel_id=channel1.id, with_video_file=True, with_caption_file=True)

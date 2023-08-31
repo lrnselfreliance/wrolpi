@@ -27,17 +27,17 @@ def resolve_url(parent_url: str, url: str):
     return f'{parent_url}/{url}'
 
 
-class RecursiveHTMLDownloader(Downloader):
-    """Recursively downloads HTML pages searching for files with a particular suffix.
+class ScrapeHTMLDownloader(Downloader):
+    """Scrape downloads HTML pages searching for files with a particular suffix.
 
     Stops recurring when depth is reached."""
 
-    name = 'recursive_html'
-    pretty_name = 'Recursive'
+    name = 'scrape_html'
+    pretty_name = 'Scrape'
     listable = False
 
     def __repr__(self):
-        return '<RecursiveHTMLDownloader>'
+        return '<ScrapeHTMLDownloader>'
 
     @staticmethod
     async def fetch_http(url: str) -> str:
@@ -115,4 +115,4 @@ class RecursiveHTMLDownloader(Downloader):
         )
 
 
-recursive_html_downloader = RecursiveHTMLDownloader()
+scrape_html_downloader = ScrapeHTMLDownloader()

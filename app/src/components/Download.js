@@ -430,7 +430,7 @@ class RSSDownload extends ChannelDownload {
     }
 }
 
-class RecursiveDownload extends Downloader {
+class ScrapeDownloader extends Downloader {
 
     constructor(props) {
         super(props);
@@ -460,7 +460,7 @@ class RecursiveDownload extends Downloader {
             try {
                 let response = await postDownload(
                     urls,
-                    'recursive_html',
+                    'scrape_html',
                     null,
                     'file',
                     null,
@@ -498,7 +498,7 @@ class RecursiveDownload extends Downloader {
         const complete = urls && depth && validSuffix && max_pages && destination;
 
         return <Form>
-            <Header as='h4'><Icon name='file alternate' color='red'/> Recursive File Downloader</Header>
+            <Header as='h4'><Icon name='file alternate' color='red'/> Scrape File Downloader</Header>
 
             <p>Search each of the URLs for files matching the suffix (.pdf, etc.).</p>
 
@@ -621,9 +621,9 @@ export function DownloadMenu({onOpen, disabled}) {
         />
         <Button
             color='red'
-            content='Recursive'
+            content='Scrape'
             disabled={disabled}
-            onClick={() => localOnOpen('recursive')}
+            onClick={() => localOnOpen('scrape')}
             style={{marginBottom: '1em'}}
         />
     </>);
@@ -654,9 +654,9 @@ export function DownloadMenu({onOpen, disabled}) {
             withSearchDirectory={true}
             destinationRequired={true}
             withTags={true}/>,
-        recursive: <RecursiveDownload
+        scrape: <ScrapeDownloader
             clearSelected={clearSelected}
-            downloader='recursive'
+            downloader='scrape'
             withSearchDirectory={true}
             destinationRequired={true}
         />,

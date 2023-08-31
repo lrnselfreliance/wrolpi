@@ -4,7 +4,7 @@ import mock
 
 from wrolpi.downloader import DownloadResult
 from wrolpi.files.downloader import FileDownloader
-from wrolpi.recursive_downloader import RecursiveHTMLDownloader
+from wrolpi.scrape_downloader import ScrapeHTMLDownloader
 
 EXAMPLE_HTTP = '''
 <html>
@@ -20,8 +20,8 @@ EXAMPLE_HTTP = '''
 '''
 
 
-async def test_recursive_html_downloader(test_directory, test_session, test_download_manager, assert_download_urls):
-    test_download_manager.register_downloader(RecursiveHTMLDownloader())
+async def test_scrape_html_downloader(test_directory, test_session, test_download_manager, assert_download_urls):
+    test_download_manager.register_downloader(ScrapeHTMLDownloader())
     test_download_manager.register_downloader(FileDownloader())
 
     destination = test_directory / 'destination'
@@ -32,7 +32,7 @@ async def test_recursive_html_downloader(test_directory, test_session, test_down
         'suffix': '.pdf',
         'destination': str(destination),
     }
-    test_download_manager.create_download('https://example.com/dir', 'recursive_html', settings=settings,
+    test_download_manager.create_download('https://example.com/dir', 'scrape_html', settings=settings,
                                           sub_downloader_name='file')
     assert_download_urls(['https://example.com/dir', ])
 
@@ -42,7 +42,7 @@ async def test_recursive_html_downloader(test_directory, test_session, test_down
     async def fake_file_do_download(*a, **kwargs):
         return DownloadResult(success=True)
 
-    with mock.patch('wrolpi.recursive_downloader.RecursiveHTMLDownloader.fetch_http', fake_fetch_http), \
+    with mock.patch('wrolpi.scrape_downloader.ScrapeHTMLDownloader.fetch_http', fake_fetch_http), \
             mock.patch('wrolpi.files.downloader.FileDownloader.do_download', fake_file_do_download):
         await test_download_manager.wait_for_all_downloads()
         await asyncio.sleep(1)

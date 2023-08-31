@@ -1,5 +1,5 @@
 import wrolpi.files.api  # noqa  Import from files so the blueprint is attached.
-import wrolpi.recursive_downloader  # noqa
+import wrolpi.scrape_downloader  # noqa
 
 BEFORE_STARTUP_FUNCTIONS = []
 

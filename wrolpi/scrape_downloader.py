@@ -17,9 +17,10 @@ def resolve_url(parent_url: str, url: str):
 
     parsed = urlparse(url)
     if parsed.scheme:
-        # URL is absolute.
+        # URL is complete or external.
         return url
     elif parsed.path.startswith('/'):
+        # URL is absolute from domain.
         return f'{parsed_domain.scheme}://{parsed_domain.netloc}{url}'
 
     # Assume URL is relative to the parent URL page.
@@ -76,13 +77,24 @@ class ScrapeHTMLDownloader(Downloader):
             local_urls = urls.copy()
             urls = list()
             for url in local_urls:
+                if page_count >= max_pages:
+                    logger.warning('Reached max page count.')
+                    break
+
+                # Get the HTML of the URL.
                 content = await self.fetch_http(url)
                 page_count += 1
                 if not content:
                     logger.error(f'Failed to download url: {url}')
                     continue
 
-                soup = bs4.BeautifulSoup(content, 'html.parser')
+                # Find all anchors, search for matching files, and more URLs to search.
+                try:
+                    soup = bs4.BeautifulSoup(content, 'html.parser')
+                except Exception as e:
+                    logger.error(f'Failed to parse HTML from {url}', exc_info=e)
+                    continue
+
                 for a in soup.find_all('a'):
                     try:
                         href: str = a['href']
@@ -96,9 +108,6 @@ class ScrapeHTMLDownloader(Downloader):
                         download_urls.append(child_url)
                     else:
                         urls.append(child_url)
-                if page_count >= max_pages:
-                    logger.warning('Reached max page count.')
-                    break
 
         if not download_urls:
             return DownloadResult(

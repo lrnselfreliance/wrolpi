@@ -531,9 +531,10 @@ class ScrapeDownloader extends Downloader {
                     </Grid.Column>
                     <Grid.Column width={6}>
                         <SForm.Field required>
-                            <label>Depth
+                            <label>
+                                Depth
                                 <HelpPopup
-                                    content='Search the URLs provided, and any pages they contain up to this depth. Warning! This can be exponential!'/>
+                                    content='Search the URLs provided, and any URLs they contain up to this depth. Warning! This can be exponential!'/>
                             </label>
                             <FormDropdown selection
                                           name='depth'

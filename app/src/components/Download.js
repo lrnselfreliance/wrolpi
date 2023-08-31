@@ -453,6 +453,8 @@ class RecursiveDownload extends Downloader {
 
     submitDownload = async () => {
         let {urls, destination, depth, suffix, max_pages} = this.state;
+        depth = parseInt(depth);
+        max_pages = parseInt(max_pages);
         if (urls) {
             this.setState({pending: true, submitted: false});
             try {
@@ -537,6 +539,7 @@ class RecursiveDownload extends Downloader {
                                           name='depth'
                                           options={depths}
                                           value={depth}
+                                          type="number"
                                           onChange={this.handleInputChange}
                             />
                         </SForm.Field>

@@ -174,7 +174,7 @@ class StoppableRow extends React.Component {
         // Open downloads (/download), or external links in an anchor.
         const link = location && !location.startsWith('/download') ?
             (text) => <Link to={location}>{text}</Link> :
-            (text) => <a href={url} target='_blank' rel='noopener noreferrer'>{text}</a>;
+            (text) => <a href={location || url} target='_blank' rel='noopener noreferrer'>{text}</a>;
 
         let completedAtCell = last_successful_download ? isoDatetimeToElapsedPopup(last_successful_download) : null;
         let buttonCell = <TableCell/>;

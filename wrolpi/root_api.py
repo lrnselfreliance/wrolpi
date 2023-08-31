@@ -226,7 +226,17 @@ async def post_download(_: Request, body: schema.DownloadRequest):
 
     excluded_urls = [i.strip() for i in body.excluded_urls.split(',')] if body.excluded_urls else None
     destination = str(get_media_directory() / body.destination) if body.destination else None
-    settings = dict(excluded_urls=excluded_urls, destination=destination, tag_names=body.tag_names)
+
+    if body.suffix and not body.suffix.startswith('.'):
+        raise InvalidDownload(f'Suffix must start with a "."')
+
+    # Don't overwrite settings if restarting download.
+    settings = None
+    if excluded_urls or destination or body.tag_names or body.suffix or body.depth:
+        settings = dict(excluded_urls=excluded_urls, destination=destination, tag_names=body.tag_names,
+                        suffix=body.suffix,
+                        depth=body.depth)
+
     if body.frequency:
         download_manager.recurring_download(urls[0], body.frequency, downloader_name=body.downloader,
                                             sub_downloader_name=body.sub_downloader, reset_attempts=True,

@@ -76,3 +76,7 @@ API_DEBUG = truthy_arg(os.environ.get('API_DEBUG', False))
 FILE_REFRESH_CHUNK_SIZE = int(os.environ.get('FILE_CHUNK_SIZE', 100))
 FILE_MAX_PDF_SIZE = int(os.environ.get('FILE_MAX_PDF_SIZE', 40_000_000))
 FILE_MAX_TEXT_SIZE = int(os.environ.get('FILE_MAX_TEXT_SIZE', 100_000))
+
+DEFAULT_HTTP_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116 Safari/537.36',
+}

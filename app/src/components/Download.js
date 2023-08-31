@@ -9,6 +9,7 @@ import {AccordionContent, AccordionTitle, Form as SForm, FormDropdown} from "sem
 import {Link} from "react-router-dom";
 import {TagsSelector} from "../Tags";
 import {toast} from "react-semantic-toasts-2";
+import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
 const validUrl = /^(http|https):\/\/[^ "]+$/;
 
@@ -429,6 +430,147 @@ class RSSDownload extends ChannelDownload {
     }
 }
 
+class RecursiveDownload extends Downloader {
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            depth: 1,
+            disabled: false,
+            max_pages: 100,
+            pending: false,
+            ready: false,
+            sub_downloader: null,
+            success: null,
+            suffix: '',
+            urls: '',
+        };
+    }
+
+    handleInputChange = async (event, {name, value}) => {
+        this.setState({[name]: value});
+    }
+
+    submitDownload = async () => {
+        let {urls, destination, depth, suffix, max_pages} = this.state;
+        if (urls) {
+            this.setState({pending: true, submitted: false});
+            try {
+                let response = await postDownload(
+                    urls,
+                    'recursive_html',
+                    null,
+                    'file',
+                    null,
+                    destination,
+                    null,
+                    depth,
+                    suffix,
+                    max_pages,
+                );
+                if (response.status === 204) {
+                    this.setState({urls: '', pending: false, submitted: true});
+                } else {
+                    const content = await response.json();
+                    let error = 'Failed to create download!';
+                    if (content && content['error']) {
+                        error = content['error'];
+                    }
+                    toast({type: 'error', title: 'Error', description: error});
+                }
+            } finally {
+                this.setState({pending: false});
+            }
+        }
+    }
+
+    render() {
+        const {urls, depth, max_pages, suffix, destination} = this.state;
+        const depths = [
+            {key: 1, text: 1, value: 1},
+            {key: 2, text: 2, value: 2},
+            {key: 3, text: 3, value: 3},
+            {key: 4, text: 4, value: 4},
+        ];
+        const validSuffix = suffix && suffix.startsWith('.');
+        const complete = urls && depth && validSuffix && max_pages && destination;
+
+        return <Form>
+            <Header as='h4'><Icon name='file alternate' color='red'/> Recursive File Downloader</Header>
+
+            <p>Search each of the URLs for files matching the suffix (.pdf, etc.).</p>
+
+            <TextArea required
+                      placeholder='Enter one URL per line'
+                      name='urls'
+                      onChange={this.handleInputChange}
+                      value={urls}
+                      style={{marginBottom: '1em'}}
+            />
+
+            <SForm.Field required>
+                <label>
+                    Destination
+                    <HelpPopup content="Download any found files into this directory."/>
+                </label>
+                <DirectorySearch onSelect={i => this.setState({destination: i})}/>
+            </SForm.Field>
+
+            <Grid style={{marginBottom: '0.5em'}}>
+                <Grid.Row>
+                    <Grid.Column width={6}>
+                        <SForm.Field required>
+                            <label>
+                                Suffix
+                                <HelpPopup content='.pdf, .wav, .mp3, etc.'/>
+                            </label>
+                            <FormInput name='suffix' onChange={this.handleInputChange} placeholder='.pdf'/>
+                        </SForm.Field>
+                    </Grid.Column>
+                    <Grid.Column width={6}>
+                        <SForm.Field required>
+                            <label>Depth
+                                <HelpPopup
+                                    content='Search the URLs provided, and any pages they contain up to this depth. Warning! This can be exponential!'/>
+                            </label>
+                            <FormDropdown selection
+                                          name='depth'
+                                          options={depths}
+                                          value={depth}
+                                          onChange={this.handleInputChange}
+                            />
+                        </SForm.Field>
+                    </Grid.Column>
+                </Grid.Row>
+                <Grid.Row>
+                    <Grid.Column width={8}>
+                        <SForm.Field required>
+                            <label>
+                                Maximum Pages
+                                <HelpPopup content='Stop searching for files if this many pages have been searched.'/>
+                            </label>
+                            <FormInput
+                                name='max_pages'
+                                value={max_pages}
+                                onChange={this.handleInputChange}
+                                placeholder='100'
+                            />
+                        </SForm.Field>
+                    </Grid.Column>
+                </Grid.Row>
+            </Grid>
+
+            <Button content='Cancel' onClick={this.props.clearSelected}/>
+            <Button
+                color='blue'
+                content='Download'
+                onClick={i => this.submitDownload()}
+                disabled={!complete}
+            />
+        </Form>
+    }
+}
+
 export function DownloadMenu({onOpen, disabled}) {
     const [downloader, setDownloader] = useState();
 
@@ -474,6 +616,13 @@ export function DownloadMenu({onOpen, disabled}) {
             onClick={() => localOnOpen('file')}
             style={{marginBottom: '1em'}}
         />
+        <Button
+            color='red'
+            content='Recursive'
+            disabled={disabled}
+            onClick={() => localOnOpen('recursive')}
+            style={{marginBottom: '1em'}}
+        />
     </>);
 
     function clearSelected() {
@@ -502,6 +651,12 @@ export function DownloadMenu({onOpen, disabled}) {
             withSearchDirectory={true}
             destinationRequired={true}
             withTags={true}/>,
+        recursive: <RecursiveDownload
+            clearSelected={clearSelected}
+            downloader='recursive'
+            withSearchDirectory={true}
+            destinationRequired={true}
+        />,
     };
 
     body = downloader in downloaders ? downloaders[downloader] : body;

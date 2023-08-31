@@ -56,6 +56,9 @@ class DownloadRequest:
     excluded_urls: Optional[str] = None
     destination: Optional[str] = None
     tag_names: List[str] = field(default_factory=lambda: list())
+    suffix: Optional[str] = None
+    depth: Optional[int] = None
+    max_pages: Optional[int] = None
 
 
 @dataclass

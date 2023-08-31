@@ -54,6 +54,9 @@ class FileDownloader(Downloader, ABC):
             await download_file(download.url, output_path, info)
             background_task(save_and_tag(output_path, download.settings.get('tag_names')))
 
+            with get_db_session(commit=True) as session:
+                FileGroup.from_paths(session, output_path)
+
             return DownloadResult(
                 success=True,
                 location=f'/download/{output_path.relative_to(media_directory)}'

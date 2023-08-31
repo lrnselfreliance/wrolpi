@@ -439,7 +439,18 @@ export async function getArchive(archiveId) {
     }
 }
 
-export async function postDownload(urls, downloader, frequency, sub_downloader, excludedURLs, destination, tagNames) {
+export async function postDownload(
+    urls,
+    downloader,
+    frequency,
+    sub_downloader,
+    excludedURLs,
+    destination,
+    tagNames,
+    depth,
+    suffix,
+    max_pages,
+) {
     if (!downloader) {
         toast({
             type: 'error',
@@ -456,6 +467,9 @@ export async function postDownload(urls, downloader, frequency, sub_downloader, 
         frequency: frequency || null,
         excluded_urls: excludedURLs,
         destination: destination || null,
+        depth: depth || null,
+        suffix: suffix || null,
+        max_pages: max_pages || null,
     };
     if (sub_downloader) {
         body['sub_downloader'] = sub_downloader;

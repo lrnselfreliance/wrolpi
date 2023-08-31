@@ -37,7 +37,7 @@ from sqlalchemy.orm import Session
 from wrolpi import dates
 from wrolpi.dates import now, from_timestamp, seconds_to_timestamp
 from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError
-from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY
+from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS
 
 logger = logging.getLogger()
 ch = logging.StreamHandler()
@@ -963,8 +963,11 @@ async def get_download_info(url: str, timeout: int = 60) -> DownloadFileInfo:
         if (match := FILENAME_MATCHER.match(disposition)) and (groups := match.groups()):
             info.name = groups[0]
     else:
-        # No Content-Disposition with filename, use the URL name.
-        parsed = urlparse(url)
+        # No Content-Disposition with filename, use the Location or URL name.
+        if info.location:
+            parsed = urlparse(info.location)
+        else:
+            parsed = urlparse(url)
         info.name = parsed.path.split('/')[-1]
 
     return info
@@ -1000,7 +1003,7 @@ async def download_file(url: str, output_path: pathlib.Path = None, info: Downlo
     download_logger.info(f'Starting download of {url} with {total_size} total bytes')
     if info.accept_ranges == 'bytes' or not output_path.is_file():
         with output_path.open('ab') as fh:
-            headers = dict()
+            headers = DEFAULT_HTTP_HEADERS.copy()
             # Check the position of append, if it is 0 then we do not need to resume.
             position = fh.tell()
             if position:

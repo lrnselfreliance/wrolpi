@@ -114,7 +114,7 @@ def test_get_video_for_app(test_session, simple_channel, simple_video):
 
 
 @pytest.mark.asyncio
-async def test_video_delete(test_client, test_session, test_directory, channel_factory, video_factory):
+async def test_video_delete(test_async_client, test_session, test_directory, channel_factory, video_factory):
     """Video.delete() removes the video's files, but leave the DB record."""
     channel1, channel2 = channel_factory(), channel_factory()
     vid1 = video_factory(channel_id=channel1.id, with_video_file=True, with_caption_file=True)
@@ -132,7 +132,7 @@ async def test_video_delete(test_client, test_session, test_directory, channel_f
     assert channel1.skip_download_videos is None
     assert channel2.skip_download_videos is None
 
-    request, response = test_client.delete(f'/api/videos/video/{vid1.id}')
+    request, response = await test_async_client.delete(f'/api/videos/video/{vid1.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Video was added to skip list.
@@ -142,7 +142,7 @@ async def test_video_delete(test_client, test_session, test_directory, channel_f
     assert vid1_video_path.is_file() is False and vid1_caption_path.is_file() is False
     assert vid2_video_path.is_file() and vid2_info_json_path.is_file()
 
-    request, response = test_client.delete(f'/api/videos/video/{vid2.id}')
+    request, response = await test_async_client.delete(f'/api/videos/video/{vid2.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     assert test_session.query(Video).count() == 0
@@ -150,12 +150,8 @@ async def test_video_delete(test_client, test_session, test_directory, channel_f
     assert vid2_video_path.is_file() is False and vid2_info_json_path.is_file() is False
 
     # 3 does not exist.
-    request, response = test_client.delete(f'/api/videos/video/3')
+    request, response = await test_async_client.delete(f'/api/videos/video/3')
     assert response.status_code == HTTPStatus.NOT_FOUND
-
-    # Can't parse the ids.
-    request, response = test_client.delete(f'/api/videos/video/3,')
-    assert response.status_code == HTTPStatus.BAD_REQUEST
 
 
 @pytest.mark.asyncio

@@ -21,7 +21,8 @@ function DriveInfo({used, size, percent, mount}) {
 }
 
 function DiskBandwidthProgress({bytes_ps, total, label, ...props}) {
-    let percent = bytes_ps / total;
+    // Calculate percent so colors can be shown.
+    let percent = (bytes_ps / total) * 100;
     percent = percent || 0;
     let color = null;
     if (percent >= 90) {
@@ -35,19 +36,17 @@ function DiskBandwidthProgress({bytes_ps, total, label, ...props}) {
     return <Progress percent={percent} label={label} color={color} key={label} {...props}/>;
 }
 
-function DiskBandwidth({name, bytes_read_ps, bytes_write_ps}) {
-    const total = 10_000_000; // Arbitrary size.  What is the real speed of the disk?
-
+function DiskBandwidth({name, bytes_read_ps, bytes_write_ps, maximum_read_ps, maximum_write_ps}) {
     const read = <DiskBandwidthProgress
         bytes_ps={bytes_read_ps}
-        total={total}
+        total={maximum_read_ps}
         label={`${name} read`}
         size='tiny'
         disabled={bytes_read_ps === 0}
     />;
     const write = <DiskBandwidthProgress
         bytes_ps={bytes_write_ps}
-        total={total}
+        total={maximum_write_ps}
         label={`${name} write`}
         size='tiny'
         disabled={bytes_write_ps === 0}

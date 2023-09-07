@@ -355,6 +355,8 @@ class DiskBandwidthInfo:
     bytes_write_ps: int = None
     elapsed: int = None
     name: str = None
+    maximum_read_ps: int = None
+    maximum_write_ps: int = None
 
     def __json__(self):
         return dict(
@@ -362,6 +364,8 @@ class DiskBandwidthInfo:
             bytes_write_ps=self.bytes_write_ps,
             elapsed=self.elapsed,
             name=self.name,
+            maximum_read_ps=self.maximum_read_ps,
+            maximum_write_ps=self.maximum_write_ps,
         )
 
 
@@ -370,12 +374,14 @@ IGNORED_DISK_NAMES = (
     'ram',
 )
 DISKS_BANDWIDTH = multiprocessing.Manager().dict()
+MAX_DISKS_BANDWIDTH = multiprocessing.Manager().dict()
 
 
 async def get_bandwidth_info() -> Tuple[List[NICBandwidthInfo], List[DiskBandwidthInfo]]:
-    """Get all bandwidth information for all NICs."""
+    """Get all bandwidth information for all NICs and Disks."""
     nics_info = []
     disks_info = []
+
     try:
         for name in sorted(BANDWIDTH.keys()):
             nic = BANDWIDTH[name]
@@ -402,11 +408,25 @@ async def get_bandwidth_info() -> Tuple[List[NICBandwidthInfo], List[DiskBandwid
             if any(name.startswith(i) for i in IGNORED_DISK_NAMES):
                 continue
             used_disks.append(name)
+
+            try:
+                maximum_read_ps = max(disk['bytes_read_ps'], MAX_DISKS_BANDWIDTH[name]['maximum_read_ps'])
+                maximum_write_ps = max(disk['bytes_write_ps'], MAX_DISKS_BANDWIDTH[name]['maximum_write_ps'])
+            except KeyError as e:
+                # Use a low first value.  Hopefully all drives are capable of this speed.
+                maximum_read_ps = 500_000
+                maximum_write_ps = 500_000
+            # Always write the new maximums.
+            value = {name: {'maximum_read_ps': maximum_read_ps, 'maximum_write_ps': maximum_write_ps}}
+            MAX_DISKS_BANDWIDTH.update(value)
+
             disks_info.append(DiskBandwidthInfo(
                 bytes_read_ps=disk['bytes_read_ps'],
                 bytes_write_ps=disk['bytes_write_ps'],
                 elapsed=disk['elapsed'],
                 name=name,
+                maximum_read_ps=maximum_read_ps,
+                maximum_write_ps=maximum_write_ps,
             ))
     except Exception as e:
         warn_once(e)

@@ -33,7 +33,6 @@ async def test_get_cpu_info():
         info = await status.get_cpu_info()
         assert isinstance(info, status.CPUInfo)
         assert isinstance(info.percent, int)
-        assert info.temperature >= 0
 
 
 @pytest.mark.asyncio

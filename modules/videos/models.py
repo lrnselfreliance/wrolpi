@@ -58,9 +58,13 @@ class Video(ModelHelper, Base):
 
         codec_names = []
         codec_types = []
-        if self.ffprobe_json:
-            codec_names = [i['codec_name'] for i in self.ffprobe_json['streams']]
-            codec_types = [i['codec_type'] for i in self.ffprobe_json['streams']]
+
+        try:
+            if self.ffprobe_json:
+                codec_names = [i['codec_name'] for i in self.ffprobe_json['streams']]
+                codec_types = [i['codec_type'] for i in self.ffprobe_json['streams']]
+        except Exception as e:
+            logger.error(f'{self} ffprobe_json is invalid', exc_info=e)
 
         # Put live data in "video" instead of "data" to avoid confusion on the frontend.
         d['video'] = dict(

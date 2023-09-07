@@ -237,7 +237,7 @@ class ChannelDownload extends React.Component {
 
         return <Form>
             <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
-            <Header as='h4'><Icon name='film' color='blue'/> Channel / Playlist</Header>
+            <Header as='h3'><Icon name='film' color='blue'/> Channel / Playlist</Header>
             <FormInput
                 required
                 label='URL'
@@ -369,7 +369,7 @@ class RSSDownload extends ChannelDownload {
 
         return <Form>
             <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
-            <Header as='h4'><Icon name='rss' color='orange'/> RSS Feed</Header>
+            <Header as='h3'><Icon name='rss' color='orange'/> RSS Feed</Header>
             <FormInput
                 required
                 label='URL'
@@ -497,8 +497,52 @@ class ScrapeDownloader extends Downloader {
         const validSuffix = suffix && suffix.startsWith('.');
         const complete = urls && depth && validSuffix && max_pages && destination;
 
+        let destinationField = <SForm.Field required>
+            <label>
+                Destination
+                <HelpPopup content="Download any found files into this directory."/>
+            </label>
+            <DirectorySearch onSelect={i => this.setState({destination: i})}/>
+        </SForm.Field>;
+
+        let depthField = <SForm.Field required>
+            <label>
+                Depth
+                <HelpPopup
+                    content='Search the URLs provided, and any URLs they contain up to this depth. Warning: This can be exponential!'/>
+            </label>
+            <FormDropdown selection
+                          name='depth'
+                          options={depths}
+                          value={depth}
+                          type="number"
+                          onChange={this.handleInputChange}
+            />
+        </SForm.Field>;
+
+        let suffixField = <SForm.Field required>
+            <label>
+                Suffix
+                <HelpPopup content='.pdf, .wav, .mp3, etc.'/>
+            </label>
+            <FormInput name='suffix' onChange={this.handleInputChange} placeholder='.pdf'/>
+        </SForm.Field>;
+
+        let maxPagesField = <SForm.Field required>
+            <label>
+                Maximum Pages
+                <HelpPopup content='Stop searching for files if this many pages have been searched.'/>
+            </label>
+            <FormInput
+                name='max_pages'
+                value={max_pages}
+                onChange={this.handleInputChange}
+                placeholder='100'
+            />
+        </SForm.Field>;
+
         return <Form>
-            <Header as='h4'><Icon name='file alternate' color='red'/> Scrape File Downloader</Header>
+            <Header as='h3'><Icon name='file alternate' color='red'/> Videos</Header>
 
             <p>Search each of the URLs for files matching the suffix (.pdf, etc.).</p>
 
@@ -510,57 +554,15 @@ class ScrapeDownloader extends Downloader {
                       style={{marginBottom: '1em'}}
             />
 
-            <SForm.Field required>
-                <label>
-                    Destination
-                    <HelpPopup content="Download any found files into this directory."/>
-                </label>
-                <DirectorySearch onSelect={i => this.setState({destination: i})}/>
-            </SForm.Field>
+            {destinationField}
 
             <Grid style={{marginBottom: '0.5em'}}>
                 <Grid.Row>
-                    <Grid.Column width={6}>
-                        <SForm.Field required>
-                            <label>
-                                Suffix
-                                <HelpPopup content='.pdf, .wav, .mp3, etc.'/>
-                            </label>
-                            <FormInput name='suffix' onChange={this.handleInputChange} placeholder='.pdf'/>
-                        </SForm.Field>
-                    </Grid.Column>
-                    <Grid.Column width={6}>
-                        <SForm.Field required>
-                            <label>
-                                Depth
-                                <HelpPopup
-                                    content='Search the URLs provided, and any URLs they contain up to this depth. Warning! This can be exponential!'/>
-                            </label>
-                            <FormDropdown selection
-                                          name='depth'
-                                          options={depths}
-                                          value={depth}
-                                          type="number"
-                                          onChange={this.handleInputChange}
-                            />
-                        </SForm.Field>
-                    </Grid.Column>
+                    <Grid.Column width={6}>{suffixField}</Grid.Column>
+                    <Grid.Column width={6}>{depthField}</Grid.Column>
                 </Grid.Row>
                 <Grid.Row>
-                    <Grid.Column width={8}>
-                        <SForm.Field required>
-                            <label>
-                                Maximum Pages
-                                <HelpPopup content='Stop searching for files if this many pages have been searched.'/>
-                            </label>
-                            <FormInput
-                                name='max_pages'
-                                value={max_pages}
-                                onChange={this.handleInputChange}
-                                placeholder='100'
-                            />
-                        </SForm.Field>
-                    </Grid.Column>
+                    <Grid.Column width={6}>{maxPagesField}</Grid.Column>
                 </Grid.Row>
             </Grid>
 

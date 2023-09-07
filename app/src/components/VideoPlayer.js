@@ -113,7 +113,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     if (video && video['description']) {
         // Only replace empty description if there is one available.
         description = video['description'];
-        description = chaptersInDescription(description, setVideoTime)
+        description = formatVideoDescription(description, setVideoTime)
     }
 
     let descriptionPane = {
@@ -139,7 +139,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             <p>{video.censored ? 'Yes' : 'No'}</p>
 
             <h3>Codec Names</h3>
-            <>{video.codec_names ? video.codec_names.map(i => <Label>{i}</Label>) : 'N/A'}</>
+            <>{video.codec_names ? video.codec_names.map(i => <Label key={i}>{i}</Label>) : 'N/A'}</>
         </TabPane>
     }
 
@@ -212,6 +212,13 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         </Segment>
     }
 
+    let title = video.video_path;
+    if (videoFile.title) {
+        title = hashtagLinks(videoFile.title);
+    } else if (videoFile.stem) {
+        title = videoFile.stem;
+    }
+
     return <>
         <Container style={{margin: '1em'}}>
             <BackButton/>
@@ -233,7 +240,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         <Container style={{marginTop: '1em'}}>
             <Segment>
 
-                <Header as='h2'>{videoFile.title || videoFile.stem || video.video_path}</Header>
+                <Header as='h2'>{title}</Header>
                 {video.upload_date && <h3>{isoDatetimeToString(video.upload_date)}</h3>}
                 <h3>
                     {channel && <Link to={`/videos/channel/${channel.id}/video`}>
@@ -272,7 +279,8 @@ export default VideoPage;
 
 const chapterRegex = new RegExp('^(\\(?(?:((\\d?\\d):)?(?:(\\d?\\d):(\\d\\d)))\\)?)\\s+(.*)$', 'i');
 
-function chaptersInDescription(description, setVideoTime) {
+function formatVideoDescription(description, setVideoTime) {
+    // Convert timestamps to links which change the video's playback location.  Change hashtags to search links.
     if (description && description.length > 0) {
         try {
             const lines = _.split(description, '\n');
@@ -300,10 +308,10 @@ function chaptersInDescription(description, setVideoTime) {
                     }
 
                     // Use the link if we could create it, otherwise fallback to the original `line`.
-                    newLines = [...newLines, link || line];
+                    newLines = [...newLines, link || hashtagLinks(line)];
                 } else if (line !== undefined) {
                     // Line does not start with a timestamp.
-                    newLines = [...newLines, line];
+                    newLines = [...newLines, hashtagLinks(line)];
                 }
             }
             // Map all lines and links with a break between.
@@ -317,4 +325,28 @@ function chaptersInDescription(description, setVideoTime) {
     }
     // Error occurred, or no description, don't fail.
     return description;
+
+}
+
+const hashtagRegex = /(#+[_a-zA-Z0-9]+)/ig;
+
+
+function hashtagLinks(text) {
+    // Converts a string into a div which has hashtags converted to search links.
+    // Example: Some text <a href="/search?q=#hashtag">#hashtag</a> the rest of the text
+    if (text && text.length > 0) {
+        const parts = text.split(hashtagRegex);
+        let newParts = '';
+        for (let i = 0; i < parts.length; i++) {
+            let part = parts[i];
+            part = part.startsWith('#') ?
+                // Part is a hashtag.
+                <a key={i} href={`/search?q=${encodeURIComponent(part)}`} target="_self">{part}</a>
+                // Part is not a hashtag.
+                : <span key={i}>{part}</span>;
+            newParts = [...newParts, part];
+        }
+        return <React.Fragment>{newParts}</React.Fragment>;
+    }
+    return text;
 }

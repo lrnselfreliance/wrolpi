@@ -230,4 +230,10 @@ RPI4_PBF_BYTES_PER_SECOND = 61879
 
 def seconds_to_import(size_in_bytes: int) -> int:
     """Attempt to predict how long it will take an RPi4 to import a given PBF file."""
+    if size_in_bytes > 1_000_000_000:
+        # Use exponential curve for large files.  These magic numbers are from testing many imports on an RPi 4.
+        a = 7.17509261732342e-14 * size_in_bytes ** 2
+        b = 6.6590760410412e-5 * size_in_bytes
+        c = 10283
+        return int(a - b + c)
     return max(int(size_in_bytes // RPI4_PBF_BYTES_PER_SECOND), 0)

@@ -73,8 +73,12 @@ async def test_run_import_command(test_directory, mock_create_subprocess_shell):
     (17737381, 286),
     (63434267, 1025),
     (87745484, 1418),
-    (136372996, 2203),
     (116318111, 1879),
+    (136372996, 2203),
+    (1936075318, 150308),
+    (2676094489, 345922),
+    (3392375001, 610106),
+    (11346305075, 8491840),
 ])
 def test_seconds_to_import_rpi4(size, expected):
     assert lib.seconds_to_import(size) == expected

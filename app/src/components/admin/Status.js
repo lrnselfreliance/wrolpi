@@ -214,6 +214,11 @@ export function StatusPage() {
             </Segment>
 
             <Segment>
+                <Header as='h1'>Drive Bandwidth</Header>
+                {disk_bandwidth.map((disk) => <DiskBandwidth key={disk['name']} {...disk}/>)}
+            </Segment>
+
+            <Segment>
                 <Header as='h1'>Network Bandwidth</Header>
                 {bandwidth ? bandwidth.map(i => <BandwidthProgressGroup key={i['name']} bandwidth={i}/>) :
                     <ProgressPlaceholder/>}
@@ -222,11 +227,6 @@ export function StatusPage() {
             <Segment>
                 <Header as='h1'>Drive Usage</Header>
                 {drives.map((drive) => <DriveInfo key={drive['mount']} {...drive}/>)}
-            </Segment>
-
-            <Segment>
-                <Header as='h1'>Drive Bandwidth</Header>
-                {disk_bandwidth.map((disk) => <DiskBandwidth key={disk['name']} {...disk}/>)}
             </Segment>
         </Media>
         <Media greaterThanOrEqual='tablet'>
@@ -247,6 +247,11 @@ export function StatusPage() {
             </Segment>
 
             <Segment>
+                <Header as='h2'>Drive Bandwidth</Header>
+                {disk_bandwidth.map(disk => <DiskBandwidth key={disk['name']} {...disk}/>)}
+            </Segment>
+
+            <Segment>
                 <Header as='h2'>Network Bandwidth</Header>
                 {bandwidth ? bandwidth.map(i => <BandwidthProgressGroup key={i['name']} bandwidth={i}/>) :
                     <ProgressPlaceholder/>}
@@ -255,11 +260,6 @@ export function StatusPage() {
             <Segment>
                 <Header as='h2'>Drive Usage</Header>
                 {drives.map(drive => <DriveInfo key={drive['mount']} {...drive}/>)}
-            </Segment>
-
-            <Segment>
-                <Header as='h2'>Drive Bandwidth</Header>
-                {disk_bandwidth.map(disk => <DiskBandwidth key={disk['name']} {...disk}/>)}
             </Segment>
         </Media>
     </>

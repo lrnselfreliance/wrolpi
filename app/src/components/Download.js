@@ -419,7 +419,7 @@ class RSSDownload extends ChannelDownload {
 
             <Button content='Cancel' onClick={this.props.clearSelected}/>
             <Button
-                color='blue'
+                color='violet'
                 content='Download'
                 onClick={this.handleSubmit}
                 disabled={buttonDisabled}
@@ -542,7 +542,7 @@ class ScrapeDownloader extends Downloader {
         </SForm.Field>;
 
         return <Form>
-            <Header as='h3'><Icon name='file alternate' color='red'/> Videos</Header>
+            <Header as='h3'><Icon name='file alternate' color='red'/> Scrape Files</Header>
 
             <p>Search each of the URLs for files matching the suffix (.pdf, etc.).</p>
 
@@ -568,7 +568,7 @@ class ScrapeDownloader extends Downloader {
 
             <Button content='Cancel' onClick={this.props.clearSelected}/>
             <Button
-                color='blue'
+                color='violet'
                 content='Download'
                 onClick={i => this.submitDownload()}
                 disabled={!complete}

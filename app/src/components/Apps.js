@@ -2,7 +2,7 @@ import React, {useContext} from 'react';
 import {Divider, Input, SegmentGroup, StatisticLabel, StatisticValue, TableCell, TableRow} from "semantic-ui-react";
 import {Link, Route, Routes} from "react-router-dom";
 import {decryptOTP, encryptOTP} from "../api";
-import {APIButton, humanFileSize, mimetypeColor, PageContainer, toLocaleString, useTitle} from "./Common";
+import {APIButton, ErrorMessage, humanFileSize, mimetypeColor, PageContainer, toLocaleString, useTitle} from "./Common";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, Header, Loader, Segment, Statistic, StatisticGroup, Table, TextArea} from "./Theme";
 import {useStatistics, useVINDecoder} from "../hooks/customHooks";
@@ -208,8 +208,8 @@ function StatisticsPage() {
     if (statistics === undefined) {
         return <>
             <Header as='h1'>Statistics</Header>
-            <Segment><p {...s}>Failed to fetch statistics</p></Segment>
-        </>;
+            <ErrorMessage>Failed to fetch statistics</ErrorMessage>
+        </>
     }
 
     if (statistics['global_statistics']) {

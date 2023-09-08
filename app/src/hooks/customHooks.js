@@ -121,7 +121,7 @@ export const useDomains = () => {
             setDomains(domains);
             setTotal(total);
         } catch (e) {
-            setDomains([]);
+            setDomains(undefined); // Display error.
             setTotal(0);
         }
     }
@@ -214,7 +214,7 @@ export const useSearchArchives = (defaultLimit) => {
                 description: 'Could not get archives',
                 time: 5000,
             });
-            setArchives([]);
+            setArchives(undefined); // Could not get Archives, display error.
         }
     }
 
@@ -256,7 +256,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
     const {view} = useSearchView();
     const headline = view === 'headline';
 
-    const [videos, setVideos] = useState();
+    const [videos, setVideos] = useState(null);
     const [totalPages, setTotalPages] = useState(0);
 
     const localSearchVideos = async () => {
@@ -268,13 +268,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
             setTotalPages(calculateTotalPages(total, limit));
         } catch (e) {
             console.error(e);
-            toast({
-                type: 'error',
-                title: 'Unexpected server response',
-                description: 'Could not get videos',
-                time: 5000,
-            });
-            setVideos([]);
+            setVideos(undefined);// Could not get Videos, display error.
         }
     }
 
@@ -405,12 +399,7 @@ export const useChannels = () => {
             setChannels(c);
         } catch (e) {
             console.error(e);
-            toast({
-                type: 'error',
-                title: 'Unexpected server response',
-                description: 'Could not get channels',
-                time: 5000,
-            });
+            setChannels(undefined); // Could not get Channels, display error.
         }
     }
 
@@ -482,7 +471,7 @@ export const useBrowseFiles = () => {
             setBrowseFiles(files);
         } catch (e) {
             console.log(e);
-            setBrowseFiles([]);
+            setBrowseFiles(undefined); // Display error.
         }
     }
 
@@ -561,6 +550,10 @@ export const useDownloads = () => {
             setPendingOnceDownloads(data['pending_once_downloads']);
         } catch (e) {
             console.error(e);
+            // Display errors.
+            setOnceDownloads(undefined);
+            setRecurringDownloads(undefined);
+            setPendingOnceDownloads(undefined);
         }
     }
 
@@ -753,7 +746,7 @@ export const useCPUTemperature = () => {
 
 
 export const useVideoStatistics = () => {
-    const [statistics, setStatistics] = useState({});
+    const [statistics, setStatistics] = useState(null);
 
     const fetchStatistics = async () => {
         try {
@@ -765,6 +758,7 @@ export const useVideoStatistics = () => {
             setStatistics(stats);
         } catch (e) {
             console.error(e);
+            setStatistics(undefined); // Display error.
         }
     }
 

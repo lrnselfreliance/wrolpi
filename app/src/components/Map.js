@@ -1,6 +1,7 @@
 import React, {useContext} from "react";
 import {
     APIButton,
+    ErrorMessage,
     HelpPopup,
     humanFileSize,
     InfoMessage,
@@ -136,6 +137,7 @@ class ManageMap extends React.Component {
             });
         } catch (e) {
             console.error(e);
+            this.setState({files: undefined});
         }
     }
 
@@ -216,24 +218,27 @@ class ManageMap extends React.Component {
             {!_.isEmpty(selectedPaths) ? 'Import Selected' : 'Import All'}
         </APIButton>;
 
-        let rows;
-        if (!files) {
-            // Fetch request is not complete.
-            rows = <TableRow>
-                <TableCell/>
-                <TableCell colSpan={6}>
-                    <Placeholder>
-                        <PlaceholderLine/>
-                        <PlaceholderLine/>
-                    </Placeholder>
-                </TableCell>
-            </TableRow>;
-        } else if (_.isEmpty(files)) {
+        let rows = <TableRow>
+            <TableCell/>
+            <TableCell colSpan={6}>
+                <Placeholder>
+                    <PlaceholderLine/>
+                    <PlaceholderLine/>
+                </Placeholder>
+            </TableCell>
+        </TableRow>;
+        if (files && files.length === 0) {
             rows = <TableRow>
                 <TableCell/><TableCell colSpan={5}>No PBF map files were found in <b>map/pbf</b></TableCell>
             </TableRow>;
-        } else {
+        } else if (files && files.length >= 1) {
             rows = files.map(i => this.tableRow(i, disabled));
+        } else if (files === undefined) {
+            rows = <TableRow>
+                <TableCell colSpan={6}>
+                    <ErrorMessage>Could not fetch map files</ErrorMessage>
+                </TableCell>
+            </TableRow>
         }
 
         let spaceHelpPopup = <HelpPopup

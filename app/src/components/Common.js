@@ -1404,11 +1404,27 @@ export function APIButton({
     return button;
 }
 
-export function InfoMessage({children}) {
-    return <Message info icon>
+export function InfoMessage({children, size = null}) {
+    return <Message info icon size={size}>
         <SIcon name='question'/>
         <Message.Content>
             {children}
         </Message.Content>
+    </Message>
+}
+
+export function WarningMessage({children, size = null}) {
+    return <Message warning icon size={size}>
+        <SIcon name='hand point right'/>
+        <Message.Content>
+            {children}
+        </Message.Content>
+    </Message>
+}
+
+export function ErrorMessage({children, size = null}) {
+    return <Message error icon size={size}>
+        <SIcon name='exclamation'/>
+        <Message.Content>{children}</Message.Content>
     </Message>
 }

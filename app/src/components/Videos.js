@@ -9,6 +9,7 @@ import {
     defaultVideoOrder,
     Duration,
     encodeMediaPath,
+    ErrorMessage,
     FileIcon,
     findPosterPath,
     isoDatetimeToString,
@@ -35,7 +36,7 @@ import {
     StatisticValue,
     TableCell
 } from "semantic-ui-react";
-import {Channels, EditChannel, NewChannel} from "./Channels";
+import {ChannelsPages, EditChannel, NewChannel} from "./Channels";
 import {useChannel, useQuery, useSearchVideos, useVideo, useVideoStatistics} from "../hooks/customHooks";
 import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
@@ -210,15 +211,19 @@ function VideosPage() {
     </>
 }
 
-function Statistics() {
+function VideosStatistics() {
     useTitle('Video Statistics');
 
     const {statistics} = useVideoStatistics();
-    const {videos, historical, channels} = statistics;
 
-    if (!videos) {
+    if (statistics === null) {
+        // Request is pending.
         return <Loader active inline='centered'/>
+    } else if (statistics === undefined) {
+        return <ErrorMessage>Unable to fetch Video Statistics</ErrorMessage>
     }
+
+    const {videos, historical, channels} = statistics;
 
     const videoNames = [
         {key: 'videos', label: 'Videos'},
@@ -270,8 +275,8 @@ export function VideosRoute(props) {
         <TabLinks links={links}/>
         <Routes>
             <Route path='/' exact element={<VideosPage/>}/>
-            <Route path='channel' exact element={<Channels/>}/>
-            <Route path='statistics' exact element={<Statistics/>}/>
+            <Route path='channel' exact element={<ChannelsPages/>}/>
+            <Route path='statistics' exact element={<VideosStatistics/>}/>
             <Route path='channel/new' exact element={<NewChannel/>}/>
             <Route path='channel/:channelId/edit' exact element={<EditChannel/>}/>
             <Route path='channel/:channelId/video' exact element={<VideosPage/>}/>

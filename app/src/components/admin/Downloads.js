@@ -4,6 +4,7 @@ import {Link} from "react-router-dom";
 import {
     APIButton,
     DisableDownloadsToggle,
+    ErrorMessage,
     isoDatetimeToElapsedPopup,
     secondsToFrequency,
     textEllipsis,
@@ -23,7 +24,6 @@ import {
 } from "semantic-ui-react";
 import {Button, Header, Modal, ModalActions, ModalContent, ModalHeader, Placeholder, Segment, Table} from "../Theme";
 import {useDownloads} from "../../hooks/customHooks";
-import _ from "lodash";
 
 function ClearCompleteDownloads({callback}) {
     async function localClearDownloads() {
@@ -245,9 +245,7 @@ class StoppableRow extends React.Component {
 }
 
 export function OnceDownloadsTable({downloads, fetchDownloads}) {
-    if (downloads && _.isEmpty(downloads)) {
-        return <Segment>No downloads are scheduled.</Segment>;
-    } else if (downloads) {
+    if (downloads && downloads.length >= 1) {
         return <>
             <Table>
                 <TableHeader>
@@ -269,19 +267,20 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
                     </TableRow>
                 </TableFooter>
             </Table>
-        </>;
-    } else {
-        return <Placeholder>
-            <PlaceholderLine/>
-            <PlaceholderLine/>
-        </Placeholder>;
+        </>
+    } else if (downloads) {
+        return <Segment>No downloads are scheduled.</Segment>
+    } else if (downloads === undefined) {
+        return <ErrorMessage>Unable to fetch downloads</ErrorMessage>
     }
+    return <Placeholder>
+        <PlaceholderLine/>
+        <PlaceholderLine/>
+    </Placeholder>
 }
 
 export function RecurringDownloadsTable({downloads, fetchDownloads}) {
-    if (downloads && _.isEmpty(downloads)) {
-        return <Segment>No downloads are scheduled.</Segment>;
-    } else if (downloads) {
+    if (downloads && downloads.length >= 1) {
         return <Table>
             <TableHeader>
                 <TableRow>
@@ -295,13 +294,16 @@ export function RecurringDownloadsTable({downloads, fetchDownloads}) {
             <TableBody>
                 {downloads.map(i => <DownloadRow key={i.id} fetchDownloads={fetchDownloads} {...i}/>)}
             </TableBody>
-        </Table>;
-    } else {
-        return <Placeholder>
-            <PlaceholderLine/>
-            <PlaceholderLine/>
-        </Placeholder>;
+        </Table>
+    } else if (downloads) {
+        return <Segment>No downloads are scheduled.</Segment>
+    } else if (downloads === undefined) {
+        return <ErrorMessage>Unable to fetch downloads</ErrorMessage>
     }
+    return <Placeholder>
+        <PlaceholderLine/>
+        <PlaceholderLine/>
+    </Placeholder>
 }
 
 export function DownloadsPage() {

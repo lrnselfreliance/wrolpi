@@ -412,7 +412,7 @@ async def get_bandwidth_info() -> Tuple[List[NICBandwidthInfo], List[DiskBandwid
             try:
                 maximum_read_ps = max(disk['bytes_read_ps'], MAX_DISKS_BANDWIDTH[name]['maximum_read_ps'])
                 maximum_write_ps = max(disk['bytes_write_ps'], MAX_DISKS_BANDWIDTH[name]['maximum_write_ps'])
-            except KeyError as e:
+            except KeyError:
                 # Use a low first value.  Hopefully all drives are capable of this speed.
                 maximum_read_ps = 500_000
                 maximum_write_ps = 500_000

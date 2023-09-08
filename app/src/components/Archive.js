@@ -18,7 +18,7 @@ import {
     BackButton,
     CardLink,
     cardTitleWrapper,
-    encodeMediaPath,
+    encodeMediaPath, ErrorMessage,
     ExternalCardLink,
     FileIcon,
     findPosterPath,
@@ -27,7 +27,6 @@ import {
     isoDatetimeToString,
     mimetypeColor,
     PageContainer,
-    PreviewLink,
     PreviewPath,
     SearchInput,
     SortButton,
@@ -301,7 +300,8 @@ export function DomainsPage() {
     const [domains] = useDomains();
     const [searchStr, setSearchStr] = useState('');
 
-    if (!domains) {
+    if (domains === null) {
+        // Request is pending.
         return <>
             <Placeholder>
                 <PlaceholderHeader>
@@ -310,7 +310,9 @@ export function DomainsPage() {
                 </PlaceholderHeader>
             </Placeholder>
         </>;
-    } else if (_.isEmpty(domains)) {
+    } else if (domains === undefined) {
+        return <ErrorMessage>Could not fetch domains</ErrorMessage>
+    } else if (domains && domains.length === 0) {
         return <Message>
             <Message.Header>No domains yet.</Message.Header>
             <Message.Content>Archive some webpages!</Message.Content>
@@ -366,25 +368,25 @@ export function SearchDomain() {
         setDomain(value);
     }
 
+    let domainOptions = [];
+
     if (domains && domains.length > 0) {
-        const domainOptions = domains.map(i => {
+        domainOptions = domains.map(i => {
             return {key: i['domain'], value: i['domain'], text: i['domain']}
         });
-        return <>
-            <Dropdown selection search clearable fluid
-                      placeholder='Domains'
-                      options={domainOptions}
-                      onChange={handleChange}
-                      value={domain}
-            />
-        </>
     }
-    return <></>
+    return <>
+        <Dropdown selection search clearable fluid
+                  placeholder='Domains'
+                  options={domainOptions}
+                  onChange={handleChange}
+                  value={domain}
+        />
+    </>
 }
 
 function ArchivesPage() {
     const [selectedArchives, setSelectedArchives] = useState([]);
-    const [deleteOpen, setDeleteOpen] = useState(false);
 
     useTitle('Archives');
 
@@ -416,7 +418,6 @@ function ArchivesPage() {
     }
 
     const onDelete = async () => {
-        setDeleteOpen(false);
         const archiveIds = archives.filter(i => selectedArchives.indexOf(i['primary_path']) >= 0)
             .map(i => i['data']['id']);
         await deleteArchives(archiveIds);

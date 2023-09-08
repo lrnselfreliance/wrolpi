@@ -13,7 +13,7 @@ import {
     TableHeaderCell,
     TableRow,
 } from "semantic-ui-react";
-import {APIButton, contrastingColor, scrollToTopOfElement} from "./components/Common";
+import {APIButton, contrastingColor, ErrorMessage, scrollToTopOfElement} from "./components/Common";
 import {
     Button,
     FormInput,
@@ -54,8 +54,8 @@ export function useTags() {
             setTags(t);
             setTagNames(t.map(i => i['name']));
         } catch (e) {
-            setTags([]);
-            setTagNames([]);
+            setTags(undefined);
+            setTagNames(undefined);
             console.error(e);
         }
     }
@@ -284,7 +284,7 @@ function EditTagsModal() {
                 </Table>
             </div>
         </Modal>
-        <Button onClick={() => setOpen(true)} color='violet'>
+        <Button onClick={() => setOpen(true)} color='violet' disabled={tags === undefined}>
             Edit
         </Button>
     </>
@@ -420,8 +420,10 @@ export const TagsDashboard = () => {
     const {tagNames, TagsLinkGroup} = React.useContext(TagsContext);
 
     let availableTagsGroup = <Loader active inline/>;
-    if (tagNames && tagNames.length) {
+    if (tagNames && tagNames.length >= 1) {
         availableTagsGroup = <TagsLinkGroup tagNames={tagNames} style={{marginTop: '0.5em'}}/>;
+    } else if (tagNames === undefined) {
+        availableTagsGroup = <ErrorMessage>Could not fetch tags</ErrorMessage>
     }
 
     return <Segment>

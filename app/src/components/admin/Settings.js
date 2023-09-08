@@ -2,8 +2,7 @@ import React from "react";
 import {getSettings, postRestart, postShutdown, saveSettings} from "../../api";
 import {Button, Form, FormGroup, FormInput, Header, Loader, Modal, ModalContent, ModalHeader, Segment} from "../Theme";
 import {Container, Dimmer, Icon} from "semantic-ui-react";
-import {ThemeContext} from "../../contexts/contexts";
-import {APIButton, HelpPopup, HotspotToggle, ThrottleToggle, Toggle, WROLModeMessage} from "../Common";
+import {APIButton, ErrorMessage, HelpPopup, HotspotToggle, ThrottleToggle, Toggle, WROLModeMessage} from "../Common";
 import QRCode from "react-qr-code";
 import {useDockerized} from "../../hooks/customHooks";
 import {toast} from "react-semantic-toasts-2";
@@ -155,6 +154,7 @@ export class SettingsPage extends React.Component {
             }, this.handleHotspotChange);
         } catch (e) {
             console.error(e);
+            this.setState({ready: undefined});
         }
     }
 
@@ -207,6 +207,8 @@ export class SettingsPage extends React.Component {
     render() {
         if (this.state.ready === false) {
             return <Loader active inline='centered'/>
+        } else if (this.state.ready === undefined) {
+            return <ErrorMessage>Unable to fetch settings</ErrorMessage>
         }
 
         let {
@@ -224,124 +226,120 @@ export class SettingsPage extends React.Component {
 
         const qrButton = <Button icon style={{marginBottom: '1em'}}><Icon name='qrcode' size='big'/></Button>;
 
-        return <ThemeContext.Consumer>
-            {({i, t}) => <Container fluid>
-                <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
+        return <Container fluid>
+            <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
 
-                <Segment>
-                    <HotspotToggle/>
-                    <ThrottleToggle/>
-                </Segment>
+            <Segment>
+                <HotspotToggle/>
+                <ThrottleToggle/>
+            </Segment>
 
-                <Segment>
-                    <Header as='h2'>
-                        Settings
-                    </Header>
-                    <p {...t}>
-                        Any changes will be written to <i>config/wrolpi.yaml</i>.
-                    </p>
+            <Segment>
+                <Header as='h2'>
+                    Settings
+                </Header>
+                <p>Any changes will be written to <i>config/wrolpi.yaml</i>.</p>
 
-                    <Form id="settings" onSubmit={this.handleSubmit}>
-                        <div style={{margin: '0.5em'}}>
-                            <Toggle
-                                label='Download on Startup'
-                                disabled={disabled || download_on_startup === null}
-                                checked={download_on_startup === true}
-                                onChange={checked => this.handleInputChange(null, 'download_on_startup', checked)}
-                            />
-                        </div>
+                <Form id="settings" onSubmit={this.handleSubmit}>
+                    <div style={{margin: '0.5em'}}>
+                        <Toggle
+                            label='Download on Startup'
+                            disabled={disabled || download_on_startup === null}
+                            checked={download_on_startup === true}
+                            onChange={checked => this.handleInputChange(null, 'download_on_startup', checked)}
+                        />
+                    </div>
 
-                        <div style={{margin: '0.5em'}}>
-                            <Toggle
-                                label='CPU Power-save on Startup'
-                                disabled={disabled || throttle_on_startup === null}
-                                checked={throttle_on_startup === true}
-                                onChange={checked => this.handleInputChange(null, 'throttle_on_startup', checked)}
-                            />
-                        </div>
+                    <div style={{margin: '0.5em'}}>
+                        <Toggle
+                            label='CPU Power-save on Startup'
+                            disabled={disabled || throttle_on_startup === null}
+                            checked={throttle_on_startup === true}
+                            onChange={checked => this.handleInputChange(null, 'throttle_on_startup', checked)}
+                        />
+                    </div>
 
-                        <div style={{margin: '0.5em'}}>
-                            <Toggle
-                                label='Ignore outdated Zims'
-                                disabled={disabled || ignore_outdated_zims === null}
-                                checked={ignore_outdated_zims === true}
-                                onChange={checked => this.handleInputChange(null, 'ignore_outdated_zims', checked)}
-                            />
-                        </div>
+                    <div style={{margin: '0.5em'}}>
+                        <Toggle
+                            label='Ignore outdated Zims'
+                            disabled={disabled || ignore_outdated_zims === null}
+                            checked={ignore_outdated_zims === true}
+                            onChange={checked => this.handleInputChange(null, 'ignore_outdated_zims', checked)}
+                        />
+                    </div>
 
-                        <FormGroup inline>
-                            <FormInput
-                                label={<>
-                                    <b {...t}>Download Timeout</b>
-                                    <HelpPopup content='Downloads will be stopped after this many seconds have elapsed.
+                    <FormGroup inline>
+                        <FormInput
+                            label={<>
+                                <b>Download Timeout</b>
+                                <HelpPopup content='Downloads will be stopped after this many seconds have elapsed.
                                 Downloads will never timeout if this is empty.'/>
-                                </>}
-                                value={download_timeout}
-                                disabled={disabled || download_timeout === null}
-                                onChange={(e, d) => this.handleTimeoutChange(e, 'download_timeout', d.value)}
-                            />
-                        </FormGroup>
+                            </>}
+                            value={download_timeout}
+                            disabled={disabled || download_timeout === null}
+                            onChange={(e, d) => this.handleTimeoutChange(e, 'download_timeout', d.value)}
+                        />
+                    </FormGroup>
 
-                        <FormGroup inline>
-                            <FormInput
-                                label='Hotspot SSID'
-                                value={hotspot_ssid}
-                                disabled={disabled || hotspot_ssid === null}
-                                onChange={(e, d) => this.setState({hotspot_ssid: d.value}, this.handleHotspotChange)}
-                            />
-                            <FormInput
-                                label='Hotspot Password'
-                                disabled={disabled || hotspot_password === null}
-                                value={hotspot_password}
-                                onChange={(e, d) => this.setState({hotspot_password: d.value}, this.handleHotspotChange)}
-                            />
-                            <FormInput
-                                label='Hotspot Device'
-                                disabled={disabled || hotspot_password === null}
-                                value={hotspot_device}
-                                onChange={(e, d) => this.handleInputChange(e, 'hotspot_device', d.value)}
-                            />
-                        </FormGroup>
+                    <FormGroup inline>
+                        <FormInput
+                            label='Hotspot SSID'
+                            value={hotspot_ssid}
+                            disabled={disabled || hotspot_ssid === null}
+                            onChange={(e, d) => this.setState({hotspot_ssid: d.value}, this.handleHotspotChange)}
+                        />
+                        <FormInput
+                            label='Hotspot Password'
+                            disabled={disabled || hotspot_password === null}
+                            value={hotspot_password}
+                            onChange={(e, d) => this.setState({hotspot_password: d.value}, this.handleHotspotChange)}
+                        />
+                        <FormInput
+                            label='Hotspot Device'
+                            disabled={disabled || hotspot_password === null}
+                            value={hotspot_device}
+                            onChange={(e, d) => this.handleInputChange(e, 'hotspot_device', d.value)}
+                        />
+                    </FormGroup>
 
-                        <Modal closeIcon
-                               onClose={() => this.setState({qrOpen: false})}
-                               onOpen={this.handleQrOpen}
-                               open={this.state.qrOpen}
-                               trigger={qrButton}
-                        >
-                            <ModalHeader>
-                                Scan this code to join the hotspot
-                            </ModalHeader>
-                            <ModalContent>
-                                <div style={{display: 'inline-block', backgroundColor: '#ffffff', padding: '1em'}}>
-                                    <QRCode value={qrCodeValue} size={300}/>
-                                </div>
-                            </ModalContent>
-                        </Modal>
+                    <Modal closeIcon
+                           onClose={() => this.setState({qrOpen: false})}
+                           onOpen={this.handleQrOpen}
+                           open={this.state.qrOpen}
+                           trigger={qrButton}
+                    >
+                        <ModalHeader>
+                            Scan this code to join the hotspot
+                        </ModalHeader>
+                        <ModalContent>
+                            <div style={{display: 'inline-block', backgroundColor: '#ffffff', padding: '1em'}}>
+                                <QRCode value={qrCodeValue} size={300}/>
+                            </div>
+                        </ModalContent>
+                    </Modal>
 
-                        <br/>
+                    <br/>
 
-                        <APIButton
-                            color='violet'
-                            size='big'
-                            onClick={this.handleSubmit}
-                            obeyWROLMode={true}
-                            disabled={disabled}
-                        >Save</APIButton>
+                    <APIButton
+                        color='violet'
+                        size='big'
+                        onClick={this.handleSubmit}
+                        obeyWROLMode={true}
+                        disabled={disabled}
+                    >Save</APIButton>
 
-                        <Dimmer active={pending}>
-                            <Loader active={pending} size='large'/>
-                        </Dimmer>
+                    <Dimmer active={pending}>
+                        <Loader active={pending} size='large'/>
+                    </Dimmer>
 
-                    </Form>
-                </Segment>
+                </Form>
+            </Segment>
 
-                <Segment>
-                    <Header as='h3'>Control WROLPi</Header>
-                    <RestartButton/>
-                    <ShutdownButton/>
-                </Segment>
-            </Container>}
-        </ThemeContext.Consumer>
+            <Segment>
+                <Header as='h3'>Control WROLPi</Header>
+                <RestartButton/>
+                <ShutdownButton/>
+            </Segment>
+        </Container>
     }
 }

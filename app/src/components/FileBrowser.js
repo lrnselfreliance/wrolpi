@@ -11,7 +11,7 @@ import {
     TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
-import {APIButton, DirectorySearch, FileIcon, humanFileSize} from "./Common";
+import {APIButton, DirectorySearch, ErrorMessage, FileIcon, humanFileSize} from "./Common";
 import React, {useEffect, useState} from "react";
 import {deleteFile, makeDirectory, movePaths, renamePath} from "../api";
 import _ from 'lodash';
@@ -129,7 +129,6 @@ function Path({path, onFolderClick, onFileClick, sortData, selectedPaths, onSele
 
 export function FileBrowser() {
     const [selectedPaths, setSelectedPaths] = React.useState([]);
-    const [deleteOpen, setDeleteOpen] = React.useState(false);
     const [renameOpen, setRenameOpen] = React.useState(false);
     const [moveOpen, setMoveOpen] = React.useState(false);
     const [makeDirectoryOpen, setMakeDirectoryOpen] = React.useState(false);
@@ -178,7 +177,6 @@ export function FileBrowser() {
     }
 
     const reset = async () => {
-        setDeleteOpen(false);
         setSelectedPaths([]);
         setPending(true);
         try {
@@ -268,6 +266,8 @@ export function FileBrowser() {
             <PlaceholderLine/>
             <PlaceholderLine/>
         </Placeholder>;
+    } else if (browseFiles === undefined) {
+        return <ErrorMessage>Could not fetch files</ErrorMessage>
     }
 
     return <>

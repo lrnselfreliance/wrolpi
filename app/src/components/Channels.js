@@ -17,6 +17,7 @@ import {
     APIButton,
     BackButton,
     DirectoryInput,
+    ErrorMessage,
     frequencyOptions,
     humanFileSize,
     RequiredAsterisk,
@@ -506,7 +507,7 @@ function MobileChannelRow({channel}) {
 }
 
 
-export function Channels() {
+export function ChannelsPages() {
     useTitle('Channels');
 
     const {channels} = useChannels();
@@ -552,7 +553,15 @@ export function Channels() {
         {key: 'manage', text: 'Manage'},
     ];
 
-    if (channels === null) {
+    if (channels && channels.length === 0) {
+        return <>
+            {header}
+            <Message>
+                <Message.Header>No channels exist yet!</Message.Header>
+                <Message.Content><Link to='/videos/channel/new'>Create one.</Link></Message.Content>
+            </Message>
+        </>
+    } else if (channels === null) {
         // Placeholders while fetching
         return <>
             {header}
@@ -569,13 +578,10 @@ export function Channels() {
                 </TableBody>
             </Table>
         </>
-    } else if (_.isEmpty(channels)) {
+    } else if (channels === undefined) {
         return <>
             {header}
-            <Message>
-                <Message.Header>No channels exist yet!</Message.Header>
-                <Message.Content><Link to='/videos/channel/new'>Create one.</Link></Message.Content>
-            </Message>
+            <ErrorMessage>Could not fetch Channels</ErrorMessage>
         </>
     }
 

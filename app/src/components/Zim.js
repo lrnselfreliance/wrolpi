@@ -31,6 +31,7 @@ import React, {useContext, useState} from "react";
 import {
     APIButton,
     encodeMediaPath,
+    ErrorMessage,
     humanFileSize,
     InfoMessage,
     normalizeEstimate,
@@ -38,7 +39,8 @@ import {
     Paginator,
     TabLinks,
     TagIcon,
-    useTitle
+    useTitle,
+    WarningMessage
 } from "./Common";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {TagsSelector} from "../Tags";
@@ -400,10 +402,10 @@ class ManageZim extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            catalog: undefined,
-            iso_639_codes: undefined,
-            subscriptions: undefined,
-            zims: undefined,
+            catalog: null,
+            iso_639_codes: null,
+            subscriptions: null,
+            zims: null,
         }
     }
 
@@ -418,6 +420,7 @@ class ManageZim extends React.Component {
             this.setState({zims});
         } catch (e) {
             console.error(e);
+            this.setState({zims: undefined}); // Display error.
         }
     }
 
@@ -427,6 +430,7 @@ class ManageZim extends React.Component {
             this.setState({subscriptions, catalog, iso_639_codes});
         } catch (e) {
             console.error(e);
+            this.setState({subscriptions: undefined, catalog: undefined}); // Display error.
         }
     }
 
@@ -452,19 +456,19 @@ class ManageZim extends React.Component {
                 <PlaceholderLine/>
             </PlaceholderHeader>
         </Placeholder>;
-        if (zims && zims.length > 0) {
+        if (zims && zims.length >= 1) {
             zimFilesBody = <SortableTable
                 data={zims}
                 rowFunc={this.zimFileTableRow}
                 rowKey='path'
                 tableHeaders={zimFilesHeaders}
             />;
-        } else if (zims === null || (zims && zims.length === 0)) {
-            zimFilesBody = <Message icon warning>
-                <Message.Content>
-                    You have not subscribed to any Kiwix projects, or your files have not been refreshed.
-                </Message.Content>
-            </Message>;
+        } else if (zims && zims.length === 0) {
+            zimFilesBody = <WarningMessage>
+                You have not subscribed to any Kiwix projects, or your files have not been refreshed.
+            </WarningMessage>;
+        } else if (zims === undefined) {
+            zimFilesBody = <ErrorMessage>Could not fetch Zim files</ErrorMessage>;
         }
 
         const kiwixCatalogHeaders = [
@@ -496,6 +500,8 @@ class ManageZim extends React.Component {
                 rowKey='name'
                 tableHeaders={kiwixCatalogHeaders}
             />
+        } else if (catalog === undefined) {
+            kiwixCatalog = <ErrorMessage>Could not fetch catalog</ErrorMessage>;
         }
 
         return <PageContainer>

@@ -18,6 +18,7 @@ import {
     CardPoster,
     cardTitleWrapper,
     encodeMediaPath,
+    ErrorMessage,
     ExternalCardLink,
     FileIcon,
     findPosterPath,
@@ -37,14 +38,15 @@ import {
     useQuery,
     useSearchFiles,
     useSearchFilter,
-    useSearchView, useStatusFlag,
+    useSearchView,
+    useStatusFlag,
     useWROLMode
 } from "../hooks/customHooks";
 import {Route, Routes} from "react-router-dom";
 import {CardPlaceholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
+import {Media, ThemeContext} from "../contexts/contexts";
 import {
     Button,
     Card,
@@ -60,7 +62,6 @@ import {
 } from "./Theme";
 import {SelectableTable} from "./Tables";
 import {VideoCard, VideoRowCells} from "./Videos";
-import _ from 'lodash';
 import {FileBrowser} from "./FileBrowser";
 import {refreshFiles} from "../api";
 import {useSubscribeEventName} from "../Events";
@@ -161,15 +162,17 @@ function FileCard({file}) {
 }
 
 export function FileCards({files}) {
-    if (!_.isEmpty(files)) {
+    if (files && files.length >= 1) {
         return <CardGroupCentered>
             {files.map(i => <FileCard key={i['primary_path']} file={i}/>)}
         </CardGroupCentered>
     } else if (files && files.length === 0) {
         return <Segment>No results!</Segment>
-    } else {
-        return <CardGroupCentered><CardPlaceholder/></CardGroupCentered>
+    } else if (files === undefined) {
+        return <ErrorMessage>Could not search!</ErrorMessage>
     }
+    // Response is pending.
+    return <CardGroupCentered><CardPlaceholder/></CardGroupCentered>
 }
 
 function ImageRowCells({file}) {
@@ -246,13 +249,7 @@ function FileRow({file}) {
 }
 
 export function FileTable({files, selectOn, onSelect, footer, selectedKeys}) {
-    if (!files) {
-        return <Placeholder>
-            <PlaceholderLine/>
-            <PlaceholderLine/>
-            <PlaceholderLine/>
-        </Placeholder>
-    } else if (files && files.length > 0) {
+    if (files && files.length > 0) {
         const headerContents = ['Poster', 'Title'];
         const rows = files.map(i => <FileRow key={i['key']} file={i}/>);
         return <SelectableTable
@@ -263,9 +260,17 @@ export function FileTable({files, selectOn, onSelect, footer, selectedKeys}) {
             footer={footer}
             rows={rows}
         />;
-    } else {
+    } else if (files) {
         return <Segment>No results!</Segment>
+    } else if (files === undefined) {
+        return <ErrorMessage>Could not search!</ErrorMessage>
     }
+
+    return <Placeholder>
+        <PlaceholderLine/>
+        <PlaceholderLine/>
+        <PlaceholderLine/>
+    </Placeholder>
 }
 
 export function FileRowTagIcon({file}) {

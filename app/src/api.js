@@ -486,6 +486,10 @@ export async function killDownload(download_id) {
     return response;
 }
 
+export async function restartDownload(download_id) {
+    return await apiPost(`${API_URI}/download/${download_id}/restart`);
+}
+
 export async function killDownloads() {
     let response = await apiPost(`${API_URI}/download/kill`);
     return response;

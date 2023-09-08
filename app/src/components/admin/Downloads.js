@@ -1,5 +1,5 @@
 import React from "react";
-import {clearCompletedDownloads, clearFailedDownloads, deleteDownload, killDownload, postDownload} from "../../api";
+import {clearCompletedDownloads, clearFailedDownloads, deleteDownload, killDownload, restartDownload} from "../../api";
 import {Link} from "react-router-dom";
 import {
     APIButton,
@@ -24,6 +24,7 @@ import {
 } from "semantic-ui-react";
 import {Button, Header, Modal, ModalActions, ModalContent, ModalHeader, Placeholder, Segment, Table} from "../Theme";
 import {useDownloads} from "../../hooks/customHooks";
+import {toast} from "react-semantic-toasts-2";
 
 function ClearCompleteDownloads({callback}) {
     async function localClearDownloads() {
@@ -67,7 +68,7 @@ function ClearFailedDownloads({callback}) {
     </APIButton>
 }
 
-class DownloadRow extends React.Component {
+class RecurringDownloadRow extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
@@ -79,6 +80,28 @@ class DownloadRow extends React.Component {
         const {id} = this.props;
         try {
             await deleteDownload(id);
+        } finally {
+            if (this.props.fetchDownloads) {
+                this.props.fetchDownloads();
+            }
+        }
+    }
+
+    handleRetry = async () => {
+        const {id} = this.props;
+        try {
+            const response = await restartDownload(id);
+            if (response.status !== 204) {
+                throw Error('Unable to restart download');
+            }
+        } catch (e) {
+            toast({
+                type: 'error',
+                title: 'Error',
+                description: 'Unable to start download',
+                time: 5000,
+            })
+            throw e;
         } finally {
             if (this.props.fetchDownloads) {
                 this.props.fetchDownloads();
@@ -121,6 +144,17 @@ class DownloadRow extends React.Component {
             />
         </>;
 
+        const retryButton = <>
+            <APIButton
+                color='green'
+                icon='redo'
+                confirmContent='Are you sure you want to retry this download?'
+                confirmButton='Retry'
+                onClick={this.handleRetry}
+                obeyWROLMode={true}
+            />
+        </>;
+
         // Show "now" if we have passed the next_download.
         let next = 'now';
         if (next_download) {
@@ -142,12 +176,13 @@ class DownloadRow extends React.Component {
             <TableCell>
                 {error && errorModal}
                 {deleteButton}
+                {retryButton}
             </TableCell>
         </TableRow>
     }
 }
 
-class StoppableRow extends React.Component {
+class OnceDownloadRow extends React.Component {
     constructor(props) {
         super(props);
     }
@@ -163,8 +198,17 @@ class StoppableRow extends React.Component {
     };
 
     handleStart = async () => {
-        let downloader = this.props.downloader;
-        await postDownload(`${this.props.url}`, downloader);
+        try {
+            await restartDownload(this.props.id);
+        } catch (e) {
+            toast({
+                type: 'error',
+                title: 'Error',
+                description: 'Unable to start download',
+                time: 5000,
+            })
+            throw e;
+        }
         await this.props.fetchDownloads();
     };
 
@@ -203,11 +247,12 @@ class StoppableRow extends React.Component {
                     />
                     <APIButton
                         color='green'
+                        icon='redo'
                         confirmContent='Are you sure you want to restart this download?'
                         confirmButton='Start'
                         onClick={this.handleStart}
                         obeyWROLMode={true}
-                    >Retry</APIButton>
+                    />
                 </TableCell>
             );
         } else if (status === 'complete' && location) {
@@ -256,7 +301,7 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {downloads.map(i => <StoppableRow fetchDownloads={fetchDownloads} key={i.id} {...i}/>)}
+                    {downloads.map(i => <OnceDownloadRow fetchDownloads={fetchDownloads} key={i.id} {...i}/>)}
                 </TableBody>
                 <TableFooter>
                     <TableRow>
@@ -292,7 +337,7 @@ export function RecurringDownloadsTable({downloads, fetchDownloads}) {
                 </TableRow>
             </TableHeader>
             <TableBody>
-                {downloads.map(i => <DownloadRow key={i.id} fetchDownloads={fetchDownloads} {...i}/>)}
+                {downloads.map(i => <RecurringDownloadRow key={i.id} fetchDownloads={fetchDownloads} {...i}/>)}
             </TableBody>
         </Table>
     } else if (downloads) {

@@ -766,6 +766,17 @@ class DownloadManager:
             return True
         return False
 
+    @optional_session
+    def restart_download(self, download_id: int, session: Session = None) -> Download:
+        """Renews a download and resets its download attempts."""
+        download = self.get_download(session, id_=download_id)
+        if not download:
+            raise InvalidDownload(f'No download with id {download_id}')
+        download.renew(reset_attempts=True)
+        session.commit()
+
+        return download
+
     def kill_download(self, download_id: int):
         """Fail a Download. If it is pending, kill the Downloader so the download stops."""
         with get_db_session(commit=True) as session:

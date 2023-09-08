@@ -251,6 +251,13 @@ async def post_download(_: Request, body: schema.DownloadRequest):
     return response.empty()
 
 
+@api_bp.post('/download/<download_id:int>/restart')
+@openapi.description('Restart a download.')
+async def restart_download(_: Request, download_id: int):
+    download_manager.restart_download(download_id)
+    return response.empty()
+
+
 @api_bp.get('/download')
 @openapi.description('Get all Downloads that need to be processed.')
 async def get_downloads(_: Request):

@@ -1,3 +1,4 @@
+import asyncio
 import json
 from http import HTTPStatus
 from itertools import zip_longest
@@ -372,6 +373,25 @@ def test_get_downloaders(test_client):
     assert 'downloaders' in response.json, 'Downloaders not returned'
     assert isinstance(response.json['downloaders'], list) and len(response.json['downloaders']), \
         'No downloaders returned'
+
+
+@pytest.mark.asyncio
+async def test_restart_download(test_session, test_async_client, test_download_manager, test_downloader):
+    """A Download can be restarted."""
+    # Create a download, fail it, it should be restarted.
+    download = test_download_manager.create_download('https://example.com', test_downloader.name)
+    download.fail()
+    test_session.commit()
+    assert test_session.query(Download).one().status == 'failed'
+
+    # Download is now "new" again.
+    request, response = await test_async_client.post(f'/api/download/{download.id}/restart')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert test_session.query(Download).one().status == 'new'
+
+    # Wait for the background download to fail.  It should be deferred.
+    await asyncio.sleep(0.5)
+    assert test_session.query(Download).one().status == 'deferred'
 
 
 def test_get_global_statistics(test_session, test_client):

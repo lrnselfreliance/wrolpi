@@ -5,6 +5,8 @@ import {
     Divider,
     Form,
     Grid,
+    GridColumn,
+    GridRow,
     Label,
     LabelGroup,
     TableBody,
@@ -31,6 +33,7 @@ import {HexColorPicker} from "react-colorful";
 import {useRecurringTimeout} from "./hooks/customHooks";
 import {Media, ThemeContext} from "./contexts/contexts";
 import {Link, useNavigate} from "react-router-dom";
+import {TagPlaceholder} from "./components/Placeholder";
 
 export const TagsContext = React.createContext({
     NameToTagLabel: null,
@@ -419,7 +422,14 @@ export const TagsSelector = ({
 export const TagsDashboard = () => {
     const {tagNames, TagsLinkGroup} = React.useContext(TagsContext);
 
-    let availableTagsGroup = <Loader active inline/>;
+    const tagPlaceholder = <GridColumn style={{width: 100}}><TagPlaceholder/></GridColumn>;
+    let availableTagsGroup = <Grid columns={3}>
+        <GridRow>
+            {tagPlaceholder}
+            {tagPlaceholder}
+            {tagPlaceholder}
+        </GridRow>
+    </Grid>;
     if (tagNames && tagNames.length >= 1) {
         availableTagsGroup = <TagsLinkGroup tagNames={tagNames} style={{marginTop: '0.5em'}}/>;
     } else if (tagNames === undefined) {

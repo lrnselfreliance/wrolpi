@@ -47,3 +47,9 @@ export function TextPlaceholder() {
         <PlaceholderLine/>
     </Placeholder>
 }
+
+export function TagPlaceholder() {
+    return <Placeholder style={{height: 30, width: 80}}>
+        <PlaceholderImage/>
+    </Placeholder>
+}

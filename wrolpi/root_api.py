@@ -21,11 +21,12 @@ from wrolpi import admin, status, flags, schema
 from wrolpi import tags
 from wrolpi.admin import HotspotStatus
 from wrolpi.common import logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
-    wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host
+    wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, LOG_LEVEL, \
+    set_global_log_level
 from wrolpi.dates import now, strptime
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, APIError, HotspotError, InvalidDownload, \
-    HotspotPasswordTooShort, NativeOnly
+    HotspotPasswordTooShort, NativeOnly, InvalidConfig
 from wrolpi.events import get_events, Events
 from wrolpi.files.lib import get_file_statistics, estimate_search
 from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
@@ -149,6 +150,7 @@ def get_settings(_: Request):
         'hotspot_password': config.hotspot_password,
         'hotspot_ssid': config.hotspot_ssid,
         'hotspot_status': admin.hotspot_status().name,
+        'log_level': LOG_LEVEL.value,
         'ignore_outdated_zims': config.ignore_outdated_zims,
         'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.
         'throttle_on_startup': config.throttle_on_startup,
@@ -162,7 +164,7 @@ def get_settings(_: Request):
 @api_bp.patch('/settings')
 @openapi.description('Update WROLPi settings')
 @validate(json=schema.SettingsRequest)
-def update_settings(_: Request, body: schema.SettingsRequest):
+def update_settings(request: Request, body: schema.SettingsRequest):
     if wrol_mode_enabled() and body.wrol_mode is None:
         # Cannot update settings while WROL Mode is enabled, unless you want to disable WROL Mode.
         raise WROLModeEnabled()
@@ -182,6 +184,14 @@ def update_settings(_: Request, body: schema.SettingsRequest):
     # Remove any keys with None values, then save the config.
     config = {k: v for k, v in body.__dict__.items() if v is not None}
     wrolpi_config = get_config()
+
+    if not config:
+        raise InvalidConfig()
+
+    log_level = config.pop('log_level', None)
+    if isinstance(log_level, int):
+        set_global_log_level(log_level)
+
     old_password = wrolpi_config.hotspot_password
     wrolpi_config.update(config)
 

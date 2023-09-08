@@ -22,6 +22,7 @@ class SettingsRequest:
     hotspot_ssid: Optional[str] = None
     hotspot_status: Optional[bool] = None
     ignore_outdated_zims: Optional[bool] = None
+    log_level: Optional[int] = None
     media_directory: Optional[str] = None
     throttle_on: Optional[bool] = None
     throttle_on_startup: Optional[bool] = None

@@ -114,13 +114,18 @@ def main():
         return 1
 
     logger.warning(f'Starting with: {sys.argv}')
-    if args.verbose == 1:
-        set_log_level(logging.INFO)
-    elif args.verbose and args.verbose == 2:
-        set_log_level(logging.DEBUG)
-    elif args.verbose and args.verbose >= 3:
-        # Log everything.  Add SQLAlchemy debug logging.
-        set_log_level(logging.NOTSET)
+    from wrolpi.common import LOG_LEVEL
+    with LOG_LEVEL.get_lock():
+        if args.verbose == 1:
+            LOG_LEVEL.value = logging.INFO
+            set_log_level(logging.INFO)
+        elif args.verbose and args.verbose == 2:
+            LOG_LEVEL.value = logging.DEBUG
+            set_log_level(logging.DEBUG)
+        elif args.verbose and args.verbose >= 3:
+            # Log everything.  Add SQLAlchemy debug logging.
+            LOG_LEVEL.value = logging.NOTSET
+            set_log_level(logging.NOTSET)
     logger.info(get_version_string())
 
     if DOCKERIZED:
@@ -182,6 +187,16 @@ async def periodic_check_db_is_up(app: Sanic):
         flags.check_db_is_up()
         flags.init_flags()
         await asyncio.sleep(10)
+
+
+@api_app.after_server_start
+async def periodic_check_log_level(app: Sanic):
+    from wrolpi.common import LOG_LEVEL
+    while True:
+        log_level = LOG_LEVEL.value
+        if log_level != logger.getEffectiveLevel():
+            set_log_level(log_level)
+        await asyncio.sleep(1)
 
 
 @api_app.after_server_start

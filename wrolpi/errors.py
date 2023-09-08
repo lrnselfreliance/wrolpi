@@ -73,6 +73,12 @@ class HotspotError(APIError):
     status = HTTPStatus.INTERNAL_SERVER_ERROR
 
 
+class LogLevelError(APIError):
+    code = 'LOG_LEVEL_ERROR'
+    summary = 'Log level is invalid'
+    status = HTTPStatus.BAD_REQUEST
+
+
 class UnknownArchive(APIError):
     code = 'UNKNOWN_ARCHIVE'
     summary = 'Unable to find the archive'
@@ -125,3 +131,9 @@ class ShutdownFailed(APIError):
     code = 'SHUTDOWN_FAILED'
     summary = 'Unable to shutdown the WROLPi'
     status = HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+class InvalidConfig(APIError):
+    code = 'INVALID_CONFIG'
+    summary = 'Config is invalid'
+    status = HTTPStatus.BAD_REQUEST

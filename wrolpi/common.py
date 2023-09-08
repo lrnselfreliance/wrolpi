@@ -1,6 +1,7 @@
 import asyncio
 import atexit
 import contextlib
+import ctypes
 import inspect
 import json
 import logging
@@ -36,12 +37,14 @@ from sqlalchemy.orm import Session
 
 from wrolpi import dates
 from wrolpi.dates import now, from_timestamp, seconds_to_timestamp
-from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError
+from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError, LogLevelError
 from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS
+
+LOG_LEVEL = multiprocessing.Value(ctypes.c_int, 20)
 
 logger = logging.getLogger()
 ch = logging.StreamHandler()
-formatter = logging.Formatter('[%(asctime)s] [%(name)s:%(lineno)d] [%(levelname)s] %(message)s')
+formatter = logging.Formatter('[%(asctime)s] [%(process)d] [%(name)s:%(lineno)d] [%(levelname)s] %(message)s')
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
@@ -50,18 +53,35 @@ logger_ = logger.getChild(__name__)
 
 def set_log_level(level, warn_level: bool = True):
     """Set the level of the root logger so all children that have been created (or will be created) share the same
-    level."""
+    level.
+
+    @warning: Child processes will not share this level.  See set_global_log_level
+    """
     logger.setLevel(level)
-    if level == logging.NOTSET:
-        # Custom maximum logging level which will include SQLAlchemy debugging.
-        sa_logger = logging.getLogger('sqlalchemy.engine')
-        sa_logger.setLevel(logging.DEBUG)
 
     # Always warn about the log level, so we know what should have been logged.
     effective_level = logger.getEffectiveLevel()
     level_name = logging.getLevelName(effective_level)
     if warn_level:
         logger.warning(f'Logging level: {level_name}')
+
+    # Enable debug logging in SQLAlchemy when logging is NOTSET.
+    sa_logger = logging.getLogger('sqlalchemy.engine')
+    sa_level = logging.DEBUG if level == logging.NOTSET else logging.WARNING
+    sa_logger.setLevel(sa_level)
+
+    # Hide sanic access logs when not at least "INFO".
+    sanic_access = logging.getLogger('sanic.access')
+    sanic_level = logging.INFO if level <= 20 else logging.WARNING
+    sanic_access.setLevel(sanic_level)
+
+
+def set_global_log_level(log_level: int):
+    """Set the global (shared between processes) log level."""
+    if not isinstance(log_level, int) or 0 > log_level or log_level > 40:
+        raise LogLevelError()
+    with LOG_LEVEL.get_lock():
+        LOG_LEVEL.value = log_level
 
 
 @contextlib.contextmanager

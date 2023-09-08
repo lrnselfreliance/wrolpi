@@ -58,6 +58,34 @@ async def test_get_settings(test_session, test_async_client):
 
 
 @pytest.mark.asyncio
+async def test_log_level(test_async_client):
+    """Log level must be between 0 and 40."""
+    data = {'log_level': 0}
+    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    data = {'log_level': -1}
+    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    data = {'log_level': 40}
+    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    data = {'log_level': 41}
+    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    data = {'log_level': None}
+    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    data = {}
+    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.asyncio
 async def test_get_downloads(test_session, test_async_client):
     request, response = await test_async_client.get('/api/download')
     assert_dict_contains(response.json, {'once_downloads': [], 'recurring_downloads': []})

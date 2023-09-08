@@ -109,6 +109,41 @@ export function RestartButton() {
     </APIButton>
 }
 
+const levelNameMap = {
+    5: 'All',
+    4: 'Debug',
+    3: 'Info',
+    2: 'Warning',
+    1: 'Critical'
+}
+
+function logLevelToName(logLevel) {
+    // Convert app log level to name.
+    return levelNameMap[logLevel]
+}
+
+function fromApiLogLevel(logLevel) {
+    // Python API uses levels on the left.  App uses levels on the right to display <input> direction correctly.
+    return {
+        40: 1,
+        30: 2,
+        20: 3,
+        10: 4,
+        0: 5,
+    }[logLevel]
+}
+
+function toApiLogLevel(logLevel) {
+    // Reverse the above levels.
+    return {
+        5: 0,
+        4: 10,
+        3: 20,
+        2: 30,
+        1: 40,
+    }[logLevel]
+}
+
 export class SettingsPage extends React.Component {
 
     constructor(props) {
@@ -128,6 +163,7 @@ export class SettingsPage extends React.Component {
             hotspot_ssid: null,
             hotspot_status: null,
             ignore_outdated_zims: null,
+            log_level: null,
             throttle_on_startup: null,
             throttle_status: null,
         }
@@ -149,6 +185,7 @@ export class SettingsPage extends React.Component {
                 hotspot_ssid: settings.hotspot_ssid,
                 hotspot_status: settings.hotspot_status,
                 ignore_outdated_zims: settings.ignore_outdated_zims,
+                log_level: fromApiLogLevel(settings.log_level),
                 throttle_on_startup: settings.throttle_on_startup,
                 throttle_status: settings.throttle_status,
             }, this.handleHotspotChange);
@@ -170,10 +207,25 @@ export class SettingsPage extends React.Component {
             hotspot_password: this.state.hotspot_password,
             hotspot_ssid: this.state.hotspot_ssid,
             ignore_outdated_zims: this.state.ignore_outdated_zims,
+            log_level: toApiLogLevel(this.state.log_level),
             throttle_on_startup: this.state.throttle_on_startup,
         }
-        await saveSettings(settings);
-        this.setState({disabled: false, pending: false});
+        try {
+            const response = await saveSettings(settings);
+            if (response.status !== 204) {
+                throw Error('Failed to save settings');
+            }
+        } catch (e) {
+            toast({
+                type: 'error',
+                title: 'Failed',
+                description: 'Failed to save settings.',
+                time: 5000,
+            });
+            throw e;
+        } finally {
+            this.setState({disabled: false, pending: false});
+        }
     }
 
     handleInputChange = async (e, name, value) => {
@@ -219,6 +271,7 @@ export class SettingsPage extends React.Component {
             hotspot_password,
             hotspot_ssid,
             ignore_outdated_zims,
+            log_level,
             pending,
             qrCodeValue,
             throttle_on_startup,
@@ -317,6 +370,27 @@ export class SettingsPage extends React.Component {
                             </div>
                         </ModalContent>
                     </Modal>
+
+                    <br/>
+
+                    <label htmlFor='log_levels_input'>Log Level: {logLevelToName(log_level)}</label>
+                    <br/>
+                    <input type='range'
+                           id='log_levels_input'
+                           list='log_levels'
+                           min='1'
+                           max='5'
+                           value={log_level}
+                           onChange={e => this.setState({'log_level': parseInt(e.target.value)})}
+                           style={{marginBottom: '1em'}}
+                    />
+                    <datalist id='log_levels'>
+                        <option value='1'>Critical</option>
+                        <option value='2'>Warning</option>
+                        <option value='3'>Info</option>
+                        <option value='4'>Debug</option>
+                        <option value='5'>All</option>
+                    </datalist>
 
                     <br/>
 

@@ -87,7 +87,7 @@ class RecurringDownloadRow extends React.Component {
         }
     }
 
-    handleRetry = async () => {
+    handleRestart = async () => {
         const {id} = this.props;
         try {
             const response = await restartDownload(id);
@@ -98,7 +98,7 @@ class RecurringDownloadRow extends React.Component {
             toast({
                 type: 'error',
                 title: 'Error',
-                description: 'Unable to start download',
+                description: 'Unable to restart download',
                 time: 5000,
             })
             throw e;
@@ -144,13 +144,13 @@ class RecurringDownloadRow extends React.Component {
             />
         </>;
 
-        const retryButton = <>
+        const restartButton = <>
             <APIButton
                 color='green'
                 icon='redo'
-                confirmContent='Are you sure you want to retry this download?'
-                confirmButton='Retry'
-                onClick={this.handleRetry}
+                confirmContent='Are you sure you want to restart this download?'
+                confirmButton='Restart'
+                onClick={this.handleRestart}
                 obeyWROLMode={true}
             />
         </>;
@@ -176,7 +176,7 @@ class RecurringDownloadRow extends React.Component {
             <TableCell>
                 {error && errorModal}
                 {deleteButton}
-                {retryButton}
+                {restartButton}
             </TableCell>
         </TableRow>
     }
@@ -197,14 +197,14 @@ class OnceDownloadRow extends React.Component {
         await this.props.fetchDownloads();
     };
 
-    handleStart = async () => {
+    handleRestart = async () => {
         try {
             await restartDownload(this.props.id);
         } catch (e) {
             toast({
                 type: 'error',
                 title: 'Error',
-                description: 'Unable to start download',
+                description: 'Unable to restart download',
                 time: 5000,
             })
             throw e;
@@ -250,7 +250,7 @@ class OnceDownloadRow extends React.Component {
                         icon='redo'
                         confirmContent='Are you sure you want to restart this download?'
                         confirmButton='Start'
-                        onClick={this.handleStart}
+                        onClick={this.handleRestart}
                         obeyWROLMode={true}
                     />
                 </TableCell>

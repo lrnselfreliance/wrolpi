@@ -147,9 +147,12 @@ async def delete(*paths: Union[str, pathlib.Path]):
         if not path.is_dir() and not path.is_file():
             raise InvalidFile(f'Cannot delete {path} because it is not a file or a directory.')
     if len(paths) > 1:
-        for p1, p2 in itertools.permutations(paths):
-            if str(p2).startswith(str(p1)):
-                raise InvalidFile(f'Cannot deleted nested paths')
+        for p1 in paths:
+            for p2 in paths:
+                if p1 == p2:
+                    continue
+                if str(p2).startswith(str(p1)):
+                    raise InvalidFile(f'Cannot deleted nested paths')
     with get_db_session() as session:
         # Search for any files that have been tagged.
         for path in paths:

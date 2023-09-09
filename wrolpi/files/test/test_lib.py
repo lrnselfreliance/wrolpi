@@ -54,6 +54,24 @@ async def test_delete(test_session, make_files_structure, test_directory):
 
 
 @pytest.mark.asyncio
+async def test_delete_multiple(test_session, make_files_structure, test_directory):
+    """Multiple files can be deleted at once."""
+    foo, bar, baz = make_files_structure([
+        'archives/foo.txt',
+        'archives/bar.txt',
+        'archives/baz.txt',
+    ])
+    assert foo.is_file()
+    assert bar.is_file()
+    assert baz.is_file()
+
+    await lib.delete('archives/foo.txt', 'archives/bar.txt', 'archives/baz.txt')
+    assert not foo.is_file()
+    assert not bar.is_file()
+    assert not baz.is_file()
+
+
+@pytest.mark.asyncio
 async def test_delete_link(test_session, test_directory):
     """Links can be deleted."""
     foo, bar = test_directory / 'foo', test_directory / 'bar'

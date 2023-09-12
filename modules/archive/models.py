@@ -93,8 +93,10 @@ class Archive(Base, ModelHelper):
         session.delete(self)
 
         if self.domain:
-            domain_archives = [i.id for i in self.domain.archives]
-            if not domain_archives:
+            # Delete a domain if it has no Archives.
+            try:
+                next(i.id for i in self.domain.archives)
+            except StopIteration:
                 self.domain.delete()
 
     @property

@@ -230,8 +230,12 @@ class VideoDownloader(Downloader, ABC):
         destination = settings.get('destination')
         if not channel and destination:
             # Destination may override the real Channel.
-            channel = get_channel(directory=destination, return_dict=False)
-            found_channel = 'download_settings_directory'
+            try:
+                channel = get_channel(directory=destination, return_dict=False)
+                found_channel = 'download_settings_directory'
+            except UnknownChannel:
+                # Destination must not be a channel.
+                pass
 
         local_channel_id = settings.get('channel_id')
         channel_url = settings.get('channel_url')
@@ -298,7 +302,7 @@ class VideoDownloader(Downloader, ABC):
                 '--ppa', 'Merger+ffmpeg_o1:-strict -2',
                 url,
             )
-            return_code, logs = await self.process_runner(url, cmd, out_dir)
+            return_code, logs, _ = await self.process_runner(url, cmd, out_dir)
 
             stdout = logs['stdout'].decode() if hasattr(logs['stdout'], 'decode') else logs['stdout']
             stderr = logs['stderr'].decode() if hasattr(logs['stderr'], 'decode') else logs['stderr']

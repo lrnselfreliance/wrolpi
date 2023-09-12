@@ -4,12 +4,12 @@ import tempfile
 from datetime import datetime, timedelta
 from http import HTTPStatus
 
-import mock
 import pytest
 from PIL import Image
 
 from modules.archive import lib
-from modules.archive.lib import get_or_create_domain, get_new_archive_files, delete_archives, do_archive, get_domains
+from modules.archive.lib import get_or_create_domain, get_new_archive_files, delete_archives, model_archive_result, \
+    get_domains
 from modules.archive.models import Archive, Domain
 from wrolpi.db import get_db_session
 from wrolpi.files import lib as files_lib
@@ -18,51 +18,48 @@ from wrolpi.root_api import CustomJSONEncoder
 from wrolpi.test.common import skip_circleci
 
 
-def make_fake_request_archive(readability=True, screenshot=True, title=True):
-    async def fake_request_archive(_):
-        with tempfile.NamedTemporaryFile(suffix='.png') as fh:
-            Image.new('RGB', (1, 1), color='grey').save(fh)
-            fh.seek(0)
-            image = fh.read()
-        singlefile = '<html><!--\n Page saved with SingleFile-->\ntest single-file\nジにてこちら\n<title>some title</title></html>'
-        r = dict(
-            content=f'<html>test readability content</html>',
-            textContent='test readability textContent',
-            title='ジにてこちら' if title else None,
-        ) if readability else None
-        s = image if screenshot else None
-        return singlefile, r, s
-
-    return fake_request_archive
+def make_fake_archive_result(readability=True, screenshot=True, title=True):
+    with tempfile.NamedTemporaryFile(suffix='.png') as fh:
+        Image.new('RGB', (1, 1), color='grey').save(fh)
+        fh.seek(0)
+        image = fh.read()
+    singlefile = '<html><!--\n Page saved with SingleFile-->\ntest single-file\nジにてこちら\n<title>some title</title></html>'
+    r = dict(
+        content=f'<html>test readability content</html>',
+        textContent='test readability textContent',
+        title='ジにてこちら' if title else None,
+    ) if readability else None
+    s = image if screenshot else None
+    return singlefile, r, s
 
 
 @pytest.mark.asyncio
 async def test_no_screenshot(test_session):
-    with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(screenshot=False)):
-        archive = await do_archive('https://example.com')
-        assert isinstance(archive.singlefile_path, pathlib.Path)
-        assert isinstance(archive.readability_path, pathlib.Path)
-        # Screenshot was empty
-        assert archive.screenshot_path is None
+    singlefile, readability, screenshot = make_fake_archive_result(screenshot=False)
+    archive = await model_archive_result('https://example.com', singlefile, readability, screenshot)
+    assert isinstance(archive.singlefile_path, pathlib.Path)
+    assert isinstance(archive.readability_path, pathlib.Path)
+    # Screenshot was empty
+    assert archive.screenshot_path is None
 
 
 @pytest.mark.asyncio
 async def test_no_readability(test_session):
-    with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive(readability=False)):
-        archive = await do_archive('https://example.com')
-        assert isinstance(archive.singlefile_path, pathlib.Path)
-        assert isinstance(archive.screenshot_path, pathlib.Path)
-        # Readability empty
-        assert archive.readability_path is None
-        assert archive.readability_txt_path is None
+    singlefile, readability, screenshot = make_fake_archive_result(readability=False)
+    archive = await model_archive_result('https://example.com', singlefile, readability, screenshot)
+    assert isinstance(archive.singlefile_path, pathlib.Path)
+    assert isinstance(archive.screenshot_path, pathlib.Path)
+    # Readability empty
+    assert archive.readability_path is None
+    assert archive.readability_txt_path is None
 
 
 @pytest.mark.asyncio
 async def test_dict(test_session):
-    with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-        d = (await do_archive('https://example.com')).dict()
-        assert isinstance(d, dict)
-        json.dumps(d, cls=CustomJSONEncoder)
+    singlefile, readability, screenshot = make_fake_archive_result()
+    d = (await model_archive_result('https://example.com', singlefile, readability, screenshot)).dict()
+    assert isinstance(d, dict)
+    json.dumps(d, cls=CustomJSONEncoder)
 
 
 @pytest.mark.asyncio
@@ -70,11 +67,9 @@ async def test_relationships(test_session, test_directory, example_singlefile):
     with get_db_session(commit=True) as session:
         url = 'https://wrolpi.org:443'
         domain = get_or_create_domain(session, url)
-        archive = Archive(
-            file_group=FileGroup.from_paths(test_session, example_singlefile),
-            url=url,
-            domain_id=domain.id,
-        )
+        archive = Archive.from_paths(test_session, example_singlefile)
+        archive.url = url
+        archive.domain_id = domain.id
         session.add(archive)
         session.flush()
 
@@ -284,22 +279,22 @@ def test_get_domains(test_session, archive_factory):
 
 @pytest.mark.asycio
 async def test_new_archive(test_session, fake_now):
-    with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-        fake_now(datetime(2000, 1, 1))
-        archive1 = await do_archive('https://example.com')
-        # Everything is filled out.
-        assert isinstance(archive1, Archive)
-        assert archive1.archive_datetime is not None
-        assert isinstance(archive1.singlefile_path, pathlib.Path)
-        assert isinstance(archive1.readability_path, pathlib.Path)
-        assert isinstance(archive1.readability_txt_path, pathlib.Path)
-        assert isinstance(archive1.screenshot_path, pathlib.Path)
-        assert archive1.file_group.title == 'ジにてこちら'
-        assert archive1.url is not None
-        assert archive1.domain is not None
+    singlefile, readability, screenshot = make_fake_archive_result()
+    fake_now(datetime(2000, 1, 1))
+    archive1 = await model_archive_result('https://example.com', singlefile, readability, screenshot)
+    # Everything is filled out.
+    assert isinstance(archive1, Archive)
+    assert archive1.archive_datetime is not None
+    assert isinstance(archive1.singlefile_path, pathlib.Path)
+    assert isinstance(archive1.readability_path, pathlib.Path)
+    assert isinstance(archive1.readability_txt_path, pathlib.Path)
+    assert isinstance(archive1.screenshot_path, pathlib.Path)
+    assert archive1.file_group.title == 'ジにてこちら'
+    assert archive1.url is not None
+    assert archive1.domain is not None
 
-        # The actual files were dumped and read correctly.  The HTML/JSON files are reformatted.
-        assert archive1.singlefile_path.read_text() == '''<html>
+    # The actual files were dumped and read correctly.  The HTML/JSON files are reformatted.
+    assert archive1.singlefile_path.read_text() == '''<html>
  <!--
  Page saved with SingleFile-->
  <body>
@@ -313,7 +308,7 @@ async def test_new_archive(test_session, fake_now):
  </body>
 </html>
 '''
-        assert archive1.readability_path.read_text() == '''<html>
+    assert archive1.readability_path.read_text() == '''<html>
  <body>
   <p>
    test readability content
@@ -321,53 +316,47 @@ async def test_new_archive(test_session, fake_now):
  </body>
 </html>
 '''
-        with open(archive1.readability_txt_path) as fh:
-            assert fh.read() == 'test readability textContent'
-        assert archive1.readability_json_path.read_text() == '''{
+    with open(archive1.readability_txt_path) as fh:
+        assert fh.read() == 'test readability textContent'
+    assert archive1.readability_json_path.read_text() == '''{
   "title": "\\u30b8\\u306b\\u3066\\u3053\\u3061\\u3089",
   "url": "https://example.com"
 }'''
 
-        fake_now(datetime(2000, 1, 2))
-        archive2 = await do_archive('https://example.com')
-        # Domain is reused.
-        assert archive1.domain == archive2.domain
+    fake_now(datetime(2000, 1, 2))
+    archive2 = await model_archive_result('https://example.com', singlefile, readability, screenshot)
+    # Domain is reused.
+    assert archive1.domain == archive2.domain
 
 
 @pytest.mark.asyncio
 async def test_get_title_from_html(test_session, fake_now):
     fake_now(datetime(2000, 1, 1))
-    with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-        archive = await do_archive('https://example.com')
-        assert archive.file_group.title == 'ジにてこちら'
+    singlefile, readability, screenshot = make_fake_archive_result()
+    archive = await model_archive_result('https://example.com', singlefile, readability, screenshot)
+    assert archive.file_group.title == 'ジにてこちら'
 
-    async def fake_request_archive(_):
-        singlefile = '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>'
-        r = dict(
-            content=f'<html>test readability content</html>',
-            textContent='<html>test readability textContent</html>',
-        )
-        s = b'screenshot data'
-        return singlefile, r, s
+    singlefile = '<html>\ntest single-file\nジにてこちら\n<title>some title</title></html>'
+    readability = dict(
+        content=f'<html>test readability content</html>',
+        textContent='<html>test readability textContent</html>',
+    )
+    screenshot = b'screenshot data'
 
     fake_now(datetime(2000, 1, 2))
-    with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
-        archive = await do_archive('https://example.com')
-        assert archive.file_group.title == 'some title'
+    archive = await model_archive_result('https://example.com', singlefile, readability, screenshot)
+    assert archive.file_group.title == 'some title'
 
-    async def fake_request_archive(_):
-        singlefile = '<html></html>'
-        r = dict(
-            content=f'<html>missing a title</html>',
-            textContent='',
-        )
-        s = b'screenshot data'
-        return singlefile, r, s
+    singlefile = '<html></html>'
+    readability = dict(
+        content=f'<html>missing a title</html>',
+        textContent='',
+    )
+    screenshot = b'screenshot data'
 
     fake_now(datetime(2000, 1, 3))
-    with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
-        archive = await do_archive('https://example.com')
-        assert archive.file_group.title is None
+    archive = await model_archive_result('https://example.com', singlefile, readability, screenshot)
+    assert archive.file_group.title is None
 
 
 @skip_circleci
@@ -411,8 +400,8 @@ async def test_title_in_filename(test_session, fake_now, test_directory, image_b
     """
     fake_now(datetime(2000, 1, 1))
 
-    with mock.patch('modules.archive.lib.request_archive', make_fake_request_archive()):
-        archive1 = await do_archive('https://example.com')
+    singlefile, readability, screenshot = make_fake_archive_result()
+    archive1 = await model_archive_result('https://example.com', singlefile, readability, screenshot)
 
     assert archive1.file_group.title == 'ジにてこちら'
 
@@ -427,18 +416,15 @@ async def test_title_in_filename(test_session, fake_now, test_directory, image_b
     assert str(archive1.screenshot_path.relative_to(test_directory)) == \
            'archive/example.com/2000-01-01-00-00-00_ジにてこちら.png'
 
-    async def fake_request_archive(_):
-        singlefile = '<html>\ntest single-file\nジにてこちら\n</html>'  # no title in HTML
-        r = dict(
-            # No Title from Readability.
-            content=f'<html>test readability content</html>',
-            textContent='test readability textContent',
-        )
-        s = image_bytes_factory()
-        return singlefile, r, s
+    singlefile = '<html>\ntest single-file\nジにてこちら\n</html>'  # no title in HTML
+    readability = dict(
+        # No Title from Readability.
+        content=f'<html>test readability content</html>',
+        textContent='test readability textContent',
+    )
+    screenshot = image_bytes_factory()
 
-    with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
-        archive2 = await do_archive('https://example.com')
+    archive2 = await model_archive_result('https://example.com', singlefile, readability, screenshot)
 
     assert str(archive2.singlefile_path.relative_to(test_directory)) == \
            'archive/example.com/2000-01-01-00-00-00_NA.html'
@@ -451,18 +437,15 @@ async def test_title_in_filename(test_session, fake_now, test_directory, image_b
     assert str(archive2.screenshot_path.relative_to(test_directory)) == \
            'archive/example.com/2000-01-01-00-00-00_NA.png'
 
-    async def fake_request_archive(_):
-        singlefile = '<html>\ntest single-file\nジにてこちら\n<title>dangerous ;\\//_title</html></html>'
-        r = dict(
-            # No Title from Readability.
-            content=f'<html>test readability content</html>',
-            textContent='<html>test readability textContent</html>',
-        )
-        s = image_bytes_factory()
-        return singlefile, r, s
+    singlefile = '<html>\ntest single-file\nジにてこちら\n<title>dangerous ;\\//_title</html></html>'
+    readability = dict(
+        # No Title from Readability.
+        content=f'<html>test readability content</html>',
+        textContent='<html>test readability textContent</html>',
+    )
+    screenshot = image_bytes_factory()
 
-    with mock.patch('modules.archive.lib.request_archive', fake_request_archive):
-        archive3 = await do_archive('https://example.com')
+    archive3 = await model_archive_result('https://example.com', singlefile, readability, screenshot)
 
     assert str(archive3.singlefile_path.relative_to(test_directory)) == \
            'archive/example.com/2000-01-01-00-00-00_dangerous ;_title.html'
@@ -620,16 +603,14 @@ def test_archive_order(test_session, test_directory, archive_factory):
 
 
 @pytest.mark.asyncio
-async def test_archive_download_index(test_session, test_directory, image_file):
+async def test_archive_download_index(test_session, test_directory, image_bytes_factory):
     """An Archive is indexed when it is downloaded."""
-    with mock.patch('modules.archive.lib.request_archive') as mock_request_archive:
-        singlefile = '<html><title>the singlefile</title></html>'
-        readability = dict(
-            content='<html>the readability</html>',
-            textContent='the readability',
-        )
-        mock_request_archive.return_value = (singlefile, readability, image_file.read_bytes())
-        archive = await lib.do_archive('https://example.com')
+    singlefile = '<html><title>the singlefile</title></html>'
+    readability = dict(
+        content='<html>the readability</html>',
+        textContent='the readability',
+    )
+    archive = await lib.model_archive_result('https://example.com', singlefile, readability, image_bytes_factory())
 
     assert isinstance(archive, lib.Archive), 'Did not get an archive'
     assert archive.singlefile_path and archive.singlefile_path.exists() and \

@@ -177,8 +177,7 @@ async def test_calculate_next_download(test_session, test_download_manager, fake
 @pytest.mark.asyncio
 async def test_recurring_downloads(test_session, test_download_manager, fake_now, test_downloader):
     """A recurring Download should be downloaded forever."""
-    test_downloader.do_download = MagicMock()
-    test_downloader.do_download.return_value = DownloadResult(success=True)
+    test_downloader.set_test_success()
 
     # Download every hour.
     test_download_manager.recurring_download('https://example.com', Seconds.hour, test_downloader.name)
@@ -217,7 +216,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
 
     # Try the download, but it fails.
     test_downloader.do_download.reset_mock()
-    test_downloader.do_download.return_value = DownloadResult(success=False)
+    test_downloader.set_test_failure()
     await test_download_manager.wait_for_all_downloads()
     test_downloader.do_download.assert_called_once()
     download = test_session.query(Download).one()
@@ -231,7 +230,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     # Try the download again, it finally succeeds.
     test_downloader.do_download.reset_mock()
     now_ = fake_now(datetime(2020, 1, 1, 4, 0, 1, tzinfo=pytz.UTC))
-    test_downloader.do_download.return_value = DownloadResult(success=True)
+    test_downloader.set_test_success()
     test_download_manager.renew_recurring_downloads(test_session)
     await test_download_manager.wait_for_all_downloads()
     test_downloader.do_download.assert_called_once()
@@ -271,12 +270,11 @@ async def test_max_attempts(test_session, test_download_manager, test_downloader
 
 @pytest.mark.asyncio
 async def test_skip_urls(test_session, test_download_manager, test_client, assert_download_urls, test_downloader):
-    """The DownloadManager will not create downloads for URLs in it's skip list."""
+    """The DownloadManager will not create downloads for URLs in its skip list."""
     _, session = get_db_context()
     get_download_manager_config().skip_urls = ['https://example.com/skipme']
 
-    test_downloader.do_download = MagicMock()
-    test_downloader.do_download.return_value = DownloadResult(success=True)
+    test_downloader.set_test_success()
 
     test_download_manager.create_downloads([
         'https://example.com/1',

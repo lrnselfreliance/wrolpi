@@ -1,22 +1,26 @@
 import asyncio
 import json
+import pathlib
+import tempfile
 from abc import ABC
-from typing import List
+from typing import List, Tuple
 
+from selenium import webdriver
 from sqlalchemy import not_
 from sqlalchemy.orm import Session
 
+from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM, READABILITY_BIN
 from wrolpi.common import logger, register_modeler, register_refresh_cleanup, limit_concurrent, split_lines_by_length, \
-    slow_logger
+    slow_logger, html_screenshot
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import FileGroup
-from wrolpi.vars import PYTEST
+from wrolpi.vars import PYTEST, DOCKERIZED
 from . import lib
 from .api import bp  # noqa
 from .errors import InvalidArchive
-from .lib import is_singlefile_file, get_title_from_html
+from .lib import is_singlefile_file, get_title_from_html, request_archive, SINGLEFILE_HEADER
 from .models import Archive, Domain
 
 PRETTY_NAME = 'Archive'
@@ -37,7 +41,14 @@ class ArchiveDownloader(Downloader, ABC):
         if download.attempts > 3:
             raise UnrecoverableDownloadError(f'Max download attempts reached for {download.url}')
 
-        archive: Archive = await lib.do_archive(download.url)
+        if DOCKERIZED or PYTEST:
+            # Perform the archive in the Archive docker container.  (Typically in the development environment).
+            singlefile, readability, screenshot = await request_archive(download.url)
+        else:
+            # Perform the archive using locally installed executables.
+            singlefile, readability, screenshot = await self.do_archive(download)
+
+        archive: Archive = await lib.model_archive_result(download.url, singlefile, readability, screenshot)
 
         if download.settings and (tag_names := download.settings.get('tag_names')):
             for name in tag_names:
@@ -52,6 +63,99 @@ class ArchiveDownloader(Downloader, ABC):
     def already_downloaded(self, *urls: List[str], session: Session = None) -> List:
         archives = list(session.query(Archive).filter(Archive.url.in_(urls)))
         return archives
+
+    async def do_singlefile(self, download: Download) -> bytes:
+        """Create a Singlefile from the archive's URL."""
+        cmd = (str(SINGLE_FILE_BIN),
+               download.url,
+               '--browser-executable-path', CHROMIUM,
+               '--browser-args', '["--no-sandbox"]',
+               '--dump-content')
+        return_code, _, stdout = await self.process_runner(
+            download.url,
+            cmd,
+            pathlib.Path('/home/wrolpi'),
+        )
+        if return_code != 0:
+            raise RuntimeError(f'Archive singlefile exited with {return_code}')
+
+        return stdout
+
+    async def do_readability(self, download: Download, html: bytes) -> dict:
+        """Extract the readability dict from the provided HTML."""
+        with tempfile.NamedTemporaryFile('wb', suffix='.html') as fh:
+            fh.write(html)
+
+            cmd = (READABILITY_BIN, fh.name, download.url)
+            logger.debug(f'readability cmd: {cmd}')
+            return_code, logs, stdout = await self.process_runner(
+                download.url,
+                cmd,
+                pathlib.Path('/home/wrolpi'),
+            )
+            if return_code == 0:
+                readability = json.loads(stdout)
+                logger.debug(f'done readability for {download.url}')
+                return readability
+            else:
+                logger.error(f'Failed to extract readability for {download.url}')
+                raise RuntimeError(f'Failed to extract readability for {download.url}')
+
+    @staticmethod
+    async def do_screenshot_url(download: Download) -> bytes:
+        """Use Chromium to get a screenshot of the Download's URL."""
+        # Set Chromium to headless.  Use a wide window size so that screenshot will be the "desktop" version of
+        # the page.
+        options = webdriver.ChromeOptions()
+        options.add_argument('headless')
+        options.add_argument('disable-gpu')
+        options.add_argument('window-size=1280x720')
+
+        driver = webdriver.Chrome(chrome_options=options)
+        driver.get(download.url)
+        screenshot = driver.get_screenshot_as_png()
+        return screenshot
+
+    async def do_archive(self, download: Download) -> Tuple[bytes, dict, bytes]:
+        """Use locally installed executables to create an Archive.
+
+        Creates a Singlefile, readability file, and screenshot file.
+
+        @warning: Will not raise errors if readability or screenshot cannot be extracted.
+        """
+        singlefile = await self.do_singlefile(download)
+
+        if SINGLEFILE_HEADER.encode() not in singlefile[:1000]:
+            raise RuntimeError(f'Singlefile created was invalid: {download.ur}')
+
+        # Extract Readability from the Singlefile.
+        try:
+            readability = await self.do_readability(download, singlefile)
+        except RuntimeError:
+            # Readability is not required.
+            readability = None
+
+        screenshot = b''
+        try:
+            # Screenshot the Singlefile first.
+            screenshot = html_screenshot(singlefile)
+        except Exception as e:
+            logger.error(f'Failed to screenshot file for {download.url}', exc_info=e)
+
+        if not screenshot:
+            # Screenshot of singlefile failed.  Download the URL again.
+            try:
+                screenshot = await self.do_screenshot_url(download)
+            except Exception as e:
+                # Screenshot failed.
+                logger.error(f'Failed to screenshot {download.url}', exc_info=e)
+
+        singlefile_len = len(singlefile) if singlefile else None
+        readability_len = len(readability) if readability else None
+        screenshot_len = len(screenshot) if screenshot else None
+        logger.debug(f'do_archive of {download.url} finished: {singlefile_len=} {readability_len=} {screenshot_len=}')
+
+        return singlefile, readability, screenshot
 
 
 archive_downloader = ArchiveDownloader()

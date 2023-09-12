@@ -185,7 +185,7 @@ def mock_video_prepare_filename():
 @pytest.fixture
 def mock_video_process_runner():
     with mock.patch('modules.videos.downloader.VideoDownloader.process_runner') as mock_process_runner:
-        mock_process_runner.return_value = (0, {'stdout': None, 'stderr': None})
+        mock_process_runner.return_value = (0, {'stdout': None, 'stderr': None}, None)
         yield mock_process_runner
 
 

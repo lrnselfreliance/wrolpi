@@ -232,6 +232,20 @@ def test_downloader(test_download_manager):
         def __repr__(self):
             return '<TESTING Downloader>'
 
+        do_download = MagicMock()
+
+        def set_test_success(self):
+            async def _(*a, **kwargs):
+                return DownloadResult(success=True)
+
+            self.do_download.side_effect = _
+
+        def set_test_failure(self):
+            async def _(*a, **kwargs):
+                return DownloadResult(success=False)
+
+            self.do_download.side_effect = _
+
     test_downloader = TestDownloader()
     test_download_manager.register_downloader(test_downloader)
 

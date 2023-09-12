@@ -3,26 +3,21 @@ import gzip
 import json
 import pathlib
 import re
-import subprocess
-import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, Tuple, List
 
 from bs4 import BeautifulSoup
-from selenium import webdriver
 from sqlalchemy import asc
 from sqlalchemy.orm import Session
 
 from modules.archive.models import Domain, Archive
-from wrolpi.cmd import READABILITY_BIN, SINGLE_FILE_BIN, CHROMIUM
-from wrolpi.common import get_media_directory, logger, extract_domain, chdir, escape_file_name, aiohttp_post, \
+from wrolpi.common import get_media_directory, logger, extract_domain, escape_file_name, aiohttp_post, \
     format_html_string, split_lines_by_length
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import UnknownArchive, InvalidOrderBy
 from wrolpi.tags import tag_names_to_file_group_sub_select
-from wrolpi.vars import DOCKERIZED, PYTEST
 
 logger = logger.getChild(__name__)
 
@@ -146,84 +141,11 @@ async def request_archive(url: str) -> Tuple[str, Optional[str], Optional[str]]:
     return singlefile, readability, screenshot
 
 
-def local_singlefile(url: str):
-    """Run the single-file executable to create an HTML file archive."""
-    if not SINGLE_FILE_BIN or not SINGLE_FILE_BIN.is_file():
-        raise FileNotFoundError(f'single-file not found.  Is it installed?')
-
-    cmd = (str(SINGLE_FILE_BIN),
-           url,
-           '--browser-executable-path', CHROMIUM,
-           '--browser-args', '["--no-sandbox"]',
-           '--dump-content')
-    logger.debug(f'archive cmd: {cmd}')
-    output = subprocess.check_output(cmd, timeout=60 * 3)
-    logger.debug(f'done archiving for {url}')
-    return output
-
-
-def local_screenshot(url: str) -> bytes:
-    """Take a screenshot of the URL using chromedriver."""
-    logger.info(f'Screenshot: {url}')
-
-    # Set Chromium to headless.  Use a wide window size so that screenshot will be the "desktop" version of the page.
-    options = webdriver.ChromeOptions()
-    options.add_argument('headless')
-    options.add_argument('disable-gpu')
-    options.add_argument('window-size=1280x720')
-
-    driver = webdriver.Chrome(chrome_options=options)
-    try:
-        driver.get(url)
-        png = driver.get_screenshot_as_png()
-    except Exception as e:
-        logger.warning(f'Failed to screenshot {url}', exc_info=e)
-        return b''
-    return png
-
-
-def local_extract_readability(path: str, url: str) -> dict:
-    """Extract the readability from an HTML file, typically from single-file."""
-    logger.info(f'readability for {url}')
-    if not READABILITY_BIN.is_file():
-        raise FileNotFoundError(f'Readability extractor not found')
-
-    cmd = (READABILITY_BIN, path, url)
-    logger.debug(f'readability cmd: {cmd}')
-    output = subprocess.check_output(cmd, timeout=60 * 3)
-    output = json.loads(output)
-    logger.debug(f'done readability for {url}')
-    return output
-
-
-def local_archive(url: str):
-    """Perform an archive of the provided URL using local resources (without the Archive docker container)."""
-    # Archives must be performed in the wrolpi home directory because chrome saves the screenshot there, and will
-    # raise an error if global $HOME is not a real user directory. :(
-    with chdir('/home/wrolpi', with_home=True):
-        singlefile = local_singlefile(url)
-        with tempfile.NamedTemporaryFile('wb') as fh:
-            fh.write(singlefile)
-            readability = local_extract_readability(fh.name, url)
-        screenshot = local_screenshot(url)
-        singlefile = singlefile.decode()
-        return singlefile, readability, screenshot
-
-
-async def do_archive(url: str) -> Archive:
+async def model_archive_result(url: str, singlefile: str, readability: dict, screenshot: bytes) -> Archive:
     """
-    Perform the real archive request to the archiving service.  Store the resulting data into files.  Create an Archive
-    record in the DB.  Create Domain if missing.
+    Convert results from ArchiveDownloader into real files.  Create Archive record.
     """
-    logger.info(f'Archiving {url}')
-
-    if DOCKERIZED or PYTEST:
-        # Perform the archive in the Archive docker container.  (Typically in the development environment).
-        singlefile, readability, screenshot = await request_archive(url)
-    else:
-        # Perform the archive using locally installed executables.
-        singlefile, readability, screenshot = local_archive(url)
-
+    readability = readability.copy() if readability else readability
     # First try to get the title from Readability.
     title = readability.get('title') if readability else None
 

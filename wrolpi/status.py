@@ -465,6 +465,8 @@ async def bandwidth_worker(count: int = None):
     if not psutil:
         return
 
+    logger.info('Bandwidth worker started')
+
     nic_names = get_nic_names()
 
     def append_all_stats():

@@ -30,6 +30,7 @@ import aiohttp
 import yaml
 from aiohttp import ClientResponse
 from bs4 import BeautifulSoup
+from selenium import webdriver
 from sqlalchemy import types
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
@@ -97,6 +98,7 @@ __all__ = [
     'ConfigFile',
     'DownloadFileInfo',
     'DownloadFileInfoLink',
+    'LOG_LEVEL',
     'ModelHelper',
     'WROLPI_CONFIG',
     'aiohttp_get',
@@ -135,8 +137,6 @@ __all__ = [
     'limit_concurrent',
     'logger',
     'make_media_directory',
-    'split_lines_by_length',
-    'slow_logger',
     'match_paths_to_suffixes',
     'minimize_dict',
     'native_only',
@@ -150,6 +150,8 @@ __all__ = [
     'set_log_level',
     'set_test_config',
     'set_test_media_directory',
+    'slow_logger',
+    'split_lines_by_length',
     'timer',
     'truncate_generator_bytes',
     'truncate_object_bytes',
@@ -1063,7 +1065,6 @@ async def download_file(url: str, output_path: pathlib.Path = None, info: Downlo
                             last_report = datetime.now()
                             bytes_received = 0
 
-                        # TODO this cannot be canceled.
                         # Sleep to catch cancel.
                         await asyncio.sleep(0)
     elif output_path.is_file():
@@ -1319,6 +1320,11 @@ def truncate_generator_bytes(gen: Generator, maximum_bytes: int) -> Generator:
 BACKGROUND_TASKS = set()
 
 
+def add_background_task(task: Task):
+    BACKGROUND_TASKS.add(task)
+    task.add_done_callback(BACKGROUND_TASKS.discard)
+
+
 def background_task(coro) -> Task:
     """Convenience function which creates an asyncio task for the provided coroutine.
 
@@ -1332,9 +1338,17 @@ def background_task(coro) -> Task:
             logger_.error('Background task had error:', exc_info=e)
 
     task = asyncio.create_task(error_logger())
-    BACKGROUND_TASKS.add(task)
-    task.add_done_callback(BACKGROUND_TASKS.discard)
+    add_background_task(task)
     return task
+
+
+async def cancel_background_tasks():
+    """Cancels any background async tasks, if any."""
+    if BACKGROUND_TASKS:
+        logger_.warning(f'Canceling {len(BACKGROUND_TASKS)} background tasks')
+        for task in BACKGROUND_TASKS:
+            task.cancel()
+            await asyncio.gather(*BACKGROUND_TASKS)
 
 
 def get_warn_once(message: str, logger__: logging.Logger, level=logging.ERROR):
@@ -1523,7 +1537,7 @@ def format_json_file(file: pathlib.Path, indent: int = 2):
 
 
 def format_html_string(html: str) -> str:
-    soup = BeautifulSoup(html)
+    soup = BeautifulSoup(html, features='lxml')
     return soup.prettify()
 
 
@@ -1542,3 +1556,20 @@ def format_html_file(file: pathlib.Path):
     finally:
         if copy.is_file():
             copy.unlink()
+
+
+def html_screenshot(html: bytes) -> bytes:
+    """Return a PNG screenshot of the provided HTML."""
+    # Set Chromium to headless.  Use a wide window size so that screenshot will be the "desktop" version of the page.
+    options = webdriver.ChromeOptions()
+    options.add_argument('headless')
+    options.add_argument('disable-gpu')
+    options.add_argument('window-size=1280x720')
+
+    with tempfile.NamedTemporaryFile('wb', suffix='.html') as fh:
+        fh.write(html)
+
+        driver = webdriver.Chrome(chrome_options=options)
+        driver.get(f'file://{fh.name}')
+        screenshot = driver.get_screenshot_as_png()
+        return screenshot

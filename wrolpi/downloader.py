@@ -11,7 +11,7 @@ from datetime import timedelta, datetime
 from enum import Enum
 from itertools import filterfalse
 from queue import Empty
-from typing import List, Dict, Generator, Iterable
+from typing import List, Dict, Generator, Iterable, Coroutine
 from typing import Tuple, Optional
 from urllib.parse import urlparse
 
@@ -209,13 +209,13 @@ class Downloader:
             self._kill.clear()
 
     async def process_runner(self, url: str, cmd: Tuple[str, ...], cwd: pathlib.Path, timeout: int = None,
-                             **kwargs) -> Tuple[int, dict]:
+                             **kwargs) -> Tuple[int, dict, bytes]:
         """
         Run a subprocess using the provided arguments.  This process can be killed by the Download Manager.
 
         Global timeout takes precedence over the timeout argument, unless it is 0.  (Smaller global timeout wins)
         """
-        logger.debug(f'{self} launching download process with args: {" ".join(cmd)}')
+        logger.debug(f'{self} launching download process with args: {" ".join(list(map(str, cmd)))}')
         start = now()
         proc = await asyncio.create_subprocess_exec(*cmd,
                                                     stdout=asyncio.subprocess.PIPE,
@@ -266,7 +266,34 @@ class Downloader:
             logger.debug(f'Download exited with {proc.returncode}')
             logs = {'stdout': stdout, 'stderr': stderr}
 
-        return proc.returncode, logs
+        return proc.returncode, logs, stdout
+
+    async def cancel_wrapper(self, coro: Coroutine, download: Download):
+        """
+        Converts an async coroutine to a task.  If DownloadManager receives a kill request, this method will cancel
+        the task.
+        """
+        task = asyncio.create_task(coro)
+        while not task.done():
+            if self._kill.is_set():
+                logger.warning(f'Cancel download of {download.url}')
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError as e:
+                    logger.debug(f'Successful cancel of {download.url}', exc_info=e)
+                    return DownloadResult(
+                        success=False,
+                        error='Download was canceled',
+                    )
+                finally:
+                    self.clear()
+            else:
+                # Wait for the download to complete.  Cancel if requested.
+                await asyncio.sleep(0.1)
+
+        # Return the result of the download attempt.
+        return task.result()
 
 
 class DownloadManager:
@@ -359,10 +386,9 @@ class DownloadManager:
 
                 try_again = True
                 try:
-                    if asyncio.iscoroutinefunction(downloader.do_download):
-                        result = await downloader.do_download(download)
-                    else:
-                        result = downloader.do_download(download)
+                    # Create download coroutine; wrap it, so it can be canceled
+                    coro = downloader.do_download(download)
+                    result = await downloader.cancel_wrapper(coro, download)
                 except UnrecoverableDownloadError as e:
                     # Download failed and should not be retried.
                     worker_logger.warning(f'UnrecoverableDownloadError for {url}', exc_info=e)
@@ -406,8 +432,8 @@ class DownloadManager:
                 background_task(self.queue_downloads())
                 # Save the config now that the Download has finished.
                 background_task(save_downloads_config())
-            except asyncio.CancelledError:
-                worker_logger.warning('Canceled!')
+            except asyncio.CancelledError as e:
+                worker_logger.warning('Canceled!', exc_info=e)
                 self.download_queue.task_done()
                 return
             except Empty:
@@ -654,10 +680,11 @@ class DownloadManager:
                 next(self.get_new_downloads())
                 continue
             except StopIteration:
-                pass
+                # Give any new downloads a chance to start up.
+                await asyncio.sleep(0.1)
 
             if self.download_queue.empty():
-                # Queue is empty.
+                # Queue is empty.  Wait for background tasks.
                 break
 
     @staticmethod
@@ -1188,7 +1215,7 @@ class RSSDownloader(Downloader, ABC):
     def __repr__(self):
         return '<RSSDownloader>'
 
-    def do_download(self, download: Download) -> DownloadResult:
+    async def do_download(self, download: Download) -> DownloadResult:
         if isinstance(download.info_json, dict) and download.info_json.get('feed'):
             feed = download.info_json['feed']
         else:

@@ -10,7 +10,7 @@ from sanic.signals import Event
 from wrolpi import flags, BEFORE_STARTUP_FUNCTIONS
 from wrolpi import root_api, admin
 from wrolpi.common import logger, get_config, check_media_directory, limit_concurrent, \
-    wrol_mode_enabled, cancel_refresh_tasks, set_log_level
+    wrol_mode_enabled, cancel_refresh_tasks, set_log_level, background_task, cancel_background_tasks
 from wrolpi.downloader import download_manager, import_downloads_config
 from wrolpi.root_api import api_app
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, PYTEST
@@ -170,33 +170,36 @@ def main():
 @api_app.before_server_start
 @limit_concurrent(1)
 async def startup(app: Sanic):
+    from wrolpi.common import LOG_LEVEL
+
     # Check database status first.  Many functions will reference flags.db_up.
     flags.check_db_is_up()
 
     flags.init_flags()
     await import_downloads_config()
 
+    async def periodic_check_db_is_up():
+        while True:
+            flags.check_db_is_up()
+            flags.init_flags()
+            await asyncio.sleep(10)
+
+    background_task(periodic_check_db_is_up())
+
+    async def periodic_check_log_level():
+        while True:
+            log_level = LOG_LEVEL.value
+            if log_level != logger.getEffectiveLevel():
+                set_log_level(log_level)
+            await asyncio.sleep(1)
+
+    background_task(periodic_check_log_level())
+
+    from wrolpi import status
+    background_task(status.bandwidth_worker())
+
     from modules.zim.lib import flag_outdated_zim_files
     flag_outdated_zim_files()
-
-
-@api_app.after_server_start
-@limit_concurrent(1)
-async def periodic_check_db_is_up(app: Sanic):
-    while True:
-        flags.check_db_is_up()
-        flags.init_flags()
-        await asyncio.sleep(10)
-
-
-@api_app.after_server_start
-async def periodic_check_log_level(app: Sanic):
-    from wrolpi.common import LOG_LEVEL
-    while True:
-        log_level = LOG_LEVEL.value
-        if log_level != logger.getEffectiveLevel():
-            set_log_level(log_level)
-        await asyncio.sleep(1)
 
 
 @api_app.after_server_start
@@ -253,12 +256,6 @@ async def main_import_tags_config(app: Sanic):
         tags.import_tags_config()
 
 
-@api_app.after_server_start
-async def bandwidth_worker(app: Sanic):
-    from wrolpi import status
-    app.add_task(status.bandwidth_worker())
-
-
 @root_api.api_app.signal(Event.SERVER_SHUTDOWN_BEFORE)
 @limit_concurrent(1)
 async def handle_server_shutdown(*args, **kwargs):
@@ -266,6 +263,7 @@ async def handle_server_shutdown(*args, **kwargs):
     if not PYTEST:
         download_manager.stop()
         await cancel_refresh_tasks()
+        await cancel_background_tasks()
 
 
 if __name__ == '__main__':

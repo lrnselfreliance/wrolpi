@@ -2,9 +2,9 @@ import pytest
 
 from modules.videos import schema
 from modules.videos.channel import lib
+from modules.videos.errors import UnknownChannel
 from modules.videos.lib import save_channels_config, import_channels_config
 from modules.videos.models import Channel
-from modules.videos.errors import UnknownChannel
 
 
 @pytest.mark.parametrize('params', [

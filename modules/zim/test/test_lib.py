@@ -5,11 +5,11 @@ import pytest
 from libzim import Entry
 
 from modules.zim import lib
+from modules.zim.errors import UnknownZim
 from modules.zim.models import TagZimEntry, ZimSubscription
 from wrolpi import tags, flags
 from wrolpi.common import DownloadFileInfo
 from wrolpi.downloader import Download, import_downloads_config, save_downloads_config
-from modules.zim.errors import UnknownZim
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
 

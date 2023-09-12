@@ -2,8 +2,8 @@ import secrets
 from functools import partial
 from typing import Dict
 
-from wrolpi.common import chunks, remove_whitespace, logger
 from modules.otp.errors import InvalidOTP, InvalidPlaintext, InvalidCiphertext
+from wrolpi.common import chunks, remove_whitespace, logger
 
 # These are the only characters we support.
 

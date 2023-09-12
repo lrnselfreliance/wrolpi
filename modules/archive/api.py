@@ -1,10 +1,8 @@
-import asyncio
 from http import HTTPStatus
 
 from sanic import response, Request
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
-from sanic_ext.extensions.openapi.definitions import Response
 
 from wrolpi.common import logger, wrol_mode_check, api_param_limiter
 from wrolpi.errors import ValidationError

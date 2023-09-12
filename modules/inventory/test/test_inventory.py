@@ -10,11 +10,11 @@ from pint import Quantity
 
 from wrolpi.common import Base
 from wrolpi.db import get_db_session
-from ..errors import NoInventories, InventoriesVersionMismatch
 from wrolpi.test.common import PytestCase
 from .. import init
 from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
     compact_unit, cleanup_quantity, save_inventories_file, import_inventories_file, get_inventories_config
+from ..errors import NoInventories, InventoriesVersionMismatch
 from ..inventory import unit_registry, \
     get_inventories, save_inventory, update_inventory, \
     delete_inventory, get_categories

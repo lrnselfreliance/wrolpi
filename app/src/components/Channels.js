@@ -573,7 +573,6 @@ export function ChannelsPages() {
         const re = new RegExp(_.escapeRegExp(searchStr), 'i');
         filteredChannels = channels.filter(i => re.test(i['name']));
     }
-    console.log(`filteredChannels=${filteredChannels === null}`);
 
     return <>
         {header}

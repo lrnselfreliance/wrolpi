@@ -470,7 +470,7 @@ export const useBrowseFiles = () => {
             const files = await getFiles(openFolders);
             setBrowseFiles(files);
         } catch (e) {
-            console.log(e);
+            console.error(e);
             setBrowseFiles(undefined); // Display error.
         }
     }

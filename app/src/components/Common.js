@@ -173,12 +173,15 @@ export function Duration({video}) {
     }
 }
 
-export function isoDatetimeToString(dt) {
+export function isoDatetimeToString(dt, time = false) {
     // Convert a datetime to a human-readable date format.
     let d = <React.Fragment/>;
-    if (dt) {
+    if (dt && time) {
         d = new Date(dt);
-        d = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+        d = `${d.toDateString()} ${d.getHours()}:${d.getMinutes()}:${d.getSeconds()}`;
+    } else if (dt) {
+        d = new Date(dt);
+        d = d.toDateString();
     }
     return d;
 }
@@ -1297,7 +1300,7 @@ export function useAPIButton(
             await onClick();
             setSuccess();
         } catch (e) {
-            console.log(e);
+            console.error(e);
             setFailure();
         }
         setPending(false);

@@ -1156,6 +1156,9 @@ async def import_downloads_config(session: Session):
                 existing.status = download['status']
                 existing.sub_downloader = download['sub_downloader']
                 existing.settings = download.get('settings') or dict()
+            else:
+                logger.warning(f'Deleting Download {existing.url} because it is no longer in the config')
+                session.delete(existing)
 
         for download in downloads_by_url.values():
             # These downloads are new, import them.

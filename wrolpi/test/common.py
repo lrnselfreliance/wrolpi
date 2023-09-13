@@ -1,17 +1,15 @@
 import os
 import pathlib
 import tempfile
-import unittest
 from contextlib import contextmanager
 from functools import partialmethod
-from http import HTTPStatus
 from itertools import zip_longest
 from typing import List
 
 import mock
 import pytest
 
-from wrolpi.common import set_test_media_directory, get_media_directory
+from wrolpi.common import get_media_directory
 from wrolpi.conftest import ROUTES_ATTACHED, test_db, test_client  # noqa
 from wrolpi.db import postgres_engine
 

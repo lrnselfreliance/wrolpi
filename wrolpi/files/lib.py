@@ -2,7 +2,6 @@ import asyncio
 import datetime
 import functools
 import glob
-import itertools
 import json
 import multiprocessing
 import os

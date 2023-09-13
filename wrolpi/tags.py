@@ -221,10 +221,10 @@ def schedule_save(session: Session = None):
 def get_tags() -> List[dict]:
     with get_db_curs() as curs:
         curs.execute('''
-            SELECT t.id, t.name, t.color, COUNT(tf.tag_id) AS file_group_count, COUNT(tz.tag_id) AS zim_entry_count
+            SELECT t.id, t.name, t.color,
+             (SELECT COUNT(*) FROM tag_file WHERE tag_id = t.id) AS file_group_count,
+             (SELECT COUNT(*) FROM tag_zim WHERE tag_id = t.id) AS zim_entry_count
             FROM tag t
-                LEFT JOIN tag_file tf on t.id = tf.tag_id
-                LEFT OUTER JOIN tag_zim tz on t.id = tz.tag_id
             GROUP BY t.id, t.name, t.color
             ORDER BY t.name
         ''')

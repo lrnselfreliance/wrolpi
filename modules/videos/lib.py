@@ -12,16 +12,14 @@ from yt_dlp import YoutubeDL
 
 from wrolpi import before_startup, dates
 from wrolpi.captions import extract_captions
-from wrolpi.common import ConfigFile, get_media_directory, sanitize_link, register_refresh_cleanup, limit_concurrent
+from wrolpi.common import ConfigFile, get_media_directory, register_refresh_cleanup, limit_concurrent
 from wrolpi.dates import Seconds
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.errors import UnknownDirectory
-from wrolpi.files.models import FileGroup
-from wrolpi.tags import Tag
 from wrolpi.vars import PYTEST
 from .common import is_valid_poster, convert_image, \
     generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
-    get_no_channel_directory, get_video_duration
+    get_video_duration
 from .models import Channel, Video
 
 logger = logger.getChild(__name__)
@@ -387,7 +385,8 @@ def import_channels_config():
     channel_import_logger.info('Importing videos config')
     try:
         config = get_channels_config()
-        channels, favorites = config.channels, config.favorites
+        channels = config.channels
+        channel_directories = [i['directory'] for i in channels]
 
         save_config = False
         with get_db_session(commit=True) as session:
@@ -412,6 +411,9 @@ def import_channels_config():
                     # Channel not yet in the DB, add it.
                     channel = Channel(directory=directory)
                     session.add(channel)
+                    session.flush([channel, ])
+                    # TODO refresh the files in the channel.
+                    logger.warning(f'Creating new Channel from config {channel}')
 
                 # Only name and directory are required
                 channel.name = data['name']
@@ -443,46 +445,17 @@ def import_channels_config():
                                             f' download_frequency={channel.download_frequency}'
                                             )
 
+        with get_db_session(commit=True) as session:
+            # Delete any Channels that were deleted from the config.
+            for channel in session.query(Channel):
+                if str(channel.directory) not in channel_directories:
+                    logger.warning(f'Deleting {channel} because it is not in the config.')
+                    channel.delete_with_videos()
+
         if save_config:
             # Information about the channel was fetched, store it.
             save_channels_config()
 
-        with get_db_session(commit=True) as session:
-            channels_by_link = {sanitize_link(i.name): i for i in session.query(Channel)}
-            for directory_, favorites in favorites.items():
-                if directory_ != 'NO CHANNEL':
-                    # A Channel's directory is saved (in the config) relative to the media directory.
-                    directory = get_media_directory() / directory_
-                    channel: Channel = session.query(Channel).filter_by(directory=directory).one_or_none()
-                    if not channel:
-                        # Directory may be the outdated "link".
-                        # TODO remove these old favorites after beta.
-                        channel = channels_by_link.get(directory_)
-                    if not channel:
-                        channel_import_logger.warning(f'Cannot find channel {directory=} for favorites!')
-                        continue
-                    channel_dir = channel.directory
-                else:
-                    channel_dir = get_no_channel_directory()
-
-                favorites_tag = Tag.find_by_name('Favorite')
-                if not favorites_tag:
-                    channel_import_logger.warning(f'Cannot tag favorite videos without Favorite tag!')
-                    return
-
-                # Set favorite Videos of this Channel.
-                for video_path, data in favorites.items():
-                    # Favorite in the config is the name of the video_path.  Add the channel directory onto this
-                    # video_path, so we can match the complete path for the Video.
-                    video_path = channel_dir / video_path
-                    file_group: FileGroup = FileGroup.get_by_path(video_path, session)
-                    if file_group and file_group.tag_files:
-                        # Video is already tagged or favorited.
-                        pass
-                    elif file_group:
-                        file_group.add_tag(favorites_tag, session)
-                    else:
-                        channel_import_logger.warning(f'Cannot find video to favorite: {video_path}')
     except Exception as e:
         channel_import_logger.warning('Failed to load channels config!', exc_info=e)
         if PYTEST:

@@ -185,6 +185,45 @@ def test_import_channel_downloads(test_session, channel_factory, test_channels_c
     assert next_download == str(download.next_download)
 
 
+def test_import_channel_delete_missing_channels(test_session, channel_factory, test_channels_config):
+    """The Channel import function deletes any Channels that are not in the config."""
+    # Create a DB and config with two Channels.
+    channel1 = channel_factory(source_id='foo')
+    channel2 = channel_factory(source_id='bar')
+    test_session.commit()
+    # Write Channels to the config file.
+    save_channels_config()
+    test_session.delete(channel1)
+    test_session.delete(channel2)
+    test_session.commit()
+
+    # Importing the config creates two Channels.
+    import_channels_config()
+    assert len(test_session.query(Channel).all()) == 2
+    assert str(channel1.directory) in test_channels_config.read_text()
+    assert str(channel2.directory) in test_channels_config.read_text()
+
+    # Delete channel2 from the config file.
+    config = get_channels_config()
+    config_dict = config.dict()
+    config_dict['channels'] = [i for i in config.channels if i['directory'] != str(channel2.directory)]
+    config.update(config_dict)
+    assert str(channel1.directory) in test_channels_config.read_text()
+    assert str(channel2.directory) not in test_channels_config.read_text()
+
+    # Importing the config deletes the Channel record.
+    import_channels_config()
+    assert len(test_session.query(Channel).all()) == 1
+    assert str(channel1.directory) in test_channels_config.read_text()
+    assert str(channel2.directory) not in test_channels_config.read_text()
+
+    # Saving and importing does not change anything.
+    save_channels_config()
+    import_channels_config()
+    assert str(channel1.directory) in test_channels_config.read_text()
+    assert str(channel2.directory) not in test_channels_config.read_text()
+
+
 def test_check_for_video_corruption(video_file, test_directory):
     # The test video is not corrupt.
     assert common.check_for_video_corruption(video_file) is False

@@ -400,7 +400,7 @@ class Channel(ModelHelper, Base):
     videos: InstrumentedList = relationship('Video', primaryjoin='Channel.id==Video.channel_id')
 
     def __repr__(self):
-        return f'<Channel id={self.id}, name={repr(self.name)}>'
+        return f'<Channel id={self.id} name={repr(self.name)} directory={self.directory}>'
 
     def __eq__(self, other):
         if isinstance(other, Channel):

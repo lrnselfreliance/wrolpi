@@ -149,30 +149,3 @@ async def test_orphaned_files(test_session, make_files_structure, test_directory
         vid2_poster_path,
         vid3_poster_path,
     ])
-
-
-@pytest.mark.asyncio
-async def test_import_channels_config_favorites_tags(test_session, test_directory, test_channels_config, video_factory,
-                                                     simple_channel):
-    """Video favorites have been moved to Tags.  Any Favorited video should be tagged with Favorite tag."""
-    test_session.add(Tag(name='Favorite'))
-    video1 = video_factory(channel_id=simple_channel.id)
-    video2 = video_factory(channel_id=simple_channel.id)
-    test_session.commit()
-
-    # Favorite video1 in config.
-    channels_config = lib.get_channels_config()
-    channels_config.favorites = {
-        str(simple_channel.directory.relative_to(test_directory)): {
-            str(video1.video_path.relative_to(simple_channel.directory)): now().isoformat(),
-        }
-    }
-
-    # The import function will tag the Video with Favorite.
-    lib.import_channels_config()
-
-    # video1 has Favorite tag.  It is also in the config.
-    assert video1.file_group.tag_files and video1.file_group.tag_files[0].tag.name == 'Favorite'
-    assert str(video1.file_group.primary_path.relative_to(test_directory)) in test_channels_config.read_text()
-    # video2 was not tagged.
-    assert not video2.file_group.tag_files

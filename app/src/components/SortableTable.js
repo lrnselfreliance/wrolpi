@@ -1,7 +1,8 @@
 import React from "react";
 import _ from "lodash";
-import {TableBody, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
+import {TableBody, TableCell, TableHeader, TableHeaderCell, TableRow} from "semantic-ui-react";
 import {Table} from "./Theme";
+import {TextPlaceholder} from "./Placeholder";
 
 export class SortableTable extends React.Component {
     constructor(props) {
@@ -41,7 +42,7 @@ export class SortableTable extends React.Component {
         let {direction} = this.state;
         rowKey = rowKey || 'key';
 
-        const data = this.sortData(this.props['data']);
+        const data = this.props['data'] ? this.sortData(this.props['data']) : null;
 
         const tableHeader = (spec) => {
             const {key, text, sortBy, width} = spec;
@@ -59,7 +60,11 @@ export class SortableTable extends React.Component {
             }
         }
 
-        const rows = data.map(i => <React.Fragment key={i[rowKey]}>{rowFunc(i, this.sortData)}</React.Fragment>);
+        // Use placeholder while data is null.
+        let rows = <TableRow><TableCell colSpan={tableHeaders.length}><TextPlaceholder/></TableCell></TableRow>;
+        if (data !== null) {
+            rows = data.map(i => <React.Fragment key={i[rowKey]}>{rowFunc(i, this.sortData)}</React.Fragment>);
+        }
 
         return <Table sortable {...this.props.tableProps}>
             <TableHeader>

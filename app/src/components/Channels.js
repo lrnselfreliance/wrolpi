@@ -561,23 +561,6 @@ export function ChannelsPages() {
                 <Message.Content><Link to='/videos/channel/new'>Create one.</Link></Message.Content>
             </Message>
         </>
-    } else if (channels === null) {
-        // Placeholders while fetching
-        return <>
-            {header}
-            <Table compact striped basic sortable size='large'>
-                <TableHeader>
-                    <TableRow>
-                        {headers.map(i => <TableHeaderCell key={i['key']}>{i['text']}</TableHeaderCell>)}
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    <TableRow>
-                        <TableCell colSpan={5}><ChannelPlaceholder/></TableCell>
-                    </TableRow>
-                </TableBody>
-            </Table>
-        </>
     } else if (channels === undefined) {
         return <>
             {header}
@@ -590,6 +573,7 @@ export function ChannelsPages() {
         const re = new RegExp(_.escapeRegExp(searchStr), 'i');
         filteredChannels = channels.filter(i => re.test(i['name']));
     }
+    console.log(`filteredChannels=${filteredChannels === null}`);
 
     return <>
         {header}

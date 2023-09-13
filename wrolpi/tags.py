@@ -97,7 +97,7 @@ class Tag(ModelHelper, Base):
 
     def has_relations(self) -> bool:
         """Returns True if this Tag has been used with any FileGroups or Zim Entries."""
-        return not self.tag_files and not self.tag_zim_entries
+        return bool(self.tag_files or self.tag_zim_entries)
 
 
 class TagsConfig(ConfigFile):
@@ -308,6 +308,7 @@ def import_tags_config(session: Session = None):
                     # Maintainer added a Tag to the config manually, or DB was wiped.
                     tag = Tag(name=name, color=attrs['color'])
                     new_tags.append(tag)
+                    logger.info(f'Creating new {tag}')
                 tag.color = attrs['color']
 
             if new_tags:
@@ -391,6 +392,7 @@ def import_tags_config(session: Session = None):
                 elif not tag:
                     logger.warning(f'Cannot find Tag for {repr(str(zim_path))}')
 
+        # Delete missing Tags last in case they are used above.
         if config.tags:
             config_tag_names = set(config.tags.keys())
             for tag in session.query(Tag):

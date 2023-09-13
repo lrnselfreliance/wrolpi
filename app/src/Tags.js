@@ -228,7 +228,7 @@ function EditTagsModal() {
         {key: 'delete', text: 'Delete', sortBy: null, width: 2},
         {key: 'edit', text: 'Edit', sortBy: null, width: 2},
         {key: 'name', text: 'Name', sortBy: 'name', width: 8},
-        {key: 'count', text: 'Count', sortBy: 'file_group_count', width: 2},
+        {key: 'count', text: 'Count', sortBy: i => i['file_group_count'] + i['zim_entry_count'], width: 2},
     ];
 
     return <>
@@ -267,6 +267,7 @@ function EditTagsModal() {
                 <Divider/>
 
                 <SortableTable
+                    tableProps={{unstackable: true}}
                     data={tags}
                     rowFunc={(i, sortData) => <EditTagRow key={i['name']} tag={i} onDelete={localDeleteTag}
                                                           onEdit={localEditTag}/>}

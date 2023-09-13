@@ -141,7 +141,8 @@ def test_tags_crud(test_session, test_client, example_pdf, assert_tags_config):
     request, response = test_client.post('/api/tag/1', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     request, response = test_client.get('/api/tag')
-    assert response.json['tags'] == [dict(name='ガーデン', color='#000000', id=1, file_group_count=1, zim_entry_count=0)]
+    assert response.json['tags'] == [
+        dict(name='ガーデン', color='#000000', id=1, file_group_count=1, zim_entry_count=0)]
     assert_tags_config(tags={'ガーデン': {'color': '#000000'}})
 
     # Conflicting names return an error.
@@ -250,24 +251,29 @@ async def test_import_tags_delete_missing(test_session, test_directory, test_tag
     assert tag3.name in test_tags_config.read_text()
     assert tag4.name in test_tags_config.read_text()
 
-    # Delete tag1 and tag2 from the config.
+    # Delete all tags but tag3.
     config = tags.get_tags_config()
     config_dict = config.dict()
-    config_dict['tags'] = {k: v for k, v in config.tags.items() if k not in [tag1.name, tag2.name, tag4.name]}
+    config_dict['tags'] = {k: v for k, v in config.tags.items() if k == tag3.name}
     config.update(config_dict)
+    config.initialize()
+    # Tag Files and Tag Zims are untouched.  Only tag3 is left.
+    assert len(config.tag_files) == 1
+    assert len(config.tag_zims) == 1
+    assert len(config.tags) == 1
 
     # Import the config.  Only unused Tags not in the config are deleted.
     tags.import_tags_config()
-    assert {
-               tag1.name,  # tag1 is used by FileGroup.
-               # tag2.name,  tag2 is unused, and deleted.
-               tag3.name,  # tag3 was not deleted.
-               tag4.name,  # tag4 is used by ZimEntry.
-           } == {i.name for i in test_session.query(tags.Tag)}
+    assert {i.name for i in test_session.query(tags.Tag)} == {
+        tag1.name,  # tag1 is used by FileGroup.
+        # tag2.name,  tag2 is unused, and deleted.
+        tag3.name,  # tag3 was not deleted.
+        tag4.name,  # tag4 is used by ZimEntry.
+    }
 
     # DB is written to config with only those Tags left.
     tags.schedule_save()
-    assert f'{tag1.name}:' in test_tags_config.read_text()
-    assert f'{tag2.name}:' not in test_tags_config.read_text()
-    assert f'{tag3.name}:' in test_tags_config.read_text()
-    assert f'{tag4.name}:' in test_tags_config.read_text()
+    # Tags that are used are restored.
+    assert len(config.tag_files) == 1
+    assert len(config.tag_zims) == 1
+    assert len(config.tags) == 3

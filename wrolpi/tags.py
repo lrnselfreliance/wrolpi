@@ -95,6 +95,10 @@ class Tag(ModelHelper, Base):
         tag = session.query(Tag).filter_by(name=name).one_or_none()
         return tag
 
+    def has_relations(self) -> bool:
+        """Returns True if this Tag has been used with any FileGroups or Zim Entries."""
+        return not self.tag_files and not self.tag_zim_entries
+
 
 class TagsConfig(ConfigFile):
     file_name = 'tags.yaml'
@@ -217,9 +221,10 @@ def schedule_save(session: Session = None):
 def get_tags() -> List[dict]:
     with get_db_curs() as curs:
         curs.execute('''
-            SELECT t.id, t.name, t.color, COUNT(tf.tag_id)
+            SELECT t.id, t.name, t.color, COUNT(tf.tag_id) AS file_group_count, COUNT(tz.tag_id) AS zim_entry_count
             FROM tag t
-            LEFT JOIN tag_file tf on t.id = tf.tag_id
+                LEFT JOIN tag_file tf on t.id = tf.tag_id
+                LEFT OUTER JOIN tag_zim tz on t.id = tz.tag_id
             GROUP BY t.id, t.name, t.color
             ORDER BY t.name
         ''')
@@ -308,15 +313,6 @@ def import_tags_config(session: Session = None):
             if new_tags:
                 session.add_all(new_tags)
 
-            config_tag_names = [i for i in config.tags.keys()]
-            for tag in session.query(Tag):
-                if tag.name not in config_tag_names:
-                    if tag.tag_files or tag.tag_zim_entries:
-                        logger.warning(f'Refusing to delete {tag} because it is used.')
-                    else:
-                        logger.warning(f'Deleting {tag} because it is not in the config.')
-                        session.delete(tag)
-
             session.commit()
 
         media_directory = get_media_directory()
@@ -394,6 +390,17 @@ def import_tags_config(session: Session = None):
                     need_commit = True
                 elif not tag:
                     logger.warning(f'Cannot find Tag for {repr(str(zim_path))}')
+
+        if config.tags:
+            config_tag_names = set(config.tags.keys())
+            for tag in session.query(Tag):
+                if tag.name not in config_tag_names:
+                    if tag.has_relations():
+                        logger.warning(f'Refusing to delete {tag} because it is used.')
+                    else:
+                        logger.warning(f'Deleting {tag} because it is not in the config.')
+                        session.delete(tag)
+                        need_commit = True
 
         if need_commit:
             session.commit()

@@ -9,10 +9,7 @@ import {
     GridRow,
     Label,
     LabelGroup,
-    TableBody,
     TableCell,
-    TableHeader,
-    TableHeaderCell,
     TableRow,
 } from "semantic-ui-react";
 import {APIButton, contrastingColor, ErrorMessage, scrollToTopOfElement} from "./components/Common";
@@ -25,8 +22,7 @@ import {
     ModalActions,
     ModalContent,
     ModalHeader,
-    Segment,
-    Table
+    Segment
 } from "./components/Theme";
 import _ from "lodash";
 import {HexColorPicker} from "react-colorful";
@@ -34,6 +30,7 @@ import {useRecurringTimeout} from "./hooks/customHooks";
 import {Media, ThemeContext} from "./contexts/contexts";
 import {Link, useNavigate} from "react-router-dom";
 import {TagPlaceholder} from "./components/Placeholder";
+import {SortableTable} from "./components/SortableTable";
 
 export const TagsContext = React.createContext({
     NameToTagLabel: null,
@@ -151,7 +148,7 @@ export const useTagsInterval = () => {
 
 function EditTagRow({tag, onDelete, onEdit}) {
     const {NameToTagLabel} = React.useContext(TagsContext);
-    const {name, color, id, count} = tag;
+    const {name, color, id, file_group_count, zim_entry_count} = tag;
 
     const deleteConfirm = <>
         <APIButton
@@ -166,7 +163,8 @@ function EditTagRow({tag, onDelete, onEdit}) {
     const nameLabel = <LabelGroup tag>
         <NameToTagLabel name={name}/>
     </LabelGroup>;
-    const countLabel = <Label>{count}</Label>;
+    const countColor = (file_group_count + zim_entry_count) > 0 ? 'black' : 'grey';
+    const countLabel = <Label color={countColor}>{file_group_count + zim_entry_count}</Label>;
 
     return <TableRow>
         <TableCell>{deleteConfirm}</TableCell>
@@ -226,11 +224,12 @@ function EditTagsModal() {
         setTagColor(DEFAULT_TAG_COLOR);
     }
 
-    let content = <Dimmer><Loader inline active/></Dimmer>;
-    if (tags && tags.length) {
-        content = tags.map(i => <EditTagRow key={i['name']} tag={i} onDelete={localDeleteTag}
-                                            onEdit={localEditTag}/>);
-    }
+    const tableHeaders = [
+        {key: 'delete', text: 'Delete', sortBy: null, width: 2},
+        {key: 'edit', text: 'Edit', sortBy: null, width: 2},
+        {key: 'name', text: 'Name', sortBy: 'name', width: 8},
+        {key: 'count', text: 'Count', sortBy: 'file_group_count', width: 2},
+    ];
 
     return <>
         <Modal closeIcon
@@ -266,25 +265,14 @@ function EditTagsModal() {
                 >Save</APIButton>
 
                 <Divider/>
-                <Table striped basic='very' unstackable>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHeaderCell width={2}>Delete</TableHeaderCell>
-                            <TableHeaderCell width={2}>Edit</TableHeaderCell>
-                            <TableHeaderCell width={8}>Tag</TableHeaderCell>
-                            <Media greaterThanOrEqual='tablet'>
-                                {(className, renderChildren) => {
-                                    return renderChildren ?
-                                        <TableHeaderCell className={className} width={2}>Count</TableHeaderCell>
-                                        : null;
-                                }}
-                            </Media>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {content}
-                    </TableBody>
-                </Table>
+
+                <SortableTable
+                    data={tags}
+                    rowFunc={(i, sortData) => <EditTagRow key={i['name']} tag={i} onDelete={localDeleteTag}
+                                                          onEdit={localEditTag}/>}
+                    rowKey='name'
+                    tableHeaders={tableHeaders}
+                />
             </div>
         </Modal>
         <Button onClick={() => setOpen(true)} color='violet' disabled={tags === undefined}>

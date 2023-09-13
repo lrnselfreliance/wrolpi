@@ -129,7 +129,7 @@ def test_tags_crud(test_session, test_client, example_pdf, assert_tags_config):
     # The tag can be retrieved.
     request, response = test_client.get('/api/tag')
     assert response.status_code == HTTPStatus.OK
-    assert response.json['tags'] == [dict(name='jardín', color='#123456', id=1, count=0)]
+    assert response.json['tags'] == [dict(name='jardín', color='#123456', id=1, file_group_count=0, zim_entry_count=0)]
 
     # Apply the tag to the PDF.
     tag = test_session.query(tags.Tag).one()
@@ -141,7 +141,7 @@ def test_tags_crud(test_session, test_client, example_pdf, assert_tags_config):
     request, response = test_client.post('/api/tag/1', content=json.dumps(content))
     assert response.status_code == HTTPStatus.OK
     request, response = test_client.get('/api/tag')
-    assert response.json['tags'] == [dict(name='ガーデン', color='#000000', id=1, count=1)]
+    assert response.json['tags'] == [dict(name='ガーデン', color='#000000', id=1, file_group_count=1, zim_entry_count=0)]
     assert_tags_config(tags={'ガーデン': {'color': '#000000'}})
 
     # Conflicting names return an error.

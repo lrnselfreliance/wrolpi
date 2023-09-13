@@ -225,3 +225,49 @@ async def test_import_tags_config(test_session, test_directory, test_tags_config
     assert test_session.query(tags.TagFile).count() == 1
     # Example file, and the config file.
     assert test_session.query(FileGroup).count() == 2
+
+
+@pytest.mark.asyncio
+async def test_import_tags_delete_missing(test_session, test_directory, test_tags_config, make_files_structure,
+                                          tag_factory, test_zim):
+    """Tags not in the config are deleted on import.  Tags that are used will not be deleted."""
+    from modules.zim import lib as zim_lib
+
+    # Create some tags, use tag1.
+    tag1, tag2, tag3, tag4 = tag_factory(), tag_factory(), tag_factory(), tag_factory()
+    # use tag1 for FileGroup.
+    foo, = make_files_structure({'foo': 'text'})
+    foo = FileGroup.from_paths(test_session, foo)
+    test_session.flush([foo, ])
+    foo.add_tag(tag1)
+    # use tag4 for Zim entry.
+    await zim_lib.add_tag(tag4.name, test_zim.id, 'home')
+    tags.schedule_save()
+
+    # All tags were saved.
+    assert tag1.name in test_tags_config.read_text()
+    assert tag2.name in test_tags_config.read_text()
+    assert tag3.name in test_tags_config.read_text()
+    assert tag4.name in test_tags_config.read_text()
+
+    # Delete tag1 and tag2 from the config.
+    config = tags.get_tags_config()
+    config_dict = config.dict()
+    config_dict['tags'] = {k: v for k, v in config.tags.items() if k not in [tag1.name, tag2.name, tag4.name]}
+    config.update(config_dict)
+
+    # Import the config.  Only unused Tags not in the config are deleted.
+    tags.import_tags_config()
+    assert {
+               tag1.name,  # tag1 is used by FileGroup.
+               # tag2.name,  tag2 is unused, and deleted.
+               tag3.name,  # tag3 was not deleted.
+               tag4.name,  # tag4 is used by ZimEntry.
+           } == {i.name for i in test_session.query(tags.Tag)}
+
+    # DB is written to config with only those Tags left.
+    tags.schedule_save()
+    assert f'{tag1.name}:' in test_tags_config.read_text()
+    assert f'{tag2.name}:' not in test_tags_config.read_text()
+    assert f'{tag3.name}:' in test_tags_config.read_text()
+    assert f'{tag4.name}:' in test_tags_config.read_text()

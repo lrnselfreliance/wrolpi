@@ -35,6 +35,7 @@ class Tag(ModelHelper, Base):
     color = Column(String)
 
     tag_files: List[TagFile] = relationship('TagFile', back_populates='tag', cascade='all')
+    tag_zim_entries: List[TagFile] = relationship('TagZimEntry', back_populates='tag', cascade='all')
 
     def __repr__(self):
         name = self.name
@@ -306,6 +307,15 @@ def import_tags_config(session: Session = None):
 
             if new_tags:
                 session.add_all(new_tags)
+
+            config_tag_names = [i for i in config.tags.keys()]
+            for tag in session.query(Tag):
+                if tag.name not in config_tag_names:
+                    if tag.tag_files or tag.tag_zim_entries:
+                        logger.warning(f'Refusing to delete {tag} because it is used.')
+                    else:
+                        logger.warning(f'Deleting {tag} because it is not in the config.')
+                        session.delete(tag)
 
             session.commit()
 

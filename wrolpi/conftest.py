@@ -135,9 +135,19 @@ def test_client() -> ReusableClient:
             api_app.blueprint(bp)
         ROUTES_ATTACHED = True
 
-    client = ReusableClient(api_app)
-    with client:
-        yield client
+    for _ in range(5):
+        # Sometimes the Sanic client tries to use a port already in use, try again...
+        try:
+            client = ReusableClient(api_app)
+            with client:
+                yield client
+            break
+        except OSError as e:
+            # Ignore errors where the port was already in use.
+            if 'address already in use' not in str(e):
+                raise
+    else:
+        raise RuntimeError('Test never got unused port')
 
 
 @pytest.fixture()

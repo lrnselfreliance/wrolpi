@@ -126,7 +126,7 @@ class ArchiveDownloader(Downloader, ABC):
         singlefile = await self.do_singlefile(download)
 
         if SINGLEFILE_HEADER.encode() not in singlefile[:1000]:
-            raise RuntimeError(f'Singlefile created was invalid: {download.ur}')
+            raise RuntimeError(f'Singlefile created was invalid: {download.url}')
 
         # Extract Readability from the Singlefile.
         try:

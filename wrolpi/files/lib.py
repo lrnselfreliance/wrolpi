@@ -25,7 +25,8 @@ from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_co
     get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk
 from wrolpi.dates import now, from_timestamp
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
-from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged
+from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged, \
+    NoPrimaryFile
 from wrolpi.events import Events
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.lang import ISO_639_CODES
@@ -165,7 +166,9 @@ async def delete(*paths: Union[str, pathlib.Path]):
                 # Search for any FileGroups that have been tagged under this directory.
                 query = query.filter(FileGroup.primary_path.like(f'{path}/%'))
             for (file_group, tag_file) in query:
-                raise FileGroupIsTagged(f"Cannot delete {file_group} because it is tagged")
+                if any(i for i in paths if i in file_group.my_paths()):
+                    # File that will be deleted is in a Tagged FileGroup.
+                    raise FileGroupIsTagged(f"Cannot delete {file_group} because it is tagged")
     for path in paths:
         if path.is_dir():
             delete_directory(path, recursive=True)
@@ -177,11 +180,6 @@ async def delete(*paths: Union[str, pathlib.Path]):
         await coro
     else:
         background_task(coro)
-
-
-FILE_NAME_REGEX = re.compile(r'[_ .]')
-
-FILE_BIN = which('file', '/usr/bin/file')
 
 
 def _mimetype_suffix_map(path: Path, mimetype: str):
@@ -226,6 +224,9 @@ def _mimetype_suffix_map(path: Path, mimetype: str):
         # Fallback to old mimetype.
         return 'text/srt'
     return mimetype
+
+
+FILE_BIN = which('file', '/usr/bin/file')
 
 
 @functools.lru_cache(maxsize=10_000)
@@ -299,8 +300,10 @@ def _paths_to_files_dict(group: List[pathlib.Path]) -> List[dict]:
     return files
 
 
-def get_primary_file(files: Union[Tuple[pathlib.Path], List[pathlib.Path]]) -> Union[pathlib.Path, List[pathlib.Path]]:
-    """Given a list of files, return the file that we can model or index."""
+def get_primary_file(files: Union[Tuple[pathlib.Path], List[pathlib.Path]]) -> pathlib.Path:
+    """Given a list of files, return the file that we can model or index.
+
+    @raise NoPrimaryFile: If not primary file can be found."""
     from modules.archive.lib import is_singlefile_file
 
     if len(files) == 0:
@@ -332,10 +335,7 @@ def get_primary_file(files: Union[Tuple[pathlib.Path], List[pathlib.Path]]) -> U
         if mimetype.startswith('image/'):
             return file
 
-    refresh_logger.debug(f'Cannot find primary file for group: {files}')
-
-    # Can't find a typical primary file.
-    return files
+    raise NoPrimaryFile(f'Cannot find primary file for group: {files}')
 
 
 def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
@@ -355,10 +355,10 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
         values = dict()
         for group in grouped:
             # The primary file is the video/SingleFile/epub, etc.
-            primary_path_or_paths = get_primary_file(group)
-            if isinstance(primary_path_or_paths, pathlib.Path):
+            try:
+                primary_path = get_primary_file(group)
                 # Multiple files in this group.
-                primary_path: pathlib.Path = primary_path_or_paths
+                primary_path: pathlib.Path = primary_path
                 # The primary mimetype allows modelers to find its file_groups.
                 mimetype = get_mimetype(primary_path)
                 # The group uses a common modification_datetime so the group will be re-indexed when any of it's files
@@ -368,9 +368,9 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
                 files = json.dumps(_paths_to_files_dict(group))
                 values[primary_path] = (modification_datetime, mimetype, size, files)
                 non_primary_files = {i for i in group if i != primary_path}
-            else:
+            except NoPrimaryFile:
                 # Cannot find primary path, create a `file_group` for each file.
-                for primary_path in primary_path_or_paths:
+                for primary_path in group:
                     primary_path: pathlib.Path
                     # The primary mimetype allows modelers to find its file_groups.
                     mimetype = get_mimetype(primary_path)

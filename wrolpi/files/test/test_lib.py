@@ -14,7 +14,7 @@ from PIL import Image
 
 from wrolpi.common import timer
 from wrolpi.dates import now, from_timestamp
-from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged
+from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPrimaryFile
 from wrolpi.files import lib, indexers
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
@@ -22,7 +22,7 @@ from wrolpi.vars import PROJECT_DIR
 
 
 @pytest.mark.asyncio
-async def test_delete(test_session, make_files_structure, test_directory):
+async def test_delete_file(test_session, make_files_structure, test_directory):
     """
     File in the media directory can be deleted.
     """
@@ -54,7 +54,7 @@ async def test_delete(test_session, make_files_structure, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_delete_multiple(test_session, make_files_structure, test_directory):
+async def test_delete_file_multiple(test_session, make_files_structure, test_directory):
     """Multiple files can be deleted at once."""
     foo, bar, baz = make_files_structure([
         'archives/foo.txt',
@@ -72,7 +72,27 @@ async def test_delete_multiple(test_session, make_files_structure, test_director
 
 
 @pytest.mark.asyncio
-async def test_delete_link(test_session, test_directory):
+async def test_delete_file_names(test_session, make_files_structure, test_directory, tag_factory):
+    """Will not refuse to delete a file that shares the name of a nearby file when they are in different FileGroups."""
+    foo, foo1 = make_files_structure({
+        'archives/foo': 'text',
+        'archives/foo1': 'text',
+    })
+    foo_fg = FileGroup.from_paths(test_session, foo)
+    foo1_fg = FileGroup.from_paths(test_session, foo1)
+    tag = tag_factory()
+    foo1_fg.add_tag(tag)
+    test_session.commit()
+    assert foo.is_file()
+    assert foo1.is_file()
+
+    await lib.delete('archives/foo')
+    assert not foo.is_file()
+    assert foo1.is_file()
+
+
+@pytest.mark.asyncio
+async def test_delete_file_link(test_session, test_directory):
     """Links can be deleted."""
     foo, bar = test_directory / 'foo', test_directory / 'bar'
     foo.touch()
@@ -187,7 +207,7 @@ async def test_refresh_empty_media_directory(test_session, test_directory):
 @pytest.mark.asyncio
 async def test__upsert_files(test_session, make_files_structure, test_directory, assert_file_groups, video_file,
                              srt_file3):
-    bar, baz = make_files_structure({
+    baz, bar = make_files_structure({
         'dir1/bar.txt': None,
         'baz.txt': 'baz file',
     })
@@ -592,7 +612,7 @@ def test_group_files_by_stem(make_files_structure, test_directory):
 
 
 def test_get_primary_file(test_directory, video_file, srt_file3, example_epub, example_mobi, example_pdf,
-                          singlefile_contents_factory):
+                          singlefile_contents_factory, make_files_structure):
     """Test that the most important file is returned from a list of files."""
     srt_file3 = srt_file3.rename(test_directory / f'{video_file.stem}.srt')
     # Same primary_file no matter the order.
@@ -611,6 +631,11 @@ def test_get_primary_file(test_directory, video_file, srt_file3, example_epub, e
 
     assert lib.get_primary_file([example_pdf, example_mobi]) == example_pdf
     assert lib.get_primary_file([example_pdf, example_mobi, example_epub]) == example_epub
+
+    # No primary file in this group.
+    foo, bar = make_files_structure({'foo': 'text', 'bar': None})
+    with pytest.raises(NoPrimaryFile):
+        assert lib.get_primary_file([foo, bar])
 
 
 def test_get_refresh_progress(test_client, test_session):

@@ -513,7 +513,7 @@ async def test_directory_crud(test_session, test_async_client, test_directory, a
 
 @pytest.mark.asyncio
 async def test_move(test_session, test_directory, make_files_structure, test_async_client):
-    foo, bar = make_files_structure({
+    baz, bar = make_files_structure({
         'foo/bar.txt': 'bar',
         'baz.txt': 'baz',
     })
@@ -529,14 +529,14 @@ async def test_move(test_session, test_directory, make_files_structure, test_asy
     content = dict(paths=['foo', 'baz.txt'], destination='qux')
     request, response = await test_async_client.post('/api/files/move', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert not foo.exists()
+    assert not bar.exists()
     assert (test_directory / 'qux/foo/bar.txt').is_file()
 
     # mv foo/bar.txt qux
     content = dict(paths=['qux/foo/bar.txt', ], destination='qux')
     request, response = await test_async_client.post('/api/files/move', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert not foo.exists()
+    assert not bar.exists()
     assert (test_directory / 'qux/bar.txt').is_file()
     assert (test_directory / 'qux/foo').is_dir()
 

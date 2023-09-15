@@ -13,7 +13,7 @@ import zipfile
 from abc import ABC
 from datetime import datetime
 from itertools import zip_longest
-from typing import List, Callable, Dict, Sequence
+from typing import List, Callable, Dict, Sequence, Union
 from typing import Tuple, Set
 from unittest import mock
 from unittest.mock import MagicMock
@@ -375,7 +375,12 @@ def example_mobi(test_directory) -> pathlib.Path:
 
 @pytest.fixture
 def make_files_structure(test_directory) -> Callable:
-    def create_files(paths: List, file_groups: bool = False, session: Session = None) -> List[pathlib.Path]:
+    """
+    A fixture which creates test files passed to it.  If a list is provided, empty files will be created at those
+    locations.  If a dict is provided, files will be created containing the value of the dict item.
+    """
+    def create_files(paths: Union[List, Dict], file_groups: bool = False, session: Session = None) -> List[
+            pathlib.Path]:
         files = []
 
         @iterify(list)
@@ -404,7 +409,7 @@ def make_files_structure(test_directory) -> Callable:
             for idx, path in enumerate(files):
                 fg = FileGroup.from_paths(session, path)
                 files[idx] = fg
-        return files
+        return sorted(files) if isinstance(paths, dict) else files
 
     return create_files
 

@@ -137,3 +137,9 @@ class InvalidConfig(APIError):
     code = 'INVALID_CONFIG'
     summary = 'Config is invalid'
     status = HTTPStatus.BAD_REQUEST
+
+
+class NoPrimaryFile(APIError):
+    code = 'NO_PRIMARY_FILE'
+    summary = 'Could not find a primary file in the provided group'
+    status = HTTPStatus.INTERNAL_SERVER_ERROR

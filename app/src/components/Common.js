@@ -820,6 +820,8 @@ export function mimetypeIconName(mimetype, lowerPath = '') {
             return 'file word'
         } else if (mimetype.startsWith('application/vnd.openxmlformats-officedocument.presentationml.') || mimetype.startsWith('application/vnd.ms-powerpoint') || mimetype.startsWith('application/vnd.oasis.opendocument.presentation')) {
             return 'file powerpoint'
+        } else if (mimetype.startsWith('font/') || mimetype.startsWith('application/font-sfnt') || mimetype.startsWith('application/vnd.ms-fontobject')) {
+            return 'font'
         }
     }
     if (lowerPath.endsWith('.pem')) {

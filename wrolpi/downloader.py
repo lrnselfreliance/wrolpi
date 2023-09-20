@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import inspect
 import logging
 import multiprocessing
 import os
@@ -388,6 +389,8 @@ class DownloadManager:
                 try:
                     # Create download coroutine; wrap it, so it can be canceled
                     coro = downloader.do_download(download)
+                    if not inspect.iscoroutine(coro):
+                        raise RuntimeError(f'Coroutine expected from {downloader} do_download method.')
                     result = await downloader.cancel_wrapper(coro, download)
                 except UnrecoverableDownloadError as e:
                     # Download failed and should not be retried.

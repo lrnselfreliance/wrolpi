@@ -794,8 +794,8 @@ export function mimetypeIconName(mimetype, lowerPath = '') {
             return 'closed captioning';
         } else if (mimetype.startsWith('application/x-openscad') || mimetype.startsWith('model/stl')) {
             return 'cube';
-        } else if (mimetype.startsWith('application/x-dosexec') || mimetype.startsWith('application/x-msi')) {
-            return 'microsoft';
+        } else if (mimetype.startsWith('application/x-dosexec') || mimetype.startsWith('application/x-msi') || mimetype.startsWith('application/vnd.microsoft.portable-executable')) {
+            return 'windows';
         } else if (mimetype.startsWith('audio/')) {
             return 'file audio';
         } else if (mimetype.startsWith('application/vnd.openxmlformats-officedocument.wordprocessingml.document')) {
@@ -813,6 +813,8 @@ export function mimetypeIconName(mimetype, lowerPath = '') {
                 return 'apple';
             } else if (lowerPath.endsWith('.azw3')) {
                 return 'book';
+            } else if (lowerPath.endsWith('.exe')) {
+                return 'windows';
             }
         } else if (mimetype.startsWith('application/vnd.openxmlformats-officedocument.spreadsheetml.') || mimetype.startsWith('application/vnd.ms-excel') || mimetype.startsWith('application/vnd.oasis.opendocument.spreadsheet')) {
             return 'file excel'

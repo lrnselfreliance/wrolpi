@@ -35,6 +35,7 @@ from wrolpi.dates import set_test_now
 from wrolpi.db import postgres_engine, get_db_args
 from wrolpi.downloader import DownloadManager, DownloadResult, Download, Downloader, \
     downloads_manager_config_context
+from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import Directory, FileGroup
 from wrolpi.root_api import BLUEPRINTS, api_app
 from wrolpi.tags import Tag
@@ -256,7 +257,21 @@ def test_downloader(test_download_manager):
 
             self.do_download.side_effect = _
 
+        def set_test_exception(self, exception: Exception = Exception('Test downloader exception')):
+            async def _(*a, **kwargs):
+                raise exception
+
+            self.do_download.side_effect = _
+
+        def set_test_unrecoverable_exception(self):
+            async def _(*a, **kwargs):
+                raise UnrecoverableDownloadError()
+
+            self.do_download.side_effect = _
+
     test_downloader = TestDownloader()
+    # Default to successful download.
+    test_downloader.set_test_success()
     test_download_manager.register_downloader(test_downloader)
 
     return test_downloader
@@ -379,8 +394,9 @@ def make_files_structure(test_directory) -> Callable:
     A fixture which creates test files passed to it.  If a list is provided, empty files will be created at those
     locations.  If a dict is provided, files will be created containing the value of the dict item.
     """
+
     def create_files(paths: Union[List, Dict], file_groups: bool = False, session: Session = None) -> List[
-            pathlib.Path]:
+        pathlib.Path]:
         files = []
 
         @iterify(list)

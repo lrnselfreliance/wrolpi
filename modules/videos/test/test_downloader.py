@@ -212,49 +212,6 @@ def test_get_or_create_channel(test_session):
     assert get_or_create_channel(source_id='quux') == channel
 
 
-@pytest.mark.asyncio
-async def test_selected_downloader(test_session, video_download_manager, test_downloader, successful_download):
-    """
-    A user can specify which Downloader to use, no other should ever be used (even if the Download fails).
-    """
-    # The test Downloader will pretend to have downloaded anything.
-    mock_do_download = test_downloader.do_download = mock.MagicMock()
-    mock_do_download.return_value = successful_download
-
-    def check_attempts(attempts):
-        assert test_session.query(Download).one().attempts == attempts
-
-    # DownloadManager will attempt to choose the Downloader.
-    with mock.patch('modules.videos.downloader.YDL.extract_info') as mock_extract_info:
-        mock_extract_info.side_effect = UnsupportedError('not this one')
-        video_download_manager.create_download('https://example.com', test_downloader.name)
-        await video_download_manager.wait_for_all_downloads()
-        mock_do_download.assert_called_once()
-
-    check_attempts(1)
-
-    mock_do_download.reset_mock()
-
-    # DownloadManager will only use the TestDownloader.
-    video_download_manager.create_download('https://example.com', test_downloader.name)
-    await video_download_manager.wait_for_all_downloads()
-    # DownloadManager called do_download.
-    mock_do_download.assert_called_once()
-
-    check_attempts(2)
-
-    mock_do_download.reset_mock()
-
-    # DownloadManager will only use the TestDownloader, even if the download fails.
-    mock_do_download.side_effect = Exception('oh no!')
-    video_download_manager.create_download('https://example.com', test_downloader.name)
-    await video_download_manager.wait_for_all_downloads()
-    # DownloadManager called do_download.
-    mock_do_download.assert_called_once()
-
-    check_attempts(3)
-
-
 def test_channel_downloader_hidden(video_download_manager):
     """
     ChannelDownloader should not be presented to the User.

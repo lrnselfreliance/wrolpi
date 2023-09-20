@@ -412,6 +412,8 @@ async def test_restart_download(test_session, test_async_client, test_download_m
     test_session.commit()
     assert test_session.query(Download).one().status == 'failed'
 
+    test_downloader.set_test_failure()
+
     # Download is now "new" again.
     request, response = await test_async_client.post(f'/api/download/{download.id}/restart')
     assert response.status_code == HTTPStatus.NO_CONTENT

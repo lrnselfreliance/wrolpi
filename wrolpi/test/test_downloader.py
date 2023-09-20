@@ -64,8 +64,7 @@ async def test_delete_old_once_downloads(test_session, test_download_manager, te
 async def test_create_download(test_session, test_download_manager, test_downloader):
     assert len(test_download_manager.get_downloads(test_session)) == 0
 
-    test_downloader.do_download = MagicMock()
-    test_downloader.do_download.return_value = DownloadResult(success=True)
+    test_downloader.set_test_success()
 
     test_download_manager.create_download('https://example.com', test_downloader.name)
     download = test_download_manager.get_download(test_session, 'https://example.com')
@@ -246,8 +245,7 @@ async def test_max_attempts(test_session, test_download_manager, test_downloader
     """A Download will only be attempted so many times, it will eventually be deleted."""
     _, session = get_db_context()
 
-    test_downloader.do_download = MagicMock()
-    test_downloader.do_download.return_value = DownloadResult(success=True)
+    test_downloader.set_test_success()
 
     test_download_manager.create_download('https://example.com', test_downloader.name)
     await test_download_manager.wait_for_all_downloads()
@@ -260,7 +258,7 @@ async def test_max_attempts(test_session, test_download_manager, test_downloader
     assert download.attempts == 2
 
     # There are no further attempts.
-    test_downloader.do_download.side_effect = UnrecoverableDownloadError()
+    test_downloader.set_test_unrecoverable_exception()
     test_download_manager.create_download('https://example.com', test_downloader.name)
     await test_download_manager.wait_for_all_downloads()
     download = session.query(Download).one()
@@ -364,8 +362,7 @@ async def test_downloads_config(test_session, test_client, test_download_manager
     await import_downloads_config()
     assert_downloads([])
 
-    test_downloader.do_download = MagicMock()
-    test_downloader.do_download.return_value = DownloadResult(success=True)
+    test_downloader.set_test_success()
 
     download1, download2 = test_download_manager.create_downloads([
         'https://example.com/1',
@@ -450,7 +447,7 @@ async def test_downloads_config(test_session, test_client, test_download_manager
 async def test_download_excluded_urls(test_client, test_session, test_download_manager, test_downloader):
     """Test that URLs that have been excluded are ignored by the download worker."""
     test_downloader.already_downloaded = lambda *i, **kw: []
-    test_downloader.do_download = lambda *i, **kw: DownloadResult(success=True)
+    test_downloader.set_test_success()
     rss_downloader = RSSDownloader()
     test_download_manager.register_downloader(rss_downloader)
 

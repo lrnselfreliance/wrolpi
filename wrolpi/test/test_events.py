@@ -17,13 +17,14 @@ def assert_events(expected: List[Dict], after=None):
         assert_dict_contains(event, expected)
 
 
-def test_events_api_feed(test_session, test_client, example_pdf):
+@pytest.mark.asyncio
+async def test_events_api_feed(test_session, test_async_client, example_pdf):
     """Events can be gotten from the API."""
     # refresh_files() creates a few events.
-    request, response = test_client.post('/api/files/refresh')
+    request, response = await test_async_client.post('/api/files/refresh')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    request, response = test_client.get('/api/events/feed')
+    request, response = await test_async_client.get('/api/events/feed')
     assert response.status_code == HTTPStatus.OK
     assert (result := response.json.get('events'))
 
@@ -48,7 +49,7 @@ def test_events_history_limit():
 
 
 @pytest.mark.asyncio
-async def test_get_events(test_client):
+async def test_get_events():
     after = now()
 
     Events.send_global_refresh_started()

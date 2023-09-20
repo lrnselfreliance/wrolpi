@@ -169,7 +169,7 @@ def test_archive_refresh_deleted_archive(test_client, test_session, archive_dire
 
 
 @pytest.mark.asyncio
-async def test_fills_contents_with_refresh(test_client, test_session, archive_factory, singlefile_contents_factory):
+async def test_fills_contents_with_refresh(test_session, archive_factory, singlefile_contents_factory):
     """Refreshing archives fills in any missing contents."""
     archive1 = archive_factory('example.com', 'https://example.com/one')
     archive2 = archive_factory('example.com', 'https://example.com/one')
@@ -277,7 +277,7 @@ def test_get_domains(test_session, archive_factory):
     assert [i['domain'] for i in get_domains()] == []
 
 
-@pytest.mark.asycio
+@pytest.mark.asyncio
 async def test_new_archive(test_session, fake_now):
     singlefile, readability, screenshot = make_fake_archive_result()
     fake_now(datetime(2000, 1, 1))
@@ -521,7 +521,7 @@ def test_refresh_archives(test_session, test_directory, test_client, make_files_
 
 
 @pytest.mark.asyncio
-async def test_refresh_archives_index(test_session, test_directory, test_client, make_files_structure):
+async def test_refresh_archives_index(test_session, make_files_structure):
     """Archives are indexed using ArchiveIndexer and archive_modeler."""
     # The start of a typical singlefile html file.
     singlefile_contents = '''<!DOCTYPE html> <html lang="en"><!--

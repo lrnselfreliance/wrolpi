@@ -220,7 +220,6 @@ def test_channel_downloader_hidden(video_download_manager):
     assert [i.__json__() for i in downloaders] == [(dict(name='video', pretty_name='Videos')), ]
 
 
-@pytest.mark.asyncio
 def test_bad_downloader(test_session, video_download_manager):
     """
     Attempting to use an unknown downloader should raise an error.

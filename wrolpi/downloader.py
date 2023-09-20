@@ -107,9 +107,15 @@ class Download(ModelHelper, Base):  # noqa
         if reset_attempts:
             self.attempts = 0
 
+    def is_new(self) -> bool:
+        return self.status == 'new'
+
     def defer(self):
         """Download should be tried again after a time."""
         self.status = 'deferred'
+
+    def is_deferred(self) -> bool:
+        return self.status == 'deferred'
 
     def fail(self):
         """Download should not be attempted again.  A recurring Download will raise an error."""
@@ -117,16 +123,25 @@ class Download(ModelHelper, Base):  # noqa
             raise ValueError('Recurring download should not be failed.')
         self.status = 'failed'
 
+    def is_failed(self) -> bool:
+        return self.status == 'failed'
+
     def started(self):
         """Mark this Download as in progress."""
         self.attempts += 1
         self.status = 'pending'
+
+    def is_pending(self) -> bool:
+        return self.status == 'pending'
 
     def complete(self):
         """Mark this Download as successfully downloaded."""
         self.status = 'complete'
         self.error = None  # clear any old errors
         self.last_successful_download = now()
+
+    def is_complete(self) -> bool:
+        return self.status == 'complete'
 
     def get_downloader(self):
         if self.downloader:
@@ -813,7 +828,7 @@ class DownloadManager:
             download = self.get_download(session, id_=download_id)
             downloader = download.get_downloader()
             self.log_warning(f'Killing download {download_id} in {downloader}')
-            if download.status == 'pending':
+            if download.is_pending():
                 downloader.kill()
             download.fail()
 
@@ -982,7 +997,7 @@ class DownloadManager:
         If the download is "complete" and the download has a frequency, schedule the download in it's next iteration.
         (Next week, month, etc.)
         """
-        if download.status == 'deferred':
+        if download.is_deferred():
             # Increase next_download slowly at first, then by large gaps later.  The largest gap is the download
             # frequency.
             hours = 3 ** (download.attempts or 1)

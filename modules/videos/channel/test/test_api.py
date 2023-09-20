@@ -89,7 +89,7 @@ def test_channel_no_download_frequency(test_client, test_session, test_directory
 
 
 @pytest.mark.asyncio
-def test_channel_frequency_update(download_channel, test_client, test_session, test_download_manager):
+async def test_channel_frequency_update(download_channel, test_async_client, test_session, test_download_manager):
     """
     A Channel's Download record is updated when the Channel's frequency is updated.
     """
@@ -102,7 +102,7 @@ def test_channel_frequency_update(download_channel, test_client, test_session, t
         url=download_channel.url,
         download_frequency=100,
     )
-    request, response = test_client.put(f'/api/videos/channels/{download_channel.id}', json=data)
+    request, response = await test_async_client.put(f'/api/videos/channels/{download_channel.id}', json=data)
     assert response.status_code == HTTPStatus.NO_CONTENT, response.json
 
     download = download_channel.get_download()
@@ -115,7 +115,7 @@ def test_channel_frequency_update(download_channel, test_client, test_session, t
 
 @pytest.mark.asyncio
 async def test_channel_download_crud(test_session, simple_channel, test_downloader_config):
-    """Modifying a Channel modifies it's Download."""
+    """Modifying a Channel modifies its Download."""
     assert simple_channel.url
     assert simple_channel.download_frequency is None
 

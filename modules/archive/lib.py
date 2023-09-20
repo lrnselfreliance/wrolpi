@@ -224,7 +224,7 @@ def get_title_from_html(html: str, url: str = None) -> str:
     try:
         return soup.title.string
     except Exception:  # noqa
-        logger.info(f'Unable to extract title {url}')
+        logger.debug(f'Unable to extract title {url}')
 
 
 @optional_session

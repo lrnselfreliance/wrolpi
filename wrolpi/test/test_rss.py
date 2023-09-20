@@ -93,5 +93,5 @@ async def test_rss_no_entries(test_session, test_download_manager):
         await test_download_manager.wait_for_all_downloads()
 
     (download,) = test_download_manager.get_downloads(test_session)
-    assert download.status == 'deferred'
+    assert download.is_deferred()
     assert 'entries' in download.error

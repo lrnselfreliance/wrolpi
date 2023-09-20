@@ -5,7 +5,6 @@ from datetime import datetime
 from http import HTTPStatus
 from itertools import zip_longest
 from unittest import mock
-from unittest.mock import MagicMock
 
 import pytest
 import pytz
@@ -13,9 +12,9 @@ import yaml
 
 from wrolpi.dates import Seconds
 from wrolpi.db import get_db_context
-from wrolpi.downloader import Downloader, Download, DownloadFrequency, DownloadResult, import_downloads_config, \
+from wrolpi.downloader import Downloader, Download, DownloadFrequency, import_downloads_config, \
     RSSDownloader, get_download_manager_config
-from wrolpi.errors import UnrecoverableDownloadError, InvalidDownload, WROLModeEnabled
+from wrolpi.errors import InvalidDownload, WROLModeEnabled
 from wrolpi.test.common import assert_dict_contains
 
 
@@ -211,7 +210,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     # Download is "new" but has not been downloaded a second time.
     assert download.next_download == expected
     assert download.last_successful_download == now_
-    assert download.status == 'new'
+    assert download.is_new()
 
     # Try the download, but it fails.
     test_downloader.do_download.reset_mock()
@@ -220,7 +219,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     test_downloader.do_download.assert_called_once()
     download = test_session.query(Download).one()
     # Download is deferred, last successful download remains the same.
-    assert download.status == 'deferred'
+    assert download.is_deferred()
     assert download.last_successful_download == now_
     # Download should be retried after the DEFAULT_RETRY_FREQUENCY.
     expected = datetime(2020, 1, 1, 3, 0, 0, 997200, tzinfo=pytz.UTC)
@@ -234,7 +233,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     await test_download_manager.wait_for_all_downloads()
     test_downloader.do_download.assert_called_once()
     download = test_session.query(Download).one()
-    assert download.status == 'complete'
+    assert download.is_complete()
     assert download.last_successful_download == now_
     # Floats cause slightly wrong date.
     assert download.next_download == datetime(2020, 1, 1, 5, 0, 0, 997200, tzinfo=pytz.UTC)
@@ -263,11 +262,11 @@ async def test_max_attempts(test_session, test_download_manager, test_downloader
     await test_download_manager.wait_for_all_downloads()
     download = session.query(Download).one()
     assert download.attempts == 3
-    assert download.status == 'failed'
+    assert download.is_failed()
 
 
 @pytest.mark.asyncio
-async def test_skip_urls(test_session, test_download_manager, test_client, assert_download_urls, test_downloader):
+async def test_skip_urls(test_session, test_download_manager, assert_download_urls, test_downloader):
     """The DownloadManager will not create downloads for URLs in its skip list."""
     _, session = get_db_context()
     get_download_manager_config().skip_urls = ['https://example.com/skipme']
@@ -354,9 +353,12 @@ async def test_crud_download(test_async_client, test_session, test_download_mana
     assert response.status_code == HTTPStatus.NOT_FOUND
     assert test_session.query(Download).count() == 0
 
+    # Let background tasks finish.
+    await asyncio.sleep(1)
+
 
 @pytest.mark.asyncio
-async def test_downloads_config(test_session, test_client, test_download_manager, test_download_manager_config,
+async def test_downloads_config(test_session, test_download_manager, test_download_manager_config,
                                 test_downloader, assert_downloads):
     # Can import with an empty config.
     await import_downloads_config()
@@ -444,7 +446,7 @@ async def test_downloads_config(test_session, test_client, test_download_manager
 
 
 @pytest.mark.asyncio
-async def test_download_excluded_urls(test_client, test_session, test_download_manager, test_downloader):
+async def test_download_excluded_urls(test_session, test_download_manager, test_downloader):
     """Test that URLs that have been excluded are ignored by the download worker."""
     test_downloader.already_downloaded = lambda *i, **kw: []
     test_downloader.set_test_success()

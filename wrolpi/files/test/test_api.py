@@ -405,7 +405,7 @@ def test_post_upload_directory(test_session, test_client, test_directory, make_f
         dict(name='chunk', value='foo', filename='chunk')
     ]
     body = make_multipart_form(forms)
-    request, response = test_client.post('/api/files/upload', data=body,
+    request, response = test_client.post('/api/files/upload', content=body,
                                          headers={
                                              'Content-Type': 'multipart/form-data; name=upload; filename="file.txt";'
                                                              ' boundary=-----sanic'})
@@ -430,7 +430,7 @@ def test_post_upload(test_session, test_client, test_directory, make_files_struc
         dict(name='chunk', value='foo', filename='chunk')
     ]
     body = make_multipart_form(forms)
-    request, response = test_client.post('/api/files/upload', data=body,
+    request, response = test_client.post('/api/files/upload', content=body,
                                          headers={
                                              'Content-Type': 'multipart/form-data; name=upload; filename="file.txt";'
                                                              ' boundary=-----sanic'})
@@ -448,7 +448,7 @@ def test_post_upload(test_session, test_client, test_directory, make_files_struc
         dict(name='chunk', value='bar', filename='chunk')
     ]
     body = make_multipart_form(forms)
-    request, response = test_client.post('/api/files/upload', data=body,
+    request, response = test_client.post('/api/files/upload', content=body,
                                          headers={
                                              'Content-Type': 'multipart/form-data; name=upload; filename="file.txt";'
                                                              ' boundary=-----sanic'})

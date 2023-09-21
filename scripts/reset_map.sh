@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 
+source /opt/wrolpi/wrolpi/scripts/lib.sh
+
+# Re-execute this script if it wasn't called with sudo.
+if [ $EUID != 0 ]; then
+  sudo "$0" "$@"
+  exit $?
+fi
+
+yes_or_no "Are you sure you want to reset the map?  The map database and cache files will be deleted." || exit 0
+
 # Use 1/4 of the RAM to import.  1/2 causes crashes on RPi.
 RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
 MAX_CACHE=$((RAM_KB / 1024 / 4))
-
-function yes_or_no {
-  while true; do
-    read -p "$* [y/n]:" yn
-    case $yn in
-    [Yy]*) return 0 ;;
-    [Nn]*) return 1 ;;
-    esac
-  done
-}
 
 Help() {
   # Display Help
@@ -43,7 +43,7 @@ while getopts ":hf" option; do
 done
 
 if [ "${FORCE}" == false ]; then
-  yes_or_no "Are you sure you want to delete the map database and cache?  This can't be undone!" || exit 1
+  yes_or_no "Are you sure you want to delete the map database and cache?  This can't be undone!" || exit 0
 fi
 
 if [[ ! -f /usr/lib/apache2/modules/mod_tile.so ||
@@ -79,7 +79,7 @@ sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO wrolpi;"
 # Reset "imported" status of any map files.
 sudo -u postgres psql -d wrolpi -c "UPDATE map_file SET imported=false"
 
-bash /opt/wrolpi/scripts/initialize_map.sh
+bash "${PROJECT_DIR}/scripts/initialize_map.sh"
 
 systemctl enable renderd
 systemctl start renderd

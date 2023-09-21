@@ -107,7 +107,6 @@ else
 fi
 
 # Clear map tile cache only after successful import.
-[ -d /var/lib/mod_tile/ajt ] && rm -rf /var/lib/mod_tile/ajt
-[ -d /var/cache/renderd/tiles/ajt ] && rm -rf /var/cache/renderd/tiles/ajt
+yes | /bin/bash /opt/wrolpi/scripts/clear_map_cache.sh
 
 # Renderd is restarted in cleanup trap.

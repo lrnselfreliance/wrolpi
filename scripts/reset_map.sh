@@ -69,19 +69,11 @@ fi
 chown -R _renderd:_renderd /var/lib/mod_tile
 
 sudo -u postgres dropdb gis || :
-
-sudo -u postgres createdb -E UTF8 -O _renderd gis
-sudo -u postgres psql -d gis -c "CREATE EXTENSION postgis;" || :
-sudo -u postgres psql -d gis -c "CREATE EXTENSION hstore;" || :
-sudo -u postgres psql -d gis -c "ALTER TABLE geometry_columns OWNER TO wrolpi;"
-sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO wrolpi;"
+sudo -u postgres dropuser _renderd || :
 
 # Reset "imported" status of any map files.
 sudo -u postgres psql -d wrolpi -c "UPDATE map_file SET imported=false"
 
 bash "${PROJECT_DIR}/scripts/initialize_map.sh"
-
-systemctl enable renderd
-systemctl start renderd
 
 echo "Map has been reset."

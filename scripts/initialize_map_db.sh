@@ -21,7 +21,8 @@ zcat /opt/wrolpi-blobs/gis-map.dump.gz | sudo -u postgres pg_restore --no-owner 
 sudo -u postgres psql -d gis -c 'ALTER TABLE geography_columns OWNER TO _renderd'
 sudo -u postgres psql -d gis -c 'ALTER TABLE geometry_columns OWNER TO _renderd'
 sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO _renderd"
+
 # Clear map tile cache files.
-[ -d /var/cache/renderd/tiles/ajt ] && sudo rm -r /var/cache/renderd/tiles/ajt
+yes | /bin/bash /opt/wrolpi/scripts/clear_map_cache.sh
 
 systemctl start renderd

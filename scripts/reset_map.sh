@@ -8,8 +8,6 @@ if [ $EUID != 0 ]; then
   exit $?
 fi
 
-yes_or_no "Are you sure you want to reset the map?  The map database and cache files will be deleted." || exit 0
-
 # Use 1/4 of the RAM to import.  1/2 causes crashes on RPi.
 RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
 MAX_CACHE=$((RAM_KB / 1024 / 4))

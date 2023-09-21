@@ -8,6 +8,8 @@ if [ $EUID != 0 ]; then
   exit $?
 fi
 
+set -x
+
 # Create WROLPi API database.
 sudo -u postgres psql -c '\l' | grep wrolpi || (
   sudo -u postgres createuser -s wrolpi  # superuser so maps can be imported

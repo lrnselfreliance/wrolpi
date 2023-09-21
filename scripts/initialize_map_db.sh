@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Creates the gis (map) database and _renderd database user if they don't exist.
+# WARNING: This will overwrite the map database data.
 
 source /opt/wrolpi/wrolpi/scripts/lib.sh
 
 yes_or_no "Are you sure you want to initialize the map database?  Data from imported maps will be lost." || exit 0
+
+set -x
 
 systemctl stop renderd
 
@@ -24,5 +27,3 @@ sudo -u postgres psql -d gis -c "ALTER TABLE spatial_ref_sys OWNER TO _renderd"
 
 # Clear map tile cache files.
 yes | /bin/bash /opt/wrolpi/scripts/clear_map_cache.sh
-
-systemctl start renderd

@@ -72,6 +72,6 @@ sudo -u postgres dropuser _renderd || :
 # Reset "imported" status of any map files.
 sudo -u postgres psql -d wrolpi -c "UPDATE map_file SET imported=false"
 
-bash "${PROJECT_DIR}/scripts/initialize_map.sh"
+yes | bash "${PROJECT_DIR}/scripts/initialize_map_db.sh"
 
 echo "Map has been reset."

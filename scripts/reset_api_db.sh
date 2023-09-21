@@ -10,6 +10,8 @@ fi
 
 yes_or_no "Are you sure you want to reset the API database? All data will be lost." || exit 0
 
+set -x
+
 systemctl stop wrolpi-api
 
 # Delete the WROLPi API DB, if it exists.

@@ -9,11 +9,13 @@ if [ $EUID != 0 ]; then
   exit $?
 fi
 
+[ -f "${SCRIPT_DIR}/config/includes.chroot/opt/wrolpi-blobs/gis-map.dump.gz" ] || \
+  (echo "config/includes.chroot/opt/wrolpi-blobs/gis-map.dump.gz does not exist!" && exit 1)
+
 # Clear out old builds.
 [ -d "${BUILD_DIR}" ] && rm -rf "${BUILD_DIR}"
 mkdir "${BUILD_DIR}"
 cd "${BUILD_DIR}" || (echo "Work directory must exist" && exit 1)
-
 set -e
 
 lb config \

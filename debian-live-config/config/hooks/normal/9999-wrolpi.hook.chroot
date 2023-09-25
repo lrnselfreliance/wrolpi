@@ -1,4 +1,5 @@
 #!/usr/bin/bash
+# This script is used to generate a Debian Live ISO image.
 
 set -e
 set -x

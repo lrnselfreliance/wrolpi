@@ -128,3 +128,4 @@ docker-compose.override.yml
 test
 /debian-live-config/config/includes.chroot/opt/wrolpi-blobs/gis-map.dump.gz
 /debian-live-config/build.log
+/debian-live-config/*.iso

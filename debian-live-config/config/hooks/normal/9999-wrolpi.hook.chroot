@@ -52,16 +52,6 @@ cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
 systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service
 systemctl enable wrolpi-kiwix.service
-
-# Configure Apache2 to listen on 8084.
-cp /opt/wrolpi/etc/raspberrypios/ports.conf /etc/apache2/ports.conf
-cp /opt/wrolpi/etc/debian12/000-default.conf /etc/apache2/sites-available/000-default.conf
-# Copy Leaflet files to Apache's directory so they can be used offline.
-cp /opt/wrolpi/etc/raspberrypios/index.html \
-  /opt/wrolpi/modules/map/leaflet.js \
-  /opt/wrolpi/modules/map/leaflet.css /var/www/html/
-chmod 644 /var/www/html/*
-
 systemctl enable renderd
 
 # NetworkManager for the hotspot.

@@ -31,16 +31,16 @@ while getopts ":hb:" option; do
 done
 
 rpi=false
-debian11=false
+debian12=false
 if (grep 'Raspberry Pi' /proc/cpuinfo >/dev/null); then
   rpi=true
 fi
-if (grep 'PRETTY_NAME="Debian GNU/Linux 11 (bullseye)"' /etc/os-release >/dev/null); then
-  debian11=true
+if (grep 'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"' /etc/os-release >/dev/null); then
+  debian12=true
 fi
 
-if [[ ${rpi} == false && ${debian11} == false ]]; then
-  echo 'This script can only be run on a Raspberry Pi or Debian 11!' && exit 2
+if [[ ${rpi} == false && ${debian12} == false ]]; then
+  echo 'This script can only be run on a Raspberry Pi or Debian 12!' && exit 2
 fi
 
 set -x
@@ -61,8 +61,8 @@ git clone https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi || :
 if [ ${rpi} == true ]; then
   /opt/wrolpi/scripts/install_raspberrypios.sh 2>&1 | tee /opt/wrolpi/install.log
   install_code=${PIPESTATUS[0]}
-elif [ ${debian11} == true ]; then
-  /opt/wrolpi/scripts/install_debian_11.sh 2>&1 | tee /opt/wrolpi/install.log
+elif [ ${debian12} == true ]; then
+  /opt/wrolpi/scripts/install_debian_12.sh 2>&1 | tee /opt/wrolpi/install.log
   install_code=${PIPESTATUS[0]}
 fi
 

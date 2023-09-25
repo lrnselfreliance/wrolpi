@@ -52,24 +52,10 @@ cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
 cp /opt/wrolpi/50x.html /var/www/50x.html
 
 # WROLPi needs a few privileged commands.
-cat >/etc/sudoers.d/90-wrolpi <<'EOF'
-%wrolpi ALL=(ALL) NOPASSWD:/usr/bin/nmcli,/usr/bin/cpufreq-set
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart renderd.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop renderd.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start renderd.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart wrolpi-kiwix.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-kiwix.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-kiwix.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart wrolpi-api.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-api.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-api.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart wrolpi-app.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-app.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-app.service
-%wrolpi ALL= NOPASSWD:/opt/wrolpi/scripts/import_map.sh
-%wrolpi ALL= NOPASSWD:/usr/sbin/shutdown
-EOF
+cp /opt/wrolpi/etc/raspberrypios/90-wrolpi /etc/sudoers.d/90-wrolpi
 chmod 0440 /etc/sudoers.d/90-wrolpi
+# Verify this new file is valid.
+visudo -c -f /etc/sudoers.d/90-wrolpi
 
 [ -d /media/wrolpi ] || mkdir /media/wrolpi
 chown wrolpi:wrolpi /media/wrolpi

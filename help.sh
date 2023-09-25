@@ -32,18 +32,18 @@ function check_file() {
 echo
 
 rpi=false
-debian11=false
+debian12=false
 if (grep 'Raspberry Pi' /proc/cpuinfo >/dev/null); then
   rpi=true
 fi
-if (grep 'PRETTY_NAME="Debian GNU/Linux 11 (bullseye)"' /etc/os-release >/dev/null); then
-  debian11=true
+if (grep 'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"' /etc/os-release >/dev/null); then
+  debian12=true
 fi
 
 if [[ ${rpi} == true ]]; then
   echo 'OK: Running on Raspberry Pi'
-elif [[ ${debian11} == true ]]; then
-  echo 'OK: Running on Debian 11'
+elif [[ ${debian12} == true ]]; then
+  echo 'OK: Running on Debian 12'
 else
   echo "FAILED: Running on unknown operating system"
 fi

@@ -12,37 +12,7 @@ fi
 RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
 MAX_CACHE=$((RAM_KB / 1024 / 4))
 
-Help() {
-  # Display Help
-  echo "Reset the Map cache/database"
-  echo
-  echo "Syntax: reset_map.sh [-h] [-f]"
-  echo "options:"
-  echo "h     Print this help."
-  echo "f     Reset without prompt."
-  echo
-}
-
-FORCE=false
-while getopts ":hf" option; do
-  case $option in
-  h) # display Help
-    Help
-    exit
-    ;;
-  f)
-    FORCE=true
-    ;;
-  *) # invalid argument(s)
-    echo "Error: Invalid option"
-    exit 1
-    ;;
-  esac
-done
-
-if [ "${FORCE}" == false ]; then
-  yes_or_no "Are you sure you want to delete the map database and cache?  This can't be undone!" || exit 0
-fi
+yes_or_no "Are you sure you want to delete the map database and cache?  This can't be undone!" || exit 0
 
 if [[ ! -f /usr/lib/apache2/modules/mod_tile.so ||
   ! -f /opt/openstreetmap-carto/mapnik.xml ||

@@ -7,46 +7,13 @@ set -e
 # Update if we haven't updated in the last day.
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
 # Install dependencies.
-apt-get install -y \
-  apt-transport-https \
-  ca-certificates \
-  calibre \
-  chromium \
-  chromium-driver \
-  cpufrequtils \
-  curl \
-  ffmpeg \
-  gcc \
-  gnupg-agent \
-  hostapd \
-  htop \
-  iotop \
-  kiwix \
-  kiwix-tools \
-  libpq-dev \
-  netcat \
-  network-manager \
-  nginx-doc \
-  nginx-full \
-  postgresql-13 \
-  python3-dev \
-  python3-doc \
-  python3-full \
-  python3-pip \
-  python3-venv \
-  software-properties-common \
-  tmux \
-  vim \
-  zim-tools
+apt-get install -y < /opt/wrolpi/pi-gen/stage2/04-wrolpi/01-packages
 
-# Install npm.
-npm --version || curl -fsSL https://deb.nodesource.com/setup_18.x | bash -
-apt-get install -y nodejs
 node -v
 npm -v
 
 # Install serve, and archiving tools.
-sudo npm i -g serve@12.0.1 single-file-cli@1.0.33 readability-extractor@0.0.6
+sudo npm i -g serve@12.0.1 single-file-cli@1.0.33 readability-extractor@0.0.6 carto@1.2.0
 
 # Build React app in background job.
 cd /opt/wrolpi/app || exit 5
@@ -84,23 +51,7 @@ EOF
 )
 
 # Give WROLPi group a few privileged commands via sudo without password.
-cat >/etc/sudoers.d/90-wrolpi <<'EOF'
-%wrolpi ALL=(ALL) NOPASSWD:/usr/bin/nmcli,/usr/bin/cpufreq-set
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart renderd.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop renderd.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start renderd.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart wrolpi-kiwix.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-kiwix.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-kiwix.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart wrolpi-api.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-api.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-api.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl restart wrolpi-app.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl stop wrolpi-app.service
-%wrolpi ALL= NOPASSWD:/usr/bin/systemctl start wrolpi-app.service
-%wrolpi ALL= NOPASSWD:/opt/wrolpi/scripts/import_map.sh
-%wrolpi ALL= NOPASSWD:/usr/sbin/shutdown
-EOF
+cp /opt/wrolpi/etc/raspberrypios/90-wrolpi /etc/sudoers.d/90-wrolpi
 chmod 0440 /etc/sudoers.d/90-wrolpi
 # Verify this new file is valid.
 visudo -c -f /etc/sudoers.d/90-wrolpi

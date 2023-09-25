@@ -27,7 +27,7 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 * [Demo](#demo)
 * [Download](#download)
 * [Try WROLPi](#try-wrolpi)
-* [Debian 11 Install](#debian-11-install)
+* [Debian 12 Install](#debian-12-install)
 * [Raspberry Pi Install](#raspberrypi-install)
 * [Raspberry Pi Image Install](#raspberry-pi-image-install)
 * [Charter](#charter)
@@ -92,13 +92,13 @@ You can try out WROLPi by running the docker containers.
 9. Browse to WROLPi.
     * http://0.0.0.0:8080
 
-# Debian 11 Install
+# Debian 12 Install
 
-Install WROLPi onto a fresh Debian 11 system.
+Install WROLPi onto a fresh Debian 12 system.
 
 **Warning: this will clobber anything else on the system!  Do not run this installation script elsewhere!**
 
-1. Install [Debian 11](https://www.debian.org/) onto a laptop or other computer.
+1. Install [Debian 12](https://www.debian.org/) onto a laptop or other computer.
 2. Get the WROLPi installation script.
     * `wget https://raw.githubusercontent.com/lrnselfreliance/wrolpi/release/install.sh -O /tmp/install.sh`
 3. Run the installation script.

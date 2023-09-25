@@ -3,7 +3,7 @@
 # Table of Contents
 
 * [Upgrading Docker containers](#upgrading-docker-containers)
-* [Upgrading Raspberry Pi or Debian 11 Installation](#upgrading-raspberry-pi-or-debian-11-installation)
+* [Upgrading Raspberry Pi or Debian 12 Installation](#upgrading-raspberry-pi-or-debian-12-installation)
 
 ## Upgrading Docker containers
 
@@ -23,7 +23,7 @@
 7. Start all docker containers
     * `docker-compose up -d`
 
-## Upgrading Raspberry Pi or Debian 11 Installation
+## Upgrading Raspberry Pi or Debian 12 Installation
 
 1. Run the upgrade script
     * `sudo /bin/bash /opt/wrolpi/upgrade.sh`

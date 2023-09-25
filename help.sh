@@ -32,18 +32,18 @@ function check_file() {
 echo
 
 rpi=false
-debian11=false
+debian12=false
 if (grep 'Raspberry Pi' /proc/cpuinfo >/dev/null); then
   rpi=true
 fi
-if (grep 'PRETTY_NAME="Debian GNU/Linux 11 (bullseye)"' /etc/os-release >/dev/null); then
-  debian11=true
+if (grep 'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"' /etc/os-release >/dev/null); then
+  debian12=true
 fi
 
 if [[ ${rpi} == true ]]; then
   echo 'OK: Running on Raspberry Pi'
-elif [[ ${debian11} == true ]]; then
-  echo 'OK: Running on Debian 11'
+elif [[ ${debian12} == true ]]; then
+  echo 'OK: Running on Debian 12'
 else
   echo "FAILED: Running on unknown operating system"
 fi
@@ -169,7 +169,7 @@ else
   echo "FAILED: WROLPi app did not respond with interface"
 fi
 
-if netstat -ant | grep LISTEN | grep 127.0.0.1:80 >/dev/null; then
+if netstat -ant | grep LISTEN | grep 0.0.0.0:80 >/dev/null; then
   echo "OK: Port 80 is occupied"
 else
   echo "FAILED: Port 80 is not occupied"
@@ -245,6 +245,12 @@ else
   echo "FAILED: Media directory files are not being served"
 fi
 
+if [ "$(stat -c '%U' /media/wrolpi/)" == 'wrolpi' ]; then
+  echo "OK: Media directory is owned by wrolpi user"
+else
+  echo "FAILED: Media directory is not owned by wrolpi user"
+fi
+
 echo
 # 3rd party commands
 if single-file -h >/dev/null 2>&1; then
@@ -253,7 +259,15 @@ else
   echo "FAILED: Singlefile cannot be run"
 fi
 
-check_file /usr/bin/readability-extractor "Readability exists" "Readability does not exist"
+if [ -f /usr/bin/readability-extractor ]; then
+  echo "OK: readability exists"
+else
+  if [ -f /usr/local/bin/readability-extractor ]; then
+    echo "OK: readability exists"
+  else
+    echo "FAILED: readability does not exist"
+  fi
+fi
 
 if wget -h >/dev/null 2>&1; then
   echo "OK: wget can be run"
@@ -270,7 +284,11 @@ fi
 if chromium-browser -h >/dev/null 2>&1; then
   echo "OK: Chromium can be run"
 else
-  echo "FAILED: Chromium cannot be run"
+  if chromium -h >/dev/null 2>&1; then
+    echo "OK: Chromium can be run"
+  else
+    echo "FAILED: Chromium cannot be run"
+  fi
 fi
 
 if ffmpeg -h >/dev/null 2>&1; then

@@ -366,7 +366,7 @@ async def test_get_status(test_async_client, test_session):
 
 
 def test_post_download(test_session, test_client, test_download_manager_config):
-    """Test creating once-downlaods and recurring downloads."""
+    """Test creating once-downloads and recurring downloads."""
 
     async def queue_downloads(*a, **kw):
         pass
@@ -374,7 +374,7 @@ def test_post_download(test_session, test_client, test_download_manager_config):
     with mock.patch('wrolpi.downloader.DownloadManager.queue_downloads', queue_downloads):
         # Create a single recurring Download.
         content = dict(
-            urls='https://example.com/1\n',
+            urls=['https://example.com/1', ],
             frequency=1_000,
             downloader='archive',
         )
@@ -385,7 +385,7 @@ def test_post_download(test_session, test_client, test_download_manager_config):
 
         # Create to once-downloads.
         content = dict(
-            urls='https://example.com/2\nhttps://example.com/3\n',
+            urls=['https://example.com/2', 'https://example.com/3'],
             downloader='archive',
         )
         request, response = test_client.post('/api/download', content=json.dumps(content))
@@ -401,6 +401,19 @@ def test_get_downloaders(test_client):
     assert 'downloaders' in response.json, 'Downloaders not returned'
     assert isinstance(response.json['downloaders'], list) and len(response.json['downloaders']), \
         'No downloaders returned'
+
+
+@pytest.mark.asyncio
+async def test_empty_post_download(test_async_client):
+    """Cannot have empty download URLs"""
+    content = dict(
+        urls=[''],  # Cannot have empty URLs
+        frequency=1_000,
+        downloader='archive',
+    )
+    request, response = await test_async_client.post('/api/download', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert response.json['code'] == 'INVALID_DOWNLOAD'
 
 
 @pytest.mark.asyncio

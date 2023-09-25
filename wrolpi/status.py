@@ -143,14 +143,15 @@ async def get_cpu_info() -> CPUInfo:
         stderr=subprocess.PIPE,
     )
     stdout, stderr = await proc.communicate()
-    if proc.returncode != 0:
+    match = TOP_REGEX.search(stdout.decode())
+    if proc.returncode != 0 or not match:
         logger.warning(f'Unable to get CPU top with exit {proc.returncode}')
         percent = None
     else:
-        percent = int(Decimal(TOP_REGEX.search(stdout.decode()).groups()[0]))
+        percent = int(Decimal(match.groups()[0]))
 
     if not TEMPERATURE_PATH.is_file():
-        logger.warning(f'CPU temperature file does not exist!')
+        warn_once(f'CPU temperature file does not exist!')
         return CPUInfo(percent=percent)
 
     try:

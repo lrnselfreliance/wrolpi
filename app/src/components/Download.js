@@ -33,6 +33,7 @@ class Downloader extends React.Component {
     submitDownload = async () => {
         let {urls, downloader, destination, tagNames} = this.state;
         if (urls) {
+            urls = urls.split(/\r?\n/);
             this.setState({pending: true, submitted: false});
             try {
                 let response = await postDownload(urls, downloader, null, null, null, destination, tagNames);
@@ -195,7 +196,7 @@ class ChannelDownload extends React.Component {
             this.setState({error: 'URL is required'});
             return;
         }
-        let response = await postDownload(url, 'video_channel', frequency,
+        let response = await postDownload([url], 'video_channel', frequency,
             null, null, destination);
         if (response.status === 204) {
             this.setState({pending: false, disabled: false, success: true, url: '', ready: false});
@@ -456,6 +457,7 @@ class ScrapeDownloader extends Downloader {
         depth = parseInt(depth);
         max_pages = parseInt(max_pages);
         if (urls) {
+            urls = urls.split(/\r?\n/);
             this.setState({pending: true, submitted: false});
             try {
                 let response = await postDownload(

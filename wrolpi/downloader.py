@@ -172,6 +172,12 @@ class Download(ModelHelper, Base):  # noqa
             return list(filterfalse(excluded, urls))
         return urls
 
+    def add_to_skip_list(self):
+        if self.manager:
+            self.manager.add_to_skip_list(self.url)
+        else:
+            raise RuntimeError(f'Cannot add {self} to skip list because I do not have a manager.')
+
 
 class Downloader:
     name: str = None
@@ -1058,6 +1064,12 @@ class DownloadManager:
         # Delete all failed once-downloads.
         session.execute('DELETE FROM download WHERE id = ANY(:ids)', {'ids': ids})
         session.commit()
+
+    @staticmethod
+    def is_skipped(*urls: str) -> bool:
+        if skip_list := get_download_manager_config().skip_urls:
+            return all(i in skip_list for i in urls)
+        return False
 
     @staticmethod
     def add_to_skip_list(*urls: str):

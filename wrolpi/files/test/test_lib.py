@@ -213,13 +213,12 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     })
     video_file = video_file.rename(test_directory / 'video.mp4')
     srt_file3 = srt_file3.rename(test_directory / 'video.en.srt')
-    foo_mtime = from_timestamp(srt_file3.stat().st_mtime)
 
     # All files are found because they are in this refresh request, or in the `dir1` directory.
     idempotency = now()
     lib._upsert_files([video_file, srt_file3, bar, baz], idempotency)
     assert_file_groups([
-        {'primary_path': video_file, 'idempotency': idempotency, 'modification_datetime': foo_mtime, 'indexed': False,
+        {'primary_path': video_file, 'idempotency': idempotency, 'indexed': False,
          'files': [
              {'path': srt_file3, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'text/srt'},
              {'path': video_file, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'},
@@ -239,14 +238,14 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     test_session.query(FileGroup).filter_by(primary_path=video_file).one().indexed = True
     test_session.commit()
     assert_file_groups(
-        [{'primary_path': str(video_file), 'idempotency': idempotency, 'modification_datetime': foo_mtime,
+        [{'primary_path': str(video_file), 'idempotency': idempotency,
           'indexed': True}],
         assert_count=False)
 
     # Only modified files need to be re-indexed.
     lib._upsert_files([video_file, srt_file3, bar, baz], idempotency)
     assert_file_groups([
-        {'primary_path': video_file, 'idempotency': idempotency, 'modification_datetime': foo_mtime, 'indexed': True,
+        {'primary_path': video_file, 'idempotency': idempotency, 'indexed': True,
          'files': [
              {'path': srt_file3, 'size': 951, 'suffix': '.en.srt', 'mimetype': 'text/srt'},
              {'path': video_file, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'},
@@ -266,7 +265,7 @@ async def test__upsert_files(test_session, make_files_structure, test_directory,
     assert len(video_file_group.files) == 1, 'SRT file was not removed from files'
     assert_file_groups([
         # Video is no longer indexed because SRT was removed.
-        {'primary_path': video_file, 'idempotency': idempotency, 'modification_datetime': foo_mtime, 'indexed': False,
+        {'primary_path': video_file, 'idempotency': idempotency, 'indexed': False,
          'files': [{'path': video_file, 'size': 1056318, 'suffix': '.mp4', 'mimetype': 'video/mp4'}]},
         {'primary_path': bar, 'idempotency': idempotency, 'indexed': False,
          'files': [{'path': bar, 'size': 0, 'suffix': '.txt', 'mimetype': 'inode/x-empty'}],

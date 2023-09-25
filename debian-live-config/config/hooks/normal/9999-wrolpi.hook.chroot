@@ -1,0 +1,71 @@
+#!/usr/bin/bash
+# This script is used to generate a Debian Live ISO image.
+
+set -e
+set -x
+
+cat >>/etc/profile <<'EOF'
+alias ll='ls -lh'
+alias la='ll -a'
+EOF
+
+git --version
+
+git clone -b master https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
+
+# Install dependencies.
+apt-get install -y < /opt/wrolpi/debian-live-config/config/package-lists/wrolpi.list.chroot
+
+# Install webapp.
+cd /opt/wrolpi/app
+npm --version
+node --version
+npm install
+npm run build
+
+# Install Node console commands.
+npm i -g serve@12.0.1 single-file-cli@1.0.15 readability-extractor@0.0.6 carto@1.2.0
+
+# Install Python requirements.
+python3 --version
+python3 -m venv /opt/wrolpi/venv
+/opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt
+
+# Configure nginx.
+cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
+cp /opt/wrolpi/50x.html /var/www/50x.html
+
+# WROLPi needs a few privileged commands.
+cp /opt/wrolpi/etc/raspberrypios/90-wrolpi /etc/sudoers.d/90-wrolpi
+chmod 0440 /etc/sudoers.d/90-wrolpi
+# Verify this new file is valid.
+visudo -c -f /etc/sudoers.d/90-wrolpi
+
+git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto
+if [[ ! -f /opt/openstreetmap-carto/mapnik.xml || ! -s /opt/openstreetmap-carto/mapnik.xml ]]; then
+  (cd /opt/openstreetmap-carto && carto project.mml >/opt/openstreetmap-carto/mapnik.xml)
+fi
+
+mkdir /media/wrolpi
+
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
+cp /opt/wrolpi/etc/debian12/wrolpi-app.service /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-kiwix.service /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
+
+systemctl enable wrolpi-api.service
+systemctl enable wrolpi-app.service
+systemctl enable wrolpi-kiwix.service
+systemctl enable renderd
+
+# NetworkManager for the hotspot.
+systemctl enable NetworkManager
+
+set +x
+
+echo
+echo "======================================================================"
+echo "9999-wrolpi.hook.chroot completed"
+echo "======================================================================"
+echo

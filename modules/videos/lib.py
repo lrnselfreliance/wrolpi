@@ -426,7 +426,6 @@ def import_channels_config():
                 # values not in the config.
                 full_data = channel.dict()
                 full_data.update(data)
-                full_data['skip_download_videos'] = list(set(data.get('skip_download_videos', {})))
                 channel.update(full_data)
 
                 if not channel.source_id and channel.url:

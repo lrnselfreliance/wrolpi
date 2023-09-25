@@ -143,7 +143,7 @@ export function CPUUsageProgress({percent, label}) {
 
 export function MemoryUsageProgress({percent, label}) {
     if (percent === null) {
-        return <Progress progress={0} color='grey' label='Memory Usage' disabled/>
+        return <Progress progress={0} color='grey' label='RAM Usage' disabled/>
     }
 
     let color = 'black';
@@ -176,6 +176,7 @@ export function StatusPage() {
     let drives = [];
     let disk_bandwidth = [];
     let memoryPercent;
+    let memorySize;
 
     if (status && status['cpu_info']) {
         const {cpu_info, load, memory_stats} = status;
@@ -194,6 +195,7 @@ export function StatusPage() {
         disk_bandwidth = status['disk_bandwidth'];
 
         memoryPercent = Math.round(memory_stats['used'] / memory_stats['total'] * 100);
+        memorySize = humanFileSize(memory_stats['total'], 0);
     }
 
     const SizedHeader = ({children}) => {
@@ -203,11 +205,14 @@ export function StatusPage() {
         </div>
     }
 
+    const cpuProgress = <CPUUsageProgress percent={percent} label={`CPU Usage (${cores} cores)`}/>;
+    const memoryUsageProgress = <MemoryUsageProgress percent={memoryPercent} label={`RAM Usage (${memorySize})`}/>;
+
     return <>
         <Media at='mobile'>
             <Segment>
-                <CPUUsageProgress percent={percent} label='CPU Usage'/>
-                <MemoryUsageProgress percent={memoryPercent} label='RAM Usage'/>
+                {cpuProgress}
+                {memoryUsageProgress}
                 <StatisticGroup>
                     <CPUTemperatureStatistic
                         temperature={temperature}
@@ -222,8 +227,8 @@ export function StatusPage() {
         </Media>
         <Media greaterThanOrEqual='tablet'>
             <Segment>
-                <CPUUsageProgress percent={percent} label='CPU Usage'/>
-                <MemoryUsageProgress percent={memoryPercent} label='RAM Usage'/>
+                {cpuProgress}
+                {memoryUsageProgress}
                 <StatisticGroup size='mini'>
                     <CPUTemperatureStatistic
                         temperature={temperature}

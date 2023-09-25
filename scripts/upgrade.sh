@@ -1,15 +1,17 @@
 #! /usr/bin/env bash
+# Installs any new dependencies of the App and API.  Uses internet.
 
-# Update systemd files.
-cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
-/usr/bin/systemctl daemon-reload
+set -e
+set -x
 
-# Upgrade the API and App.
-/bin/bash /opt/wrolpi/scripts/build_api_and_app.sh
+# Install any App dependencies.
+cd /opt/wrolpi/app || exit 1
+npm install || npm install || npm install || npm install # try install multiple times  :(
 
-# Update nginx configs
-cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
-cp /opt/wrolpi/50x.html /var/www/50x.html
-/usr/sbin/nginx -s reload
+# Install any new Python requirements.
+/opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt
+# Upgrade the WROLPi database.
+(cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py db upgrade)
 
-chown -R wrolpi:wrolpi /opt/wrolpi
+# Install any configs, restart services.
+/opt/wrolpi/repair.sh

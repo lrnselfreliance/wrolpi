@@ -36,8 +36,6 @@ function cleanup() {
   if [ -f ${MERGED_TMP_FILE} ]; then
     rm ${MERGED_TMP_FILE}
   fi
-  # Renderd must be restarted to forget the cache.
-  systemctl restart renderd
 }
 
 trap cleanup EXIT
@@ -107,7 +105,4 @@ else
 fi
 
 # Clear map tile cache only after successful import.
-[ -d /var/lib/mod_tile/ajt ] && rm -rf /var/lib/mod_tile/ajt
-[ -d /var/cache/renderd/tiles/ajt ] && rm -rf /var/cache/renderd/tiles/ajt
-
-# Renderd is restarted in cleanup trap.
+yes | /bin/bash /opt/wrolpi/scripts/clear_map_cache.sh

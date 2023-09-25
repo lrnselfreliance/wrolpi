@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-echo "Raspberry Pi OS install start: $(date '+%Y-%m-%d %H:%M:%S')"
+echo "Debian 12 install start: $(date '+%Y-%m-%d %H:%M:%S')"
 
 set -x
 set -e
@@ -7,7 +7,7 @@ set -e
 # Update if we haven't updated in the last day.
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
 # Install dependencies.
-apt-get install -y < /opt/wrolpi/pi-gen/stage2/04-wrolpi/01-packages
+apt-get install -y < /opt/wrolpi/debian-live-config/config/package-lists/wrolpi.list.chroot
 
 # App dependencies were installed.
 node -v
@@ -34,10 +34,10 @@ sudo -u _renderd /bin/bash -c '(cd /opt/openstreetmap-carto && git fetch && git 
 
 set +x
 
-ip=$(hostname -i | cut -d' ' -f1)
+ip=$(hostname -I | cut -d' ' -f1)
 if [[ $ip == *":"* ]]; then
   # Don't suggest the ipv6 address.
-  ip=$(hostname -i | cut -d' ' -f2)
+  ip=$(hostname -I | cut -d' ' -f2)
 fi
 
 echo "

@@ -108,17 +108,13 @@ def test_get_video_prev_next_no_upload_date(test_session, video_factory, channel
     assert next_ is None
 
 
-def test_get_video_for_app(test_session, simple_channel, simple_video):
-    vid, prev, next_ = get_video_for_app(simple_video.id)
-    assert vid['id'] == simple_video.id
-
-
 @pytest.mark.asyncio
-async def test_video_delete(test_async_client, test_session, test_directory, channel_factory, video_factory):
+async def test_video_delete(test_async_client, test_session, channel_factory, video_factory, test_download_manager):
     """Video.delete() removes the video's files, but leave the DB record."""
     channel1, channel2 = channel_factory(), channel_factory()
-    vid1 = video_factory(channel_id=channel1.id, with_video_file=True, with_caption_file=True)
-    vid2 = video_factory(channel_id=channel2.id, with_video_file=True, with_info_json=True)
+    vid1 = video_factory(channel_id=channel1.id, with_video_file=True, with_caption_file=True,
+                         with_info_json={'url': '1'})
+    vid2 = video_factory(channel_id=channel2.id, with_video_file=True, with_info_json={'url': '2'})
     test_session.commit()
 
     assert test_session.query(Video).count() == 2
@@ -129,14 +125,12 @@ async def test_video_delete(test_async_client, test_session, test_directory, cha
     # No videos have been deleted yet.
     assert vid1_video_path.is_file() and vid1_caption_path.is_file()
     assert vid2_video_path.is_file() and vid2_info_json_path.is_file()
-    assert channel1.skip_download_videos is None
-    assert channel2.skip_download_videos is None
 
     request, response = await test_async_client.delete(f'/api/videos/video/{vid1.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Video was added to skip list.
-    assert len(channel1.skip_download_videos) == 1
+    assert test_download_manager.is_skipped(vid1.url)
     # Video was deleted.
     assert test_session.query(Video).count() == 1
     assert vid1_video_path.is_file() is False and vid1_caption_path.is_file() is False
@@ -145,6 +139,7 @@ async def test_video_delete(test_async_client, test_session, test_directory, cha
     request, response = await test_async_client.delete(f'/api/videos/video/{vid2.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
+    assert test_download_manager.is_skipped(vid1.url, vid2.url)
     assert test_session.query(Video).count() == 0
     assert vid1_video_path.is_file() is False and vid1_caption_path.is_file() is False
     assert vid2_video_path.is_file() is False and vid2_info_json_path.is_file() is False
@@ -155,9 +150,8 @@ async def test_video_delete(test_async_client, test_session, test_directory, cha
 
 
 @pytest.mark.asyncio
-async def test_wrol_mode(test_async_client, test_directory, simple_channel, simple_video, wrol_mode_fixture,
-                         test_download_manager,
-                         tag_factory):
+async def test_wrol_mode(test_async_client, simple_channel, simple_video, wrol_mode_fixture,
+                         test_download_manager, tag_factory):
     """Many methods are blocked when WROL Mode is enabled."""
     channel = dumps(dict(name=simple_channel.name, directory=str(simple_channel.directory)))
     tag = tag_factory()

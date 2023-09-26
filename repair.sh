@@ -21,6 +21,7 @@ set -x
 systemctl stop wrolpi-api.service || :
 systemctl stop wrolpi-app.service || :
 systemctl stop wrolpi-kiwix.service || :
+systemctl stop nginx || :
 systemctl stop renderd || :
 systemctl stop apache2 || :
 
@@ -33,7 +34,6 @@ git reset HEAD --hard
 # Copy configs to system.
 cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
 cp /opt/wrolpi/50x.html /var/www/50x.html
-/usr/sbin/nginx -s reload
 
 # Install the systemd services
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
@@ -92,6 +92,7 @@ chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi*
 systemctl start wrolpi.target
 systemctl start apache2
 systemctl start renderd
+systemctl start nginx
 
 set +x
 

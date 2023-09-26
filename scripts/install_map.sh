@@ -4,10 +4,10 @@
 
 source /opt/wrolpi/wrolpi/scripts/lib.sh
 
+yes_or_no "Reset the map database and cache?" && yes | /opt/wrolpi/scripts/reset_map.sh
+
 set -x
 set -e
-
-yes_or_no "Reset the map database and cache?" && yes | /opt/wrolpi/scripts/reset_map.sh
 
 carto -v
 

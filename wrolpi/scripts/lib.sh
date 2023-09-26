@@ -24,7 +24,3 @@ fi
 if (grep 'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"' /etc/os-release >/dev/null); then
   debian12=true
 fi
-
-if [[ ${rpi} == false && ${debian12} == false ]]; then
-  echo 'This script can only be run on a Raspberry Pi or Debian 12!' && exit 2
-fi

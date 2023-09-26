@@ -253,7 +253,15 @@ else
   echo "FAILED: Singlefile cannot be run"
 fi
 
-check_file /usr/bin/readability-extractor "Readability exists" "Readability does not exist"
+if [ -f /usr/bin/readability-extractor ]; then
+  echo "OK: readability exists"
+else
+  if [ -f /usr/local/bin/readability-extractor ]; then
+    echo "OK: readability exists"
+  else
+    echo "FAILED: readability does not exist"
+  fi
+fi
 
 if wget -h >/dev/null 2>&1; then
   echo "OK: wget can be run"

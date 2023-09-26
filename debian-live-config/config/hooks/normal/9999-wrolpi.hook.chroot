@@ -41,6 +41,11 @@ chmod 0440 /etc/sudoers.d/90-wrolpi
 # Verify this new file is valid.
 visudo -c -f /etc/sudoers.d/90-wrolpi
 
+git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto
+if [[ ! -f /opt/openstreetmap-carto/mapnik.xml || ! -s /opt/openstreetmap-carto/mapnik.xml ]]; then
+  (cd /opt/openstreetmap-carto && carto project.mml >/opt/openstreetmap-carto/mapnik.xml)
+fi
+
 mkdir /media/wrolpi
 
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/

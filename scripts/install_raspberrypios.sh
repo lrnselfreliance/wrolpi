@@ -87,7 +87,7 @@ sudo -u postgres psql -c "alter user wrolpi with superuser"
 (cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py db upgrade)
 
 # Install map only if that script hasn't finished.
-[ -f /var/www/html/leaflet.css ] || /opt/wrolpi/scripts/install_map_raspberrypios.sh
+[ -f /var/www/html/leaflet.css ] || /opt/wrolpi/scripts/install_map.sh
 
 chown -R wrolpi:wrolpi /opt/wrolpi
 

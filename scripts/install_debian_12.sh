@@ -71,7 +71,7 @@ sudo -u postgres psql -c '\l' | grep wrolpi || yes | /opt/wrolpi/scripts/initial
 sudo -u postgres psql -c "alter user wrolpi with superuser"
 
 # Install map only if that script hasn't finished.
-[ -f /var/www/html/leaflet.css ] || /opt/wrolpi/scripts/install_map_debian_12.sh
+[ -f /var/www/html/leaflet.css ] || /opt/wrolpi/scripts/install_map.sh
 
 chown -R wrolpi:wrolpi /opt/wrolpi
 

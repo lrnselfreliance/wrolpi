@@ -4,12 +4,8 @@
 cd /opt/wrolpi || (echo "Cannot repair.  /opt/wrolpi does not exist" && exit 1)
 
 rpi=false
-debian12=false
 if (grep 'Raspberry Pi' /proc/cpuinfo >/dev/null); then
   rpi=true
-fi
-if (grep 'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"' /etc/os-release >/dev/null); then
-  debian12=true
 fi
 
 set -e
@@ -19,6 +15,8 @@ set -x
 systemctl stop wrolpi-api.service || :
 systemctl stop wrolpi-app.service || :
 systemctl stop wrolpi-kiwix.service || :
+systemctl stop renderd || :
+systemctl stop apache2 || :
 
 # Reset any inadvertent changes to the WROLPi repo.
 git reset HEAD --hard
@@ -45,6 +43,19 @@ systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service
 systemctl enable wrolpi-kiwix.service
 
+cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
+# Configure Apache2 to listen on 8084.
+cp /opt/wrolpi/etc/raspberrypios/ports.conf /etc/apache2/ports.conf
+cp /opt/wrolpi/etc/debian12/000-default.conf /etc/apache2/sites-available/000-default.conf
+# Copy Leaflet files to Apache's directory so they can be used offline.
+cp /opt/wrolpi/etc/raspberrypios/index.html \
+  /opt/wrolpi/modules/map/leaflet.js \
+  /opt/wrolpi/modules/map/leaflet.css /var/www/html/
+chmod 644 /var/www/html/*
+
+systemctl enable renderd
+systemctl start renderd
+
 # Create the WROLPi user
 grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
 [ -f /home/wrolpi/.pgpass ] || cat >/home/wrolpi/.pgpass <<'EOF'
@@ -66,7 +77,7 @@ sudo -u postgres psql -c '\l' | grep wrolpi || /opt/wrolpi/scripts/initialize_ap
 sudo -u postgres psql -c "alter user wrolpi with superuser"
 
 # Install map only if that script hasn't finished.
-[ -f /var/www/html/leaflet.css ] || /opt/wrolpi/scripts/install_map_debian_12.sh
+/opt/wrolpi/scripts/install_map.sh
 
 # Create the media directory.  This should be mounted by the maintainer.
 [ -d /media/wrolpi ] || mkdir /media/wrolpi
@@ -75,6 +86,13 @@ chown wrolpi:wrolpi /media/wrolpi
 chown -R wrolpi:wrolpi /opt/wrolpi*
 
 systemctl start wrolpi.target
+systemctl start apache2
+systemctl start renderd
+
+set +x
+
+echo 'Waiting for services to start...'
+sleep 10
 
 # Run the help script to suggest what may not have been repaired.
 /opt/wrolpi/help.sh

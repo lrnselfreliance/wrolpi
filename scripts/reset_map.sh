@@ -12,7 +12,9 @@ fi
 RAM_KB=$(grep MemTotal /proc/meminfo | awk '{print $2}')
 MAX_CACHE=$((RAM_KB / 1024 / 4))
 
-yes_or_no "Are you sure you want to delete the map database and cache?  This can't be undone!" || exit 0
+if psql -l 2>/dev/null | grep gis >/dev/null; then
+  yes_or_no "Are you sure you want to delete the map database and cache?  This can't be undone!" || exit 0
+fi
 
 set -e
 set -x

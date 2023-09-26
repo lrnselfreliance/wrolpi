@@ -270,7 +270,11 @@ fi
 if chromium-browser -h >/dev/null 2>&1; then
   echo "OK: Chromium can be run"
 else
-  echo "FAILED: Chromium cannot be run"
+  if chromium -h >/dev/null 2>&1; then
+    echo "OK: Chromium can be run"
+  else
+    echo "FAILED: Chromium cannot be run"
+  fi
 fi
 
 if ffmpeg -h >/dev/null 2>&1; then

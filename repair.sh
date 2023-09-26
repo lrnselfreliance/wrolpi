@@ -8,6 +8,12 @@ if (grep 'Raspberry Pi' /proc/cpuinfo >/dev/null); then
   rpi=true
 fi
 
+# Re-execute this script if it wasn't called with sudo.
+if [ $EUID != 0 ]; then
+  sudo "$0" "$@"
+  exit $?
+fi
+
 set -e
 set -x
 
@@ -62,7 +68,6 @@ grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bas
 127.0.0.1:5432:gis:_renderd:wrolpi
 127.0.0.1:5432:wrolpi:wrolpi:wrolpi
 EOF
-chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi
 chmod 0600 /home/wrolpi/.pgpass
 
 # WROLPi needs a few privileged commands.
@@ -72,18 +77,17 @@ chmod 0440 /etc/sudoers.d/90-wrolpi
 visudo -c -f /etc/sudoers.d/90-wrolpi
 
 # Configure Postgresql.  Do this after the API is stopped.
-sudo -u postgres psql -c '\l' | grep wrolpi || /opt/wrolpi/scripts/initialize_api_db.sh
+/opt/wrolpi/scripts/initialize_api_db.sh
 # wrolpi user is superuser so they can import maps.
 sudo -u postgres psql -c "alter user wrolpi with superuser"
 
-# Install map only if that script hasn't finished.
 /opt/wrolpi/scripts/install_map.sh
 
 # Create the media directory.  This should be mounted by the maintainer.
 [ -d /media/wrolpi ] || mkdir /media/wrolpi
 chown wrolpi:wrolpi /media/wrolpi
 
-chown -R wrolpi:wrolpi /opt/wrolpi*
+chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi*
 
 systemctl start wrolpi.target
 systemctl start apache2

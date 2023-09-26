@@ -3,6 +3,15 @@
 
 cd /opt/wrolpi || (echo "Cannot repair.  /opt/wrolpi does not exist" && exit 1)
 
+rpi=false
+debian12=false
+if (grep 'Raspberry Pi' /proc/cpuinfo >/dev/null); then
+  rpi=true
+fi
+if (grep 'PRETTY_NAME="Debian GNU/Linux 12 (bookworm)"' /etc/os-release >/dev/null); then
+  debian12=true
+fi
+
 set -e
 set -x
 
@@ -24,7 +33,11 @@ cp /opt/wrolpi/50x.html /var/www/50x.html
 
 # Install the systemd services
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
-cp /opt/wrolpi/etc/raspberrypios/wrolpi-app.service /etc/systemd/system/
+if [[ ${rpi} == true ]]; then
+  cp /opt/wrolpi/etc/raspberrypios/wrolpi-app.service /etc/systemd/system/
+else
+  cp /opt/wrolpi/etc/debian12/wrolpi-app.service /etc/systemd/system/
+fi
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-kiwix.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 /usr/bin/systemctl daemon-reload
@@ -60,6 +73,8 @@ sudo -u postgres psql -c "alter user wrolpi with superuser"
 chown wrolpi:wrolpi /media/wrolpi
 
 chown -R wrolpi:wrolpi /opt/wrolpi*
+
+systemctl start wrolpi.target
 
 # Run the help script to suggest what may not have been repaired.
 /opt/wrolpi/help.sh

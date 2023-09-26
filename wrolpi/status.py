@@ -151,7 +151,7 @@ async def get_cpu_info() -> CPUInfo:
         percent = int(Decimal(match.groups()[0]))
 
     if not TEMPERATURE_PATH.is_file():
-        logger.warning(f'CPU temperature file does not exist!')
+        warn_once(f'CPU temperature file does not exist!')
         return CPUInfo(percent=percent)
 
     try:

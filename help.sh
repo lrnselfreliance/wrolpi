@@ -245,6 +245,12 @@ else
   echo "FAILED: Media directory files are not being served"
 fi
 
+if [ "$(stat -c '%U' /media/wrolpi/)" == 'wrolpi' ]; then
+  echo "OK: Media directory is owned by wrolpi user"
+else
+  echo "FAILED: Media directory is not owned by wrolpi user"
+fi
+
 echo
 # 3rd party commands
 if single-file -h >/dev/null 2>&1; then

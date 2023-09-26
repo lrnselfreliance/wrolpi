@@ -169,7 +169,7 @@ else
   echo "FAILED: WROLPi app did not respond with interface"
 fi
 
-if netstat -ant | grep LISTEN | grep 127.0.0.1:80 >/dev/null; then
+if netstat -ant | grep LISTEN | grep 0.0.0.0:80 >/dev/null; then
   echo "OK: Port 80 is occupied"
 else
   echo "FAILED: Port 80 is not occupied"

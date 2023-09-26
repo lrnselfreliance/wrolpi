@@ -4,10 +4,10 @@
 
 source /opt/wrolpi/wrolpi/scripts/lib.sh
 
-/opt/wrolpi/scripts/reset_map.sh
-
 set -x
 set -e
+
+/opt/wrolpi/scripts/reset_map.sh
 
 carto -v
 

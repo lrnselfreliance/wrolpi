@@ -21,15 +21,13 @@ set -x
 
 systemctl stop renderd
 
-chown -R _renderd:_renderd /var/lib/mod_tile
-
 sudo -u postgres dropdb gis || :
 sudo -u postgres dropuser _renderd || :
 
 # Reset "imported" status of any map files.
 sudo -u postgres psql -d wrolpi -c "UPDATE map_file SET imported=false"
 
-yes | bash "${PROJECT_DIR}/scripts/initialize_map_db.sh"
+yes | /opt/wrolpi/scripts/initialize_map_db.sh
 
 set +x
 

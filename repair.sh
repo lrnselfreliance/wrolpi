@@ -90,8 +90,6 @@ chown wrolpi:wrolpi /media/wrolpi
 chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi*
 
 systemctl start wrolpi.target
-systemctl start apache2
-systemctl start renderd
 systemctl start nginx
 
 set +x

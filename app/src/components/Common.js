@@ -929,7 +929,7 @@ export function CPUTemperatureIcon({size = 'large'}) {
     // Returns an Icon only if temperature is too high.
     const {temperature, high_temperature, critical_temperature} = useCPUTemperature();
 
-    if (temperature < high_temperature) {
+    if (temperature === null || temperature < high_temperature) {
         // Temperature is not a problem.
         return null;
     }

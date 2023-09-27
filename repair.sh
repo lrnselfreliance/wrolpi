@@ -35,6 +35,12 @@ git reset HEAD --hard
 cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
 cp /opt/wrolpi/50x.html /var/www/50x.html
 
+# WROLPi needs a few privileged commands.
+cp /opt/wrolpi/etc/raspberrypios/90-wrolpi /etc/sudoers.d/90-wrolpi
+chmod 0440 /etc/sudoers.d/90-wrolpi
+# Verify this new file is valid.
+visudo -c -f /etc/sudoers.d/90-wrolpi
+
 # Install the systemd services
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
 if [[ ${rpi} == true ]]; then

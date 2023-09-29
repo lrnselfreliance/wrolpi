@@ -167,16 +167,6 @@ class ChannelDownloader(Downloader, ABC):
             match_regex = re.compile(channel.match_regex)
             downloads = [i for i in downloads if (title := i.get('title')) and match_regex.match(title)]
 
-        # Do not request videos in the skip list.
-        skip_download_videos = channel.skip_download_videos or []
-        try:
-            downloads = [i for i in downloads if i['id'] not in skip_download_videos]
-        except KeyError as e:
-            if downloads and 'id' not in downloads[0] and ('url' in downloads[0] or 'webpage_url' in downloads[0]):
-                logger.warning(f'Downloading all videos because entries do not have id', exc_info=e)
-            else:
-                raise
-
         # Prefer `webpage_url` before `url` for all entries.
         downloads = [i.get('webpage_url') or i.get('url') for i in downloads]
 
@@ -390,10 +380,7 @@ class VideoDownloader(Downloader, ABC):
                     source_id = info.get('id')
                     logger.warning(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
                                    f'attempt to download it again.')
-
-                    with get_db_session(commit=True) as session:
-                        c = session.query(Channel).filter_by(id=channel_id).one()
-                        c.add_video_to_skip_list(source_id)
+                    download.add_to_skip_list()
                 except Exception:
                     # Could not skip this video, it may not have a channel.
                     logger.warning(f'Could not skip video {url}')

@@ -101,11 +101,11 @@ class Video(ModelHelper, Base):
         session.delete(self)
 
     def add_to_skip_list(self):
-        """Add this video to it's Channel's skip list."""
-        if self.channel and self.source_id:
-            self.channel.add_video_to_skip_list(self.source_id)
+        """Add this video to the DownloadManager's skip list."""
         if self.url:
             download_manager.add_to_skip_list(self.url)
+        else:
+            logger.warning(f'{self} cannot be added to skip list because it does not have a URL')
 
     def set_viewed(self):
         self.viewed = now()
@@ -387,7 +387,6 @@ class Channel(ModelHelper, Base):
     url = Column(String, unique=True)
     match_regex = Column(String)
     directory: pathlib.Path = Column(MediaPathType)
-    skip_download_videos = Column(ARRAY(String))
     generate_posters = Column(Boolean, default=False)  # generating posters may delete files, and can be slow.
     calculate_duration = Column(Boolean, default=True)
     download_frequency = Column(Integer)
@@ -406,14 +405,6 @@ class Channel(ModelHelper, Base):
         if isinstance(other, Channel):
             return self.id == other.id
         return False
-
-    def add_video_to_skip_list(self, source_id: str):
-        if not source_id:
-            raise UnknownVideo(f'Cannot skip video with empty source id: {source_id}')
-
-        skip_download_videos = {i for i in self.skip_download_videos or [] if i}
-        skip_download_videos.add(source_id)
-        self.skip_download_videos = skip_download_videos
 
     def delete_with_videos(self):
         """Delete all Video records (but not video files) related to this Channel.  Then delete the Channel."""
@@ -481,7 +472,6 @@ class Channel(ModelHelper, Base):
             generate_posters=self.generate_posters,
             match_regex=self.match_regex or '',
             name=self.name,
-            skip_download_videos=self.skip_download_videos or [],
             source_id=self.source_id,
             url=self.url or None,
         )

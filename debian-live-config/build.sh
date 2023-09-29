@@ -29,7 +29,6 @@ lb config \
  --archive-areas "main contrib non-free non-free-firmware" \
  --updates true \
  --security true \
- --cache true \
  --apt-recommends false \
  --firmware-binary true \
  --firmware-chroot true \
@@ -37,6 +36,8 @@ lb config \
  --checksums sha512 \
  --clean \
  --color \
+ --linux-packages "linux-image linux-headers" \
+ --memtest memtest86+ \
  --iso-preparer WROLPi \
  --iso-publisher https://wrolpi.org
 

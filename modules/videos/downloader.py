@@ -75,6 +75,7 @@ class ChannelDownloader(Downloader, ABC):
     @staticmethod
     def is_a_playlist(info: dict):
         # A playlist may have an id different from its channel.
+        logger.debug(f'is_a_playlist {info["id"]=} {info.get("channel_id")=}')
         return info['id'] != info.get('channel_id')
 
     async def do_download(self, download: Download) -> DownloadResult:
@@ -117,6 +118,8 @@ class ChannelDownloader(Downloader, ABC):
         try:
             if not is_a_playlist:
                 await self.prepare_channel_for_downloads(download, channel)
+            else:
+                logger.debug('Not updating channel because this is a playlist')
 
             downloads = self.get_missing_videos(download, channel)
             return DownloadResult(
@@ -140,6 +143,7 @@ class ChannelDownloader(Downloader, ABC):
     @classmethod
     async def prepare_channel_for_downloads(cls, download: Download, channel: Channel):
         """Update the Channel's video catalog.  Refresh the Channel's files if necessary."""
+        logger.debug(f'Preparing {channel} for downloads')
         channel_id = channel.id
 
         update_channel_catalog(channel, download.info_json)
@@ -165,7 +169,13 @@ class ChannelDownloader(Downloader, ABC):
 
         # Do not request videos in the skip list.
         skip_download_videos = channel.skip_download_videos or []
-        downloads = [i for i in downloads if i['id'] not in skip_download_videos]
+        try:
+            downloads = [i for i in downloads if i['id'] not in skip_download_videos]
+        except KeyError as e:
+            if downloads and 'id' not in downloads[0] and ('url' in downloads[0] or 'webpage_url' in downloads[0]):
+                logger.warning(f'Downloading all videos because entries do not have id', exc_info=e)
+            else:
+                raise
 
         # Prefer `webpage_url` before `url` for all entries.
         downloads = [i.get('webpage_url') or i.get('url') for i in downloads]
@@ -510,6 +520,9 @@ def update_channel_catalog(channel: Channel, info: dict):
         info_json_path = channel.directory / f'{channel.name}.info.json'
         with info_json_path.open('wt') as fh:
             json.dump(info, fh, indent=2)
+        logger.debug(f'Wrote channel info json to {info_json_path}')
+    else:
+        logger.debug(f'Skipping channel info json because it does not have a directory: {channel}')
 
     logger.info(f'Finished downloading video list for {channel} found {len(entries)} videos')
 

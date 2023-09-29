@@ -159,7 +159,7 @@ def test_api_download_channel(test_session, test_client, simple_channel):
 
 def test_api_download(test_session, test_client, test_directory):
     """A video can be downloaded."""
-    content = {'urls': 'https://example.com/video1', 'downloader': 'video', 'destination': 'dest',
+    content = {'urls': ['https://example.com/video1', ], 'downloader': 'video', 'destination': 'dest',
                'excluded_urls': 'example.com'}
     request, response = test_client.post('/api/download', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
@@ -177,7 +177,7 @@ def test_api_download_video_tags(test_session, test_client, tag_factory):
     tag1 = tag_factory()
     tag2 = tag_factory()
 
-    content = {'urls': 'https://example.com/video1', 'downloader': 'video', 'tag_names': [tag1.name, tag2.name]}
+    content = {'urls': ['https://example.com/video1', ], 'downloader': 'video', 'tag_names': [tag1.name, tag2.name]}
     request, response = test_client.post('/api/download', content=json.dumps(content))
     assert response.status_code == HTTPStatus.NO_CONTENT
 

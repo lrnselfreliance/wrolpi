@@ -228,8 +228,6 @@ def valid_regex(_: Request, body: schema.RegexRequest):
 @validate(schema.DownloadRequest)
 @wrol_mode_check
 async def post_download(_: Request, body: schema.DownloadRequest):
-    # URLs are provided in a textarea, lets split all lines.
-    urls = [i.strip() for i in str(body.urls).strip().splitlines()]
     downloader = download_manager.get_downloader_by_name(body.downloader)
     if not downloader:
         raise InvalidDownload(f'Cannot find downloader with name {body.downloader}')
@@ -248,11 +246,11 @@ async def post_download(_: Request, body: schema.DownloadRequest):
                         depth=body.depth)
 
     if body.frequency:
-        download_manager.recurring_download(urls[0], body.frequency, downloader_name=body.downloader,
+        download_manager.recurring_download(body.urls[0], body.frequency, downloader_name=body.downloader,
                                             sub_downloader_name=body.sub_downloader, reset_attempts=True,
                                             settings=settings)
     else:
-        download_manager.create_downloads(urls, downloader_name=body.downloader, reset_attempts=True,
+        download_manager.create_downloads(body.urls, downloader_name=body.downloader, reset_attempts=True,
                                           sub_downloader_name=body.sub_downloader, settings=settings)
     if download_manager.disabled.is_set() or download_manager.stopped.is_set():
         # Downloads are disabled, warn the user.

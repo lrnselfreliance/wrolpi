@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import Optional, List
 
+from wrolpi.errors import InvalidDownload
+
 
 @dataclass
 class SettingsObject:
@@ -50,7 +52,7 @@ class EchoResponse:
 
 @dataclass
 class DownloadRequest:
-    urls: str
+    urls: List[str]
     downloader: str
     frequency: Optional[int] = None
     sub_downloader: Optional[str] = None
@@ -60,6 +62,13 @@ class DownloadRequest:
     suffix: Optional[str] = None
     depth: Optional[int] = None
     max_pages: Optional[int] = None
+
+    def __post_init__(self):
+        urls = [j for i in self.urls if (j := i.strip())]
+        if not urls:
+            raise InvalidDownload(f'urls cannot be empty')
+        # Get unique URLs, preserve order.
+        self.urls = list(dict.fromkeys(urls))
 
 
 @dataclass

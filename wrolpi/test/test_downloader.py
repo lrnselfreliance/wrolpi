@@ -321,7 +321,7 @@ async def test_process_runner_timeout(test_directory):
 async def test_crud_download(test_async_client, test_session, test_download_manager, test_downloader):
     """Test the ways that Downloads can be created."""
     body = dict(
-        urls='https://example.com',
+        urls=['https://example.com', ],
         downloader=test_downloader.name,
         frequency=DownloadFrequency.weekly,
         excluded_urls='example.org,something',

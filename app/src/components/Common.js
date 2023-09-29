@@ -902,23 +902,50 @@ export function UnsupportedModal(header, message, icon) {
 export function HotspotStatusIcon() {
     const {on, setHotspot, dockerized} = useHotspot();
     const {modal, doOpen} = UnsupportedModal('Unsupported on Docker', 'You cannot toggle the hotspot on Docker.');
+    const [confirmOpen, setConfirmOpen] = React.useState(false);
 
-    const toggleHotspot = (e) => {
-        e.preventDefault();
-        if (dockerized) {
-            doOpen();
+    const handleConfirm = (e) => {
+        if (e) {
+            e.preventDefault()
         }
-        if (on != null) {
-            setHotspot(!on);
-        }
+        setConfirmOpen(false);
+        setHotspot(false);
     }
 
-    return <>
-        <a href='#' onClick={toggleHotspot}>
+    if (dockerized === false && on === true) {
+        return <>
+            <Confirm
+                open={confirmOpen}
+                onCancel={() => setConfirmOpen(false)}
+                onClose={() => setConfirmOpen(false)}
+                onConfirm={handleConfirm}
+                header='Disable the hotspot'
+                content='You will be disconnected when using the hotspot. Are you sure?'
+                confirmButton='Disable'
+            />
+            <a href='#' onClick={() => setConfirmOpen(true)}>
+                <IconGroup size='large'>
+                    <Icon name='wifi' disabled={on !== true}/>
+                    {on === false && <Icon corner name='x'/>}
+                    {on === null && <Icon corner name='question'/>}
+                </IconGroup>
+            </a>
+        </>
+    } else if (dockerized === false && on === false) {
+        return <a href='#' onClick={() => setHotspot(true)}>
             <IconGroup size='large'>
-                <Icon name='wifi' disabled={on !== true}/>
-                {on === false && <Icon corner name='x'/>}
-                {on === null && <Icon corner name='question'/>}
+                <Icon name='wifi' disabled/>
+                <Icon corner name='x'/>
+            </IconGroup>
+        </a>
+    }
+
+    // Hotspot is not available, or, status has not yet been fetched.
+    return <>
+        <a href='#' onClick={doOpen}>
+            <IconGroup size='large'>
+                <Icon name='wifi' disabled/>
+                <Icon corner name='question'/>
             </IconGroup>
         </a>
         {modal}

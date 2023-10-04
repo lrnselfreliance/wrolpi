@@ -32,8 +32,8 @@ python3 -m venv /opt/wrolpi/venv
 /opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt
 
 # Configure nginx.
-cp /opt/wrolpi/nginx.conf /etc/nginx/nginx.conf
-cp /opt/wrolpi/50x.html /var/www/50x.html
+cp /opt/wrolpi/etc/raspberrypios/nginx.conf /etc/nginx/nginx.conf
+cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
 
 # WROLPi needs a few privileged commands.
 cp /opt/wrolpi/etc/raspberrypios/90-wrolpi /etc/sudoers.d/90-wrolpi

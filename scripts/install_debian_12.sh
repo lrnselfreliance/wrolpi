@@ -7,7 +7,7 @@ set -e
 # Update if we haven't updated in the last day.
 [ -z "$(find -H /var/lib/apt/lists -maxdepth 0 -mtime -1)" ] && apt update
 # Install dependencies.
-apt-get install -y < /opt/wrolpi/debian-live-config/config/package-lists/wrolpi.list.chroot
+apt-get install -y $(cat /opt/wrolpi/debian-live-config/config/package-lists/wrolpi.list.chroot)
 
 # App dependencies were installed.
 node -v
@@ -24,10 +24,19 @@ npm install || npm install || npm install || npm install # try install multiple 
 python3 -m venv /opt/wrolpi/venv
 /opt/wrolpi/venv/bin/pip3 install -r /opt/wrolpi/requirements.txt
 
+# Create the WROLPi user
+grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bash)"
+
 # Get map dependencies.
 [ -d /opt/openstreetmap-carto ] && chown -R wrolpi:wrolpi /opt/openstreetmap-carto
 git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto || :
-sudo -u _renderd /bin/bash -c '(cd /opt/openstreetmap-carto && git fetch && git checkout master && git reset --hard origin/master && git pull --ff)'
+(cd /opt/openstreetmap-carto && git fetch && git checkout master && git reset --hard origin/master && git pull --ff)
+chown -R _renderd:_renderd /opt/openstreetmap-carto
+
+# Get map initialization dump.
+if [[ ! -f /opt/wrolpi-blobs/gis-map.dump.gz || ! -s /opt/wrolpi-blobs/gis-map.dump.gz ]]; then
+  wget https://wrolpi.nyc3.cdn.digitaloceanspaces.com/gis-map.dump.gz -O /opt/wrolpi-blobs/gis-map.dump.gz
+fi
 
 # Repair will install configs and restart services.
 /opt/wrolpi/repair.sh

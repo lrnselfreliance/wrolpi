@@ -125,3 +125,7 @@ chown wrolpi:wrolpi /media/wrolpi
 chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi*
 
 systemctl start wrolpi.target
+
+set +x
+
+echo "Repair has completed.  You may run /opt/wrolpi/help.sh to check system status."

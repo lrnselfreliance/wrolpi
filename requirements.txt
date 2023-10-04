@@ -1,4 +1,4 @@
-Pillow==9.5.0
+Pillow==10.0.1
 Pint==0.21
 pypdf==3.12.1
 PyYAML==6.0

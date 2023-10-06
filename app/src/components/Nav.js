@@ -1,9 +1,9 @@
 import React from "react";
 import {NavLink} from "react-router-dom";
 import {Dropdown, Menu} from "semantic-ui-react";
-import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
+import {Media, ThemeContext} from "../contexts/contexts";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {DarkModeToggle, HotspotStatusIcon, NAME, CPUTemperatureIcon} from "./Common";
+import {CPUTemperatureIcon, DarkModeToggle, HotspotStatusIcon, NAME, SystemLoadIcon} from "./Common";
 import {ShareButton} from "./Share";
 import {useWROLMode} from "../hooks/customHooks";
 
@@ -66,8 +66,12 @@ export function NavBar() {
     const homeLink = <NavLink className='item' to='/' style={{paddingTop: 0, paddingBottom: 0}}>
         {topNavText}
     </NavLink>;
+
+    // Display the temperature icon first because it can cause the system to throttle.
+    const warningIcon = <CPUTemperatureIcon fallback={<SystemLoadIcon/>}/>
+
     const icons = <React.Fragment>
-        <NavIconWrapper><CPUTemperatureIcon/></NavIconWrapper>
+        <NavIconWrapper>{warningIcon}</NavIconWrapper>
         <NavIconWrapper><ShareButton/></NavIconWrapper>
         <NavIconWrapper><HotspotStatusIcon/></NavIconWrapper>
         <NavIconWrapper><DarkModeToggle/></NavIconWrapper>

@@ -737,11 +737,43 @@ export const useStatusFlag = (flag) => {
 
 export const useCPUTemperature = () => {
     const {status} = React.useContext(StatusContext);
-    const temperature = status && status['cpu_info'] ? status['cpu_info']['temperature'] : 0;
-    const high_temperature = status && status['cpu_info'] ? status['cpu_info']['high_temperature'] : 75;
-    const critical_temperature = status && status['cpu_info'] ? status['cpu_info']['critical_temperature'] : 85;
+    let temperature = 0;
+    let highTemperature = 75;
+    let criticalTemperature = 85;
 
-    return {temperature, high_temperature, critical_temperature}
+    if (status && status['cpu_info']) {
+        temperature = status['cpu_info']['temperature'];
+        highTemperature = status['cpu_info']['high_temperature'];
+        criticalTemperature = status['cpu_info']['critical_temperature'];
+    }
+
+    return {temperature, highTemperature, criticalTemperature}
+}
+
+export const useLoad = () => {
+    const {status} = React.useContext(StatusContext);
+    let minute_1;
+    let minute_5;
+    let minute_15;
+    let mediumLoad = false;
+    let highLoad = false;
+    let cores;
+
+    if (status && status['load']) {
+        minute_1 = status['load']['minute_1'];
+        minute_5 = status['load']['minute_5'];
+        minute_15 = status['load']['minute_15'];
+
+        cores = status['cpu_info']['cores'];
+        const quarter = cores / 4;
+        if (cores && minute_1 >= (quarter * 3)) {
+            highLoad = true;
+        } else if (cores && minute_1 >= (quarter * 2)) {
+            mediumLoad = true;
+        }
+    }
+
+    return {minute_1, minute_5, minute_15, mediumLoad, highLoad, cores};
 }
 
 

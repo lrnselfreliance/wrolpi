@@ -3,6 +3,14 @@ import {getByTestId, queryByTestId, render, screen} from '@testing-library/react
 import {CPUTemperatureIcon, DisableDownloadsToggle} from "./Common";
 import {StatusContext} from "../contexts/contexts";
 import {startDownloads} from "../components/Common";
+import {BrowserRouter} from "react-router-dom";
+
+const mockedUseHref = jest.fn();
+
+jest.mock("react-router-dom", () => ({
+    ...(jest.requireActual("react-router-dom")),
+    useHref: () => mockedUseHref
+}));
 
 test('DownloadsToggle is off when loading', async () => {
     const statusValue = {status: null, fetchStatus: null};
@@ -58,7 +66,9 @@ test('DownloadsToggle is on if downloading is On', async () => {
 test('CPUTemperatureIcon high', async () => {
     const statusValue = {status: {cpu_info: {temperature: 80, high_temperature: 75, critical_temperature: 90}}};
     const {container} = render(<StatusContext.Provider value={statusValue}>
-        <CPUTemperatureIcon/>
+        <BrowserRouter>
+            <CPUTemperatureIcon/>
+        </BrowserRouter>
     </StatusContext.Provider>);
 
     const icon = getByTestId(container, 'cpuTemperatureIcon');
@@ -69,7 +79,9 @@ test('CPUTemperatureIcon high', async () => {
 test('CPUTemperatureIcon critical', async () => {
     const statusValue = {status: {cpu_info: {temperature: 100, high_temperature: 75, critical_temperature: 90}}};
     const {container} = render(<StatusContext.Provider value={statusValue}>
-        <CPUTemperatureIcon/>
+        <BrowserRouter>
+            <CPUTemperatureIcon/>
+        </BrowserRouter>
     </StatusContext.Provider>);
 
     const icon = getByTestId(container, 'cpuTemperatureIcon');

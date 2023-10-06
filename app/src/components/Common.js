@@ -19,6 +19,7 @@ import {
     useCPUTemperature,
     useDirectories,
     useHotspot,
+    useLoad,
     useSearchDirectories,
     useSearchOrder,
     useSettings,
@@ -952,23 +953,36 @@ export function HotspotStatusIcon() {
     </>
 }
 
-export function CPUTemperatureIcon({size = 'large'}) {
+export function CPUTemperatureIcon({size = 'large', fallback = null}) {
     // Returns an Icon only if temperature is too high.
-    const {temperature, high_temperature, critical_temperature} = useCPUTemperature();
+    const {temperature, highTemperature, criticalTemperature} = useCPUTemperature();
 
-    if (temperature === null || temperature < high_temperature) {
+    if (temperature === null || temperature < highTemperature) {
         // Temperature is not a problem.
-        return null;
+        return fallback;
     }
 
-    let icon;
-    if (temperature >= critical_temperature) {
-        icon = <Icon data-testid='cpuTemperatureIcon' name='thermometer' size={size} color='red'/>;
-    } else if (temperature >= high_temperature) {
-        icon = <Icon data-testid='cpuTemperatureIcon' name='thermometer half' size={size} color='yellow'/>;
-    }
+    let icon = temperature >= criticalTemperature ?
+        <Icon data-testid='cpuTemperatureIcon' name='thermometer' size={size} color='red'/>
+        : <Icon data-testid='cpuTemperatureIcon' name='thermometer half' size={size} color='yellow'/>;
+    icon = <Link to='/admin/status'>{icon}</Link>;
 
     return <Popup content={`CPU: ${temperature}°C`} trigger={icon}/>
+}
+
+export function SystemLoadIcon({size = 'large', fallback = null}) {
+    const {minute_1, mediumLoad, highLoad} = useLoad();
+
+    if (!mediumLoad && !highLoad) {
+        return fallback;
+    }
+
+    // Only return the icon if the load is not low.
+    const color = highLoad ? 'red' : 'yellow';
+    let icon = <Link to='/admin/status'>
+        <Icon name='tachometer alternate' size={size} color={color}/>
+    </Link>;
+    return <Popup content={`Load: ${minute_1}`} trigger={icon}/>
 }
 
 export function useTitle(title) {

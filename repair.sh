@@ -26,6 +26,7 @@ systemctl stop renderd || :
 systemctl stop apache2 || :
 
 # Reset any inadvertent changes to the WROLPi repo.
+git config --global --add safe.directory /opt/wrolpi
 git reset HEAD --hard
 
 # Rebuild the app after reset.

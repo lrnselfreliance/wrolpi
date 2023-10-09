@@ -29,7 +29,6 @@ network so that any user with a laptop/tablet/phone can connect and use the libr
 * [Try WROLPi](#try-wrolpi)
 * [Debian 12 Install](#debian-12-install)
 * [Raspberry Pi Install](#raspberrypi-install)
-* [Raspberry Pi Image Install](#raspberry-pi-image-install)
 * [Charter](#charter)
 * [Upgrading WROLPi](UPGRADE.md)
 * [Join](#join)
@@ -94,45 +93,31 @@ You can try out WROLPi by running the docker containers.
 
 # Debian 12 Install
 
-Install WROLPi onto a fresh Debian 12 system.
+Steps necessary to initialize your WROLPi after installing the Debian image from wrolpi.org
 
-**Warning: this will clobber anything else on the system!  Do not run this installation script elsewhere!**
+1. Download and copy a pre-built Debian image from https://wrolpi.org onto a USB thumb-drive (USB 2 recommended)
+2. Insert the thumb-drive into the laptop, boot to the thumb-drive
+   1. Select "Start Installer"
+   2. Install Debian 12 like usual.
+   3. 
+       * WROLPi will be installed during the Debian 12 installation without your intervention.
+3. Unplug the thumb-drive after the installation has completed, login as the user _you_ created during installation.
+4. Switch to the root user: `su -`
+5. Initialize the WROLPi databases using the repair script: `/opt/wrolpi/repair.sh`
+6. Reboot: `reboot`
+7. Browse to http://wrolpi.local or the IP address of your WROLPi!
 
-1. Install [Debian 12](https://www.debian.org/) onto a laptop or other computer.
-2. Get the WROLPi installation script.
-    * `wget https://raw.githubusercontent.com/lrnselfreliance/wrolpi/release/install.sh -O /tmp/install.sh`
-3. Run the installation script.
-    * `sudo /bin/bash /tmp/install.sh`
-4. Start WROLPi.
-    * `sudo systemctl start wrolpi.target`
-5. Browse to the IP address of your WROLPi!
+# Raspberry Pi Install
 
-# RaspberryPi Install
-
-Install WROLPi onto a fresh Raspberry Pi.
-
-**Warning: this will clobber anything else on the Raspberry Pi!  Do not run this installation script elsewhere!**
-
-1. Install [Raspberry Pi OS](https://www.raspberrypi.com/software/operating-systems/) onto a RaspberryPi.
-2. Get the WROLPi installation script.
-    * `wget https://raw.githubusercontent.com/lrnselfreliance/wrolpi/release/install.sh -O /tmp/install.sh`
-3. Run the installation script.
-    * `sudo /bin/bash /tmp/install.sh`
-4. Start WROLPi.
-    * `sudo systemctl start wrolpi.target`
-5. Join the Hotspot or browse to the IP address of your WROLPi!
-
-# Raspberry Pi Image Install
-
-Steps necessary to initialize your WROLPi after installing the images from wrolpi.org
+Steps necessary to initialize your WROLPi after installing the Raspberry Pi image from wrolpi.org
 
 1. Download and copy a pre-built image from https://wrolpi.org onto an SD card.
 2. Boot the Raspberry Pi, login with username pi and password wrolpi.
 3. Modify fstab to mount your external drive to /media/wrolpi (modify this command to match your system).
     * `echo '/dev/sda1 /media/wrolpi auto defaults,nofail 0 0' | sudo tee -a /etc/fstab`
-4. Run the database creation script: `sudo bash /opt/wrolpi/scripts/create_db.sh`
+4. Initialize the WROLPi databases using the repair script: `sudo /opt/wrolpi/repair.sh`
 5. Reboot `sudo reboot`
-6. Join the Hotspot or browse to the IP address of your WROLPi!
+6. Join the Hotspot or browse to http://wrolpi.local or the IP address of your WROLPi!
 
 # Charter
 

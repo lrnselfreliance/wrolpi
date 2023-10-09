@@ -5,7 +5,11 @@ MEDIA_DIRECTORY=/media/wrolpi
 # Source environment file after declaring globals.
 [ -f /opt/wrolpi/.env ] && source /opt/wrolpi/.env
 
-echo "This script is running as $(whoami)"
+# Re-execute this script if it wasn't called with sudo.
+if [ $EUID != 0 ]; then
+  sudo "$0" "$@"
+  exit $?
+fi
 
 function check_directory() {
   directory=$1

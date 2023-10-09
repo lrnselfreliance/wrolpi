@@ -902,7 +902,7 @@ export function UnsupportedModal(header, message, icon) {
 
 export function HotspotStatusIcon() {
     const {on, setHotspot, dockerized} = useHotspot();
-    const {modal, doOpen} = UnsupportedModal('Unsupported on Docker', 'You cannot toggle the hotspot on Docker.');
+    const {modal, doOpen} = UnsupportedModal('Unsupported', 'You cannot toggle the hotspot on this machine.');
     const [confirmOpen, setConfirmOpen] = React.useState(false);
 
     const handleConfirm = (e) => {

@@ -3,6 +3,8 @@
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 BUILD_DIR=/tmp/wrolpi-build
 
+VERSION=$(cat "${SCRIPT_DIR}/../wrolpi/version.txt")
+
 # Re-execute this script if it wasn't called with sudo.
 if [ $EUID != 0 ]; then
   sudo "$0" "$@"
@@ -24,6 +26,7 @@ lb config \
  --architectures amd64 \
  --linux-flavours amd64 \
  --distribution bookworm \
+ --debian-installer live \
  --debian-installer-gui true \
  --archive-areas "main contrib non-free non-free-firmware" \
  --updates true \
@@ -37,8 +40,8 @@ lb config \
  --color \
  --linux-packages "linux-image linux-headers" \
  --memtest memtest86+ \
- --iso-volume WROLPi \
- --iso-application WROLPi \
+ --iso-volume "WROLPi v${VERSION}" \
+ --iso-application "WROLPi v${VERSION}" \
  --iso-preparer WROLPi \
  --iso-publisher https://wrolpi.org
 

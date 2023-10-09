@@ -263,6 +263,8 @@ def test_zim_tag_migration(test_session, test_directory, zim_factory, tag_factor
         ('https://download.kiwix.org/zim/stack_exchange/superuser.com_en_all_', ('Superuser (Stack Exchange)', 'en')),
         ('https://download.kiwix.org/zim/ifixit/ifixit_nl_all_', ('iFixit', 'nl')),
         ('https://download.kiwix.org/zim/gutenberg/gutenberg_ang_all_', ('Gutenberg', 'ang')),
+        ('https://download.kiwix.org/zim/stack_exchange/ham.stackexchange.com_en_all_',
+         ('Amateur Radio (Stack Exchange)', 'en'))
     ]
 )
 def test_zim_download_url_to_name(url, expected):

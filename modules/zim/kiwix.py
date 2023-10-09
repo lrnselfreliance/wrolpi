@@ -129,6 +129,11 @@ KIWIX_CATALOG = [
                       'sl', 'sr', 'sv', 'te', 'tl', 'zh'],
         'size': 70 * 1073741824,
     },
+    {
+        'name': 'Amateur Radio (Stack Exchange)',
+        'languages': ['en'],
+        'size': 62 * 1048576,
+    },
 ]
 
 KIWIX_CATALOG_BY_NAME = {i['name']: i for i in KIWIX_CATALOG}

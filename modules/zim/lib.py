@@ -313,6 +313,8 @@ async def subscribe(name: str, language: str, session: Session = None,
         url = f'https://download.kiwix.org/zim/ifixit/ifixit_{language}_all_'
     elif name == 'Gutenberg':
         url = f'https://download.kiwix.org/zim/gutenberg/gutenberg_{language}_all_'
+    elif name == 'Amateur Radio (Stack Exchange)':
+        url = f'https://download.kiwix.org/zim/stack_exchange/ham.stackexchange.com_{language}_all_'
     else:
         raise ValueError(f'{name} not a valid Kiwix subscription name!')
 
@@ -375,6 +377,8 @@ def zim_download_url_to_name(url: str) -> Tuple[str, str]:
         name = 'iFixit'
     elif project == 'gutenberg' and flavor == '_all_':
         name = 'Gutenberg'
+    elif project == 'ham.stackexchange.com' and flavor == '_all_':
+        name = 'Amateur Radio (Stack Exchange)'
     else:
         raise RuntimeError(f'Could not find name for Zim URL: {url} {project=} {flavor=}')
 

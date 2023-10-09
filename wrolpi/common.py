@@ -110,6 +110,7 @@ __all__ = [
     'background_task',
     'cancel_refresh_tasks',
     'cancelable_wrapper',
+    'chain',
     'chdir',
     'check_media_directory',
     'chunks',
@@ -1573,3 +1574,29 @@ def html_screenshot(html: bytes) -> bytes:
         driver.get(f'file://{fh.name}')
         screenshot = driver.get_screenshot_as_png()
         return screenshot
+
+
+def chain(iterable: Union[List, Tuple], length: int) -> List:
+    """
+    Steps through the provided list and generates slices of the provided length.
+
+    >>> list(chain([1, 2, 3, 4], 2))
+    [[1, 2], [2, 3], [3, 4]]
+
+    >>> list(chain([1, 2, 3, 4], 3))
+    [[1, 2, 3], [2, 3, 4]]
+    """
+    if not iterable:
+        return
+
+    position = 0
+    maximum = 1 + len(iterable) - length
+    yielded = False
+    while position < maximum:
+        tick = iterable[position:position + length]
+        yield tick
+        yielded = True
+        position += 1
+    if not yielded:
+        # Not enough items to iterate.  Yield the original iterable.
+        yield iterable

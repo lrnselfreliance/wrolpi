@@ -782,3 +782,21 @@ def test_format_html_file():
  </body>
 </html>
 '''
+
+
+@pytest.mark.parametrize(
+    'iterable,length,step,expected',
+    [
+        ([1, 2, 3, 4], 1, None, [[1], [2], [3], [4]]),
+        ([1, 2, 3, 4], 2, None, [[1, 2], [2, 3], [3, 4]]),
+        ([1, 2, 3, 4], 3, None, [[1, 2, 3], [2, 3, 4]]),
+        # More length than items yield the original iterable.
+        ([1, 2, 3, 4], 5, None, [[1, 2, 3, 4], ]),
+        # Can handle empty lists.
+        ([], 2, None, []),
+        # Type inputted matches output.
+        ((1, 2, 3, 4), 2, None, [(1, 2), (2, 3), (3, 4)]),
+    ]
+)
+def test_chain(iterable, length, step, expected):
+    assert list(common.chain(iterable, length)) == expected

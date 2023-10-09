@@ -4,7 +4,7 @@ import pathlib
 from pathlib import Path
 from typing import Optional, Dict, List, Union
 
-from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ARRAY, ForeignKey, BigInteger
+from sqlalchemy import Column, Integer, String, Boolean, JSON, Date, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship, Session, deferred
 from sqlalchemy.orm.collections import InstrumentedList
 
@@ -379,6 +379,11 @@ class Video(ModelHelper, Base):
         from modules.videos.common import ffmpeg_video_complete
         return ffmpeg_video_complete(self.video_path)
 
+    def get_channel_entry(self) -> Optional[Dict]:
+        """Return the info_json entry for this Video from its Channel."""
+        if self.channel and self.source_id:
+            return self.channel.get_video_entry_by_id(self.source_id)
+
 
 class Channel(ModelHelper, Base):
     __tablename__ = 'channel'
@@ -573,3 +578,12 @@ class Channel(ModelHelper, Base):
         if not channel:
             raise UnknownChannel(f'Cannot find channel with id {id_}')
         return channel
+
+    def get_video_entry_by_id(self, video_source_id: str) -> Optional[Dict]:
+        """Search my info_json for the entry with the provided id."""
+        if self.info_json:
+            matching_entries = [i for i in self.info_json['entries'] if i['id'] == video_source_id]
+            if len(matching_entries) == 1:
+                return matching_entries[0]
+            elif len(matching_entries) > 1:
+                raise RuntimeError(f'More than one info_json entry matches {video_source_id}')

@@ -104,7 +104,7 @@ cp /opt/wrolpi/etc/raspberrypios/mod_tile.conf /etc/apache2/conf-available/mod_t
 carto -v
 
 # Initialize the map if it has not been initialized.
-sudo -u postgres psql -c '\l' | grep gis || yes | /opt/wrolpi/scripts/initialize_map_db.sh
+sudo -u postgres psql -c '\l' | grep gis || /opt/wrolpi/scripts/initialize_map_db.sh
 
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
 # Configure Apache2 to listen on 8084.

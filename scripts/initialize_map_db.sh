@@ -4,7 +4,9 @@
 
 source /opt/wrolpi/wrolpi/scripts/lib.sh
 
-yes_or_no "Are you sure you want to initialize the map database?  Data from imported maps will be lost." || exit 0
+sudo -u postgres psql -c '\l' 2>/dev/null | grep gis >/dev/null && (
+  yes_or_no "Are you sure you want to initialize the map database?  Data from imported maps will be lost." || exit 0
+)
 
 set -x
 

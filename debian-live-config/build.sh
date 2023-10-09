@@ -1,4 +1,5 @@
 #!/bin/bash
+# https://live-team.pages.debian.net/live-manual/html/live-manual/index.en.html
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 BUILD_DIR=/tmp/wrolpi-build
@@ -11,8 +12,10 @@ if [ $EUID != 0 ]; then
   exit $?
 fi
 
-[ -f "${SCRIPT_DIR}/config/includes.chroot/opt/wrolpi-blobs/gis-map.dump.gz" ] || \
-  (echo "config/includes.chroot/opt/wrolpi-blobs/gis-map.dump.gz does not exist!" && exit 1)
+if [ ! -f "${SCRIPT_DIR}/config/includes.chroot/opt/wrolpi-blobs/gis-map.dump.gz" ]; then
+  echo "config/includes.chroot/opt/wrolpi-blobs/gis-map.dump.gz does not exist!"
+  exit 1
+fi
 
 # Clear out old builds.
 [ -d "${BUILD_DIR}" ] && rm -rf "${BUILD_DIR}"
@@ -51,3 +54,8 @@ lb build 2>&1 | tee "${SCRIPT_DIR}/build.log"
 
 cp "${BUILD_DIR}"/*iso "${SCRIPT_DIR}/" || (echo "Build failed. No ISOs were found!" && exit 1)
 chmod 644 "${SCRIPT_DIR}"/*iso
+DEST="${SCRIPT_DIR}/WROLPi-v${VERSION}-amd64.iso"
+[ -f "${DEST}" ] && (echo "Removing conflicting ISO" && rm "${DEST}")
+mv "${SCRIPT_DIR}"/*.iso "${DEST}"
+
+echo "Build has completed. ISO output ${DEST}"

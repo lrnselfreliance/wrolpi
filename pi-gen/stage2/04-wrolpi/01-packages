@@ -5,6 +5,7 @@ autoconf
 build-essential
 bzip2
 ca-certificates
+calibre
 cargo
 chromium-browser
 chromium-chromedriver
@@ -72,10 +73,12 @@ python3-mapnik
 python3-pip
 python3-venv
 renderd
+rsync
 software-properties-common
 tar
 tmux
 unzip
 vim
+vlc
 wget
 zim-tools

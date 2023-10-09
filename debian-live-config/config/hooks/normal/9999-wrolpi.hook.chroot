@@ -13,9 +13,6 @@ git --version
 
 git clone -b master https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi
 
-# Install dependencies.
-apt-get install -y < /opt/wrolpi/debian-live-config/config/package-lists/wrolpi.list.chroot
-
 # Install webapp.
 cd /opt/wrolpi/app
 npm --version

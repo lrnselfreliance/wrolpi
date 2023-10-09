@@ -78,6 +78,7 @@ python3-minimal
 python3-pip
 python3-venv
 renderd
+rsync
 software-properties-common
 sudo
 tar

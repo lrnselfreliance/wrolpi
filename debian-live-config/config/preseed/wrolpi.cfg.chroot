@@ -1,0 +1,1 @@
+d-i netcfg/get_hostname string wrolpi

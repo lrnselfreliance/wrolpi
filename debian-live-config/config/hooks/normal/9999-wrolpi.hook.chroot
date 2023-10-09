@@ -43,6 +43,9 @@ if [[ ! -f /opt/openstreetmap-carto/mapnik.xml || ! -s /opt/openstreetmap-carto/
   (cd /opt/openstreetmap-carto && carto project.mml >/opt/openstreetmap-carto/mapnik.xml)
 fi
 
+# Change default postgresql port to 5432.
+sed -i 's/port = 5433/port = 5432/' /etc/postgresql/13/main/postgresql.conf
+
 mkdir /media/wrolpi
 
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/

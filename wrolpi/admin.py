@@ -45,18 +45,21 @@ def hotspot_status() -> HotspotStatus:
     return HotspotStatus.unknown
 
 
-def enable_hotspot():
+def enable_hotspot(depth: int = 10):
     """Turn the Wi-Fi interface into a hotspot.
 
     If Wi-Fi is already running, replace that with a hotspot.
     """
+    if depth < 0:
+        raise RuntimeError(f'Failed to start hotspot!')
+
     status = hotspot_status()
     logger.info(f'Hotspot status: {status}')
 
     if status == HotspotStatus.connected:
         logger.info('Hotspot already connected.  Rebooting hotspot.')
         disable_hotspot()
-        return enable_hotspot()
+        return enable_hotspot(depth=depth - 1)
     elif status == HotspotStatus.disconnected:
         # Radio is on, but not connected.  Good, turn it into a hotspot.
         cmd = (SUDO_BIN, NMCLI_BIN, 'device', 'wifi', 'hotspot', 'ifname', WROLPI_CONFIG.hotspot_device,
@@ -69,7 +72,7 @@ def enable_hotspot():
         cmd = (SUDO_BIN, NMCLI_BIN, 'radio', 'wifi', 'on')
         subprocess.check_call(cmd)
         logger.info('Turned on hotspot radio.')
-        return enable_hotspot()
+        return enable_hotspot(depth=depth - 1)
     elif status == HotspotStatus.unknown:
         logger.error('Cannot enable hotspot with unknown status!')
 

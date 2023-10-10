@@ -97,15 +97,16 @@ Steps necessary to initialize your WROLPi after installing the Debian image from
 
 1. Download and copy a pre-built Debian image from https://wrolpi.org onto a USB thumb-drive (USB 2 recommended)
 2. Insert the thumb-drive into the laptop, boot to the thumb-drive
-   1. Select "Start Installer"
-   2. Install Debian 12 like usual.
-   3. 
-       * WROLPi will be installed during the Debian 12 installation without your intervention.
-3. Unplug the thumb-drive after the installation has completed, login as the user _you_ created during installation.
-4. Switch to the root user: `su -`
-5. Initialize the WROLPi databases using the repair script: `/opt/wrolpi/repair.sh`
-6. Reboot: `reboot`
-7. Browse to http://wrolpi.local or the IP address of your WROLPi!
+    1. Select "Start Installer"
+    2. Install Debian 12 as you would like.
+       1. It is recommended to use the hostname **wrolpi**
+       2. (WROLPi will be installed during the installation without your intervention.)
+3. Unplug the thumb-drive after the installation has completed
+4. Login as the user _you_ created during installation.
+5. Switch to the root user: `su -`
+6. Initialize the WROLPi databases using the repair script: `/opt/wrolpi/repair.sh`
+7. Reboot: `reboot`
+8. Browse to http://wrolpi.local or the IP address of your WROLPi!
 
 # Raspberry Pi Install
 
@@ -125,7 +126,7 @@ Steps necessary to initialize your WROLPi after installing the Raspberry Pi imag
 
 1. Storage is cheaper than power.
 2. Two is one, one is none.
-3. In WROL mode, run silently.
+3. Run silently.
 
 ## Physical properties
 

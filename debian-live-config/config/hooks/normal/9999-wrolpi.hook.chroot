@@ -39,9 +39,7 @@ chmod 0440 /etc/sudoers.d/90-wrolpi
 visudo -c -f /etc/sudoers.d/90-wrolpi
 
 git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto
-if [[ ! -f /opt/openstreetmap-carto/mapnik.xml || ! -s /opt/openstreetmap-carto/mapnik.xml ]]; then
-  (cd /opt/openstreetmap-carto && carto project.mml >/opt/openstreetmap-carto/mapnik.xml)
-fi
+(cd /opt/openstreetmap-carto && carto project.mml >/opt/openstreetmap-carto/mapnik.xml)
 
 # Change default postgresql port to 5432.
 sed -i 's/port = 5433/port = 5432/' /etc/postgresql/15/main/postgresql.conf

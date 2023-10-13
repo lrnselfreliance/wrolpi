@@ -1,0 +1,50 @@
+#!/bin/bash
+# https://github.com/RPI-Distro/pi-gen
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+BUILD_DIR=/tmp/wrolpi-build
+
+VERSION=$(cat "${SCRIPT_DIR}/../wrolpi/version.txt")
+
+# Re-execute this script if it wasn't called with sudo.
+if [ $EUID != 0 ]; then
+  sudo "$0" "$@"
+  exit $?
+fi
+
+if [ ! -f "${SCRIPT_DIR}/stage2/04-wrolpi/files/gis-map.dump.gz" ]; then
+  echo "stage2/04-wrolpi/files/gis-map.dump.gz does not exist!"
+  exit 1
+fi
+
+set -e
+set -x
+
+# Clear out old builds.
+[ -d "${BUILD_DIR}" ] && rm -rf "${BUILD_DIR}"
+mkdir "${BUILD_DIR}"
+
+# We need the arm64 branch for modern RPi.
+git clone --branch arm64 https://github.com/RPI-Distro/pi-gen.git "${BUILD_DIR}"
+
+# Copy the configuration and build files into the pi-gen directory.
+cp "${SCRIPT_DIR}/config.txt" "${BUILD_DIR}/config.txt"
+rsync -a "${SCRIPT_DIR}"/stage2/* "${BUILD_DIR}/stage2/"
+
+# We only need to build the Lite and Desktop images.
+rm "${BUILD_DIR}"/stage*/EXPORT*
+echo 'IMG_SUFFIX="-lite"' > "${BUILD_DIR}/stage2/EXPORT_IMAGE"
+echo 'IMG_SUFFIX="-desktop"' > "${BUILD_DIR}/stage5/EXPORT_IMAGE"
+
+# Build the images.
+(cd "${BUILD_DIR}" && time nice -n 18 "${BUILD_DIR}/build.sh" -c "${BUILD_DIR}/config.txt" | \
+  tee "${SCRIPT_DIR}"/build.log)
+
+grep "02-run.sh completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "script 2 failed!" && exit 1)
+grep "03-run-chroot.sh completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "script 3 failed!" && exit 1)
+grep "04-run-chroot.sh completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "script 4 failed!" && exit 1)
+
+# Move the built images out of the build directory.
+mv "${SCRIPT_DIR}/deploy/*xz" "${SCRIPT_DIR}/"
+chmod 644 "${SCRIPT_DIR}"/*xz
+chown 1000:1000 "${SCRIPT_DIR}"/*xz

@@ -50,7 +50,7 @@ lb config \
 
 rsync -a "${SCRIPT_DIR}/config" "${BUILD_DIR}/"
 
-lb build 2>&1 | tee "${SCRIPT_DIR}/build.log"
+time nice -n 18 lb build 2>&1 | tee "${SCRIPT_DIR}/build.log"
 
 cp "${BUILD_DIR}"/*iso "${SCRIPT_DIR}/" || (echo "Build failed. No ISOs were found!" && exit 1)
 chmod 644 "${SCRIPT_DIR}"/*iso

@@ -52,11 +52,6 @@ cp /opt/wrolpi/etc/raspberrypios/wrolpi-kiwix.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
 
-systemctl enable wrolpi-api.service
-systemctl enable wrolpi-app.service
-systemctl enable wrolpi-kiwix.service
-systemctl enable renderd
-
 # NetworkManager for the hotspot.
 systemctl enable NetworkManager
 

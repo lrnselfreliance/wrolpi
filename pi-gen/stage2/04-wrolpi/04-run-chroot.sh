@@ -4,16 +4,11 @@ set -e
 set -x
 
 # Create mapnik config.
-if [ ! -d /opt/openstreetmap-carto ]; then
-  git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto
-fi
+git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto
 git config --global --add safe.directory /opt/openstreetmap-carto
 (cd /opt/openstreetmap-carto && git fetch && git checkout master && git reset --hard origin/master && git pull --ff)
 chown -R wrolpi:wrolpi /opt/openstreetmap-carto
-cd /opt/openstreetmap-carto
-if [[ ! -f /opt/openstreetmap-carto/mapnik.xml || ! -s /opt/openstreetmap-carto/mapnik.xml ]]; then
-  /usr/bin/carto project.mml >/opt/openstreetmap-carto/mapnik.xml
-fi
+(cd /opt/openstreetmap-carto && carto project.mml >/opt/openstreetmap-carto/mapnik.xml)
 
 # WROLPi user can access WROLPi and Map database.
 mkdir -p /home/pi/Desktop
@@ -48,7 +43,7 @@ chmod 644 /var/www/html/*
 # Allow wrolpi user to delete map tiles.
 usermod -aG _renderd wrolpi
 
-[ -d /var/cache/renderd/tiles ] || mkdir /var/cache/renderd/tiles
+mkdir /var/cache/renderd/tiles
 chown -R _renderd:_renderd /var/cache/renderd/tiles
 
 # Create the media directory for the wrolpi user.

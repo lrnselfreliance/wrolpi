@@ -23,8 +23,9 @@ const links = [
         ]
     },
 ];
+const help = {to: '/help', text: 'Help', key: 'help'};
 const admin = {to: '/admin', text: 'Admin', key: 'admin'};
-const rightLinks = [admin,];
+const rightLinks = [help, admin];
 
 const collapsedLinks = links.concat([admin,]);
 

@@ -48,6 +48,18 @@ function Footer() {
     </Container>
 }
 
+function HelpPage() {
+    return <iframe
+        title='map'
+        src={`http://${window.location.hostname}:8086/`}
+        style={{
+            position: 'fixed',
+            height: '100%',
+            width: '100%',
+            border: 'none',
+        }}/>
+}
+
 function Root() {
     return <>
         <header>
@@ -70,6 +82,7 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     <Route path='videos/channel/:channelId/video/:videoId' exact element={<VideoWrapper/>}/>
     <Route path="videos/*" element={<VideosRoute/>}/>
     <Route path="admin/*" element={<AdminRoute/>}/>
+    <Route path="help/*" element={<HelpPage/>}/>
     <Route path="more/*" element={<MoreRoute/>}/>
     <Route path="inventory/*" element={<InventoryRoute/>}/>
     <Route path='archive/*' element={<ArchiveRoute/>}/>

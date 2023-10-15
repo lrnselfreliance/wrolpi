@@ -37,7 +37,7 @@ echo 'IMG_SUFFIX="-lite"' > "${BUILD_DIR}/stage2/EXPORT_IMAGE"
 echo 'IMG_SUFFIX="-desktop"' > "${BUILD_DIR}/stage5/EXPORT_IMAGE"
 
 # Build the images.
-(cd "${BUILD_DIR}" && time nice -n 18 "${BUILD_DIR}/build.sh" -c "${BUILD_DIR}/config.txt" | \
+(cd "${BUILD_DIR}" && time nice -n 18 "${BUILD_DIR}"/build.sh -c "${BUILD_DIR}"/config.txt | \
   tee "${SCRIPT_DIR}"/build.log)
 
 grep "02-run.sh completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "script 2 failed!" && exit 1)
@@ -45,6 +45,7 @@ grep "03-run-chroot.sh completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (
 grep "04-run-chroot.sh completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "script 4 failed!" && exit 1)
 
 # Move the built images out of the build directory.
-mv "${SCRIPT_DIR}/deploy/*xz" "${SCRIPT_DIR}/"
+mv "${SCRIPT_DIR}"/deploy/*lite*xz "${SCRIPT_DIR}"/WROLPi-v"${VERSION}"-aarch64-lite.img.xz
+mv "${SCRIPT_DIR}"/deploy/*desktop*xz "${SCRIPT_DIR}"/WROLPi-v"${VERSION}"-aarch64-desktop.img.xz
 chmod 644 "${SCRIPT_DIR}"/*xz
 chown 1000:1000 "${SCRIPT_DIR}"/*xz

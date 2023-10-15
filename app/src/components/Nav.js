@@ -27,7 +27,7 @@ const help = {to: '/help', text: 'Help', key: 'help'};
 const admin = {to: '/admin', text: 'Admin', key: 'admin'};
 const rightLinks = [help, admin];
 
-const collapsedLinks = links.concat([admin,]);
+const collapsedLinks = links.concat([help, admin]);
 
 function DropdownLinks({link}) {
     return <Dropdown item text={link.text} direction='left'>

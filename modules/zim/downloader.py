@@ -1,10 +1,8 @@
 from http import HTTPStatus
 from typing import List
 
-import bs4
-
 from modules.zim import lib
-from wrolpi.common import logger, aiohttp_get, get_download_info, download_file, background_task
+from wrolpi.common import logger, aiohttp_get, get_download_info, download_file, background_task, get_html_soup
 from wrolpi.downloader import Downloader, Download, DownloadResult
 
 __all__ = ['KiwixCatalogDownloader', 'KiwixZimDownloader', 'kiwix_zim_downloader', 'kiwix_catalog_downloader']
@@ -20,7 +18,7 @@ async def fetch_hrefs(url: str) -> List[str]:
     if status != HTTPStatus.OK:
         raise RuntimeError(f'Failed to fetch file catalog')
 
-    soup = bs4.BeautifulSoup(content, 'html.parser')
+    soup = get_html_soup(content)
     downloads = list()
     for a_ in soup.find_all('a'):
         downloads.append(a_['href'])

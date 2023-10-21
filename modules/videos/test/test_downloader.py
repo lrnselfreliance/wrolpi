@@ -4,7 +4,6 @@ from copy import copy
 from unittest import mock
 
 import pytest
-from yt_dlp.utils import UnsupportedError
 
 from modules.videos.channel.lib import download_channel
 from modules.videos.downloader import VideoDownloader, \

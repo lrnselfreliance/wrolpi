@@ -27,6 +27,7 @@ from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Gener
 from urllib.parse import urlparse, urlunsplit
 
 import aiohttp
+import bs4
 import yaml
 from aiohttp import ClientResponse
 from bs4 import BeautifulSoup
@@ -36,7 +37,6 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
-from wrolpi import dates
 from wrolpi.dates import now, from_timestamp, seconds_to_timestamp
 from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError, LogLevelError
 from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS
@@ -129,8 +129,8 @@ __all__ = [
     'get_config',
     'get_download_info',
     'get_files_and_directories',
+    'get_html_soup',
     'get_media_directory',
-    'get_model_by_table_name',
     'get_relative_to_media_directory',
     'get_warn_once',
     'insert_parameter',
@@ -138,7 +138,6 @@ __all__ = [
     'limit_concurrent',
     'logger',
     'make_media_directory',
-    'match_paths_to_suffixes',
     'minimize_dict',
     'native_only',
     'partition',
@@ -147,7 +146,6 @@ __all__ = [
     'register_refresh_cleanup',
     'remove_whitespace',
     'run_after',
-    'sanitize_link',
     'set_log_level',
     'set_test_config',
     'set_test_media_directory',
@@ -161,6 +159,8 @@ __all__ = [
     'wrol_mode_check',
     'wrol_mode_enabled',
     'zig_zag',
+    'html_screenshot',
+    'format_html_string',
 ]
 
 # Base is used for all SQLAlchemy models.
@@ -200,13 +200,6 @@ class ModelHelper:
         Session.object_session(self).flush([self])
 
 
-def get_model_by_table_name(table_name):
-    """Find a model by its table name."""
-    for klass in Base._decl_class_registry.values():
-        if hasattr(klass, '__tablename__') and klass.__tablename__ == table_name:
-            return klass
-
-
 class tsvector(types.TypeDecorator):
     impl = types.UnicodeText
 
@@ -217,12 +210,6 @@ def compile_tsvector(element, compiler, **kw):
 
 
 URL_CHARS = string.ascii_lowercase + string.digits
-
-
-def sanitize_link(link: str) -> str:
-    """Remove any non-url safe characters, all will be lowercase."""
-    new_link = ''.join(i for i in str(link).lower() if i in URL_CHARS)
-    return new_link
 
 
 class ConfigFile:
@@ -1118,35 +1105,19 @@ def register_refresh_cleanup(func: callable):
 
 
 async def apply_refresh_cleanup():
+    # TODO convert all functions to async so refresh functions can be used.
     for func in REFRESH_CLEANUP:
-        start = dates.now()
-        try:
-            logger_.info(f'Applying refresh cleanup {func.__name__}')
-            func()
-        except Exception as e:
-            logger_.error(f'Refresh cleanup {func.__name__} failed!', exc_info=e)
-            if PYTEST:
-                raise
-        finally:
-            elapsed = (dates.now() - start).total_seconds()
-            logger_.warning(f'After refresh cleanup {func.__name__} took {int(elapsed)} seconds')
+        slow_message = f'After refresh cleanup {func.__name__} took %(elapsed)s seconds'
+        with slow_logger(5, slow_message, logger__=logger_):
+            try:
+                logger_.info(f'Applying refresh cleanup {func.__name__}')
+                func()
+            except Exception as e:
+                logger_.error(f'Refresh cleanup {func.__name__} failed!', exc_info=e)
+                if PYTEST:
+                    raise
         # Sleep to catch cancel.
         await asyncio.sleep(0)
-
-
-@iterify(tuple)
-def match_paths_to_suffixes(paths: List[pathlib.Path], suffix_groups: List[Tuple[str]]):
-    paths = paths.copy()
-    for group in suffix_groups:
-        match = None
-        for suffix in group:
-            # Compare all suffixes in the group to the path's name.  Yield the first path that shares the first
-            # suffix.  If no suffix matches any path, yield None.
-            match = next(filter(lambda i: i.name.endswith(suffix), paths), None)
-            if match:
-                paths.pop(paths.index(match))
-                break
-        yield match
 
 
 def chunks(it: Iterable, size: int):
@@ -1210,7 +1181,7 @@ def timer(name):
 
 
 @contextlib.contextmanager
-def slow_logger(max_seconds: int, message: str, logger__=logger, level=logging.WARNING):
+def slow_logger(max_seconds: int, message: str, logger__=logger_, level=logging.WARNING):
     """Only logs when the context duration exceeds the `max_seconds`."""
     before = now()
     try:
@@ -1472,8 +1443,13 @@ def url_strip_host(url: str) -> str:
     return url or '/'
 
 
-def extract_html_text(html: str) -> str:
+def get_html_soup(html: Union[bytes, str]) -> bs4.BeautifulSoup:
     soup = BeautifulSoup(html, features='html.parser')
+    return soup
+
+
+def extract_html_text(html: str) -> str:
+    soup = get_html_soup(html)
 
     # kill all script and style elements
     for script in soup(["script", "style"]):
@@ -1538,6 +1514,9 @@ def format_json_file(file: pathlib.Path, indent: int = 2):
 
 
 def format_html_string(html: str) -> str:
+    if not html.strip():
+        raise RuntimeError('Refusing to format empty HTMl string.')
+
     soup = BeautifulSoup(html, features='lxml')
     return soup.prettify()
 

@@ -15,7 +15,38 @@ from .models import Inventory, Item, InventoriesVersion
 
 logger = logger.getChild(__name__)
 
-unit_registry = pint.UnitRegistry()
+__all__ = [
+    'DEFAULT_CATEGORIES',
+    'DEFAULT_INVENTORIES',
+    'delete_inventory',
+    'delete_items',
+    'get_brands',
+    'get_categories',
+    'get_inventories',
+    'get_inventories_version',
+    'get_items',
+    'get_next_inventories_version',
+    'get_unit_registry',
+    'increment_inventories_version',
+    'logger',
+    'save_inventory',
+    'save_item',
+    'sort_categories',
+    'update_inventory',
+    'update_item',
+]
+
+UNIT_REGISTRY: pint.UnitRegistry = None
+
+
+def get_unit_registry() -> pint.UnitRegistry:
+    global UNIT_REGISTRY
+    if UNIT_REGISTRY:
+        return UNIT_REGISTRY
+
+    UNIT_REGISTRY = pint.UnitRegistry()
+    return UNIT_REGISTRY
+
 
 DEFAULT_CATEGORIES = [
     ('salt', 'cooking ingredients'),

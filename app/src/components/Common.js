@@ -179,7 +179,10 @@ export function isoDatetimeToString(dt, time = false) {
     let d = <React.Fragment/>;
     if (dt && time) {
         d = new Date(dt);
-        d = `${d.toDateString()} ${d.getHours()}:${d.getMinutes()}:${d.getSeconds()}`;
+        const hours = String(d.getHours()).padStart(2, '0');
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        const seconds = String(d.getSeconds()).padStart(2, '0');
+        d = `${d.toDateString()} ${hours}:${minutes}:${seconds}`;
     } else if (dt) {
         d = new Date(dt);
         d = d.toDateString();

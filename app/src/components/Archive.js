@@ -6,6 +6,8 @@ import {
     CardMeta,
     Container,
     Dropdown,
+    GridColumn,
+    GridRow,
     Image,
     Input,
     PlaceholderHeader,
@@ -18,7 +20,8 @@ import {
     BackButton,
     CardLink,
     cardTitleWrapper,
-    encodeMediaPath, ErrorMessage,
+    encodeMediaPath,
+    ErrorMessage,
     ExternalCardLink,
     FileIcon,
     findPosterPath,
@@ -165,6 +168,13 @@ function ArchivePage() {
         await fetchArchive();
     }
 
+    const archivedDatetimeString = isoDatetimeToString(data.archive_datetime, true);
+    const publishedDatetimeString = archiveFile.published_datetime ? isoDatetimeToString(archiveFile.published_datetime, true)
+        : 'unknown';
+    const modifiedDatetimeString = archiveFile.published_modified_datetime
+        ? isoDatetimeToString(archiveFile.published_modified_datetime, true)
+        : 'unknown';
+
     const aboutPane = {
         menuItem: 'About', render: () => <TabPane>
             <Header as={'h3'}>Domain</Header>
@@ -175,6 +185,9 @@ function ArchivePage() {
 
             <Header as={'h3'}>URL</Header>
             <p>{data.url ? <a href={data.url}>{data.url}</a> : 'N/A'}</p>
+
+            <Header as={'h3'}>Modified Date</Header>
+            <p>{modifiedDatetimeString}</p>
         </TabPane>
     };
 
@@ -221,7 +234,19 @@ function ArchivePage() {
             <ExternalCardLink to={singlefileUrl}>
                 <Header as='h2'>{textEllipsis(archiveFile.title || data.url)}</Header>
             </ExternalCardLink>
-            <Header as='h3'>{isoDatetimeToString(data.archive_datetime, true)}</Header>
+
+            <Header as='h3'>Author: {archiveFile.author ? archiveFile.author : 'unknown'}</Header>
+
+            <Grid columns={2} stackable>
+                <GridRow>
+                    <GridColumn>
+                        <Header as='h4'>Published: {publishedDatetimeString}</Header>
+                    </GridColumn>
+                    <GridColumn>
+                        <Header as='h4'>Archived: {archivedDatetimeString}</Header>
+                    </GridColumn>
+                </GridRow>
+            </Grid>
 
             {singlefileButton}
             {updateButton}

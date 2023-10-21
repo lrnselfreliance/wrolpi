@@ -1,5 +1,6 @@
 apache2
 apache2-dev
+apache2-doc
 apt-transport-https
 autoconf
 build-essential
@@ -17,8 +18,10 @@ fonts-noto-cjk
 fonts-noto-hinted
 fonts-noto-unhinted
 gcc
+gcc-doc
 gdal-bin
 git
+git-doc
 gnupg-agent
 hostapd
 htop
@@ -64,6 +67,7 @@ osm2pgsql
 osmium-tool
 pkg-config
 postgis
+postgis-doc
 postgresql-15
 postgresql-15-postgis-3
 postgresql-15-postgis-3-scripts

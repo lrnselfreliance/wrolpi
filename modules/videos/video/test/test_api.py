@@ -6,7 +6,6 @@ from json import dumps
 import pytest
 
 from modules.videos.models import Video
-from modules.videos.video.lib import get_video_for_app
 from wrolpi.dates import now
 
 

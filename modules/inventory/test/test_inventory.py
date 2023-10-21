@@ -15,10 +15,11 @@ from .. import init
 from ..common import sum_by_key, get_inventory_by_category, get_inventory_by_subcategory, get_inventory_by_name, \
     compact_unit, cleanup_quantity, save_inventories_file, import_inventories_file, get_inventories_config
 from ..errors import NoInventories, InventoriesVersionMismatch
-from ..inventory import unit_registry, \
-    get_inventories, save_inventory, update_inventory, \
-    delete_inventory, get_categories
+from ..inventory import get_inventories, save_inventory, update_inventory, \
+    delete_inventory, get_categories, get_unit_registry
 from ..models import Item, Inventory
+
+UNIT_REGISTRY = get_unit_registry()
 
 TEST_ITEMS_COLUMNS = (
     'inventory_id',
@@ -199,11 +200,11 @@ def quantity_to_string(quantity: Quantity) -> str:
 @pytest.mark.parametrize(
     'quantity,expected',
     [
-        (Decimal(5) * unit_registry.ounce, '5 ounce'),
-        (Decimal(16) * unit_registry.ounce, '1 pound'),
-        (Decimal(500) * unit_registry.pound, '500 pound'),
-        (Decimal(2000) * unit_registry.pound, '1 ton'),
-        (Decimal(128000) * unit_registry.ounce, '4 ton'),
+        (Decimal(5) * UNIT_REGISTRY.ounce, '5 ounce'),
+        (Decimal(16) * UNIT_REGISTRY.ounce, '1 pound'),
+        (Decimal(500) * UNIT_REGISTRY.pound, '500 pound'),
+        (Decimal(2000) * UNIT_REGISTRY.pound, '1 ton'),
+        (Decimal(128000) * UNIT_REGISTRY.ounce, '4 ton'),
     ]
 )
 def test_compact_unit(quantity, expected):
@@ -211,7 +212,7 @@ def test_compact_unit(quantity, expected):
     assert quantity_to_string(compact_unit(quantity)) == expected
 
 
-pound, oz, gram, gallon = unit_registry('pound'), unit_registry('oz'), unit_registry('gram'), unit_registry('gallon')
+pound, oz, gram, gallon = UNIT_REGISTRY('pound'), UNIT_REGISTRY('oz'), UNIT_REGISTRY('gram'), UNIT_REGISTRY('gallon')
 pound, oz, gram, gallon = pound.units, oz.units, gram.units, gallon.units
 mass = pound.dimensionality
 length = gallon.dimensionality

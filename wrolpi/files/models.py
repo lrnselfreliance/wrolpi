@@ -65,17 +65,20 @@ class FileGroup(ModelHelper, Base):
     __tablename__ = 'file_group'
     id: int = Column(BigInteger, primary_key=True)
 
+    # the Path of the file that can be modeled or indexed.
+    author = Column(String)  # name of the author, maybe even a URL
     data = Column(FancyJSON)  # populated by the modeler
     files = Column(FancyJSON, nullable=False)  # populated during discovery
-    idempotency = Column(TZDateTime)
-    indexed = Column(Boolean, default=lambda: False, nullable=False)
+    idempotency = Column(TZDateTime)  # used to track which files need to be deleted during refresh
+    indexed = Column(Boolean, default=lambda: False, nullable=False)  # wrolpi.files.lib.apply_indexers
     mimetype = Column(String)  # wrolpi.files.lib.get_mimetype
     model = Column(String)  # "video", "archive", "ebook", etc.
-    modification_datetime = Column(TZDateTime)
-    # the Path of the file that can be modeled or indexed.
+    modification_datetime = Column(TZDateTime)  # the modification date of the file on disk
     primary_path: pathlib.Path = Column(MediaPathType, nullable=False, unique=True)
+    published_datetime = Column(TZDateTime)  # the date the creator published this file
+    published_modified_datetime = Column(TZDateTime)  # the date the publisher modified this file
     size = Column(BigInteger, default=lambda: 0)
-    title = Column(String)
+    title = Column(String)  # user-displayable title
 
     tag_files: InstrumentedList = relationship('TagFile', cascade='all')
 
@@ -114,6 +117,9 @@ class FileGroup(ModelHelper, Base):
             'tags': tags,
             'title': self.title,
             'key': self.primary_path,
+            'author': self.author,
+            'published_datetime': self.published_datetime,
+            'published_modified_datetime': self.published_modified_datetime,
         }
         return d
 

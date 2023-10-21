@@ -4,11 +4,10 @@ import logging
 import pathlib
 from typing import List, Optional, Tuple
 
-import bs4
 from sqlalchemy import Column, Integer, String, BigInteger, ForeignKey, or_, and_
 from sqlalchemy.orm import relationship
 
-from wrolpi.common import ModelHelper, Base, register_modeler
+from wrolpi.common import ModelHelper, Base, register_modeler, get_html_soup
 from wrolpi.db import get_db_session
 from wrolpi.files.lib import split_path_stem_and_suffix, get_mimetype
 from wrolpi.files.models import FileGroup
@@ -66,7 +65,7 @@ class EBookData:
 
 
 def extract_text(html: str) -> str:
-    soup = bs4.BeautifulSoup(html, features='html.parser')
+    soup = get_html_soup(html)
     text = soup.get_text()
     return text
 

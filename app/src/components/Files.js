@@ -137,11 +137,7 @@ function FileCard({file}) {
         return <EbookCard key={file['primary_path']} file={file}/>;
     }
 
-    const {data} = file;
-    let author;
-    if (data) {
-        author = data['author'];
-    }
+    const author = file.author;
     const downloadUrl = `/download/${encodeMediaPath(file.primary_path)}`;
     const color = mimetypeColor(file.mimetype);
     const size = file.size !== null && file.size !== undefined ? humanFileSize(file.size) : null;

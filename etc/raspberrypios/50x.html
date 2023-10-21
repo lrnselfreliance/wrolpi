@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html lang="en">
 <body>
 
@@ -5,8 +6,8 @@
 
 <p>nginx could not find WROLPi! Are your services running?</p>
 
-<p><b>sudo systemctl status wrolpi-app</b></p>
-<p><b>sudo systemctl status wrolpi-api</b></p>
+<pre><b>sudo systemctl status wrolpi-app</b></pre>
+<pre><b>sudo systemctl status wrolpi-api</b></pre>
 
 <br/>
 <p>If either of those services are not running, start all WROLPi services:</p>
@@ -15,71 +16,72 @@
 
 <br/>
 <p>Or, start them individually:</p>
-<p><b>sudo systemctl start wrolpi-app</b></p>
-<p><b>sudo systemctl start wrolpi-api</b></p>
-<p><b>sudo systemctl start wrolpi-kiwix</b></p>
+<pre><b>sudo systemctl start wrolpi-app</b></pre>
+<pre><b>sudo systemctl start wrolpi-api</b></pre>
+<pre><b>sudo systemctl start wrolpi-kiwix</b></pre>
 
 <br/>
-<p>View the logs</p>
-<p><b>journalctl -u wrolpi-app</b></p>
-<p><b>journalctl -u wrolpi-api</b></p>
-<p><b>journalctl -u wrolpi-kiwix</b></p>
-<p>Watch the logs</p>
-<p><b>journalctl -fu wrolpi-app</b></p>
-<p><b>journalctl -fu wrolpi-api</b></p>
-<p><b>journalctl -fu wrolpi-kiwix</b></p>
+<p>View the logs:</p>
+<pre><b>journalctl -u wrolpi-app</b></pre>
+<pre><b>journalctl -u wrolpi-api</b></pre>
+<pre><b>journalctl -u wrolpi-kiwix</b></pre>
+<p>Watch the logs:</p>
+<pre><b>journalctl -fu wrolpi-app</b></pre>
+<pre><b>journalctl -fu wrolpi-api</b></pre>
+<pre><b>journalctl -fu wrolpi-kiwix</b></pre>
 
 <hr/>
 
 <h2>Help script</h2>
 <p>Run the provided help script which may narrow down the scope of the problem.</p>
-<p><b>bash /opt/wrolpi/help.sh</b></p>
+<pre><b>bash /opt/wrolpi/help.sh</b></pre>
 
 <h2>Repair script</h2>
 <p>Run the provided repair script which will attempt to automatically repair the WROLPi systems.</p>
-<p><b>bash /opt/wrolpi/repair.sh</b></p>
+<pre><b>bash /opt/wrolpi/repair.sh</b></pre>
 
 <hr/>
 
 <h2>Still not working?</h2>
 <p>You can view the media directory by <a id="media_link" href="/media">navigating to /media</a></p>
+<p>The API may be available <a id="api_link" href="http://127.0.0.1:8081">by navigating to port 8081</a></p>
+<p>The map may be available <a id="map_link" href="http://127.0.0.1:8084">by navigating to port 8084</a></p>
+<p>Kiwix may be available <a id="kiwix_link" href="http://127.0.0.1:8085">by navigating to port 8085</a></p>
 
-<p>The API may be available <a id="api_link" href="#">by navigating to port 8081</a></p>
+<hr/>
 
-<p>The map may be available <a id="map_link" href="#">by navigating to port 8084</a></p>
-
-<p>Kiwix may be available <a id="kiwix_link" href="#">by navigating to port 8085</a></p>
+<h2>Third-Party Documentation</h2>
+<p>WROLPi comes with official documentation from some third-party applications:</p>
+<ul>
+    <li><a href="file:///usr/share/doc/python3-doc/html/index.html">Python 3</a></li>
+    <li><a href="file:///usr/share/doc/postgresql-doc-15/html/index.html">Postgresql</a></li>
+    <li><a href="file:///usr/share/doc/nodejs/api/index.html">NodeJS</a></li>
+    <li><a href="file:///usr/share/doc/apache2-doc/manual/en/index.html">Apache2</a></li>
+    <li><a href="file:///usr/share/doc/postgis-doc/postgis.html">Postgis</a></li>
+    <li><a href="file:///usr/share/doc/ffmpeg/manual/index.html">FFMPEG</a></li>
+    <li><a href="file:///usr/share/doc/gcc-10-doc/gcc.html">GCC</a></li>
+    <li><a href="file:///usr/share/doc/git-doc/git.html">Git</a></li>
+</ul>
 
 <script>
-    // Get the current hostname (probably an IP) link to my other ports above.
-    let hostname = window.location.hostname;
+    // Get the current hostname (probably an IP) link to the ports above.
+    const hostname = window.location.hostname;
 
-    let media_a = document.getElementById('media_link');
-    if (media_a) {
-        let media_url = `http://${hostname}:8080/media`;
-        media_a.setAttribute('href', media_url);
-        media_a.textContent = `by navigating to ${media_url}`;
+    function replaceHref(elm_id, url) {
+        const elm = document.getElementById(elm_id);
+        if (elm) {
+            elm.setAttribute('href', url);
+            elm.textContent = `by navigating to ${url}`;
+        }
     }
 
-    let api_a = document.getElementById('api_link');
-    if (api_a) {
-        let api_url = `http://${hostname}:8081`;
-        api_a.setAttribute('href', api_url);
-        api_a.textContent = `by navigating to ${api_url}`;
-    }
-
-    let map_a = document.getElementById('map_link');
-    if (map_a) {
-        let map_url = `http://${hostname}:8084`;
-        map_a.setAttribute('href', map_url);
-        map_a.textContent = `by navigating to ${map_url}`;
-    }
-
-    let kiwix_a = document.getElementById('kiwix_link');
-    if (kiwix_a) {
-        let kiwix_url = `http://${hostname}:8085`;
-        kiwix_a.setAttribute('href', kiwix_url);
-        kiwix_a.textContent = `by navigating to ${kiwix_url}`;
+    if (hostname) {
+        replaceHref('media_link', `http://${hostname}:8080/media`);
+        replaceHref('api_link', `http://${hostname}:8081`);
+        replaceHref('map_link', `http://${hostname}:8084`);
+        replaceHref('kiwix_link', `http://${hostname}:8085`);
+    } else {
+        console.error('Refusing to replace services links because window.location.hostname is empty');
     }
 </script>
 

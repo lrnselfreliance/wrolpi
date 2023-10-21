@@ -2,9 +2,7 @@ import pathlib
 from http import HTTPStatus
 from urllib.parse import urlparse
 
-import bs4
-
-from wrolpi.common import aiohttp_session, logger
+from wrolpi.common import aiohttp_session, logger, get_html_soup
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.vars import DEFAULT_HTTP_HEADERS
@@ -90,7 +88,7 @@ class ScrapeHTMLDownloader(Downloader):
 
                 # Find all anchors, search for matching files, and more URLs to search.
                 try:
-                    soup = bs4.BeautifulSoup(content, 'html.parser')
+                    soup = get_html_soup(content)
                 except Exception as e:
                     logger.error(f'Failed to parse HTML from {url}', exc_info=e)
                     continue

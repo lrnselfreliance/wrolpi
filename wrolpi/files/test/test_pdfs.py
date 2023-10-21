@@ -13,8 +13,8 @@ async def test_pdf_title(test_session, example_pdf):
     """PDF modeler extracts a PDF's title and contents."""
     await files_lib.refresh_files()
 
-    with mock.patch('wrolpi.files.pdfs.create_index') as mock_create_index:
-        mock_create_index.side_effect = Exception('Should not index twice')
+    with mock.patch('wrolpi.files.pdfs.get_pdf_metadata') as mock_get_pdf_metadata:
+        mock_get_pdf_metadata.side_effect = Exception('Should not index twice')
         await files_lib.refresh_files()
 
     pdf: FileGroup = test_session.query(FileGroup).one()
@@ -23,7 +23,11 @@ async def test_pdf_title(test_session, example_pdf):
     assert pdf.b_text == 'roland'
     assert pdf.c_text == 'pdf example pdf'
     assert pdf.d_text and pdf.d_text.startswith('Page one\n') and len(pdf.d_text) == 467
-    assert pdf.data and pdf.data.get('author') == 'roland'
+    # Metadata within the PDF.
+    assert pdf.author
+    assert pdf.published_datetime
+    # The date the file was modified.
+    assert pdf.modification_datetime
 
 
 @pytest.mark.asyncio

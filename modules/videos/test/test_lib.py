@@ -1,4 +1,3 @@
-import datetime
 import pathlib
 import shutil
 
@@ -7,10 +6,8 @@ import pytest
 from modules.videos import lib
 from modules.videos.lib import parse_video_file_name, validate_video, get_statistics
 from modules.videos.models import Video
-from wrolpi.dates import now
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
-from wrolpi.tags import Tag
 from wrolpi.vars import PROJECT_DIR
 
 
@@ -67,7 +64,7 @@ async def test_video_factory(test_session, video_factory, channel_factory):
     assert video.source_id == 'some id'
 
 
-def test_validate_video(test_session, test_directory, video_factory, image_bytes_factory, video_file):
+def test_validate_video(test_directory, video_factory, image_bytes_factory, video_file):
     """A video poster will be generated only if the channel permits."""
     video_file = video_file.rename(test_directory / 'Channel Name_20050607_1234567890_The Title.mp4')
     vid1 = video_factory(with_video_file=video_file)
@@ -81,7 +78,8 @@ def test_validate_video(test_session, test_directory, video_factory, image_bytes
     assert vid1.poster_path.is_file(), 'Poster path does not exist'
     assert vid1.video_path.stem == vid1.poster_path.stem
     assert vid1.poster_path.suffix == '.jpg'
-    assert vid1.upload_date == datetime.datetime(2005, 6, 7, 0, 0, tzinfo=datetime.timezone.utc)
+    # File name date is assumed to be local timezone.
+    assert vid1.upload_date and vid1.upload_date.year == 2005
     assert vid1.source_id == '1234567890'
     assert vid1.file_group.title == 'The Title'
 

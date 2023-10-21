@@ -1,8 +1,10 @@
 import logging
+import re
 from datetime import datetime, timezone, timedelta
 from enum import Enum
 from typing import Union
 
+import dateutil.parser
 import pytz
 from sqlalchemy import types
 
@@ -41,18 +43,84 @@ def strftime(dt: datetime) -> str:
     return dt.isoformat()
 
 
-def strptime(dt: str) -> datetime:
-    if isinstance(dt, str) and dt.endswith(' 00:00'):
-        # URL decoding removed +
-        dt = f'{dt[:26]}+00:00'
-    return datetime.fromisoformat(dt).astimezone(pytz.UTC)
-
-
 def strpdate(dt: str) -> datetime:
-    if '-' in dt:
-        return datetime.strptime(dt, '%Y-%m-%d').replace(tzinfo=pytz.UTC)
+    """
+    Attempt to parse a datetime string.  Tries to find a Timezone, if possible.  DB requires timezone.
 
-    return datetime.strptime(dt, '%Y%m%d').replace(tzinfo=pytz.UTC)
+    TODO replace this in Python 3.11 https://docs.python.org/3/library/datetime.html#datetime.datetime.fromisoformat
+    """
+    try:
+        if dt.count('/') == 2:
+            # No timezone info.
+            try:
+                a, b, c = dt.split('/')
+                if len(c) == 4:
+                    # Assume m/d/Y
+                    return datetime.strptime(dt, '%m/%d/%Y')
+                if len(a) == 4:
+                    # Y/m/d
+                    return datetime.strptime(dt, '%Y/%m/%d')
+            except ValueError:
+                pass
+        elif dt.count('-') == 2 and len(dt) <= 10:
+            # No timezone info.
+            a, b, c = dt.split('-')
+            if len(a) == 4:
+                # Y-m-d
+                return datetime.strptime(dt, '%Y-%m-%d')
+
+        if dt.startswith('D:'):
+            # D:20221226113758-07'00, D:20200205184724, etc.
+            dt2 = dt.replace("'", '').rstrip('+')
+            try:
+                return datetime.strptime(dt2, "D:%Y%m%d%H%M%S%z")
+            except ValueError:
+                pass
+
+            return datetime.strptime(dt2, "D:%Y%m%d%H%M%S")
+
+        if dt.count('-') == 0 and dt.count('/') == 0 and dt.isdigit() and len(dt) == 8:
+            # Assume %Y%m%d date
+            return datetime.strptime(dt, '%Y%m%d')
+
+        if dt.count('.') == 2 and len(dt) <= 9:
+            # yyyy.mm.dd or dd.mm.yyyy
+            try:
+                a, b, c = dt.split('.')
+                if len(a) == 4:
+                    return datetime.strptime(dt, '%Y.%m.%d')
+                if len(c) == 4:
+                    return datetime.strptime(dt, '%d.%m.%Y')
+            except ValueError:
+                pass
+
+        try:
+            # Fri Jun 17 2022 19:24:52  (from Singlefile)
+            return datetime.strptime(dt, '%a %b %d %Y %H:%M:%S')
+        except ValueError:
+            pass
+
+        if len(dt) == 4 and dt.isdigit():
+            # Assume this is a year
+            return datetime.strptime(dt, '%Y').replace(tzinfo=pytz.UTC)
+
+        if ',' in dt and (dt.endswith('AM') or dt.endswith('PM')):
+            try:
+                # Tuesday, October 19, 1999 3:41:01 PM
+                return datetime.strptime(dt, '%A, %B %d, %Y %I:%M:%S %p')
+            except ValueError:
+                pass
+
+            try:
+                # Tue, October 19, 1999 3:41:01 PM
+                return datetime.strptime(dt, '%a, %B %d, %Y %I:%M:%S %p')
+            except ValueError:
+                pass
+
+        # Last, try third-party module to parse ISO 8601 datetime.
+        return dateutil.parser.isoparse(dt)
+    except Exception as e:
+        raise RuntimeError(f'Unable to parse datetime string: {dt}') from e
 
 
 def strftime_ms(dt: datetime) -> str:
@@ -73,6 +141,7 @@ def seconds_to_timestamp(seconds: Union[int, float]) -> str:
     >>> seconds_to_timestamp(5)
     # '00:00:05'
     >>> seconds_to_timestamp(60)
+
     # '00:01:00'
     >>> seconds_to_timestamp(86400)
     # '1d 00:00:00'

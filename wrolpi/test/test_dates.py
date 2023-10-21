@@ -1,7 +1,8 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytz
+from dateutil.tz import tzoffset
 from sqlalchemy import Column, Integer
 
 from wrolpi import dates
@@ -86,18 +87,54 @@ def test_timedelta_to_timestamp(td, expected):
 
 
 @pytest.mark.parametrize('dt,expected', [
-    ('2023-02-26T02:27:26.408944+00:00', datetime(2023, 2, 26, 2, 27, 26, 408944, tzinfo=pytz.UTC)),
-    ('2023-02-26T02:27:26.408944 00:00', datetime(2023, 2, 26, 2, 27, 26, 408944, tzinfo=pytz.UTC)),
-])
-def test_strptime(dt, expected):
-    assert dates.strptime(dt) == expected
-
-
-@pytest.mark.parametrize('dt,expected', [
-    ('20010101', datetime(2001, 1, 1, tzinfo=pytz.UTC)),
-    ('20050607', datetime(2005, 6, 7, tzinfo=pytz.UTC)),
-    ('2006-07-08', datetime(2006, 7, 8, tzinfo=pytz.UTC)),
-    ('2007-8-9', datetime(2007, 8, 9, tzinfo=pytz.UTC)),
+    ('20010101', datetime(2001, 1, 1)),
+    ('20050607', datetime(2005, 6, 7)),
+    ('2006-07-08', datetime(2006, 7, 8)),
+    ('2007-8-9', datetime(2007, 8, 9)),
+    ('2023-10-19T05:53:24+00:00', datetime(2023, 10, 19, 5, 53, 24, tzinfo=pytz.UTC)),
+    ('2022-09-27T00:40:19.000Z', datetime(2022, 9, 27, 0, 40, 19, tzinfo=pytz.UTC)),
+    ('06/17/2022', datetime(2022, 6, 17)),
+    ('14.3.2002', datetime(2002, 3, 14)),
+    ('2002.3.14', datetime(2002, 3, 14)),
+    ('2022/8/1', datetime(2022, 8, 1)),
+    ('2022-8-1', datetime(2022, 8, 1)),
+    ('2023-08-22T02:45:59+0000', datetime(2023, 8, 22, 2, 45, 59, tzinfo=pytz.UTC)),
+    ('2023-08-29T15:29-0400', datetime(2023, 8, 29, 15, 29, tzinfo=tzoffset(None, -14400))),
+    ('2023-08-29T15:29+0400', datetime(2023, 8, 29, 15, 29, tzinfo=tzoffset(None, 14400))),
+    ('2011-11-04', datetime(2011, 11, 4, 0, 0)),
+    ('20111104', datetime(2011, 11, 4, 0, 0)),
+    ('2011-11-04T00:05:23', datetime(2011, 11, 4, 0, 5, 23)),
+    ('2011-11-04T00:05:23Z', datetime(2011, 11, 4, 0, 5, 23, tzinfo=pytz.UTC)),
+    ('20111104T000523', datetime(2011, 11, 4, 0, 5, 23)),
+    ('2011-W01-2T00:05:23.283', datetime(2011, 1, 4, 0, 5, 23, 283000)),
+    ('2011-11-04 00:05:23.283', datetime(2011, 11, 4, 0, 5, 23, 283000)),
+    ('2011-11-04 00:05:23.283+00:00', datetime(2011, 11, 4, 0, 5, 23, 283000, tzinfo=pytz.UTC)),
+    ('2011-11-04T00:05:23+04:00', datetime(2011, 11, 3, 20, 5, 23, tzinfo=pytz.UTC)),
+    ('2000', datetime(2000, 1, 1, tzinfo=pytz.UTC)),
+    ('Tuesday, October 19, 1999 3:41:01 PM', datetime(1999, 10, 19, 15, 41, 1)),
+    ('Tue, October 19, 1999 3:41:01 PM', datetime(1999, 10, 19, 15, 41, 1)),
+    ('Tue, October 19, 1999 03:41:01 PM', datetime(1999, 10, 19, 15, 41, 1)),
+    # From SingleFile.
+    ('Fri Jun 17 2022 19:24:52', datetime(2022, 6, 17, 19, 24, 52)),
+    # PDFs are the Wild West...
+    ("D:20221226113758-07'00", datetime(2022, 12, 26, 11, 37, 58, tzinfo=timezone(timedelta(days=-1, seconds=61200)))),
+    ('D:20200205184724', datetime(2020, 2, 5, 18, 47, 24)),
+    ("D:20091019120104+", datetime(2009, 10, 19, 12, 1, 4)),
 ])
 def test_strpdate(dt, expected):
     assert dates.strpdate(dt) == expected
+
+
+def test_invalid_strpdate():
+    with pytest.raises(RuntimeError):
+        dates.strpdate('1')
+    with pytest.raises(RuntimeError):
+        dates.strpdate('asdf')
+    with pytest.raises(RuntimeError):
+        dates.strpdate('13/1/2008')
+
+    # Not a real date.
+    with pytest.raises(RuntimeError):
+        dates.strpdate('2001-2-31')
+    with pytest.raises(RuntimeError):
+        dates.strpdate('2001-2-30')

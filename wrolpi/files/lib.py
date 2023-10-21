@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import datetime
 import functools
 import glob
@@ -412,14 +413,16 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
                         AND file_group.size = EXCLUDED.size
                         AND json_array_length(file_group.files) = json_array_length(EXCLUDED.files)
                     )
-                RETURNING id, indexed
+                RETURNING id, file_group.indexed AS old_indexed, indexed
             '''
             curs.execute(stmt)
-            need_index = [i[0] for i in curs.fetchall() if i[1] is False]
-            if need_index:
-                refresh_logger.info(f'Invalidated indexes of {len(need_index)} file groups near {str(chunk[0])}')
+            results = list(curs.fetchall())
+            # Count the files that used to be indexed, but need to be re-indexed.
+            invalidated_files = len([i['id'] for i in results if i['old_indexed'] and not i['indexed']])
+            if invalidated_files:
+                refresh_logger.info(f'Invalidated indexes of {invalidated_files} file groups near {chunk[0]}')
             else:
-                refresh_logger.debug(f'Upserted {len(chunk)} files near {str(chunk[0])}')
+                refresh_logger.debug(f'Upserted {len(chunk)} files near {chunk[0]}')
 
             if non_primary_files:
                 # New files may have been added which change what primary paths exist.  Delete any file_groups which
@@ -456,9 +459,15 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
         directories, files = partition(lambda i: i.is_dir(), exists)
         while directories:
             directory = directories.pop(0)
-            new_files, new_directories = get_files_and_directories(directory)
+            try:
+                new_files, new_directories = get_files_and_directories(directory)
+            except FileNotFoundError as e:
+                # Directory may have been deleted during refresh.
+                logger.warning(f'Cannot refresh directory because it is missing: {directory}', exc_info=e)
+                continue
             directories.extend(new_directories)
             files.extend(new_files)
+            refresh_logger.debug(f'Discovered {len(new_files)} files in {directory}')
             if len(files) >= 100:
                 # Wait until there are enough files to perform the upsert.
                 try:
@@ -474,6 +483,8 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
                 _upsert_files(files, idempotency)
             except Exception as e:
                 refresh_logger.error(f'Failed to upsert files', exc_info=e)
+
+        refresh_logger.info('Finished discovering files.  Will now remove deleted files from DB...')
 
     with get_db_curs(commit=True) as curs:
         wheres = ''
@@ -512,6 +523,9 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
     if isinstance(paths, pathlib.Path):
         paths = [paths, ]
 
+    idempotency = now()
+    REFRESH['idempotency'] = idempotency
+
     refreshing_all_files = False
 
     with flags.refreshing:
@@ -522,8 +536,6 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
             refresh_logger.warning(f'Refreshing {", ".join(list(map(str, paths)))}')
         if send_events:
             Events.send_global_refresh_started()
-
-        idempotency = now()
 
         # Add all files in the media directory to the DB.
         paths = paths or [get_media_directory()]
@@ -591,6 +603,7 @@ async def apply_indexers():
             file_groups = session.query(FileGroup).filter(FileGroup.indexed != True).limit(20)
             file_groups: List[FileGroup] = list(file_groups)
 
+            file_group = None
             processed = 0
             for file_group in file_groups:
                 processed += 1
@@ -606,7 +619,8 @@ async def apply_indexers():
                 # Sleep to catch cancel.
                 await asyncio.sleep(0)
 
-            refresh_logger.debug(f'Indexed {processed} files')
+            if file_group:
+                refresh_logger.debug(f'Indexed {processed} files near {file_group.primary_path}')
 
             if processed < 20:
                 # Processed less than the limit, don't do the next query.
@@ -969,9 +983,52 @@ async def remove_file_group_tag(file_group_id: int, file_group_primary_path: str
     file_group.remove_tag(tag, session)
 
 
-def get_refresh_progress():
-    with get_db_curs() as curs:
-        curs.execute('''
+@dataclasses.dataclass
+class RefreshProgress:
+    counted_files: int = 0
+    counting: bool = False
+    discovery: bool = False
+    indexed: int = 0
+    indexing: bool = False
+    modeled: int = 0
+    modeling: bool = False
+    cleanup: bool = False
+    refreshing: bool = False
+    total_file_groups: int = 0
+    unindexed: int = 0
+
+    def __json__(self):
+        d = dict(
+            counted_files=self.counted_files,
+            counting=self.counting,
+            discovery=self.discovery,
+            indexed=self.indexed,
+            indexing=self.indexing,
+            modeled=self.modeled,
+            modeling=self.modeling,
+            cleanup=self.cleanup,
+            refreshing=self.refreshing,
+            total_file_groups=self.total_file_groups,
+            unindexed=self.unindexed,
+        )
+        return d
+
+
+def get_refresh_progress() -> RefreshProgress:
+    idempotency = REFRESH.get('idempotency')
+    if idempotency:
+        stmt = '''
+            SELECT
+                -- Sum all the files in each FileGroup.
+                SUM(json_array_length(files)) FILTER (WHERE idempotency=%(idempotency)s) AS "total_file_groups",
+                COUNT(id) FILTER (WHERE indexed IS TRUE AND idempotency=%(idempotency)s) AS "indexed",
+                COUNT(id) FILTER (WHERE indexed IS FALSE) AS "unindexed",
+                COUNT(id) FILTER (WHERE model IS NOT NULL AND idempotency=%(idempotency)s) AS "modeled"
+            FROM file_group
+        '''
+    else:
+        # Idempotency has not yet been declared.
+        stmt = '''
             SELECT
                 -- Sum all the files in each FileGroup.
                 SUM(json_array_length(files)) AS "total_file_groups",
@@ -979,25 +1036,28 @@ def get_refresh_progress():
                 COUNT(id) FILTER (WHERE indexed IS FALSE) AS "unindexed",
                 COUNT(id) FILTER (WHERE model IS NOT NULL) AS "modeled"
             FROM file_group
-        ''')
+        '''
+
+    with get_db_curs() as curs:
+        curs.execute(stmt, dict(idempotency=idempotency))
         results = dict(curs.fetchone())
         # TODO counts are wrong if we are not refreshing all files.
 
-        status = dict(
+        progress = RefreshProgress(
             counted_files=REFRESH.get('counted_files', 0),
             counting=flags.refresh_counting.is_set(),
             discovery=flags.refresh_discovery.is_set(),
-            indexed=results['indexed'],
+            indexed=int(results['indexed'] or 0),
             indexing=flags.refresh_indexing.is_set(),
-            modeled=results['modeled'],
+            modeled=int(results['modeled'] or 0),
             modeling=flags.refresh_modeling.is_set(),
             cleanup=flags.refresh_cleanup.is_set(),
             refreshing=flags.refreshing.is_set(),
-            total_file_groups=results['total_file_groups'],
-            unindexed=results['unindexed'],
+            total_file_groups=int(results['total_file_groups'] or 0),
+            unindexed=int(results['unindexed'] or 0),
         )
 
-    return status
+    return progress
 
 
 async def estimate_search(search_str: str, tag_names: List[str]):

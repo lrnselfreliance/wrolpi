@@ -9,8 +9,8 @@ from wrolpi import before_startup
 from wrolpi.common import logger, Base, ConfigFile
 from wrolpi.db import get_db_session
 from .errors import NoInventories, InventoriesVersionMismatch
-from .inventory import unit_registry, get_items, get_inventories, increment_inventories_version, \
-    get_inventories_version
+from .inventory import get_items, get_inventories, increment_inventories_version, \
+    get_inventories_version, get_unit_registry
 from .models import Inventory, Item
 
 MY_DIR: Path = Path(__file__).parent
@@ -23,6 +23,8 @@ def sum_by_key(items: List[Base], key: callable):
     Sum the total size of each item by the provided key function.  Returns a dict containing the key, and the total_size
     for that key.  Combine total of like units.  This means ounces and pounds will be in the same total.
     """
+    unit_registry = get_unit_registry()
+
     summed = dict()
     for item in items:
         k = key(item)
@@ -61,17 +63,28 @@ def get_inventory_by_keys(keys: Tuple, inventory_id: int):
 get_inventory_by_category = partial(get_inventory_by_keys, ('category',))
 get_inventory_by_subcategory = partial(get_inventory_by_keys, ('category', 'subcategory'))
 get_inventory_by_name = partial(get_inventory_by_keys, ('brand', 'name'))
-INVENTORY_UNITS = {
-    ('ounce', 1): (16, unit_registry.pound),
-    ('pound', 1): (2000, unit_registry.ton),
-}
+INVENTORY_UNITS: dict = None
 UNIT_PRECISION = 5
 
 
-def compact_unit(quantity: unit_registry.Quantity) -> unit_registry.Quantity:
+def initialize_inventory_units() -> dict:
+    global INVENTORY_UNITS
+    if INVENTORY_UNITS:
+        return INVENTORY_UNITS
+
+    unit_registry = get_unit_registry()
+    INVENTORY_UNITS = {
+        ('ounce', 1): (16, unit_registry.pound),
+        ('pound', 1): (2000, unit_registry.ton),
+    }
+
+
+def compact_unit(quantity: Quantity) -> Quantity:
     """
     Convert a Quantity to it's more readable format.  Such as 2000 pounds to 1 ton.
     """
+    initialize_inventory_units()
+
     number, (units,) = quantity.to_tuple()
     next_unit = INVENTORY_UNITS.get(units)
     if not next_unit:
@@ -88,7 +101,8 @@ def compact_unit(quantity: unit_registry.Quantity) -> unit_registry.Quantity:
     return quantity
 
 
-def quantity_to_tuple(quantity: unit_registry.Quantity) -> Tuple[Decimal, Quantity]:
+def quantity_to_tuple(quantity: Quantity) -> Tuple[Decimal, Quantity]:
+    unit_registry = get_unit_registry()
     decimal, (units,) = quantity.to_tuple()
     unit, _ = units
     quantity, unit = round(decimal, UNIT_PRECISION), unit_registry(unit)

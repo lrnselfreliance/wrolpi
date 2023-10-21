@@ -5,7 +5,9 @@ from datetime import datetime, timedelta
 from http import HTTPStatus
 
 import pytest
+import pytz
 from PIL import Image
+from pytz import utc
 
 from modules.archive import lib
 from modules.archive.lib import get_or_create_domain, get_new_archive_files, delete_archives, model_archive_result, \
@@ -63,7 +65,7 @@ async def test_dict(test_session):
 
 
 @pytest.mark.asyncio
-async def test_relationships(test_session, test_directory, example_singlefile):
+async def test_relationships(test_session, example_singlefile):
     with get_db_session(commit=True) as session:
         url = 'https://wrolpi.org:443'
         domain = get_or_create_domain(session, url)
@@ -459,7 +461,8 @@ async def test_title_in_filename(test_session, fake_now, test_directory, image_b
            'archive/example.com/2000-01-01-00-00-00_dangerous ;_title.png'
 
 
-def test_refresh_archives(test_session, test_directory, test_client, make_files_structure):
+@pytest.mark.asyncio
+async def test_refresh_archives(test_session, test_directory, test_async_client, make_files_structure):
     """Archives can be found and put in the database.  A single Archive will have multiple files."""
     # The start of a typical singlefile html file.
     singlefile_contents = '''<!DOCTYPE html> <html lang="en"><!--
@@ -484,7 +487,7 @@ def test_refresh_archives(test_session, test_directory, test_client, make_files_
     })
 
     # The single archive is found.
-    test_client.post('/api/files/refresh')
+    await test_async_client.post('/api/files/refresh')
     assert test_session.query(Archive).count() == 1
 
     # Cause a re-index of the archive.
@@ -493,7 +496,7 @@ def test_refresh_archives(test_session, test_directory, test_client, make_files_
     test_session.commit()
 
     # Running the refresh does not result in a new archive.
-    test_client.post('/api/files/refresh')
+    await test_async_client.post('/api/files/refresh')
     assert test_session.query(Archive).count() == 1
 
     # Archives file format was changed, lets check the new formats are found.
@@ -501,13 +504,13 @@ def test_refresh_archives(test_session, test_directory, test_client, make_files_
         'archive/example.com/2021-10-05-16-20-11_The Title.html': '<html></html>',
         'archive/example.com/2021-10-05-16-20-11_The Title.readability.json': '{"url": "https://example.com"}',
     })
-    test_client.post('/api/files/refresh')
+    await test_async_client.post('/api/files/refresh')
     # The old formatted archive above is renamed.
     assert (test_directory / 'archive/example.com/2021-10-05-16-20-10_NA.html').is_file()
     assert test_session.query(Archive).count() == 2
 
     content = json.dumps({'search_str': 'text', 'model': 'archive'})
-    request, response = test_client.post('/api/files/search', content=content)
+    request, response = await test_async_client.post('/api/files/search', content=content)
     assert response.status_code == HTTPStatus.OK
     assert response.json['file_groups'], 'No files matched "text"'
     assert response.json['file_groups'][0]['model'] == 'archive', 'Returned file was not an archive'
@@ -528,7 +531,14 @@ async def test_refresh_archives_index(test_session, make_files_structure):
  Page saved with SingleFile 
  url: https://example.com
  saved date: Mon May 16 2022 23:51:35 GMT+0000 (Coordinated Universal Time)
---><head><meta charset="utf-8">'''
+--><head><meta charset="utf-8">
+<script class="sf-hidden" type="application/ld+json">
+ {"@context":"http://schema.org", "@type":"NewsArticle", "headline":"The headline",
+  "datePublished":"2022-09-27T00:40:19.000Z", "dateModified":"2022-09-27T13:43:47.971Z",
+  "author":{"@type":"Person", "name":"AUTHOR NAME", "jobTitle":""},
+  "description": "The article description"}
+</script>
+</html>'''
 
     singlefile, *_ = make_files_structure({
         'archive/example.com/2021-10-05-16-20-10_NA.html': singlefile_contents,
@@ -543,8 +553,14 @@ async def test_refresh_archives_index(test_session, make_files_structure):
 
     archive: Archive = test_session.query(Archive).one()
     assert archive.singlefile_path == singlefile
-    assert archive.file_group.a_text == 'the title'
-    assert archive.file_group.d_text == 'article text contents'
+
+    assert archive.file_group.author == 'AUTHOR NAME'
+    assert archive.file_group.published_datetime
+    assert archive.file_group.published_modified_datetime
+
+    assert archive.file_group.a_text == 'the title'  # from readability json
+    assert archive.file_group.b_text == 'The article description'  # From application/ld+json
+    assert archive.file_group.d_text == 'article text contents'  # from readability txt
     assert archive.file_group.indexed is True
 
 
@@ -651,3 +667,143 @@ def test_archive_history(test_session, archive_factory):
     assert not archive3.history, 'archive3 has no history'
     assert not archive4.history, 'archive4 has no history'
     assert not archive5.history, 'archive5 has no history'
+
+
+SINGLEFILE_1 = b'''
+<!DOCTYPE html>
+<html lang="en-US">
+</html>
+'''
+
+SINGLEFILE_2 = b'''
+<!DOCTYPE html>
+<html lang="en-US">
+ <head>
+  <meta charset="utf-8"/>
+  <title>This is not a meta title and should be ignored</title>
+  <meta content="en_US" property="og:locale"/>
+  <meta content="article" property="og:type"/>
+  <meta content="The Title" property="og:title"/>
+  <meta name="author" content="Author Name"/>
+  <meta content="2023-10-18T04:52:23+00:00" property="article:published_time"/>
+  <meta content="2023-10-19T05:53:24+00:00" property="article:modified_time"/>
+ </head>
+</html>
+'''
+
+SINGLEFILE_3 = b'''
+<!DOCTYPE html>
+<html lang="en-US">
+<title>This is not a meta title and should be ignored</title>
+<script class="sf-hidden" type="application/ld+json">
+ {"@context":"http://schema.org", "@type":"NewsArticle", "headline":"The headline",
+  "datePublished":"2022-09-27T00:40:19.000Z", "dateModified":"2022-09-27T13:43:47.971Z",
+  "author":{"@type":"Person", "name":"BOBBY", "jobTitle":""},
+  "creator":{"@type":"Person", "name":"OTHER BOBBY", "jobTitle":""},
+  "description": "The article description"}
+</script>
+</html>'''
+
+SINGLEFILE_4 = b'''
+<!DOCTYPE html>
+<html lang="en-US">
+<title>This is not a meta title and should be ignored</title>
+<a href="https://example.com" rel="author">
+    Link Author
+</a>
+</html>'''
+
+SINGLEFILE_5 = b'''
+<!DOCTYPE html>
+<html lang="en-US">
+<title>This is not a meta title and should be ignored</title>
+<a class='g-profile' href='https://example.com' rel='author' title='author profile'>
+    <span itemprop='name'>The Span Author</span>
+</a>
+<time class="post-date updated" itemprop="datePublished" datetime="2023-08-25"></time>
+</html>
+'''
+
+
+def test_parse_article_html_metadata():
+    """Singlefiles may contain metadata tags."""
+    # Metadata can be empty.
+    metadata = lib.parse_article_html_metadata(SINGLEFILE_1)
+    assert metadata.title is None
+    assert metadata.published_datetime is None
+    assert metadata.modified_datetime is None
+    assert metadata.description is None
+    assert metadata.author is None
+
+    # Data from <meta> elements.
+    metadata = lib.parse_article_html_metadata(SINGLEFILE_2)
+    assert metadata.title == 'The Title'
+    assert metadata.published_datetime == datetime(2023, 10, 18, 4, 52, 23, tzinfo=utc)
+    assert metadata.modified_datetime == datetime(2023, 10, 19, 5, 53, 24, tzinfo=utc)
+    assert metadata.description is None
+    assert metadata.author == 'Author Name'
+
+    # Data from Article structured data
+    # https://developers.google.com/search/docs/appearance/structured-data/article
+    metadata = lib.parse_article_html_metadata(SINGLEFILE_3)
+    assert metadata.title == 'The headline'
+    assert metadata.published_datetime == datetime(2022, 9, 27, 0, 40, 19, tzinfo=utc)
+    assert metadata.modified_datetime == datetime(2022, 9, 27, 13, 43, 47, 971000, tzinfo=utc)
+    assert metadata.description == 'The article description'
+    assert metadata.author == 'BOBBY'
+
+    # Data from author anchor element.
+    metadata = lib.parse_article_html_metadata(SINGLEFILE_4)
+    assert metadata.author == 'Link Author'
+
+    # author anchor may be a list.
+    metadata = lib.parse_article_html_metadata(SINGLEFILE_5)
+    assert metadata.author == 'The Span Author'
+    assert metadata.published_datetime == datetime(2023, 8, 25, tzinfo=pytz.UTC)
+
+
+@pytest.mark.parametrize(
+    'html,expected',
+    [
+        ('<meta content="2023-10-18T04:52:23+00:00" property="article:published_time"/>',
+         datetime(2023, 10, 18, 4, 52, 23, tzinfo=utc)),
+        ('<abbr class="published" itemprop="datePublished" title="2022-03-17T03:00:00-07:00">March 17, 2022</abbr>',
+         datetime(2022, 3, 17, 10, 0, tzinfo=pytz.UTC)),
+        ('<meta name="article.published" content="2023-04-04T21:52:00.000Z">',
+         datetime(2023, 4, 4, 21, 52, tzinfo=pytz.UTC)),
+        ('<meta itemprop="datePublished" content="2023-04-04T21:52:00.000Z">',
+         datetime(2023, 4, 4, 21, 52, tzinfo=pytz.UTC)),
+        (
+                '<abbr class="published" itemprop="datePublished" title="2013-03-05T00:12:00-06:00">3/05/2013 12:12:00 AM</abbr>',
+                datetime(2013, 3, 5, 6, 12, tzinfo=pytz.UTC)),
+        ('<time class="post-date updated" itemprop="datePublished" datetime="2023-08-25"></time>',
+         datetime(2023, 8, 25, tzinfo=pytz.UTC))
+    ])
+def test_published_datetime(html, expected):
+    assert lib.parse_article_html_metadata(html).published_datetime == expected
+
+
+@pytest.mark.parametrize(
+    'html,expected',
+    [
+        ('<meta name="article.updated" content="2023-04-04T21:52:00.000Z">',
+         datetime(2023, 4, 4, 21, 52, tzinfo=pytz.UTC)),
+        ('<meta content="2023-10-19T05:53:24+00:00" property="article:modified_time"/>',
+         datetime(2023, 10, 19, 5, 53, 24, tzinfo=utc)),
+        (
+                '<script class="sf-hidden" type="application/ld+json">{"@context":"http://schema.org","dateModified":"2022-09-27T13:43:47.971Z"}</script>',
+                datetime(2022, 9, 27, 13, 43, 47, 971000, tzinfo=utc)),
+    ])
+def test_modified_datetime(html, expected):
+    assert lib.parse_article_html_metadata(html).modified_datetime == expected
+
+
+@pytest.mark.parametrize(
+    'html,expected',
+    [
+        ('<a href="#" rel="author"><span itemprop="name">Linda</span></a></span>', 'Linda'),
+        ('<meta content="Billy" property="article:author"/>', 'Billy'),
+    ]
+)
+def test_author(html, expected):
+    assert lib.parse_article_html_metadata(html).author == expected

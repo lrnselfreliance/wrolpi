@@ -6,6 +6,7 @@ import re
 import warnings
 from typing import Tuple, Optional, Generator
 
+import pytz
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from yt_dlp import YoutubeDL
@@ -102,6 +103,8 @@ def validate_video(video: Video, channel_generate_poster: bool):
         upload_date = upload_date or video.upload_date
         if upload_date and isinstance(upload_date, str):
             upload_date = dates.strpdate(upload_date)
+            if not upload_date.tzinfo:
+                upload_date = upload_date.astimezone(pytz.UTC)
         video.file_group.title = video.file_group.title or html.unescape(title)
         video.upload_date = upload_date
         video.source_id = video.source_id or source_id
@@ -120,7 +123,7 @@ def validate_video(video: Video, channel_generate_poster: bool):
         if video.ffprobe_json:
             if duration := video.ffprobe_json['format'].get('duration'):
                 video.duration = float(duration)
-            elif video_streams := video.get_streams_by_codec_type('video'):
+            elif (video_streams := video.get_streams_by_codec_type('video')) and 'duration' in video_streams[0]:
                 video.duration = float(video_streams[0]['duration'])
         else:
             # Slowest method.

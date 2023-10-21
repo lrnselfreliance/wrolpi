@@ -1,4 +1,3 @@
-import datetime
 import json
 import pathlib
 import re
@@ -9,6 +8,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger
 from sqlalchemy.orm import relationship, Session, validates
 from sqlalchemy.orm.collections import InstrumentedList
 
+from wrolpi import dates
 from wrolpi.common import ModelHelper, Base, logger
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session
@@ -170,7 +170,7 @@ class Archive(Base, ModelHelper):
         if screenshot_file := self.screenshot_file:
             return screenshot_file['path']
 
-    def read_readability_data(self):
+    def apply_readability_data(self):
         """Read the Readability JSON file, apply its contents to this record."""
         readability_json_path = self.readability_json_path
         if not readability_json_path:
@@ -195,7 +195,7 @@ class Archive(Base, ModelHelper):
         self.url = url or self.url
         self.file_group.title = title or self.file_group.title
 
-    def read_singlefile_data(self):
+    def apply_singlefile_data(self):
         """Read the start of the singlefile (if any) and extract any Archive information."""
         path = self.singlefile_path
         if not path:
@@ -225,10 +225,7 @@ class Archive(Base, ModelHelper):
                         dt = match[0].strip()
                         dt = ' '.join(dt.split(' ')[:5])
                         # SingleFile uses GMT.
-                        dt = datetime.datetime.strptime(
-                            dt,
-                            '%a %b %d %Y %H:%M:%S'  # Fri Jun 17 2022 19:24:52
-                        ).replace(tzinfo=pytz.timezone('GMT'))
+                        dt = dates.strpdate(dt).replace(tzinfo=pytz.timezone('GMT'))
                         self.archive_datetime = dt
                 except Exception as e:
                     logger.error(f'Could not get archive date from singlefile {path}', exc_info=e)
@@ -251,13 +248,31 @@ class Archive(Base, ModelHelper):
         if self.singlefile_path and not self.file_group.title:
             self.file_group.title = get_title_from_html(self.singlefile_path.read_text())
 
+    def apply_metadata(self):
+        """Read and apply <meta> (and more) data from the Singlefile HTML."""
+        from modules.archive import lib
+        contents = self.singlefile_path.read_bytes()
+
+        metadata = lib.parse_article_html_metadata(contents)
+        if metadata.author:
+            self.file_group.author = metadata.author
+        if metadata.title:
+            self.file_group.title = metadata.title
+        if metadata.description:
+            self.file_group.b_text = metadata.description
+        if metadata.published_datetime:
+            self.file_group.published_datetime = metadata.published_datetime
+        if metadata.modified_datetime:
+            self.file_group.published_modified_datetime = metadata.modified_datetime
+
     def validate(self):
         """Fill in any missing data about this Archive from its files."""
         try:
-            self.read_readability_data()
-            self.read_singlefile_data()
+            self.apply_readability_data()
+            self.apply_singlefile_data()
             self.apply_domain()
             self.apply_singlefile_title()
+            self.apply_metadata()
         except Exception as e:
             logger.warning(f'Unable to validate {self}', exc_info=e)
             if PYTEST:

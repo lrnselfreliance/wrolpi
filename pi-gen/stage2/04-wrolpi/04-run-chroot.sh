@@ -43,7 +43,7 @@ chmod 644 /var/www/html/*
 # Allow wrolpi user to delete map tiles.
 usermod -aG _renderd wrolpi
 
-mkdir /var/cache/renderd/tiles
+[ ! -d /var/cache/renderd/tiles ] && mkdir /var/cache/renderd/tiles
 chown -R _renderd:_renderd /var/cache/renderd/tiles
 
 # Create the media directory for the wrolpi user.

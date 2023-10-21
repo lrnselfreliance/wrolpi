@@ -238,20 +238,21 @@ def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
 
         return archive
     except Exception as e:
-        logger.error(f'Failed to model Archive {file_group}', exc_info=e)
-        if PYTEST:
-            raise
+        logger.error('Failed to model Archive', exc_info=e)
+        raise InvalidArchive(f'Failed to model Archive {file_group}') from e
 
 
 @register_modeler
 async def archive_modeler():
+    """Searches DB for FileGroups that contain an HTML file.  If the HTML file is a SingleFile, we model it as an
+    Archive."""
     invalid_archives = set()
 
     while True:
         with get_db_session(commit=True) as session:
             results = session.query(FileGroup, Archive) \
                 .filter(
-                # Get all groups that contain a PDF that have not been indexed.
+                # Get all groups that contain an HTML file that have not been indexed.
                 FileGroup.indexed != True,
                 FileGroup.mimetype == 'text/html',
             ).filter(not_(FileGroup.id.in_(list(invalid_archives)))) \
@@ -262,7 +263,8 @@ async def archive_modeler():
             for file_group, archive in results:
                 processed += 1
 
-                with slow_logger(1, f'Modeling archive took %(elapsed)s seconds: {file_group}', logger__=logger):
+                with slow_logger(1, f'Modeling archive took %(elapsed)s seconds: {file_group}',
+                                 logger__=logger):
                     if archive:
                         archive: Archive
                         try:
@@ -276,7 +278,7 @@ async def archive_modeler():
                         try:
                             model_archive(file_group, session=session)
                         except InvalidArchive:
-                            # May not be a real Singlefile archive.
+                            # It was not a real Archive.  Many HTML files will not be an Archive.
                             pass
 
                 # Even if indexing fails, we mark it as indexed.  We won't retry indexing this.

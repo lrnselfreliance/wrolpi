@@ -17,13 +17,13 @@ from sanic_ext.extensions.openapi import openapi
 from vininfo import Vin
 from vininfo.details._base import VinDetails
 
-from wrolpi import admin, status, flags, schema
+from wrolpi import admin, status, flags, schema, dates
 from wrolpi import tags
 from wrolpi.admin import HotspotStatus
 from wrolpi.common import logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, LOG_LEVEL, \
     set_global_log_level
-from wrolpi.dates import now, strptime
+from wrolpi.dates import now
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, APIError, HotspotError, InvalidDownload, \
     HotspotPasswordTooShort, NativeOnly, InvalidConfig
@@ -411,7 +411,7 @@ async def get_statistics(_):
 @validate(query=schema.EventsRequest)
 async def feed(_: Request, query: schema.EventsRequest):
     start = now()
-    after = None if query.after == 'None' else strptime(query.after)
+    after = None if query.after == 'None' else dates.strpdate(query.after)
     events = get_events(after)
     return json_response(dict(events=events, now=start))
 

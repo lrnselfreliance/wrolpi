@@ -13,7 +13,7 @@ import pytest
 from PIL import Image
 
 from wrolpi.common import timer
-from wrolpi.dates import now, from_timestamp
+from wrolpi.dates import now
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileGroupIsTagged, NoPrimaryFile
 from wrolpi.files import lib, indexers
 from wrolpi.files.models import FileGroup

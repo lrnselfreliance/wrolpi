@@ -5,19 +5,22 @@ import pathlib
 import re
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional, Tuple, List
+from typing import Optional, Tuple, List, Union
+from urllib.parse import urlparse
 
-from bs4 import BeautifulSoup
+import pytz
 from sqlalchemy import asc
 from sqlalchemy.orm import Session
 
 from modules.archive.models import Domain, Archive
+from wrolpi import dates
 from wrolpi.common import get_media_directory, logger, extract_domain, escape_file_name, aiohttp_post, \
-    format_html_string, split_lines_by_length
+    format_html_string, split_lines_by_length, get_html_soup
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import UnknownArchive, InvalidOrderBy
 from wrolpi.tags import tag_names_to_file_group_sub_select
+from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
@@ -220,11 +223,155 @@ def get_title_from_html(html: str, url: str = None) -> str:
     """
     Try and get the title from the
     """
-    soup = BeautifulSoup(html, features='html.parser')
+    soup = get_html_soup(html)
     try:
         return soup.title.string
     except Exception:  # noqa
         logger.debug(f'Unable to extract title {url}')
+
+
+SINGLEFILE_URL_EXTRACTOR = re.compile(r'Page saved with SingleFile \s+url: (http.+?)\n')
+
+
+def get_url_from_singlefile(html: bytes) -> str:
+    """Extract URL from SingleFile contents."""
+    html = html.decode()
+    if SINGLEFILE_HEADER not in html:
+        raise RuntimeError(f'Not a singlefile!')
+
+    url, = SINGLEFILE_URL_EXTRACTOR.findall(html)
+    url = url.strip()
+
+    if not url.startswith('http'):
+        raise RuntimeError('URL did not start with http')
+
+    # Verify that the URL can be parsed.
+    urlparse(url)
+    return url
+
+
+@dataclass
+class ArticleMetadata:
+    title: str = None
+    published_datetime: datetime = None
+    modified_datetime: datetime = None
+    description: str = None
+    author: str = None
+
+
+def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True) -> ArticleMetadata:
+    """
+    Read the data from the <meta> tags, extract any data relevant to the article.  This function also reads the
+    <script type="application/ld+json"> data.
+    """
+    metadata = ArticleMetadata()
+
+    soup = get_html_soup(html)
+
+    def get_meta_by_property(prop: str):
+        return soup.find('meta', attrs={'property': prop})
+
+    # <meta content="2023-10-18T04:52:23+00:00" property="article:published_time"/>
+    if meta_published_time := get_meta_by_property('article:published_time'):
+        metadata.published_datetime = dates.strpdate(meta_published_time.attrs['content'])
+        logger.debug(f'Found meta published_time: {meta_published_time}')
+    # <meta name="article.published" content="2023-04-04T21:52:00.000Z">
+    if meta_article_published := soup.find('meta', attrs={'name': 'article.published'}):
+        metadata.published_datetime = metadata.published_datetime or dates.strpdate(
+            meta_article_published.attrs['content'])
+    # <meta itemprop="datePublished" content="2023-04-04T21:52:00.000Z">
+    if meta_item_published := soup.find('meta', attrs={'itemprop': 'datePublished'}):
+        metadata.published_datetime = metadata.published_datetime or dates.strpdate(
+            meta_item_published.attrs['content'])
+    # <time itemprop="datePublished" datetime="2023-08-25">
+    if time := soup.find('time', attrs={'itemprop': 'datePublished'}):
+        metadata.published_datetime = metadata.published_datetime or dates.strpdate(time.attrs['datetime'])
+        logger.debug(f'Found time published_time: {time}')
+    # <abbr class="published" itemprop="datePublished" title="2022-03-17T03:00:00-07:00">March 17, 2022</abbr>
+    if abbr := soup.find('abbr', attrs={'itemprop': 'datePublished'}):
+        metadata.published_datetime = metadata.published_datetime or dates.strpdate(abbr.attrs['title'])
+
+    # <meta content="2023-10-19T05:53:24+00:00" property="article:modified_time"/>
+    if meta_modified_time := get_meta_by_property('article:modified_time'):
+        metadata.modified_datetime = dates.strpdate(meta_modified_time.attrs['content'])
+        logger.debug(f'Found meta modified_time: {meta_modified_time}')
+    # <meta name="article.updated" content="2023-04-04T21:52:00.000Z">
+    if meta_article_updated := soup.find('meta', attrs={'name': 'article.updated'}):
+        metadata.modified_datetime = metadata.modified_datetime or dates.strpdate(meta_article_updated.attrs['content'])
+
+    # <meta content="The Title" property="og:title"/>
+    if meta_title := get_meta_by_property('og:title'):
+        metadata.title = meta_title.attrs['content']
+        logger.debug(f'Found meta title: {meta_title}')
+
+    # <meta name="author" content="Author Name"/>
+    if meta_author := soup.find('meta', attrs={'name': 'author'}):
+        metadata.author = meta_author.attrs['content']
+        logger.debug(f'Found meta author: {meta_author}')
+    # <meta content="Billy" property="article:author"/>
+    if meta_property_author := get_meta_by_property('article:author'):
+        metadata.author = metadata.author or meta_property_author.attrs['content']
+    # <a href="https://example.com" rel="author">
+    if link_author := soup.find('a', attrs={'rel': 'author'}):
+        metadata.author = metadata.author or link_author.text.strip()
+        logger.debug(f'Found link author: {link_author}')
+
+    # <script class="sf-hidden" type="application/ld+json">
+    if (ld_script := soup.find('script', attrs={'type': 'application/ld+json'})) and ld_script.contents:
+        try:
+            schema = json.loads(ld_script.text)
+        except json.decoder.JSONDecodeError:
+            # Was not valid JSON.
+            schema = None
+        if isinstance(schema, dict) and schema.get('@context') in ('https://schema.org', 'http://schema.org'):
+            # Found https://schema.org/
+            if headline := schema.get('headline'):
+                metadata.title = metadata.title or schema.get('headline')
+                logger.debug(f'Found schema headline: {headline}')
+            if datePublished := schema.get('datePublished'):
+                try:
+                    metadata.published_datetime = metadata.published_datetime or dates.strpdate(datePublished)
+                    logger.debug(f'Found schema published_datetime: {datePublished}')
+                except RuntimeError as e:
+                    # Invalid date, ignore.
+                    logger.error('Invalid datetime', exc_info=e)
+                    if PYTEST:
+                        raise
+            if dateModified := schema.get('dateModified'):
+                try:
+                    metadata.modified_datetime = metadata.modified_datetime or dates.strpdate(dateModified)
+                    logger.debug(f'Found schema modified_datetime: {dateModified}')
+                except RuntimeError as e:
+                    # Invalid date, ignore.
+                    logger.error('Invalid datetime', exc_info=e)
+                    if PYTEST:
+                        raise
+            if description := schema.get('description'):
+                metadata.description = description
+                logger.debug(f'Found schema description: {description}')
+            if author := schema.get('author'):
+                if isinstance(author, list) and len(author) >= 1:
+                    # Use the first Author.
+                    author = author[0]
+
+                if isinstance(author, dict):
+                    author = author.get('name') or author
+
+                if isinstance(author, str):
+                    metadata.author = author
+                    logger.debug(f'Found schema author: {author}')
+                else:
+                    logger.warning(f'Unable to parse author schema: {author}')
+
+    # Assume UTC if no timezone.
+    if metadata.published_datetime and not metadata.published_datetime.tzinfo and assume_utc:
+        logger.debug(f'Assuming UTC for {metadata.published_datetime=}')
+        metadata.published_datetime = metadata.published_datetime.replace(tzinfo=pytz.UTC)
+    if metadata.modified_datetime and not metadata.modified_datetime.tzinfo and assume_utc:
+        logger.debug(f'Assuming UTC for {metadata.modified_datetime=}')
+        metadata.modified_datetime = metadata.modified_datetime.replace(tzinfo=pytz.UTC)
+
+    return metadata
 
 
 @optional_session
@@ -292,22 +439,21 @@ def get_domains():
 
 
 ARCHIVE_ORDERS = {
-    'date': 'a.archive_datetime ASC',
-    '-date': 'a.archive_datetime DESC NULLS LAST',
-    'rank': '2 DESC, a.archive_datetime DESC',
-    '-rank': '2 ASC, a.archive_datetime ASC',
+    'date': (date := 'fg.published_datetime ASC, a.archive_datetime ASC'),
+    '-date': (_date := 'fg.published_datetime DESC NULLS LAST, a.archive_datetime DESC NULLS LAST'),
+    'rank': f'2 DESC, {_date}',
+    '-rank': f'2 ASC, {date}',
     'size': 'fg.size ASC, LOWER(fg.primary_path) ASC',
     '-size': 'fg.size DESC NULLS LAST, LOWER(fg.primary_path) DESC',
 }
 ORDER_GROUP_BYS = {
-    'date': 'a.archive_datetime',
-    '-date': 'a.archive_datetime',
-    'rank': 'a.archive_datetime',
-    '-rank': 'a.archive_datetime',
-    'size': 'fg.size, fg.primary_path',
-    '-size': 'fg.size, fg.primary_path',
+    'date': 'fg.published_datetime, a.archive_datetime',
+    '-date': 'fg.published_datetime, a.archive_datetime',
+    'rank': 'fg.published_datetime, a.archive_datetime',
+    '-rank': 'fg.published_datetime, a.archive_datetime',
+    'size': 'fg.size, fg.published_datetime, fg.primary_path',
+    '-size': 'fg.size, fg.published_datetime, fg.primary_path',
 }
-FILE_ORDERS = ['size', '-size']
 
 
 def search_archives(search_str: str, domain: str, limit: int, offset: int, order: str, tag_names: List[str],
@@ -315,11 +461,10 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
         -> Tuple[List[dict], int]:
     # Always filter FileGroups to Archives.
     wheres = []
-    joins = []
-    group_by = 'a.file_group_id'
+    group_by = 'fg.published_datetime, a.archive_datetime, a.file_group_id'
 
     params = dict(search_str=search_str, offset=int(offset), limit=int(limit))
-    order_by = 'id DESC'
+    order_by = ARCHIVE_ORDERS['-date']
 
     select_columns = ''
     if search_str:
@@ -328,15 +473,12 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
                          ' COUNT(*) OVER() AS total'
         wheres.append('fg.textsearch @@ websearch_to_tsquery(%(search_str)s)')
         params['search_str'] = search_str
-        joins = ['LEFT JOIN file_group fg ON fg.id = a.file_group_id']
         group_by = f'{group_by}, rank'
 
     if order:
         try:
             order_by = ARCHIVE_ORDERS[order]
             group_by = f'{group_by}, {ORDER_GROUP_BYS[order]}'
-            if order in FILE_ORDERS:
-                joins = ['LEFT JOIN file_group fg ON fg.id = a.file_group_id']
         except KeyError:
             raise InvalidOrderBy(f'Invalid order by: {order}')
 
@@ -345,7 +487,6 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
         tags_stmt, params_ = tag_names_to_file_group_sub_select(tag_names)
         params.update(params_)
         wheres.append(f'fg.id = ANY({tags_stmt})')
-        joins = ['LEFT JOIN file_group fg ON fg.id = a.file_group_id']
 
     if search_str and headline:
         headline = ''',
@@ -364,7 +505,6 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
     select_columns = f", {select_columns}" if select_columns else ""
     wheres = '\n AND '.join(wheres)
     where = f'WHERE\n{wheres}' if wheres else ''
-    join = '\n'.join(joins)
     stmt = f'''
             SELECT
                 a.file_group_id AS id, -- always get `file_group.id` for `handle_file_group_search_results`
@@ -372,7 +512,7 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
                 {select_columns}
                 {headline}
             FROM archive a
-            {join}
+            LEFT JOIN file_group fg ON fg.id = a.file_group_id
             {where}
             GROUP BY {group_by}
             ORDER BY {order_by}

@@ -55,25 +55,22 @@ CPUFREQ_SET_BIN = which('cpufreq-set', '/usr/bin/cpufreq-set')
 WGET_BIN = which('wget', '/usr/bin/wget', flag=flags.wget_installed)
 
 # Map
-BASH_BIN = which('bash', '/bin/bash', warn=True)
+BASH_BIN = which('bash', '/bin/bash')
 
 # Archive
 SINGLE_FILE_BIN = which('single-file',
                         '/usr/bin/single-file',  # rpi os
                         '/usr/local/bin/single-file',  # debian
-                        warn=True,
                         flag=flags.singlefile_installed,
                         )
 CHROMIUM = which('chromium-browser', 'chromium',
                  '/usr/bin/chromium-browser',  # rpi os
                  '/usr/bin/chromium',  # debian
-                 warn=True,
                  flag=flags.chromium_installed,
                  )
 READABILITY_BIN = which('readability-extractor',
                         '/usr/bin/readability-extractor',  # rpi os
                         '/usr/local/bin/readability-extractor',  # debian
-                        warn=True,
                         flag=flags.readability_installed,
                         )
 
@@ -82,8 +79,7 @@ YT_DLP_BIN = which(
     'yt-dlp',
     '/usr/local/bin/yt-dlp',  # Location in docker container
     '/opt/wrolpi/venv/bin/yt-dlp',  # Use virtual environment location
-    warn=True,
     flag=flags.yt_dlp_installed,
 )
-FFPROBE_BIN = which('ffprobe', '/usr/bin/ffprobe', warn=True, flag=flags.ffprobe_installed)
+FFPROBE_BIN = which('ffprobe', '/usr/bin/ffprobe', flag=flags.ffprobe_installed)
 FFMPEG_BIN = which('ffmpeg', '/usr/bin/ffmpeg', flag=flags.ffmpeg_installed)

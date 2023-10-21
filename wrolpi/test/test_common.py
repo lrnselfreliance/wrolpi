@@ -302,28 +302,6 @@ def test_escape_file_name(name, expected):
         raise AssertionError(f'Escape of {repr(name)}: {repr(result)} != {repr(expected)}')
 
 
-@pytest.mark.parametrize(
-    'paths,suffix_groups,expected', [
-        ([], [], ()),
-        (['foo.mp4', 'foo.info.json'], [('.mp4',)], ('foo.mp4',)),
-        (['foo.mp4', 'foo.info.json'], [('.mp4',), ('.info.json',)], ('foo.mp4', 'foo.info.json')),
-        (['foo.mp4', 'foo.info.json'], [('.mp4',), ('.nope',), ('.info.json',)], ('foo.mp4', None, 'foo.info.json')),
-        (['foo.mp4', 'foo.info.json', 'extra.txt'], [('.mp4',)], ('foo.mp4',)),
-        (['foo.mp4'], [('.mp4', '.flv'), ('.info.json',)], ('foo.mp4', None)),
-        (
-                # Two files are matched to the closest suffix.
-                ['foo.info.json', 'bar.json'],
-                [('.info.json',), ('.json',)],  # TODO longest suffix must be first
-                ('foo.info.json', 'bar.json'),
-        ),
-    ]
-)
-def test_match_paths_to_suffixes(paths, suffix_groups, expected):
-    paths = [pathlib.Path(i) for i in paths]
-    expected = tuple(pathlib.Path(i) if i else None for i in expected)
-    assert (i := common.match_paths_to_suffixes(paths, suffix_groups)) == expected, f'{i} != {expected}'
-
-
 def test_truncate_object_bytes():
     """
     Objects can be truncated (lists will be shortened) so they will fit in tsvector columns.

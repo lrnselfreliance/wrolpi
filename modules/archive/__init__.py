@@ -61,8 +61,8 @@ class ArchiveDownloader(Downloader, ABC):
 
     @optional_session
     def already_downloaded(self, *urls: List[str], session: Session = None) -> List:
-        archives = list(session.query(Archive).filter(Archive.url.in_(urls)))
-        return archives
+        file_groups = list(session.query(FileGroup).filter(FileGroup.url.in_(urls), FileGroup.model == 'archive'))
+        return file_groups
 
     async def do_singlefile(self, download: Download) -> bytes:
         """Create a Singlefile from the archive's URL."""
@@ -226,14 +226,12 @@ def model_archive(file_group: FileGroup, session: Session = None) -> Archive:
         file_group.d_text = contents
         file_group.data = {
             'id': archive.id,
-            'archive_datetime': archive.archive_datetime,
             'domain': archive.domain.domain if archive.domain else None,
             'readability_json_path': archive.readability_json_path,
             'readability_path': archive.readability_path,
             'readability_txt_path': archive.readability_txt_path,
             'screenshot_path': archive.screenshot_path,
             'singlefile_path': archive.singlefile_path,
-            'url': archive.url,
         }
 
         return archive

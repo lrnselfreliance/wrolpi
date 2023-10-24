@@ -398,7 +398,7 @@ async def test_download_playlist(test_session, test_directory, mock_video_extrac
     video = Video.from_paths(test_session, video_file)
     video.channel_id = channel.id
     video.source_id = 'video 1 id'
-    video.url = 'https://www.youtube.com/watch?v=video_1_url'
+    video.file_group.url = 'https://www.youtube.com/watch?v=video_1_url'
     test_session.commit()
 
     mock_video_extract_info.return_value = example_playlist_json  # Playlist info is fetched first.

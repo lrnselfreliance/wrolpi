@@ -148,27 +148,26 @@ export function isoDatetimeToElapsedPopup(dt) {
     return secondsToElapsedPopup(d.getTime() / 1000);
 }
 
-export function secondsToDuration(video) {
-    let duration = video.duration;
-    let hours = Math.floor(duration / 3600);
-    duration -= hours * 3600;
-    let minutes = Math.floor(duration / 60);
-    let seconds = duration - (minutes * 60);
+export function secondsToHMS(totalSeconds) {
+    let hours = Math.floor(totalSeconds / 3600);
+    totalSeconds -= hours * 3600;
+    let minutes = Math.floor(totalSeconds / 60);
+    let seconds = totalSeconds - (minutes * 60);
 
     hours = String('00' + hours).slice(-2);
     minutes = String('00' + minutes).slice(-2);
     seconds = String('00' + seconds).slice(-2);
 
-    return [hours, minutes, seconds];
+    return {hours, minutes, seconds};
 }
 
-export function Duration({video}) {
-    let [hours, minutes, seconds] = secondsToDuration(video);
+export function Duration({totalSeconds}) {
+    const {hours, minutes, seconds} = secondsToHMS(totalSeconds);
 
     if (hours > 0) {
-        return <div className="duration-overlay">{hours}:{minutes}:{seconds}</div>
-    } else if (video.duration) {
-        return <div className="duration-overlay">{minutes}:{seconds}</div>
+        return <div className='duration-overlay'>{hours}:{minutes}:{seconds}</div>
+    } else if (totalSeconds) {
+        return <div className='duration-overlay'>{minutes}:{seconds}</div>
     } else {
         return <></>
     }
@@ -224,7 +223,7 @@ export function RequiredAsterisk() {
     return <span style={{color: '#db2828'}}> *</span>
 }
 
-export let defaultVideoOrder = '-upload_date';
+export let defaultVideoOrder = '-published_datetime';
 export let defaultSearchOrder = 'rank';
 
 export const frequencyOptions = [{key: null, text: '', value: null}, {
@@ -1277,7 +1276,7 @@ export function SortButton({sorts = []}) {
         </Modal>
         <ButtonGroup icon>
             <Button icon={desc ? 'sort down' : 'sort up'} onClick={() => toggleDesc()}/>
-            <Button content={selectedSort['text']} onClick={() => setOpen(true)}/>
+            <Button content={selectedSort['short'] || selectedSort['text']} onClick={() => setOpen(true)}/>
         </ButtonGroup>
     </>
 }

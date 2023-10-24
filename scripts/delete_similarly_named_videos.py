@@ -86,7 +86,7 @@ async def rank_video_quality(video: Video) -> int:
     rank = 0
 
     # These are more valuable.
-    if video.url:
+    if video.file_group.url:
         rank += 2
     if video.source_id:
         rank += 2

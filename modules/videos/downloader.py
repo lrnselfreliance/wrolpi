@@ -20,6 +20,7 @@ from wrolpi.db import optional_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.lib import glob_shared_stem
+from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
 from .common import get_no_channel_directory, get_videos_directory, update_view_counts, ffmpeg_video_complete
@@ -197,8 +198,8 @@ class VideoDownloader(Downloader, ABC):
     @optional_session
     def already_downloaded(self, *urls: str, session: Session = None) -> List:
         # We only consider a video record with a video file as "downloaded".
-        videos = list(session.query(Video).filter(Video.url.in_(urls)))
-        return videos
+        file_groups = list(session.query(FileGroup).filter(FileGroup.url.in_(urls), FileGroup.model == 'video'))
+        return file_groups
 
     async def do_download(self, download: Download) -> DownloadResult:
         if download.attempts >= 10:

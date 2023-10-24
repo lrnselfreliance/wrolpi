@@ -79,7 +79,7 @@ def test_validate_video(test_directory, video_factory, image_bytes_factory, vide
     assert vid1.video_path.stem == vid1.poster_path.stem
     assert vid1.poster_path.suffix == '.jpg'
     # File name date is assumed to be local timezone.
-    assert vid1.upload_date and vid1.upload_date.year == 2005
+    assert vid1.file_group.published_datetime and vid1.file_group.published_datetime.year == 2005
     assert vid1.source_id == '1234567890'
     assert vid1.file_group.title == 'The Title'
 

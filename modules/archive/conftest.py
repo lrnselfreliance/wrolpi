@@ -40,8 +40,8 @@ def archive_factory(test_session, archive_directory, make_files_structure):
         domain_dir = archive_directory / domain_dir
         domain_dir.mkdir(exist_ok=True)
 
-        archive_datetime = next(now)
-        timestamp = archive_strftime(archive_datetime)
+        download_datetime = next(now)
+        timestamp = archive_strftime(download_datetime)
 
         json_contents = {}
         if title != 'NA':
@@ -76,7 +76,7 @@ def archive_factory(test_session, archive_directory, make_files_structure):
         archive = Archive.from_paths(test_session, *files)
         archive.url = url
         archive.title = title
-        archive.archive_datetime = archive.file_group.published_datetime = next(now)
+        archive.file_group.download_datetime = archive.file_group.published_datetime = next(now)
         archive.file_group.modification_datetime = next(now)
         archive.domain = domain
         archive.validate()

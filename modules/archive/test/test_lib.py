@@ -88,37 +88,33 @@ async def test_archive_title(test_session, archive_factory, singlefile_contents_
         title='json title',
         singlefile_contents=singlefile_contents_factory('singlefile title', 'https://example.com/singlefile-url'),
     )
-    test_session.query(FileGroup).delete()
-    test_session.commit()
 
-    await files_lib.refresh_files()
+    async def reset_and_get_archive():
+        test_session.query(FileGroup).delete()
+        test_session.commit()
+        await files_lib.refresh_files()
+        return test_session.query(Archive).one()
+
+    archive1: Archive = await reset_and_get_archive()
 
     assert test_session.query(FileGroup).count() == 1
     assert test_session.query(Archive).count() == 1
 
-    archive1: Archive = test_session.query(Archive).one()
-
     # Readability JSON is trusted first.
-    assert archive1.url == 'https://example.com/json-url'
+    assert archive1.file_group.url == 'https://example.com/json-url'
     assert archive1.file_group.title == 'json title'
 
     # Delete JSON file.
     archive1.readability_json_path.unlink()
-    test_session.delete(archive1)
-    await files_lib.refresh_files()
-
-    archive1: Archive = test_session.query(Archive).one()
-    assert archive1.url == 'https://example.com/singlefile-url'
+    archive1: Archive = await reset_and_get_archive()
+    assert archive1.file_group.url == 'https://example.com/singlefile-url'
     assert archive1.file_group.title == 'singlefile title'
 
     # Clear out title and URL from Singlefile.
     archive1.singlefile_path.write_text(singlefile_contents_factory('', ''))
-    test_session.delete(archive1)
-    await files_lib.refresh_files()
-
+    archive1: Archive = await reset_and_get_archive()
     # No title/URL could be found.
-    archive1: Archive = test_session.query(Archive).one()
-    assert archive1.url is None
+    assert archive1.file_group.url is None
     assert archive1.file_group.title is None
 
 
@@ -286,7 +282,7 @@ async def test_new_archive(test_session, fake_now):
     archive1 = await model_archive_result('https://example.com', singlefile, readability, screenshot)
     # Everything is filled out.
     assert isinstance(archive1, Archive)
-    assert archive1.archive_datetime is not None
+    assert archive1.file_group.download_datetime is not None
     assert isinstance(archive1.singlefile_path, pathlib.Path)
     assert isinstance(archive1.readability_path, pathlib.Path)
     assert isinstance(archive1.readability_txt_path, pathlib.Path)
@@ -520,7 +516,7 @@ async def test_refresh_archives(test_session, test_directory, test_async_client,
     assert response.json['file_groups'][0]['data'].get('readability_txt_path') == \
            'archive/example.com/2021-10-05-16-20-10_NA.readability.txt', \
         'Could not find readability text file containing "text"'
-    assert response.json['file_groups'][0]['data']['archive_datetime'], 'Archive has no datetime'
+    assert response.json['file_groups'][0]['download_datetime'], 'Archive has no datetime'
 
 
 @pytest.mark.asyncio
@@ -611,7 +607,7 @@ def test_archive_files(test_directory):
 def test_archive_order(test_session, test_directory, archive_factory):
     archive1 = archive_factory()
     archive2 = archive_factory()
-    archive2.archive_datetime += timedelta(seconds=10)
+    archive2.file_group.download_datetime += timedelta(seconds=10)
     test_session.commit()
 
     assert archive2 > archive1

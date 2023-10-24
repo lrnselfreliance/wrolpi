@@ -84,10 +84,11 @@ function VideosPage() {
     useTitle(title);
 
     let videoOrders = [
-        {value: 'upload_date', text: 'Date'},
-        {value: 'duration', text: 'Duration'},
+        {value: 'published_datetime', text: 'Published Date', short: 'P.Date'},
+        {value: 'length', text: 'Length'},
         {value: 'size', text: 'Size'},
         {value: 'view_count', text: 'Views'},
+        {value: 'viewed', text: 'Recently Viewed', short: 'R.Viewed'},
     ]
 
     if (searchStr) {
@@ -291,7 +292,7 @@ export function VideoCard({file}) {
     // Default to video FilePreview for lone video files.
     let video_url;
 
-    const upload_date = isoDatetimeToString(video.upload_date);
+    const published_datetime = isoDatetimeToString(file.published_datetime);
     // A video may not have a channel.
     const channel = video.channel ? video.channel : null;
     let channel_url = null;
@@ -320,7 +321,7 @@ export function VideoCard({file}) {
     const color = mimetypeColor(file.mimetype);
     return <Card color={color}>
         {poster}
-        <Duration video={video}/>
+        <Duration totalSeconds={file.length}/>
         <CardContent {...s}>
             <CardHeader>
                 <Container textAlign='left'>
@@ -332,7 +333,7 @@ export function VideoCard({file}) {
                     {channel && <Link to={channel_url} className="no-link-underscore card-link">
                         <b {...s}>{channel.name}</b>
                     </Link>}
-                    <p {...s}>{upload_date}</p>
+                    <p {...s}>{published_datetime}</p>
                 </Container>
             </CardDescription>
         </CardContent>

@@ -65,12 +65,13 @@ class FileGroup(ModelHelper, Base):
     __tablename__ = 'file_group'
     id: int = Column(BigInteger, primary_key=True)
 
-    # the Path of the file that can be modeled or indexed.
     author = Column(String)  # name of the author, maybe even a URL
     data = Column(FancyJSON)  # populated by the modeler
+    download_datetime = Column(TZDateTime)  # the date WROLPi downloaded this file.
     files = Column(FancyJSON, nullable=False)  # populated during discovery
     idempotency = Column(TZDateTime)  # used to track which files need to be deleted during refresh
     indexed = Column(Boolean, default=lambda: False, nullable=False)  # wrolpi.files.lib.apply_indexers
+    length = Column(BigInteger)  # video duration, article words, etc.
     mimetype = Column(String)  # wrolpi.files.lib.get_mimetype
     model = Column(String)  # "video", "archive", "ebook", etc.
     modification_datetime = Column(TZDateTime)  # the modification date of the file on disk
@@ -79,6 +80,8 @@ class FileGroup(ModelHelper, Base):
     published_modified_datetime = Column(TZDateTime)  # the date the publisher modified this file
     size = Column(BigInteger, default=lambda: 0)
     title = Column(String)  # user-displayable title
+    url = Column(String)  # the location where this file can be downloaded.
+    viewed = Column(TZDateTime)  # the most recent time a User viewed this file.
 
     tag_files: InstrumentedList = relationship('TagFile', cascade='all')
 
@@ -103,23 +106,26 @@ class FileGroup(ModelHelper, Base):
         _, suffix = split_path_stem_and_suffix(self.primary_path)
         tags = sorted([i.tag.name for i in self.tag_files])
         d = {
+            'author': self.author,
             'data': self.data,
             'directory': self.primary_path.parent,
+            'download_datetime': self.download_datetime,
             'files': self.my_files(),
             'id': self.id,
+            'key': self.primary_path,
+            'length': self.length,
             'mimetype': self.mimetype,
             'model': self.model,
             'modified': self.modification_datetime or None,
             'name': self.primary_path.name,
             'primary_path': self.primary_path,
+            'published_datetime': self.published_datetime,
+            'published_modified_datetime': self.published_modified_datetime,
             'size': self.size,
             'suffix': suffix,
             'tags': tags,
             'title': self.title,
-            'key': self.primary_path,
-            'author': self.author,
-            'published_datetime': self.published_datetime,
-            'published_modified_datetime': self.published_modified_datetime,
+            'url': self.url
         }
         return d
 
@@ -128,6 +134,9 @@ class FileGroup(ModelHelper, Base):
         if self.title:
             return self.title
         return self.primary_path.name
+
+    def set_viewed(self):
+        self.viewed = now()
 
     @optional_session
     def add_tag(self, tag: Tag, session: Session = None) -> TagFile:

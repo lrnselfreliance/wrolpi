@@ -69,10 +69,7 @@ function ArchivePage() {
     const {archiveFile, history, fetchArchive} = useArchive(archiveId);
     const {theme} = useContext(ThemeContext);
 
-    let title;
-    if (archiveFile && archiveFile.archive) {
-        title = archiveFile.archive.title;
-    }
+    let title = archiveFile ? archiveFile.title ? archiveFile.title : archiveFile.name : null;
     useTitle(title);
 
     if (archiveFile === null) {
@@ -168,7 +165,7 @@ function ArchivePage() {
         await fetchArchive();
     }
 
-    const archivedDatetimeString = isoDatetimeToString(data.archive_datetime, true);
+    const archivedDatetimeString = isoDatetimeToString(archiveFile.download_datetime, true);
     const publishedDatetimeString = archiveFile.published_datetime ? isoDatetimeToString(archiveFile.published_datetime, true)
         : 'unknown';
     const modifiedDatetimeString = archiveFile.published_modified_datetime
@@ -305,7 +302,7 @@ export function ArchiveCard({file}) {
                 </CardLink>}
             <CardMeta {...s}>
                 <p>
-                    {isoDatetimeToString(data.archive_datetime)}
+                    {isoDatetimeToString(file.published_datetime)}
                 </p>
             </CardMeta>
             <CardDescription>
@@ -426,8 +423,11 @@ function ArchivesPage() {
     } = useSearchArchives();
 
     let archiveOrders = [
-        {value: 'date', text: 'Date'},
+        {value: 'published_datetime', text: 'Published Date', short: 'P.Date'},
+        {value: 'published_modified_datetime', text: 'Modified Date', short: 'M.Date'},
+        {value: 'download_datetime', text: 'Download Date', short: 'D.Date'},
         {value: 'size', text: 'Size'},
+        {value: 'viewed', text: 'Recently Viewed', short: 'R.Viewed'},
     ];
 
     if (searchStr) {

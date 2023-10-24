@@ -70,7 +70,6 @@ import {Headlines} from "./Headline";
 
 function EbookCard({file}) {
     const {s} = useContext(ThemeContext);
-    let {data} = file;
 
     const downloadUrl = `/download/${encodeMediaPath(file.primary_path)}`;
     const isEpub = file['mimetype'].startsWith('application/epub');
@@ -83,12 +82,12 @@ function EbookCard({file}) {
             <CardHeader>
                 <Container textAlign='left'>
                     <ExternalCardLink to={viewerUrl || downloadUrl}>
-                        {cardTitleWrapper(data ? data.title : file.title)}
+                        {cardTitleWrapper(file ? file.title : file.title)}
                     </ExternalCardLink>
                 </Container>
             </CardHeader>
             <CardMeta>
-                {data.creator ? <b {...s}>{data.creator}</b> : null}
+                {file.author ? <b {...s}>{file.author}</b> : null}
                 {file.size && <p {...s}>{humanFileSize(file.size)}</p>}
             </CardMeta>
         </CardContent>

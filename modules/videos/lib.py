@@ -77,14 +77,14 @@ def validate_video(video: Video, channel_generate_poster: bool):
     found, it will be generated from the video file.
     """
     info_json_path = video.info_json_path
-    json_data_missing = bool(video.file_group.title) and bool(video.duration) and bool(video.view_count) \
-                        and bool(video.url)
+    json_data_missing = bool(video.file_group.title) and bool(video.file_group.length) and bool(video.view_count) \
+                        and bool(video.file_group.url)
     if info_json_path and json_data_missing is False:
         # These properties can be found in the info json.
         video_info_json = process_video_info_json(video)
         video.file_group.title = video_info_json.title
-        video.duration = video_info_json.duration
-        video.url = video_info_json.url
+        video.file_group.length = video_info_json.duration
+        video.file_group.url = video_info_json.url
         # View count will probably be overwritten by more recent data when this Video's Channel is
         # updated.
         video.view_count = video.view_count or video_info_json.view_count
@@ -96,17 +96,17 @@ def validate_video(video: Video, channel_generate_poster: bool):
     if not video_path:
         logger.error(f'{video} does not have video_path!')
 
-    if video_path and (not video.file_group.title or not video.upload_date or not video.source_id):
+    if video_path and (not video.file_group.title or not video.file_group.published_datetime or not video.source_id):
         # Video is missing things that can be extracted from the video file name.
         # These are the least trusted, so anything already on the video should be trusted.
-        _, upload_date, source_id, title = parse_video_file_name(video_path)
-        upload_date = upload_date or video.upload_date
-        if upload_date and isinstance(upload_date, str):
-            upload_date = dates.strpdate(upload_date)
-            if not upload_date.tzinfo:
-                upload_date = upload_date.astimezone(pytz.UTC)
+        _, published_date, source_id, title = parse_video_file_name(video_path)
+        published_date = published_date or video.file_group.published_datetime
+        if published_date and isinstance(published_date, str):
+            published_date = dates.strpdate(published_date)
+            if not published_date.tzinfo:
+                published_date = published_date.astimezone(pytz.UTC)
         video.file_group.title = video.file_group.title or html.unescape(title)
-        video.upload_date = upload_date
+        video.file_group.published_datetime = published_date
         video.source_id = video.source_id or source_id
 
     if channel_generate_poster:
@@ -116,18 +116,18 @@ def validate_video(video: Video, channel_generate_poster: bool):
             # Poster was created/updated.
             video.file_group.append_files(new_poster_path)
         if duration:
-            video.duration = duration
+            video.file_group.length = duration
 
-    if video_path and not video.duration:
+    if video_path and not video.file_group.length:
         # Duration was not retrieved during poster generation.
         if video.ffprobe_json:
             if duration := video.ffprobe_json['format'].get('duration'):
-                video.duration = float(duration)
+                video.file_group.length = float(duration)
             elif (video_streams := video.get_streams_by_codec_type('video')) and 'duration' in video_streams[0]:
-                video.duration = float(video_streams[0]['duration'])
+                video.file_group.length = float(video_streams[0]['duration'])
         else:
             # Slowest method.
-            video.duration = get_video_duration(video_path)
+            video.file_group.length = get_video_duration(video_path)
 
     if video_path and not video.caption_paths and video.file_group.d_text and not EXTRACT_SUBTITLES:
         # Caption file was deleted, clear out old captions.
@@ -482,11 +482,11 @@ async def get_statistics():
             -- total videos
             COUNT(v.id) AS "videos",
             -- total videos downloaded over the past week/month/year
-            COUNT(v.id) FILTER (WHERE upload_date >= current_date - interval '1 week') AS "week",
-            COUNT(v.id) FILTER (WHERE upload_date >= current_date - interval '1 month') AS "month",
-            COUNT(v.id) FILTER (WHERE upload_date >= current_date - interval '1 year') AS "year",
+            COUNT(v.id) FILTER (WHERE published_datetime >= current_date - interval '1 week') AS "week",
+            COUNT(v.id) FILTER (WHERE published_datetime >= current_date - interval '1 month') AS "month",
+            COUNT(v.id) FILTER (WHERE published_datetime >= current_date - interval '1 year') AS "year",
             -- sum of all video lengths in seconds
-            COALESCE(SUM(v.duration), 0) AS "sum_duration",
+            COALESCE(SUM(fg.length), 0) AS "sum_duration",
             -- sum of all video file sizes
             COALESCE(SUM(fg.size), 0)::BIGINT AS "sum_size",
             -- largest video
@@ -511,9 +511,9 @@ async def get_statistics():
             video
             LEFT JOIN file_group fg on video.file_group_id = fg.id
         WHERE
-            video.upload_date >= date_trunc('month', months.a)
-            AND video.upload_date < date_trunc('month', months.a) + interval '1 month'
-            AND video.upload_date IS NOT NULL
+            published_datetime >= date_trunc('month', months.a)
+            AND published_datetime < date_trunc('month', months.a) + interval '1 month'
+            AND published_datetime IS NOT NULL
         GROUP BY
             1
         ORDER BY
@@ -551,7 +551,7 @@ def parse_video_file_name(video_path: pathlib.Path) -> \
     """
     A Video's file name can have data in it, this attempts to extract what may be there.
 
-    Example: {channel_name}_{upload_date}_{source_id}_title{ext}
+    Example: {channel_name}_{published_datetime}_{source_id}_title{ext}
     """
     video_str = str(video_path)
     if match := NAME_PARSER.match(video_str):

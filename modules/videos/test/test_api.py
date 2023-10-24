@@ -228,7 +228,7 @@ def test_search_videos_file(test_client, test_session, test_directory, video_wit
     assert_video_search(search_str='b', limit=2, assert_ids=[1, 2], assert_total=4)
 
 
-def test_search_videos(test_client, test_session, video_factory, assert_video_search, simple_channel, tag_factory):
+def test_search_videos(test_session, video_factory, assert_video_search, simple_channel, tag_factory):
     """Search the Video table.  This does not need to use a join with the File table."""
     vid1: Video = video_factory(upload_date='2022-09-16', with_video_file=True, title='vid1')
     vid2: Video = video_factory(upload_date='2022-09-17', with_video_file=True, title='vid2',
@@ -248,11 +248,11 @@ def test_search_videos(test_client, test_session, video_factory, assert_video_se
     assert test_session.query(Video).count() == 3
     assert test_session.query(FileGroup).count() == 3
 
-    assert_video_search(assert_total=3, assert_ids=[vid1.id, vid2.id, vid3.id], order_by='upload_date')
-    assert_video_search(assert_total=3, assert_ids=[vid3.id, vid2.id, vid1.id], order_by='-upload_date')
-    assert_video_search(assert_total=3, assert_ids=[vid3.id, vid2.id], order_by='-upload_date', limit=2)
-    assert_video_search(assert_total=3, assert_ids=[vid2.id, vid1.id], order_by='-upload_date', limit=2, offset=1)
-    assert_video_search(assert_total=1, assert_ids=[vid2.id], order_by='-upload_date', channel_id=simple_channel.id)
+    assert_video_search(assert_total=3, assert_ids=[vid1.id, vid2.id, vid3.id], order_by='published_datetime')
+    assert_video_search(assert_total=3, assert_ids=[vid3.id, vid2.id, vid1.id], order_by='-published_datetime')
+    assert_video_search(assert_total=3, assert_ids=[vid3.id, vid2.id], order_by='-published_datetime', limit=2)
+    assert_video_search(assert_total=3, assert_ids=[vid2.id, vid1.id], order_by='-published_datetime', limit=2, offset=1)
+    assert_video_search(assert_total=1, assert_ids=[vid2.id], order_by='-published_datetime', channel_id=simple_channel.id)
     assert_video_search(assert_total=2, assert_ids=[vid1.id, vid2.id], tag_names=[tag1.name])
     assert_video_search(assert_total=2, assert_ids=[vid3.id, vid2.id], tag_names=[tag2.name])
     assert_video_search(assert_total=2, assert_ids=[vid1.id], tag_names=[tag1.name], limit=1)

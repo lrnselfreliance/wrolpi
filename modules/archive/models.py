@@ -10,7 +10,6 @@ from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi import dates
 from wrolpi.common import ModelHelper, Base, logger
-from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session
 from wrolpi.errors import UnknownArchive
 from wrolpi.files.models import FileGroup
@@ -31,9 +30,6 @@ class Archive(Base, ModelHelper):
     __tablename__ = 'archive'
     id = Column(Integer, primary_key=True)
 
-    archive_datetime = Column(TZDateTime)
-    url = Column(String)
-
     domain_id = Column(Integer, ForeignKey('domains.id'))
     domain = relationship('Domain', primaryjoin='Archive.domain_id==Domain.id')
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), unique=True, nullable=False)
@@ -41,20 +37,20 @@ class Archive(Base, ModelHelper):
 
     def __repr__(self):
         if self.domain:
-            return f'<Archive id={self.id} url={self.url} singlefile={repr(str(self.singlefile_path))} ' \
+            return f'<Archive id={self.id} url={self.file_group.url} singlefile={repr(str(self.singlefile_path))} ' \
                    f'domain={self.domain.domain}>'
-        return f'<Archive id={self.id} url={self.url} singlefile={repr(str(self.singlefile_path))}>'
+        return f'<Archive id={self.id} url={self.file_group.url} singlefile={repr(str(self.singlefile_path))}>'
 
     @staticmethod
     @optional_session
-    def get_by_id(id_: int, session: Session = None) -> Optional[Base]:
+    def get_by_id(id_: int, session: Session = None) -> Optional['Archive']:
         """Attempt to find an Archive with the provided id.  Returns None if it cannot be found."""
         archive = session.query(Archive).filter_by(id=id_).one_or_none()
         return archive
 
     @staticmethod
     @optional_session
-    def find_by_id(id_: int, session: Session = None) -> Base:
+    def find_by_id(id_: int, session: Session = None) -> 'Archive':
         """Find an Archive with the provided id, raises an exception when no Archive is found.
 
         @raise UnknownArchive: if the Archive can not be found"""
@@ -84,7 +80,7 @@ class Archive(Base, ModelHelper):
         if not isinstance(other, Archive):
             raise ValueError(f'Cannot compare {type(other)} to Archive!')
 
-        return self.archive_datetime > other.archive_datetime
+        return self.file_group.published_datetime > other.file_group.published_datetime
 
     def delete(self):
         self.file_group.delete()
@@ -105,9 +101,11 @@ class Archive(Base, ModelHelper):
         session = Session.object_session(self)
         history = list(session.query(Archive).filter(
             Archive.id != self.id,
-            Archive.url == self.url,
-            Archive.url != None,  # noqa
-        ).order_by(Archive.archive_datetime))
+            FileGroup.url == self.file_group.url,
+            FileGroup.url != None,  # noqa
+        ) \
+                       .join(FileGroup, FileGroup.id == Archive.file_group_id) \
+                       .order_by(FileGroup.published_datetime))
         return history
 
     @property
@@ -192,7 +190,7 @@ class Archive(Base, ModelHelper):
             raise InvalidArchive() from e
 
         # Readability is most trusted, it should overwrite any previous data.
-        self.url = url or self.url
+        self.file_group.url = url or self.file_group.url
         self.file_group.title = title or self.file_group.title
 
     def apply_singlefile_data(self):
@@ -202,7 +200,7 @@ class Archive(Base, ModelHelper):
             # Can't read contents of nothing.
             raise ValueError('Cannot read singlefile data when this has no files')
 
-        if self.url and self.archive_datetime:
+        if self.file_group.url and self.file_group.published_datetime:
             # This data has already been read.
             return
 
@@ -212,21 +210,21 @@ class Archive(Base, ModelHelper):
                 logger.error(f'Could not find SingleFile header in {self}')
                 return
 
-            if not self.url:
+            if not self.file_group.url:
                 try:
                     if match := MATCH_URL.findall(head):
-                        self.url = match[0].strip()
+                        self.file_group.url = match[0].strip()
                 except Exception as e:
                     logger.error(f'Could not get URL from singlefile {path}', exc_info=e)
 
-            if not self.archive_datetime:
+            if not self.file_group.download_datetime:
                 try:
                     if match := MATCH_DATE.findall(head):
                         dt = match[0].strip()
                         dt = ' '.join(dt.split(' ')[:5])
                         # SingleFile uses GMT.
                         dt = dates.strpdate(dt).replace(tzinfo=pytz.timezone('GMT'))
-                        self.archive_datetime = dt
+                        self.file_group.download_datetime = dt
                 except Exception as e:
                     logger.error(f'Could not get archive date from singlefile {path}', exc_info=e)
 
@@ -234,11 +232,11 @@ class Archive(Base, ModelHelper):
         """Get the domain from the URL."""
         from modules.archive.lib import get_or_create_domain
         domain = None
-        if self.url:
+        if self.file_group.url:
             session = Session.object_session(self)
             if not session:
                 raise ValueError('No session found!')
-            domain = get_or_create_domain(session, self.url)
+            domain = get_or_create_domain(session, self.file_group.url)
         # Clear domain if the URL is missing.
         self.domain_id = domain.id if domain else None
 

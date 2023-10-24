@@ -272,4 +272,4 @@ async def test_video_ffprobe_json(test_session, video_file):
 
     video = test_session.query(Video).one()
     assert video.ffprobe_json
-    assert video.duration
+    assert video.file_group.length

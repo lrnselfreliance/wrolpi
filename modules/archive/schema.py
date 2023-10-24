@@ -14,7 +14,6 @@ class ArchiveDict:
     readability_txt_path: str
     screenshot_path: str
     title: str
-    archive_datetime: datetime
 
 
 @dataclass

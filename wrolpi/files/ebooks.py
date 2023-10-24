@@ -45,18 +45,18 @@ EBOOK_MIMETYPES = (
 @dataclasses.dataclass
 class EBookData:
     cover: bytes = None
-    creator: str = None
+    author: str = None
     text: str = None
     title: str = None
     ebook_path: pathlib.Path = None
 
     def __bool__(self):
-        return bool(self.cover) or bool(self.creator) or bool(self.text) or bool(self.title)
+        return bool(self.cover) or bool(self.author) or bool(self.text) or bool(self.title)
 
     def __json__(self):
         d = {}
-        if self.creator:
-            d['creator'] = self.creator
+        if self.author:
+            d['author'] = self.author
         if self.title:
             d['title'] = self.title
         if self.ebook_path:
@@ -88,7 +88,7 @@ def extract_ebook_data(path: pathlib.Path, mimetype: str) -> Optional[EBookData]
         if 'title' in value:
             data.title = data.title or value['title'][0][0]
         if 'creator' in value:
-            data.creator = data.creator or value['creator'][0][0]
+            data.author = data.author or value['creator'][0][0]
 
     data.text = ''
     for doc in book.get_items_of_type(ebooklib.ITEM_DOCUMENT):
@@ -149,8 +149,6 @@ class EBook(ModelHelper, Base):
     __tablename__ = 'ebook'
     id = Column(Integer, primary_key=True)
     size: int = Column(Integer)
-
-    creator: str = Column(String)
 
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), nullable=False, unique=True)
     file_group: FileGroup = relationship('FileGroup')
@@ -239,8 +237,8 @@ def _model_ebook(ebook: EBook) -> EBook:
             if data:
                 # Title is a_text.
                 ebook.file_group.title = ebook.file_group.a_text = data.title
-                # Creator is b_text.
-                ebook.file_group.b_text = ebook.creator = data.creator
+                # Author is b_text.
+                ebook.file_group.b_text = ebook.file_group.author = data.author
                 # All text is d_text.
                 ebook.file_group.d_text = data.text
                 d: dict = data.__json__()

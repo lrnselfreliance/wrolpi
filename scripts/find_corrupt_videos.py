@@ -106,12 +106,12 @@ async def create_download(url: str, downloader: str, message: str):
 
 
 async def download_or_ask_delete(video: Video, session: Session, message: str):
-    if video.url and can_be_downloaded(video.url):
-        await create_download(video.url, VideoDownloader.name, message)
+    if video.file_group.url and can_be_downloaded(video.file_group.url):
+        await create_download(video.file_group.url, VideoDownloader.name, message)
         # Always re-download when possible.
         do_delete = True
     else:
-        logger.error(f'Video cannot be downloaded: {video.url or video}')
+        logger.error(f'Video cannot be downloaded: {video.file_group.url or video}')
         do_delete = confirm(f'{message}  Delete? (y/N)')
 
     if do_delete:
@@ -140,7 +140,7 @@ async def find_corrupt_videos(channel_id: int = None):
             if not video.video_path.is_file():
                 await download_or_ask_delete(video, session, f'Video does not exist: {video.video_path}')
                 continue
-            if video.url:
+            if video.file_group.url:
                 for path in video.file_group.my_paths():
                     if not path.is_file() and path.name.endswith('.srt'):
                         files = [i for i in video.file_group.my_files() if i['path'] != path]
@@ -148,7 +148,7 @@ async def find_corrupt_videos(channel_id: int = None):
                         session.commit()
                         logger.info(f'Removed non-existent srt: {video.video_path}')
                 if not all(i.is_file() for i in video.file_group.my_paths()):
-                    await create_download(video.url, VideoDownloader.name,
+                    await create_download(video.file_group.url, VideoDownloader.name,
                                           f'Video is missing {path}: {video.video_path}')
                     continue
 

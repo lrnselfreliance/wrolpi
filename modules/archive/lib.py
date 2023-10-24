@@ -198,7 +198,7 @@ async def model_archive_result(url: str, singlefile: str, readability: dict, scr
 
     with get_db_session(commit=True) as session:
         archive = Archive.from_paths(session, *paths)
-        archive.archive_datetime = now()
+        archive.file_group.download_datetime = now()
         archive.url = url
         archive.domain = get_or_create_domain(session, url)
         session.flush()
@@ -378,6 +378,7 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
 def get_archive(session, archive_id: int) -> Archive:
     """Get an Archive."""
     archive = Archive.find_by_id(archive_id, session=session)
+    archive.file_group.set_viewed()
     return archive
 
 
@@ -439,20 +440,38 @@ def get_domains():
 
 
 ARCHIVE_ORDERS = {
-    'date': (date := 'fg.published_datetime ASC, a.archive_datetime ASC'),
-    '-date': (_date := 'fg.published_datetime DESC NULLS LAST, a.archive_datetime DESC NULLS LAST'),
+    'published_datetime': (date := 'fg.published_datetime ASC, fg.download_datetime ASC'),
+    '-published_datetime': (_date := 'fg.published_datetime DESC NULLS LAST, fg.download_datetime DESC NULLS LAST'),
+    'published_modified_datetime': f'fg.published_modified_datetime ASC NULLS LAST, {date}',
+    '-published_modified_datetime': f'fg.published_modified_datetime DESC, {_date}',
+    'download_datetime': 'fg.download_datetime ASC',
+    '-download_datetime': 'fg.download_datetime DESC',
     'rank': f'2 DESC, {_date}',
     '-rank': f'2 ASC, {date}',
     'size': 'fg.size ASC, LOWER(fg.primary_path) ASC',
     '-size': 'fg.size DESC NULLS LAST, LOWER(fg.primary_path) DESC',
+    'viewed': 'fg.viewed ASC',
+    '-viewed': 'fg.viewed DESC',
 }
 ORDER_GROUP_BYS = {
-    'date': 'fg.published_datetime, a.archive_datetime',
-    '-date': 'fg.published_datetime, a.archive_datetime',
-    'rank': 'fg.published_datetime, a.archive_datetime',
-    '-rank': 'fg.published_datetime, a.archive_datetime',
+    'published_datetime': 'fg.published_datetime, fg.download_datetime',
+    '-published_datetime': 'fg.published_datetime, fg.download_datetime',
+    'published_modified_datetime': 'fg.published_modified_datetime, fg.published_datetime, fg.download_datetime',
+    '-published_modified_datetime': 'fg.published_modified_datetime, fg.published_datetime, fg.download_datetime',
+    'download_datetime': 'fg.download_datetime',
+    '-download_datetime': 'fg.download_datetime',
+    'rank': 'fg.published_datetime, fg.download_datetime',
+    '-rank': 'fg.published_datetime, fg.download_datetime',
     'size': 'fg.size, fg.published_datetime, fg.primary_path',
     '-size': 'fg.size, fg.published_datetime, fg.primary_path',
+    'viewed': 'fg.viewed',
+    '-viewed': 'fg.viewed',
+}
+NO_NULL_ORDERS = {
+    'viewed': 'fg.viewed IS NOT NULL',
+    '-viewed': 'fg.viewed IS NOT NULL',
+    'published_modified_datetime': 'fg.published_modified_datetime IS NOT NULL',
+    '-published_modified_datetime': 'fg.published_modified_datetime IS NOT NULL',
 }
 
 
@@ -461,10 +480,10 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
         -> Tuple[List[dict], int]:
     # Always filter FileGroups to Archives.
     wheres = []
-    group_by = 'fg.published_datetime, a.archive_datetime, a.file_group_id'
+    group_by = 'fg.published_datetime, fg.download_datetime, a.file_group_id'
 
     params = dict(search_str=search_str, offset=int(offset), limit=int(limit))
-    order_by = ARCHIVE_ORDERS['-date']
+    order_by = ARCHIVE_ORDERS['-published_datetime']
 
     select_columns = ''
     if search_str:
@@ -480,7 +499,9 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
             order_by = ARCHIVE_ORDERS[order]
             group_by = f'{group_by}, {ORDER_GROUP_BYS[order]}'
         except KeyError:
-            raise InvalidOrderBy(f'Invalid order by: {order}')
+            raise InvalidOrderBy(f'Invalid order byy {order}')
+        if order in NO_NULL_ORDERS:
+            wheres.append(NO_NULL_ORDERS[order])
 
     if tag_names:
         # Filter all FileGroups by those that have been tagged with the provided tag names.

@@ -21,15 +21,15 @@ async def test_index(test_session, test_directory, example_epub, example_mobi):
 
     assert ebook.file_group.title == 'WROLPi Test Book'
     assert ebook.file_group.mimetype.startswith(EPUB_MIMETYPE)
-    assert ebook.creator == 'roland'
+    assert ebook.file_group.author == 'roland'
     assert ebook.size == 292579
-    assert ebook.file_group.data == {'creator': 'roland', 'title': 'WROLPi Test Book',
+    assert ebook.file_group.data == {'author': 'roland', 'title': 'WROLPi Test Book',
                                      'cover_path': test_directory / 'ebook example.jpeg',
                                      'ebook_path': test_directory / 'ebook example.epub',
                                      }
 
     assert ebook.file_group.a_text, 'Book title was not indexed'
-    assert ebook.file_group.b_text, 'Book creator was not indexed'
+    assert ebook.file_group.b_text, 'Book author was not indexed'
     assert ebook.file_group.d_text, 'Book text was not indexed'
     # Both ebooks are assumed to be the same book, but different formats.
     assert (epubs := ebook.file_group.my_files('application/epub+zip')) and len(epubs) == 1 \
@@ -86,7 +86,7 @@ def test_search(test_session, test_client, example_epub):
 
     ebook: EBook = test_session.query(EBook).one()
     assert ebook.file_group.title == 'WROLPi Test Book'
-    assert ebook.creator == 'roland'
+    assert ebook.file_group.author == 'roland'
     assert ebook.file_group.a_text == 'WROLPi Test Book', 'Book title was not updated'
     assert ebook.file_group.d_text, 'Book was not indexed'
 
@@ -100,7 +100,7 @@ def test_search(test_session, test_client, example_epub):
     assert_dict_contains(
         file_group['data'],
         {'cover_path': 'ebook example.jpeg', 'ebook_path': 'ebook example.epub', 'title': 'WROLPi Test Book',
-         'creator': 'roland'},
+         'author': 'roland'},
     )
 
     # No Mobi ebook.
@@ -143,7 +143,7 @@ async def test_move_ebook(test_session, test_directory, example_epub, image_file
 
     ebook: EBook = test_session.query(EBook).one()
     assert ebook.cover_path
-    assert_dict_contains(ebook.file_group.data, dict(creator='roland'))
+    assert_dict_contains(ebook.file_group.data, dict(author='roland'))
     assert sorted([i['path'] for i in ebook.file_group.files]) == [
         test_directory / 'ebook example.epub',
         test_directory / 'ebook example.jpg',
@@ -158,7 +158,7 @@ async def test_move_ebook(test_session, test_directory, example_epub, image_file
     ebook: EBook = test_session.query(EBook).one()
     assert ebook.file_group.primary_path == test_directory / 'new/ebook example.epub'
     assert ebook.cover_path
-    assert_dict_contains(ebook.file_group.data, dict(creator='roland'))
+    assert_dict_contains(ebook.file_group.data, dict(author='roland'))
     assert sorted([i['path'] for i in ebook.file_group.files]) == [
         test_directory / 'new/ebook example.epub',
         test_directory / 'new/ebook example.jpg',

@@ -73,7 +73,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
     const navigate = useNavigate();
     const videoRef = React.useRef();
 
-    useTitle(videoFile === null || videoFile === undefined ? null : videoFile.video.title);
+    useTitle(videoFile ? videoFile.title ? videoFile.title : videoFile.name : null);
     let video;
     if (videoFile) {
         video = videoFile.video;
@@ -241,7 +241,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             <Segment>
 
                 <Header as='h2'>{title}</Header>
-                {video.upload_date && <h3>{isoDatetimeToString(video.upload_date)}</h3>}
+                {videoFile.published_datetime && <h3>{isoDatetimeToString(videoFile.published_datetime)}</h3>}
                 <h3>
                     {channel && <Link to={`/videos/channel/${channel.id}/video`}>
                         {channel.name}

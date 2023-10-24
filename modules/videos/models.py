@@ -1,4 +1,3 @@
-import datetime
 import json
 import pathlib
 from pathlib import Path
@@ -11,7 +10,6 @@ from sqlalchemy.orm.collections import InstrumentedList
 from modules.videos.errors import UnknownVideo, UnknownChannel
 from wrolpi.captions import read_captions
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task
-from wrolpi.dates import now, TZDateTime
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.downloader import Download, download_manager
 from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
@@ -29,13 +27,9 @@ class Video(ModelHelper, Base):
     __tablename__ = 'video'
     id = Column(Integer, primary_key=True)
 
-    duration = Column(Integer)
-    source_id = Column(String)
-    upload_date: datetime.datetime = Column(TZDateTime)
-    url = Column(String)
-    view_count = Column(Integer)
-    viewed = Column(TZDateTime)
-    ffprobe_json = deferred(Column(JSON))
+    source_id = Column(String)  # The id from yt-dlp
+    view_count = Column(Integer)  # The view count from the ChannelDownloader (or from initial download)
+    ffprobe_json = deferred(Column(JSON))  # Data that is fetched once from ffprobe (ffmpeg)
 
     channel_id = Column(Integer, ForeignKey('channel.id'))
     channel = relationship('Channel', primaryjoin='Video.channel_id==Channel.id', back_populates='videos')
@@ -75,7 +69,6 @@ class Video(ModelHelper, Base):
             codec_names=codec_names,
             codec_types=codec_types,
             description=self.file_group.c_text or self.get_video_description(),
-            duration=self.duration,
             id=self.id,
             info_json_file=self.info_json_file,
             info_json_path=self.info_json_path,
@@ -83,8 +76,6 @@ class Video(ModelHelper, Base):
             poster_path=self.poster_path,
             source_id=self.source_id,
             stem=split_path_stem_and_suffix(self.video_path)[0],
-            upload_date=self.upload_date.isoformat() if self.upload_date else None,
-            url=self.url,
             video_path=self.video_path,
             view_count=self.view_count,
         )
@@ -102,13 +93,10 @@ class Video(ModelHelper, Base):
 
     def add_to_skip_list(self):
         """Add this video to the DownloadManager's skip list."""
-        if self.url:
-            download_manager.add_to_skip_list(self.url)
+        if self.file_group.url:
+            download_manager.add_to_skip_list(self.file_group.url)
         else:
             logger.warning(f'{self} cannot be added to skip list because it does not have a URL')
-
-    def set_viewed(self):
-        self.viewed = now()
 
     def get_info_json(self) -> Optional[Dict]:
         """If this Video has an info_json file, return it's contents.  Otherwise, return None."""
@@ -156,16 +144,17 @@ class Video(ModelHelper, Base):
         session = Session.object_session(self)
 
         with get_db_curs() as curs:
-            if self.upload_date:
+            if self.file_group.published_datetime:
                 # Get videos next to this Video's upload date.
                 stmt = '''
                         WITH numbered_videos AS (
-                            SELECT id,
-                                ROW_NUMBER() OVER (ORDER BY upload_date ASC) AS row_number
-                            FROM video
+                            SELECT fg.id,
+                                ROW_NUMBER() OVER (ORDER BY published_datetime ASC) AS row_number
+                            FROM file_group fg
+                            LEFT OUTER JOIN video v on fg.id = v.file_group_id
                             WHERE
-                                channel_id = %(channel_id)s
-                                AND upload_date IS NOT NULL
+                                v.channel_id = %(channel_id)s
+                                AND fg.published_datetime IS NOT NULL
                         )
                         SELECT id
                         FROM numbered_videos
@@ -174,7 +163,7 @@ class Video(ModelHelper, Base):
                             FROM numbered_videos
                             CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
                             WHERE
-                            id = %(video_id)s
+                            id = %(fg_id)s
                         )
                 '''
             else:
@@ -198,7 +187,7 @@ class Video(ModelHelper, Base):
                         CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
                     )
                 '''
-            curs.execute(stmt, dict(channel_id=self.channel_id, video_id=self.id))
+            curs.execute(stmt, dict(channel_id=self.channel_id, fg_id=self.file_group_id))
 
             results = [i[0] for i in curs.fetchall()]
 

@@ -91,7 +91,6 @@ class Video:
     poster_path: str
     source_id: str
     title: str
-    upload_date: date
     video_path: str
     name: str
     caption_path: str
@@ -108,7 +107,6 @@ class VideoWithChannel:
     poster_path: str
     source_id: str
     title: str
-    upload_date: date
     video_path: str
     name: str
     caption_path: str
@@ -120,18 +118,13 @@ class VideoWithChannel:
 
 
 @dataclass
-class ChannelVideosResponse:
-    videos: List[Video]
-
-
-@dataclass
 class ExtendedVideo(Video):
     info_json: dict
 
 
 @dataclass
 class VideoResponse:
-    file = ExtendedVideo
+    file_group = ExtendedVideo
     prev = ExtendedVideo
     next = ExtendedVideo
 

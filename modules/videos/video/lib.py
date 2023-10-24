@@ -18,7 +18,7 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
     """
     with get_db_session(commit=True) as session:
         video = Video.find_by_id(video_id, session=session)
-        video.set_viewed()
+        video.file_group.set_viewed()
         previous_video, next_video = video.get_surrounding_videos()
 
         video = video.__json__()
@@ -29,34 +29,33 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
 
 
 VIDEO_ORDERS = {
-    'upload_date': 'v.upload_date ASC, LOWER(fg.primary_path) ASC',
-    '-upload_date': 'v.upload_date DESC NULLS LAST, LOWER(fg.primary_path) ASC',
+    'published_datetime': 'fg.published_datetime ASC, LOWER(fg.primary_path) ASC',
+    '-published_datetime': 'fg.published_datetime DESC NULLS LAST, LOWER(fg.primary_path) ASC',
+    'download_datetime': 'fg.download_datetime ASC, fg.published_datetime ASC, LOWER(fg.primary_path) ASC',
+    '-download_datetime': 'fg.download_datetime DESC NULLS LAST, fg.published_datetime DESC NULLS LAST, LOWER(fg.primary_path) ASC',
     'rank': '2 DESC, LOWER(fg.primary_path) DESC',
     '-rank': '2 ASC, LOWER(fg.primary_path) ASC',
     'size': 'fg.size ASC, LOWER(fg.primary_path) ASC',
     '-size': 'fg.size DESC, LOWER(fg.primary_path) DESC',
-    'duration': 'duration ASC, LOWER(fg.primary_path) ASC',
-    '-duration': 'duration DESC, LOWER(fg.primary_path) DESC',
-    'viewed': 'v.viewed ASC',
-    '-viewed': 'v.viewed DESC',
+    'length': 'fg.length ASC, LOWER(fg.primary_path) ASC',
+    '-length': 'fg.length DESC, LOWER(fg.primary_path) DESC',
+    'viewed': 'fg.viewed ASC',
+    '-viewed': 'fg.viewed DESC',
     'view_count': 'v.view_count ASC',
     '-view_count': 'v.view_count DESC',
-    'modification_datetime': 'fg.modification_datetime ASC',
-    '-modification_datetime': 'fg.modification_datetime DESC',
 }
 NO_NULL_ORDERS = {
-    'viewed': 'v.viewed IS NOT NULL',
-    '-viewed': 'v.viewed IS NOT NULL',
-    'duration': 'v.duration IS NOT NULL',
-    '-duration': 'v.duration IS NOT NULL',
+    'viewed': 'fg.viewed IS NOT NULL',
+    '-viewed': 'fg.viewed IS NOT NULL',
+    'length': 'fg.length IS NOT NULL',
+    '-length': 'fg.length IS NOT NULL',
     'size': 'fg.size IS NOT NULL',
     '-size': 'fg.size IS NOT NULL',
     'view_count': 'v.view_count IS NOT NULL',
     '-view_count': 'v.view_count IS NOT NULL',
-    'modification_datetime': 'fg.modification_datetime IS NOT NULL',
-    '-modification_datetime': 'fg.modification_datetime IS NOT NULL',
 }
-JOIN_ORDERS = ('upload_date', '-upload_date', 'viewed', '-viewed', 'view_count', '-view_count', 'duration', '-duration')
+JOIN_ORDERS = ('published_datetime', '-published_datetime', 'viewed', '-viewed', 'view_count', '-view_count',
+               'length', '-length')
 DEFAULT_VIDEO_ORDER = 'rank'
 VIDEO_QUERY_LIMIT = 24
 

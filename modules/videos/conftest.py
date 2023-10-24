@@ -132,7 +132,7 @@ def video_factory(test_session, test_directory):
         video = Video.from_paths(test_session, *paths)
         video.channel_id = channel_id
         video.source_id = source_id or title
-        video.upload_date = upload_date
+        video.file_group.published_datetime = upload_date
         video.validate()
         return video
 

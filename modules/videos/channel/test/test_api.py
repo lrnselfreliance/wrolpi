@@ -30,9 +30,9 @@ def test_get_video(test_client, test_session, simple_channel, video_factory):
     """Test that you get can information about a video.  Test that video file can be gotten."""
     now_ = now()
     video1 = video_factory(channel_id=simple_channel.id, title='vid1')
-    video1.upload_date = now_
+    video1.file_group.published_datetime = now_
     video2 = video_factory(channel_id=simple_channel.id, title='vid2')
-    video2.upload_date = now_ + timedelta(seconds=1)
+    video2.file_group.published_datetime = now_ + timedelta(seconds=1)
     test_session.commit()
 
     # Test that a 404 is returned when no video exists
@@ -276,7 +276,7 @@ async def test_channel_download_requires_refresh(test_session, download_channel,
 
     Videos already downloaded are not downloaded again."""
     vid = video_factory(channel_id=download_channel.id, with_video_file=True, with_poster_ext='jpg')
-    vid.url = 'https://example.com/1'
+    vid.file_group.url = 'https://example.com/1'
     d = download_channel.get_download()
     d.next_download = None
     test_session.commit()
@@ -502,7 +502,7 @@ def test_search_videos_channel(test_client, test_session, video_factory):
                          dict(primary_path='vid1.mp4', video=dict(channel_id=channel2.id)))
 
 
-def test_get_channel_videos_pagination(test_client, test_session, simple_channel, video_factory, assert_video_search):
+def test_get_channel_videos_pagination(test_session, simple_channel, video_factory, assert_video_search):
     for i in range(50):
         video_factory(channel_id=simple_channel.id)
 
@@ -524,7 +524,8 @@ def test_get_channel_videos_pagination(test_client, test_session, simple_channel
     ]
     last_ids = []
     for offset, video_count in tests:
-        _, response = assert_video_search(channel_id=simple_channel.id, order_by='upload_date', offset=offset, limit=20)
+        _, response = assert_video_search(channel_id=simple_channel.id, order_by='published_datetime', offset=offset,
+                                          limit=20)
         assert len(response.json['file_groups']) == video_count, 'Returned videos does not match'
         current_ids = [i['id'] for i in response.json['file_groups']]
         assert current_ids != last_ids, f'IDs are unchanged current_ids={current_ids}'

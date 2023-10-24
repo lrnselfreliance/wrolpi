@@ -129,7 +129,7 @@ async def test_video_delete(test_async_client, test_session, channel_factory, vi
     assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Video was added to skip list.
-    assert test_download_manager.is_skipped(vid1.url)
+    assert test_download_manager.is_skipped(vid1.file_group.url)
     # Video was deleted.
     assert test_session.query(Video).count() == 1
     assert vid1_video_path.is_file() is False and vid1_caption_path.is_file() is False
@@ -138,7 +138,7 @@ async def test_video_delete(test_async_client, test_session, channel_factory, vi
     request, response = await test_async_client.delete(f'/api/videos/video/{vid2.id}')
     assert response.status_code == HTTPStatus.NO_CONTENT
 
-    assert test_download_manager.is_skipped(vid1.url, vid2.url)
+    assert test_download_manager.is_skipped(vid1.file_group.url, vid2.file_group.url)
     assert test_session.query(Video).count() == 0
     assert vid1_video_path.is_file() is False and vid1_caption_path.is_file() is False
     assert vid2_video_path.is_file() is False and vid2_info_json_path.is_file() is False

@@ -273,6 +273,12 @@ class FileGroup(ModelHelper, Base):
 
         return file_group
 
+    def find_by_id(id_: int, session: Session = None) -> 'FileGroup':
+        fg = session.query(FileGroup).filter(FileGroup.id == id_).one_or_none()
+        if not fg:
+            raise RuntimeError(f'Unable to find FileGroup with id {id_}')
+        return fg
+
     @staticmethod
     @optional_session
     def get_by_path(path, session) -> Optional['FileGroup']:

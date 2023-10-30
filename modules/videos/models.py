@@ -10,7 +10,7 @@ from sqlalchemy.orm.collections import InstrumentedList
 from modules.videos.errors import UnknownVideo, UnknownChannel
 from wrolpi.captions import read_captions
 from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task
-from wrolpi.db import get_db_curs, get_db_session, optional_session
+from wrolpi.db import get_db_curs, get_db_session, optional_session, mogrify
 from wrolpi.downloader import Download, download_manager
 from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
@@ -148,7 +148,7 @@ class Video(ModelHelper, Base):
                 # Get videos next to this Video's upload date.
                 stmt = '''
                         WITH numbered_videos AS (
-                            SELECT fg.id,
+                            SELECT fg.id AS fg_id, v.id AS v_id,
                                 ROW_NUMBER() OVER (ORDER BY published_datetime ASC) AS row_number
                             FROM file_group fg
                             LEFT OUTER JOIN video v on fg.id = v.file_group_id
@@ -156,14 +156,14 @@ class Video(ModelHelper, Base):
                                 v.channel_id = %(channel_id)s
                                 AND fg.published_datetime IS NOT NULL
                         )
-                        SELECT id
+                        SELECT v_id
                         FROM numbered_videos
                         WHERE row_number IN (
                             SELECT row_number+i
                             FROM numbered_videos
                             CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
                             WHERE
-                            id = %(fg_id)s
+                            fg_id = %(fg_id)s
                         )
                 '''
             else:
@@ -173,20 +173,22 @@ class Video(ModelHelper, Base):
                     else 'WHERE v.channel_id IS NULL'
                 stmt = f'''
                     WITH numbered_videos AS (
-                        SELECT v.id, ROW_NUMBER() OVER (ORDER BY fg.primary_path) AS row_number
+                        SELECT fg.id AS fg_id, v.id AS v_id, ROW_NUMBER() OVER (ORDER BY fg.primary_path) AS row_number
                         FROM
                             video v
                             LEFT JOIN file_group fg on fg.id = v.file_group_id
                         {channel_where}
                     )
-                    SELECT id
+                    SELECT v_id
                     FROM numbered_videos
                     WHERE row_number IN (
                         SELECT row_number+i
                         FROM numbered_videos
                         CROSS JOIN (SELECT -1 AS i UNION ALL SELECT 0 UNION ALL SELECT 1) n
+                        WHERE fg_id = %(fg_id)s
                     )
                 '''
+            logger.debug(stmt)
             curs.execute(stmt, dict(channel_id=self.channel_id, fg_id=self.file_group_id))
 
             results = [i[0] for i in curs.fetchall()]

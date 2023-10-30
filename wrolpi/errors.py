@@ -143,3 +143,9 @@ class NoPrimaryFile(APIError):
     code = 'NO_PRIMARY_FILE'
     summary = 'Could not find a primary file in the provided group'
     status = HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+class InvalidDatetime(APIError):
+    code = 'INVALID_DATETIME'
+    summary = 'Unable to parse a datetime string'
+    status = HTTPStatus.INTERNAL_SERVER_ERROR

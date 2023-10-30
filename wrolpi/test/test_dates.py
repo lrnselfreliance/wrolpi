@@ -9,6 +9,7 @@ from wrolpi import dates
 from wrolpi.common import Base
 from wrolpi.dates import TZDateTime, timedelta_to_timestamp, seconds_to_timestamp
 from wrolpi.db import get_db_session, get_db_curs
+from wrolpi.errors import InvalidDatetime
 
 
 class TestTable(Base):
@@ -126,15 +127,15 @@ def test_strpdate(dt, expected):
 
 
 def test_invalid_strpdate():
-    with pytest.raises(RuntimeError):
+    with pytest.raises(InvalidDatetime):
         dates.strpdate('1')
-    with pytest.raises(RuntimeError):
+    with pytest.raises(InvalidDatetime):
         dates.strpdate('asdf')
-    with pytest.raises(RuntimeError):
+    with pytest.raises(InvalidDatetime):
         dates.strpdate('13/1/2008')
 
     # Not a real date.
-    with pytest.raises(RuntimeError):
+    with pytest.raises(InvalidDatetime):
         dates.strpdate('2001-2-31')
-    with pytest.raises(RuntimeError):
+    with pytest.raises(InvalidDatetime):
         dates.strpdate('2001-2-30')

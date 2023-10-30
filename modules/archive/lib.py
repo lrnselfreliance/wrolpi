@@ -18,7 +18,7 @@ from wrolpi.common import get_media_directory, logger, extract_domain, escape_fi
     format_html_string, split_lines_by_length, get_html_soup
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
-from wrolpi.errors import UnknownArchive, InvalidOrderBy
+from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
 from wrolpi.tags import tag_names_to_file_group_sub_select
 from wrolpi.vars import PYTEST
 
@@ -274,7 +274,6 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
     # <meta content="2023-10-18T04:52:23+00:00" property="article:published_time"/>
     if meta_published_time := get_meta_by_property('article:published_time'):
         metadata.published_datetime = dates.strpdate(meta_published_time.attrs['content'])
-        logger.debug(f'Found meta published_time: {meta_published_time}')
     # <meta name="article.published" content="2023-04-04T21:52:00.000Z">
     if meta_article_published := soup.find('meta', attrs={'name': 'article.published'}):
         metadata.published_datetime = metadata.published_datetime or dates.strpdate(
@@ -286,7 +285,6 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
     # <time itemprop="datePublished" datetime="2023-08-25">
     if time := soup.find('time', attrs={'itemprop': 'datePublished'}):
         metadata.published_datetime = metadata.published_datetime or dates.strpdate(time.attrs['datetime'])
-        logger.debug(f'Found time published_time: {time}')
     # <abbr class="published" itemprop="datePublished" title="2022-03-17T03:00:00-07:00">March 17, 2022</abbr>
     if abbr := soup.find('abbr', attrs={'itemprop': 'datePublished'}):
         metadata.published_datetime = metadata.published_datetime or dates.strpdate(abbr.attrs['title'])
@@ -294,7 +292,6 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
     # <meta content="2023-10-19T05:53:24+00:00" property="article:modified_time"/>
     if meta_modified_time := get_meta_by_property('article:modified_time'):
         metadata.modified_datetime = dates.strpdate(meta_modified_time.attrs['content'])
-        logger.debug(f'Found meta modified_time: {meta_modified_time}')
     # <meta name="article.updated" content="2023-04-04T21:52:00.000Z">
     if meta_article_updated := soup.find('meta', attrs={'name': 'article.updated'}):
         metadata.modified_datetime = metadata.modified_datetime or dates.strpdate(meta_article_updated.attrs['content'])
@@ -302,19 +299,16 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
     # <meta content="The Title" property="og:title"/>
     if meta_title := get_meta_by_property('og:title'):
         metadata.title = meta_title.attrs['content']
-        logger.debug(f'Found meta title: {meta_title}')
 
     # <meta name="author" content="Author Name"/>
     if meta_author := soup.find('meta', attrs={'name': 'author'}):
         metadata.author = meta_author.attrs['content']
-        logger.debug(f'Found meta author: {meta_author}')
     # <meta content="Billy" property="article:author"/>
     if meta_property_author := get_meta_by_property('article:author'):
         metadata.author = metadata.author or meta_property_author.attrs['content']
     # <a href="https://example.com" rel="author">
     if link_author := soup.find('a', attrs={'rel': 'author'}):
         metadata.author = metadata.author or link_author.text.strip()
-        logger.debug(f'Found link author: {link_author}')
 
     # <script class="sf-hidden" type="application/ld+json">
     if (ld_script := soup.find('script', attrs={'type': 'application/ld+json'})) and ld_script.contents:
@@ -327,12 +321,10 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
             # Found https://schema.org/
             if headline := schema.get('headline'):
                 metadata.title = metadata.title or schema.get('headline')
-                logger.debug(f'Found schema headline: {headline}')
             if datePublished := schema.get('datePublished'):
                 try:
                     metadata.published_datetime = metadata.published_datetime or dates.strpdate(datePublished)
-                    logger.debug(f'Found schema published_datetime: {datePublished}')
-                except RuntimeError as e:
+                except InvalidDatetime as e:
                     # Invalid date, ignore.
                     logger.error('Invalid datetime', exc_info=e)
                     if PYTEST:
@@ -340,15 +332,13 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
             if dateModified := schema.get('dateModified'):
                 try:
                     metadata.modified_datetime = metadata.modified_datetime or dates.strpdate(dateModified)
-                    logger.debug(f'Found schema modified_datetime: {dateModified}')
-                except RuntimeError as e:
+                except InvalidDatetime as e:
                     # Invalid date, ignore.
                     logger.error('Invalid datetime', exc_info=e)
                     if PYTEST:
                         raise
             if description := schema.get('description'):
                 metadata.description = description
-                logger.debug(f'Found schema description: {description}')
             if author := schema.get('author'):
                 if isinstance(author, list) and len(author) >= 1:
                     # Use the first Author.
@@ -359,7 +349,6 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
 
                 if isinstance(author, str):
                     metadata.author = author
-                    logger.debug(f'Found schema author: {author}')
                 else:
                     logger.warning(f'Unable to parse author schema: {author}')
 

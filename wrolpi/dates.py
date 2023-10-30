@@ -7,6 +7,7 @@ import dateutil.parser
 import pytz
 from sqlalchemy import types
 
+from wrolpi.errors import InvalidDatetime
 from wrolpi.vars import DATETIME_FORMAT_MS
 
 logger = logging.getLogger(__name__)
@@ -119,7 +120,7 @@ def strpdate(dt: str) -> datetime:
         # Last, try third-party module to parse ISO 8601 datetime.
         return dateutil.parser.isoparse(dt)
     except Exception as e:
-        raise RuntimeError(f'Unable to parse datetime string: {dt}') from e
+        raise InvalidDatetime(f'Unable to parse datetime string: {dt}') from e
 
 
 def strftime_ms(dt: datetime) -> str:

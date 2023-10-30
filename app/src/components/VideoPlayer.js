@@ -130,7 +130,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             <p>{videoFile.size ? humanFileSize(videoFile.size) : 'Unknown'}</p>
 
             <h3>Source URL</h3>
-            <p>{video.url ? <a href={video.url}>{video.url}</a> : 'N/A'}</p>
+            <p>{videoFile.url ? <a href={videoFile.url}>{videoFile.url}</a> : 'N/A'}</p>
 
             <h3>View Count</h3>
             <p>{video.view_count ? humanNumber(video.view_count) : 'N/A'}</p>

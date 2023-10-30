@@ -104,7 +104,7 @@ def downgrade():
     session.execute('ALTER TABLE video ADD COLUMN IF NOT EXISTS viewed TIMESTAMP WITH TIME ZONE')
     session.execute('''
         UPDATE video
-        SET url=file_group.viewed
+        SET url=file_group.url
         FROM file_group
         WHERE file_group.id = video.file_group_id
     ''')

@@ -461,6 +461,7 @@ export function FilesSearchView({
         {key: 'image', text: 'Image', value: 'image'},
         {key: 'zip', text: 'ZIP', value: 'zip'},
         {key: 'model', text: '3D Model', value: 'model'},
+        {key: 'software', text: 'Software', value: 'software'},
     ];
 
     const {searchFiles, pages} = useSearchFiles(24, emptySearch, model);

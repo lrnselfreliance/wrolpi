@@ -1175,6 +1175,8 @@ export const filterToMimetypes = (filter) => {
         return ['application/zip', 'application/zlib', 'application/x-bzip2', 'application/x-xz', 'application/x-bzip', 'application/x-bzip2', 'application/gzip', 'application/vnd.rar', 'application/x-tar', 'application/x-7z-compressed'];
     } else if (filter === 'model') {
         return ['application/x-openscad', 'model/stl', 'application/sla', 'model/obj'];
+    } else if (filter === 'software') {
+        return ['application/x-iso9660-image', 'application/x-executable', 'application/x-dosexec', 'application/x-bzip2', 'application/vnd.debian.binary-package', 'application/x-executable']
     }
 }
 

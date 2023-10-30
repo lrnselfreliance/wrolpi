@@ -31,8 +31,6 @@ def get_video_for_app(video_id: int) -> Tuple[dict, Optional[dict], Optional[dic
 VIDEO_ORDERS = {
     'published_datetime': 'fg.published_datetime ASC, LOWER(fg.primary_path) ASC',
     '-published_datetime': 'fg.published_datetime DESC NULLS LAST, LOWER(fg.primary_path) ASC',
-    'download_datetime': 'fg.download_datetime ASC, fg.published_datetime ASC, LOWER(fg.primary_path) ASC',
-    '-download_datetime': 'fg.download_datetime DESC NULLS LAST, fg.published_datetime DESC NULLS LAST, LOWER(fg.primary_path) ASC',
     'rank': '2 DESC, LOWER(fg.primary_path) DESC',
     '-rank': '2 ASC, LOWER(fg.primary_path) ASC',
     'size': 'fg.size ASC, LOWER(fg.primary_path) ASC',

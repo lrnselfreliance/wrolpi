@@ -665,13 +665,13 @@ def test_archive_history(test_session, archive_factory):
     assert not archive5.history, 'archive5 has no history'
 
 
-SINGLEFILE_1 = b'''
+METADATA_EXAMPLE_1 = b'''
 <!DOCTYPE html>
 <html lang="en-US">
 </html>
 '''
 
-SINGLEFILE_2 = b'''
+METADATA_EXAMPLE_2 = b'''
 <!DOCTYPE html>
 <html lang="en-US">
  <head>
@@ -687,7 +687,7 @@ SINGLEFILE_2 = b'''
 </html>
 '''
 
-SINGLEFILE_3 = b'''
+METADATA_EXAMPLE_3 = b'''
 <!DOCTYPE html>
 <html lang="en-US">
 <title>This is not a meta title and should be ignored</title>
@@ -700,7 +700,7 @@ SINGLEFILE_3 = b'''
 </script>
 </html>'''
 
-SINGLEFILE_4 = b'''
+METADATA_EXAMPLE_4 = b'''
 <!DOCTYPE html>
 <html lang="en-US">
 <title>This is not a meta title and should be ignored</title>
@@ -709,7 +709,7 @@ SINGLEFILE_4 = b'''
 </a>
 </html>'''
 
-SINGLEFILE_5 = b'''
+METADATA_EXAMPLE_5 = b'''
 <!DOCTYPE html>
 <html lang="en-US">
 <title>This is not a meta title and should be ignored</title>
@@ -724,7 +724,7 @@ SINGLEFILE_5 = b'''
 def test_parse_article_html_metadata():
     """Singlefiles may contain metadata tags."""
     # Metadata can be empty.
-    metadata = lib.parse_article_html_metadata(SINGLEFILE_1)
+    metadata = lib.parse_article_html_metadata(METADATA_EXAMPLE_1)
     assert metadata.title is None
     assert metadata.published_datetime is None
     assert metadata.modified_datetime is None
@@ -732,7 +732,7 @@ def test_parse_article_html_metadata():
     assert metadata.author is None
 
     # Data from <meta> elements.
-    metadata = lib.parse_article_html_metadata(SINGLEFILE_2)
+    metadata = lib.parse_article_html_metadata(METADATA_EXAMPLE_2)
     assert metadata.title == 'The Title'
     assert metadata.published_datetime == datetime(2023, 10, 18, 4, 52, 23, tzinfo=utc)
     assert metadata.modified_datetime == datetime(2023, 10, 19, 5, 53, 24, tzinfo=utc)
@@ -741,7 +741,7 @@ def test_parse_article_html_metadata():
 
     # Data from Article structured data
     # https://developers.google.com/search/docs/appearance/structured-data/article
-    metadata = lib.parse_article_html_metadata(SINGLEFILE_3)
+    metadata = lib.parse_article_html_metadata(METADATA_EXAMPLE_3)
     assert metadata.title == 'The headline'
     assert metadata.published_datetime == datetime(2022, 9, 27, 0, 40, 19, tzinfo=utc)
     assert metadata.modified_datetime == datetime(2022, 9, 27, 13, 43, 47, 971000, tzinfo=utc)
@@ -749,11 +749,11 @@ def test_parse_article_html_metadata():
     assert metadata.author == 'BOBBY'
 
     # Data from author anchor element.
-    metadata = lib.parse_article_html_metadata(SINGLEFILE_4)
+    metadata = lib.parse_article_html_metadata(METADATA_EXAMPLE_4)
     assert metadata.author == 'Link Author'
 
     # author anchor may be a list.
-    metadata = lib.parse_article_html_metadata(SINGLEFILE_5)
+    metadata = lib.parse_article_html_metadata(METADATA_EXAMPLE_5)
     assert metadata.author == 'The Span Author'
     assert metadata.published_datetime == datetime(2023, 8, 25, tzinfo=pytz.UTC)
 
@@ -803,3 +803,17 @@ def test_modified_datetime(html, expected):
 )
 def test_author(html, expected):
     assert lib.parse_article_html_metadata(html).author == expected
+
+
+SINGLEFILE_EXAMPLE_1 = b'''<!DOCTYPE html>
+<html class="fonts-loaded" lang="en">
+ <!--
+ Page saved with SingleFile 
+ url: https://www.example.com 
+ saved date: Tue Oct 31 2023 15:57:19 GMT+0000 (Coordinated Universal Time)
+-->
+ <head>'''
+
+
+def test_get_url_from_singlefile():
+    assert lib.get_url_from_singlefile(SINGLEFILE_EXAMPLE_1) == 'https://www.example.com'

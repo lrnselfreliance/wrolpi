@@ -399,6 +399,10 @@ class VideoDownloader(Downloader, ABC):
             location = f'/videos/channel/{channel_id}/video/{video_id}'
         else:
             location = f'/videos/video/{video_id}'
+
+        logger.debug(f'Downloaded video {location=}')
+        logger.info(f'Successfully downloaded video {url} {video}')
+
         result = DownloadResult(
             success=True,
             location=location,

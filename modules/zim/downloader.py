@@ -109,6 +109,8 @@ class KiwixZimDownloader(Downloader):
         if return_code != 0:
             logger.error(f'Failed to restart kiwix')
 
+        logger.info(f'Successfully downloaded Zim {download.url} to {output_path}')
+
         # Location is just the generic Kiwix viewer.
         return DownloadResult(success=True, location='/zim')
 

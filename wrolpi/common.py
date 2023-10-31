@@ -1548,11 +1548,13 @@ def html_screenshot(html: bytes) -> bytes:
 
     with tempfile.NamedTemporaryFile('wb', suffix='.html') as fh:
         fh.write(html)
+        fh.flush()
 
-        driver = webdriver.Chrome(chrome_options=options)
-        driver.get(f'file://{fh.name}')
-        screenshot = driver.get_screenshot_as_png()
-        return screenshot
+        with webdriver.Chrome(chrome_options=options) as driver:
+            driver.get(f'file://{fh.name}')
+            driver.set_window_size(1280, 720)
+            screenshot = driver.get_screenshot_as_png()
+            return screenshot
 
 
 def chain(iterable: Union[List, Tuple], length: int) -> List:

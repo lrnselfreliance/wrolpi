@@ -84,7 +84,10 @@ async def call_single_file(url) -> bytes:
     logger.debug(f'archive cmd: {cmd}')
     stdout, stderr, return_code = await check_output(cmd, always_log_stderr=True)
     if return_code != 0 or not stdout:
-        raise ValueError(f'Failed to single-file {url}')
+        if stderr:
+            for line in stderr.splitlines():
+                logger.error(line)
+        raise RuntimeError(f'Failed to single-file {url} got the following error: {stderr}')
     logger.debug(f'done archiving for {url}')
     return stdout
 
@@ -103,19 +106,18 @@ async def extract_readability(path: str, url: str) -> dict:
         output = json.loads(stdout)
     except JSONDecodeError as e:
         stderr = stderr.decode() if stderr else None
-        raise ChildProcessError(f'Failed to extract readability.  {stderr}') from e
+        raise RuntimeError(f'Failed to extract readability.  {stderr}') from e
     logger.debug(f'done readability for {url}')
     return output
 
 
 async def take_screenshot(url: str) -> bytes:
-    logger.info(f'Screenshot: {url}')
     cmd = '/usr/bin/chromium-browser' \
           ' --headless' \
           ' --disable-gpu' \
           ' --no-sandbox' \
           ' --screenshot' \
-          ' --window-size=1280,720' \
+          ' --window-size=1280x720' \
           f' "{url}"'
     logger.debug(f'Screenshot cmd: {cmd}')
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -156,6 +158,7 @@ async def post_archive(request: Request):
         # Use html suffix so chrome screenshot recognizes it as an HTML file.
         with tempfile.NamedTemporaryFile('wb', suffix='.html') as fh:
             fh.write(singlefile)
+            fh.flush()
             readability = None
             try:
                 readability = await extract_readability(fh.name, url)

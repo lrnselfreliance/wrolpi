@@ -1277,6 +1277,8 @@ class RSSDownloader(Downloader, ABC):
         # Only download new URLs.
         urls = [i for i in urls if i not in [i.url for i in sub_downloader.already_downloaded(*urls)]]
 
+        logger.info(f'Successfully got {len(urls)} urls from rss {download.url}')
+
         return DownloadResult(success=True, downloads=urls)
 
     @staticmethod

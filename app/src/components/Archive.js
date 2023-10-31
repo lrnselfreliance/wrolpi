@@ -149,9 +149,7 @@ function ArchivePage() {
     if (domain) {
         const domainUrl = `/archive?domain=${domain}`;
         domainHeader = <Header as='h4'>
-            <CardLink to={domainUrl}>
-                {domain}
-            </CardLink>
+            <a href={domainUrl}>{domain}</a>
         </Header>;
     }
 
@@ -181,7 +179,7 @@ function ArchivePage() {
             {humanFileSize(size)}
 
             <Header as={'h3'}>URL</Header>
-            <p>{data.url ? <a href={data.url}>{data.url}</a> : 'N/A'}</p>
+            <p>{archiveFile.url ? <a href={archiveFile.url}>{archiveFile.url}</a> : 'N/A'}</p>
 
             <Header as={'h3'}>Modified Date</Header>
             <p>{modifiedDatetimeString}</p>
@@ -310,7 +308,7 @@ export function ArchiveCard({file}) {
                     <Button icon='file alternate' content='Details'
                             labelPosition='left'/>
                 </Link>
-                <Button icon='external' href={data.url} target='_blank' rel='noopener noreferrer'/>
+                <Button icon='external' href={file.url} target='_blank' rel='noopener noreferrer'/>
             </CardDescription>
         </CardContent>
     </Card>

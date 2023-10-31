@@ -1,4 +1,5 @@
-FROM capsulecode/singlefile
+# Keep older singlefile version so we can keep screenshots at specific ratio.
+FROM capsulecode/singlefile:v0.3.32
 
 USER root
 WORKDIR /app
@@ -14,7 +15,7 @@ COPY docker/archive/requirements.txt /app/requirements.txt
 RUN pip3 install -r /app/requirements.txt
 COPY docker/archive /app
 
-# Install Readability too
-RUN npm install -g 'git+https://github.com/pirate/readability-extractor'
+# Install a newer singlefile and Readability.
+RUN npm install -g single-file-cli@1.1.16 'git+https://github.com/pirate/readability-extractor'
 
 ENTRYPOINT [ "python3", "/app/main.py"]

@@ -277,7 +277,7 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
 
 export default VideoPage;
 
-const chapterRegex = new RegExp('^(\\(?(?:((\\d?\\d):)?(?:(\\d?\\d):(\\d\\d)))\\)?)\\s+(.*)$', 'i');
+const chapterRegex = new RegExp('^(\\(?(?:((\\d?\\d):)?(?:(\\d?\\d):(\\d\\d)))\\)?)\.?\\s+(.*)$', 'i');
 
 function formatVideoDescription(description, setVideoTime) {
     // Convert timestamps to links which change the video's playback location.  Change hashtags to search links.

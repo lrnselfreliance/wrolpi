@@ -57,6 +57,8 @@ class ArchiveDownloader(Downloader, ABC):
             if session := Session.object_session(archive):
                 session.commit()
 
+        logger.info(f'Successfully downloaded Archive {download.url} {archive}')
+
         return DownloadResult(success=True, location=f'/archive/{archive.id}')
 
     @optional_session

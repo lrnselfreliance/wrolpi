@@ -320,7 +320,7 @@ def parse_article_html_metadata(html: Union[bytes, str], assume_utc: bool = True
         if isinstance(schema, dict) and schema.get('@context') in ('https://schema.org', 'http://schema.org'):
             # Found https://schema.org/
             if headline := schema.get('headline'):
-                metadata.title = metadata.title or schema.get('headline')
+                metadata.title = metadata.title or headline
             if datePublished := schema.get('datePublished'):
                 try:
                     metadata.published_datetime = metadata.published_datetime or dates.strpdate(datePublished)

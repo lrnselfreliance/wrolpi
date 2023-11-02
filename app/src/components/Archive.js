@@ -39,7 +39,7 @@ import {
 import {deleteArchives, postDownload, tagFileGroup, untagFileGroup} from "../api";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useArchive, useDomains, useSearchArchives, useSearchDomain} from "../hooks/customHooks";
+import {useArchive, useDomains, useSearchArchives, useSearchDomain, useSearchOrder} from "../hooks/customHooks";
 import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
@@ -537,6 +537,8 @@ function ArchivesPage() {
 
 export function ArchiveRowCells({file}) {
     const {data} = file;
+    let {sort} = useSearchOrder();
+    sort = sort ? sort.replace(/^-+/, '') : null;
 
     const archiveUrl = `/archive/${data.id}`;
     const posterPath = findPosterPath(file);
@@ -551,6 +553,17 @@ export function ArchiveRowCells({file}) {
         poster = <FileIcon file={file} size='large'/>;
     }
 
+    let dataCell = file.published_datetime ? isoDatetimeToString(file.published_datetime) : '';
+    if (sort === 'published_modified_datetime') {
+        dataCell = file.published_modified_datetime ? isoDatetimeToString(file.published_modified_datetime) : '';
+    } else if (sort === 'download_datetime') {
+        dataCell = file.download_datetime ? isoDatetimeToString(file.download_datetime) : '';
+    } else if (sort === 'size') {
+        dataCell = humanFileSize(file.size);
+    } else if (sort === 'viewed') {
+        dataCell = isoDatetimeToString(file.viewed);
+    }
+
     // Fragment for SelectableRow
     return <React.Fragment>
         <TableCell>
@@ -562,6 +575,7 @@ export function ArchiveRowCells({file}) {
                 {textEllipsis(file.title || file.stem)}
             </CardLink>
         </TableCell>
+        <TableCell>{dataCell}</TableCell>
     </React.Fragment>
 }
 

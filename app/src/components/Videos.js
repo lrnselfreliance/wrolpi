@@ -11,12 +11,15 @@ import {
     ErrorMessage,
     FileIcon,
     findPosterPath,
+    humanFileSize,
+    humanNumber,
     isoDatetimeToString,
     mimetypeColor,
     PageContainer,
     PreviewLink,
     scrollToTop,
     SearchInput,
+    secondsToFullDuration,
     SortButton,
     TabLinks,
     textEllipsis,
@@ -36,7 +39,14 @@ import {
     TableCell
 } from "semantic-ui-react";
 import {ChannelsPage, EditChannel, NewChannel} from "./Channels";
-import {useChannel, useQuery, useSearchVideos, useVideo, useVideoStatistics} from "../hooks/customHooks";
+import {
+    useChannel,
+    useQuery,
+    useSearchOrder,
+    useSearchVideos,
+    useVideo,
+    useVideoStatistics
+} from "../hooks/customHooks";
 import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
@@ -306,7 +316,8 @@ export function VideoCard({file}) {
 
     let poster = <CardPoster to={video_url} file={file}/>;
 
-    let header = <span {...s} className='card-title-ellipsis'>{file.title || file.name || video.stem || video.name}</span>;
+    let header = <span {...s}
+                       className='card-title-ellipsis'>{file.title || file.name || video.stem || video.name}</span>;
     if (video_url) {
         // Link to Channel-Video page or Video page.
         header = <Link to={video_url} className="no-link-underscore card-link">{header}</Link>;
@@ -341,6 +352,8 @@ export function VideoCard({file}) {
 
 export function VideoRowCells({file}) {
     const {video} = file;
+    let {sort} = useSearchOrder();
+    sort = sort ? sort.replace(/^-+/, '') : null;
 
     let video_url = `/videos/video/${video.id}`;
     const poster_path = findPosterPath(file);
@@ -358,6 +371,17 @@ export function VideoRowCells({file}) {
         poster = <FileIcon file={file} size='large'/>;
     }
 
+    let dataCell = file.published_datetime ? isoDatetimeToString(file.published_datetime) : '';
+    if (sort === 'length') {
+        dataCell = secondsToFullDuration(file.length || 0);
+    } else if (sort === 'size') {
+        dataCell = humanFileSize(file.size);
+    } else if (sort === 'view_count') {
+        dataCell = humanNumber(video.view_count || 0);
+    } else if (sort === 'viewed') {
+        dataCell = isoDatetimeToString(file.viewed);
+    }
+
     // Fragment for SelectableRow
     return <React.Fragment>
         <TableCell>
@@ -371,5 +395,6 @@ export function VideoRowCells({file}) {
                 {textEllipsis(file.title || video.stem || video.video_path)}
             </CardLink>
         </TableCell>
+        <TableCell>{dataCell}</TableCell>
     </React.Fragment>
 }

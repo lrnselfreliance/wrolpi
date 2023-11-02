@@ -125,7 +125,8 @@ class FileGroup(ModelHelper, Base):
             'suffix': suffix,
             'tags': tags,
             'title': self.title,
-            'url': self.url
+            'url': self.url,
+            'viewed': self.viewed,
         }
         return d
 

@@ -190,6 +190,7 @@ function ImageRowCells({file}) {
                 <p>{textEllipsis(file.title || file.stem || file.primary_path)}</p>
             </PreviewLink>
         </TableCell>
+        <TableCell>{humanFileSize(file.size)}</TableCell>
     </React.Fragment>
 }
 
@@ -212,6 +213,7 @@ export function EbookRowCells({file}) {
                 {textEllipsis(file.title || file.stem)}
             </PreviewLink>
         </TableCell>
+        <TableCell>{humanFileSize(file.size)}</TableCell>
     </React.Fragment>
 }
 
@@ -239,12 +241,13 @@ function FileRow({file}) {
             <FileRowTagIcon file={file}/>
             <PreviewLink file={file}>{textEllipsis(file.title || file.name || file.stem)}</PreviewLink>
         </TableCell>
+        <TableCell/>
     </React.Fragment>
 }
 
 export function FileTable({files, selectOn, onSelect, footer, selectedKeys}) {
     if (files && files.length > 0) {
-        const headerContents = ['Poster', 'Title'];
+        const headerContents = ['Poster', 'Title', 'Data'];
         const rows = files.map(i => <FileRow key={i['key']} file={i}/>);
         return <SelectableTable
             headerContents={headerContents}

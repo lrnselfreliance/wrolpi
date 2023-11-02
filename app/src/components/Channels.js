@@ -6,10 +6,7 @@ import {
     Input,
     StatisticLabel,
     StatisticValue,
-    TableBody,
     TableCell,
-    TableHeader,
-    TableHeaderCell,
     TableRow,
 } from "semantic-ui-react";
 import {createChannel, deleteChannel, downloadChannel, refreshChannel, updateChannel, validateRegex} from "../api";
@@ -21,7 +18,7 @@ import {
     frequencyOptions,
     humanFileSize,
     RequiredAsterisk,
-    secondsToFrequency,
+    secondsToFrequency, secondsToFullDuration,
     Toggle,
     useTitle,
     WROLModeMessage
@@ -31,23 +28,10 @@ import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {useChannel, useChannels} from "../hooks/customHooks";
 import _ from "lodash";
-import {
-    Accordion,
-    Button,
-    Form,
-    FormField,
-    FormGroup,
-    FormInput,
-    Header,
-    Loader,
-    Segment,
-    Statistic,
-    Table
-} from "./Theme";
+import {Accordion, Button, Form, FormField, FormGroup, FormInput, Header, Loader, Segment, Statistic} from "./Theme";
 import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
 import {Media, ThemeContext} from "../contexts/contexts";
 import {SortableTable} from "./SortableTable";
-import {ChannelPlaceholder} from "./Placeholder";
 import {toast} from "react-semantic-toasts-2";
 
 
@@ -69,6 +53,10 @@ function ChannelStatistics({statistics}) {
         <Statistic>
             <StatisticValue>{humanFileSize(statistics.largest_video, true)}</StatisticValue>
             <StatisticLabel>Largest Video</StatisticLabel>
+        </Statistic>
+        <Statistic>
+            <StatisticValue>{secondsToFullDuration(statistics.length)}</StatisticValue>
+            <StatisticLabel>Total Duration</StatisticLabel>
         </Statistic>
     </Segment>
 }
@@ -283,6 +271,7 @@ function ChannelPage({create, header}) {
                 error={error}
                 success={success}
                 autoComplete="off"
+                onSubmit={handleSubmit}
             >
                 <FormGroup>
                     <FormField width={8}>
@@ -507,7 +496,7 @@ function MobileChannelRow({channel}) {
 }
 
 
-export function ChannelsPages() {
+export function ChannelsPage() {
     useTitle('Channels');
 
     const {channels} = useChannels();
@@ -569,7 +558,7 @@ export function ChannelsPages() {
     }
 
     let filteredChannels = channels;
-    if (searchStr) {
+    if (searchStr && Array.isArray(channels)) {
         const re = new RegExp(_.escapeRegExp(searchStr), 'i');
         filteredChannels = channels.filter(i => re.test(i['name']));
     }

@@ -513,17 +513,19 @@ class Channel(ModelHelper, Base):
                 SELECT
                     SUM(size),
                     MAX(size),
-                    COUNT(video.id)
+                    COUNT(video.id),
+                    SUM(fg.length)
                 FROM video
                 LEFT JOIN file_group fg on fg.id = video.file_group_id
                 WHERE channel_id = %(id)s
             '''
             curs.execute(stmt, dict(id=self.id))
-            size, largest_video, video_count = curs.fetchone()
+            size, largest_video, video_count, length = curs.fetchone()
         statistics = dict(
             video_count=video_count,
             size=size,
             largest_video=largest_video,
+            length=length,
         )
         return statistics
 

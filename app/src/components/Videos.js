@@ -35,7 +35,7 @@ import {
     StatisticValue,
     TableCell
 } from "semantic-ui-react";
-import {ChannelsPages, EditChannel, NewChannel} from "./Channels";
+import {ChannelsPage, EditChannel, NewChannel} from "./Channels";
 import {useChannel, useQuery, useSearchVideos, useVideo, useVideoStatistics} from "../hooks/customHooks";
 import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
@@ -275,7 +275,7 @@ export function VideosRoute(props) {
         <TabLinks links={links}/>
         <Routes>
             <Route path='/' exact element={<VideosPage/>}/>
-            <Route path='channel' exact element={<ChannelsPages/>}/>
+            <Route path='channel' exact element={<ChannelsPage/>}/>
             <Route path='statistics' exact element={<VideosStatistics/>}/>
             <Route path='channel/new' exact element={<NewChannel/>}/>
             <Route path='channel/:channelId/edit' exact element={<EditChannel/>}/>

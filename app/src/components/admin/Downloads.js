@@ -295,7 +295,7 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
                     <TableRow>
                         <TableHeaderCell width={11}>URL</TableHeaderCell>
                         <TableHeaderCell width={2}>Completed At</TableHeaderCell>
-                        <TableHeaderCell width={3}>Control</TableHeaderCell>
+                        <TableHeaderCell width={2}>Control</TableHeaderCell>
                     </TableRow>
                 </TableHeader>
                 <TableBody>

@@ -369,7 +369,7 @@ export function FilesView(
     }
 }
 
-export function SearchFilter({filters = [], modalHeader}) {
+export function SearchFilter({filters = [], modalHeader, size = 'medium'}) {
     const {filter, setFilter} = useSearchFilter();
     const [open, setOpen] = useState(false);
 
@@ -418,9 +418,11 @@ export function SearchFilter({filters = [], modalHeader}) {
                 icon='filter'
                 onClick={handleOpen}
                 primary={!!filter}
+                size={size}
             />
         </>
     }
+
     return <></>
 }
 
@@ -445,12 +447,7 @@ export function TagsQuerySelector({onChange}) {
     />
 }
 
-export function FilesSearchView({
-                                    showView = true,
-                                    showSelect = false,
-                                    emptySearch = false,
-                                    model,
-                                }) {
+export function FileSearchFilterButton({size = 'medium'}) {
     const filterOptions = [
         {key: 'video', text: 'Video', value: 'video'},
         {key: 'archive', text: 'Archive', value: 'archive'},
@@ -462,6 +459,16 @@ export function FilesSearchView({
         {key: 'model', text: '3D Model', value: 'model'},
         {key: 'software', text: 'Software', value: 'software'},
     ];
+
+    return <SearchFilter filters={filterOptions} size={size}/>
+}
+
+export function FilesSearchView({
+                                    showView = true,
+                                    showSelect = false,
+                                    emptySearch = false,
+                                    model,
+                                }) {
 
     const {searchFiles, pages} = useSearchFiles(24, emptySearch, model);
 
@@ -486,7 +493,6 @@ export function FilesSearchView({
                         <Grid.Column width={2}>{viewButton}</Grid.Column>}
                     <Grid.Column width={4}>{limitDropdown}</Grid.Column>
                     <Grid.Column width={2}>{tagQuerySelector}</Grid.Column>
-                    <Grid.Column width={2}><SearchFilter filters={filterOptions}/></Grid.Column>
                 </Grid.Row>
             </Grid>
         </Media>
@@ -499,7 +505,6 @@ export function FilesSearchView({
                         <Grid.Column width={1}>{viewButton}</Grid.Column>}
                     <Grid.Column width={2}>{limitDropdown}</Grid.Column>
                     <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
-                    <Grid.Column width={1}><SearchFilter filters={filterOptions}/></Grid.Column>
                 </Grid.Row>
             </Grid>
         </Media>

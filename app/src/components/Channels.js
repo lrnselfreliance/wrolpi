@@ -514,7 +514,9 @@ export function ChannelsPage() {
                                  searchStr={searchStr}
                                  disabled={!Array.isArray(channels) || channels.length === 0}
                                  onClear={() => setSearchStr('')}
-                                 onChange={setSearchStr}/>
+                                 onChange={setSearchStr}
+                                 onSubmit={null}
+                    />
                 </Grid.Column>
                 <Grid.Column textAlign='right'>
                     <Link to='/videos/channel/new'>

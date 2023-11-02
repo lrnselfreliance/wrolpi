@@ -25,6 +25,7 @@ import {Upload} from "./components/Upload";
 import {SearchView, useSearch} from "./components/Search";
 import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
 import {useSettings, useWROLMode} from "./hooks/customHooks";
+import {FileSearchFilterButton} from "./components/Files";
 
 function FlagsMessages({flags}) {
     const {settings, fetchSettings} = useSettings();
@@ -82,18 +83,14 @@ function FlagsMessages({flags}) {
     </>
 }
 
-export function DashboardPage() {
-    useTitle('Dashboard');
-
-    const navigate = useNavigate();
-
-    const {searchStr, setSearchStr, activeTags} = useSearch();
+export function Getters() {
     const {status} = useContext(StatusContext);
     const wrolModeEnabled = useWROLMode();
 
     // Getters are Downloads or Uploads.
     const [selectedGetter, setSelectedGetter] = useState(null);
     const gettersDisabled = status?.flags?.indexOf('refresh_complete') === -1;
+
     const handleSetGetter = (e, value) => {
         if (e) {
             e.preventDefault();
@@ -101,7 +98,7 @@ export function DashboardPage() {
         setSelectedGetter(value);
     }
 
-    let getter = <Segment>
+    const getter = <Segment>
         <Grid columns={2} textAlign='center'>
             <Divider vertical>Or</Divider>
             <GridRow verticalAlign='middle'>
@@ -120,6 +117,7 @@ export function DashboardPage() {
             </GridRow>
         </Grid>
     </Segment>;
+
     let getterModal;
     if (selectedGetter === 'downloads') {
         getterModal = <Modal closeIcon
@@ -145,25 +143,44 @@ export function DashboardPage() {
         </Modal>;
     }
 
+    if (wrolModeEnabled) {
+        return <></>
+    }
+
+    return <>
+        {getter}
+        {getterModal}
+    </>
+}
+
+export function DashboardPage() {
+
+    const navigate = useNavigate();
+
+    const {searchStr, setSearchStr, activeTags} = useSearch();
+    const {status} = useContext(StatusContext);
+
+    const title = searchStr ? `Search: ${searchStr} - Dashboard` : 'Dashboard';
+    useTitle(title);
+
     // Only show dashboard parts if not searching.
-    let body;
+    let body = <React.Fragment>
+        <Getters/>
+        <TagsDashboard/>
+        <DashboardStatus/>
+    </React.Fragment>;
     if (searchStr || (activeTags && activeTags.length > 0)) {
+        // User has submitted and wants full search.
         body = <SearchView/>;
-    } else {
-        body = <>
-            {!wrolModeEnabled && getter}
-            {getterModal}
-            <TagsDashboard/>
-            <DashboardStatus/>
-        </>;
     }
 
     return <PageContainer>
         <Grid>
             <Grid.Row>
-                <Grid.Column mobile={16} computer={8}>
+                <Grid.Column mobile={13} computer={8}>
                     <SearchInput clearable
                                  searchStr={searchStr}
+                                 onChange={setSearchStr}
                                  onSubmit={setSearchStr}
                                  size='large'
                                  placeholder='Search everywhere...'
@@ -171,6 +188,9 @@ export function DashboardPage() {
                                  onClear={() => navigate('/')}
                                  style={{marginBottom: '2em'}}
                     />
+                </Grid.Column>
+                <Grid.Column mobile={3} computer={2}>
+                    <FileSearchFilterButton size='large'/>
                 </Grid.Column>
             </Grid.Row>
         </Grid>

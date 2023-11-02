@@ -31,6 +31,7 @@ import {enumerate, filterToMimetypes, humanFileSize, secondsToFullDuration} from
 import {StatusContext} from "../contexts/contexts";
 import {toast} from "react-semantic-toasts-2";
 import {useSearch} from "../components/Search";
+import _ from "lodash";
 
 const calculatePage = (offset, limit) => {
     return offset && limit ? Math.round((offset / limit) + 1) : 1;
@@ -448,8 +449,17 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
         }
     }
 
+    // Only search after the user has stopped typing.  Estimates will always happen.
+    const debouncedLocalSearchFiles = _.debounce(async () => {
+        await localSearchFiles();
+    }, 1000);
+
     useEffect(() => {
-        localSearchFiles();
+        if (searchStr || (activeTags && activeTags.length > 0)) {
+            debouncedLocalSearchFiles();
+        }
+        // Handle when this is unmounted.
+        return () => debouncedLocalSearchFiles.cancel();
     }, [searchStr, pages.effect, filter, model, model_, JSON.stringify(activeTags), headline]);
 
     return {

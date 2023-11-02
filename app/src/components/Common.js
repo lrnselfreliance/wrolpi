@@ -409,7 +409,7 @@ export function SearchInput({
                                 onChange = null,
                                 ...props
                             }) {
-    let [value, setValue] = useState(searchStr || '');
+    const [value, setValue] = useState(searchStr || '');
 
     const handleChange = (e) => {
         if (e) {

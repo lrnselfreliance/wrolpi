@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from "react";
-import {createSearchParams, Route, Routes, useHref, useNavigate} from "react-router-dom";
+import {createSearchParams, Route, Routes, useNavigate} from "react-router-dom";
 import {FilesSearchView} from "./Files";
 import {usePages, useQuery} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
@@ -8,21 +8,32 @@ import {normalizeEstimate, TabLinks} from "./Common";
 
 export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {
     const navigate = useNavigate();
-    const href = useHref();
 
     const {searchParams, updateQuery} = useQuery();
+    // `searchStr` means actually fetch the files/zims.
     const searchStr = searchParams.get('q');
+    // User can search only by Tags, `searchStr` not required.
     const activeTags = searchParams.getAll('tag');
     const pages = usePages(defaultLimit, totalPages);
+    // text/html, video*, image*, etc.
     const filter = searchParams.get('filter');
+    // archive/video/ebook/etc.
     const model_ = searchParams.get('model') || model;
 
     const setSearchStr = (value) => {
+        const searchQuery = {q: value, o: 0};
+        if (filter) {
+            searchQuery['filter'] = filter;
+        }
         navigate({
             pathname: '/search',
             // Start new search at offset 0.
-            search: createSearchParams({q: value, o: 0}).toString(),
+            search: createSearchParams(searchQuery).toString(),
         });
+    }
+
+    const clearSearch = () => {
+        navigate({pathname: window.location.pathname, search: ''});
     }
 
     const setTags = (tags) => {
@@ -43,13 +54,13 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
         activeTags,
         addTag,
         filter,
-        href,
         model: model_,
         pages,
         removeTag,
         searchParams,
         searchStr,
         setSearchStr,
+        clearSearch,
         setTags,
     }
 }
@@ -61,7 +72,7 @@ export const useSearchEstimate = (search_str, activeTags) => {
     const [zimsSum, setZimsSum] = useState('?');
 
     const localFetchSearchEstimate = async () => {
-        if (!search_str && !activeTags) {
+        if (!search_str && (!activeTags || activeTags.length === 0)) {
             return;
         }
         try {

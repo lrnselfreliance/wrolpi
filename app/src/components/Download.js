@@ -368,7 +368,7 @@ class RSSDownload extends ChannelDownload {
                 in the future.</Message.Content>
         </Message>);
 
-        return <Form>
+        return <Form onSubmit={this.handleSubmit}>
             <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
             <Header as='h3'><Icon name='rss' color='orange'/> RSS Feed</Header>
             <FormInput
@@ -619,7 +619,7 @@ export function DownloadMenu({onOpen, disabled}) {
         />
         <Button
             color='black'
-            content='File'
+            content='Files'
             disabled={disabled}
             onClick={() => localOnOpen('file')}
             style={{marginBottom: '1em'}}

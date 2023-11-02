@@ -208,3 +208,19 @@ textarea.otp {
 .inverted label {
     color: #DDDDDD !important;
 }
+
+.table-ellipsis td.column-ellipsis {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 0; /* Ensures the content doesn't exceed the cell's width */
+    min-width: 0; /* Can be set to ensure a minimum width for your cells, if needed */
+}
+
+.card-title-ellipsis {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

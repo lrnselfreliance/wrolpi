@@ -16,7 +16,6 @@ import {
 import {
     CardGroupCentered,
     CardPoster,
-    cardTitleWrapper,
     encodeMediaPath,
     ErrorMessage,
     ExternalCardLink,
@@ -81,8 +80,8 @@ function EbookCard({file}) {
         <CardContent {...s}>
             <CardHeader>
                 <Container textAlign='left'>
-                    <ExternalCardLink to={viewerUrl || downloadUrl}>
-                        {cardTitleWrapper(file ? file.title : file.title)}
+                    <ExternalCardLink to={viewerUrl || downloadUrl} className='card-title-ellipsis'>
+                        {file.title || file.stem || file.name}
                     </ExternalCardLink>
                 </Container>
             </CardHeader>
@@ -145,8 +144,8 @@ function FileCard({file}) {
         <CardPoster to={downloadUrl} file={file}/>
         <CardContent {...s}>
             <CardHeader>
-                <ExternalCardLink to={downloadUrl}>
-                    {cardTitleWrapper(file.title || file.name || file.primary_path)}
+                <ExternalCardLink to={downloadUrl} className='card-title-ellipsis'>
+                    {file.title || file.name || file.primary_path}
                 </ExternalCardLink>
             </CardHeader>
             {author && <b {...s}>{author}</b>}

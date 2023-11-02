@@ -199,10 +199,17 @@ export function CardLink({to, newTab = false, ...props}) {
     </Link>
 }
 
-export function ExternalCardLink({to, ...props}) {
+export function ExternalCardLink({to, children, ...props}) {
     const {t} = useContext(ThemeContext);
-    return <a href={to} target='_blank' rel='noopener noreferrer' className='no-link-underscore card-link' {...t}>
-        {props.children}
+    return <a
+        href={to}
+        target='_blank'
+        rel='noopener noreferrer'
+        className='no-link-underscore card-link'
+        {...t}
+        {...props}
+    >
+        {children}
     </a>
 }
 
@@ -1182,11 +1189,6 @@ export const filterToMimetypes = (filter) => {
 
 export const toLocaleString = (num, locale = 'en-US') => {
     return num.toLocaleString(locale);
-}
-
-export const cardTitleWrapper = (title, maxLength = 100, breakWord = true) => {
-    const style = breakWord ? {overflowWrap: 'break-word'} : null;
-    return <span style={style}>{textEllipsis(title, maxLength)}</span>
 }
 
 function luma(color) {

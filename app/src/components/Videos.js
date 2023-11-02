@@ -4,7 +4,6 @@ import {
     APIButton,
     CardLink,
     CardPoster,
-    cardTitleWrapper,
     defaultSearchOrder,
     defaultVideoOrder,
     Duration,
@@ -307,7 +306,7 @@ export function VideoCard({file}) {
 
     let poster = <CardPoster to={video_url} file={file}/>;
 
-    let header = <p {...s}>{cardTitleWrapper(file.title || file.name || video.stem || video.video_path)}</p>;
+    let header = <span {...s} className='card-title-ellipsis'>{file.title || file.name || video.stem || video.name}</span>;
     if (video_url) {
         // Link to Channel-Video page or Video page.
         header = <Link to={video_url} className="no-link-underscore card-link">{header}</Link>;

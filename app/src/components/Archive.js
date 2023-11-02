@@ -19,7 +19,6 @@ import {
     APIButton,
     BackButton,
     CardLink,
-    cardTitleWrapper,
     encodeMediaPath,
     ErrorMessage,
     ExternalCardLink,
@@ -289,14 +288,14 @@ export function ArchiveCard({file}) {
         <CardContent {...s}>
             <CardHeader>
                 <Container textAlign='left'>
-                    <ExternalCardLink to={singlefileUrl}>
-                        {cardTitleWrapper(file.title || data.url)}
+                    <ExternalCardLink to={singlefileUrl} className='card-title-ellipsis'>
+                        {file.title || data.url}
                     </ExternalCardLink>
                 </Container>
             </CardHeader>
             {domain &&
                 <CardLink to={domainUrl}>
-                    <p {...s}>{domain}</p>
+                    <span {...s}>{domain}</span>
                 </CardLink>}
             <CardMeta {...s}>
                 <p>

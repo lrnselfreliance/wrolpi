@@ -157,15 +157,13 @@ class RecurringDownloadRow extends React.Component {
 
         // Show "now" if we have passed the next_download.
         let next = 'now';
-        if (next_download) {
-            if (new Date() < new Date(next_download)) {
-                next = isoDatetimeToElapsedPopup(next_download);
-            }
+        if (next_download && new Date() < new Date(next_download)) {
+            next = isoDatetimeToElapsedPopup(next_download);
         }
 
         return <TableRow>
-            <TableCell>
-                {link(textEllipsis(url, 50))}
+            <TableCell className='column-ellipsis'>
+                {link(url)}
             </TableCell>
             <TableCell>{secondsToFrequency(frequency)}</TableCell>
             <TableCell>
@@ -277,8 +275,8 @@ class OnceDownloadRow extends React.Component {
         }
 
         return <TableRow>
-            <TableCell>
-                {link(textEllipsis(url, 50))}
+            <TableCell className='column-ellipsis'>
+                {link(url)}
             </TableCell>
             <TableCell>
                 {completedAtCell}
@@ -292,12 +290,12 @@ class OnceDownloadRow extends React.Component {
 export function OnceDownloadsTable({downloads, fetchDownloads}) {
     if (downloads && downloads.length >= 1) {
         return <>
-            <Table>
+            <Table className='table-ellipsis'>
                 <TableHeader>
                     <TableRow>
-                        <TableHeaderCell>URL</TableHeaderCell>
-                        <TableHeaderCell>Completed At</TableHeaderCell>
-                        <TableHeaderCell>Control</TableHeaderCell>
+                        <TableHeaderCell width={11}>URL</TableHeaderCell>
+                        <TableHeaderCell width={2}>Completed At</TableHeaderCell>
+                        <TableHeaderCell width={3}>Control</TableHeaderCell>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -326,14 +324,14 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
 
 export function RecurringDownloadsTable({downloads, fetchDownloads}) {
     if (downloads && downloads.length >= 1) {
-        return <Table>
+        return <Table unstackable className='table-ellipsis'>
             <TableHeader>
                 <TableRow>
-                    <TableHeaderCell>URL</TableHeaderCell>
-                    <TableHeaderCell>Download Frequency</TableHeaderCell>
-                    <TableHeaderCell>Completed At</TableHeaderCell>
-                    <TableHeaderCell>Next</TableHeaderCell>
-                    <TableHeaderCell>Control</TableHeaderCell>
+                    <TableHeaderCell width={8}>URL</TableHeaderCell>
+                    <TableHeaderCell width={2}>Download Frequency</TableHeaderCell>
+                    <TableHeaderCell width={2}>Completed At</TableHeaderCell>
+                    <TableHeaderCell width={1}>Next</TableHeaderCell>
+                    <TableHeaderCell width={3}>Control</TableHeaderCell>
                 </TableRow>
             </TableHeader>
             <TableBody>

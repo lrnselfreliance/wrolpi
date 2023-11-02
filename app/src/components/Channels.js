@@ -3,7 +3,6 @@ import {
     AccordionContent,
     AccordionTitle,
     Grid,
-    Input,
     StatisticLabel,
     StatisticValue,
     TableCell,
@@ -18,7 +17,9 @@ import {
     frequencyOptions,
     humanFileSize,
     RequiredAsterisk,
-    secondsToFrequency, secondsToFullDuration,
+    SearchInput,
+    secondsToFrequency,
+    secondsToFullDuration,
     Toggle,
     useTitle,
     WROLModeMessage
@@ -26,7 +27,7 @@ import {
 import {Link, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
-import {useChannel, useChannels} from "../hooks/customHooks";
+import {useChannel, useChannels, useOneQuery} from "../hooks/customHooks";
 import _ from "lodash";
 import {Accordion, Button, Form, FormField, FormGroup, FormInput, Header, Loader, Segment, Statistic} from "./Theme";
 import Dropdown from "semantic-ui-react/dist/commonjs/modules/Dropdown";
@@ -500,25 +501,20 @@ export function ChannelsPage() {
     useTitle('Channels');
 
     const {channels} = useChannels();
-    const [searchStr, setSearchStr] = useState('');
+    const [searchStr, setSearchStr] = useOneQuery('name');
 
-    const handleInputChange = (e, {value}) => {
-        e.preventDefault();
-        setSearchStr(value);
-    }
-
-    let header = <div style={{marginBottom: '1em'}}>
-        <Header as='h1'>Channels</Header>
+    const header = <div style={{marginBottom: '1em'}}>
         <Grid stackable columns={2}>
             <Grid.Row>
                 <Grid.Column>
-                    <Input fluid
-                           icon='search'
-                           placeholder='Name filter...'
-                           size="large"
-                           name="filterStr"
-                           value={searchStr}
-                           onChange={handleInputChange}/>
+                    <SearchInput clearable={true}
+                                 placeholder='Name filter...'
+                                 size="large"
+                                 actionIcon='search'
+                                 searchStr={searchStr}
+                                 disabled={!Array.isArray(channels) || channels.length === 0}
+                                 onClear={() => setSearchStr('')}
+                                 onChange={setSearchStr}/>
                 </Grid.Column>
                 <Grid.Column textAlign='right'>
                     <Link to='/videos/channel/new'>

@@ -406,15 +406,33 @@ export function SearchInput({
                                 clearable,
                                 autoFocus = false,
                                 onClear = null,
+                                onChange = null,
                                 ...props
                             }) {
     let [value, setValue] = useState(searchStr || '');
+
+    const handleChange = (e) => {
+        if (e) {
+            e.preventDefault();
+        }
+        setValue(e.target.value);
+        if (onChange) {
+            // Try to call the remote function, don't let its failure break this.
+            try {
+                onChange(e.target.value);
+            } catch (e) {
+                console.error(`Call to ${onChange} failed`);
+            }
+        }
+    }
 
     const handleClearSearch = (e) => {
         e.preventDefault();
         // Clear the input when the "clear" button is clicked, search again.
         setValue('');
-        onSubmit('');
+        if (onSubmit) {
+            onSubmit('');
+        }
         if (onClear) {
             onClear();
         }
@@ -423,7 +441,11 @@ export function SearchInput({
     const localOnSubmit = (e) => {
         // Send the value up when submitting.
         e.preventDefault();
-        onSubmit(value);
+        if (onSubmit) {
+            onSubmit(value);
+        } else {
+            console.debug('No onSubmit defined');
+        }
     }
 
     if ((action || actionIcon) && searchStr && searchStr === value && clearable) {
@@ -438,7 +460,7 @@ export function SearchInput({
         <Input fluid
                placeholder={placeholder}
                type='text'
-               onChange={(e) => setValue(e.target.value)}
+               onChange={handleChange}
                value={value}
                size={size}
                action={action}

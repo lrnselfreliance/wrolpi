@@ -92,6 +92,7 @@ export const useOneQuery = (name) => {
     const value = searchParams.get(name);
 
     const setValue = (newValue) => {
+        console.debug(`useOneQuery setValue=${newValue}`);
         updateQuery({[name]: newValue});
     }
 

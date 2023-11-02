@@ -448,6 +448,7 @@ export function TagsQuerySelector({onChange}) {
 }
 
 export function FileSearchFilterButton({size = 'medium'}) {
+    // see `filterToMimetypes`
     const filterOptions = [
         {key: 'video', text: 'Video', value: 'video'},
         {key: 'archive', text: 'Archive', value: 'archive'},

@@ -1188,6 +1188,9 @@ export const ColorToSemanticHexColor = (color) => {
 }
 
 export const filterToMimetypes = (filter) => {
+    const zipMimetypes = ['application/zip', 'application/zlib', 'application/x-bzip2', 'application/x-xz', 'application/x-bzip', 'application/x-bzip2', 'application/gzip', 'application/vnd.rar', 'application/x-tar', 'application/x-7z-compressed'];
+    const softwareMimetypes = [...zipMimetypes, 'application/x-iso9660-image', 'application/x-executable', 'application/x-dosexec'];
+
     if (filter === 'video') {
         return ['video'];
     } else if (filter === 'archive') {
@@ -1201,11 +1204,11 @@ export const filterToMimetypes = (filter) => {
     } else if (filter === 'image') {
         return ['image'];
     } else if (filter === 'zip') {
-        return ['application/zip', 'application/zlib', 'application/x-bzip2', 'application/x-xz', 'application/x-bzip', 'application/x-bzip2', 'application/gzip', 'application/vnd.rar', 'application/x-tar', 'application/x-7z-compressed'];
+        return zipMimetypes;
     } else if (filter === 'model') {
         return ['application/x-openscad', 'model/stl', 'application/sla', 'model/obj'];
     } else if (filter === 'software') {
-        return ['application/x-iso9660-image', 'application/x-executable', 'application/x-dosexec', 'application/x-bzip2', 'application/vnd.debian.binary-package', 'application/x-executable']
+        return softwareMimetypes;
     }
 }
 

@@ -502,6 +502,9 @@ export function ChannelsPage() {
 
     const {channels} = useChannels();
     const [searchStr, setSearchStr] = useOneQuery('name');
+    // Hides Channels with few videos.
+    const [hideSmall, setHideSmall] = React.useState(true);
+    const enoughChannelsToHideSmall = channels && channels.length > 10;
 
     const header = <div style={{marginBottom: '1em'}}>
         <Grid stackable columns={2}>
@@ -559,6 +562,11 @@ export function ChannelsPage() {
     if (searchStr && Array.isArray(channels)) {
         const re = new RegExp(_.escapeRegExp(searchStr), 'i');
         filteredChannels = channels.filter(i => re.test(i['name']));
+    } else if (channels && hideSmall && enoughChannelsToHideSmall) {
+        filteredChannels = channels.filter(i =>
+            i['video_count'] > 5 // Channels need to have at least 5 videos.
+            || i['name'].toLowerCase() === 'wrolpi'  // Always show the WROLPi channel so users can find tutorials.
+        );
     }
 
     return <>
@@ -583,5 +591,17 @@ export function ChannelsPage() {
                 rowFunc={(i, sortData) => <ChannelRow key={i.id} channel={i} sortData={sortData}/>}
             />
         </Media>
+        <Grid textAlign='center'>
+            <Grid.Row>
+                <Grid.Column>
+                    <Button
+                        style={{marginTop: '1em'}}
+                        onClick={() => setHideSmall(!hideSmall)}
+                        size='big'
+                        disabled={!enoughChannelsToHideSmall}
+                    >Show {hideSmall ? 'More' : 'Less'}</Button>
+                </Grid.Column>
+            </Grid.Row>
+        </Grid>
     </>
 }

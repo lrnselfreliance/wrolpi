@@ -1,6 +1,6 @@
 import {LoadStatistic, PageContainer, SearchInput, useTitle} from "./components/Common";
 import React, {useContext, useState} from "react";
-import {StatusContext} from "./contexts/contexts";
+import {Media, StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
 import {
     Button,
@@ -160,7 +160,15 @@ export function DashboardPage() {
     const {searchStr, setSearchStr, activeTags} = useSearch();
     const {status} = useContext(StatusContext);
 
-    const title = searchStr ? `Search: ${searchStr} - Dashboard` : 'Dashboard';
+    let title = 'Dashboard';
+    if (searchStr) {
+        title = `Search: ${searchStr} - Dashboard`;
+    } else if (activeTags && activeTags.length === 1) {
+        title = `Tag: ${activeTags[0]} - Dashboard`;
+    } else if (activeTags && activeTags.length > 1) {
+        const tagNames = activeTags.join(' & ');
+        title = `Tags: ${tagNames} - Dashboard`;
+    }
     useTitle(title);
 
     // Only show dashboard parts if not searching.
@@ -175,25 +183,48 @@ export function DashboardPage() {
     }
 
     return <PageContainer>
-        <Grid>
-            <Grid.Row>
-                <Grid.Column mobile={13} computer={8}>
-                    <SearchInput clearable
-                                 searchStr={searchStr}
-                                 onChange={setSearchStr}
-                                 onSubmit={setSearchStr}
-                                 size='large'
-                                 placeholder='Search everywhere...'
-                                 actionIcon='search'
-                                 onClear={() => navigate('/')}
-                                 style={{marginBottom: '2em'}}
-                    />
-                </Grid.Column>
-                <Grid.Column mobile={3} computer={2}>
-                    <FileSearchFilterButton size='large'/>
-                </Grid.Column>
-            </Grid.Row>
-        </Grid>
+        <Media at='mobile'>
+            <Grid>
+                <Grid.Row columns={2}>
+                    <Grid.Column width={13}>
+                        <SearchInput clearable
+                                     searchStr={searchStr}
+                                     onChange={setSearchStr}
+                                     onSubmit={setSearchStr}
+                                     size='large'
+                                     placeholder='Search everywhere...'
+                                     actionIcon='search'
+                                     onClear={() => navigate('/')}
+                                     style={{marginBottom: '2em'}}
+                        />
+                    </Grid.Column>
+                    <Grid.Column width={3} textAlign='right'>
+                        <FileSearchFilterButton size='large'/>
+                    </Grid.Column>
+                </Grid.Row>
+            </Grid>
+        </Media>
+        <Media greaterThanOrEqual='tablet'>
+            <Grid>
+                <Grid.Row columns={2}>
+                    <Grid.Column width={14}>
+                        <SearchInput clearable
+                                     searchStr={searchStr}
+                                     onChange={setSearchStr}
+                                     onSubmit={setSearchStr}
+                                     size='big'
+                                     placeholder='Search everywhere...'
+                                     actionIcon='search'
+                                     onClear={() => navigate('/')}
+                                     style={{marginBottom: '2em'}}
+                        />
+                    </Grid.Column>
+                    <Grid.Column width={2} textAlign='right'>
+                        <FileSearchFilterButton size='big'/>
+                    </Grid.Column>
+                </Grid.Row>
+            </Grid>
+        </Media>
         {!searchStr && <FlagsMessages flags={status['flags']}/>}
         {body}
     </PageContainer>

@@ -439,11 +439,11 @@ function ChannelPage({create, header}) {
     </>
 }
 
-export function EditChannel(props) {
+export function ChannelEditPage(props) {
     return <ChannelPage header="Edit Channel" {...props}/>;
 }
 
-export function NewChannel(props) {
+export function ChannelNewPage(props) {
     useTitle('New Channel');
     return <ChannelPage header='New Channel' {...props} create/>
 }

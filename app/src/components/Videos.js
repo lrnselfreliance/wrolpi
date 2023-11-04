@@ -38,7 +38,7 @@ import {
     StatisticValue,
     TableCell
 } from "semantic-ui-react";
-import {ChannelsPage, EditChannel, NewChannel} from "./Channels";
+import {ChannelsPage, ChannelEditPage, ChannelNewPage} from "./Channels";
 import {
     useChannel,
     useQuery,
@@ -287,8 +287,8 @@ export function VideosRoute(props) {
             <Route path='/' exact element={<VideosPage/>}/>
             <Route path='channel' exact element={<ChannelsPage/>}/>
             <Route path='statistics' exact element={<VideosStatistics/>}/>
-            <Route path='channel/new' exact element={<NewChannel/>}/>
-            <Route path='channel/:channelId/edit' exact element={<EditChannel/>}/>
+            <Route path='channel/new' exact element={<ChannelNewPage/>}/>
+            <Route path='channel/:channelId/edit' exact element={<ChannelEditPage/>}/>
             <Route path='channel/:channelId/video' exact element={<VideosPage/>}/>
         </Routes>
     </PageContainer>

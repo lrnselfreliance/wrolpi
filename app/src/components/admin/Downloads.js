@@ -7,7 +7,6 @@ import {
     ErrorMessage,
     isoDatetimeToElapsedPopup,
     secondsToFrequency,
-    textEllipsis,
     useTitle,
     WROLModeMessage
 } from "../Common";
@@ -25,6 +24,7 @@ import {
 import {Button, Header, Modal, ModalActions, ModalContent, ModalHeader, Placeholder, Segment, Table} from "../Theme";
 import {useDownloads} from "../../hooks/customHooks";
 import {toast} from "react-semantic-toasts-2";
+import {Media} from "../../contexts/contexts";
 
 function ClearCompleteDownloads({callback}) {
     async function localClearDownloads() {
@@ -324,7 +324,7 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
 
 export function RecurringDownloadsTable({downloads, fetchDownloads}) {
     if (downloads && downloads.length >= 1) {
-        return <Table unstackable className='table-ellipsis'>
+        return <Table className='table-ellipsis'>
             <TableHeader>
                 <TableRow>
                     <TableHeaderCell width={8}>URL</TableHeaderCell>

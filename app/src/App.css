@@ -214,7 +214,7 @@ textarea.otp {
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 0; /* Ensures the content doesn't exceed the cell's width */
-    min-width: 0; /* Can be set to ensure a minimum width for your cells, if needed */
+    min-width: 25em; /* About iPhone SE width */
 }
 
 .card-title-ellipsis {

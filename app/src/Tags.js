@@ -341,6 +341,24 @@ export function AddTagsButton({
         }
     }
 
+    const clearLocalTags = () => {
+        if (!localTags || (localTags && localTags.length === 0)) {
+            console.debug('No tags to clear');
+            return
+        }
+
+        setLoading(true);
+        try {
+            for (let i = 0; i < localTags.length; i++) {
+                onRemove(localTags[i]);
+            }
+            setLocalTags([]);
+            onToggle([]);
+        } finally {
+            setLoading(false);
+        }
+    }
+
     const selectedTagsGroup = <TagsGroup tagNames={localTags} onClick={removeTag}/>;
     const unusedTags = _.difference(tagNames, localTags);
     const unusedTagsGroup = <TagsGroup tagNames={unusedTags} onClick={addTag}/>;
@@ -369,6 +387,7 @@ export function AddTagsButton({
                         </Grid.Column>
                         <Grid.Column width={8}>
                             <Button onClick={() => setOpen(false)} floated='right'>Close</Button>
+                            <Button floated='right' secondary onClick={() => clearLocalTags()}>Clear</Button>
                         </Grid.Column>
                     </Grid.Row>
                 </Grid>

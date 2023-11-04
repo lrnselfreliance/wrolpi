@@ -263,7 +263,7 @@ const secondsToHours = 3600;
 const secondsToMinutes = 60;
 
 export function secondsToFullDuration(seconds) {
-    let s = '';
+    let duration = '';
 
     let years, days, hours, minutes;
     [years, seconds] = divmod(seconds, secondsToYears);
@@ -271,17 +271,22 @@ export function secondsToFullDuration(seconds) {
     [hours, seconds] = divmod(seconds, secondsToHours);
     [minutes] = divmod(seconds, secondsToMinutes);
     if (years > 0) {
-        s = `${years}Y`;
+        duration = `${years}Y`;
     }
     if (days > 0) {
-        s = `${s} ${days}D`;
+        duration = `${duration} ${days}D`;
     }
     if (hours > 0 || minutes > 0) {
         hours = String(hours).padStart(2, '0');
         minutes = String(minutes).padStart(2, '0');
-        s = `${s} ${hours}:${minutes}`;
+        duration = `${duration} ${hours}:${minutes}`;
     }
-    return s;
+    if (years === 0 && days === 0 && hours === 0 && minutes === 0) {
+        // Less than a minute.
+        seconds = String(seconds).padStart(2, '0');
+        duration = `00:00:${seconds}`;
+    }
+    return duration.trim();
 }
 
 export function secondsToTimestamp(seconds) {

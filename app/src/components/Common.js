@@ -454,7 +454,7 @@ export function SearchInput({
     }
 
     if ((action || actionIcon) && searchStr && searchStr === value && clearable) {
-        action = <Button icon='close' size={size} onClick={handleClearSearch}/>;
+        action = <Button icon='close' size={size} onClick={handleClearSearch} type='button'/>;
     } else if (actionIcon) {
         action = <Button icon={actionIcon} size={size}/>;
     } else if (action) {

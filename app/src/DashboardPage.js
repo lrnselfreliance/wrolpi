@@ -207,7 +207,7 @@ export function DashboardPage() {
         <Media greaterThanOrEqual='tablet'>
             <Grid>
                 <Grid.Row columns={2}>
-                    <Grid.Column width={14}>
+                    <Grid.Column mobile={14}>
                         <SearchInput clearable
                                      searchStr={searchStr}
                                      onChange={setSearchStr}
@@ -219,7 +219,7 @@ export function DashboardPage() {
                                      style={{marginBottom: '2em'}}
                         />
                     </Grid.Column>
-                    <Grid.Column width={2} textAlign='right'>
+                    <Grid.Column textAlign='right' width={2}>
                         <FileSearchFilterButton size='big'/>
                     </Grid.Column>
                 </Grid.Row>

@@ -5,6 +5,7 @@ import {usePages, useQuery} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
 import {searchEstimate, searchSuggestions} from "../api";
 import {normalizeEstimate, TabLinks} from "./Common";
+import _ from "lodash";
 
 export function useSearchSuggestions() {
     const {searchParams} = useQuery();
@@ -28,11 +29,14 @@ export function useSearchSuggestions() {
                         })
                     },
                 };
+                console.debug('newSuggestions', newSuggestions);
                 setSuggestions(newSuggestions);
             } catch (e) {
                 console.error(e);
                 console.error('Failed to get search suggestions');
             }
+        } else {
+            setSuggestions(null);
         }
     }
 
@@ -127,8 +131,12 @@ export const useSearchEstimate = (search_str, activeTags) => {
         }
     }
 
+    const debouncedEstimate = _.debounce(async () => await localFetchSearchEstimate(), 800);
+
     useEffect(() => {
-        localFetchSearchEstimate();
+        debouncedEstimate();
+
+        return () => debouncedEstimate.cancel();
     }, [search_str, JSON.stringify(activeTags)]);
 
     return {fileGroups, zimsSum, zims}

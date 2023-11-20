@@ -413,10 +413,10 @@ export function SearchInput({
                                 onClear = null,
                                 onChange = null,
                                 results = null,
+                                handleResultSelect = null,
                                 ...props
                             }) {
     const [value, setValue] = useState(searchStr || '');
-    const navigate = useNavigate();
 
     const handleChange = (e) => {
         if (e) {
@@ -455,19 +455,13 @@ export function SearchInput({
         }
     }
 
-    const localHandleResultSelect = (e, {result}) => {
+    const localHandleResultSelect = (e, data) => {
         if (e) {
             e.preventDefault();
         }
-
-        if (!result) {
-            return;
-        }
-
-        if (result['type'] === 'channel') {
-            navigate(`/videos/channel/${result['id']}/video`);
-        } else if (result['type'] === 'domain') {
-            navigate(`/archive?domain=${result['domain']}`);
+        console.debug(`Selected result`, data);
+        if (handleResultSelect) {
+            handleResultSelect(data);
         }
     }
 

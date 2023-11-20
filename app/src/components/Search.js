@@ -7,8 +7,19 @@ import {searchEstimate, searchSuggestions} from "../api";
 import {normalizeEstimate, TabLinks} from "./Common";
 import _ from "lodash";
 
+const suggestedApps = [
+    {location: '/more/otp', title: 'One Time Pad', description: 'Encrypt and Decrypt messages'},
+    {location: '/inventory', title: 'Inventory', description: 'Track and organize your food storage'},
+    {location: '/more/vin', title: 'Vin Decoder', description: 'Decode and analyze vehicle VIN numbers'},
+    {location: '/admin', title: 'Downloads', description: 'View your downloads'},
+    {location: '/admin/settings', title: 'Settings', description: 'View and modify your settings'},
+    {location: '/admin/wrol', title: 'WROL Mode', description: 'Enable or disable WROL Mode'},
+];
+
 export function useSearchSuggestions() {
+    const navigate = useNavigate();
     const {searchParams} = useQuery();
+
     const searchStr = searchParams.get('q');
 
     const [suggestions, setSuggestions] = useState(null);
@@ -17,6 +28,7 @@ export function useSearchSuggestions() {
         if (searchStr && searchStr.length > 0) {
             try {
                 const i = await searchSuggestions(searchStr);
+                const matchingApps = suggestedApps.filter(i => i.title.toLowerCase().includes(searchStr));
                 const newSuggestions = {
                     channels: {
                         name: 'Channels', results: i['channels'].map(i => {
@@ -28,6 +40,12 @@ export function useSearchSuggestions() {
                             return {title: i['domain'], id: i['id'], type: 'domain'}
                         })
                     },
+                    tags: {
+                        name: 'Tags', results: i['tags'].map(i => {
+                            return {title: i['name'], type: 'tag'}
+                        })
+                    },
+                    apps: {name: 'Apps', results: matchingApps},
                 };
                 console.debug('newSuggestions', newSuggestions);
                 setSuggestions(newSuggestions);
@@ -44,7 +62,24 @@ export function useSearchSuggestions() {
         fetchSuggestions();
     }, [searchStr]);
 
-    return {suggestions, searchStr}
+
+    const handleResultSelect = ({result}) => {
+        if (!result) {
+            return;
+        }
+
+        if (result.location) {
+            navigate(result.location);
+        } else if (result['type'] === 'channel') {
+            navigate(`/videos/channel/${result['id']}/video`);
+        } else if (result['type'] === 'domain') {
+            navigate(`/archive?domain=${result['domain']}`);
+        } else if (result['type'] === 'tag') {
+            navigate(`/search?tag=${result['title']}`);
+        }
+    }
+
+    return {suggestions, searchStr, handleResultSelect}
 }
 
 export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {

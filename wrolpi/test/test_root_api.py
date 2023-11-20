@@ -488,12 +488,13 @@ def test_search_str_estimate(test_session, test_client, test_directory, test_zim
 
 
 @pytest.mark.asyncio
-async def test_search_suggestions(test_session, test_async_client, channel_factory, archive_factory):
+async def test_search_suggestions(test_session, test_async_client, channel_factory, archive_factory, tag_factory):
     channel_factory(name='Foo')
     channel_factory(name='Fool')
     channel_factory(name='Bar')
     archive_factory(domain='foo.com')
     archive_factory(domain='bar.com')
+    tag_factory()
     test_session.commit()
 
     body = dict(search_str='foo')
@@ -511,6 +512,13 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     assert response.status_code == HTTPStatus.OK
     assert response.json['channels'] == [{'directory': 'Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar'}]
     assert response.json['domains'] == [{'directory': 'archive/bar.com', 'domain': 'bar.com', 'id': 2}]
+
+    body = dict(search_str='one')
+    request, response = await test_async_client.post('/api/search_suggestions', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['channels'] == []
+    assert response.json['domains'] == []
+    assert response.json['tags'] == [{'color': '#111111', 'id': 1, 'name': 'one'}]
 
 
 def test_recursive_errors():

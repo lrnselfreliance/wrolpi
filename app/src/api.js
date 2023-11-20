@@ -1026,9 +1026,11 @@ export async function searchSuggestions(search_str) {
         const content = await response.json();
         const channels = content['channels'];
         const domains = content['domains'];
+        const tags = content['tags'];
         return {
             channels,
             domains,
+            tags,
         }
     }
 }

@@ -158,7 +158,7 @@ export function DashboardPage() {
     const navigate = useNavigate();
 
     const {searchStr, setSearchStr, activeTags} = useSearch();
-    const {suggestions} = useSearchSuggestions();
+    const {suggestions, handleResultSelect} = useSearchSuggestions();
     const {status} = useContext(StatusContext);
 
     let title = 'Dashboard';
@@ -198,6 +198,7 @@ export function DashboardPage() {
                                      onClear={() => navigate('/')}
                                      style={{marginBottom: '2em'}}
                                      results={suggestions}
+                                     handleResultSelect={handleResultSelect}
                         />
                     </Grid.Column>
                     <Grid.Column width={3} textAlign='right'>
@@ -220,6 +221,7 @@ export function DashboardPage() {
                                      onClear={() => navigate('/')}
                                      style={{marginBottom: '2em'}}
                                      results={suggestions}
+                                     handleResultSelect={handleResultSelect}
                         />
                     </Grid.Column>
                     <Grid.Column textAlign='right' width={2}>

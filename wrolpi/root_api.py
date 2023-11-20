@@ -553,9 +553,11 @@ async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequ
 
     channels = sorted(search_channels_by_name(body.search_str), key=lambda i: i.name)
     domains = sorted(search_domains_by_name(body.search_str), key=lambda i: i.domain)
+    tags_ = tags.search_tags_by_name(body.search_str)
     ret = dict(
         channels=channels,
         domains=domains,
+        tags=tags_,
     )
     return json_response(ret)
 

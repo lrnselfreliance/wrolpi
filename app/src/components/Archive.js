@@ -105,7 +105,7 @@ function ArchivePage() {
         navigate(-1);
     }
     const localUpdateArchive = async () => {
-        await postDownload(data.url, 'archive');
+        await postDownload([data.url], 'archive');
         toast({
             type: 'success',
             title: 'Archive Downloading',

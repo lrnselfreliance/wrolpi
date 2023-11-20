@@ -336,7 +336,7 @@ class RSSDownload extends ChannelDownload {
             this.setState({error: 'URL is required'});
             return;
         }
-        let response = await postDownload(url, 'rss', frequency, sub_downloader, excludedURLs);
+        let response = await postDownload([url], 'rss', frequency, sub_downloader, excludedURLs);
         if (response.status === 204) {
             this.setState({pending: false, disabled: false, success: true, url: '', ready: false});
         } else {

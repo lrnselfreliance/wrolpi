@@ -487,6 +487,32 @@ def test_search_str_estimate(test_session, test_client, test_directory, test_zim
                          ))
 
 
+@pytest.mark.asyncio
+async def test_search_suggestions(test_session, test_async_client, channel_factory, archive_factory):
+    channel_factory(name='Foo')
+    channel_factory(name='Fool')
+    channel_factory(name='Bar')
+    archive_factory(domain='foo.com')
+    archive_factory(domain='bar.com')
+    test_session.commit()
+
+    body = dict(search_str='foo')
+    request, response = await test_async_client.post('/api/search_suggestions', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['channels'] == [{'directory': 'Foo', 'id': 1, 'name': 'Foo', 'url': 'https://example.com/Foo'},
+                                         {'directory': 'Fool',
+                                          'id': 2,
+                                          'name': 'Fool',
+                                          'url': 'https://example.com/Fool'}]
+    assert response.json['domains'] == [{'directory': 'archive/foo.com', 'domain': 'foo.com', 'id': 1}]
+
+    body = dict(search_str='bar')
+    request, response = await test_async_client.post('/api/search_suggestions', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['channels'] == [{'directory': 'Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar'}]
+    assert response.json['domains'] == [{'directory': 'archive/bar.com', 'domain': 'bar.com', 'id': 2}]
+
+
 def test_recursive_errors():
     """Errors are reported recursively."""
 

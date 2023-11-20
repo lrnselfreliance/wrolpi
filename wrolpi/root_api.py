@@ -544,6 +544,22 @@ async def post_shutdown(_: Request):
     return response.empty(HTTPStatus.NO_CONTENT)
 
 
+@api_bp.post('/search_suggestions')
+@validate(schema.SearchSuggestionsRequest)
+async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequest):
+    """Used by the Global search to suggest links to the user."""
+    from modules.videos.channel.lib import search_channels_by_name
+    from modules.archive.lib import search_domains_by_name
+
+    channels = sorted(search_channels_by_name(body.search_str), key=lambda i: i.name)
+    domains = sorted(search_domains_by_name(body.search_str), key=lambda i: i.domain)
+    ret = dict(
+        channels=channels,
+        domains=domains,
+    )
+    return json_response(ret)
+
+
 class CustomJSONEncoder(json.JSONEncoder):
 
     def default(self, obj):

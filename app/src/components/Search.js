@@ -3,8 +3,45 @@ import {createSearchParams, Route, Routes, useNavigate} from "react-router-dom";
 import {FilesSearchView} from "./Files";
 import {usePages, useQuery} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
-import {searchEstimate} from "../api";
+import {searchEstimate, searchSuggestions} from "../api";
 import {normalizeEstimate, TabLinks} from "./Common";
+
+export function useSearchSuggestions() {
+    const {searchParams} = useQuery();
+    const searchStr = searchParams.get('q');
+
+    const [suggestions, setSuggestions] = useState(null);
+
+    const fetchSuggestions = async () => {
+        if (searchStr && searchStr.length > 0) {
+            try {
+                const i = await searchSuggestions(searchStr);
+                const newSuggestions = {
+                    channels: {
+                        name: 'Channels', results: i['channels'].map(i => {
+                            return {title: i['name'], id: i['id'], type: 'channel'}
+                        })
+                    },
+                    domains: {
+                        name: 'Domains', results: i['domains'].map(i => {
+                            return {title: i['domain'], id: i['id'], type: 'domain'}
+                        })
+                    },
+                };
+                setSuggestions(newSuggestions);
+            } catch (e) {
+                console.error(e);
+                console.error('Failed to get search suggestions');
+            }
+        }
+    }
+
+    React.useEffect(() => {
+        fetchSuggestions();
+    }, [searchStr]);
+
+    return {suggestions, searchStr}
+}
 
 export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {
     const navigate = useNavigate();

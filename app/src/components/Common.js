@@ -412,9 +412,11 @@ export function SearchInput({
                                 autoFocus = false,
                                 onClear = null,
                                 onChange = null,
+                                results = null,
                                 ...props
                             }) {
     const [value, setValue] = useState(searchStr || '');
+    const navigate = useNavigate();
 
     const handleChange = (e) => {
         if (e) {
@@ -453,6 +455,22 @@ export function SearchInput({
         }
     }
 
+    const localHandleResultSelect = (e, {result}) => {
+        if (e) {
+            e.preventDefault();
+        }
+
+        if (!result) {
+            return;
+        }
+
+        if (result['type'] === 'channel') {
+            navigate(`/videos/channel/${result['id']}/video`);
+        } else if (result['type'] === 'domain') {
+            navigate(`/archive?domain=${result['domain']}`);
+        }
+    }
+
     if ((action || actionIcon) && searchStr && searchStr === value && clearable) {
         action = <Button icon='close' size={size} onClick={handleClearSearch} type='button'/>;
     } else if (actionIcon) {
@@ -462,13 +480,15 @@ export function SearchInput({
     }
 
     return <Form onSubmit={localOnSubmit} {...props}>
-        <Input fluid
-               placeholder={placeholder}
-               type='text'
-               onChange={handleChange}
-               value={value}
-               size={size}
-               action={action}
+        <Search fluid category
+                placeholder={placeholder}
+                type='text'
+                onSearchChange={handleChange}
+                onResultSelect={localHandleResultSelect}
+                value={value}
+                size={size}
+                action={action}
+                results={results}
         />
     </Form>
 }

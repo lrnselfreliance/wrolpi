@@ -224,3 +224,16 @@ textarea.otp {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+
+.search-container {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.search-input {
+    flex-grow: 1;
+}
+
+.search-clear {
+    margin: 10px;
+}

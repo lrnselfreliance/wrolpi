@@ -38,7 +38,7 @@ import {
     StatisticValue,
     TableCell
 } from "semantic-ui-react";
-import {ChannelsPage, ChannelEditPage, ChannelNewPage} from "./Channels";
+import {ChannelEditPage, ChannelNewPage, ChannelsPage} from "./Channels";
 import {
     useChannel,
     useQuery,
@@ -200,7 +200,7 @@ function VideosPage() {
                     <Grid.Column width={6}><SortButton sorts={videoOrders}/></Grid.Column>
                 </Grid.Row>
                 <Grid.Row>
-                    <Grid.Column width={10}>{searchInput}</Grid.Column>
+                    <Grid.Column width={16}>{searchInput}</Grid.Column>
                 </Grid.Row>
             </Grid>
         </Media>

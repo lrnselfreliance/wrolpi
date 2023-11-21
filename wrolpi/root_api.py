@@ -1,3 +1,4 @@
+import asyncio
 import json
 import re
 from datetime import datetime, date, timezone
@@ -551,9 +552,11 @@ async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequ
     from modules.videos.channel.lib import search_channels_by_name
     from modules.archive.lib import search_domains_by_name
 
-    channels = sorted(search_channels_by_name(body.search_str), key=lambda i: i.name)
-    domains = sorted(search_domains_by_name(body.search_str), key=lambda i: i.domain)
-    tags_ = tags.search_tags_by_name(body.search_str)
+    channels, domains, tags_ = await asyncio.gather(
+        search_channels_by_name(body.search_str),
+        search_domains_by_name(body.search_str),
+        tags.search_tags_by_name(body.search_str),
+    )
     ret = dict(
         channels=channels,
         domains=domains,

@@ -4,8 +4,10 @@ import {FilesSearchView} from "./Files";
 import {usePages, useQuery} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
 import {searchEstimate, searchSuggestions} from "../api";
-import {normalizeEstimate, TabLinks} from "./Common";
+import {fuzzyMatch, normalizeEstimate, TabLinks} from "./Common";
 import _ from "lodash";
+import {TagsContext} from "../Tags";
+import {Header as SHeader} from "semantic-ui-react";
 
 const suggestedApps = [
     {location: '/more/otp', title: 'One Time Pad', description: 'Encrypt and Decrypt messages'},
@@ -19,6 +21,7 @@ const suggestedApps = [
 export function useSearchSuggestions() {
     const navigate = useNavigate();
     const {searchParams} = useQuery();
+    const {SingleTag} = React.useContext(TagsContext);
 
     const searchStr = searchParams.get('q');
 
@@ -26,29 +29,32 @@ export function useSearchSuggestions() {
 
     const fetchSuggestions = async () => {
         if (searchStr && searchStr.length > 0) {
+            const lowerSearchStr = searchStr.toLowerCase();
             try {
                 const i = await searchSuggestions(searchStr);
-                const matchingApps = suggestedApps.filter(i => i.title.toLowerCase().includes(searchStr.toLowerCase()));
-                const newSuggestions = {
+                const matchingApps = suggestedApps.filter(i =>
+                    i.title.toLowerCase().includes(lowerSearchStr)
+                    || fuzzyMatch(i.title.toLowerCase(), lowerSearchStr));
+                const matchingSuggestions = {
                     channels: {
-                        name: 'Channels', results: i['channels'].map(i => {
+                        name: 'Channels', results: i.channels.map(i => {
                             return {title: i['name'], id: i['id'], type: 'channel'}
                         })
                     },
                     domains: {
-                        name: 'Domains', results: i['domains'].map(i => {
+                        name: 'Domains', results: i.domains.map(i => {
                             return {title: i['domain'], id: i['id'], type: 'domain'}
                         })
                     },
                     tags: {
-                        name: 'Tags', results: i['tags'].map(i => {
+                        name: 'Tags', results: i.tags.map(i => {
                             return {title: i['name'], type: 'tag'}
                         })
                     },
                     apps: {name: 'Apps', results: matchingApps},
                 };
-                console.debug('newSuggestions', newSuggestions);
-                setSuggestions(newSuggestions);
+                console.debug('newSuggestions', matchingSuggestions);
+                setSuggestions(matchingSuggestions);
             } catch (e) {
                 console.error(e);
                 console.error('Failed to get search suggestions');
@@ -75,11 +81,24 @@ export function useSearchSuggestions() {
         } else if (result['type'] === 'domain') {
             navigate(`/archive?domain=${result['domain']}`);
         } else if (result['type'] === 'tag') {
-            navigate(`/search?tag=${result['title']}`);
+            navigate(`/search?tag=${encodeURIComponent(result['title'])}`);
         }
-    }
+    };
 
-    return {suggestions, searchStr, handleResultSelect}
+    const resultRenderer = ({type, title, description}) => {
+        description = description !== null ? <SHeader as='h5'>{description}</SHeader> : null;
+        if (type === 'tag') {
+            return <SingleTag name={title}/>;
+        }
+
+        // No specific renderer, use the generic.
+        return <>
+            <SHeader as='h4'>{title}</SHeader>
+            {description}
+        </>
+    };
+
+    return {suggestions, searchStr, handleResultSelect, resultRenderer}
 }
 
 export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {

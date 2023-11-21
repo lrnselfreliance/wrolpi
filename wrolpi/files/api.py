@@ -130,12 +130,12 @@ async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
         return response.empty()
 
     from modules.videos.channel import lib as channels_lib
-    channels = channels_lib.search_channels_by_name(name=body.name)
+    channels = await channels_lib.search_channels_by_name(name=body.name)
     channel_directories = [dict(path=i.directory, name=i.name) for i in channels]
     channel_paths = [i['path'] for i in channel_directories]
 
     from modules.archive import lib as archives_lib
-    domains = archives_lib.search_domains_by_name(name=body.name)
+    domains = await archives_lib.search_domains_by_name(name=body.name)
     domain_directories = [dict(path=i.directory, domain=i.domain) for i in domains]
     domain_paths = [i['path'] for i in domain_directories]
 

@@ -1,4 +1,4 @@
-import {LoadStatistic, PageContainer, SearchInput, useTitle} from "./components/Common";
+import {LoadStatistic, PageContainer, SearchResultsInput, useTitle} from "./components/Common";
 import React, {useContext, useState} from "react";
 import {Media, StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
@@ -158,7 +158,7 @@ export function DashboardPage() {
     const navigate = useNavigate();
 
     const {searchStr, setSearchStr, activeTags} = useSearch();
-    const {suggestions, handleResultSelect} = useSearchSuggestions();
+    const {suggestions, handleResultSelect, resultRenderer} = useSearchSuggestions();
     const {status} = useContext(StatusContext);
 
     let title = 'Dashboard';
@@ -188,17 +188,18 @@ export function DashboardPage() {
             <Grid>
                 <Grid.Row columns={2}>
                     <Grid.Column width={13}>
-                        <SearchInput clearable
-                                     searchStr={searchStr}
-                                     onChange={setSearchStr}
-                                     onSubmit={setSearchStr}
-                                     size='large'
-                                     placeholder='Search everywhere...'
-                                     actionIcon='search'
-                                     onClear={() => navigate('/')}
-                                     style={{marginBottom: '2em'}}
-                                     results={suggestions}
-                                     handleResultSelect={handleResultSelect}
+                        <SearchResultsInput clearable
+                                            searchStr={searchStr}
+                                            onChange={setSearchStr}
+                                            onSubmit={setSearchStr}
+                                            size='large'
+                                            placeholder='Search everywhere...'
+                                            actionIcon='search'
+                                            onClear={() => navigate('/')}
+                                            style={{marginBottom: '2em'}}
+                                            results={suggestions}
+                                            handleResultSelect={handleResultSelect}
+                                            resultRenderer={resultRenderer}
                         />
                     </Grid.Column>
                     <Grid.Column width={3} textAlign='right'>
@@ -211,17 +212,18 @@ export function DashboardPage() {
             <Grid>
                 <Grid.Row columns={2}>
                     <Grid.Column mobile={14}>
-                        <SearchInput clearable
-                                     searchStr={searchStr}
-                                     onChange={setSearchStr}
-                                     onSubmit={setSearchStr}
-                                     size='big'
-                                     placeholder='Search everywhere...'
-                                     actionIcon='search'
-                                     onClear={() => navigate('/')}
-                                     style={{marginBottom: '2em'}}
-                                     results={suggestions}
-                                     handleResultSelect={handleResultSelect}
+                        <SearchResultsInput clearable
+                                            searchStr={searchStr}
+                                            onChange={setSearchStr}
+                                            onSubmit={setSearchStr}
+                                            size='big'
+                                            placeholder='Search everywhere...'
+                                            actionIcon='search'
+                                            onClear={() => navigate('/')}
+                                            style={{marginBottom: '2em'}}
+                                            results={suggestions}
+                                            handleResultSelect={handleResultSelect}
+                                            resultRenderer={resultRenderer}
                         />
                     </Grid.Column>
                     <Grid.Column textAlign='right' width={2}>

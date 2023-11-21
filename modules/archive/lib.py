@@ -536,7 +536,7 @@ def search_archives(search_str: str, domain: str, limit: int, offset: int, order
 
 
 @optional_session
-def search_domains_by_name(name: str, limit: int = 5, session: Session = None) -> List[Domain]:
+async def search_domains_by_name(name: str, limit: int = 5, session: Session = None) -> List[Domain]:
     domains = session.query(Domain) \
         .filter(Domain.domain.ilike(f'%{name}%')) \
         .order_by(asc(Domain.domain)) \

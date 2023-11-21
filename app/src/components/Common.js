@@ -401,28 +401,16 @@ export function scrollToTopOfElement(element, smooth = true) {
     });
 }
 
-export function SearchInput({
-                                searchStr,
-                                onSubmit,
-                                size = 'small',
-                                placeholder,
-                                action,
-                                actionIcon,
-                                clearable,
-                                autoFocus = false,
-                                onClear = null,
-                                onChange = null,
-                                results = null,
-                                handleResultSelect = null,
-                                ...props
-                            }) {
+const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small', placeholder = 'Search...', icon = 'search', withAction = true) => {
     const [value, setValue] = useState(searchStr || '');
+    const [submitted, setSubmitted] = useState(false);
 
     const handleChange = (e) => {
         if (e) {
             e.preventDefault();
         }
         setValue(e.target.value);
+        setSubmitted(false);
         if (onChange) {
             // Try to call the remote function, don't let its failure break this.
             try {
@@ -437,6 +425,7 @@ export function SearchInput({
         e.preventDefault();
         // Clear the input when the "clear" button is clicked, search again.
         setValue('');
+        setSubmitted(false);
         if (onSubmit) {
             onSubmit('');
         }
@@ -448,6 +437,7 @@ export function SearchInput({
     const localOnSubmit = (e) => {
         // Send the value up when submitting.
         e.preventDefault();
+        setSubmitted(true);
         if (onSubmit) {
             onSubmit(value);
         } else {
@@ -455,35 +445,100 @@ export function SearchInput({
         }
     }
 
+    const clearButton = <Button
+        icon='close'
+        size={size}
+        onClick={handleClearSearch}
+        type='button'
+        disabled={!!!value}
+        className='search-clear'
+    />;
+
+    let action;
+    if (withAction) {
+        // Can only clear after submitting.
+        action = submitted ? clearButton : <Button type='button' icon={icon} size='big'/>;
+    }
+
+    const input = <Input fluid
+                         placeholder={placeholder}
+                         type='text'
+                         onChange={handleChange}
+                         value={value}
+                         size={size}
+                         className='search-input'
+                         action={action}
+    />;
+
+    return {value, submitted, clearButton, input, localOnSubmit, handleChange}
+}
+
+export function SearchInput({
+                                searchStr,
+                                onSubmit,
+                                onChange,
+                                onClear,
+                                size = 'small',
+                                placeholder = 'Search...',
+                                icon = 'search',
+                            }) {
+    let {input, localOnSubmit} = useClearableInput(searchStr, onChange, onClear, onSubmit, size, placeholder, icon);
+
+    return <Form onSubmit={localOnSubmit} className='search-container'>
+        {input}
+    </Form>
+}
+
+export function SearchResultsInput({
+                                       searchStr,
+                                       onSubmit,
+                                       onClear = null,
+                                       onChange = null,
+                                       size = 'small',
+                                       placeholder = 'Search...',
+                                       icon = 'search',
+                                       action,
+                                       actionIcon,
+                                       clearable = false,
+                                       autoFocus = false,
+                                       results = undefined,
+                                       handleResultSelect = null,
+                                       resultRenderer = undefined,
+                                       ...props
+                                   }) {
+    let {
+        value,
+        clearButton,
+        localOnSubmit,
+        handleChange,
+    } = useClearableInput(searchStr, onChange, onClear, onSubmit, size, placeholder, undefined, false);
+
     const localHandleResultSelect = (e, data) => {
         if (e) {
             e.preventDefault();
         }
-        console.debug(`Selected result`, data);
         if (handleResultSelect) {
+            console.debug(`Selected result`, data);
             handleResultSelect(data);
+        } else {
+            console.error('No handleResultSelect defined!');
         }
     }
 
-    if ((action || actionIcon) && searchStr && searchStr === value && clearable) {
-        action = <Button icon='close' size={size} onClick={handleClearSearch} type='button'/>;
-    } else if (actionIcon) {
-        action = <Button icon={actionIcon} size={size}/>;
-    } else if (action) {
-        action = <Button size={size}>{action}</Button>;
-    }
-
-    return <Form onSubmit={localOnSubmit} {...props}>
-        <Search fluid category
+    return <Form onSubmit={localOnSubmit} {...props} className='search-container'>
+        <Search category
+                input={{fluid: true}}
                 placeholder={placeholder}
                 type='text'
                 onSearchChange={handleChange}
                 onResultSelect={localHandleResultSelect}
                 value={value}
                 size={size}
-                action={action}
                 results={results}
+                resultRenderer={resultRenderer}
+                className='search-input'
         />
+        {clearable === true && <div style={{marginLeft: '1em'}}>{clearButton}</div>}
     </Form>
 }
 
@@ -1525,4 +1580,33 @@ export function ErrorMessage({children, size = null}) {
         <SIcon name='exclamation'/>
         <Message.Content>{children}</Message.Content>
     </Message>
+}
+
+function levenshteinDistance(a, b) {
+    const matrix = [];
+
+    // Initialize the matrix
+    for (let i = 0; i <= b.length; i++) {
+        matrix[i] = [i];
+    }
+    for (let j = 0; j <= a.length; j++) {
+        matrix[0][j] = j;
+    }
+
+    // Populate the matrix
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(matrix[i - 1][j - 1], matrix[i][j - 1], matrix[i - 1][j]) + 1;
+            }
+        }
+    }
+
+    return matrix[b.length][a.length];
+}
+
+export function fuzzyMatch(a, b, threshold = 3) {
+    return levenshteinDistance(a, b) <= threshold;
 }

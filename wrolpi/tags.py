@@ -1,7 +1,7 @@
 import contextlib
 import pathlib
 from datetime import datetime
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Sequence
 
 from sqlalchemy import Column, Integer, String, ForeignKey, BigInteger, asc
 from sqlalchemy.exc import IntegrityError
@@ -464,7 +464,7 @@ def tag_names_to_zim_sub_select(tag_names: List[str], zim_id: int = None) -> Tup
 
 
 @optional_session
-def search_tags_by_name(name: str, limit: int = 5, session: Session = None) -> List[Tag]:
+async def search_tags_by_name(name: str, limit: int = 5, session: Session = None) -> Sequence[Tag]:
     tags = session.query(Tag) \
         .filter(Tag.name.ilike(f'%{name}%')) \
         .order_by(asc(Tag.name)) \

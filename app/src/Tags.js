@@ -1,17 +1,6 @@
 import React, {useEffect} from "react";
 import {deleteTag, getTags, saveTag} from "./api";
-import {
-    Dimmer,
-    Divider,
-    Form,
-    Grid,
-    GridColumn,
-    GridRow,
-    Label,
-    LabelGroup,
-    TableCell,
-    TableRow,
-} from "semantic-ui-react";
+import {Dimmer, Divider, Form, Grid, GridColumn, GridRow, Label, TableCell, TableRow,} from "semantic-ui-react";
 import {APIButton, contrastingColor, ErrorMessage, scrollToTopOfElement} from "./components/Common";
 import {
     Button,
@@ -36,6 +25,7 @@ export const TagsContext = React.createContext({
     NameToTagLabel: null,
     TagsGroup: null,
     TagsLinkGroup: null,
+    SingleTag: null,
     fetchTags: null,
     findTagByName: null,
     tagNames: [],
@@ -103,7 +93,7 @@ export function useTags() {
     }
 
     const TagLabelLink = ({name, props}) => {
-        const to = `/search?tag=${name}`;
+        const to = `/search?tag=${encodeURIComponent(name)}`;
         const style = {marginLeft: '0.3em', marginRight: '0.3em'};
         try {
             // We prefer to use Link to avoid reloading the page, check if React Router is available, so we can use it.
@@ -129,12 +119,16 @@ export function useTags() {
         </Label.Group>
     }
 
+    const SingleTag = ({name}) => {
+        return <Label.Group tag><NameToTagLabel name={name}/></Label.Group>
+    }
+
     useEffect(() => {
         setTags([]);
         fetchTags();
     }, []);
 
-    return {tags, tagNames, NameToTagLabel, TagsGroup, TagsLinkGroup, fetchTags, findTagByName}
+    return {tags, tagNames, NameToTagLabel, TagsGroup, TagsLinkGroup, fetchTags, findTagByName, SingleTag}
 }
 
 export const useTagsInterval = () => {
@@ -147,7 +141,7 @@ export const useTagsInterval = () => {
 }
 
 function EditTagRow({tag, onDelete, onEdit}) {
-    const {NameToTagLabel} = React.useContext(TagsContext);
+    const {SingleTag} = React.useContext(TagsContext);
     const {name, color, id, file_group_count, zim_entry_count} = tag;
 
     const deleteConfirm = <>
@@ -160,16 +154,13 @@ function EditTagRow({tag, onDelete, onEdit}) {
         />
     </>;
     const editButton = <Button primary onClick={() => onEdit(name, color, id)} icon='edit'/>;
-    const nameLabel = <LabelGroup tag>
-        <NameToTagLabel name={name}/>
-    </LabelGroup>;
     const countColor = (file_group_count + zim_entry_count) > 0 ? 'black' : 'grey';
     const countLabel = <Label color={countColor}>{file_group_count + zim_entry_count}</Label>;
 
     return <TableRow>
         <TableCell>{deleteConfirm}</TableCell>
         <TableCell>{editButton}</TableCell>
-        <TableCell>{nameLabel}</TableCell>
+        <TableCell><SingleTag name={name}/></TableCell>
         <Media greaterThanOrEqual='tablet'>
             {(className, renderChildren) => {
                 return renderChildren ? <TableCell className={className}>

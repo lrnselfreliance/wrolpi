@@ -556,11 +556,10 @@ async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequ
     if not body.search_str and not body.tag_names:
         return response.empty(HTTPStatus.BAD_REQUEST)
 
-    file_groups, channels, domains, tags_ = await asyncio.gather(
+    file_groups, channels, domains = await asyncio.gather(
         estimate_search(body.search_str, body.tag_names),
         search_channels_by_name(body.search_str),
         search_domains_by_name(body.search_str),
-        tags.search_tags_by_name(body.search_str),
     )
 
     if body.tag_names:
@@ -587,7 +586,6 @@ async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequ
         zims_estimates=zims_estimates,
         channels=channels,
         domains=domains,
-        tags=tags_,
     )
     return json_response(ret)
 

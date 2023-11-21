@@ -22,7 +22,7 @@ const suggestedApps = [
 export function useSearchSuggestions() {
     const navigate = useNavigate();
     const {searchParams} = useQuery();
-    const {SingleTag} = React.useContext(TagsContext);
+    const {SingleTag, fuzzyMatchTagsByName} = React.useContext(TagsContext);
 
     const searchStr = searchParams.get('q');
 
@@ -69,13 +69,13 @@ export function useSearchSuggestions() {
                         })
                     }
                 }
-                if (newSuggestions.tags && newSuggestions.tags.length > 0) {
-                    matchingSuggestions.tags = {
-                        name: 'Tags', results: newSuggestions.tags.map(i => {
-                            return {type: 'tag', description: i['name']}
-                        })
-                    }
+
+                matchingSuggestions.tags = {
+                    name: 'Tags', results: fuzzyMatchTagsByName(searchStr).map(i => {
+                        return {type: 'tag', description: i.name}
+                    })
                 }
+
                 if (matchingApps && matchingApps.length > 0) {
                     matchingSuggestions.apps = {name: 'Apps', results: matchingApps};
                 }
@@ -108,7 +108,7 @@ export function useSearchSuggestions() {
         } else if (result['type'] === 'domain') {
             return navigate(`/archive?domain=${result['domain']}`);
         } else if (result['type'] === 'tag') {
-            return navigate(`/search?tag=${encodeURIComponent(result['title'])}`);
+            return navigate(`/search?tag=${encodeURIComponent(result['description'])}`);
         } else if (result['type'] === 'files') {
             return navigate(`/search?q=${encodeURIComponent(searchStr)}`);
         } else if (result['type'] === 'zims') {

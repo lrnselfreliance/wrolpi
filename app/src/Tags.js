@@ -1,7 +1,7 @@
 import React, {useEffect} from "react";
 import {deleteTag, getTags, saveTag} from "./api";
 import {Dimmer, Divider, Form, Grid, GridColumn, GridRow, Label, TableCell, TableRow,} from "semantic-ui-react";
-import {APIButton, contrastingColor, ErrorMessage, scrollToTopOfElement} from "./components/Common";
+import {APIButton, contrastingColor, ErrorMessage, fuzzyMatch, scrollToTopOfElement} from "./components/Common";
 import {
     Button,
     FormInput,
@@ -28,6 +28,7 @@ export const TagsContext = React.createContext({
     SingleTag: null,
     fetchTags: null,
     findTagByName: null,
+    fuzzyMatchTagsByName: null,
     tagNames: [],
     tags: [],
 });
@@ -60,6 +61,16 @@ export function useTags() {
                 return tag;
             }
         }
+    }
+
+    const fuzzyMatchTagsByName = (name) => {
+        const lowerName = name.toLowerCase();
+        if (!tags || tags.length === 0) {
+            return []
+        }
+
+        return tags.filter(i => i.name.toLowerCase().includes(name)
+            || fuzzyMatch(lowerName, i.name.toLowerCase()))
     }
 
     const NameToTagLabel = ({name, to, ...props}) => {
@@ -128,7 +139,17 @@ export function useTags() {
         fetchTags();
     }, []);
 
-    return {tags, tagNames, NameToTagLabel, TagsGroup, TagsLinkGroup, fetchTags, findTagByName, SingleTag}
+    return {
+        tags,
+        tagNames,
+        NameToTagLabel,
+        TagsGroup,
+        TagsLinkGroup,
+        fetchTags,
+        findTagByName,
+        SingleTag,
+        fuzzyMatchTagsByName
+    }
 }
 
 export const useTagsInterval = () => {

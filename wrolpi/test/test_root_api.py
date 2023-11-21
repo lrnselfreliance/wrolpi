@@ -496,7 +496,6 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     archive_factory(domain='foo.com', contents='contents of foo')
     archive_factory(domain='bar.com', contents='contents of bar')
     zim_factory('test zim')
-    tag_factory()
     test_session.commit()
 
     body = dict(search_str='foo')
@@ -525,7 +524,6 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     assert response.status_code == HTTPStatus.OK
     assert response.json['channels'] == []
     assert response.json['domains'] == []
-    assert response.json['tags'] == [{'color': '#111111', 'id': 1, 'name': 'one'}]
     assert response.json['file_groups'] == 0
     assert response.json['zims_estimates'][0]['estimate'] == 2
 

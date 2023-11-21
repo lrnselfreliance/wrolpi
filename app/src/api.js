@@ -1029,13 +1029,11 @@ export async function searchSuggestions(search_str) {
         const zimsEstimates = content['zims_estimates'];
         const channels = content['channels'];
         const domains = content['domains'];
-        const tags = content['tags'];
         return {
             fileGroups,
             zimsEstimates,
             channels,
             domains,
-            tags,
         }
     }
 }

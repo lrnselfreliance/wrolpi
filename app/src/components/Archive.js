@@ -509,9 +509,8 @@ function ArchivesPage() {
                     <Grid.Column width={2}>{tagQuerySelector}</Grid.Column>
                     <Grid.Column width={6}><SortButton sorts={archiveOrders}/></Grid.Column>
                 </Grid.Row>
-                <Grid.Row>
-                    <Grid.Column width={10}>{searchInput}</Grid.Column>
-                    <Grid.Column width={6}><SearchDomain/></Grid.Column>
+                <Grid.Row width={16}>
+                    <Grid.Column>{searchInput}</Grid.Column>
                 </Grid.Row>
             </Grid>
         </Media>
@@ -522,11 +521,8 @@ function ArchivesPage() {
                     <Grid.Column width={1}>{viewButton}</Grid.Column>
                     <Grid.Column width={2}>{limitDropdown}</Grid.Column>
                     <Grid.Column width={1}>{tagQuerySelector}</Grid.Column>
-                    <Grid.Column width={5}><SortButton sorts={archiveOrders}/></Grid.Column>
-                </Grid.Row>
-                <Grid.Row>
+                    <Grid.Column width={3}><SortButton sorts={archiveOrders}/></Grid.Column>
                     <Grid.Column width={8}>{searchInput}</Grid.Column>
-                    <Grid.Column width={6}><SearchDomain/></Grid.Column>
                 </Grid.Row>
             </Grid>
         </Media>

@@ -1024,10 +1024,15 @@ export async function searchSuggestions(search_str) {
     const response = await apiPost(`${API_URI}/search_suggestions`, body);
     if (response.ok) {
         const content = await response.json();
+
+        const fileGroups = content['file_groups'];
+        const zimsEstimates = content['zims_estimates'];
         const channels = content['channels'];
         const domains = content['domains'];
         const tags = content['tags'];
         return {
+            fileGroups,
+            zimsEstimates,
             channels,
             domains,
             tags,

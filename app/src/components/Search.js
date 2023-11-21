@@ -15,6 +15,7 @@ const suggestedApps = [
     {location: '/more/vin', title: 'Vin Decoder', description: 'Decode and analyze vehicle VIN numbers'},
     {location: '/admin', title: 'Downloads', description: 'View your downloads'},
     {location: '/admin/settings', title: 'Settings', description: 'View and modify your settings'},
+    {location: '/admin/status', title: 'Status', description: 'View the status of this WROLPi'},
     {location: '/admin/wrol', title: 'WROL Mode', description: 'Enable or disable WROL Mode'},
 ];
 
@@ -31,29 +32,55 @@ export function useSearchSuggestions() {
         if (searchStr && searchStr.length > 0) {
             const lowerSearchStr = searchStr.toLowerCase();
             try {
-                const i = await searchSuggestions(searchStr);
+                const newSuggestions = await searchSuggestions(searchStr);
                 const matchingApps = suggestedApps.filter(i =>
                     i.title.toLowerCase().includes(lowerSearchStr)
                     || fuzzyMatch(i.title.toLowerCase(), lowerSearchStr));
-                const matchingSuggestions = {
-                    channels: {
-                        name: 'Channels', results: i.channels.map(i => {
-                            return {title: i['name'], id: i['id'], type: 'channel'}
+
+                const zimSum = newSuggestions.zimsEstimates.reduce((i, j) => i + j['estimate'], 0);
+
+                // Suggested results are ordered.
+                let matchingSuggestions = {};
+                if (newSuggestions.fileGroups > 0) {
+                    matchingSuggestions.fileGroups = {
+                        name: 'Files', results: [
+                            {description: newSuggestions.fileGroups, type: 'files'}
+                        ]
+                    };
+                }
+                if (zimSum > 0) {
+                    matchingSuggestions.zimsSum = {
+                        name: 'Zims', results: [
+                            {description: zimSum, type: 'zims'}
+                        ],
+                    }
+                }
+                if (newSuggestions.channels && newSuggestions.channels.length > 0) {
+                    matchingSuggestions.channels = {
+                        name: 'Channels', results: newSuggestions.channels.map(i => {
+                            return {type: 'channel', description: i['name'], id: i['id']}
                         })
-                    },
-                    domains: {
-                        name: 'Domains', results: i.domains.map(i => {
-                            return {title: i['domain'], id: i['id'], type: 'domain'}
+                    }
+                }
+                if (newSuggestions.domains && newSuggestions.domains.length > 0) {
+                    matchingSuggestions.domains = {
+                        name: 'Domains', results: newSuggestions.domains.map(i => {
+                            return {type: 'domain', description: i.domain, id: i['id'], domain: i.domain}
                         })
-                    },
-                    tags: {
-                        name: 'Tags', results: i.tags.map(i => {
-                            return {title: i['name'], type: 'tag'}
+                    }
+                }
+                if (newSuggestions.tags && newSuggestions.tags.length > 0) {
+                    matchingSuggestions.tags = {
+                        name: 'Tags', results: newSuggestions.tags.map(i => {
+                            return {type: 'tag', description: i['name']}
                         })
-                    },
-                    apps: {name: 'Apps', results: matchingApps},
-                };
-                console.debug('newSuggestions', matchingSuggestions);
+                    }
+                }
+                if (matchingApps && matchingApps.length > 0) {
+                    matchingSuggestions.apps = {name: 'Apps', results: matchingApps};
+                }
+
+                console.debug('matchingSuggestions', matchingSuggestions);
                 setSuggestions(matchingSuggestions);
             } catch (e) {
                 console.error(e);
@@ -75,14 +102,19 @@ export function useSearchSuggestions() {
         }
 
         if (result.location) {
-            navigate(result.location);
+            return navigate(result.location);
         } else if (result['type'] === 'channel') {
-            navigate(`/videos/channel/${result['id']}/video`);
+            return navigate(`/videos/channel/${result['id']}/video`);
         } else if (result['type'] === 'domain') {
-            navigate(`/archive?domain=${result['domain']}`);
+            return navigate(`/archive?domain=${result['domain']}`);
         } else if (result['type'] === 'tag') {
-            navigate(`/search?tag=${encodeURIComponent(result['title'])}`);
+            return navigate(`/search?tag=${encodeURIComponent(result['title'])}`);
+        } else if (result['type'] === 'files') {
+            return navigate(`/search?q=${encodeURIComponent(searchStr)}`);
+        } else if (result['type'] === 'zims') {
+            return navigate(`/search/zim?q=${encodeURIComponent(searchStr)}`);
         }
+        console.error('No handleResultSelect defined:', result);
     };
 
     const resultRenderer = ({type, title, description}) => {
@@ -92,10 +124,13 @@ export function useSearchSuggestions() {
         }
 
         // No specific renderer, use the generic.
-        return <>
-            <SHeader as='h4'>{title}</SHeader>
-            {description}
-        </>
+        if (title) {
+            return <>
+                <SHeader as='h4'>{title}</SHeader>
+                {description}
+            </>
+        }
+        return <span>{description}</span>
     };
 
     return {suggestions, searchStr, handleResultSelect, resultRenderer}

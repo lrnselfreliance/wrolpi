@@ -551,13 +551,40 @@ async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequ
     """Used by the Global search to suggest links to the user."""
     from modules.videos.channel.lib import search_channels_by_name
     from modules.archive.lib import search_domains_by_name
+    from modules.zim.models import Zims
 
-    channels, domains, tags_ = await asyncio.gather(
+    if not body.search_str and not body.tag_names:
+        return response.empty(HTTPStatus.BAD_REQUEST)
+
+    file_groups, channels, domains, tags_ = await asyncio.gather(
+        estimate_search(body.search_str, body.tag_names),
         search_channels_by_name(body.search_str),
         search_domains_by_name(body.search_str),
         tags.search_tags_by_name(body.search_str),
     )
+
+    if body.tag_names:
+        # Get actual count of entries tagged with the tag names.
+        zims_estimates = list()
+        for zim, count in Zims.entries_with_tags(body.tag_names).items():
+            d = dict(
+                estimate=count,
+                **zim.__json__(),
+            )
+            zims_estimates.append(d)
+    else:
+        # Get estimates using libzim.
+        zims_estimates = list()
+        for zim, estimate in Zims.estimate(body.search_str).items():
+            d = dict(
+                estimate=estimate,
+                **zim.__json__(),
+            )
+            zims_estimates.append(d)
+
     ret = dict(
+        file_groups=file_groups,
+        zims_estimates=zims_estimates,
         channels=channels,
         domains=domains,
         tags=tags_,

@@ -118,9 +118,8 @@ export function useSearchSuggestions() {
     };
 
     const resultRenderer = ({type, title, description}) => {
-        description = description !== null ? <SHeader as='h5'>{description}</SHeader> : null;
         if (type === 'tag') {
-            return <SingleTag name={title}/>;
+            return <SingleTag name={description}/>;
         }
 
         // No specific renderer, use the generic.

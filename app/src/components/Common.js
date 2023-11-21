@@ -401,7 +401,7 @@ export function scrollToTopOfElement(element, smooth = true) {
     });
 }
 
-const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small', placeholder = 'Search...', icon = 'search', withAction = true) => {
+const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small', placeholder = 'Search...', icon = 'search') => {
     const [value, setValue] = useState(searchStr || '');
     const [submitted, setSubmitted] = useState(false);
 
@@ -454,11 +454,8 @@ const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small
         className='search-clear'
     />;
 
-    let action;
-    if (withAction) {
-        // Can only clear after submitting.
-        action = submitted ? clearButton : <Button type='button' icon={icon} size='big'/>;
-    }
+    // Can only clear after submitting.
+    let action = submitted ? clearButton : <Button type='button' icon={icon} size='big'/>;
 
     const input = <Input fluid
                          placeholder={placeholder}
@@ -481,10 +478,12 @@ export function SearchInput({
                                 size = 'small',
                                 placeholder = 'Search...',
                                 icon = 'search',
+                                ...props
                             }) {
+    // A Semantic <Input> with a Clear button as the action.
     let {input, localOnSubmit} = useClearableInput(searchStr, onChange, onClear, onSubmit, size, placeholder, icon);
 
-    return <Form onSubmit={localOnSubmit} className='search-container'>
+    return <Form onSubmit={localOnSubmit} {...props} className='search-container'>
         {input}
     </Form>
 }
@@ -506,12 +505,13 @@ export function SearchResultsInput({
                                        resultRenderer = undefined,
                                        ...props
                                    }) {
+    // A Semantic <Search> input with a Clear button.
     let {
         value,
         clearButton,
         localOnSubmit,
         handleChange,
-    } = useClearableInput(searchStr, onChange, onClear, onSubmit, size, placeholder, undefined, false);
+    } = useClearableInput(searchStr, onChange, onClear, onSubmit, size, placeholder);
 
     const localHandleResultSelect = (e, data) => {
         if (e) {
@@ -527,7 +527,7 @@ export function SearchResultsInput({
 
     return <Form onSubmit={localOnSubmit} {...props} className='search-container'>
         <Search category
-                input={{fluid: true}}
+                input={{fluid: true, icon: icon}}
                 placeholder={placeholder}
                 type='text'
                 onSearchChange={handleChange}

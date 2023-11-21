@@ -194,7 +194,6 @@ export function DashboardPage() {
                                             onSubmit={setSearchStr}
                                             size='large'
                                             placeholder='Search everywhere...'
-                                            actionIcon='search'
                                             onClear={() => navigate('/')}
                                             style={{marginBottom: '2em'}}
                                             results={suggestions}
@@ -218,7 +217,6 @@ export function DashboardPage() {
                                             onSubmit={setSearchStr}
                                             size='big'
                                             placeholder='Search everywhere...'
-                                            actionIcon='search'
                                             onClear={() => navigate('/')}
                                             style={{marginBottom: '2em'}}
                                             results={suggestions}

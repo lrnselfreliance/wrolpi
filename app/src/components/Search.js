@@ -28,7 +28,7 @@ export function useSearchSuggestions() {
         if (searchStr && searchStr.length > 0) {
             try {
                 const i = await searchSuggestions(searchStr);
-                const matchingApps = suggestedApps.filter(i => i.title.toLowerCase().includes(searchStr));
+                const matchingApps = suggestedApps.filter(i => i.title.toLowerCase().includes(searchStr.toLowerCase()));
                 const newSuggestions = {
                     channels: {
                         name: 'Channels', results: i['channels'].map(i => {

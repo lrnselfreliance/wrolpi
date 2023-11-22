@@ -83,6 +83,10 @@
     } else {
         console.error('Refusing to replace services links because window.location.hostname is empty');
     }
+
+    setInterval(function () {
+        location.reload();
+    }, 10000) // Refresh every 10 seconds in hopes that WROLPi will come back.
 </script>
 
 </body>

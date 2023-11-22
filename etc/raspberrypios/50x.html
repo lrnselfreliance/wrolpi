@@ -44,6 +44,8 @@
 
 <h2>Still not working?</h2>
 <p>You can view the media directory by <a id="media_link" href="/media">navigating to /media</a></p>
+<p>The Help documentation may be available <a id="help_link" href="http://127.0.0.1:8086">by navigating to port 8086</a>
+</p>
 <p>The API may be available <a id="api_link" href="http://127.0.0.1:8081">by navigating to port 8081</a></p>
 <p>The map may be available <a id="map_link" href="http://127.0.0.1:8084">by navigating to port 8084</a></p>
 <p>Kiwix may be available <a id="kiwix_link" href="http://127.0.0.1:8085">by navigating to port 8085</a></p>
@@ -76,6 +78,7 @@
     }
 
     if (hostname) {
+        replaceHref('help_link', `http://${hostname}:8086`);
         replaceHref('media_link', `http://${hostname}:8080/media`);
         replaceHref('api_link', `http://${hostname}:8081`);
         replaceHref('map_link', `http://${hostname}:8084`);

@@ -184,7 +184,6 @@ function VideosPage() {
     const searchInput = <SearchInput clearable
                                      searchStr={searchStr}
                                      onSubmit={setSearchStr}
-                                     actionIcon='search'
                                      placeholder='Search Videos...'
     />;
 

@@ -158,7 +158,7 @@ export function DashboardPage() {
     const navigate = useNavigate();
 
     const {searchStr, setSearchStr, activeTags} = useSearch();
-    const {suggestions, handleResultSelect, resultRenderer} = useSearchSuggestions();
+    const {suggestions, handleResultSelect, resultRenderer, loading} = useSearchSuggestions();
     const {status} = useContext(StatusContext);
 
     let title = 'Dashboard';
@@ -199,6 +199,7 @@ export function DashboardPage() {
                                             results={suggestions}
                                             handleResultSelect={handleResultSelect}
                                             resultRenderer={resultRenderer}
+                                            loading={loading}
                         />
                     </Grid.Column>
                     <Grid.Column width={3} textAlign='right'>
@@ -222,6 +223,7 @@ export function DashboardPage() {
                                             results={suggestions}
                                             handleResultSelect={handleResultSelect}
                                             resultRenderer={resultRenderer}
+                                            loading={loading}
                         />
                     </Grid.Column>
                     <Grid.Column textAlign='right' width={2}>

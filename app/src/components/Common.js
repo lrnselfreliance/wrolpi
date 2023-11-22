@@ -503,6 +503,7 @@ export function SearchResultsInput({
                                        results = undefined,
                                        handleResultSelect = null,
                                        resultRenderer = undefined,
+                                       loading = false,
                                        ...props
                                    }) {
     // A Semantic <Search> input with a Clear button.
@@ -537,6 +538,7 @@ export function SearchResultsInput({
                 results={results}
                 resultRenderer={resultRenderer}
                 className='search-input'
+                loading={loading}
         />
         {clearable === true && <div style={{marginLeft: '1em'}}>{clearButton}</div>}
     </Form>

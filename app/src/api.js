@@ -1025,10 +1025,10 @@ export async function searchSuggestions(search_str) {
     if (response.ok) {
         const content = await response.json();
 
-        const fileGroups = content['file_groups'];
-        const zimsEstimates = content['zims_estimates'];
-        const channels = content['channels'];
-        const domains = content['domains'];
+        const fileGroups = content.file_groups;
+        const zimsEstimates = content.zims_estimates;
+        const channels = content.channels;
+        const domains = content.domains;
         return {
             fileGroups,
             zimsEstimates,

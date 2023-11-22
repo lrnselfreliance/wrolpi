@@ -1,7 +1,7 @@
 import React, {useEffect, useState} from "react";
 import {createSearchParams, Route, Routes, useNavigate} from "react-router-dom";
 import {FilesSearchView} from "./Files";
-import {usePages, useQuery} from "../hooks/customHooks";
+import {useLatestRequest, usePages, useQuery} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
 import {searchEstimate, searchSuggestions} from "../api";
 import {fuzzyMatch, normalizeEstimate, TabLinks} from "./Common";
@@ -19,6 +19,7 @@ const suggestedApps = [
     {location: '/admin/wrol', title: 'WROL Mode', description: 'Enable or disable WROL Mode'},
 ];
 
+
 export function useSearchSuggestions() {
     const navigate = useNavigate();
     const {searchParams} = useQuery();
@@ -26,75 +27,78 @@ export function useSearchSuggestions() {
 
     const searchStr = searchParams.get('q');
 
+    const {data, sendRequest, loading} = useLatestRequest(500);
     const [suggestions, setSuggestions] = useState(null);
 
-    const fetchSuggestions = async () => {
-        if (searchStr && searchStr.length > 0) {
-            const lowerSearchStr = searchStr.toLowerCase();
-            try {
-                const newSuggestions = await searchSuggestions(searchStr);
-                const matchingApps = suggestedApps.filter(i =>
-                    i.title.toLowerCase().includes(lowerSearchStr)
-                    || fuzzyMatch(i.title.toLowerCase(), lowerSearchStr));
+    const normalizeSuggestions = (newSuggestions) => {
+        // Convert the suggestions from the Backend to what the Semantic <Search> expects.
+        const lowerSearchStr = searchStr.toLowerCase();
+        const matchingApps = suggestedApps.filter(i =>
+            i.title.toLowerCase().includes(lowerSearchStr)
+            || fuzzyMatch(i.title.toLowerCase(), lowerSearchStr));
 
-                const zimSum = newSuggestions.zimsEstimates.reduce((i, j) => i + j['estimate'], 0);
+        const zimSum = newSuggestions.zimsEstimates.reduce((i, j) => i + j['estimate'], 0).toString();
 
-                // Suggested results are ordered.
-                let matchingSuggestions = {};
-                if (newSuggestions.fileGroups > 0) {
-                    matchingSuggestions.fileGroups = {
-                        name: 'Files', results: [
-                            {description: newSuggestions.fileGroups, type: 'files'}
-                        ]
-                    };
-                }
-                if (zimSum > 0) {
-                    matchingSuggestions.zimsSum = {
-                        name: 'Zims', results: [
-                            {description: zimSum, type: 'zims'}
-                        ],
-                    }
-                }
-                if (newSuggestions.channels && newSuggestions.channels.length > 0) {
-                    matchingSuggestions.channels = {
-                        name: 'Channels', results: newSuggestions.channels.map(i => {
-                            return {type: 'channel', description: i['name'], id: i['id']}
-                        })
-                    }
-                }
-                if (newSuggestions.domains && newSuggestions.domains.length > 0) {
-                    matchingSuggestions.domains = {
-                        name: 'Domains', results: newSuggestions.domains.map(i => {
-                            return {type: 'domain', description: i.domain, id: i['id'], domain: i.domain}
-                        })
-                    }
-                }
-
-                matchingSuggestions.tags = {
-                    name: 'Tags', results: fuzzyMatchTagsByName(searchStr).map(i => {
-                        return {type: 'tag', description: i.name}
-                    })
-                }
-
-                if (matchingApps && matchingApps.length > 0) {
-                    matchingSuggestions.apps = {name: 'Apps', results: matchingApps};
-                }
-
-                console.debug('matchingSuggestions', matchingSuggestions);
-                setSuggestions(matchingSuggestions);
-            } catch (e) {
-                console.error(e);
-                console.error('Failed to get search suggestions');
-            }
-        } else {
-            setSuggestions(null);
+        // Suggested results are ordered.
+        let matchingSuggestions = {};
+        if (newSuggestions.fileGroups > 0) {
+            matchingSuggestions.fileGroups = {
+                name: 'Files', results: [
+                    {title: newSuggestions.fileGroups.toString(), type: 'files'}
+                ]
+            };
         }
+        if (zimSum > 0) {
+            matchingSuggestions.zimsSum = {
+                name: 'Zims', results: [
+                    {title: zimSum, type: 'zims'}
+                ],
+            }
+        }
+        if (newSuggestions.channels && newSuggestions.channels.length > 0) {
+            matchingSuggestions.channels = {
+                name: 'Channels', results: newSuggestions.channels.map(i => {
+                    return {type: 'channel', title: i['name'], id: i['id']}
+                })
+            }
+        }
+        if (newSuggestions.domains && newSuggestions.domains.length > 0) {
+            matchingSuggestions.domains = {
+                name: 'Domains', results: newSuggestions.domains.map(i => {
+                    return {type: 'domain', title: i.domain, id: i['id'], domain: i.domain}
+                })
+            }
+        }
+
+        matchingSuggestions.tags = {
+            name: 'Tags', results: fuzzyMatchTagsByName(searchStr).map(i => {
+                return {type: 'tag', title: i.name}
+            })
+        }
+
+        if (matchingApps && matchingApps.length > 0) {
+            matchingSuggestions.apps = {name: 'Apps', results: matchingApps};
+        }
+
+        console.debug('matchingSuggestions', matchingSuggestions);
+        setSuggestions(matchingSuggestions);
     }
 
     React.useEffect(() => {
-        fetchSuggestions();
-    }, [searchStr]);
+        if (data) {
+            normalizeSuggestions(data);
+        }
+    }, [JSON.stringify(data)]);
 
+    React.useEffect(() => {
+        if (!searchStr || searchStr.length === 0) {
+            console.debug('Not getting suggestions because there is no search.');
+            return;
+        }
+
+        // Use the useLatestRequest to handle user typing.
+        sendRequest(searchSuggestions(searchStr));
+    }, [searchStr, sendRequest]);
 
     const handleResultSelect = ({result}) => {
         if (!result) {
@@ -108,7 +112,7 @@ export function useSearchSuggestions() {
         } else if (result['type'] === 'domain') {
             return navigate(`/archive?domain=${result['domain']}`);
         } else if (result['type'] === 'tag') {
-            return navigate(`/search?tag=${encodeURIComponent(result['description'])}`);
+            return navigate(`/search?tag=${encodeURIComponent(result['title'])}`);
         } else if (result['type'] === 'files') {
             return navigate(`/search?q=${encodeURIComponent(searchStr)}`);
         } else if (result['type'] === 'zims') {
@@ -119,20 +123,20 @@ export function useSearchSuggestions() {
 
     const resultRenderer = ({type, title, description}) => {
         if (type === 'tag') {
-            return <SingleTag name={description}/>;
+            return <SingleTag name={title}/>;
         }
 
         // No specific renderer, use the generic.
-        if (title) {
+        if (description) {
             return <>
                 <SHeader as='h4'>{title}</SHeader>
                 {description}
             </>
         }
-        return <span>{description}</span>
+        return <span>{title}</span>
     };
 
-    return {suggestions, searchStr, handleResultSelect, resultRenderer}
+    return {suggestions, searchStr, handleResultSelect, resultRenderer, loading}
 }
 
 export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {

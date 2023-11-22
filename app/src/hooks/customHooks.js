@@ -63,6 +63,44 @@ export const useRecurringTimeout = (callback, delay) => {
     }, [delay])
 }
 
+export const useLatestRequest = (delay = 300) => {
+    // A hook which cancels older requests and will only set `data` to the latest response's data.
+
+    const [data, setData] = React.useState(null);
+    const latestRequestRef = React.useRef(0);
+    const debounceTimerRef = React.useRef(null);
+    const [loading, setLoading] = React.useState(false);
+
+    const sendRequest = React.useCallback((fetchCoroutine) => {
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+        }
+
+        debounceTimerRef.current = setTimeout(async () => {
+            setLoading(true);
+            const requestId = ++latestRequestRef.current;
+
+            try {
+                const result = await fetchCoroutine;
+
+                if (requestId === latestRequestRef.current) {
+                    setData(result);
+                }
+            } catch (error) {
+                console.error('Request failed:', error);
+                setData(null);
+            } finally {
+                if (requestId === latestRequestRef.current) {
+                    setLoading(false);
+                }
+            }
+        }, delay);
+    }, [delay]);
+
+    return {data, sendRequest, loading};
+};
+
+
 export const useQuery = () => {
     const [searchParams, setSearchParams] = useSearchParams();
 

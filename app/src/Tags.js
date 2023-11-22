@@ -70,7 +70,7 @@ export function useTags() {
         }
 
         return tags.filter(i => i.name.toLowerCase().includes(name)
-            || fuzzyMatch(lowerName, i.name.toLowerCase()))
+            || fuzzyMatch(lowerName, i.name.toLowerCase(), 2))
     }
 
     const NameToTagLabel = ({name, to, ...props}) => {

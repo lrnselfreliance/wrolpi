@@ -49,12 +49,6 @@ python3 -m venv /opt/wrolpi-help/venv
 
 set +x
 
-ip=$(hostname -I | cut -d' ' -f1)
-if [[ $ip == *":"* ]]; then
-  # Don't suggest the ipv6 address.
-  ip=$(hostname -I | cut -d' ' -f2)
-fi
-
 echo "
 
 WROLPi has successfully been installed!
@@ -66,11 +60,10 @@ file permissions if necessary:
 Start the WROLPi services using:
  # sudo systemctl start wrolpi.target
 
-then navigate to:  http://${ip}
+then navigate to:  http://wrolpi.local
 
 Or, join to the Wifi hotspot:
 SSID: WROLPi
 Password: wrolpi hotspot
 
-When on the hotspot, WROLPi is accessible at http://192.168.0.1
 "

@@ -24,6 +24,14 @@ Type=Link
 URL=http://127.0.0.1
 Icon=/opt/wrolpi/icon.png
 EOF
+cat >/home/pi/Desktop/wrolpi-help.desktop <<'EOF'
+[Desktop Entry]
+Encoding=UTF-8
+Name=WROLPi Help
+Type=Link
+URL=http://127.0.0.1:8086
+Icon=/opt/wrolpi-help/venv/lib/python3.11/site-packages/mkdocs/themes/mkdocs/img/favicon.ico
+EOF
 chown -R pi:pi /home/pi
 chmod 0600 /home/pi/.pgpass
 usermod -aG wrolpi pi
@@ -46,6 +54,12 @@ usermod -aG _renderd wrolpi
 [ ! -d /var/cache/renderd/tiles ] && mkdir /var/cache/renderd/tiles
 chown -R _renderd:_renderd /var/cache/renderd/tiles
 
+# Install WROLPi Help.
+git clone https://github.com/wrolpi/wrolpi-help.git /opt/wrolpi-help || :
+(cd /opt/wrolpi-help && git fetch && git checkout master && git reset --hard origin/master)
+python3 -m venv /opt/wrolpi-help/venv
+/opt/wrolpi-help/venv/bin/pip3 install -r /opt/wrolpi-help/requirements.txt
+
 # Create the media directory for the wrolpi user.
 echo '/dev/sda1 /media/wrolpi auto defaults,nofail 0 0' | tee -a /etc/fstab
 mkdir -p /media/wrolpi
@@ -54,7 +68,7 @@ cat >/home/wrolpi/.pgpass <<'EOF'
 127.0.0.1:5432:wrolpi:wrolpi:wrolpi
 EOF
 chmod 0600 /home/wrolpi/.pgpass
-chown -R wrolpi:wrolpi /media/wrolpi /home/wrolpi
+chown -R wrolpi:wrolpi /media/wrolpi /home/wrolpi /opt/wrolpi*
 
 set +x
 

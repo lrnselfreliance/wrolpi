@@ -47,7 +47,7 @@ sed -i 's/port = 5433/port = 5432/' /etc/postgresql/15/main/postgresql.conf
 mkdir /media/wrolpi
 
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
-cp /opt/wrolpi/etc/debian12/wrolpi-app.service /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-app.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-kiwix.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf

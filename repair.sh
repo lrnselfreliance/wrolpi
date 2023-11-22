@@ -44,11 +44,7 @@ visudo -c -f /etc/sudoers.d/90-wrolpi
 
 # Install the systemd services
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
-if [[ ${rpi} == true ]]; then
-  cp /opt/wrolpi/etc/raspberrypios/wrolpi-app.service /etc/systemd/system/
-else
-  cp /opt/wrolpi/etc/debian12/wrolpi-app.service /etc/systemd/system/
-fi
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-app.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi-kiwix.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 /usr/bin/systemctl daemon-reload

@@ -67,9 +67,11 @@ export const useLatestRequest = (delay = 300) => {
     // A hook which ignores older requests and will only set `data` to the latest response's data.
     // usage: sendRequest(async () => await yourAPICall(...args));
 
+    // The results from awaiting `fetchFunction`.
     const [data, setData] = React.useState(null);
     const latestRequestRef = React.useRef(0);
     const debounceTimerRef = React.useRef(null);
+    // Loading while awaiting.
     const [loading, setLoading] = React.useState(false);
 
     const sendRequest = React.useCallback((fetchFunction) => {

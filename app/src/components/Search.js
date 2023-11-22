@@ -9,14 +9,15 @@ import _ from "lodash";
 import {TagsContext} from "../Tags";
 import {Header as SHeader} from "semantic-ui-react";
 
-const suggestedApps = [
+const SUGGESTED_APPS = [
     {location: '/more/otp', title: 'One Time Pad', description: 'Encrypt and Decrypt messages'},
     {location: '/inventory', title: 'Inventory', description: 'Track and organize your food storage'},
     {location: '/more/vin', title: 'Vin Decoder', description: 'Decode and analyze vehicle VIN numbers'},
     {location: '/admin', title: 'Downloads', description: 'View your downloads'},
     {location: '/admin/settings', title: 'Settings', description: 'View and modify your settings'},
-    {location: '/admin/status', title: 'Status', description: 'View the status of this WROLPi'},
+    {location: '/admin/status', title: 'Status', description: 'View the status of this WROLPi server'},
     {location: '/admin/wrol', title: 'WROL Mode', description: 'Enable or disable WROL Mode'},
+    {location: '/help', title: 'Help', description: 'Help documents for WROLPi'},
 ];
 
 
@@ -33,7 +34,7 @@ export function useSearchSuggestions() {
     const normalizeSuggestions = (newSuggestions) => {
         // Convert the suggestions from the Backend to what the Semantic <Search> expects.
         const lowerSearchStr = searchStr.toLowerCase();
-        const matchingApps = suggestedApps.filter(i =>
+        const matchingApps = SUGGESTED_APPS.filter(i =>
             i.title.toLowerCase().includes(lowerSearchStr)
             || fuzzyMatch(i.title.toLowerCase(), lowerSearchStr));
 
@@ -44,35 +45,45 @@ export function useSearchSuggestions() {
         if (newSuggestions.fileGroups > 0) {
             matchingSuggestions.fileGroups = {
                 name: 'Files', results: [
-                    {title: newSuggestions.fileGroups.toString(), type: 'files'}
+                    {
+                        title: newSuggestions.fileGroups.toString(),
+                        type: 'files',
+                        location: `/search?q=${encodeURIComponent(searchStr)}`
+                    }
                 ]
             };
         }
         if (zimSum > 0) {
             matchingSuggestions.zimsSum = {
                 name: 'Zims', results: [
-                    {title: zimSum, type: 'zims'}
+                    {title: zimSum, type: 'zims', location: `/search/zim?q=${encodeURIComponent(searchStr)}`}
                 ],
             }
         }
         if (newSuggestions.channels && newSuggestions.channels.length > 0) {
             matchingSuggestions.channels = {
                 name: 'Channels', results: newSuggestions.channels.map(i => {
-                    return {type: 'channel', title: i['name'], id: i['id']}
+                    return {type: 'channel', title: i['name'], id: i['id'], location: `/videos/channel/${i.id}/video`}
                 })
             }
         }
         if (newSuggestions.domains && newSuggestions.domains.length > 0) {
             matchingSuggestions.domains = {
                 name: 'Domains', results: newSuggestions.domains.map(i => {
-                    return {type: 'domain', title: i.domain, id: i['id'], domain: i.domain}
+                    return {
+                        type: 'domain',
+                        title: i.domain,
+                        id: i.id,
+                        domain: i.domain,
+                        location: `/archive?domain=${i.domain}`
+                    }
                 })
             }
         }
 
         matchingSuggestions.tags = {
             name: 'Tags', results: fuzzyMatchTagsByName(searchStr).map(i => {
-                return {type: 'tag', title: i.name}
+                return {type: 'tag', title: i.name, location: `/search?tag=${encodeURIComponent(i.title)}`}
             })
         }
 
@@ -100,26 +111,7 @@ export function useSearchSuggestions() {
         sendRequest(searchSuggestions(searchStr));
     }, [searchStr, sendRequest]);
 
-    const handleResultSelect = ({result}) => {
-        if (!result) {
-            return;
-        }
-
-        if (result.location) {
-            return navigate(result.location);
-        } else if (result['type'] === 'channel') {
-            return navigate(`/videos/channel/${result['id']}/video`);
-        } else if (result['type'] === 'domain') {
-            return navigate(`/archive?domain=${result['domain']}`);
-        } else if (result['type'] === 'tag') {
-            return navigate(`/search?tag=${encodeURIComponent(result['title'])}`);
-        } else if (result['type'] === 'files') {
-            return navigate(`/search?q=${encodeURIComponent(searchStr)}`);
-        } else if (result['type'] === 'zims') {
-            return navigate(`/search/zim?q=${encodeURIComponent(searchStr)}`);
-        }
-        console.error('No handleResultSelect defined:', result);
-    };
+    const handleResultSelect = ({result}) => navigate(result.location);
 
     const resultRenderer = ({type, title, description}) => {
         if (type === 'tag') {

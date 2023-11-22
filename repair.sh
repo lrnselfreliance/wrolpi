@@ -123,6 +123,7 @@ chown wrolpi:wrolpi /media/wrolpi
 
 chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi*
 
+systemctl restart wrolpi-help
 systemctl start wrolpi.target
 
 set +x

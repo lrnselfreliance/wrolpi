@@ -514,6 +514,9 @@ export function SearchResultsInput({
         handleChange,
     } = useClearableInput(searchStr, onChange, onClear, onSubmit, size, placeholder);
 
+    // Show a "Loading" message rather than "No results" while results are pending.
+    const loadingResults = {'loading': {name: 'Loading', results: [{title: 'Results are pending...'}]}};
+
     const localHandleResultSelect = (e, data) => {
         if (e) {
             e.preventDefault();
@@ -535,7 +538,7 @@ export function SearchResultsInput({
                 onResultSelect={localHandleResultSelect}
                 value={value}
                 size={size}
-                results={results}
+                results={!loading && results ? results : loadingResults}
                 resultRenderer={resultRenderer}
                 className='search-input'
                 loading={loading}

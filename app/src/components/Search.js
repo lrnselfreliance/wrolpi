@@ -34,14 +34,10 @@ export function useSearchSuggestions() {
     const normalizeSuggestions = (newSuggestions) => {
         // Convert the suggestions from the Backend to what the Semantic <Search> expects.
         const lowerSearchStr = searchStr.toLowerCase();
-        const matchingApps = SUGGESTED_APPS.filter(i =>
-            i.title.toLowerCase().includes(lowerSearchStr)
-            || fuzzyMatch(i.title.toLowerCase(), lowerSearchStr));
 
-        const zimSum = newSuggestions.zimsEstimates.reduce((i, j) => i + j['estimate'], 0).toString();
+        let matchingSuggestions = {};
 
         // Suggested results are ordered.
-        let matchingSuggestions = {};
         if (newSuggestions.fileGroups > 0) {
             matchingSuggestions.fileGroups = {
                 name: 'Files', results: [
@@ -53,6 +49,8 @@ export function useSearchSuggestions() {
                 ]
             };
         }
+
+        const zimSum = newSuggestions.zimsEstimates.reduce((i, j) => i + j['estimate'], 0).toString();
         if (zimSum > 0) {
             matchingSuggestions.zimsSum = {
                 name: 'Zims', results: [
@@ -81,12 +79,18 @@ export function useSearchSuggestions() {
             }
         }
 
-        matchingSuggestions.tags = {
-            name: 'Tags', results: fuzzyMatchTagsByName(searchStr).map(i => {
-                return {type: 'tag', title: i.name, location: `/search?tag=${encodeURIComponent(i.title)}`}
-            })
+        const matchingTags = fuzzyMatchTagsByName(searchStr);
+        if (matchingTags && matchingTags.length > 0) {
+            matchingSuggestions.tags = {
+                name: 'Tags', results: matchingTags.map(i => {
+                    return {type: 'tag', title: i.name, location: `/search?tag=${encodeURIComponent(i.title)}`}
+                })
+            }
         }
 
+        const matchingApps = SUGGESTED_APPS.filter(i =>
+            i.title.toLowerCase().includes(lowerSearchStr)
+            || fuzzyMatch(i.title.toLowerCase(), lowerSearchStr));
         if (matchingApps && matchingApps.length > 0) {
             matchingSuggestions.apps = {name: 'Apps', results: matchingApps};
         }
@@ -106,9 +110,10 @@ export function useSearchSuggestions() {
             console.debug('Not getting suggestions because there is no search.');
             return;
         }
+        setSuggestions(undefined);
 
         // Use the useLatestRequest to handle user typing.
-        sendRequest(searchSuggestions(searchStr));
+        sendRequest(async () => await searchSuggestions(searchStr));
     }, [searchStr, sendRequest]);
 
     const handleResultSelect = ({result}) => navigate(result.location);

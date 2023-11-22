@@ -64,14 +64,15 @@ export const useRecurringTimeout = (callback, delay) => {
 }
 
 export const useLatestRequest = (delay = 300) => {
-    // A hook which cancels older requests and will only set `data` to the latest response's data.
+    // A hook which ignores older requests and will only set `data` to the latest response's data.
+    // usage: sendRequest(async () => await yourAPICall(...args));
 
     const [data, setData] = React.useState(null);
     const latestRequestRef = React.useRef(0);
     const debounceTimerRef = React.useRef(null);
     const [loading, setLoading] = React.useState(false);
 
-    const sendRequest = React.useCallback((fetchCoroutine) => {
+    const sendRequest = React.useCallback((fetchFunction) => {
         if (debounceTimerRef.current) {
             clearTimeout(debounceTimerRef.current);
         }
@@ -81,7 +82,7 @@ export const useLatestRequest = (delay = 300) => {
             const requestId = ++latestRequestRef.current;
 
             try {
-                const result = await fetchCoroutine;
+                const result = await fetchFunction();
 
                 if (requestId === latestRequestRef.current) {
                     setData(result);

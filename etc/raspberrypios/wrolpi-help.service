@@ -1,0 +1,12 @@
+[Unit]
+Description=WROLPi Help Documents
+PartOf=wrolpi.target
+
+[Service]
+ExecStart=/opt/wrolpi-help/venv/bin/mkdocs serve -a 0.0.0.0:8086
+Group=wrolpi
+User=wrolpi
+WorkingDirectory=/opt/wrolpi-help/
+
+[Install]
+WantedBy=default.target

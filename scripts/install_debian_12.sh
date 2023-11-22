@@ -38,6 +38,12 @@ if [[ ! -f /opt/wrolpi-blobs/gis-map.dump.gz || ! -s /opt/wrolpi-blobs/gis-map.d
   wget https://wrolpi.nyc3.cdn.digitaloceanspaces.com/gis-map.dump.gz -O /opt/wrolpi-blobs/gis-map.dump.gz
 fi
 
+# Install WROLPi Help.
+git clone https://github.com/wrolpi/wrolpi-help.git /opt/wrolpi-help || :
+(cd /opt/wrolpi-help && git fetch && git checkout master && git reset --hard origin/master)
+python3 -m venv /opt/wrolpi-help/venv
+/opt/wrolpi-help/venv/bin/pip3 install -r /opt/wrolpi-help/requirements.txt
+
 # Repair will install configs and restart services.
 /opt/wrolpi/repair.sh
 

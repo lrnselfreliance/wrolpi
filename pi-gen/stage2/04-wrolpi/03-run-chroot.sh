@@ -56,9 +56,7 @@ visudo -c -f /etc/sudoers.d/90-wrolpi
 mkdir /media/wrolpi
 chown wrolpi:wrolpi /media/wrolpi
 
-cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
-cp /opt/wrolpi/etc/raspberrypios/wrolpi-app.service /etc/systemd/system/
-cp /opt/wrolpi/etc/raspberrypios/wrolpi-kiwix.service /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi-*.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 
 # NetworkManager for the hotspot.

@@ -43,14 +43,13 @@ chmod 0440 /etc/sudoers.d/90-wrolpi
 visudo -c -f /etc/sudoers.d/90-wrolpi
 
 # Install the systemd services
-cp /opt/wrolpi/etc/raspberrypios/wrolpi-api.service /etc/systemd/system/
-cp /opt/wrolpi/etc/raspberrypios/wrolpi-app.service /etc/systemd/system/
-cp /opt/wrolpi/etc/raspberrypios/wrolpi-kiwix.service /etc/systemd/system/
+cp /opt/wrolpi/etc/raspberrypios/wrolpi*.service /etc/systemd/system/
 cp /opt/wrolpi/etc/raspberrypios/wrolpi.target /etc/systemd/system/
 /usr/bin/systemctl daemon-reload
 systemctl enable wrolpi-api.service
 systemctl enable wrolpi-app.service
 systemctl enable wrolpi-kiwix.service
+systemctl enable wrolpi-help.service
 
 cp /opt/wrolpi/etc/raspberrypios/renderd.conf /etc/renderd.conf
 # Configure Apache2 to listen on 8084.

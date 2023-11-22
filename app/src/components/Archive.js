@@ -492,10 +492,10 @@ function ArchivesPage() {
         !!searchStr,
     );
 
-    const searchInput = <SearchInput clearable
-                                     searchStr={searchStr}
-                                     onSubmit={setSearchStr}
-                                     placeholder='Search Archives...'
+    const searchInput = <SearchInput
+        searchStr={searchStr}
+        onSubmit={setSearchStr}
+        placeholder='Search Archives...'
     />;
 
     return <>

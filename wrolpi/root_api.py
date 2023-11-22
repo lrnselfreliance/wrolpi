@@ -488,45 +488,6 @@ async def post_vin_number_decoder(_: Request, body: schema.VINDecoderRequest):
     return json_response(dict(vin=vin))
 
 
-@api_bp.post('/search_estimate')
-@validate(schema.SearchEstimateRequest)
-async def post_search_estimate(_: Request, body: schema.SearchEstimateRequest):
-    """Estimates the count of items of a search (FileGroups, Zim articles, etc.).
-
-    If tag_names are provided, then the estimates are actual counts."""
-    from modules.zim.models import Zims
-
-    if not body.search_str and not body.tag_names:
-        return response.empty(HTTPStatus.BAD_REQUEST)
-
-    file_groups_estimate = await estimate_search(body.search_str, body.tag_names)
-
-    if body.tag_names:
-        # Get actual count of entries tagged with the tag names.
-        zims_estimates = list()
-        for zim, count in Zims.entries_with_tags(body.tag_names).items():
-            d = dict(
-                estimate=count,
-                **zim.__json__(),
-            )
-            zims_estimates.append(d)
-    else:
-        # Get estimates using libzim.
-        zims_estimates = list()
-        for zim, estimate in Zims.estimate(body.search_str).items():
-            d = dict(
-                estimate=estimate,
-                **zim.__json__(),
-            )
-            zims_estimates.append(d)
-
-    ret = dict(
-        file_groups=file_groups_estimate,
-        zims=zims_estimates,
-    )
-    return json_response(ret)
-
-
 @api_bp.post('/restart')
 async def post_restart(_: Request):
     if DOCKERIZED:

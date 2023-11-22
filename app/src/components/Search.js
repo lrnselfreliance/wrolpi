@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useContext, useEffect, useState} from "react";
 import {createSearchParams, Route, Routes, useNavigate} from "react-router-dom";
 import {FilesSearchView} from "./Files";
 import {useLatestRequest, usePages, useQuery} from "../hooks/customHooks";
@@ -8,6 +8,15 @@ import {fuzzyMatch, normalizeEstimate, TabLinks} from "./Common";
 import _ from "lodash";
 import {TagsContext} from "../Tags";
 import {Header as SHeader} from "semantic-ui-react";
+
+export const SearchSuggestionsContext = React.createContext({
+    suggestionsResults: {},
+    suggestions: {},
+    suggestionsSums: {},
+    handleResultSelect: null,
+    resultRenderer: null,
+    loading: false,
+});
 
 const SUGGESTED_APPS = [
     {location: '/more/otp', title: 'One Time Pad', description: 'Encrypt and Decrypt messages'},
@@ -29,17 +38,19 @@ export function useSearchSuggestions() {
     const searchStr = searchParams.get('q');
 
     const {data, sendRequest, loading} = useLatestRequest(500);
-    const [suggestions, setSuggestions] = useState(null);
+    const [suggestionsResults, setSuggestionsResults] = useState({});
+    const [suggestions, setSuggestions] = useState({});
+    const [suggestionsSums, setSuggestionsSums] = useState({});
 
-    const normalizeSuggestions = (newSuggestions) => {
+    const normalizeSuggestionsResults = (newSuggestions) => {
         // Convert the suggestions from the Backend to what the Semantic <Search> expects.
         const lowerSearchStr = searchStr.toLowerCase();
 
-        let matchingSuggestions = {};
+        let results = {};
 
         // Suggested results are ordered.
         if (newSuggestions.fileGroups > 0) {
-            matchingSuggestions.fileGroups = {
+            results.fileGroups = {
                 name: 'Files', results: [
                     {
                         title: newSuggestions.fileGroups.toString(),
@@ -50,23 +61,23 @@ export function useSearchSuggestions() {
             };
         }
 
-        const zimSum = newSuggestions.zimsEstimates.reduce((i, j) => i + j['estimate'], 0).toString();
+        const zimSum = newSuggestions.zimsEstimates.reduce((i, j) => i + j['estimate'], 0);
         if (zimSum > 0) {
-            matchingSuggestions.zimsSum = {
+            results.zimsSum = {
                 name: 'Zims', results: [
-                    {title: zimSum, type: 'zims', location: `/search/zim?q=${encodeURIComponent(searchStr)}`}
+                    {title: zimSum.toString(), type: 'zims', location: `/search/zim?q=${encodeURIComponent(searchStr)}`}
                 ],
             }
         }
         if (newSuggestions.channels && newSuggestions.channels.length > 0) {
-            matchingSuggestions.channels = {
+            results.channels = {
                 name: 'Channels', results: newSuggestions.channels.map(i => {
                     return {type: 'channel', title: i['name'], id: i['id'], location: `/videos/channel/${i.id}/video`}
                 })
             }
         }
         if (newSuggestions.domains && newSuggestions.domains.length > 0) {
-            matchingSuggestions.domains = {
+            results.domains = {
                 name: 'Domains', results: newSuggestions.domains.map(i => {
                     return {
                         type: 'domain',
@@ -81,9 +92,9 @@ export function useSearchSuggestions() {
 
         const matchingTags = fuzzyMatchTagsByName(searchStr);
         if (matchingTags && matchingTags.length > 0) {
-            matchingSuggestions.tags = {
+            results.tags = {
                 name: 'Tags', results: matchingTags.map(i => {
-                    return {type: 'tag', title: i.name, location: `/search?tag=${encodeURIComponent(i.title)}`}
+                    return {type: 'tag', title: i.name, location: `/search?tag=${encodeURIComponent(i.name)}`}
                 })
             }
         }
@@ -92,16 +103,24 @@ export function useSearchSuggestions() {
             i.title.toLowerCase().includes(lowerSearchStr)
             || fuzzyMatch(i.title.toLowerCase(), lowerSearchStr));
         if (matchingApps && matchingApps.length > 0) {
-            matchingSuggestions.apps = {name: 'Apps', results: matchingApps};
+            results.apps = {name: 'Apps', results: matchingApps};
         }
 
-        console.debug('matchingSuggestions', matchingSuggestions);
-        setSuggestions(matchingSuggestions);
+        setSuggestionsResults(results);
+        setSuggestionsSums({
+            fileGroups: newSuggestions.fileGroups,
+            zims: zimSum,
+            channels: newSuggestions.channels.length,
+            domains: newSuggestions.domains.length,
+            tags: matchingTags.length,
+            apps: matchingApps.length,
+        })
     }
 
     React.useEffect(() => {
         if (data) {
-            normalizeSuggestions(data);
+            setSuggestions(data);
+            normalizeSuggestionsResults(data);
         }
     }, [JSON.stringify(data)]);
 
@@ -110,7 +129,9 @@ export function useSearchSuggestions() {
             console.debug('Not getting suggestions because there is no search.');
             return;
         }
-        setSuggestions(undefined);
+        setSuggestions({});
+        setSuggestionsSums({});
+        setSuggestionsResults({});
 
         // Use the useLatestRequest to handle user typing.
         sendRequest(async () => await searchSuggestions(searchStr));
@@ -133,7 +154,15 @@ export function useSearchSuggestions() {
         return <span>{title}</span>
     };
 
-    return {suggestions, searchStr, handleResultSelect, resultRenderer, loading}
+    return {suggestions, suggestionsResults, suggestionsSums, searchStr, handleResultSelect, resultRenderer, loading}
+}
+
+export const SearchSuggestionsProvider = (props) => {
+    const value = useSearchSuggestions();
+
+    return <SearchSuggestionsContext.Provider value={value}>
+        {props.children}
+    </SearchSuggestionsContext.Provider>
 }
 
 export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {
@@ -196,51 +225,14 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
 }
 
 
-export const useSearchEstimate = (search_str, activeTags) => {
-    const [fileGroups, setFileGroups] = useState('?');
-    const [zims, setZims] = useState(null);
-    const [zimsSum, setZimsSum] = useState('?');
-
-    const localFetchSearchEstimate = async () => {
-        if (!search_str && (!activeTags || activeTags.length === 0)) {
-            return;
-        }
-        try {
-            const estimates = await searchEstimate(search_str, activeTags);
-            console.debug('estimates', estimates);
-            setFileGroups(estimates['file_groups']);
-            setZimsSum(estimates['zimSum']);
-            setZims(estimates['zims']);
-        } catch (e) {
-            console.error('Failed to fetch estimates');
-            console.error(e);
-            setFileGroups(null);
-            setZimsSum(null);
-            setZims(null);
-        }
-    }
-
-    const debouncedEstimate = _.debounce(async () => await localFetchSearchEstimate(), 800);
-
-    useEffect(() => {
-        debouncedEstimate();
-
-        return () => debouncedEstimate.cancel();
-    }, [search_str, JSON.stringify(activeTags)]);
-
-    return {fileGroups, zimsSum, zims}
-}
-
 export function SearchView() {
-    const {searchStr, activeTags} = useSearch();
-    const estimates = useSearchEstimate(searchStr, activeTags);
+    const {suggestionsSums, suggestions} = useContext(SearchSuggestionsContext);
 
     let filesTabName = 'Files';
     let zimsTabName = 'Zims';
-    if (estimates) {
-        const {fileGroups, zimsSum} = estimates;
-        filesTabName = `Files (${normalizeEstimate(fileGroups)})`;
-        zimsTabName = `Zims (${normalizeEstimate(zimsSum)})`;
+    if (!_.isEmpty(suggestionsSums)) {
+        filesTabName = `Files (${normalizeEstimate(suggestionsSums.fileGroups)})`;
+        zimsTabName = `Zims (${normalizeEstimate(suggestionsSums.zims)})`;
     }
 
     const links = [
@@ -252,7 +244,7 @@ export function SearchView() {
         <TabLinks links={links}/>
         <Routes>
             <Route path='/*' element={<FilesSearchView/>}/>
-            <Route path='/zim' exact element={<ZimSearchView estimates={estimates}/>}/>
+            <Route path='/zim' exact element={<ZimSearchView estimates={suggestions}/>}/>
         </Routes>
     </React.Fragment>
 }

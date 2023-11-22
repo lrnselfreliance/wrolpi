@@ -108,31 +108,6 @@ def test_zim_crud(test_client, test_session, test_directory, test_zim):
     assert test_session.query(Zim).count() == 0
 
 
-def test_zim_tag_estimate(test_client, test_session, test_zim, tag_factory):
-    """Global search estimate returns Zim estimates."""
-    tag1, tag2 = tag_factory(), tag_factory()
-    test_session.commit()
-
-    content = dict(search_str=None, tag_names=[tag1.name, ])
-    request, response = test_client.post('/api/search_estimate', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['zims'] and response.json['zims'][0]['estimate'] == 0
-
-    # Entries can be tagged in the API.
-    content = dict(tag_name=tag1.name, zim_id=test_zim.id, zim_entry='home')
-    request, response = test_client.post('/api/zim/tag', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.CREATED
-    # Create other Tags directly.
-    test_zim.tag_entry(tag2.name, 'one')
-    test_zim.tag_entry(tag1.name, 'two')
-    test_session.commit()
-
-    content = dict(search_str=None, tag_names=[tag1.name, ])
-    request, response = test_client.post('/api/search_estimate', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['zims'] and response.json['zims'][0]['estimate'] == 2
-
-
 def test_zim_tag_and_untag(test_client, test_session, test_zim, tag_factory):
     """Zim entries can be Tagged and Untagged."""
     tag1, tag2 = tag_factory(), tag_factory()

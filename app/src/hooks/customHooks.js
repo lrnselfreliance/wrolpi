@@ -777,7 +777,9 @@ export const useStatusInterval = () => {
 export const StatusProvider = (props) => {
     const value = useStatusInterval();
 
-    return <StatusContext.Provider value={value}>
+    const statusValue = React.useMemo(() => value, [value]);
+
+    return <StatusContext.Provider value={statusValue}>
         {props.children}
     </StatusContext.Provider>
 }

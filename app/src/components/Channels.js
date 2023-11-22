@@ -510,15 +510,14 @@ export function ChannelsPage() {
         <Grid stackable columns={2}>
             <Grid.Row>
                 <Grid.Column>
-                    <SearchInput clearable={true}
-                                 placeholder='Name filter...'
-                                 size="large"
-                                 actionIcon='search'
-                                 searchStr={searchStr}
-                                 disabled={!Array.isArray(channels) || channels.length === 0}
-                                 onClear={() => setSearchStr('')}
-                                 onChange={setSearchStr}
-                                 onSubmit={null}
+                    <SearchInput
+                        placeholder='Name filter...'
+                        size='large'
+                        searchStr={searchStr}
+                        disabled={!Array.isArray(channels) || channels.length === 0}
+                        onClear={() => setSearchStr('')}
+                        onChange={setSearchStr}
+                        onSubmit={null}
                     />
                 </Grid.Column>
                 <Grid.Column textAlign='right'>

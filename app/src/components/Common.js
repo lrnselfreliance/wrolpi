@@ -538,7 +538,7 @@ export function SearchResultsInput({
                 onResultSelect={localHandleResultSelect}
                 value={value}
                 size={size}
-                results={!loading && results ? results : loadingResults}
+                results={!loading && !_.isEmpty(results) ? results : loadingResults}
                 resultRenderer={resultRenderer}
                 className='search-input'
                 loading={loading}

@@ -467,26 +467,6 @@ async def test_post_vin_number_decoder(test_async_client):
                                     'years': '1995'}
 
 
-def test_search_str_estimate(test_session, test_client, test_directory, test_zim, example_pdf):
-    """Get the search result estimates."""
-    test_session.commit()
-
-    request, response = test_client.post('/api/files/refresh')
-    assert response.status_code == HTTPStatus.NO_CONTENT
-
-    content = dict(search_str='example')
-    request, response = test_client.post('/api/search_estimate', content=json.dumps(content))
-    assert response.status_code == HTTPStatus.OK
-
-    assert response.json['file_groups'] == 1
-    assert len(response.json['zims']) == 1
-    assert_dict_contains(response.json['zims'][0],
-                         dict(
-                             estimate=1,
-                             path=str(test_zim.path.relative_to(test_directory)),
-                         ))
-
-
 @pytest.mark.asyncio
 async def test_search_suggestions(test_session, test_async_client, channel_factory, archive_factory, tag_factory,
                                   zim_factory):

@@ -22,7 +22,7 @@ import {refreshFiles} from "./api";
 import _ from "lodash";
 import {TagsDashboard} from "./Tags";
 import {Upload} from "./components/Upload";
-import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
+import {SearchSuggestionsContext, SearchView, useSearch} from "./components/Search";
 import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
 import {useSettings, useWROLMode} from "./hooks/customHooks";
 import {FileSearchFilterButton} from "./components/Files";
@@ -158,7 +158,7 @@ export function DashboardPage() {
     const navigate = useNavigate();
 
     const {searchStr, setSearchStr, activeTags} = useSearch();
-    const {suggestions, handleResultSelect, resultRenderer, loading} = useSearchSuggestions();
+    const {suggestionsResults, handleResultSelect, resultRenderer, loading} = useContext(SearchSuggestionsContext);
     const {status} = useContext(StatusContext);
 
     let title = 'Dashboard';
@@ -196,7 +196,7 @@ export function DashboardPage() {
                                             placeholder='Search everywhere...'
                                             onClear={() => navigate('/')}
                                             style={{marginBottom: '2em'}}
-                                            results={suggestions}
+                                            results={suggestionsResults}
                                             handleResultSelect={handleResultSelect}
                                             resultRenderer={resultRenderer}
                                             loading={loading}
@@ -220,7 +220,7 @@ export function DashboardPage() {
                                             placeholder='Search everywhere...'
                                             onClear={() => navigate('/')}
                                             style={{marginBottom: '2em'}}
-                                            results={suggestions}
+                                            results={suggestionsResults}
                                             handleResultSelect={handleResultSelect}
                                             resultRenderer={resultRenderer}
                                             loading={loading}

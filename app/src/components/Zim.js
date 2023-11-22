@@ -61,6 +61,7 @@ import {ThemeContext} from "../contexts/contexts";
 import {Link, Route, Routes} from "react-router-dom";
 import {SortableTable} from "./SortableTable";
 import {toast} from "react-semantic-toasts-2";
+import _ from "lodash";
 
 const VIEWER_URL = `http://${window.location.hostname}:8085/`;
 
@@ -288,17 +289,15 @@ const ZimsRefreshWarning = () => {
 export const ZimSearchView = ({estimates}) => {
     const [activeIndex, setActiveIndex] = React.useState(null);
     const {searchStr, activeTags, setTags} = useSearch();
-    const {zims} = estimates;
+    const {zimsEstimates} = estimates;
 
     const handleClick = (index, activeIndex_) => {
         setActiveIndex(index === activeIndex_ ? -1 : index);
     }
 
-    let body = <TextPlaceholder/>;
-    if (zims && zims.length === 0) {
-        body = <ZimsRefreshWarning/>;
-    } else if (zims) {
-        body = zims.map((i, index) => <ZimAccordion
+    let body = <ZimsRefreshWarning/>;
+    if (!_.isEmpty(zimsEstimates)) {
+        body = zimsEstimates.map((i, index) => <ZimAccordion
             key={i['path']}
             index={index}
             activeIndex={activeIndex}

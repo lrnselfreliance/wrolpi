@@ -21,6 +21,7 @@ import {SemanticToastContainer} from "react-semantic-toasts-2";
 import {FilePreviewProvider} from "./components/FilePreview";
 import {TagsProvider} from "./Tags";
 import {ZimRoute} from "./components/Zim";
+import {SearchSuggestionsProvider} from "./components/Search";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);
@@ -61,13 +62,19 @@ function HelpPage() {
 }
 
 function Root() {
-    return <>
-        <header>
-            <NavBar/>
-        </header>
-        <Outlet/>
-        <Footer/>
-    </>
+    return <ThemeProvider>
+        <TagsProvider>
+            <FilePreviewProvider>
+                <SearchSuggestionsProvider>
+                    <header>
+                        <NavBar/>
+                    </header>
+                    <Outlet/>
+                    <Footer/>
+                </SearchSuggestionsProvider>
+            </FilePreviewProvider>
+        </TagsProvider>
+    </ThemeProvider>
 }
 
 const router = createBrowserRouter(createRoutesFromElements(<Route
@@ -94,19 +101,13 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
 export default function App() {
     useEventsInterval();
 
-    return <ThemeProvider>
-        <TagsProvider>
-            <FilePreviewProvider>
-                {/* Context and style to handle switching between mobile/computer. */}
-                <style>{mediaStyles}</style>
-                {/* Toasts can be on any page. */}
-                <SemanticToastContainer position='top-right'/>
-                <MediaContextProvider>
-                    <StatusProvider>
-                        <RouterProvider router={router}/>
-                    </StatusProvider>
-                </MediaContextProvider>
-            </FilePreviewProvider>
-        </TagsProvider>
-    </ThemeProvider>
+    return <StatusProvider>
+        {/* Context and style to handle switching between mobile/computer. */}
+        <style>{mediaStyles}</style>
+        {/* Toasts can be on any page. */}
+        <SemanticToastContainer position='top-right'/>
+        <MediaContextProvider>
+            <RouterProvider router={router}/>
+        </MediaContextProvider>
+    </StatusProvider>
 }

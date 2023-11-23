@@ -13,5 +13,8 @@ npm install || npm install || npm install || npm install # try install multiple 
 # Upgrade the WROLPi database.
 (cd /opt/wrolpi && /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py db upgrade)
 
+# Upgrade WROLPi Help.
+/opt/wrolpi/scripts/install_help_service.sh
+
 # Install any configs, restart services.
 /opt/wrolpi/repair.sh

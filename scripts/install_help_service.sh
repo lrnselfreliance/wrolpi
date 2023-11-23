@@ -11,6 +11,7 @@ set -e
 
 # Install WROLPi Help repo.
 git clone https://github.com/wrolpi/wrolpi-help.git /opt/wrolpi-help || :
+git config --global --add safe.directory /opt/wrolpi-help
 (cd /opt/wrolpi-help && git fetch && git checkout master && git reset --hard origin/master)
 python3 -m venv /opt/wrolpi-help/venv
 /opt/wrolpi-help/venv/bin/pip3 install -r /opt/wrolpi-help/requirements.txt

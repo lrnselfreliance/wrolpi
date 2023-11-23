@@ -55,10 +55,7 @@ usermod -aG _renderd wrolpi
 chown -R _renderd:_renderd /var/cache/renderd/tiles
 
 # Install WROLPi Help.
-git clone https://github.com/wrolpi/wrolpi-help.git /opt/wrolpi-help || :
-(cd /opt/wrolpi-help && git fetch && git checkout master && git reset --hard origin/master)
-python3 -m venv /opt/wrolpi-help/venv
-/opt/wrolpi-help/venv/bin/pip3 install -r /opt/wrolpi-help/requirements.txt
+/opt/wrolpi/scripts/install_help_service.sh
 
 # Create the media directory for the wrolpi user.
 echo '/dev/sda1 /media/wrolpi auto defaults,nofail 0 0' | tee -a /etc/fstab

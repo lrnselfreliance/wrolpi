@@ -39,10 +39,7 @@ if [[ ! -f /opt/wrolpi-blobs/gis-map.dump.gz || ! -s /opt/wrolpi-blobs/gis-map.d
 fi
 
 # Install WROLPi Help.
-git clone https://github.com/wrolpi/wrolpi-help.git /opt/wrolpi-help || :
-(cd /opt/wrolpi-help && git fetch && git checkout master && git reset --hard origin/master)
-python3 -m venv /opt/wrolpi-help/venv
-/opt/wrolpi-help/venv/bin/pip3 install -r /opt/wrolpi-help/requirements.txt
+/opt/wrolpi/scripts/install_help_service.sh
 
 # Repair will install configs and restart services.
 /opt/wrolpi/repair.sh

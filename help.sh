@@ -80,17 +80,13 @@ fi
   echo "OK: Postgres is using file socket" ||
   echo "FAILED: Postgres is not using file socket"
 
-psql -l >/dev/null 2>/dev/null &&
-  echo "OK: Connected to postgres" ||
-  echo "FAILED: Unable to connect to postgres"
-
-if sudo -u wrolpi psql -l 2>/dev/null | grep wrolpi >/dev/null; then
+if sudo -i -u wrolpi psql -l 2>/dev/null | grep wrolpi >/dev/null; then
   echo "OK: Found wrolpi database"
 
-  if sudo -u wrolpi psql wrolpi -c '\d' | grep "file_group" >/dev/null; then
+  if sudo -i -u wrolpi psql wrolpi -c '\d' | grep "file_group" >/dev/null; then
     echo "OK: WROLPi database is initialized"
 
-    if [ "$(sudo -u wrolpi psql wrolpi -c 'copy (select count(*) from file_group) to stdout')" -gt 0 ]; then
+    if [ "$(sudo -i -u wrolpi psql wrolpi -c 'copy (select count(*) from file_group) to stdout')" -gt 0 ]; then
       echo "OK: WROLPi database has files"
     else
       echo "FAILED: WROLPi database has no files"
@@ -108,7 +104,7 @@ echo
 if [ -f /opt/wrolpi/venv/bin/python3 ]; then
   echo "OK: WROLPi Python virtual environment exists"
 
-  if /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py -h >/dev/null; then
+  if /opt/wrolpi/venv/bin/python3 /opt/wrolpi/main.py -h 2>/dev/null > /dev/null; then
     echo 'OK: WROLPi main can be run'
   else
     echo "Failed: WROLPi main could not be run"
@@ -188,10 +184,10 @@ fi
 echo
 # Map
 
-if sudo -u _renderd psql -l 2>/dev/null | grep gis >/dev/null; then
+if sudo -i -u wrolpi psql -l 2>/dev/null | grep gis >/dev/null; then
   echo "OK: Found map database"
 
-  if sudo -u _renderd psql gis -c '\d' | grep water_polygons >/dev/null; then
+  if sudo -i -u wrolpi psql gis -c '\d' | grep water_polygons >/dev/null; then
     echo "OK: Map database is initialized"
   else
     echo "FAILED: Map database is not initialized"
@@ -299,4 +295,12 @@ if ffmpeg -h >/dev/null 2>&1; then
   echo "OK: ffmpeg can be run"
 else
   echo "FAILED: ffmpeg cannot be run"
+fi
+
+echo
+# Help Service
+if curl -s http://0.0.0.0:8086/ | grep MkDocs 2>/dev/null >/dev/null; then
+  echo "OK: Help service is running"
+else
+  echo "FAILED: Help service is not running"
 fi

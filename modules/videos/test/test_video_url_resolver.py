@@ -1,15 +1,22 @@
 import pytest
 
-from modules.videos.video_url_resolver import video_url_resolver
+from modules.videos.normalize_video_url import normalize_video_url
 
 
 @pytest.mark.parametrize(
-    'domain,entry,expected',
+    'url,expected',
     [
-        ('youtube.com', {'url': 'foo'}, 'https://youtube.com/watch?v=foo'),
-        ('youtube.com', {'webpage_url': 'https://youtube.com/watch?v=foo'}, 'https://youtube.com/watch?v=foo'),
-        ('youtube.com', {'url': 'https://youtube.com/watch?v=foo'}, 'https://youtube.com/watch?v=foo'),
+        ('https://example.com', 'https://example.com'),
+        ('https://www.youtube.com/watch?v=0xfMLNVFq2Y', 'https://www.youtube.com/watch?v=0xfMLNVFq2Y'),
+        ('https://www.youtube.com/shorts/0xfMLNVFq2Y', 'https://www.youtube.com/watch?v=0xfMLNVFq2Y'),
+        ('https://youtu.be/0xfMLNVFq2Y', 'https://www.youtube.com/watch?v=0xfMLNVFq2Y'),
+        ('https://youtu.be/0xfMLNVFq2Y', 'https://www.youtube.com/watch?v=0xfMLNVFq2Y'),
+        (
+                'https://www.youtube.com/watch?v=0xfMLNVFq2Y&list=PLMRyOtjhfFJUMPtB122lfeXebndQaePSF&index=2',
+                'https://www.youtube.com/watch?v=0xfMLNVFq2Y'
+        ),
+        ('https://youtu.be/0xfMLNVFq2Y?si=YALbJCpBgQcoY_Dp', 'https://www.youtube.com/watch?v=0xfMLNVFq2Y')
     ]
 )
-def test_video_url_resolver(domain, entry, expected):
-    assert video_url_resolver(domain, entry) == expected
+def test_normalize_video_url(url: str, expected: str):
+    assert normalize_video_url(url) == expected

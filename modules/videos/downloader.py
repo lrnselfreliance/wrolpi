@@ -28,7 +28,7 @@ from .errors import UnknownChannel
 from .lib import get_downloader_config
 from .models import Video, Channel
 from .schema import ChannelPostRequest
-from .video_url_resolver import normalize_youtube_shorts_url
+from .normalize_video_url import normalize_video_url
 
 logger = logger.getChild(__name__)
 ydl_logger = logger.getChild('youtube-dl')
@@ -172,7 +172,7 @@ class ChannelDownloader(Downloader, ABC):
         downloads = [i.get('webpage_url') or i.get('url') for i in downloads]
 
         # YouTube Shorts are handled specially.
-        downloads = [normalize_youtube_shorts_url(i) for i in downloads]
+        downloads = [normalize_video_url(i) for i in downloads]
 
         # Only download those that have not yet been downloaded.
         already_downloaded = [i.url for i in video_downloader.already_downloaded(*downloads)]
@@ -205,7 +205,7 @@ class VideoDownloader(Downloader, ABC):
         if download.attempts >= 10:
             raise UnrecoverableDownloadError('Max download attempts reached')
 
-        url = download.url
+        url = normalize_video_url(download.url)
         info = download.info_json or extract_info(url)
 
         if not info:

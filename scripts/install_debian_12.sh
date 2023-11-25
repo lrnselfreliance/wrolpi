@@ -30,6 +30,7 @@ grep wrolpi: /etc/passwd || useradd -md /home/wrolpi wrolpi -s "$(command -v bas
 # Get map dependencies.
 [ -d /opt/openstreetmap-carto ] && chown -R wrolpi:wrolpi /opt/openstreetmap-carto
 git clone https://github.com/lrnselfreliance/openstreetmap-carto.git /opt/openstreetmap-carto || :
+git config --global --add safe.directory /opt/openstreetmap-carto
 (cd /opt/openstreetmap-carto && git fetch && git checkout master && git reset --hard origin/master && git pull --ff)
 chown -R _renderd:_renderd /opt/openstreetmap-carto
 

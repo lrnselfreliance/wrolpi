@@ -52,6 +52,8 @@ rsync -a "${SCRIPT_DIR}/config" "${BUILD_DIR}/"
 
 time nice -n 18 lb build 2>&1 | tee "${SCRIPT_DIR}/build.log"
 
+grep "9999-wrolpi.hook.chroot completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (echo "build hook failed!" && exit 1)
+
 cp "${BUILD_DIR}"/*iso "${SCRIPT_DIR}/" || (echo "Build failed. No ISOs were found!" && exit 1)
 chmod 644 "${SCRIPT_DIR}"/*iso
 DEST="${SCRIPT_DIR}/WROLPi-v${VERSION}-amd64.iso"

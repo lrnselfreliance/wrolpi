@@ -217,12 +217,14 @@ class VideoDownloader(Downloader, ABC):
         source_channel_id = info.get('channel_id')
         channel_url = info.get('channel_url')
         channel = None
+        logger.debug(f'{channel_name=} {source_channel_id=} {channel_url=}')
         if channel_name or source_channel_id:
             # Try to find the channel via info_json from yt-dlp.
             try:
                 channel = get_or_create_channel(source_id=source_channel_id, url=channel_url, name=channel_name)
                 if channel:
                     found_channel = 'yt_dlp'
+                    logger.debug(f'Found a channel with source_id {channel=}')
             except UnknownChannel:
                 # Can't find a channel, use the no channel directory.
                 pass
@@ -234,6 +236,7 @@ class VideoDownloader(Downloader, ABC):
             try:
                 channel = get_channel(directory=destination, return_dict=False)
                 found_channel = 'download_settings_directory'
+                logger.debug(f'Found a channel that shares the destination directory {channel=}')
             except UnknownChannel:
                 # Destination must not be a channel.
                 pass
@@ -245,6 +248,7 @@ class VideoDownloader(Downloader, ABC):
             logger.info(f'Using download.settings to find channel')
             try:
                 channel = get_channel(channel_id=local_channel_id, url=channel_url, return_dict=False)
+                logger.debug(f'Found channel with channel url {channel=}')
             except UnknownChannel:
                 # We do not need a Channel if we have a destination directory.
                 if not destination:

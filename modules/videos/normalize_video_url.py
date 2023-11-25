@@ -24,10 +24,7 @@ def strip_extra_from_url(url: str) -> str:
 def normalize_video_url(url: str) -> str:
     """Convert video URLs to what is expected to be in the yt-dlp info json."""
     url = url.strip()
-    if match := YOUTUBE_SHORT_REGEX.match(url):
-        source_id = match.group(1)
-        url = f'https://www.youtube.com/watch?v={source_id}'
-    if match := YOUTU_BE_REGEX.match(url):
+    if (match := YOUTUBE_SHORT_REGEX.match(url)) or (match := YOUTU_BE_REGEX.match(url)):
         source_id = match.group(1)
         url = f'https://www.youtube.com/watch?v={source_id}'
     url = strip_extra_from_url(url)

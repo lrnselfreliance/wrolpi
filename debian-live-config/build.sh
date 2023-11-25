@@ -56,6 +56,7 @@ grep "9999-wrolpi.hook.chroot completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>
 
 cp "${BUILD_DIR}"/*iso "${SCRIPT_DIR}/" || (echo "Build failed. No ISOs were found!" && exit 1)
 chmod 644 "${SCRIPT_DIR}"/*iso
+chown 1000:1000 "${SCRIPT_DIR}"/*iso
 DEST="${SCRIPT_DIR}/WROLPi-v${VERSION}-amd64.iso"
 [ -f "${DEST}" ] && (echo "Removing conflicting ISO" && rm "${DEST}")
 mv "${SCRIPT_DIR}"/*.iso "${DEST}"

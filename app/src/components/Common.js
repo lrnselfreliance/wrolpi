@@ -56,6 +56,9 @@ export const OTP_API = `${API_URI}/otp`;
 export const ZIM_API = `${API_URI}/zim`;
 export const DEFAULT_LIMIT = 20;
 export const NAME = process.env && process.env.REACT_APP_NAME ? process.env.REACT_APP_NAME : null;
+export const MAP_VIEWER_URI = `${window.location.protocol}//${window.location.host}/proxy/map`;
+export const ZIM_VIEWER_URI = `${window.location.protocol}//${window.location.host}/proxy/zim`;
+
 
 export function Paginator({activePage, onPageChange, totalPages, showFirstAndLast, size = 'mini'}) {
     const handlePageChange = (e, {activePage}) => {

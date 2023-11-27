@@ -479,6 +479,11 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     zim_factory('test zim')
     test_session.commit()
 
+    # Search string is required.
+    body = dict(search_str=None)
+    request, response = await test_async_client.post('/api/search_suggestions', json=body)
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
     body = dict(search_str='foo')
     request, response = await test_async_client.post('/api/search_suggestions', json=body)
     assert response.status_code == HTTPStatus.OK

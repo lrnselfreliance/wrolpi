@@ -5,6 +5,7 @@ import {
     HelpPopup,
     humanFileSize,
     InfoMessage,
+    MAP_VIEWER_URI,
     PageContainer,
     TabLinks,
     useTitle,
@@ -280,10 +281,10 @@ class ManageMap extends React.Component {
     }
 }
 
-function MapPage() {
+function MapViewer() {
     return <iframe
         title='map'
-        src={`http://${window.location.hostname}:8084/`}
+        src={MAP_VIEWER_URI}
         style={{
             position: 'fixed',
             height: '100%',
@@ -303,7 +304,7 @@ export function MapRoute() {
     return <div style={{marginTop: '2em'}}>
         <TabLinks links={links}/>
         <Routes>
-            <Route path='/' exact element={<MapPage/>}/>
+            <Route path='/' exact element={<MapViewer/>}/>
             <Route path='manage' exact element={<ManageMap/>}/>
         </Routes>
     </div>

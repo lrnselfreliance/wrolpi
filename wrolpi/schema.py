@@ -139,7 +139,7 @@ class VINDecoderResponse:
 
 @dataclass
 class SearchSuggestionsRequest:
-    search_str: Optional[str] = None
+    search_str: str
 
 
 @dataclass

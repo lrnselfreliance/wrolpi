@@ -5,6 +5,7 @@ import re
 from datetime import datetime
 from typing import List, Tuple, Dict
 
+import cachetools.func
 from libzim import Entry
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound  # noqa
@@ -206,6 +207,13 @@ def headline_zim(search_str: str, zim_id: int, tag_names: List[str] = None, offs
         estimate=estimate,
     )
     return results
+
+
+@cachetools.func.mru_cache(maxsize=1_000)
+def get_estimates(search_str: str) -> List[int]:
+    zims = Zims.get_all()
+    estimates = [i.estimate(search_str) for i in zims]
+    return estimates
 
 
 @optional_session

@@ -507,21 +507,43 @@ async def post_shutdown(_: Request):
 
 
 @api_bp.post('/search_suggestions')
-@validate(schema.SearchSuggestionsRequest)
+@validate(json=schema.SearchSuggestionsRequest)
 async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequest):
-    """Used by the Global search to suggest links to the user."""
+    """Used by the Global search to suggest related Channels/Domains/etc. to the user.
+
+    @note: Does not handle Tags, unlike search_estimates"""
     from modules.videos.channel.lib import search_channels_by_name
     from modules.archive.lib import search_domains_by_name
+    from modules.zim import lib as zim_lib
+
+    file_groups, channels, domains = await asyncio.gather(
+        estimate_search(body.search_str, []),
+        search_channels_by_name(body.search_str),
+        search_domains_by_name(body.search_str),
+    )
+
+    # Get estimates using libzim.
+    zims_estimates = zim_lib.get_estimates(body.search_str)
+
+    ret = dict(
+        file_groups=file_groups,
+        zims_estimates=zims_estimates,
+        channels=channels,
+        domains=domains,
+    )
+    return json_response(ret)
+
+
+@api_bp.post('/search_estimates')
+@validate(json=schema.SearchEstimateRequest)
+async def post_search_estimates(_: Request, body: schema.SearchEstimateRequest):
+    """Get an estimated count of FileGroups/Zims which may or may not have been tagged."""
     from modules.zim.models import Zims
 
     if not body.search_str and not body.tag_names:
         return response.empty(HTTPStatus.BAD_REQUEST)
 
-    file_groups, channels, domains = await asyncio.gather(
-        estimate_search(body.search_str, body.tag_names),
-        search_channels_by_name(body.search_str),
-        search_domains_by_name(body.search_str),
-    )
+    file_groups = await estimate_search(body.search_str, body.tag_names)
 
     if body.tag_names:
         # Get actual count of entries tagged with the tag names.
@@ -544,9 +566,7 @@ async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequ
 
     ret = dict(
         file_groups=file_groups,
-        zims_estimates=zims_estimates,
-        channels=channels,
-        domains=domains,
+        zims_estimates=zims_estimates
     )
     return json_response(ret)
 

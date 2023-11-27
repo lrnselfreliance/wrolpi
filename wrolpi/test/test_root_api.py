@@ -470,6 +470,7 @@ async def test_post_vin_number_decoder(test_async_client):
 @pytest.mark.asyncio
 async def test_search_suggestions(test_session, test_async_client, channel_factory, archive_factory, tag_factory,
                                   zim_factory):
+    # WARNING results are cached, this test uses unique queries to avoid conflicts.
     channel_factory(name='Foo')
     channel_factory(name='Fool')
     channel_factory(name='Bar')
@@ -489,7 +490,7 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     assert response.json['domains'] == [{'directory': 'archive/foo.com', 'domain': 'foo.com', 'id': 1}]
     assert response.json['file_groups'] == 1
     assert 'zims_estimates' in response.json and len(response.json['zims_estimates']) == 1
-    assert response.json['zims_estimates'][0]['estimate'] == 0
+    assert response.json['zims_estimates'][0] == 0
 
     body = dict(search_str='bar')
     request, response = await test_async_client.post('/api/search_suggestions', json=body)
@@ -497,7 +498,7 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     assert response.json['channels'] == [{'directory': 'Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar'}]
     assert response.json['domains'] == [{'directory': 'archive/bar.com', 'domain': 'bar.com', 'id': 2}]
     assert response.json['file_groups'] == 1
-    assert response.json['zims_estimates'][0]['estimate'] == 0
+    assert response.json['zims_estimates'][0] == 0
 
     body = dict(search_str='one')
     request, response = await test_async_client.post('/api/search_suggestions', json=body)
@@ -505,6 +506,21 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     assert response.json['channels'] == []
     assert response.json['domains'] == []
     assert response.json['file_groups'] == 0
+    assert response.json['zims_estimates'][0] == 2
+
+
+@pytest.mark.asyncio
+async def test_search_estimates(test_session, test_async_client, archive_factory, zim_factory):
+    archive_factory(domain='foo.com', contents='contents of foo')
+    archive_factory(domain='bar.com', contents='contents of bar')
+    zim_factory('test zim')
+    test_session.commit()
+
+    body = dict(search_str='one')
+    request, response = await test_async_client.post('/api/search_estimates', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file_groups'] == 0
+    assert len(response.json['zims_estimates']) == 1
     assert response.json['zims_estimates'][0]['estimate'] == 2
 
 

@@ -70,7 +70,7 @@ export function Paginator({activePage, onPageChange, totalPages, showFirstAndLas
                 onPageChange={handlePageChange}
                 size={size}
                 siblingRange={2}
-                totalPages={totalPages}
+                totalPages={totalPages || 1}
                 firstItem={showFirstAndLast ? undefined : null}
                 lastItem={showFirstAndLast ? undefined : null}
             />
@@ -82,7 +82,7 @@ export function Paginator({activePage, onPageChange, totalPages, showFirstAndLas
                 onPageChange={handlePageChange}
                 size={size}
                 siblingRange={5}
-                totalPages={totalPages}
+                totalPages={totalPages || 1}
                 firstItem={showFirstAndLast ? undefined : null}
                 lastItem={showFirstAndLast ? undefined : null}
             />

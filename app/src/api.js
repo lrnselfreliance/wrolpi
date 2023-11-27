@@ -1022,6 +1022,21 @@ export async function searchSuggestions(search_str) {
     }
 }
 
+export async function searchEstimate(search_str, tagNames) {
+    const body = {search_str: search_str, tag_names: tagNames};
+    const response = await apiPost(`${API_URI}/search_estimates`, body);
+    if (response.ok) {
+        const content = await response.json();
+
+        const fileGroups = content.file_groups;
+        const zimsEstimates = content.zims_estimates;
+        return {
+            fileGroups,
+            zimsEstimates,
+        }
+    }
+}
+
 export async function getOutdatedZims() {
     const response = await apiGet(`${API_URI}/zim/outdated`);
     if (response.status === 200) {

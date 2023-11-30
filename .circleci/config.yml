@@ -159,7 +159,7 @@ jobs:
   api-tests-3-11:
     docker:
       - image: cimg/python:3.11
-      - image: cimg/postgres:14.1
+      - image: cimg/postgres:16.1
         environment:
           POSTGRES_USER: postgres
           POSTGRES_DB: wrolpi

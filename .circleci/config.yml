@@ -61,6 +61,20 @@ jobs:
           paths:
             - ./app/node_modules
       - run: cd app && npm run test
+  app-tests-20:
+    docker:
+      - image: cimg/node:20.10
+    resource_class: small
+    steps:
+      - checkout
+      - restore_cache:
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+      - run: cd app && npm install --legacy-peer-deps
+      - save_cache:
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+          paths:
+            - ./app/node_modules
+      - run: cd app && npm run test
   api-tests-3-8:
     docker:
       - image: cimg/python:3.8

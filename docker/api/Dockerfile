@@ -1,4 +1,4 @@
-FROM python:3.8-buster
+FROM python:3.11-buster
 ENV DOCKER=true
 WORKDIR /opt/wrolpi
 

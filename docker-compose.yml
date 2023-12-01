@@ -81,11 +81,15 @@ services:
   web:
     depends_on:
       - app
-    image: nginx:latest
+    build:
+      context: .
+      dockerfile: docker/web/Dockerfile
     ports:
       - ${WEB_HOST-0.0.0.0}:${WEB_PORT-8080}:80
+      - ${WEB_HOST-0.0.0.0}:${WEB_HTTPS_PORT-8443}:443
     volumes:
-      - './nginx.dev.conf:/etc/nginx/nginx.conf'
+      - './docker/web/nginx.dev.conf:/etc/nginx/nginx.conf'
+      - './docker/web/wrolpi.conf:/etc/nginx/wrolpi.conf'
       - './icon.ico:/etc/nginx/favicon.ico'
       - './icon.png:/etc/nginx/icon.png'
       - './test:/opt/media'

@@ -44,7 +44,11 @@ chmod 0600 /home/pi/.pgpass
 chown -R wrolpi:wrolpi /opt/wrolpi
 
 # Configure nginx.
+openssl genrsa -out /etc/nginx/cert.key 2048
+openssl req -new -x509 -nodes -key /etc/nginx/cert.key -out /etc/nginx/cert.crt \
+  -days 3650 -subj "/C=US/ST=State/L=City/O=Org/OU=WROLPi/CN=wrolpi.local"
 cp /opt/wrolpi/etc/raspberrypios/nginx.conf /etc/nginx/nginx.conf
+cp /opt/wrolpi/etc/raspberrypios/wrolpi.conf /etc/nginx/wrolpi.conf
 cp /opt/wrolpi/etc/raspberrypios/50x.html /var/www/50x.html
 
 # WROLPi needs a few privileged commands.

@@ -22,6 +22,7 @@ import {FilePreviewProvider} from "./components/FilePreview";
 import {TagsProvider} from "./Tags";
 import {ZimRoute} from "./components/Zim";
 import {SearchSuggestionsProvider} from "./components/Search";
+import {HELP_VIEWER_URI} from "./components/Common";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);
@@ -52,7 +53,7 @@ function Footer() {
 function HelpPage() {
     return <iframe
         title='map'
-        src={`http://${window.location.hostname}:8086/`}
+        src={HELP_VIEWER_URI}
         style={{
             position: 'fixed',
             height: '100%',

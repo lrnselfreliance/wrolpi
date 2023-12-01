@@ -49,7 +49,8 @@ import _ from "lodash";
 import {killDownloads, startDownloads} from "../api";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
-export const API_URI = process.env && process.env.REACT_APP_API_URI ? process.env.REACT_APP_API_URI : `${window.location.protocol}//${window.location.host}/api`;
+export const API_URI = process.env && process.env.REACT_APP_API_URI ?
+    process.env.REACT_APP_API_URI : `${window.location.protocol}//${window.location.host}/api`;
 export const VIDEOS_API = `${API_URI}/videos`;
 export const ARCHIVES_API = `${API_URI}/archive`;
 export const OTP_API = `${API_URI}/otp`;
@@ -58,6 +59,7 @@ export const DEFAULT_LIMIT = 20;
 export const NAME = process.env && process.env.REACT_APP_NAME ? process.env.REACT_APP_NAME : null;
 export const MAP_VIEWER_URI = `${window.location.protocol}//${window.location.host}/proxy/map`;
 export const ZIM_VIEWER_URI = `${window.location.protocol}//${window.location.host}/proxy/zim`;
+export const HELP_VIEWER_URI = `${window.location.protocol}//${window.location.host}/proxy/help`;
 
 
 export function Paginator({activePage, onPageChange, totalPages, showFirstAndLast, size = 'mini'}) {

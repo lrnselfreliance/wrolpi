@@ -513,8 +513,11 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
         curs.execute(stmt)
 
 
-def files_being_used(files: List[pathlib.Path]) -> bool:
+def any_files_open(files: List[pathlib.Path]) -> bool:
     """Returns True if any process has any of the provided files open."""
+    if not files:
+        return False
+
     files = list(map(str, files))
 
     # Check all processes for open file descriptors
@@ -538,21 +541,27 @@ def create_refresh_queue():
 
 def add_to_refresh_queue(file: str):
     file = pathlib.Path(file)
-    size = file.stat().st_size if file.is_file() else 0
-    REFRESH_QUEUE.put((file, size))
+    REFRESH_QUEUE.put(file)
 
 
+@limit_concurrent(1)  # Only one refresh worker at a time.
 @cancelable_wrapper
 async def refresh_worker():
     while True:
-        file = size = None
+        file = None
         try:
-            file, size = REFRESH_QUEUE.get(block=True, timeout=1)
+            file = REFRESH_QUEUE.get(block=True, timeout=1)
         except Empty:
             pass
 
+        # Get the size of all files in the group, if any exist (a file may have been deleted).
+        group = glob_shared_stem(file) if file else None
+        group_size = None
+        if group:
+            group_size = sum(i.stat().st_size for i in group if i.is_file())
+
         try:
-            # Catch cancel.  Also, wait for writing to file to finish.
+            # Catch cancel.  Also, wait for writing to files to finish.
             await asyncio.sleep(1)
         except CancelledError:
             break
@@ -561,14 +570,26 @@ async def refresh_worker():
             # Queue is empty.
             continue
 
-        if file.is_file() and size != file.stat().st_size:
+        # Compare the size from 1 second ago to what it is now.
+        if group and sum(i.stat().st_size for i in group if i.is_file()) != group_size:
             # File size has changed, wait for it to finish.  The MediaDirectoryWatcher will put it back in queue.
             continue
 
+        if flags.refreshing.is_set():
+            # Refresh is already running, try again later.
+            REFRESH_QUEUE.put(file)
+            continue
+
+        if any_files_open(group):
+            # Files are busy, try again later.
+            logger.debug(f'Files of {file} are busy...')
+            REFRESH_QUEUE.put(file)
+            continue
+
         try:
-            # Search for files near the file being refreshed.
-            group = glob_shared_stem(file)
-            if not group:
+            if group:
+                _upsert_files(group, now())
+            else:
                 # File was deleted, no files around it.
                 stem, _ = split_path_stem_and_suffix(file, full=True)
                 refresh_logger.debug(f'Deleting files near {stem=}')
@@ -576,14 +597,6 @@ async def refresh_worker():
                     stmt = 'DELETE FROM file_group WHERE primary_path LIKE %(stem)s'
                     params = dict(stem=f'{stem}%')
                     curs.execute(stmt, params)
-            else:
-                if files_being_used(group):
-                    # Files are busy, try again later.
-                    logger.debug(f'Files near {file} are busy...')
-                    REFRESH_QUEUE.put(file)
-                    continue
-
-                _upsert_files(group, now())
         except Exception as e:
             logger.error('Failed to handle file change', exc_info=e)
 

@@ -116,6 +116,8 @@ outdated_zims = Flag('outdated_zims', store_db=True)
 kiwix_restart = Flag('kiwix_restart')
 # Map Importing
 map_importing = Flag('map_importing')
+# Watches files for changes.
+media_directory_watcher = Flag('media_directory_watcher')
 
 # Steps of refreshing.
 refresh_counting = Flag('refresh_counting')

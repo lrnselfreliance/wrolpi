@@ -12,6 +12,7 @@ from wrolpi import root_api, admin
 from wrolpi.common import logger, get_config, check_media_directory, limit_concurrent, \
     wrol_mode_enabled, cancel_refresh_tasks, set_log_level, background_task, cancel_background_tasks
 from wrolpi.downloader import download_manager, import_downloads_config
+from wrolpi.files.watcher import start_file_watcher
 from wrolpi.root_api import api_app
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, PYTEST
 from wrolpi.version import get_version_string
@@ -244,8 +245,15 @@ async def start_workers(app: Sanic):
         download_manager.stop()
         return
 
+    from wrolpi.files.lib import refresh_worker, create_refresh_queue
+
     async with flags.db_up.wait_for():
         download_manager.start_workers()
+
+        start_file_watcher()
+
+        create_refresh_queue()
+        app.loop.create_task(refresh_worker())
 
 
 @api_app.before_server_start

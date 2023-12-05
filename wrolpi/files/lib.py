@@ -10,11 +10,14 @@ import pathlib
 import re
 import shutil
 import subprocess
+from asyncio import CancelledError
 from itertools import zip_longest
 from pathlib import Path
+from queue import Empty
 from typing import List, Tuple, Union, Dict, Generator
 
 import cachetools.func
+import psutil
 import psycopg2
 from sqlalchemy import asc
 from sqlalchemy.orm import Session
@@ -510,7 +513,79 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
         curs.execute(stmt)
 
 
+def files_being_used(files: List[pathlib.Path]) -> bool:
+    """Returns True if any process has any of the provided files open."""
+    files = list(map(str, files))
+
+    # Check all processes for open file descriptors
+    for proc in psutil.process_iter(['open_files']):
+        for item in proc.open_files():
+            if item.path in files:
+                return True
+
+    return False
+
+
 REFRESH = multiprocessing.Manager().dict()
+REFRESH_QUEUE: multiprocessing.Queue = None
+
+
+def create_refresh_queue():
+    global REFRESH_QUEUE
+    if not REFRESH_QUEUE:
+        REFRESH_QUEUE = multiprocessing.Queue()
+
+
+def add_to_refresh_queue(file: str):
+    file = pathlib.Path(file)
+    size = file.stat().st_size if file.is_file() else 0
+    REFRESH_QUEUE.put((file, size))
+
+
+@cancelable_wrapper
+async def refresh_worker():
+    while True:
+        file = size = None
+        try:
+            file, size = REFRESH_QUEUE.get(block=True, timeout=1)
+        except Empty:
+            pass
+
+        try:
+            # Catch cancel.  Also, wait for writing to file to finish.
+            await asyncio.sleep(1)
+        except CancelledError:
+            break
+
+        if not file:
+            # Queue is empty.
+            continue
+
+        if file.is_file() and size != file.stat().st_size:
+            # File size has changed, wait for it to finish.  The MediaDirectoryWatcher will put it back in queue.
+            continue
+
+        try:
+            # Search for files near the file being refreshed.
+            group = glob_shared_stem(file)
+            if not group:
+                # File was deleted, no files around it.
+                stem, _ = split_path_stem_and_suffix(file, full=True)
+                refresh_logger.debug(f'Deleting files near {stem=}')
+                with get_db_curs(commit=True) as curs:
+                    stmt = 'DELETE FROM file_group WHERE primary_path LIKE %(stem)s'
+                    params = dict(stem=f'{stem}%')
+                    curs.execute(stmt, params)
+            else:
+                if files_being_used(group):
+                    # Files are busy, try again later.
+                    logger.debug(f'Files near {file} are busy...')
+                    REFRESH_QUEUE.put(file)
+                    continue
+
+                _upsert_files(group, now())
+        except Exception as e:
+            logger.error('Failed to handle file change', exc_info=e)
 
 
 @limit_concurrent(1)  # Only one refresh at a time.
@@ -804,15 +879,14 @@ def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List
     return results, total
 
 
-def glob_shared_stem(path: pathlib.Path) -> List[pathlib.Path]:
+def glob_shared_stem(path: Union[pathlib.Path, str]) -> List[pathlib.Path]:
     """Return all paths that share the same stem and parent path as the provided path.
 
     Example paths: foo.mp4, foo.png, foo.info.json, foobar.txt
     >>> glob_shared_stem(pathlib.Path('foo.mp4'))
     ['foo.mp4', 'foo.png', 'foo.info.json']
     """
-    if isinstance(path, str):
-        path = pathlib.Path(path)
+    path = pathlib.Path(path) if isinstance(path, str) else path
 
     stem, suffix = split_path_stem_and_suffix(path)
     escaped_stem = glob.escape(stem)
@@ -823,7 +897,7 @@ def glob_shared_stem(path: pathlib.Path) -> List[pathlib.Path]:
 
 def get_matching_directories(path: Union[str, Path]) -> List[str]:
     """
-    Return a list of directory strings that start with the provided path.  If the path is a directory, return it's
+    Return a list of directory strings that start with the provided path.  If the path is a directory, return its
     subdirectories, if the directory contains no subdirectories, return the directory.
     """
     path = str(path)

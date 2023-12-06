@@ -15,6 +15,7 @@ from wrolpi.errors import UnknownArchive
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag, TagFile
+from wrolpi.typing_ import LIST_OF_PATHS
 from wrolpi.vars import PYTEST
 from .errors import InvalidArchive
 
@@ -59,7 +60,7 @@ class Archive(Base, ModelHelper):
             raise UnknownArchive(f'Cannot find Archive with id {id_}')
         return archive
 
-    def my_paths(self, *mimetypes: str) -> List[pathlib.Path]:
+    def my_paths(self, *mimetypes: str) -> LIST_OF_PATHS:
         return self.file_group.my_paths(*mimetypes)
 
     def my_files(self, *mimetypes: str) -> List[dict]:

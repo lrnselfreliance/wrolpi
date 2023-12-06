@@ -5,6 +5,8 @@ import pathlib
 import sys
 from typing import List, Dict
 
+from wrolpi.typing_ import LIST_OF_PATHS
+
 sys.path.append(os.getcwd())
 
 from modules.videos import lib as videos_lib
@@ -12,7 +14,7 @@ from wrolpi.common import get_media_directory
 from wrolpi.files.lib import get_mimetype, split_path_stem_and_suffix
 
 
-def group_orphaned_files(orphaned_paths: List[pathlib.Path]) -> Dict[str, List[pathlib.Path]]:
+def group_orphaned_files(orphaned_paths: LIST_OF_PATHS) -> Dict[str, LIST_OF_PATHS]:
     """Group files by the `source_id` in their filename."""
     groups = dict()
     for orphan in orphaned_paths:

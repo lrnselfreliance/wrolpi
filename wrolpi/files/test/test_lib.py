@@ -899,3 +899,12 @@ async def test_move_tagged(test_session, test_directory, make_files_structure, t
     await lib.rename(new_bar, 'baz.txt')
     baz = new_bar.with_name('baz.txt')
     assert baz.read_text() == 'bar'
+
+
+@pytest.mark.asyncio
+async def test_refresh_created_handler(test_session, test_directory):
+    foo = test_directory / 'foo.txt'
+    foo.touch()
+    await lib.refresh_created_handler([(str(foo),), ])
+    assert test_session.query(FileGroup).count() == 1
+    assert lib.get_model_files_queue().qsize() == 1

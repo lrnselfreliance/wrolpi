@@ -17,6 +17,7 @@ from wrolpi.common import ConfigFile, get_media_directory, register_refresh_clea
 from wrolpi.dates import Seconds
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.errors import UnknownDirectory
+from wrolpi.typing_ import PATH_GENERATOR
 from wrolpi.vars import PYTEST
 from .common import is_valid_poster, convert_image, \
     generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
@@ -571,7 +572,7 @@ def parse_video_file_name(video_path: pathlib.Path) -> \
     return None, None, None, title
 
 
-def find_orphaned_video_files(directory: pathlib.Path) -> Generator[pathlib.Path, None, None]:
+def find_orphaned_video_files(directory: pathlib.Path) -> PATH_GENERATOR:
     """Finds all files which should be associated with a video file, but a video file does not match their stem.
 
     Example:

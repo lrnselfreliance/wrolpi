@@ -14,27 +14,25 @@ from asyncio import CancelledError
 from itertools import zip_longest
 from pathlib import Path
 from queue import Empty
-from typing import List, Tuple, Union, Dict, Generator
+from typing import List, Tuple, Union, Dict
 
 import cachetools.func
-import psutil
 import psycopg2
 from sqlalchemy import asc
 from sqlalchemy.orm import Session
 
 from wrolpi import flags
 from wrolpi.cmd import which
-from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
-    partition, cancelable_wrapper, \
-    get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk
-from wrolpi.dates import now, from_timestamp
+from wrolpi.common import get_media_directory, wrol_mode_check, logger, chunks_by_stem, background_task, walk, \
+    apply_modelers, cancelable_wrapper
+from wrolpi.dates import from_timestamp, now
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
-from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged, \
+from wrolpi.errors import InvalidFile, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged, \
     NoPrimaryFile
-from wrolpi.events import Events
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.lang import ISO_639_CODES
 from wrolpi.tags import TagFile, Tag, tag_names_to_file_group_sub_select
+from wrolpi.typing_ import PATH_OR_STR, LIST_OF_PATHS, PATH_GENERATOR
 from wrolpi.vars import PYTEST
 
 try:
@@ -90,7 +88,7 @@ def _get_directory_dict(directory: pathlib.Path,
     )
 
 
-def _get_recursive_directory_dict(directory: pathlib.Path, directories: List[pathlib.Path]) -> Dict:
+def _get_recursive_directory_dict(directory: pathlib.Path, directories: LIST_OF_PATHS) -> Dict:
     directories_cache = str(sorted(directories))
     d = _get_directory_dict(directory, directories_cache)
     if directory in directories:
@@ -261,7 +259,7 @@ SUFFIXES |= {f'.{i}.vtt' for i in ISO_639_CODES}
 
 
 @functools.lru_cache(maxsize=10_000)
-def split_path_stem_and_suffix(path: Union[pathlib.Path, str], full: bool = False) -> Tuple[str, str]:
+def split_path_stem_and_suffix(path: PATH_OR_STR, full: bool = False) -> Tuple[str, str]:
     """Get the path's stem and suffix.
 
     This function handles WROLPi suffixes like .info.json."""
@@ -285,7 +283,7 @@ def split_path_stem_and_suffix(path: Union[pathlib.Path, str], full: bool = Fals
 refresh_logger = logger.getChild('refresh')
 
 
-def _paths_to_files_dict(group: List[pathlib.Path]) -> List[dict]:
+def _paths_to_files_dict(group: LIST_OF_PATHS) -> List[dict]:
     """This generates `FileGroup.files` from a list of files."""
     files = list()
     for file in group:
@@ -304,7 +302,7 @@ def _paths_to_files_dict(group: List[pathlib.Path]) -> List[dict]:
     return files
 
 
-def get_primary_file(files: Union[Tuple[pathlib.Path], List[pathlib.Path]]) -> pathlib.Path:
+def get_primary_file(files: Union[Tuple[pathlib.Path], LIST_OF_PATHS]) -> pathlib.Path:
     """Given a list of files, return the file that we can model or index.
 
     @raise NoPrimaryFile: If not primary file can be found."""
@@ -342,7 +340,7 @@ def get_primary_file(files: Union[Tuple[pathlib.Path], List[pathlib.Path]]) -> p
     raise NoPrimaryFile(f'Cannot find primary file for group: {files}')
 
 
-def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
+def _upsert_files(files: LIST_OF_PATHS, idempotency: datetime.datetime):
     """Insert/update all records of the provided files.
 
     Any inserted files will be marked with `indexed=false`.  Any existing files will only be updated if their
@@ -434,316 +432,140 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
                              (list(map(str, non_primary_files)),))
 
 
-async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetime.datetime = None):
-    """Discover all files in the directories provided in paths, as well as all files in paths.
-
-    All records for files in `paths` that do not exist will be deleted.
-
-    Will refuse to refresh when the media directory is empty."""
-    try:
-        next(get_media_directory().iterdir())
-    except StopIteration:
-        # We don't want to delete a bunch of files which would exist if the drive was mounted.
-        raise UnknownDirectory(f'Refusing to refresh because media directory is empty or does not exist.')
-    except FileNotFoundError:
-        raise UnknownDirectory(f'Refusing to refresh because media directory is empty or does not exist.')
-
-    if not paths:
-        raise ValueError('Must provide some paths to refresh.')
-
-    idempotency = idempotency or now()
-
-    exists, deleted = partition(lambda i: i.exists(), paths)
-
-    # DISCOVER all files, upsert their records.
-
-    if exists:
-        # Recursively upsert all files that exist, and files in the existing directories.
-        directories, files = partition(lambda i: i.is_dir(), exists)
-        while directories:
-            directory = directories.pop(0)
-            try:
-                new_files, new_directories = get_files_and_directories(directory)
-            except FileNotFoundError as e:
-                # Directory may have been deleted during refresh.
-                logger.warning(f'Cannot refresh directory because it is missing: {directory}', exc_info=e)
-                continue
-            directories.extend(new_directories)
-            files.extend(new_files)
-            refresh_logger.debug(f'Discovered {len(new_files)} files in {directory}')
-            if len(files) >= 100:
-                # Wait until there are enough files to perform the upsert.
-                try:
-                    _upsert_files(files, idempotency)
-                except Exception as e:
-                    refresh_logger.error(f'Failed to upsert files', exc_info=e)
-                files = list()
-            # Sleep to catch cancel.
-            await asyncio.sleep(0)
-        if files:
-            # Not enough files for the chunks above, finish what is left.
-            try:
-                _upsert_files(files, idempotency)
-            except Exception as e:
-                refresh_logger.error(f'Failed to upsert files', exc_info=e)
-
-        refresh_logger.info('Finished discovering files.  Will now remove deleted files from DB...')
-
-    with get_db_curs(commit=True) as curs:
-        wheres = ''
-        if paths:
-            # Use LIKE to delete any children of directories that are deleted.
-            wheres = ' OR '.join([curs.mogrify('primary_path LIKE %s', (f'{i}/%',)).decode() for i in paths])
-        deleted_files = ''
-        if deleted:
-            # Delete any paths that do not exist.
-            deleted_files = ' OR '.join([curs.mogrify('primary_path = %s', (str(i),)).decode() for i in deleted])
-
-        idempotency = curs.mogrify('%s', (idempotency,)).decode()
-        wheres = f' ( (idempotency != {idempotency} OR idempotency is null) AND ({wheres}))' if wheres else ''
-        stmt = f'''
-            DELETE FROM file_group
-            WHERE
-                -- Delete all known-deleted files.
-                {deleted_files}
-                -- Delete any files in the refreshed paths that were not updated.
-                {" OR " + wheres if deleted_files else wheres}
-        '''
-        refresh_logger.debug(stmt)
-        curs.execute(stmt)
-
-
-def any_files_open(files: List[pathlib.Path]) -> bool:
-    """Returns True if any process has any of the provided files open."""
-    if not files:
-        return False
-
-    files = list(map(str, files))
-
-    # Check all processes for open file descriptors
-    for proc in psutil.process_iter(['open_files']):
-        for item in proc.open_files():
-            if item.path in files:
-                return True
-
-    return False
+def refresh_files():
+    pass
 
 
 REFRESH = multiprocessing.Manager().dict()
-REFRESH_QUEUE: multiprocessing.Queue = None
+QUEUES = dict()
 
 
-def create_refresh_queue():
-    global REFRESH_QUEUE
-    if not REFRESH_QUEUE:
-        REFRESH_QUEUE = multiprocessing.Queue()
+def files_queue(name: str):
+    global QUEUES
+
+    def getter() -> multiprocessing.Queue:
+        if name in QUEUES:
+            return QUEUES[name]
+        QUEUES[name] = multiprocessing.Queue()
+        return QUEUES[name]
+
+    return getter
 
 
-def add_to_refresh_queue(file: str):
-    file = pathlib.Path(file)
-    REFRESH_QUEUE.put(file)
+get_created_files_queue = files_queue('created')
+get_modified_files_queue = files_queue('modified')
+get_moved_files_queue = files_queue('moved')
+get_deleted_files_queue = files_queue('deleted')
+get_model_files_queue = files_queue('model')
+get_index_files_queue = files_queue('index')
+
+WORKERS_STARTED = multiprocessing.Event()
 
 
-@limit_concurrent(1)  # Only one refresh worker at a time.
+def start_workers(loop):
+    if WORKERS_STARTED.is_set():
+        return
+
+    WORKERS_STARTED.set()
+    loop.create_task(refresh_worker(get_created_files_queue, refresh_created_handler))
+    loop.create_task(refresh_worker(get_moved_files_queue, refresh_moved_handler))
+    loop.create_task(refresh_worker(get_model_files_queue, refresh_model_handler))
+    loop.create_task(refresh_worker(get_modified_files_queue, refresh_modified_handler))
+
+
 @cancelable_wrapper
-async def refresh_worker():
+async def refresh_worker(queue_getter: files_queue, handler: callable):
+    """Accumulate a list of arguments sent to the Queue.  After some time, send the list to the handler."""
+    start = now()
+    args_list = list()
+    logger.warning(f'Starting worker {handler=}')
+
     while True:
-        file = None
+        args = None
         try:
-            file = REFRESH_QUEUE.get(block=True, timeout=1)
+            args = queue_getter().get(block=True, timeout=1)
         except Empty:
             pass
 
-        # Get the size of all files in the group, if any exist (a file may have been deleted).
-        group = glob_shared_stem(file) if file else None
-        group_size = None
-        if group:
-            group_size = sum(i.stat().st_size for i in group if i.is_file())
+        if args:
+            args_list.append(args)
+
+        if args_list and (now() - start).total_seconds() > 1 or len(args_list) > 100:
+            # We have accumulated enough args to connect to the DB, handle them.
+            try:
+                await handler(args_list)
+            except Exception as e:
+                logger.error(f'Handler {handler} had error', exc_info=e)
+            finally:
+                args_list = list()
+                start = now()
 
         try:
-            # Catch cancel.  Also, wait for writing to files to finish.
-            await asyncio.sleep(1)
+            # Queue is empty, sleep to catch cancel.
+            await asyncio.sleep(0.1)
         except CancelledError:
+            logger.warning('Loop break')
             break
 
-        if not file:
-            # Queue is empty.
-            continue
-
-        # Compare the size from 1 second ago to what it is now.
-        if group and sum(i.stat().st_size for i in group if i.is_file()) != group_size:
-            # File size has changed, wait for it to finish.  The MediaDirectoryWatcher will put it back in queue.
-            continue
-
-        if flags.refreshing.is_set():
-            # Refresh is already running, try again later.
-            REFRESH_QUEUE.put(file)
-            continue
-
-        if any_files_open(group):
-            # Files are busy, try again later.
-            logger.debug(f'Files of {file} are busy...')
-            REFRESH_QUEUE.put(file)
-            continue
-
-        try:
-            if group:
-                _upsert_files(group, now())
-            else:
-                # File was deleted, no files around it.
-                stem, _ = split_path_stem_and_suffix(file, full=True)
-                refresh_logger.debug(f'Deleting files near {stem=}')
-                with get_db_curs(commit=True) as curs:
-                    stmt = 'DELETE FROM file_group WHERE primary_path LIKE %(stem)s'
-                    params = dict(stem=f'{stem}%')
-                    curs.execute(stmt, params)
-        except Exception as e:
-            logger.error('Failed to handle file change', exc_info=e)
+        logger.warning(f'Looped {handler=}')
 
 
-@limit_concurrent(1)  # Only one refresh at a time.
-@wrol_mode_check
-@cancelable_wrapper
-async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = True):
-    """Find, model, and index all files in the media directory."""
-    if isinstance(paths, str):
-        paths = [pathlib.Path(paths), ]
-    if isinstance(paths, pathlib.Path):
-        paths = [paths, ]
 
-    idempotency = now()
-    REFRESH['idempotency'] = idempotency
-
-    refreshing_all_files = False
-
-    with flags.refreshing:
-        if not paths:
-            refresh_logger.warning('Refreshing all files')
-            refreshing_all_files = True
-        else:
-            refresh_logger.warning(f'Refreshing {", ".join(list(map(str, paths)))}')
-        if send_events:
-            Events.send_global_refresh_started()
-
-        # Add all files in the media directory to the DB.
-        paths = paths or [get_media_directory()]
-
-        directories = list(filter(lambda i: i.is_dir(), paths))
-        found_directories = set()
-        if directories:
-            with flags.refresh_counting:
-                while directories:
-                    directory = directories.pop()
-                    files, dirs = get_files_and_directories(directory)
-                    directories.extend(dirs)
-                    found_directories |= set(dirs)
-                    REFRESH['counted_files'] = REFRESH.get('counted_files', 0) + len(files)
-                    # Sleep to catch cancel.
-                    await asyncio.sleep(0)
-                refresh_logger.info(f'Counted {REFRESH["counted_files"]} files')
-
-        with flags.refresh_discovery:
-            await refresh_discover_paths(paths, idempotency)
-            if send_events:
-                Events.send_global_refresh_discovery_completed()
-
-        # Model all files that have not been indexed.
-        with flags.refresh_modeling:
-            await apply_modelers()
-            if send_events:
-                Events.send_global_refresh_modeling_completed()
-
-        # Index the rest of the files that were not indexed by modelers.
-        with flags.refresh_indexing:
-            await apply_indexers()
-            if send_events:
-                Events.send_global_refresh_indexing_completed()
-
-        # Cleanup any outdated file data.
-        with flags.refresh_cleanup:
-            await apply_refresh_cleanup()
-
-            with get_db_session() as session:
-                parent_directories = {i[0] for i in session.query(Directory.path).filter(Directory.path.in_(paths))}
-                parent_directories |= set(filter(lambda i: i.is_dir(), paths))
-            await upsert_directories(parent_directories, found_directories)
-
-            if send_events:
-                Events.send_global_after_refresh_completed()
-
-        refresh_logger.warning('Done refreshing Files')
-
-        if refreshing_all_files:
-            # Only set refresh_complete flag if all files have been refreshed.
-            flags.refresh_complete.set()
-        if send_events:
-            Events.send_refresh_completed()
+async def refresh_created_handler(args_list: List[Tuple[str]]):
+    groups = [glob_shared_stem(i) for i, in args_list]
+    with get_db_session(commit=True) as session:
+        for group in groups:
+            file_group = FileGroup.from_paths(session, *group)
+            session.add(file_group)
+    # New FileGroups need to be modeled.
+    for _ in groups:
+        get_model_files_queue().put((file_group.id,))
 
 
-async def apply_indexers():
-    """Indexes any Files that have not yet been indexed by Modelers, or by previous calls of this function."""
-    from wrolpi.files.models import FileGroup
-    refresh_logger.info('Applying indexers')
-
-    while True:
-        # Continually query for Files that have not been indexed.
-        with get_db_session(commit=True) as session:
-            file_groups = session.query(FileGroup).filter(FileGroup.indexed != True).limit(20)
-            file_groups: List[FileGroup] = list(file_groups)
-
-            file_group = None
-            processed = 0
-            for file_group in file_groups:
-                processed += 1
-                try:
-                    file_group.do_index()
-                except Exception:
-                    # Error has already been logged in .do_index.
-                    if PYTEST:
-                        raise
-                # Always mark the FileGroup as indexed.  We won't try to index it again.
-                file_group.indexed = True
-
-                # Sleep to catch cancel.
-                await asyncio.sleep(0)
-
-            if file_group:
-                refresh_logger.debug(f'Indexed {processed} files near {file_group.primary_path}')
-
-            if processed < 20:
-                # Processed less than the limit, don't do the next query.
-                break
+async def refresh_modified_handler(args_list: List[Tuple[str]]):
+    files = [pathlib.Path(i) for i, in args_list]
+    with get_db_session(commit=True) as session:
+        for file in files:
+            group = glob_shared_stem(file)
+            file_group = FileGroup.get_by_path(file, session)
+            if not file_group:
+                file_group = FileGroup.from_paths(session, *group)
+                session.add(file_group)
+            get_model_files_queue().put(file_group.id)
 
 
-async def upsert_directories(parent_directories, directories):
-    """
-    Insert/update/delete directories provided.  Deletes all children of `parent_directories` which are not in
-    `directories`.
-    """
-    idempotency = now()
-    directories = list(directories) + list(parent_directories)
+async def refresh_moved_handler(args_list: List[Tuple[str, str]]):
+    with get_db_session(commit=True) as session:
+        for src, dest in args_list:
+            src_group = glob_shared_stem(src)
+            dest_group = glob_shared_stem(dest)
+            destination_primary = get_primary_file(dest_group)
+            # Delete all source files, any that still exist will be re-created without the moved files.
+            for path in src_group:
+                file_group = FileGroup.get_by_path(path, session)
+                if file_group:
+                    session.delete(file_group)
+            # Get/create the destination FileGroup.
+            dest_file_group = FileGroup.get_by_path(destination_primary, session)
+            if not dest_file_group:
+                dest_file_group = FileGroup.from_paths(session, *dest_group)
+                session.add(dest_file_group)
+            # Add any files not in the destination FileGroup to the group.
+            missing_paths = [i for i in dest_group if i not in dest_file_group.my_paths()]
+            if missing_paths:
+                dest_file_group.append_files(*missing_paths)
 
-    # Only insert directories that are children of `media_directory` and exist.
-    media_directory = get_media_directory()
-    directories = [i for i in directories if i.is_dir() and i != media_directory]
+            if src_group:
+                # Create a new FileGroup for the remaining old files.
+                src_file_group = FileGroup.from_paths(session, *src_group)
+                session.add(src_file_group)
+                get_model_files_queue().put(src_file_group.id)
 
-    if directories:
-        # Insert any directories that were created, update any directories which previously existed.
-        with get_db_curs(commit=True) as curs:
-            values = [(str(i.absolute()), i.name, idempotency) for i in directories]
-            values = mogrify(curs, values)
-            stmt = f'''
-                INSERT INTO directory (path, name, idempotency) VALUES {values}
-                ON CONFLICT (path) DO UPDATE
-                SET idempotency = EXCLUDED.idempotency
-            '''
-            curs.execute(stmt)
+            get_model_files_queue().put(dest_file_group.id)
 
-    with get_db_curs(commit=True) as curs:
-        # Delete the children of any parent directory which no longer exists.
-        for directory in parent_directories:
-            stmt = f'DELETE FROM directory WHERE path LIKE %(directory)s AND idempotency != %(idempotency)s'
-            curs.execute(stmt, dict(directory=f'{directory.absolute()}%', idempotency=idempotency))
+
+async def refresh_model_handler(file_group_id: int):
+    await apply_modelers()
 
 
 @optional_session
@@ -892,7 +714,7 @@ def handle_file_group_search_results(statement: str, params: dict) -> Tuple[List
     return results, total
 
 
-def glob_shared_stem(path: Union[pathlib.Path, str]) -> List[pathlib.Path]:
+def glob_shared_stem(path: PATH_OR_STR) -> LIST_OF_PATHS:
     """Return all paths that share the same stem and parent path as the provided path.
 
     Example paths: foo.mp4, foo.png, foo.info.json, foobar.txt
@@ -908,7 +730,7 @@ def glob_shared_stem(path: Union[pathlib.Path, str]) -> List[pathlib.Path]:
     return paths
 
 
-def get_matching_directories(path: Union[str, Path]) -> List[str]:
+def get_matching_directories(path: PATH_OR_STR) -> List[str]:
     """
     Return a list of directory strings that start with the provided path.  If the path is a directory, return its
     subdirectories, if the directory contains no subdirectories, return the directory.
@@ -992,8 +814,7 @@ def get_file_statistics():
         return statistics
 
 
-def group_files_by_stem(files: List[pathlib.Path], pre_sorted: bool = False) -> \
-        Generator[List[pathlib.Path], None, None]:
+def group_files_by_stem(files: LIST_OF_PATHS, pre_sorted: bool = False) -> PATH_GENERATOR:
     """
     Return lists of paths, each list contains only paths that share a common stem.
 

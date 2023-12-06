@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import logging
 import sys
+from asyncio import CancelledError
 
 from sanic import Sanic
 from sanic.signals import Event
@@ -183,7 +184,10 @@ async def startup(app: Sanic):
         while True:
             flags.check_db_is_up()
             flags.init_flags()
-            await asyncio.sleep(10)
+            try:
+                await asyncio.sleep(10)
+            except CancelledError:
+                break
 
     background_task(periodic_check_db_is_up())
 
@@ -192,7 +196,10 @@ async def startup(app: Sanic):
             log_level = LOG_LEVEL.value
             if log_level != logger.getEffectiveLevel():
                 set_log_level(log_level)
-            await asyncio.sleep(1)
+            try:
+                await asyncio.sleep(1)
+            except CancelledError:
+                break
 
     background_task(periodic_check_log_level())
 
@@ -201,6 +208,11 @@ async def startup(app: Sanic):
 
     from modules.zim.lib import flag_outdated_zim_files
     flag_outdated_zim_files()
+
+    start_file_watcher()
+
+    from wrolpi.files.lib import start_workers
+    start_workers(app.loop)
 
 
 @api_app.after_server_start
@@ -245,15 +257,8 @@ async def start_workers(app: Sanic):
         download_manager.stop()
         return
 
-    from wrolpi.files.lib import refresh_worker, create_refresh_queue
-
     async with flags.db_up.wait_for():
         download_manager.start_workers()
-
-        start_file_watcher()
-
-        create_refresh_queue()
-        app.loop.create_task(refresh_worker())
 
 
 @api_app.before_server_start
@@ -268,7 +273,9 @@ async def main_import_tags_config(app: Sanic):
 @limit_concurrent(1)
 async def handle_server_shutdown(*args, **kwargs):
     """Stop downloads when server is shutting down."""
+    logger.warning('Server shutdown')
     if not PYTEST:
+        logger.warning('Not pytest')
         download_manager.stop()
         await cancel_refresh_tasks()
         await cancel_background_tasks()

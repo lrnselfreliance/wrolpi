@@ -1,7 +1,7 @@
 import asyncio
+import pathlib
 import subprocess
 from multiprocessing import Manager
-from pathlib import Path
 from typing import List
 
 from sqlalchemy.orm import Session
@@ -13,6 +13,7 @@ from wrolpi.common import get_media_directory, walk, logger
 from wrolpi.dates import now, timedelta_to_timestamp, seconds_to_timestamp
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.events import Events
+from wrolpi.typing_ import LIST_OF_PATHS
 from wrolpi.vars import PROJECT_DIR
 
 logger = logger.getChild(__name__)
@@ -22,14 +23,14 @@ IMPORTING = Manager().dict(dict(
 ))
 
 
-def get_map_directory() -> Path:
+def get_map_directory() -> pathlib.Path:
     map_directory = get_media_directory() / 'map'
     if not map_directory.is_dir():
         map_directory.mkdir()
     return map_directory
 
 
-def is_pbf_file(pbf: Path) -> bool:
+def is_pbf_file(pbf: pathlib.Path) -> bool:
     """Uses file command to check type of a file.  Returns True if a file is an OpenStreetMap PBF file."""
     cmd = ('/usr/bin/file', pbf)
     try:
@@ -40,7 +41,7 @@ def is_pbf_file(pbf: Path) -> bool:
     return 'OpenStreetMap Protocolbuffer Binary Format' in output.decode()
 
 
-def is_dump_file(path: Path) -> bool:
+def is_dump_file(path: pathlib.Path) -> bool:
     """Uses file command to check type of a file.  Returns True if a file is a Postgresql dump file."""
     cmd = ('/usr/bin/file', path)
     try:
@@ -51,12 +52,12 @@ def is_dump_file(path: Path) -> bool:
     return 'PostgreSQL custom database dump' in output.decode()
 
 
-def get_map_paths() -> List[Path]:
+def get_map_paths() -> LIST_OF_PATHS:
     """Find all pbf/dump files in the map directory."""
     map_directory = get_map_directory()
     paths = walk(map_directory)
 
-    def is_valid(path: Path) -> bool:
+    def is_valid(path: pathlib.Path) -> bool:
         if path.is_file():
             if str(path).endswith('.osm.pbf') and is_pbf_file(path):
                 return True
@@ -67,7 +68,7 @@ def get_map_paths() -> List[Path]:
     return list(filter(is_valid, paths))
 
 
-def get_or_create_map_file(pbf_path: Path, session: Session) -> MapFile:
+def get_or_create_map_file(pbf_path: pathlib.Path, session: Session) -> MapFile:
     """Finds the MapFile row in the DB, or creates one."""
     map_file: MapFile = session.query(MapFile).filter_by(path=str(pbf_path)).one_or_none()
     if map_file:
@@ -161,7 +162,7 @@ async def import_files(paths: List[str]):
                 Events.send_map_import_failed(f'Map import failed!  See server logs.')
 
 
-async def run_import_command(*paths: Path) -> int:
+async def run_import_command(*paths: pathlib.Path) -> int:
     """Run the map import script on the provided paths.
 
     Can only import a single *.dump file, or a list of *.osm.pbf files.  They cannot be mixed.

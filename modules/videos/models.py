@@ -16,6 +16,7 @@ from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
 from wrolpi.files.models import FileGroup
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag, TagFile
+from wrolpi.typing_ import LIST_OF_PATHS
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -277,7 +278,7 @@ class Video(ModelHelper, Base):
             + self.file_group.my_files('application/x-subrip')
 
     @property
-    def caption_paths(self) -> List[pathlib.Path]:
+    def caption_paths(self) -> LIST_OF_PATHS:
         return [i['path'] for i in self.caption_files]
 
     def get_caption_text(self) -> Optional[str]:

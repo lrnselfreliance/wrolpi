@@ -277,3 +277,61 @@ async def test_import_tags_delete_missing(test_session, test_directory, test_tag
     assert len(config.tag_files) == 1
     assert len(config.tag_zims) == 1
     assert len(config.tags) == 3
+
+
+@pytest.mark.asyncio
+async def test_tags_find_by_paths(test_session, test_directory, make_files_structure, tag_factory):
+    make_files_structure({
+        'one.txt': 'one',
+        'two.txt': 'two',
+    })
+    tag_one, tag_two = tag_factory(), tag_factory()
+    await files_lib.refresh_files()
+    fg1, fg2 = test_session.query(FileGroup).order_by(FileGroup.primary_path)
+    fg1.add_tag(tag_one)
+    fg1.add_tag(tag_two)
+    fg2.add_tag(tag_two)
+    test_session.commit()
+    assert fg1.__json__()['tags'] == ['one', 'two']
+    assert fg2.__json__()['tags'] == ['two']
+
+    results = TagFile.find_by_paths([test_directory / 'one.txt', ], test_session)
+    assert len(results) == 2
+    tag_file, tag, fg = results[0]
+    assert tag == tag_one and fg == fg1
+    tag_file, tag, fg = results[1]
+    assert tag == tag_two and fg == fg1
+
+    results = TagFile.find_by_paths([test_directory / 'two.txt', ], test_session)
+    assert len(results) == 1
+    tag_file, tag, fg = results[0]
+    assert tag == tag_two and fg == fg2
+
+    results = TagFile.find_by_paths(['does not exist', ], test_session)
+    assert results == []
+
+
+@pytest.mark.asyncio
+async def test_tags_move(test_session, test_directory, make_files_structure, tag_factory, example_pdf):
+    # Tag the PDF.
+    tag_one = tag_factory()
+    await files_lib.refresh_files()
+    src_fg: FileGroup = test_session.query(FileGroup).one()
+    src_fg.add_tag(tag_one)
+    test_session.commit()
+    assert src_fg.tag_files
+    tag_file: TagFile = src_fg.tag_files[0]
+    assert src_fg == tag_file.file_group and tag_file in src_fg.tag_files
+
+    # Move the PDF file, move the associated tag.
+    dest = test_directory / 'rename.pdf'
+    example_pdf.rename(dest)
+    dest_fg: FileGroup = FileGroup.from_paths(test_session, dest)
+    test_session.flush([dest_fg, ])
+    tag_file.move(dest_fg)
+    test_session.delete(src_fg)
+    test_session.commit()
+
+    assert test_session.query(FileGroup).count() == 1
+    fg: FileGroup = test_session.query(FileGroup).one()
+    assert fg == dest_fg and fg.tag_files

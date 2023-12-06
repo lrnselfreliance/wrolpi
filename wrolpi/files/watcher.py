@@ -15,34 +15,33 @@ watchdog_logger.setLevel(logging.WARNING)
 
 class MediaDirectoryWatcher(FileSystemEventHandler):
 
-    def on_modified(self, event: FileModifiedEvent):
-        if event.is_directory:
-            return
-
-        logger.debug(f'MediaDirectoryWatcher.on_modified {event=}')
-        files_lib.add_to_refresh_queue(event.src_path)
-
     def on_created(self, event: FileCreatedEvent):
         if event.is_directory:
             return
 
         logger.debug(f'MediaDirectoryWatcher.on_created {event=}')
-        files_lib.add_to_refresh_queue(event.src_path)
+        files_lib.get_created_files_queue().put((event.src_path,))
+
+    def on_modified(self, event: FileModifiedEvent):
+        if event.is_directory:
+            return
+
+        logger.debug(f'MediaDirectoryWatcher.on_modified {event=}')
+        files_lib.get_modified_files_queue().put((event.src_path,))
 
     def on_moved(self, event: FileMovedEvent):
         if event.is_directory:
             return
 
         logger.debug(f'MediaDirectoryWatcher.on_moved {event=}')
-        files_lib.add_to_refresh_queue(event.src_path)
-        files_lib.add_to_refresh_queue(event.dest_path)
+        files_lib.get_moved_files_queue().put((event.src_path, event.dest_path))
 
     def on_deleted(self, event):
         if event.is_directory:
             return
 
         logger.debug(f'MediaDirectoryWatcher.on_deleted {event=}')
-        files_lib.add_to_refresh_queue(event.src_path)
+        files_lib.get_deleted_files_queue().put((event.src_path,))
 
 
 # Only one observer will be started.

@@ -39,6 +39,7 @@ from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import Directory, FileGroup
 from wrolpi.root_api import BLUEPRINTS, api_app
 from wrolpi.tags import Tag
+from wrolpi.typing_ import LIST_OF_PATHS
 from wrolpi.vars import PROJECT_DIR
 
 
@@ -628,7 +629,7 @@ def image_bytes_factory():
 def insert_file_group(test_session, test_directory):
     """Inserts a FileGroup based on the provided paths.  Does not verify if the files exist."""
 
-    def _(paths: List[pathlib.Path]):
+    def _(paths: LIST_OF_PATHS):
         files = [dict(path=str(i), mimetype='fake') for i in paths]
         params = dict(
             primary_path=str(paths[0]),

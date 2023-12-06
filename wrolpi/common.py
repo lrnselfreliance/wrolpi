@@ -39,6 +39,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi.dates import now, from_timestamp, seconds_to_timestamp
 from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError, LogLevelError
+from wrolpi.typing_ import PATH_OR_STR, LIST_OF_PATHS, PATH_GENERATOR
 from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS
 
 LOG_LEVEL = multiprocessing.Value(ctypes.c_int, 20)
@@ -622,7 +623,7 @@ def get_absolute_media_path(path: str) -> Path:
     return path
 
 
-def get_relative_to_media_directory(path: Union[str, Path]) -> Path:
+def get_relative_to_media_directory(path: PATH_OR_STR) -> Path:
     """
     Get the path for a file/directory relative to the config media directory.
 
@@ -644,7 +645,7 @@ def minimize_dict(d: dict, keys: Iterable) -> Optional[dict]:
     return {k: d[k] for k in set(keys) & d.keys()}
 
 
-def make_media_directory(path: Union[str, Path]):
+def make_media_directory(path: PATH_OR_STR):
     """Make a directory relative within the media directory."""
     media_dir = get_media_directory()
     path = media_dir / str(path)
@@ -778,7 +779,7 @@ def zig_zag(low: ZIG_TYPE, high: ZIG_TYPE) -> Generator[ZIG_TYPE, None, None]:
             num = low + (diff / divisor)
 
 
-def walk(path: Path) -> Generator[Path, None, None]:
+def walk(path: Path) -> PATH_GENERATOR:
     """Recursively walk a directory structure yielding all files and directories."""
     if not path.is_dir():
         raise ValueError('Can only walk a directory.')
@@ -1126,7 +1127,7 @@ def chunks(it: Iterable, size: int):
     return iter(lambda: tuple(islice(it, size)), ())
 
 
-def chunks_by_stem(it: List[Union[pathlib.Path, str]], size: int) -> Generator[List[pathlib.Path], None, None]:
+def chunks_by_stem(it: List[PATH_OR_STR], size: int) -> PATH_GENERATOR:
     """
     Attempt to split a list of paths near the defined size.  Keep groups of files together when they share
     matching names.
@@ -1358,6 +1359,7 @@ async def cancel_refresh_tasks():
         for task in REFRESH_TASKS:
             task.cancel()
         await asyncio.gather(*REFRESH_TASKS)
+
 
 
 def cancelable_wrapper(func: callable):

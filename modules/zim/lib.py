@@ -21,6 +21,7 @@ from wrolpi.db import get_db_session, optional_session, get_db_curs
 from wrolpi.downloader import DownloadFrequency
 from wrolpi.files.lib import refresh_files
 from wrolpi.files.models import FileGroup
+from wrolpi.typing_ import LIST_OF_PATHS
 from wrolpi.vars import PYTEST, DOCKERIZED
 
 logger = logger.getChild(__name__)
@@ -426,7 +427,7 @@ def parse_name(path: pathlib.Path) -> Tuple[str, datetime]:
     return name, date
 
 
-def find_outdated_zim_files(path: pathlib.Path = None) -> Tuple[List[pathlib.Path], List[pathlib.Path]]:
+def find_outdated_zim_files(path: pathlib.Path = None) -> Tuple[LIST_OF_PATHS, LIST_OF_PATHS]:
     """Search the Zim directory for outdated Zim files.  Returns a list of outdated, and a list of current Zim files."""
     path = path or get_zim_directory()
     if not path.is_dir():

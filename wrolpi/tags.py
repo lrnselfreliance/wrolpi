@@ -13,6 +13,7 @@ from wrolpi.common import ModelHelper, Base, logger, ConfigFile, get_media_direc
 from wrolpi.dates import TZDateTime
 from wrolpi.db import optional_session, get_db_curs
 from wrolpi.errors import UnknownTag, UsedTag, InvalidTag
+from wrolpi.typing_ import PATH_OR_STR
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -26,6 +27,26 @@ class TagFile(ModelHelper, Base):
     tag = relationship('Tag', back_populates='tag_files')
     file_group_id = Column(BigInteger, ForeignKey('file_group.id', ondelete='CASCADE'), primary_key=True)
     file_group = relationship('FileGroup', back_populates='tag_files')
+
+    def __repr__(self):
+        return f'<TagFile tag_id={self.tag_id} file_group_id={self.file_group_id}>'
+
+    @staticmethod
+    def find_by_paths(paths: List[PATH_OR_STR], session: Session) -> List[Tuple['TagFile', 'Tag', 'FileGroup']]:
+        from wrolpi.files.models import FileGroup
+        results = session.query(TagFile, Tag, FileGroup) \
+            .filter(FileGroup.primary_path.in_(paths)) \
+            .join(TagFile, TagFile.tag_id == Tag.id) \
+            .join(FileGroup, TagFile.file_group_id == FileGroup.id)
+        results = list(results)
+        return results
+
+    def move(self, dest: 'FileGroup'):
+        """Move this TagFile to a new FileGroup.  Typically, this means that the FileGroup has been renamed."""
+        session: Session = Session.object_session(self)
+        # Create a new TagFile that has my Tag, but with the destination FileGroup.
+        self.tag.add_file_group_tag(dest, session)
+        session.delete(self)
 
 
 class Tag(ModelHelper, Base):

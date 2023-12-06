@@ -16,6 +16,7 @@ from wrolpi.errors import FileGroupIsTagged
 from wrolpi.files import indexers
 from wrolpi.media_path import MediaPathType
 from wrolpi.tags import Tag, TagFile
+from wrolpi.typing_ import LIST_OF_PATHS, PATH_OR_STR
 from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
@@ -177,7 +178,7 @@ class FileGroup(ModelHelper, Base):
         # Sort files to avoid random order.
         return sorted(files, key=lambda i: i['path'])
 
-    def my_paths(self, *mimetypes: str) -> List[pathlib.Path]:
+    def my_paths(self, *mimetypes: str) -> LIST_OF_PATHS:
         return [i['path'] for i in self.my_files(*mimetypes)]
 
     def my_video_files(self):
@@ -282,7 +283,7 @@ class FileGroup(ModelHelper, Base):
 
     @staticmethod
     @optional_session
-    def get_by_path(path, session) -> Optional['FileGroup']:
+    def get_by_path(path: PATH_OR_STR, session: Session) -> Optional['FileGroup']:
         file_group = session.query(FileGroup).filter(FileGroup.primary_path == str(path)).one_or_none()
         return file_group
 

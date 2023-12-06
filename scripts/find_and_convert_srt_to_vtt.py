@@ -6,13 +6,15 @@ import subprocess
 import sys
 from typing import Generator
 
+from wrolpi.typing_ import PATH_GENERATOR
+
 logger = logging.getLogger()
 handler = logging.StreamHandler()
 handler.setFormatter(logging.Formatter('%(asctime)s %(levelname)s %(message)s'))
 logger.addHandler(handler)
 
 
-def walk(path: pathlib.Path) -> Generator[pathlib.Path, None, None]:
+def walk(path: pathlib.Path) -> PATH_GENERATOR:
     """Recursively walk a directory structure yielding all files and directories."""
     if not path.is_dir():
         raise ValueError('Can only walk a directory.')

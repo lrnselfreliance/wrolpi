@@ -13,8 +13,10 @@ from wrolpi.common import logger
 
 __all__ = ['read_captions', 'extract_captions']
 
+from wrolpi.typing_ import PATH_OR_STR
 
-def get_caption_text(caption_path: Union[str, Path]) -> Generator:
+
+def get_caption_text(caption_path: PATH_OR_STR) -> Generator:
     """Return all text from each caption of a caption file."""
     if str(caption_path).endswith('vtt'):
         # VTT
@@ -30,7 +32,7 @@ def get_caption_text(caption_path: Union[str, Path]) -> Generator:
                     yield subtitle.content
 
 
-def get_unique_caption_lines(caption_path: Union[str, Path]) -> Generator:
+def get_unique_caption_lines(caption_path: PATH_OR_STR) -> Generator:
     """Return all unique lines from each caption of a caption file."""
     last_line = None
     for text in get_caption_text(caption_path):

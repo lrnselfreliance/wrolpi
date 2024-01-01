@@ -509,25 +509,18 @@ async def post_shutdown(_: Request):
 @api_bp.post('/search_suggestions')
 @validate(json=schema.SearchSuggestionsRequest)
 async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequest):
-    """Used by the Global search to suggest related Channels/Domains/etc. to the user.
-
-    @note: Does not handle Tags, unlike search_estimates"""
+    """Used by the Global search to suggest related Channels/Domains/etc. to the user."""
     from modules.videos.channel.lib import search_channels_by_name
     from modules.archive.lib import search_domains_by_name
-    from modules.zim import lib as zim_lib
 
     file_groups, channels, domains = await asyncio.gather(
-        estimate_search(body.search_str, []),
+        estimate_search(body.search_str, body.tag_names),
         search_channels_by_name(body.search_str),
         search_domains_by_name(body.search_str),
     )
 
-    # Get estimates using libzim.
-    zims_estimates = zim_lib.get_estimates(body.search_str)
-
     ret = dict(
         file_groups=file_groups,
-        zims_estimates=zims_estimates,
         channels=channels,
         domains=domains,
     )

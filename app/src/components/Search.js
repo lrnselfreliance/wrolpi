@@ -3,7 +3,7 @@ import {createSearchParams, Route, Routes, useNavigate} from "react-router-dom";
 import {FileSearchFilterButton, FilesSearchView} from "./Files";
 import {useLatestRequest, usePages, useQuery} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
-import {searchEstimateFiles, searchEstimateZims, searchSuggestions} from "../api";
+import {searchEstimateZims, searchSuggestions} from "../api";
 import {fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
 import _ from "lodash";
 import {TagsContext} from "../Tags";
@@ -11,35 +11,28 @@ import {Header as SHeader, Label} from "semantic-ui-react";
 import {Button, Modal, ModalContent} from "./Theme";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
-export const SearchSuggestionsContext = React.createContext({
-    suggestionsResults: {},
-    suggestions: {},
-    suggestionsSums: {},
-    handleResultSelect: null,
-    resultRenderer: null,
-    loading: false,
-    searchStr: '',
-    setSearchStr: null,
-});
-
-
-export const SearchSuggestionsProvider = (props) => {
-    const value = useSearchSuggestions();
-
-    return <SearchSuggestionsContext.Provider value={value}>
-        {props.children}
-    </SearchSuggestionsContext.Provider>
-}
-
 const SUGGESTED_APPS = [
-    {location: '/more/otp', title: 'One Time Pad', description: 'Encrypt and Decrypt messages'},
-    {location: '/inventory', title: 'Inventory', description: 'Track and organize your food storage'},
-    {location: '/more/vin', title: 'Vin Decoder', description: 'Decode and analyze vehicle VIN numbers'},
-    {location: '/admin', title: 'Downloads', description: 'View your downloads'},
+    {location: '/admin', title: 'Downloads', description: 'View and control your downloads'},
+    {location: '/admin/settings', title: 'Hotspot', description: 'Control your hotspot'},
+    {location: '/admin/settings', title: 'Restart', description: 'Restart your WROLPi'},
     {location: '/admin/settings', title: 'Settings', description: 'View and modify your settings'},
+    {location: '/admin/settings', title: 'Shutdown', description: 'Shutdown your WROLPi'},
     {location: '/admin/status', title: 'Status', description: 'View the status of this WROLPi server'},
     {location: '/admin/wrol', title: 'WROL Mode', description: 'Enable or disable WROL Mode'},
+    {location: '/archive', title: 'Archives', description: 'View your Archives'},
+    {location: '/archive/domains', title: 'Domains', description: 'View the domains of your Archives'},
+    {location: '/files', title: 'Files', description: 'View your files'},
     {location: '/help', title: 'Help', description: 'Help documents for WROLPi'},
+    {location: '/inventory', title: 'Inventory', description: 'Track and organize your food storage'},
+    {location: '/map', title: 'Map', description: 'View your Map'},
+    {location: '/map/manage', title: 'Manage Map', description: 'Manage your Map'},
+    {location: '/more/otp', title: 'One Time Pad', description: 'Encrypt and Decrypt messages'},
+    {location: '/more/statistics', title: 'Statistics', description: 'View the statistics of your WROLPi'},
+    {location: '/more/vin', title: 'Vin Decoder', description: 'Decode and analyze vehicle VIN numbers'},
+    {location: '/videos', title: 'Videos', description: 'View your Videos'},
+    {location: '/videos/channel', title: 'Channels', description: 'View the Channels of your Videos'},
+    {location: '/zim', title: 'Zim', description: 'View your Zims'},
+    {location: '/zim/manage', title: 'Manage Zim', description: 'Manage your Zims'},
 ];
 
 export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {
@@ -101,27 +94,65 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
     }
 }
 
-export function useSuggestions(searchStr) {
-    const {data, sendRequest, loading} = useLatestRequest(500);
+export const SearchSuggestionsContext = React.createContext({
+    suggestions: {}, // from the api
+    suggestionsResults: {}, // suggestions converted for <Search/> results.
+    suggestionsSums: {}, // suggestions from the api summarized.
+    handleResultSelect: null, // user clicks "result"
+    resultRenderer: null,
+    loading: false,
+    searchStr: '',
+    setSearchStr: null,
+    setSearchTags: null,
+});
+
+export function useSuggestions(searchStr, tagNames) {
+    const defaultSuggestions = {
+        fileGroups: [],
+        channels: [],
+        domains: [],
+        zimsEstimates: [],
+    }
+    const [suggestions, setSuggestions] = React.useState(defaultSuggestions);
+    // fileGroups/channels/domains.
+    const {data, sendRequest, loading} = useLatestRequest(500, true);
+    // Zims are slow, so they are separate.
+    const {data: zimData, sendRequest: sendZimRequest, loading: zimLoading} = useLatestRequest(500, true);
 
     React.useEffect(() => {
-        if (!searchStr || searchStr.length === 0) {
-            return;
+        if ((searchStr && searchStr.length > 0) || (tagNames && tagNames.length > 0)) {
+            sendRequest(async () => await searchSuggestions(searchStr, tagNames));
+            sendZimRequest(async () => await searchEstimateZims(searchStr, tagNames));
         }
+    }, [searchStr, sendRequest, sendZimRequest, JSON.stringify(tagNames)]);
 
-        // Use the `useLatestRequest` to handle user typing.
-        sendRequest(async () => await searchSuggestions(searchStr));
-    }, [searchStr, sendRequest]);
+    React.useEffect(() => {
+        if (!_.isEmpty(data)) {
+            setSuggestions({
+                ...suggestions,
+                channels: data.channels,
+                fileGroups: data.fileGroups,
+                domains: data.domains,
+            });
+        }
+    }, [JSON.stringify(data)]);
 
-    return {suggestions: data, loading}
+    React.useEffect(() => {
+        if (!_.isEmpty(zimData)) {
+            setSuggestions({...suggestions, zimsEstimates: zimData.zimsEstimates});
+        }
+    }, [JSON.stringify(zimData)]);
+
+    return {suggestions, loading: loading || zimLoading}
 }
 
 
-export function useSearchSuggestions(defaultSearchStr) {
+export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
     const navigate = useNavigate();
     const [searchStr, setSearchStr] = React.useState(defaultSearchStr || '');
+    const [searchTags, setSearchTags] = React.useState(defaultTagNames);
     const {SingleTag, fuzzyMatchTagsByName} = React.useContext(TagsContext);
-    const {suggestions, loading} = useSuggestions(searchStr);
+    const {suggestions, loading} = useSuggestions(searchStr, searchTags);
 
     // The results that will be displayed by <Search>.
     const [suggestionsResults, setSuggestionsResults] = useState({});
@@ -130,7 +161,7 @@ export function useSearchSuggestions(defaultSearchStr) {
 
     const normalizeSuggestionsResults = (newSuggestions) => {
         // Convert the suggestions from the Backend to what the Semantic <Search> expects.
-        const lowerSearchStr = searchStr.toLowerCase();
+        const lowerSearchStr = searchStr ? searchStr.toLowerCase() : '';
 
         let results = {};
 
@@ -147,8 +178,10 @@ export function useSearchSuggestions(defaultSearchStr) {
             };
         }
 
-        const zimSum = newSuggestions.zimsEstimates.reduce((i, j) => i + j, 0);
-        if (zimSum > 0) {
+        const zimSum = newSuggestions.zimsEstimates && newSuggestions.zimsEstimates.length > 0
+            ? newSuggestions.zimsEstimates.reduce((i, j) => i + j.estimate, 0)
+            : null;
+        if (newSuggestions && zimSum > 0) {
             results.zimsSum = {
                 name: 'Zims', results: [
                     {title: zimSum.toString(), type: 'zims', location: `/search/zim?q=${encodeURIComponent(searchStr)}`}
@@ -176,7 +209,8 @@ export function useSearchSuggestions(defaultSearchStr) {
             }
         }
 
-        const matchingTags = fuzzyMatchTagsByName(searchStr);
+        // Match at most 5 Tags.
+        const matchingTags = searchStr ? fuzzyMatchTagsByName(searchStr).slice(0, 5) : null;
         if (matchingTags && matchingTags.length > 0) {
             results.tags = {
                 name: 'Tags', results: matchingTags.map(i => {
@@ -189,7 +223,8 @@ export function useSearchSuggestions(defaultSearchStr) {
             i.title.toLowerCase().includes(lowerSearchStr)
             || fuzzyMatch(i.title.toLowerCase(), lowerSearchStr));
         if (matchingApps && matchingApps.length > 0) {
-            results.apps = {name: 'Apps', results: matchingApps};
+            // Match at most 5 apps.
+            results.apps = {name: 'Apps', results: matchingApps.slice(0, 5)};
         }
 
         setSuggestionsResults(results);
@@ -198,8 +233,8 @@ export function useSearchSuggestions(defaultSearchStr) {
             zims: zimSum,
             channels: newSuggestions.channels.length,
             domains: newSuggestions.domains.length,
-            tags: matchingTags.length,
-            apps: matchingApps.length,
+            tags: matchingTags?.length,
+            apps: matchingApps?.length,
         });
     }
 
@@ -236,6 +271,7 @@ export function useSearchSuggestions(defaultSearchStr) {
         suggestionsSums,
         searchStr,
         setSearchStr,
+        setSearchTags,
         handleResultSelect,
         resultRenderer,
         loading
@@ -243,67 +279,20 @@ export function useSearchSuggestions(defaultSearchStr) {
 }
 
 
-export function useSearchEstimate(searchStr, tagNames) {
-    const {data: filesData, sendRequest: sendFilesRequest, loading: loadingFiles} = useLatestRequest(250);
-    const {data: zimsData, sendRequest: sendZimsRequest, loading: loadingZims} = useLatestRequest(250);
+export const SearchSuggestionsProvider = (props) => {
+    const value = useSearchSuggestions();
 
-    // The estimates from the response.
-    const [estimates, setEstimates] = React.useState({
-        fileGroups: [],
-        zims: [],
-    });
-    // The estimates summarized.
-    const [estimatesSums, setEstimatesSums] = React.useState({
-        fileGroups: 0,
-        zims: 0,
-    });
-
-    React.useEffect(() => {
-        // Handle results from `sendRequest`.
-        if (_.isEmpty(filesData)) {
-            return;
-        }
-
-        setEstimates({...estimates, fileGroups: filesData.fileGroups});
-        setEstimatesSums({...estimatesSums, fileGroups: filesData.fileGroups});
-    }, [JSON.stringify(filesData)]);
-
-    React.useEffect(() => {
-        sendFilesRequest(async () => await searchEstimateFiles(searchStr, tagNames));
-    }, [searchStr, JSON.stringify(tagNames)], sendFilesRequest);
-
-    React.useEffect(() => {
-        // Handle results from `sendRequest`.
-        if (_.isEmpty(zimsData)) {
-            return;
-        }
-
-        setEstimates({...estimates, zimsEstimates: zimsData.zimsEstimates});
-        setEstimatesSums({...estimatesSums, zims: zimsData.zimsEstimates.reduce((i, j) => i + j['estimate'], 0)});
-    }, [JSON.stringify(zimsData)]);
-
-    React.useEffect(() => {
-        sendZimsRequest(async () => await searchEstimateZims(searchStr, tagNames));
-    }, [searchStr, JSON.stringify(tagNames)], sendZimsRequest);
-
-    return {
-        estimates,
-        estimatesSums,
-        loading: loadingFiles || loadingZims,
-    }
+    return <SearchSuggestionsContext.Provider value={value}>
+        {props.children}
+    </SearchSuggestionsContext.Provider>
 }
 
 
 export function SearchView() {
-    const {searchStr, activeTags} = useSearch();
-    const {estimates, estimatesSums, loading} = useSearchEstimate(searchStr, activeTags);
+    const {suggestions, suggestionsSums, loading} = useContext(SearchSuggestionsContext);
 
-    let filesTabName = <span>Files <Label>?</Label></span>;
-    let zimsTabName = <span>Zims<Label>?</Label></span>;
-    if (!_.isEmpty(estimatesSums)) {
-        filesTabName = <span>Files <Label>{normalizeEstimate(estimatesSums.fileGroups)}</Label></span>;
-        zimsTabName = <span>Zims <Label>{normalizeEstimate(estimatesSums.zims)}</Label></span>;
-    }
+    const filesTabName = <span>Files <Label>{normalizeEstimate(suggestionsSums?.fileGroups)}</Label></span>;
+    const zimsTabName = <span>Zims <Label>{normalizeEstimate(suggestionsSums?.zims)}</Label></span>;
 
     const links = [
         {text: filesTabName, to: '/search', key: 'filesSearch', end: true},
@@ -314,7 +303,7 @@ export function SearchView() {
         <TabLinks links={links}/>
         <Routes>
             <Route path='/*' element={<FilesSearchView/>}/>
-            <Route path='/zim' exact element={<ZimSearchView estimates={estimates} loading={loading}/>}/>
+            <Route path='/zim' exact element={<ZimSearchView suggestions={suggestions} loading={loading}/>}/>
         </Routes>
     </React.Fragment>
 }

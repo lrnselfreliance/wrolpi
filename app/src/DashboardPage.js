@@ -156,19 +156,34 @@ export function Getters() {
 export function DashboardPage() {
     const navigate = useNavigate();
 
+    // The search the user submitted.
     const {searchStr, setSearchStr, activeTags} = useSearch();
+    // The search that the user is typing.
+    const [localSearchStr, setLocalSearchStr] = React.useState(searchStr);
+    console.log('searchStr', searchStr, 'localSearchStr', localSearchStr);
     const {
         suggestionsResults,
         handleResultSelect,
         resultRenderer,
         loading,
-        setSearchStr: setSuggestionSearchStr
+        setSearchStr: setSuggestionSearchStr,
+        setSearchTags,
     } = useContext(SearchSuggestionsContext);
     const {status} = useContext(StatusContext);
 
     React.useEffect(() => {
-        setSuggestionSearchStr(searchStr);
-    }, [searchStr])
+        setSuggestionSearchStr(localSearchStr);
+    }, [localSearchStr]);
+
+    React.useEffect(() => {
+        setLocalSearchStr(searchStr);
+    }, [searchStr]);
+
+    React.useEffect(() => {
+        if (activeTags) {
+            setSearchTags(activeTags);
+        }
+    }, [JSON.stringify(activeTags)]);
 
     let title = 'Dashboard';
     if (searchStr) {
@@ -192,24 +207,28 @@ export function DashboardPage() {
         body = <SearchView/>;
     }
 
+    const getSearchResultsInput = (props) => {
+        return <SearchResultsInput clearable
+                                   searchStr={localSearchStr}
+                                   onChange={setLocalSearchStr}
+                                   onSubmit={setSearchStr}
+                                   placeholder='Search everywhere...'
+                                   onClear={() => navigate('/')}
+                                   style={{marginBottom: '2em'}}
+                                   results={suggestionsResults}
+                                   handleResultSelect={handleResultSelect}
+                                   resultRenderer={resultRenderer}
+                                   loading={loading}
+                                   {...props}
+        />;
+    };
+
     return <PageContainer>
         <Media at='mobile'>
             <Grid>
                 <Grid.Row columns={2}>
                     <Grid.Column width={13}>
-                        <SearchResultsInput clearable
-                                            searchStr={searchStr}
-                                            onChange={setSearchStr}
-                                            onSubmit={setSearchStr}
-                                            size='large'
-                                            placeholder='Search everywhere...'
-                                            onClear={() => navigate('/')}
-                                            style={{marginBottom: '2em'}}
-                                            results={suggestionsResults}
-                                            handleResultSelect={handleResultSelect}
-                                            resultRenderer={resultRenderer}
-                                            loading={loading}
-                        />
+                        {getSearchResultsInput({size: 'large'})}
                     </Grid.Column>
                     <Grid.Column width={3} textAlign='right'>
                         <FileSearchFilterButton size='large'/>
@@ -221,19 +240,7 @@ export function DashboardPage() {
             <Grid>
                 <Grid.Row columns={2}>
                     <Grid.Column mobile={14}>
-                        <SearchResultsInput clearable
-                                            searchStr={searchStr}
-                                            onChange={setSearchStr}
-                                            onSubmit={setSearchStr}
-                                            size='big'
-                                            placeholder='Search everywhere...'
-                                            onClear={() => navigate('/')}
-                                            style={{marginBottom: '2em'}}
-                                            results={suggestionsResults}
-                                            handleResultSelect={handleResultSelect}
-                                            resultRenderer={resultRenderer}
-                                            loading={loading}
-                        />
+                        {getSearchResultsInput({size: 'big'})}
                     </Grid.Column>
                     <Grid.Column textAlign='right' width={2}>
                         <FileSearchFilterButton size='big'/>

@@ -140,9 +140,4 @@ class VINDecoderResponse:
 @dataclass
 class SearchSuggestionsRequest:
     search_str: Optional[str] = None
-
-
-@dataclass
-class SearchEstimateRequest:
-    search_str: Optional[str] = None
     tag_names: List[str] = field(default_factory=lambda: list())

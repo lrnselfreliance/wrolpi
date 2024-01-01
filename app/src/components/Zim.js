@@ -287,10 +287,10 @@ const ZimsRefreshWarning = () => {
     </Message>;
 }
 
-export const ZimSearchView = ({estimates, loading}) => {
+export const ZimSearchView = ({suggestions, loading}) => {
     const [activeIndex, setActiveIndex] = React.useState(null);
     const {searchStr, activeTags, setTags} = useSearch();
-    const {zimsEstimates} = estimates;
+    const {zimsEstimates} = suggestions;
 
     const handleClick = (index, activeIndex_) => {
         setActiveIndex(index === activeIndex_ ? -1 : index);
@@ -308,7 +308,11 @@ export const ZimSearchView = ({estimates, loading}) => {
             onClick={handleClick}
         />);
     } else if (loading) {
-        body = <Loader active={true}/>;
+        body = <AccordionContent>
+            <Segment placeholder>
+                <Loader active={true}/>
+            </Segment>
+        </AccordionContent>;
     } else if (_.isEmpty(zimsEstimates)) {
         body = <ZimsRefreshWarning/>;
     }

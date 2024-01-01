@@ -1003,32 +1003,19 @@ export async function fetchDecoded(vinNumber) {
     }
 }
 
-export async function searchSuggestions(search_str) {
-    const body = {search_str: search_str};
+export async function searchSuggestions(search_str, tagNames) {
+    const body = {search_str: search_str, tag_names: tagNames};
     const response = await apiPost(`${API_URI}/search_suggestions`, body);
     if (response.ok) {
         const content = await response.json();
 
         const fileGroups = content.file_groups;
-        const zimsEstimates = content.zims_estimates;
         const channels = content.channels;
         const domains = content.domains;
         return {
             fileGroups,
-            zimsEstimates,
             channels,
             domains,
-        }
-    }
-}
-
-export async function searchEstimateFiles(search_str, tagNames) {
-    const body = {search_str: search_str, tag_names: tagNames};
-    const response = await apiPost(`${API_URI}/files/search_estimates`, body);
-    if (response.ok) {
-        const content = await response.json();
-        return {
-            fileGroups: content.file_groups,
         }
     }
 }

@@ -1396,7 +1396,10 @@ export function TagIcon() {
 }
 
 export function normalizeEstimate(estimate) {
-    return estimate > 999 ? '>999' : estimate;
+    if (Number.isInteger(estimate)) {
+        return estimate > 999 ? '>999' : estimate.toString();
+    }
+    return '?';
 }
 
 export function useAPIButton(

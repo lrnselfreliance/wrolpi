@@ -1022,17 +1022,24 @@ export async function searchSuggestions(search_str) {
     }
 }
 
-export async function searchEstimate(search_str, tagNames) {
+export async function searchEstimateFiles(search_str, tagNames) {
     const body = {search_str: search_str, tag_names: tagNames};
-    const response = await apiPost(`${API_URI}/search_estimates`, body);
+    const response = await apiPost(`${API_URI}/files/search_estimates`, body);
     if (response.ok) {
         const content = await response.json();
-
-        const fileGroups = content.file_groups;
-        const zimsEstimates = content.zims_estimates;
         return {
-            fileGroups,
-            zimsEstimates,
+            fileGroups: content.file_groups,
+        }
+    }
+}
+
+export async function searchEstimateZims(search_str, tagNames) {
+    const body = {search_str: search_str, tag_names: tagNames};
+    const response = await apiPost(`${API_URI}/zim/search_estimates`, body);
+    if (response.ok) {
+        const content = await response.json();
+        return {
+            zimsEstimates: content.zims_estimates,
         }
     }
 }

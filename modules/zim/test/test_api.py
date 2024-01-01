@@ -218,3 +218,15 @@ async def test_find_outdated_zim_files(test_session, test_directory, test_zim_by
     assert wikipedia_two.is_file()
     assert asdf.is_file()
     assert empty.is_file()
+
+
+@pytest.mark.asyncio
+async def test_search_estimates(test_session, test_async_client, zim_factory):
+    zim_factory('test zim')
+    test_session.commit()
+
+    body = dict(search_str='one')
+    request, response = await test_async_client.post('/api/zim/search_estimates', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert len(response.json['zims_estimates']) == 1
+    assert response.json['zims_estimates'][0]['estimate'] == 2

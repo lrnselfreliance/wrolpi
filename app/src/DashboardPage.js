@@ -154,12 +154,21 @@ export function Getters() {
 }
 
 export function DashboardPage() {
-
     const navigate = useNavigate();
 
     const {searchStr, setSearchStr, activeTags} = useSearch();
-    const {suggestionsResults, handleResultSelect, resultRenderer, loading} = useContext(SearchSuggestionsContext);
+    const {
+        suggestionsResults,
+        handleResultSelect,
+        resultRenderer,
+        loading,
+        setSearchStr: setSuggestionSearchStr
+    } = useContext(SearchSuggestionsContext);
     const {status} = useContext(StatusContext);
+
+    React.useEffect(() => {
+        setSuggestionSearchStr(searchStr);
+    }, [searchStr])
 
     let title = 'Dashboard';
     if (searchStr) {

@@ -585,3 +585,15 @@ async def test_delete_directory_recursive(test_session, test_directory, make_fil
 
     empty = test_session.query(FileGroup).one()
     assert empty.primary_path.name == 'empty'
+
+
+@pytest.mark.asyncio
+async def test_search_estimates(test_session, test_async_client, archive_factory):
+    archive_factory(domain='foo.com', contents='contents of foo')
+    archive_factory(domain='bar.com', contents='contents of bar')
+    test_session.commit()
+
+    body = dict(search_str='one')
+    request, response = await test_async_client.post('/api/files/search_estimates', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file_groups'] == 0

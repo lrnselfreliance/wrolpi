@@ -5,6 +5,7 @@ import {
     Divider,
     Header,
     Icon,
+    Loader,
     Modal,
     ModalActions,
     ModalContent,
@@ -286,7 +287,7 @@ const ZimsRefreshWarning = () => {
     </Message>;
 }
 
-export const ZimSearchView = ({estimates}) => {
+export const ZimSearchView = ({estimates, loading}) => {
     const [activeIndex, setActiveIndex] = React.useState(null);
     const {searchStr, activeTags, setTags} = useSearch();
     const {zimsEstimates} = estimates;
@@ -295,7 +296,7 @@ export const ZimSearchView = ({estimates}) => {
         setActiveIndex(index === activeIndex_ ? -1 : index);
     }
 
-    let body = <ZimsRefreshWarning/>;
+    let body;
     if (!_.isEmpty(zimsEstimates)) {
         body = zimsEstimates.map((i, index) => <ZimAccordion
             key={i['path']}
@@ -306,6 +307,10 @@ export const ZimSearchView = ({estimates}) => {
             activeTags={activeTags}
             onClick={handleClick}
         />);
+    } else if (loading) {
+        body = <Loader active={true}/>;
+    } else if (_.isEmpty(zimsEstimates)) {
+        body = <ZimsRefreshWarning/>;
     }
 
     return <>

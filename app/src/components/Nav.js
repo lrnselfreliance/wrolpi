@@ -6,6 +6,7 @@ import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {CPUTemperatureIcon, DarkModeToggle, HotspotStatusIcon, NAME, SystemLoadIcon} from "./Common";
 import {ShareButton} from "./Share";
 import {useWROLMode} from "../hooks/customHooks";
+import {SearchIconButton} from "./Search";
 
 const links = [
     {text: 'Videos', to: '/videos', key: 'videos'},
@@ -76,6 +77,7 @@ export function NavBar() {
         <NavIconWrapper><ShareButton/></NavIconWrapper>
         <NavIconWrapper><HotspotStatusIcon/></NavIconWrapper>
         <NavIconWrapper><DarkModeToggle/></NavIconWrapper>
+        <span style={{marginTop: '0.5em'}}><SearchIconButton/></span>
     </React.Fragment>;
 
     return <>

@@ -93,3 +93,9 @@ class ZimSubscribeRequest:
 class OutdatedZims:
     outdated: List[str]
     current: List[str]
+
+
+@dataclass
+class SearchEstimateRequest:
+    search_str: Optional[str] = None
+    tag_names: List[str] = field(default_factory=lambda: list())

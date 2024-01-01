@@ -1,13 +1,15 @@
-import React, {useState} from "react";
+import React, {useContext, useState} from "react";
 import {createSearchParams, Route, Routes, useNavigate} from "react-router-dom";
-import {FilesSearchView} from "./Files";
+import {FileSearchFilterButton, FilesSearchView} from "./Files";
 import {useLatestRequest, usePages, useQuery} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
-import {searchEstimate, searchSuggestions} from "../api";
-import {fuzzyMatch, normalizeEstimate, TabLinks} from "./Common";
+import {searchEstimateFiles, searchEstimateZims, searchSuggestions} from "../api";
+import {fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
 import _ from "lodash";
 import {TagsContext} from "../Tags";
 import {Header as SHeader, Label} from "semantic-ui-react";
+import {Button, Modal, ModalContent} from "./Theme";
+import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 
 export const SearchSuggestionsContext = React.createContext({
     suggestionsResults: {},
@@ -16,6 +18,8 @@ export const SearchSuggestionsContext = React.createContext({
     handleResultSelect: null,
     resultRenderer: null,
     loading: false,
+    searchStr: '',
+    setSearchStr: null,
 });
 
 
@@ -113,10 +117,10 @@ export function useSuggestions(searchStr) {
 }
 
 
-export function useSearchSuggestions() {
+export function useSearchSuggestions(defaultSearchStr) {
     const navigate = useNavigate();
+    const [searchStr, setSearchStr] = React.useState(defaultSearchStr || '');
     const {SingleTag, fuzzyMatchTagsByName} = React.useContext(TagsContext);
-    const {searchStr} = useSearch();
     const {suggestions, loading} = useSuggestions(searchStr);
 
     // The results that will be displayed by <Search>.
@@ -226,43 +230,73 @@ export function useSearchSuggestions() {
         return <span>{title}</span>
     };
 
-    return {suggestions, suggestionsResults, suggestionsSums, searchStr, handleResultSelect, resultRenderer, loading}
+    return {
+        suggestions,
+        suggestionsResults,
+        suggestionsSums,
+        searchStr,
+        setSearchStr,
+        handleResultSelect,
+        resultRenderer,
+        loading
+    }
 }
 
 
 export function useSearchEstimate(searchStr, tagNames) {
-    const {data, sendRequest, loading} = useLatestRequest(250);
+    const {data: filesData, sendRequest: sendFilesRequest, loading: loadingFiles} = useLatestRequest(250);
+    const {data: zimsData, sendRequest: sendZimsRequest, loading: loadingZims} = useLatestRequest(250);
 
     // The estimates from the response.
-    const [estimates, setEstimates] = React.useState({});
+    const [estimates, setEstimates] = React.useState({
+        fileGroups: [],
+        zims: [],
+    });
     // The estimates summarized.
-    const [estimatesSums, setEstimatesSums] = React.useState({});
+    const [estimatesSums, setEstimatesSums] = React.useState({
+        fileGroups: 0,
+        zims: 0,
+    });
 
     React.useEffect(() => {
         // Handle results from `sendRequest`.
-        if (_.isEmpty(data)) {
+        if (_.isEmpty(filesData)) {
             return;
         }
 
-        setEstimates(data);
-        setEstimatesSums({
-            fileGroups: data.fileGroups,
-            zims: data.zimsEstimates.reduce((i, j) => i + j['estimate'], 0),
-        });
-    }, [JSON.stringify(data)]);
+        setEstimates({...estimates, fileGroups: filesData.fileGroups});
+        setEstimatesSums({...estimatesSums, fileGroups: filesData.fileGroups});
+    }, [JSON.stringify(filesData)]);
 
     React.useEffect(() => {
-        // Use the `useLatestRequest` to handle user typing.
-        sendRequest(async () => await searchEstimate(searchStr, tagNames));
-    }, [searchStr, JSON.stringify(tagNames)], sendRequest);
+        sendFilesRequest(async () => await searchEstimateFiles(searchStr, tagNames));
+    }, [searchStr, JSON.stringify(tagNames)], sendFilesRequest);
 
-    return {estimates, estimatesSums, loading}
+    React.useEffect(() => {
+        // Handle results from `sendRequest`.
+        if (_.isEmpty(zimsData)) {
+            return;
+        }
+
+        setEstimates({...estimates, zimsEstimates: zimsData.zimsEstimates});
+        setEstimatesSums({...estimatesSums, zims: zimsData.zimsEstimates.reduce((i, j) => i + j['estimate'], 0)});
+    }, [JSON.stringify(zimsData)]);
+
+    React.useEffect(() => {
+        sendZimsRequest(async () => await searchEstimateZims(searchStr, tagNames));
+    }, [searchStr, JSON.stringify(tagNames)], sendZimsRequest);
+
+    return {
+        estimates,
+        estimatesSums,
+        loading: loadingFiles || loadingZims,
+    }
 }
 
 
 export function SearchView() {
     const {searchStr, activeTags} = useSearch();
-    const {estimates, estimatesSums} = useSearchEstimate(searchStr, activeTags);
+    const {estimates, estimatesSums, loading} = useSearchEstimate(searchStr, activeTags);
 
     let filesTabName = <span>Files <Label>?</Label></span>;
     let zimsTabName = <span>Zims<Label>?</Label></span>;
@@ -280,7 +314,54 @@ export function SearchView() {
         <TabLinks links={links}/>
         <Routes>
             <Route path='/*' element={<FilesSearchView/>}/>
-            <Route path='/zim' exact element={<ZimSearchView estimates={estimates}/>}/>
+            <Route path='/zim' exact element={<ZimSearchView estimates={estimates} loading={loading}/>}/>
         </Routes>
+    </React.Fragment>
+}
+
+export function SearchIconButton() {
+    // A single button which displays a modal for search suggestions.
+    const {
+        suggestionsResults,
+        handleResultSelect,
+        resultRenderer,
+        loading,
+        searchStr,
+        setSearchStr,
+    } = useContext(SearchSuggestionsContext);
+    const [open, setOpen] = React.useState(false);
+
+    const localHandleResultSelect = (i) => {
+        // Close modal when user selects a result.
+        setOpen(false);
+        handleResultSelect(i);
+    }
+
+    return <React.Fragment>
+        <Button icon='search' onClick={() => setOpen(!open)}/>
+        <Modal open={open} onClose={() => setOpen(false)} centered={false}>
+            <ModalContent>
+                <Grid columns={2}>
+                    <Grid.Row>
+                        <Grid.Column mobile={13} computer={14}>
+                            <SearchResultsInput clearable
+                                                searchStr={searchStr}
+                                                onChange={setSearchStr}
+                                                onSubmit={setSearchStr}
+                                                size='large'
+                                                placeholder='Search everywhere...'
+                                                results={suggestionsResults}
+                                                handleResultSelect={localHandleResultSelect}
+                                                resultRenderer={resultRenderer}
+                                                loading={loading}
+                            />
+                        </Grid.Column>
+                        <Grid.Column mobile={3} computer={2}>
+                            <FileSearchFilterButton/>
+                        </Grid.Column>
+                    </Grid.Row>
+                </Grid>
+            </ModalContent>
+        </Modal>
     </React.Fragment>
 }

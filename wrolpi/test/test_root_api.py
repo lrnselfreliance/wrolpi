@@ -509,21 +509,6 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     assert response.json['zims_estimates'][0] == 2
 
 
-@pytest.mark.asyncio
-async def test_search_estimates(test_session, test_async_client, archive_factory, zim_factory):
-    archive_factory(domain='foo.com', contents='contents of foo')
-    archive_factory(domain='bar.com', contents='contents of bar')
-    zim_factory('test zim')
-    test_session.commit()
-
-    body = dict(search_str='one')
-    request, response = await test_async_client.post('/api/search_estimates', json=body)
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['file_groups'] == 0
-    assert len(response.json['zims_estimates']) == 1
-    assert response.json['zims_estimates'][0]['estimate'] == 2
-
-
 def test_recursive_errors():
     """Errors are reported recursively."""
 

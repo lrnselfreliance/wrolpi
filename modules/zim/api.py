@@ -12,6 +12,7 @@ from wrolpi.downloader import download_manager
 from wrolpi.events import Events
 from wrolpi.root_api import get_blueprint, json_response
 from . import lib, schema
+from .models import Zims
 
 bp = get_blueprint('Zim', '/api/zim')
 
@@ -158,3 +159,36 @@ async def delete_outdated_zims(_: Request):
         lib.flag_outdated_zim_files()
         Events.send_deleted(f'Deleted {deleted_count} outdated Zims')
     return response.empty(HTTPStatus.NO_CONTENT)
+
+
+@bp.post('/search_estimates')
+@validate(json=schema.SearchEstimateRequest)
+async def post_search_estimates(_: Request, body: schema.SearchEstimateRequest):
+    """Get an estimated count of FileGroups/Zims which may or may not have been tagged."""
+
+    if not body.search_str and not body.tag_names:
+        return response.empty(HTTPStatus.BAD_REQUEST)
+
+    if body.tag_names:
+        # Get actual count of entries tagged with the tag names.
+        zims_estimates = list()
+        for zim, count in Zims.entries_with_tags(body.tag_names).items():
+            d = dict(
+                estimate=count,
+                **zim.__json__(),
+            )
+            zims_estimates.append(d)
+    else:
+        # Get estimates using libzim.
+        zims_estimates = list()
+        for zim, estimate in Zims.estimate(body.search_str).items():
+            d = dict(
+                estimate=estimate,
+                **zim.__json__(),
+            )
+            zims_estimates.append(d)
+
+    ret = dict(
+        zims_estimates=zims_estimates
+    )
+    return json_response(ret)

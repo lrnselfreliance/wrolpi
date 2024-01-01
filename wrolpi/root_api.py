@@ -534,43 +534,6 @@ async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequ
     return json_response(ret)
 
 
-@api_bp.post('/search_estimates')
-@validate(json=schema.SearchEstimateRequest)
-async def post_search_estimates(_: Request, body: schema.SearchEstimateRequest):
-    """Get an estimated count of FileGroups/Zims which may or may not have been tagged."""
-    from modules.zim.models import Zims
-
-    if not body.search_str and not body.tag_names:
-        return response.empty(HTTPStatus.BAD_REQUEST)
-
-    file_groups = await estimate_search(body.search_str, body.tag_names)
-
-    if body.tag_names:
-        # Get actual count of entries tagged with the tag names.
-        zims_estimates = list()
-        for zim, count in Zims.entries_with_tags(body.tag_names).items():
-            d = dict(
-                estimate=count,
-                **zim.__json__(),
-            )
-            zims_estimates.append(d)
-    else:
-        # Get estimates using libzim.
-        zims_estimates = list()
-        for zim, estimate in Zims.estimate(body.search_str).items():
-            d = dict(
-                estimate=estimate,
-                **zim.__json__(),
-            )
-            zims_estimates.append(d)
-
-    ret = dict(
-        file_groups=file_groups,
-        zims_estimates=zims_estimates
-    )
-    return json_response(ret)
-
-
 class CustomJSONEncoder(json.JSONEncoder):
 
     def default(self, obj):

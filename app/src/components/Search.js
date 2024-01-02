@@ -1,15 +1,14 @@
 import React, {useState} from "react";
 import {createSearchParams, Route, Routes, useNavigate} from "react-router-dom";
-import {FileSearchFilterButton, FilesSearchView} from "./Files";
+import {FilesSearchView} from "./Files";
 import {useLatestRequest, usePages, useQuery} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
 import {searchEstimateZims, searchSuggestions} from "../api";
 import {fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
 import _ from "lodash";
 import {TagsContext} from "../Tags";
-import {Header as SHeader, Label} from "semantic-ui-react";
-import {Button, Modal, ModalContent} from "./Theme";
-import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import {Button as SButton, Header as SHeader, Label} from "semantic-ui-react";
+import {Modal, ModalContent} from "./Theme";
 
 const SUGGESTED_APPS = [
     {location: '/admin', title: 'Downloads', description: 'View and control your downloads'},
@@ -305,29 +304,20 @@ export function SearchIconButton() {
     }
 
     return <React.Fragment>
-        <Button icon='search' onClick={() => setOpen(!open)}/>
+        <SButton icon='search' onClick={() => setOpen(!open)} color='blue'/>
         <Modal open={open} onClose={() => setOpen(false)} centered={false}>
             <ModalContent>
-                <Grid columns={2}>
-                    <Grid.Row>
-                        <Grid.Column mobile={13} computer={14}>
-                            <SearchResultsInput clearable
-                                                searchStr={searchStr}
-                                                onChange={setSearchStr}
-                                                onSubmit={setSearchStr}
-                                                size='large'
-                                                placeholder='Search everywhere...'
-                                                results={suggestionsResults}
-                                                handleResultSelect={localHandleResultSelect}
-                                                resultRenderer={resultRenderer}
-                                                loading={loading}
-                            />
-                        </Grid.Column>
-                        <Grid.Column mobile={3} computer={2}>
-                            <FileSearchFilterButton/>
-                        </Grid.Column>
-                    </Grid.Row>
-                </Grid>
+                <SearchResultsInput clearable
+                                    searchStr={searchStr}
+                                    onChange={setSearchStr}
+                                    onSubmit={setSearchStr}
+                                    size='large'
+                                    placeholder='Search everywhere...'
+                                    results={suggestionsResults}
+                                    handleResultSelect={localHandleResultSelect}
+                                    resultRenderer={resultRenderer}
+                                    loading={loading}
+                />
             </ModalContent>
         </Modal>
     </React.Fragment>

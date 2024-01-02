@@ -22,7 +22,7 @@ import {refreshFiles} from "./api";
 import _ from "lodash";
 import {TagsDashboard} from "./Tags";
 import {Upload} from "./components/Upload";
-import {SearchSuggestionsContext, SearchView, useSearch} from "./components/Search";
+import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
 import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
 import {useSettings, useWROLMode} from "./hooks/customHooks";
 import {FileSearchFilterButton} from "./components/Files";
@@ -160,15 +160,16 @@ export function DashboardPage() {
     const {searchStr, setSearchStr, activeTags} = useSearch();
     // The search that the user is typing.
     const [localSearchStr, setLocalSearchStr] = React.useState(searchStr);
-    console.log('searchStr', searchStr, 'localSearchStr', localSearchStr);
     const {
+        suggestions,
         suggestionsResults,
+        suggestionsSums,
         handleResultSelect,
         resultRenderer,
         loading,
         setSearchStr: setSuggestionSearchStr,
         setSearchTags,
-    } = useContext(SearchSuggestionsContext);
+    } = useSearchSuggestions(searchStr, activeTags);
     const {status} = useContext(StatusContext);
 
     React.useEffect(() => {
@@ -204,7 +205,7 @@ export function DashboardPage() {
     </React.Fragment>;
     if (searchStr || (activeTags && activeTags.length > 0)) {
         // User has submitted and wants full search.
-        body = <SearchView/>;
+        body = <SearchView suggestions={suggestions} suggestionsSums={suggestionsSums} loading={loading}/>;
     }
 
     const getSearchResultsInput = (props) => {

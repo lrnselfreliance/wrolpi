@@ -1,4 +1,4 @@
-import React, {useContext, useState} from "react";
+import React, {useState} from "react";
 import {createSearchParams, Route, Routes, useNavigate} from "react-router-dom";
 import {FileSearchFilterButton, FilesSearchView} from "./Files";
 import {useLatestRequest, usePages, useQuery} from "../hooks/customHooks";
@@ -94,18 +94,6 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
     }
 }
 
-export const SearchSuggestionsContext = React.createContext({
-    suggestions: {}, // from the api
-    suggestionsResults: {}, // suggestions converted for <Search/> results.
-    suggestionsSums: {}, // suggestions from the api summarized.
-    handleResultSelect: null, // user clicks "result"
-    resultRenderer: null,
-    loading: false,
-    searchStr: '',
-    setSearchStr: null,
-    setSearchTags: null,
-});
-
 export function useSuggestions(searchStr, tagNames) {
     const defaultSuggestions = {
         fileGroups: [],
@@ -115,9 +103,9 @@ export function useSuggestions(searchStr, tagNames) {
     }
     const [suggestions, setSuggestions] = React.useState(defaultSuggestions);
     // fileGroups/channels/domains.
-    const {data, sendRequest, loading} = useLatestRequest(500, true);
+    const {data, sendRequest, loading} = useLatestRequest(500);
     // Zims are slow, so they are separate.
-    const {data: zimData, sendRequest: sendZimRequest, loading: zimLoading} = useLatestRequest(500, true);
+    const {data: zimData, sendRequest: sendZimRequest, loading: zimLoading} = useLatestRequest(500);
 
     React.useEffect(() => {
         if ((searchStr && searchStr.length > 0) || (tagNames && tagNames.length > 0)) {
@@ -274,22 +262,12 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
         setSearchTags,
         handleResultSelect,
         resultRenderer,
-        loading
+        loading,
     }
 }
 
 
-export const SearchSuggestionsProvider = (props) => {
-    const value = useSearchSuggestions();
-
-    return <SearchSuggestionsContext.Provider value={value}>
-        {props.children}
-    </SearchSuggestionsContext.Provider>
-}
-
-
-export function SearchView() {
-    const {suggestions, suggestionsSums, loading} = useContext(SearchSuggestionsContext);
+export function SearchView({suggestions, suggestionsSums, loading}) {
 
     const filesTabName = <span>Files <Label>{normalizeEstimate(suggestionsSums?.fileGroups)}</Label></span>;
     const zimsTabName = <span>Zims <Label>{normalizeEstimate(suggestionsSums?.zims)}</Label></span>;
@@ -297,7 +275,7 @@ export function SearchView() {
     const links = [
         {text: filesTabName, to: '/search', key: 'filesSearch', end: true},
         {text: zimsTabName, to: '/search/zim', key: 'zimsSearch'},
-    ]
+    ];
 
     return <React.Fragment>
         <TabLinks links={links}/>
@@ -317,7 +295,7 @@ export function SearchIconButton() {
         loading,
         searchStr,
         setSearchStr,
-    } = useContext(SearchSuggestionsContext);
+    } = useSearchSuggestions();
     const [open, setOpen] = React.useState(false);
 
     const localHandleResultSelect = (i) => {

@@ -673,7 +673,7 @@ export function CardPoster({to, file}) {
         const image = <>
             {/* Replicate <Image label/> but with maxHeight applied to image */}
             {imageLabel}
-            <img alt='poster' src={posterPath} style={{maxHeight: '163px', width: 'auto'}}/>
+            <img alt='poster' src={posterPath} style={{maxHeight: '163px', maxWidth: '290px', width: 'auto'}}/>
         </>;
 
         if (to) {

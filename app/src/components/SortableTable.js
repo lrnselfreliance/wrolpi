@@ -63,7 +63,14 @@ export class SortableTable extends React.Component {
         // Use placeholder while data is null.
         let rows = <TableRow><TableCell colSpan={tableHeaders.length}><TextPlaceholder/></TableCell></TableRow>;
         if (data !== null) {
-            rows = data.map(i => <React.Fragment key={i[rowKey]}>{rowFunc(i, this.sortData)}</React.Fragment>);
+            if (data.length > 0) {
+                // Convert data to table rows.
+                rows = data.map(i => <React.Fragment key={i[rowKey]}>{rowFunc(i, this.sortData)}</React.Fragment>);
+            } else {
+                // No results in data.
+                rows = this.props.emptyRow
+                    || <TableRow><TableCell colSpan={tableHeaders.length}>No results</TableCell></TableRow>;
+            }
         }
 
         return <Table sortable {...this.props.tableProps}>

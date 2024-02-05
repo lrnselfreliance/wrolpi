@@ -10,9 +10,10 @@ import difflib
 import functools
 import re
 from difflib import SequenceMatcher
-from typing import List, Generator, Optional
+from typing import List, Generator, Optional, Dict
 
 from modules.videos import Video, Channel
+from modules.videos.lib import parse_video_file_name
 from wrolpi.common import get_relative_to_media_directory, chain
 from wrolpi.db import get_db_curs, get_db_session
 from wrolpi.files.models import FileGroup
@@ -67,7 +68,7 @@ def find_similar_videos(channel_id: int, minimum_rank: float = MINIMUM_RANK, dir
 
             vid1, *vids = link
             vid1_title = vid1.file_group.title
-            similar_videos = [i for i in vids if similar(i.file_group.title, vid1_title) > minimum_rank]
+            similar_videos = [i for i in vids if similar(i.file_group.title, vid1_title) >= minimum_rank]
 
             if not similar_videos:
                 continue
@@ -80,7 +81,7 @@ def find_similar_videos(channel_id: int, minimum_rank: float = MINIMUM_RANK, dir
             yield similar_videos
 
 
-async def rank_video_quality(video: Video) -> int:
+async def rank_video_quality(video: Video, sizes_by_source_id: Dict[str, int]) -> int:
     """Returns a higher integer the more quality the Video record is.  A video with info_json is more valuable than
     one without, etc."""
     rank = 0
@@ -90,18 +91,27 @@ async def rank_video_quality(video: Video) -> int:
         rank += 2
     if video.source_id:
         rank += 2
-    if video.info_json_path:
+    if video.info_json_path and video.info_json_path.is_file() and video.info_json_path.stat().st_size:
+        rank += 2
+    if video_file_matches_channel_info_json(video):
         rank += 2
     # These are more common.
     if video.channel_id:
         rank += 1
     if video.caption_paths:
         rank += 1
-    if video.poster_path:
+    if video.poster_path and video.poster_path.is_file() and video.poster_path.stat().st_size:
         rank += 1
     if video.ffprobe_json or await video.get_ffprobe_json():
         rank += 1
-    if video_file_matches_channel_info_json(video):
+    largest_size = sizes_by_source_id.get(video.source_id)
+    if largest_size and video.file_group.size == largest_size:
+        rank += 1
+
+    _, _, _, video_title = parse_video_file_name(video.video_path)
+    video_title = video_title.strip()
+    if video.file_group.title == video_title:
+        # Video title from JSON matches the video file name.
         rank += 1
 
     channel_name = get_channel_name(video.channel_id)
@@ -145,6 +155,16 @@ def remove_part_from_title(title: str) -> str:
     return title
 
 
+def largest_size_by_source_id(similar_videos: List[Video]) -> Dict[str, int]:
+    """Videos that are larger are probably better quality, prefer to preserve larger videos."""
+    sizes = dict()
+    for video in similar_videos:
+        source_id = video.source_id
+        old_size = sizes.get(source_id, 0)
+        sizes[source_id] = max(old_size, video.file_group.size)
+    return sizes
+
+
 async def handle_user_delete_duplicates(similar_videos: List[Video], video_url: str = None,
                                         delete_lower_ranked_automatically: bool = False):
     similar_videos = similar_videos.copy()
@@ -160,13 +180,15 @@ async def handle_user_delete_duplicates(similar_videos: List[Video], video_url: 
                 all_changes += get_different_characters(a, b)
         # Ignore space changes.
         all_changes = ''.join(i for i in all_changes if i != ' ' and i != '.')
-        if all_changes.isdigit() or not all_changes:
+        if all_changes.isdigit():
             print(f'\nSkipping {similar_videos[0]} and similar because they are parts')
             return
 
-        print()
-        print(f'{all_changes=}')
-        ranked_videos = [(await rank_video_quality(i), i) for i in similar_videos]
+        # Preserve the largest duplicate video.
+        sizes_by_source_id = largest_size_by_source_id(similar_videos)
+
+        print('\n')
+        ranked_videos = [(await rank_video_quality(i, sizes_by_source_id), i) for i in similar_videos]
         ranked_videos = sorted(ranked_videos, key=lambda i: (i[0], i[1].file_group.size), reverse=True)
         for rank, video in ranked_videos:
             fg = video.file_group
@@ -174,9 +196,12 @@ async def handle_user_delete_duplicates(similar_videos: List[Video], video_url: 
             size = f'{size // 1_048_576} MB'
             path = get_relative_to_media_directory(path)
             if video_url:
-                print(f'{rank} {id_} {repr(title)} {repr(str(path))} {source_id} {size} {video_url + str(id_)}')
+                print(f'{rank} {repr(title)} {size} {repr(str(path.name))} {source_id} {id_} {video_url + str(id_)}')
             else:
-                print(f'{rank} {id_} {repr(title)} {repr(str(path))} {source_id} {size}')
+                print(f'{rank} {repr(title)} {size} {repr(str(path.name))} {source_id} {id_}')
+
+        # Detect re-uploaded videos.
+        # If video with exact title is uploaded day(s) later, then suggest deleting the oldest video.
 
         unique_ranks = {i[0] for i in ranked_videos}
         if len(unique_ranks) > 1:
@@ -189,10 +214,10 @@ async def handle_user_delete_duplicates(similar_videos: List[Video], video_url: 
                 continue
             response = input('Delete the lowest ranked video? (y/N)').lower()
             if response == 'y':
-                if input(f'\nConfirm delete: {lowest_video} ').lower() == 'y':
-                    delete_video(lowest_video.id)
-                    index = similar_videos.index(lowest_video)
-                    del similar_videos[index]
+                # Don't need to confirm when the video has been ranked low.
+                delete_video(lowest_video.id)
+                index = similar_videos.index(lowest_video)
+                del similar_videos[index]
             elif response == 'n':
                 break
             elif response == 'c':

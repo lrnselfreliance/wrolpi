@@ -566,6 +566,8 @@ def get_media_directory() -> Path:
         raise ValueError('No test media directory set during testing!!')
 
     if isinstance(TEST_MEDIA_DIRECTORY, pathlib.Path):
+        if not str(TEST_MEDIA_DIRECTORY).startswith('/tmp'):
+            raise RuntimeError('Refusing to run test outside tmp directory!')
         return TEST_MEDIA_DIRECTORY
 
     return MEDIA_DIRECTORY

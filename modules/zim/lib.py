@@ -434,7 +434,7 @@ def find_outdated_zim_files(path: pathlib.Path = None) -> Tuple[List[pathlib.Pat
         return list(), list()
 
     # Find all non-empty Zim files.
-    files = [i for i in walk(path) if i.is_file() and i.stat().st_size and i.suffix == '.zim']
+    files = [i for i in walk(path) if i.is_file() and i.suffix == '.zim' and i.stat().st_size]
     zims = list()
     for file in files:
         try:

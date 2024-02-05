@@ -140,4 +140,5 @@ class VINDecoderResponse:
 @dataclass
 class SearchSuggestionsRequest:
     search_str: Optional[str] = None
+    mimetypes: List[str] = field(default_factory=lambda: list())
     tag_names: List[str] = field(default_factory=lambda: list())

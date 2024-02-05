@@ -1,10 +1,10 @@
 import React, {useState} from "react";
 import {createSearchParams, Route, Routes, useNavigate} from "react-router-dom";
 import {FilesSearchView} from "./Files";
-import {useLatestRequest, usePages, useQuery} from "../hooks/customHooks";
+import {useLatestRequest, usePages, useQuery, useSearchFilter} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
 import {searchEstimateZims, searchSuggestions} from "../api";
-import {fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
+import {filterToMimetypes, fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
 import _ from "lodash";
 import {TagsContext} from "../Tags";
 import {Button as SButton, Header as SHeader, Label} from "semantic-ui-react";
@@ -93,7 +93,7 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
     }
 }
 
-export function useSuggestions(searchStr, tagNames) {
+export function useSuggestions(searchStr, tagNames, filter) {
     const defaultSuggestions = {
         fileGroups: [],
         channels: [],
@@ -108,7 +108,8 @@ export function useSuggestions(searchStr, tagNames) {
 
     React.useEffect(() => {
         if ((searchStr && searchStr.length > 0) || (tagNames && tagNames.length > 0)) {
-            sendRequest(async () => await searchSuggestions(searchStr, tagNames));
+            const mimetypes = filterToMimetypes(filter);
+            sendRequest(async () => await searchSuggestions(searchStr, tagNames, mimetypes));
             sendZimRequest(async () => await searchEstimateZims(searchStr, tagNames));
         }
     }, [searchStr, sendRequest, sendZimRequest, JSON.stringify(tagNames)]);
@@ -136,15 +137,19 @@ export function useSuggestions(searchStr, tagNames) {
 
 export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
     const navigate = useNavigate();
+    const {filter} = useSearchFilter();
     const [searchStr, setSearchStr] = React.useState(defaultSearchStr || '');
     const [searchTags, setSearchTags] = React.useState(defaultTagNames);
     const {SingleTag, fuzzyMatchTagsByName} = React.useContext(TagsContext);
-    const {suggestions, loading} = useSuggestions(searchStr, searchTags);
+    const {suggestions, loading} = useSuggestions(searchStr, searchTags, filter);
+    const {getLocationStr} = useQuery();
 
     // The results that will be displayed by <Search>.
     const [suggestionsResults, setSuggestionsResults] = useState({});
     // The results summarized.
     const [suggestionsSums, setSuggestionsSums] = useState({});
+
+    const noResults = [{title: 'No results'}];
 
     const normalizeSuggestionsResults = (newSuggestions) => {
         // Convert the suggestions from the Backend to what the Semantic <Search> expects.
@@ -159,10 +164,13 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
                     {
                         title: newSuggestions.fileGroups.toString(),
                         type: 'files',
-                        location: `/search?q=${encodeURIComponent(searchStr)}`
+                        location: getLocationStr({q: searchStr})
                     }
                 ]
             };
+        } else if (newSuggestions.fileGroups === 0) {
+            // Tell the user there are no files.
+            results.fileGroups = {name: 'Files', results: noResults};
         }
 
         const zimSum = newSuggestions.zimsEstimates && newSuggestions.zimsEstimates.length > 0
@@ -173,7 +181,9 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
                 name: 'Zims', results: [
                     {title: zimSum.toString(), type: 'zims', location: `/search/zim?q=${encodeURIComponent(searchStr)}`}
                 ],
-            }
+            };
+        } else if (newSuggestions && zimSum === 0) {
+            results.zimsSum = {name: 'Zims', results: noResults};
         }
         if (newSuggestions.channels && newSuggestions.channels.length > 0) {
             results.channels = {
@@ -235,7 +245,13 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
     }, [JSON.stringify(suggestions)]);
 
     // User clicked on a result in the dropdown.
-    const handleResultSelect = ({result}) => navigate(result.location);
+    const handleResultSelect = ({result}) => {
+        if (result.location) {
+            navigate(result.location);
+        } else {
+            console.error('No location to navigate');
+        }
+    }
 
     const resultRenderer = ({type, title, description}) => {
         if (type === 'tag') {

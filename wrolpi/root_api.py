@@ -514,7 +514,7 @@ async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequ
     from modules.archive.lib import search_domains_by_name
 
     file_groups, channels, domains = await asyncio.gather(
-        estimate_search(body.search_str, body.tag_names),
+        estimate_search(body.search_str, body.tag_names, body.mimetypes),
         search_channels_by_name(body.search_str),
         search_domains_by_name(body.search_str),
     )

@@ -468,13 +468,15 @@ async def test_post_vin_number_decoder(test_async_client):
 
 
 @pytest.mark.asyncio
-async def test_search_suggestions(test_session, test_async_client, channel_factory, archive_factory, tag_factory):
+async def test_search_suggestions(test_session, test_async_client, channel_factory, archive_factory, tag_factory,
+                                  video_factory):
     # WARNING results are cached, this test uses unique queries to avoid conflicts.
     channel_factory(name='Foo')
     channel_factory(name='Fool')
     channel_factory(name='Bar')
-    archive_factory(domain='foo.com', contents='contents of foo')
+    archive_factory(domain='foo.com', contents='contents of foo with bunny')
     archive_factory(domain='bar.com', contents='contents of bar')
+    video_factory(with_caption_file=True)
     test_session.commit()
 
     body = dict(search_str='foo')
@@ -501,6 +503,18 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     assert response.json['channels'] == []
     assert response.json['domains'] == []
     assert response.json['file_groups'] == 0
+
+    # "foo" archive and video both contain bunny.
+    body = dict(search_str='bunny')
+    request, response = await test_async_client.post('/api/search_suggestions', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file_groups'] == 2
+
+    # Filtering with mimetypes removes archive result.
+    body = dict(search_str='bunny', mimetypes=['video'])
+    request, response = await test_async_client.post('/api/search_suggestions', json=body)
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file_groups'] == 1
 
 
 def test_recursive_errors():

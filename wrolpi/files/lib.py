@@ -700,17 +700,9 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         selects.append('ts_rank(textsearch, websearch_to_tsquery(%(search_str)s))')
         order_by = '2 DESC'
 
-    if mimetypes:
-        mimetype_wheres = []
-        for idx, mimetype in enumerate(mimetypes):
-            key = f'mimetype{idx}'
-            if len(mimetype.split('/')) == 1:
-                params[key] = f'{mimetype}/%'
-            else:
-                params[key] = f'{mimetype}%'
-            mimetype_wheres.append(f'mimetype LIKE %({key})s')
-        mimetype_wheres = ' OR '.join(mimetype_wheres)
-        wheres.append(f'({mimetype_wheres})')
+    mimetype_wheres, params = mimetypes_to_sql_wheres(mimetypes, params)
+    if mimetype_wheres:
+        wheres.append(mimetype_wheres)
 
     if model:
         params['model'] = model
@@ -1060,31 +1052,48 @@ def get_refresh_progress() -> RefreshProgress:
     return progress
 
 
-async def estimate_search(search_str: str, tag_names: List[str]):
+def mimetypes_to_sql_wheres(mimetypes: List[str], params: dict):
+    if mimetypes:
+        mimetype_wheres = []
+        for idx, mimetype in enumerate(mimetypes):
+            key = f'mimetype{idx}'
+            if len(mimetype.split('/')) == 1:
+                params[key] = f'{mimetype}/%'
+            else:
+                params[key] = f'{mimetype}%'
+            mimetype_wheres.append(f'mimetype LIKE %({key})s')
+        mimetype_wheres = ' OR '.join(mimetype_wheres)
+        return f'({mimetype_wheres})', params
+    return '', params
+
+
+async def estimate_search(search_str: str, tag_names: List[str], mimetypes: List[str]):
+    """
+    Return FileGroup count of what will be returned if the search is actually performed.
+    """
+    wheres = ['textsearch @@ websearch_to_tsquery(%(search_str)s)']
+    joins = list()
+    params = dict(search_str=search_str, tag_names=tag_names, mimetypes=mimetypes)
+
+    if tag_names:
+        joins.append('LEFT JOIN tag_file tf on file_group.id = tf.file_group_id')
+        wheres.append('tf.tag_id IN (select id from tag where name = ANY(%(tag_names)s))')
+
+    mimetype_wheres, params = mimetypes_to_sql_wheres(mimetypes, params)
+    if mimetype_wheres:
+        wheres.append(mimetype_wheres)
+
+    joins = "\n".join(joins)
+    wheres = "\nAND ".join(wheres)
+    stmt = f'''
+        SELECT COUNT(*) OVER() AS estimate
+        FROM file_group
+            {joins}
+        WHERE {wheres}
+    '''
+    logger.debug(stmt, params)
+
     with get_db_curs() as curs:
-        if search_str and tag_names:
-            params = dict(search_str=search_str, tag_names=tag_names)
-            stmt = '''
-            SELECT COUNT(*) OVER() AS estimate
-            FROM file_group
-                LEFT JOIN tag_file tf on file_group.id = tf.file_group_id
-            WHERE textsearch @@ websearch_to_tsquery(%(search_str)s)
-                AND tf.tag_id IN (select id from tag where name = ANY(%(tag_names)s))
-            '''
-        elif tag_names:
-            params = dict(tag_names=tag_names)
-            stmt = '''
-            SELECT COUNT(*) OVER() AS estimate
-            FROM file_group
-                LEFT JOIN tag_file tf on file_group.id = tf.file_group_id
-            WHERE tf.tag_id IN (select id from tag where name = ANY(%(tag_names)s))'''
-        else:
-            params = dict(search_str=search_str)
-            stmt = '''
-            SELECT COUNT(*) OVER() AS estimate
-            FROM file_group
-            WHERE textsearch @@ websearch_to_tsquery(%(search_str)s)
-            '''
         curs.execute(stmt, params)
         result = curs.fetchone()
         if result:

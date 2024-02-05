@@ -26,7 +26,7 @@ import {
     setHotspot,
     setThrottle,
 } from "../api";
-import {createSearchParams, useSearchParams} from "react-router-dom";
+import {createSearchParams, useLocation, useSearchParams} from "react-router-dom";
 import {enumerate, filterToMimetypes, humanFileSize, secondsToFullDuration} from "../components/Common";
 import {StatusContext} from "../contexts/contexts";
 import {toast} from "react-semantic-toasts-2";
@@ -105,13 +105,14 @@ export const useLatestRequest = (delay = 300, defaultLoading = false) => {
 
 
 export const useQuery = () => {
+    const location = useLocation();
     const [searchParams, setSearchParams] = useSearchParams();
 
-    const setQuery = (obj) => {
-        setSearchParams(createSearchParams(obj), {replace: true});
+    const setQuery = (obj, replace = true) => {
+        setSearchParams(createSearchParams(obj), {replace: replace});
     }
 
-    const updateQuery = (obj) => {
+    const getQuery = (obj) => {
         const newQuery = {};
         for (const entry of searchParams.entries()) {
             newQuery[entry[0]] = entry[1];
@@ -123,10 +124,21 @@ export const useQuery = () => {
                 newQuery[key] = value;
             }
         })
+        return newQuery;
+    }
+
+    const updateQuery = (obj) => {
+        const newQuery = getQuery(obj);
         setQuery(newQuery);
     }
 
-    return {searchParams, setSearchParams, setQuery, updateQuery}
+    const getLocationStr = (newSearchParams) => {
+        // Get the current location, but with new params appended.
+        const newQuery = createSearchParams(getQuery(newSearchParams));
+        return `${location.pathname}?${newQuery.toString()}`
+    }
+
+    return {searchParams, setSearchParams, setQuery, updateQuery, getLocationStr}
 }
 
 export const useOneQuery = (name) => {

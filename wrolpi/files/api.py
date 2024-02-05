@@ -372,17 +372,3 @@ async def post_upload(request: Request):
 
     # Request the next chunk.
     return json_response({'expected_chunk': expected_chunk_num}, HTTPStatus.OK)
-
-
-@bp.post('/search_estimates')
-@validate(json=schema.SearchEstimateRequest)
-async def post_search_estimates(_: Request, body: schema.SearchEstimateRequest):
-    """Get an estimated count of FileGroups which may or may not have been tagged."""
-    if not body.search_str and not body.tag_names:
-        return response.empty(HTTPStatus.BAD_REQUEST)
-
-    file_groups = await lib.estimate_search(body.search_str, body.tag_names)
-    ret = dict(
-        file_groups=file_groups,
-    )
-    return json_response(ret)

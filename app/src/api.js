@@ -1003,8 +1003,8 @@ export async function fetchDecoded(vinNumber) {
     }
 }
 
-export async function searchSuggestions(search_str, tagNames) {
-    const body = {search_str: search_str, tag_names: tagNames};
+export async function searchSuggestions(search_str, tagNames, mimetypes) {
+    const body = {search_str: search_str, tag_names: tagNames, mimetypes: mimetypes};
     const response = await apiPost(`${API_URI}/search_suggestions`, body);
     if (response.ok) {
         const content = await response.json();

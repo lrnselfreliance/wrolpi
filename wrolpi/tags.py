@@ -432,7 +432,7 @@ def tag_names_to_file_group_sub_select(tag_names: List[str], params: dict) -> Tu
     return sub_select, params
 
 
-def tag_append_sub_select_where(tag_names: list[str], wheres: list[str], params: dict) -> Tuple[list[str], dict]:
+def tag_append_sub_select_where(tag_names: List[str], wheres: List[str], params: dict) -> Tuple[List[str], dict]:
     """Modify provided `wheres` and `params` to filter by `tag_names`, if any."""
     if not tag_names:
         return wheres, params

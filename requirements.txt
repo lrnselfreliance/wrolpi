@@ -25,6 +25,6 @@ sanic==22.6.2
 selenium==4.9.1
 srt==3.5.3
 vininfo[cli]==1.7.0
-websockets==10.1
+websockets==10.4
 webvtt-py==0.4.6
 yt-dlp==2023.11.16

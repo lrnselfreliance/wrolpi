@@ -46,7 +46,8 @@ except ImportError:
 logger = logger.getChild(__name__)
 
 __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 'refresh_files', 'search_files',
-           'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics', 'estimate_search',
+           'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics',
+           'search_file_suggestion_count',
            'move', 'rename', 'delete_directory', 'handle_file_group_search_results']
 
 
@@ -709,7 +710,7 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         wheres.append('model = %(model)s')
 
     if tags:
-        # Filter all FileGroups by those that have been tagged with the provided tag names.
+        # Filter all FileGroups by those that have been tagged with all the provided tag names.
         tags_stmt, params_ = tag_names_to_file_group_sub_select(tags)
         params.update(params_)
         wheres.append(f'fg.id = ANY({tags_stmt})')
@@ -1054,42 +1055,49 @@ def get_refresh_progress() -> RefreshProgress:
 
 def mimetypes_to_sql_wheres(mimetypes: List[str], params: dict):
     if mimetypes:
-        mimetype_wheres = []
+        wheres = list()
         for idx, mimetype in enumerate(mimetypes):
             key = f'mimetype{idx}'
             if len(mimetype.split('/')) == 1:
                 params[key] = f'{mimetype}/%'
             else:
                 params[key] = f'{mimetype}%'
-            mimetype_wheres.append(f'mimetype LIKE %({key})s')
-        mimetype_wheres = ' OR '.join(mimetype_wheres)
-        return f'({mimetype_wheres})', params
+            wheres.append(f'mimetype LIKE %({key})s')
+        return f'({" OR ".join(wheres)})', params
     return '', params
 
 
-async def estimate_search(search_str: str, tag_names: List[str], mimetypes: List[str]):
+async def search_file_suggestion_count(search_str: str, tag_names: List[str], mimetypes: List[str]):
     """
     Return FileGroup count of what will be returned if the search is actually performed.
     """
-    wheres = ['textsearch @@ websearch_to_tsquery(%(search_str)s)']
+    wheres = []
     joins = list()
     params = dict(search_str=search_str, tag_names=tag_names, mimetypes=mimetypes)
+    group_by = ''
+    having = ''
 
+    if search_str:
+        wheres.append('fg.textsearch @@ websearch_to_tsquery(%(search_str)s)')
     if tag_names:
-        joins.append('LEFT JOIN tag_file tf on file_group.id = tf.file_group_id')
-        wheres.append('tf.tag_id IN (select id from tag where name = ANY(%(tag_names)s))')
+        # Only estimate files that have been tagged with all tag names.
+        tags_stmt, params_ = tag_names_to_file_group_sub_select(tag_names)
+        params.update(params_)
+        wheres.append(f'fg.id = ANY({tags_stmt})')
 
     mimetype_wheres, params = mimetypes_to_sql_wheres(mimetypes, params)
     if mimetype_wheres:
         wheres.append(mimetype_wheres)
 
     joins = "\n".join(joins)
-    wheres = "\nAND ".join(wheres)
+    wheres = 'WHERE ' + "\nAND ".join(wheres) if wheres else ''
     stmt = f'''
         SELECT COUNT(*) OVER() AS estimate
-        FROM file_group
+        FROM file_group fg
             {joins}
-        WHERE {wheres}
+        {wheres}
+        {group_by}
+        {having}
     '''
     logger.debug(stmt, params)
 

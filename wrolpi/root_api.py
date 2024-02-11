@@ -29,7 +29,7 @@ from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, APIError, HotspotError, InvalidDownload, \
     HotspotPasswordTooShort, NativeOnly, InvalidConfig
 from wrolpi.events import get_events, Events
-from wrolpi.files.lib import get_file_statistics, estimate_search
+from wrolpi.files.lib import get_file_statistics, search_file_suggestion_count
 from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
     truthy_arg
 from wrolpi.version import __version__
@@ -514,7 +514,7 @@ async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequ
     from modules.archive.lib import search_domains_by_name
 
     file_groups, channels, domains = await asyncio.gather(
-        estimate_search(body.search_str, body.tag_names, body.mimetypes),
+        search_file_suggestion_count(body.search_str, body.tag_names, body.mimetypes),
         search_channels_by_name(body.search_str),
         search_domains_by_name(body.search_str),
     )

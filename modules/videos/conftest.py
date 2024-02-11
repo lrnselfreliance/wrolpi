@@ -91,8 +91,9 @@ def video_factory(test_session, test_directory):
 
     def factory(channel_id: int = None, title: str = None, upload_date=None, with_video_file=None,
                 with_info_json: dict = None, with_poster_ext: str = None, with_caption_file: bool = False,
-                source_id: str = None) -> Video:
+                source_id: str = None, tag_names: List[str] = None) -> Video:
         title = title or str(uuid4())
+        tag_names = tag_names or list()
 
         if with_video_file and isinstance(with_video_file, (pathlib.Path, str)):
             # Put the video exactly where specified for the test.
@@ -134,6 +135,10 @@ def video_factory(test_session, test_directory):
         video.source_id = source_id or title
         video.file_group.published_datetime = upload_date
         video.validate()
+
+        for tag_name in tag_names:
+            video.add_tag(tag_name)
+
         return video
 
     return factory

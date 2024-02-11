@@ -474,47 +474,74 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     channel_factory(name='Foo')
     channel_factory(name='Fool')
     channel_factory(name='Bar')
-    archive_factory(domain='foo.com', contents='contents of foo with bunny')
-    archive_factory(domain='bar.com', contents='contents of bar')
-    video_factory(with_caption_file=True)
+    tag1, tag2, tag3 = tag_factory(), tag_factory(), tag_factory()
+    archive_factory(domain='foo.com', contents='contents of foo with bunny', tag_names=[tag1.name, ])
+    archive_factory(domain='bar.com', contents='contents of bar', tag_names=[tag2.name, ])
+    video_factory(with_caption_file=True, tag_names=[tag1.name, tag2.name])
     test_session.commit()
 
-    body = dict(search_str='foo')
-    request, response = await test_async_client.post('/api/search_suggestions', json=body)
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['channels'] == [{'directory': 'Foo', 'id': 1, 'name': 'Foo', 'url': 'https://example.com/Foo'},
-                                         {'directory': 'Fool',
-                                          'id': 2,
-                                          'name': 'Fool',
-                                          'url': 'https://example.com/Fool'}]
-    assert response.json['domains'] == [{'directory': 'archive/foo.com', 'domain': 'foo.com', 'id': 1}]
-    assert response.json['file_groups'] == 1
+    async def assert_results(body: dict, expected_channels=None, expected_domains=None, expected_file_groups=None):
+        expected_channels = expected_channels or []
+        expected_domains = expected_domains or []
+        expected_file_groups = expected_file_groups or 0
 
-    body = dict(search_str='bar')
-    request, response = await test_async_client.post('/api/search_suggestions', json=body)
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['channels'] == [{'directory': 'Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar'}]
-    assert response.json['domains'] == [{'directory': 'archive/bar.com', 'domain': 'bar.com', 'id': 2}]
-    assert response.json['file_groups'] == 1
+        request, response = await test_async_client.post('/api/search_suggestions', json=body)
+        assert response.status_code == HTTPStatus.OK
+        if expected_channels:
+            assert response.json['channels'] == expected_channels
+        assert response.json['domains'] == expected_domains
+        assert response.json['file_groups'] == expected_file_groups or 0
 
-    body = dict(search_str='one')
-    request, response = await test_async_client.post('/api/search_suggestions', json=body)
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['channels'] == []
-    assert response.json['domains'] == []
-    assert response.json['file_groups'] == 0
+    await assert_results(
+        dict(search_str='foo'),
+        [{'directory': 'Foo', 'id': 1, 'name': 'Foo', 'url': 'https://example.com/Foo'},
+         {'directory': 'Fool',
+          'id': 2,
+          'name': 'Fool',
+          'url': 'https://example.com/Fool'}],
+        [{'directory': 'archive/foo.com', 'domain': 'foo.com', 'id': 1}],
+        1,
+    )
+
+    await assert_results(
+        dict(search_str='bar'),
+        [{'directory': 'Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar'}],
+        [{'directory': 'archive/bar.com', 'domain': 'bar.com', 'id': 2}],
+        1,
+    )
 
     # "foo" archive and video both contain bunny.
-    body = dict(search_str='bunny')
-    request, response = await test_async_client.post('/api/search_suggestions', json=body)
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['file_groups'] == 2
+    await assert_results(dict(search_str='bunny'), expected_file_groups=2)
 
     # Filtering with mimetypes removes archive result.
-    body = dict(search_str='bunny', mimetypes=['video'])
-    request, response = await test_async_client.post('/api/search_suggestions', json=body)
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['file_groups'] == 1
+    await assert_results(dict(search_str='bunny', mimetypes=['video']), expected_file_groups=1)
+
+    # tag1 has been used twice
+    await assert_results(dict(tag_names=[tag1.name, ]), expected_file_groups=2)
+
+    # archive2 was tagged with tag2, but only video contains bunny.
+    await assert_results(dict(search_str='bunny', tag_names=[tag2.name, ]), expected_file_groups=1)
+
+    # tag2 has been used twice
+    await assert_results(dict(tag_names=[tag2.name, ]), expected_file_groups=2)
+
+    # tag2 has been used twice, but filter by video mimetype.
+    await assert_results(dict(tag_names=[tag2.name], mimetypes=['video']), expected_file_groups=1)
+
+    # Can use all filters simultaneously.
+    await assert_results(dict(search_str='bunny', tag_names=[tag2.name], mimetypes=['video']),
+                         expected_file_groups=1)
+
+    # Only the video has been tagged with both tag1 and tag2.
+    await assert_results(dict(tag_names=[tag1.name, tag2.name]), expected_file_groups=1)
+
+    # tag3 was never used
+    await assert_results(dict(tag_names=[tag3.name]))
+
+    await assert_results(dict(search_str='Does not exist.'))
+
+    # No PDFs.
+    await assert_results(dict(mimetypes=['application/pdf']))
 
 
 def test_recursive_errors():

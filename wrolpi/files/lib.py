@@ -31,7 +31,7 @@ from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag
 from wrolpi.events import Events
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.lang import ISO_639_CODES
-from wrolpi.tags import TagFile, Tag, tag_names_to_file_group_sub_select
+from wrolpi.tags import TagFile, Tag, tag_append_sub_select_where
 from wrolpi.vars import PYTEST
 
 try:
@@ -673,7 +673,7 @@ async def search_directories_by_name(name: str, excluded: List[str] = None, limi
 
 
 def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
-                 tags: List[str] = None, headline: bool = False) -> \
+                 tag_names: List[str] = None, headline: bool = False) -> \
         Tuple[List[dict], int]:
     """Search the FileGroup table.
 
@@ -686,7 +686,7 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         offset: Offset the query.
         mimetypes: Only return files that match these mimetypes.
         model: Only return files that match this model.
-        tags: A list of tag names.
+        tag_names: A list of tag names.
         headline: Includes Postgresql headline if True.
     """
     params = dict(offset=offset, limit=limit)
@@ -709,11 +709,7 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         params['model'] = model
         wheres.append('model = %(model)s')
 
-    if tags:
-        # Filter all FileGroups by those that have been tagged with all the provided tag names.
-        tags_stmt, params_ = tag_names_to_file_group_sub_select(tags)
-        params.update(params_)
-        wheres.append(f'fg.id = ANY({tags_stmt})')
+    wheres, params = tag_append_sub_select_where(tag_names, wheres, params)
 
     if search_str and headline:
         headline = ''',
@@ -1079,11 +1075,8 @@ async def search_file_suggestion_count(search_str: str, tag_names: List[str], mi
 
     if search_str:
         wheres.append('fg.textsearch @@ websearch_to_tsquery(%(search_str)s)')
-    if tag_names:
-        # Only estimate files that have been tagged with all tag names.
-        tags_stmt, params_ = tag_names_to_file_group_sub_select(tag_names)
-        params.update(params_)
-        wheres.append(f'fg.id = ANY({tags_stmt})')
+
+    wheres, params = tag_append_sub_select_where(tag_names, wheres, params)
 
     mimetype_wheres, params = mimetypes_to_sql_wheres(mimetypes, params)
     if mimetype_wheres:

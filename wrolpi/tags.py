@@ -412,12 +412,13 @@ def import_tags_config(session: Session = None):
             raise
 
 
-def tag_names_to_file_group_sub_select(tag_names: List[str]) -> Tuple[str, dict]:
+def tag_names_to_file_group_sub_select(tag_names: List[str], params: dict) -> Tuple[str, dict]:
     """Create the SQL necessary to filter FileGroup by the provided Tag names."""
     if not tag_names:
-        return '', dict()
+        return '', params
 
-    stmt = '''
+    # This select gets an array of FileGroup.id's which are tagged with the provided tag names.
+    sub_select = '''
         SELECT
             tf.file_group_id
         FROM
@@ -427,7 +428,18 @@ def tag_names_to_file_group_sub_select(tag_names: List[str]) -> Tuple[str, dict]
         -- Match only FileGroups that have at least all the Tag names.
         HAVING array_agg(t.name)::TEXT[] @> %(tag_names)s::TEXT[]
     '''
-    return stmt, dict(tag_names=tag_names)
+    params['tag_names'] = tag_names
+    return sub_select, params
+
+
+def tag_append_sub_select_where(tag_names: list[str], wheres: list[str], params: dict) -> Tuple[list[str], dict]:
+    """Modify provided `wheres` and `params` to filter by `tag_names`, if any."""
+    if not tag_names:
+        return wheres, params
+
+    tags_sub_select, params = tag_names_to_file_group_sub_select(tag_names, params)
+    wheres.append(f'fg.id = ANY({tags_sub_select})')
+    return wheres, params
 
 
 def tag_names_to_zim_sub_select(tag_names: List[str], zim_id: int = None) -> Tuple[str, dict]:

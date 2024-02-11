@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from modules.videos.models import Video
 from wrolpi.common import run_after, logger
 from wrolpi.db import get_db_session, optional_session
-from wrolpi.files.lib import handle_file_group_search_results, tag_names_to_file_group_sub_select
+from wrolpi.files.lib import handle_file_group_search_results
+from wrolpi.tags import tag_append_sub_select_where
 from ..errors import UnknownVideo
 from ..lib import save_channels_config
 
@@ -89,11 +90,7 @@ def search_videos(
         # No search_str provided.  Get id and total only.
         select_columns = 'fg.id, COUNT(*) OVER() AS total'
 
-    if tag_names:
-        # Filter all FileGroups by those that have been tagged with the provided tag names.
-        tags_stmt, params_ = tag_names_to_file_group_sub_select(tag_names)
-        params.update(params_)
-        wheres.append(f'fg.id = ANY({tags_stmt})')
+    wheres, params = tag_append_sub_select_where(tag_names, wheres, params)
 
     if search_str and headline:
         headline = ''',

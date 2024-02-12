@@ -87,7 +87,7 @@ jobs:
           paths:
             - "venv"
       - run:
-          command: './venv/bin/pytest -svv wrolpi modules'
+          command: './venv/bin/pytest -svv'
   api-tests-3-9:
     docker:
       - image: cimg/python:3.9
@@ -114,7 +114,7 @@ jobs:
           paths:
             - "venv"
       - run:
-          command: './venv/bin/pytest -svv wrolpi modules'
+          command: './venv/bin/pytest -svv'
   api-tests-3-10:
     docker:
       - image: cimg/python:3.10
@@ -141,7 +141,7 @@ jobs:
           paths:
             - "venv"
       - run:
-          command: './venv/bin/pytest -svv wrolpi modules'
+          command: './venv/bin/pytest -svv'
   api-tests-3-11:
     docker:
       - image: cimg/python:3.11
@@ -168,7 +168,7 @@ jobs:
           paths:
             - "venv"
       - run:
-          command: './venv/bin/pytest -svv wrolpi modules'
+          command: './venv/bin/pytest -svv'
   api-tests-3-12:
     docker:
       - image: cimg/python:3.12
@@ -195,7 +195,7 @@ jobs:
           paths:
             - "venv"
       - run:
-          command: './venv/bin/pytest -svv wrolpi modules'
+          command: './venv/bin/pytest -svv'
 
 workflows:
   wrolpi-api-tests:

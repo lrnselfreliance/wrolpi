@@ -314,7 +314,10 @@ async def subscribe(name: str, language: str, session: Session = None,
     elif name == 'Vikidia':
         url = f'https://download.kiwix.org/zim/vikidia/vikidia_{language}_all_maxi_'
     elif name == 'Stackoverflow (Stack Exchange)':
-        url = f'https://download.kiwix.org/zim/stack_exchange/{language}.stackoverflow.com_{language}_all_'
+        if language == 'en':
+            url = f'https://download.kiwix.org/zim/stack_exchange/stackoverflow.com_{language}_all_'
+        else:
+            url = f'https://download.kiwix.org/zim/stack_exchange/{language}.stackoverflow.com_{language}_all_'
     elif name == 'Superuser (Stack Exchange)':
         url = f'https://download.kiwix.org/zim/stack_exchange/superuser.com_{language}_all_'
     elif name == 'iFixit':

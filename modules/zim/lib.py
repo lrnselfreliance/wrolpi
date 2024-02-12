@@ -323,6 +323,20 @@ async def subscribe(name: str, language: str, session: Session = None,
         url = f'https://download.kiwix.org/zim/gutenberg/gutenberg_{language}_all_'
     elif name == 'Amateur Radio (Stack Exchange)':
         url = f'https://download.kiwix.org/zim/stack_exchange/ham.stackexchange.com_{language}_all_'
+    elif name == 'DIY (Stack Exchange)':
+        url = f'https://download.kiwix.org/zim/stack_exchange/diy.stackexchange.com_{language}_all_'
+    elif name == 'Electronics (Stack Exchange)':
+        url = f'https://download.kiwix.org/zim/stack_exchange/electronics.stackexchange.com_{language}_all'
+    elif name == 'Unix (Stack Exchange)':
+        url = f'https://download.kiwix.org/zim/stack_exchange/unix.stackexchange.com_{language}_all'
+    elif name == 'Ask Ubuntu (Stack Exchange)':
+        url = f'https://download.kiwix.org/zim/stack_exchange/askubuntu.com_{language}_all_'
+    elif name == 'Bicycles (Stack Exchange)':
+        url = f'https://download.kiwix.org/zim/stack_exchange/bicycles.stackexchange.com_{language}_all_'
+    elif name == 'Biology (Stack Exchange)':
+        url = f'https://download.kiwix.org/zim/stack_exchange/biology.stackexchange.com_{language}_all_'
+    elif name == '3D Printing (Stack Exchange)':
+        url = f'https://download.kiwix.org/zim/stack_exchange/3dprinting.stackexchange.com_{language}_all_'
     else:
         raise ValueError(f'{name} not a valid Kiwix subscription name!')
 
@@ -387,6 +401,22 @@ def zim_download_url_to_name(url: str) -> Tuple[str, str]:
         name = 'Gutenberg'
     elif project == 'ham.stackexchange.com' and flavor == '_all_':
         name = 'Amateur Radio (Stack Exchange)'
+    elif project == 'diy.stackexchange.com' and flavor == '_all_':
+        name = 'DIY (Stack Exchange)'
+    elif project == 'electronics.stackexchange.com' and flavor == '_all_':
+        name = 'Electronics (Stack Exchange)'
+    elif project == 'unix.stackexchange.com' and flavor == '_all_':
+        name = 'Unix (Stack Exchange)'
+    elif project == 'askubuntu.com' and flavor == '_all_':
+        name = 'Ask Ubuntu (Stack Exchange)'
+    elif project == 'bicycles.stackexchange.com' and flavor == '_all_':
+        name = 'Bicycles (Stack Exchange)'
+    elif project == 'biology.stackexchange.com' and flavor == '_all_':
+        name = 'Biology (Stack Exchange)'
+    elif project == 'arduino.stackexchange.com' and flavor == '_all_':
+        name = 'Arduino (Stack Exchange)'
+    elif project == '3dprinting.stackexchange.com' and flavor == '_all_':
+        name = '3D Printing (Stack Exchange)'
     else:
         raise RuntimeError(f'Could not find name for Zim URL: {url} {project=} {flavor=}')
 

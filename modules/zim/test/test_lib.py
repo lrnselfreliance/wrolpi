@@ -264,7 +264,23 @@ def test_zim_tag_migration(test_session, test_directory, zim_factory, tag_factor
         ('https://download.kiwix.org/zim/ifixit/ifixit_nl_all_', ('iFixit', 'nl')),
         ('https://download.kiwix.org/zim/gutenberg/gutenberg_ang_all_', ('Gutenberg', 'ang')),
         ('https://download.kiwix.org/zim/stack_exchange/ham.stackexchange.com_en_all_',
-         ('Amateur Radio (Stack Exchange)', 'en'))
+         ('Amateur Radio (Stack Exchange)', 'en')),
+        ('https://download.kiwix.org/zim/stack_exchange/diy.stackexchange.com_en_all_',
+         ('DIY (Stack Exchange)', 'en')),
+        ('https://download.kiwix.org/zim/stack_exchange/electronics.stackexchange.com_en_all_',
+         ('Electronics (Stack Exchange)', 'en')),
+        ('https://download.kiwix.org/zim/stack_exchange/unix.stackexchange.com_en_all_',
+         ('Unix (Stack Exchange)', 'en')),
+        ('https://download.kiwix.org/zim/stack_exchange/askubuntu.com_en_all_',
+         ('Ask Ubuntu (Stack Exchange)', 'en')),
+        ('https://download.kiwix.org/zim/stack_exchange/bicycles.stackexchange.com_en_all_',
+         ('Bicycles (Stack Exchange)', 'en')),
+        ('https://download.kiwix.org/zim/stack_exchange/biology.stackexchange.com_en_all_',
+         ('Biology (Stack Exchange)', 'en')),
+        ('https://download.kiwix.org/zim/stack_exchange/arduino.stackexchange.com_en_all_',
+         ('Arduino (Stack Exchange)', 'en')),
+        ('https://download.kiwix.org/zim/stack_exchange/3dprinting.stackexchange.com_en_all_',
+         ('3D Printing (Stack Exchange)', 'en')),
     ]
 )
 def test_zim_download_url_to_name(url, expected):

@@ -134,6 +134,46 @@ KIWIX_CATALOG = [
         'languages': ['en'],
         'size': 62 * 1048576,
     },
+    {
+        'name': 'DIY (Stack Exchange)',
+        'languages': ['en'],
+        'size': 930 * 1048576,
+    },
+    {
+        'name': 'Electronics (Stack Exchange)',
+        'languages': ['en'],
+        'size': 1.4 * 1073741824,
+    },
+    {
+        'name': 'Unix (Stack Exchange)',
+        'languages': ['en'],
+        'size': 1.1 * 1073741824,
+    },
+    {
+        'name': 'Ask Ubuntu (Stack Exchange)',
+        'languages': ['en'],
+        'size': 1.9 * 1073741824,
+    },
+    {
+        'name': 'Bicycles (Stack Exchange)',
+        'languages': ['en'],
+        'size': 350 * 1048576,
+    },
+    {
+        'name': 'Biology (Stack Exchange)',
+        'languages': ['en'],
+        'size': 350 * 1048576,
+    },
+    {
+        'name': 'Arduino (Stack Exchange)',
+        'languages': ['en'],
+        'size': 240 * 1048576,
+    },
+    {
+        'name': '3D Printing (Stack Exchange)',
+        'languages': ['en'],
+        'size': 100 * 1048576,
+    },
 ]
 
 KIWIX_CATALOG_BY_NAME = {i['name']: i for i in KIWIX_CATALOG}

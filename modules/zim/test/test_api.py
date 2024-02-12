@@ -178,6 +178,13 @@ def test_zim_subscribe(test_session, test_client):
     assert test_session.query(lib.ZimSubscription).count() == 0
     assert test_session.query(Download).count() == 0
 
+    # English Stack Exchange is special.
+    content = dict(name='Stackoverflow (Stack Exchange)', language='en')
+    request, response = test_client.post('/api/zim/subscribe', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.CREATED
+    download: Download = test_session.query(Download).one()
+    assert download.url == 'https://download.kiwix.org/zim/stack_exchange/stackoverflow.com_en_all_'
+
 
 def test_get_zim_entry(test_session, test_client, test_zim):
     request, response = test_client.get('/api/zim/1/entry/home')

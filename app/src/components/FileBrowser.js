@@ -54,17 +54,20 @@ export function splitPathParentAndName(path) {
 
 function Folder({folder, onFolderClick, sortData, selectedPaths, onFileClick, onSelect, disabled}) {
     // Creates a single table row for a folder, or a row for itself and indented rows for its children.
-    let {path, children, is_empty} = folder;
+    let {path, children, is_empty, size} = folder;
     const pathWithNoTrailingSlash = path.substring(0, path.length - 1);
     const name = path.substring(pathWithNoTrailingSlash.lastIndexOf('/') + 1);
     const f = <TableRow key={path} disabled={disabled}>
         <TableCell collapsing>
             <Checkbox checked={selectedPaths.indexOf(folder['path']) >= 0} onChange={() => onSelect(folder['path'])}/>
         </TableCell>
-        <TableCell onClick={() => onFolderClick(path)} className='file-path' colSpan={2} disabled={is_empty}>
+        <TableCell onClick={() => onFolderClick(path)} className='file-path' disabled={is_empty}>
             {depthIndentation(pathWithNoTrailingSlash)}
             {is_empty ? <Icon name='folder outline'/> : <Icon name='folder'/>}
             {name}
+        </TableCell>
+        <TableCell collapsing textAlign='right'>
+            {size > 0 && humanFileSize(size)}
         </TableCell>
     </TableRow>;
     if (children) {

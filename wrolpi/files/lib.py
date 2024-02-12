@@ -77,14 +77,37 @@ def get_file_dict(file: str) -> Dict:
     return _get_file_dict(media_directory / file)
 
 
+@cachetools.func.ttl_cache(1_000, 30.0)
+def _get_directory_size(directory: pathlib.Path) -> int:
+    media_directory = get_media_directory()
+    if not str(directory).startswith(str(media_directory)):
+        raise InvalidFile('Directory is not in the media directory')
+
+    with get_db_curs() as curs:
+        stmt = "SELECT SUM(size) FROM file_group WHERE primary_path LIKE %(path)s"
+        directory = f'{directory}/%'
+        curs.execute(stmt, dict(path=directory))
+        results = curs.fetchone()
+        if results and results[0] is not None:
+            return int(results[0])
+        return 0
+
+
 @cachetools.func.ttl_cache(10_000, 30.0)
 def _get_directory_dict(directory: pathlib.Path,
                         directories_cache: str,  # Used to cache by requested directories.
                         ) -> Dict:
     media_directory = get_media_directory()
+    try:
+        directory_size = _get_directory_size(directory)
+    except Exception as e:
+        logger.error('Failed to get directory size', e)
+        directory_size = 0
+
     return dict(
         path=f'{directory.relative_to(media_directory)}/',
         is_empty=not next(directory.iterdir(), False),
+        size=directory_size,
     )
 
 

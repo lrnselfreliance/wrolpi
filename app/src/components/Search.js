@@ -164,7 +164,8 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
                     {
                         title: newSuggestions.fileGroups.toString(),
                         type: 'files',
-                        location: getLocationStr({q: searchStr})
+                        // Add search query onto current location.
+                        location: getLocationStr({q: encodeURIComponent(searchStr)}, '/search')
                     }
                 ]
             };
@@ -179,6 +180,7 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
         if (newSuggestions && zimSum > 0) {
             results.zimsSum = {
                 name: 'Zims', results: [
+                    // Navigating to Zims is not relative. We don't want to keep filters or other extra params.
                     {title: zimSum.toString(), type: 'zims', location: `/search/zim?q=${encodeURIComponent(searchStr)}`}
                 ],
             };

@@ -132,10 +132,10 @@ export const useQuery = () => {
         setQuery(newQuery);
     }
 
-    const getLocationStr = (newSearchParams) => {
+    const getLocationStr = (newSearchParams, pathname) => {
         // Get the current location, but with new params appended.
         const newQuery = createSearchParams(getQuery(newSearchParams));
-        return `${location.pathname}?${newQuery.toString()}`
+        return `${pathname || location.pathname}?${newQuery.toString()}`
     }
 
     return {searchParams, setSearchParams, setQuery, updateQuery, getLocationStr}

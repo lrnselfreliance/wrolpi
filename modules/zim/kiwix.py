@@ -174,6 +174,37 @@ KIWIX_CATALOG = [
         'languages': ['en'],
         'size': 100 * 1048576,
     },
+    {
+        'name': 'MD Wiki (Wiki Project Med Foundation)',
+        'languages': ['en'],
+        'size': 5.9 * 1073741824,
+    },
+    {
+        'name': 'WikiMed Medical Encyclopedia',
+        'languages': ['ar', 'as', 'bn', 'bpy', 'de', 'en', 'es', 'fa', 'fr', 'gu', 'hi', 'it', 'ja', 'kn', 'lo', 'ml',
+                      'mr', 'or', 'pa', 'pt', 'ru', 'ta', 'te', 'uk', 'ur', 'zh'],
+        'size': 6.3 * 1073741824,
+    },
+    {
+        'name': 'Post Disaster Resource Library',
+        'languages': ['en'],
+        'size': 763 * 1048576,
+    },
+    {
+        'name': 'Military Medicine',
+        'languages': ['en'],
+        'size': 82 * 1048576,
+    },
+    {
+        'name': 'WikEm (Global Emergency Medicine Wiki)',
+        'languages': ['en'],
+        'size': 42 * 1048576,
+    },
+    {
+        'name': 'Health (Stack Exchange)',
+        'languages': ['en'],
+        'size': 57 * 1048576,
+    },
 ]
 
 KIWIX_CATALOG_BY_NAME = {i['name']: i for i in KIWIX_CATALOG}

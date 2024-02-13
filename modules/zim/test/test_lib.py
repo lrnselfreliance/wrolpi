@@ -281,6 +281,18 @@ def test_zim_tag_migration(test_session, test_directory, zim_factory, tag_factor
          ('Arduino (Stack Exchange)', 'en')),
         ('https://download.kiwix.org/zim/stack_exchange/3dprinting.stackexchange.com_en_all_',
          ('3D Printing (Stack Exchange)', 'en')),
+        ('https://download.kiwix.org/zim/other/mdwiki_en_all_',
+         ('MD Wiki (Wiki Project Med Foundation)', 'en')),
+        ('https://download.kiwix.org/zim/wikipedia/wikipedia_bpy_medicine_',
+         ('WikiMed Medical Encyclopedia', 'bpy')),
+        ('https://download.kiwix.org/zim/other/zimgit-post-disaster_en_',
+         ('Post Disaster Resource Library', 'en')),
+        ('https://download.kiwix.org/zim/zimit/fas-military-medicine_en_',
+         ('Military Medicine', 'en')),
+        ('https://download.kiwix.org/zim/other/wikem_en_all_maxi_',
+         ('WikEm (Global Emergency Medicine Wiki)', 'en')),
+        ('https://download.kiwix.org/zim/stack_exchange/health.stackexchange.com_en_all_',
+         ('Health (Stack Exchange)', 'en')),
     ]
 )
 def test_zim_download_url_to_name(url, expected):

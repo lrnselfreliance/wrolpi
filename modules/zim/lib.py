@@ -340,6 +340,18 @@ async def subscribe(name: str, language: str, session: Session = None,
         url = f'https://download.kiwix.org/zim/stack_exchange/biology.stackexchange.com_{language}_all_'
     elif name == '3D Printing (Stack Exchange)':
         url = f'https://download.kiwix.org/zim/stack_exchange/3dprinting.stackexchange.com_{language}_all_'
+    elif name == 'MD Wiki (Wiki Project Med Foundation)':
+        url = f'https://download.kiwix.org/zim/other/mdwiki_{language}_all_'
+    elif name == 'WikiMed Medical Encyclopedia':
+        url = f'https://download.kiwix.org/zim/wikipedia/wikipedia_{language}_medicine_'
+    elif name == 'Post Disaster Resource Library':
+        url = f'https://download.kiwix.org/zim/other/zimgit-post-disaster_{language}_'
+    elif name == 'Military Medicine':
+        url = f'https://download.kiwix.org/zim/zimit/fas-military-medicine_{language}_'
+    elif name == 'WikEm (Global Emergency Medicine Wiki)':
+        url = f'https://download.kiwix.org/zim/other/wikem_{language}_all_maxi_'
+    elif name == 'Health (Stack Exchange)':
+        url = f'https://download.kiwix.org/zim/stack_exchange/health.stackexchange.com_{language}_all_'
     else:
         raise ValueError(f'{name} not a valid Kiwix subscription name!')
 
@@ -365,11 +377,17 @@ async def unsubscribe(subscription_id: int, session: Session = None):
         raise UnknownZimSubscription(f'{subscription_id=}')
 
 
-KIWIX_URL_PARSER = re.compile(r'https:\/\/download\.kiwix\.org\/zim\/(.+?)\/(.+?)_(\w{2,3})(_.+)')
+KIWIX_URL_PARSER = re.compile(r'https:\/\/download\.kiwix\.org\/zim\/(.+?)\/(.+?)[_-](\w{2,3})([_-].+)')
+KIWIX_URL_NO_FLAVOR_PARSER = re.compile(r'https:\/\/download\.kiwix\.org\/zim\/(.+?)\/(.+)[_-]([a-zA-Z]{2,3})')
 
 
 def zim_download_url_to_name(url: str) -> Tuple[str, str]:
-    _, project, language, flavor = KIWIX_URL_PARSER.match(url).groups()
+    try:
+        _, project, language, flavor = KIWIX_URL_PARSER.match(url).groups()
+    except AttributeError:
+        # May not have a "flavor".
+        _, project, language = KIWIX_URL_NO_FLAVOR_PARSER.match(url).groups()
+        flavor = None
     if project == 'wikipedia' and flavor == '_all_maxi_':
         name = 'Wikipedia (with images)'
     elif project == 'wikipedia' and flavor == '_all_nopic_':
@@ -420,6 +438,18 @@ def zim_download_url_to_name(url: str) -> Tuple[str, str]:
         name = 'Arduino (Stack Exchange)'
     elif project == '3dprinting.stackexchange.com' and flavor == '_all_':
         name = '3D Printing (Stack Exchange)'
+    elif project == 'mdwiki' and flavor == '_all_':
+        name = 'MD Wiki (Wiki Project Med Foundation)'
+    elif project == 'wikipedia' and flavor == '_medicine_':
+        name = 'WikiMed Medical Encyclopedia'
+    elif project == 'zimgit-post-disaster' and flavor is None:
+        name = 'Post Disaster Resource Library'
+    elif project == 'fas-military-medicine' and flavor is None:
+        name = 'Military Medicine'
+    elif project == 'wikem' and flavor == '_all_maxi_':
+        name = 'WikEm (Global Emergency Medicine Wiki)'
+    elif project == 'health.stackexchange.com' and flavor == '_all_':
+        name = 'Health (Stack Exchange)'
     else:
         raise RuntimeError(f'Could not find name for Zim URL: {url} {project=} {flavor=}')
 

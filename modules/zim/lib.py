@@ -338,6 +338,8 @@ async def subscribe(name: str, language: str, session: Session = None,
         url = f'https://download.kiwix.org/zim/stack_exchange/bicycles.stackexchange.com_{language}_all_'
     elif name == 'Biology (Stack Exchange)':
         url = f'https://download.kiwix.org/zim/stack_exchange/biology.stackexchange.com_{language}_all_'
+    elif name == 'Arduino (Stack Exchange)':
+        url = f'https://download.kiwix.org/zim/stack_exchange/arduino.stackexchange.com_{language}_all_'
     elif name == '3D Printing (Stack Exchange)':
         url = f'https://download.kiwix.org/zim/stack_exchange/3dprinting.stackexchange.com_{language}_all_'
     elif name == 'MD Wiki (Wiki Project Med Foundation)':

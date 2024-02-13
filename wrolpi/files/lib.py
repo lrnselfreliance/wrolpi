@@ -77,20 +77,13 @@ def get_file_dict(file: str) -> Dict:
     return _get_file_dict(media_directory / file)
 
 
-@cachetools.func.ttl_cache(1_000, 30.0)
-def _get_directory_size(directory: pathlib.Path) -> int:
-    media_directory = get_media_directory()
-    if not str(directory).startswith(str(media_directory)):
-        raise InvalidFile('Directory is not in the media directory')
-
-    with get_db_curs() as curs:
-        stmt = "SELECT SUM(size) FROM file_group WHERE primary_path LIKE %(path)s"
-        directory = f'{directory}/%'
-        curs.execute(stmt, dict(path=directory))
-        results = curs.fetchone()
-        if results and results[0] is not None:
-            return int(results[0])
-        return 0
+def get_directory_size(directory: pathlib.Path) -> int:
+    """Returns the size of all the files in the specified directory in bytes using the `du` command."""
+    # Execute the 'du' command to get the total size of the directory
+    result = subprocess.run(['du', '-sb', directory], capture_output=True, check=True, text=True)
+    # The output is in the format "size\t directory\n", so split by tab and take the first element
+    size = int(result.stdout.split("\t")[0])
+    return size - 4096  # Remove size of directory.
 
 
 @cachetools.func.ttl_cache(10_000, 30.0)
@@ -99,7 +92,7 @@ def _get_directory_dict(directory: pathlib.Path,
                         ) -> Dict:
     media_directory = get_media_directory()
     try:
-        directory_size = _get_directory_size(directory)
+        directory_size = get_directory_size(directory)
     except Exception as e:
         logger.error('Failed to get directory size', e)
         directory_size = 0
@@ -114,6 +107,7 @@ def _get_directory_dict(directory: pathlib.Path,
 def _get_recursive_directory_dict(directory: pathlib.Path, directories: List[pathlib.Path]) -> Dict:
     directories_cache = str(sorted(directories))
     d = _get_directory_dict(directory, directories_cache)
+
     if directory in directories:
         children = dict()
         for path in directory.iterdir():

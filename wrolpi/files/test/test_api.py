@@ -595,6 +595,7 @@ async def test_get_directory_size(test_session, test_directory, make_files_struc
         'foo/two': 'two contents',
         'bar/one': 'baz contents',
     })
+    # Make empty directory.
     (test_directory / 'baz').mkdir()
 
     request, response = await test_async_client.post('/api/files/refresh')

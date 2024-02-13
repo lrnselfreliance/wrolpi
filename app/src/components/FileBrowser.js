@@ -61,13 +61,10 @@ function Folder({folder, onFolderClick, sortData, selectedPaths, onFileClick, on
         <TableCell collapsing>
             <Checkbox checked={selectedPaths.indexOf(folder['path']) >= 0} onChange={() => onSelect(folder['path'])}/>
         </TableCell>
-        <TableCell onClick={() => onFolderClick(path)} className='file-path' disabled={is_empty}>
+        <TableCell onClick={() => onFolderClick(path)} className='file-path' colSpan={2} disabled={is_empty}>
             {depthIndentation(pathWithNoTrailingSlash)}
             {is_empty ? <Icon name='folder outline'/> : <Icon name='folder'/>}
             {name}
-        </TableCell>
-        <TableCell collapsing textAlign='right'>
-            {size > 0 && humanFileSize(size)}
         </TableCell>
     </TableRow>;
     if (children) {

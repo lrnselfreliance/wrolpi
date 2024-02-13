@@ -77,30 +77,14 @@ def get_file_dict(file: str) -> Dict:
     return _get_file_dict(media_directory / file)
 
 
-def get_directory_size(directory: pathlib.Path) -> int:
-    """Returns the size of all the files in the specified directory in bytes using the `du` command."""
-    # Execute the 'du' command to get the total size of the directory
-    result = subprocess.run(['du', '-sb', directory], capture_output=True, check=True, text=True)
-    # The output is in the format "size\t directory\n", so split by tab and take the first element
-    size = int(result.stdout.split("\t")[0])
-    return size - 4096  # Remove size of directory.
-
-
 @cachetools.func.ttl_cache(10_000, 30.0)
 def _get_directory_dict(directory: pathlib.Path,
                         directories_cache: str,  # Used to cache by requested directories.
                         ) -> Dict:
     media_directory = get_media_directory()
-    try:
-        directory_size = get_directory_size(directory)
-    except Exception as e:
-        logger.error('Failed to get directory size', e)
-        directory_size = 0
-
     return dict(
         path=f'{directory.relative_to(media_directory)}/',
         is_empty=not next(directory.iterdir(), False),
-        size=directory_size,
     )
 
 

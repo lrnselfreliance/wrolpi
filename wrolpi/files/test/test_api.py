@@ -587,22 +587,3 @@ async def test_delete_directory_recursive(test_session, test_directory, make_fil
     empty = test_session.query(FileGroup).one()
     assert empty.primary_path.name == 'empty'
 
-
-@pytest.mark.asyncio
-async def test_get_directory_size(test_session, test_directory, make_files_structure, test_async_client):
-    make_files_structure({
-        'foo/one': 'one contents',
-        'foo/two': 'two contents',
-        'bar/one': 'baz contents',
-    })
-    # Make empty directory.
-    (test_directory / 'baz').mkdir()
-
-    request, response = await test_async_client.post('/api/files/refresh')
-    assert response.status_code == HTTPStatus.NO_CONTENT
-
-    request, response = await test_async_client.post('/api/files', content=json.dumps({'directories': []}))
-    assert response.status_code == HTTPStatus.OK
-    assert response.json['files']['foo/']['size'] == 24
-    assert response.json['files']['bar/']['size'] == 12
-    assert response.json['files']['baz/']['size'] == 0

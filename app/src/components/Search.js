@@ -249,6 +249,7 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
     // User clicked on a result in the dropdown.
     const handleResultSelect = ({result}) => {
         if (result.location) {
+            console.info(`useSearchSuggestions Navigating: ${result.location}`)
             navigate(result.location);
         } else {
             console.error('No location to navigate');

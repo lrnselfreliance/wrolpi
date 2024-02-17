@@ -593,6 +593,17 @@ export async function getFiles(directories) {
     return files;
 }
 
+export async function getFile(path) {
+    let body = {file: path};
+    let response = await apiPost(`${API_URI}/files/file`, body);
+    if (response.ok) {
+        const {file} = await response.json();
+        return file;
+    } else {
+        throw new Error('Failed to get file data');
+    }
+}
+
 export async function deleteFile(paths) {
     let body = {paths: paths};
     const response = await apiPost(`${API_URI}/files/delete`, body);

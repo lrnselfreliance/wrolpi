@@ -9,6 +9,7 @@ import {
     getChannels,
     getDirectories,
     getDownloads,
+    getFile,
     getFiles,
     getInventory,
     getOutdatedZims,
@@ -109,6 +110,7 @@ export const useQuery = () => {
     const [searchParams, setSearchParams] = useSearchParams();
 
     const setQuery = (obj, replace = true) => {
+        console.debug(`setQuery`, obj);
         setSearchParams(createSearchParams(obj), {replace: replace});
     }
 

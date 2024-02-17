@@ -587,3 +587,15 @@ async def test_delete_directory_recursive(test_session, test_directory, make_fil
     empty = test_session.query(FileGroup).one()
     assert empty.primary_path.name == 'empty'
 
+
+@pytest.mark.asyncio
+async def test_get_file(test_session, test_async_client, test_directory, make_files_structure):
+    """Can get info about a single file."""
+    make_files_structure({'foo/bar.txt': 'foo contents'})
+    await lib.refresh_files()
+
+    content = dict(file='foo/bar.txt')
+    request, response = await test_async_client.post('/api/files/file', content=json.dumps(content))
+    assert response.status_code == HTTPStatus.OK
+    assert response.json['file']
+    assert response.json['file']['path'] == 'foo/bar.txt'

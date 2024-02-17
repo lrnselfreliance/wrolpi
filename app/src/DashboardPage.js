@@ -26,6 +26,7 @@ import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
 import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
 import {useSettings, useWROLMode} from "./hooks/customHooks";
 import {FileSearchFilterButton} from "./components/Files";
+import {FilePreviewContext} from "./components/FilePreview";
 
 function FlagsMessages({flags}) {
     const {settings, fetchSettings} = useSettings();
@@ -171,6 +172,8 @@ export function DashboardPage() {
         setSearchTags,
     } = useSearchSuggestions(searchStr, activeTags);
     const {status} = useContext(StatusContext);
+
+    const {setPreviewFile} = React.useContext(FilePreviewContext);
 
     React.useEffect(() => {
         setSuggestionSearchStr(localSearchStr);

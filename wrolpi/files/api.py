@@ -41,7 +41,10 @@ async def get_files(_: Request, body: schema.FilesRequest):
 )
 @validate(schema.FileRequest)
 async def get_file(_: Request, body: schema.FileRequest):
-    file = lib.get_file_dict(body.file)
+    try:
+        file = lib.get_file_dict(body.file)
+    except FileNotFoundError:
+        raise InvalidFile()
     return json_response({'file': file})
 
 

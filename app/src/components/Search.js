@@ -165,7 +165,7 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
                         title: newSuggestions.fileGroups.toString(),
                         type: 'files',
                         // Add search query onto current location.
-                        location: getLocationStr({q: encodeURIComponent(searchStr)}, '/search')
+                        location: getLocationStr({q: searchStr}, '/search'),
                     }
                 ]
             };

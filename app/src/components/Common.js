@@ -405,6 +405,16 @@ const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small
     const [value, setValue] = useState(searchStr || '');
     const [submitted, setSubmitted] = useState(false);
 
+    React.useEffect(() => {
+        // Search was changed above.
+        if (searchStr !== value) {
+            setValue(searchStr);
+        }
+        if (!searchStr) {
+            setValue('');
+        }
+    }, [searchStr, value]);
+
     const handleChange = (e) => {
         if (e) {
             e.preventDefault();

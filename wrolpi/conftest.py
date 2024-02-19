@@ -424,6 +424,7 @@ def make_files_structure(test_directory) -> Callable[[Union[List[Union[pathlib.P
         if file_groups:
             for idx, path in enumerate(files):
                 fg = FileGroup.from_paths(session, path)
+                fg.do_index()
                 files[idx] = fg
         return sorted(files) if isinstance(paths, dict) else files
 

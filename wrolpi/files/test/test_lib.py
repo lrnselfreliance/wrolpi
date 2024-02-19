@@ -899,3 +899,49 @@ async def test_move_tagged(test_session, test_directory, make_files_structure, t
     await lib.rename(new_bar, 'baz.txt')
     baz = new_bar.with_name('baz.txt')
     assert baz.read_text() == 'bar'
+
+
+@pytest.mark.asyncio
+async def test_html_index(test_session, test_directory, make_files_structure):
+    make_files_structure({
+        'archive.html': '''<html>
+        <title>The Title</title>
+
+        <style>
+        body {
+            color: red;
+        }
+        </style>
+
+        <script class="sf-hidden" type="application/ld+json">
+         {"@context":"http://schema.org", "@type":"NewsArticle",
+          "datePublished":"2022-09-27T00:40:19.000Z", "dateModified":"2022-09-27T13:43:47.971Z",
+          "author":{"@type":"Person", "name":"BOBBY", "jobTitle":""},
+          "creator":{"@type":"Person", "name":"OTHER BOBBY", "jobTitle":""},
+          "description": "The article description"}
+        </script>
+
+        <body>
+        <h1>Some Header</h1>
+        <p>Some Text</p>
+
+        <span>Span Text</span>
+
+        Outside element.
+        </body>
+
+        </html>
+        '''
+    })
+
+    await lib.refresh_files()
+
+    assert test_session.query(FileGroup).count() == 1, 'Too many files were refreshed.'
+    archive_file: FileGroup = test_session.query(FileGroup).one()
+    assert archive_file.a_text == 'The Title'
+    assert archive_file.b_text == 'archive html'
+    assert archive_file.c_text == 'The article description'
+    assert archive_file.d_text == '''Some Header
+Some Text
+Span Text
+Outside element.'''

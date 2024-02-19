@@ -1592,3 +1592,14 @@ def chain(iterable: Union[List, Tuple], length: int) -> List:
     if not yielded:
         # Not enough items to iterate.  Yield the original iterable.
         yield iterable
+
+
+def get_title_from_html(html: str, url: str = None) -> str:
+    """
+    Try and get the title from the
+    """
+    soup = get_html_soup(html)
+    try:
+        return soup.title.string
+    except Exception:  # noqa
+        logger.debug(f'Unable to extract title {url}')

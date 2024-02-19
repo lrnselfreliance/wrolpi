@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi.cmd import SINGLE_FILE_BIN, CHROMIUM, READABILITY_BIN
 from wrolpi.common import logger, register_modeler, register_refresh_cleanup, limit_concurrent, split_lines_by_length, \
-    slow_logger, html_screenshot
+    slow_logger, html_screenshot, get_title_from_html
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
@@ -20,7 +20,7 @@ from wrolpi.vars import PYTEST, DOCKERIZED
 from . import lib
 from .api import bp  # noqa
 from .errors import InvalidArchive
-from .lib import is_singlefile_file, get_title_from_html, request_archive, SINGLEFILE_HEADER
+from .lib import is_singlefile_file, request_archive, SINGLEFILE_HEADER
 from .models import Archive, Domain
 
 PRETTY_NAME = 'Archive'
@@ -263,6 +263,9 @@ async def archive_modeler():
             for file_group, archive in results:
                 processed += 1
 
+                # Even if indexing fails, we mark it as indexed.  We won't retry indexing this.
+                file_group.indexed = True
+
                 with slow_logger(1, f'Modeling archive took %(elapsed)s seconds: {file_group}',
                                  logger__=logger):
                     if archive:
@@ -279,10 +282,7 @@ async def archive_modeler():
                             model_archive(file_group, session=session)
                         except InvalidArchive:
                             # It was not a real Archive.  Many HTML files will not be an Archive.
-                            pass
-
-                # Even if indexing fails, we mark it as indexed.  We won't retry indexing this.
-                file_group.indexed = True
+                            file_group.indexed = False
 
             session.commit()
 

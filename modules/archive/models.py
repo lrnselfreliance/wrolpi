@@ -9,7 +9,7 @@ from sqlalchemy.orm import relationship, Session, validates
 from sqlalchemy.orm.collections import InstrumentedList
 
 from wrolpi import dates
-from wrolpi.common import ModelHelper, Base, logger
+from wrolpi.common import ModelHelper, Base, logger, get_title_from_html
 from wrolpi.db import optional_session
 from wrolpi.errors import UnknownArchive
 from wrolpi.files.models import FileGroup
@@ -242,7 +242,6 @@ class Archive(Base, ModelHelper):
 
     def apply_singlefile_title(self):
         """Get the title from the Singlefile, if it's missing."""
-        from modules.archive.lib import get_title_from_html
         if self.singlefile_path and not self.file_group.title:
             self.file_group.title = get_title_from_html(self.singlefile_path.read_text())
 

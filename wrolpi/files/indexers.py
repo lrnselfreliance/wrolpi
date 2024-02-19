@@ -11,7 +11,7 @@ try:
 except ImportError:
     PdfReader = None
 
-from wrolpi.common import logger, split_lines_by_length, truncate_object_bytes
+from wrolpi.common import logger, split_lines_by_length, truncate_object_bytes, extract_html_text, get_title_from_html
 
 logger = logger.getChild(__name__)
 
@@ -115,3 +115,23 @@ class TextIndexer(Indexer, ABC):
         contents = truncate_object_bytes(contents, FILE_MAX_TEXT_SIZE)
         words = split_lines_by_length(contents)
         return words
+
+
+@register_indexer('text/html')
+class HTMLIndexer(Indexer, ABC):
+    """Extracts words from an HTML document.  Ignores code (HTML/Javascript/etc)."""
+
+    @classmethod
+    def create_index(cls, path: pathlib.Path):
+        from modules.archive.lib import parse_article_html_metadata
+
+        a = cls.get_title(path)
+
+        contents = path.read_text()
+        metadata = parse_article_html_metadata(contents)
+        text = extract_html_text(contents)
+        words = split_lines_by_length(text)
+
+        title = metadata.title or get_title_from_html(contents)
+
+        return title, a, metadata.description, words

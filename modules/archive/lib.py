@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from modules.archive.models import Domain, Archive
 from wrolpi import dates
 from wrolpi.common import get_media_directory, logger, extract_domain, escape_file_name, aiohttp_post, \
-    format_html_string, split_lines_by_length, get_html_soup
+    format_html_string, split_lines_by_length, get_html_soup, get_title_from_html
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
@@ -217,17 +217,6 @@ def get_or_create_domain(session: Session, url) -> Domain:
         session.add(domain)
         session.flush()
     return domain
-
-
-def get_title_from_html(html: str, url: str = None) -> str:
-    """
-    Try and get the title from the
-    """
-    soup = get_html_soup(html)
-    try:
-        return soup.title.string
-    except Exception:  # noqa
-        logger.debug(f'Unable to extract title {url}')
 
 
 SINGLEFILE_URL_EXTRACTOR = re.compile(r'Page saved with SingleFile \s+url: (http.+?)\n')

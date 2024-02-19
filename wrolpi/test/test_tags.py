@@ -219,13 +219,27 @@ async def test_import_tags_config(test_session, test_directory, test_tags_config
     file_group: FileGroup = test_session.query(FileGroup).one()
     assert file_group.tag_files, 'File was not tagged during import.'
 
-    # Importing again does not change count.
-    await files_lib.refresh_files()
+
+@pytest.mark.asyncio()
+async def test_import_tags_config_missing_file(test_session, test_directory, test_tags_config, example_singlefile):
+    """A FileGroup should be created (and tagged) when a file exists, but does not yet have a FileGroup."""
+    with test_tags_config.open('wt') as fh:
+        data = dict(
+            # Tag names can contain Unicode characters.
+            tags={'🦄': {'color': '#654321'}},
+            tag_files=[
+                ('🦄', str(example_singlefile.relative_to(test_directory)), '2000-01-01 01:01:01'),
+            ],
+        )
+        yaml.dump(data, fh)
+
+    # Re-initialize config with the data we just saved.
+    tags.get_tags_config().initialize()
+
     tags.import_tags_config(test_session)
-    assert test_session.query(tags.Tag).count() == 1
-    assert test_session.query(tags.TagFile).count() == 1
-    # Example file, and the config file.
-    assert test_session.query(FileGroup).count() == 2
+
+    file_group: FileGroup = test_session.query(FileGroup).one()
+    assert file_group.tag_files, 'File was not tagged during import.'
 
 
 @pytest.mark.asyncio

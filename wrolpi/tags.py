@@ -284,6 +284,7 @@ def import_tags_config(session: Session = None):
     """Reads the Tags and TagFiles from the config file, upserts them in the DB."""
     from modules.zim import lib as zim_lib
     from modules.zim.models import Zim, TagZimEntry
+    from wrolpi.files.lib import glob_shared_stem
 
     if PYTEST and not TEST_TAGS_CONFIG:
         logger.warning('Refusing to import tags without test tags config.  '
@@ -340,6 +341,13 @@ def import_tags_config(session: Session = None):
                 # Paths are absolute in the DB, relative in config.
                 absolute_path = media_directory / primary_path
                 file_group: FileGroup = file_groups_by_primary_path.get(absolute_path)
+                if not file_group and absolute_path.is_file():
+                    # File exists, but is not yet in DB.
+                    files = glob_shared_stem(absolute_path)
+                    file_group = FileGroup.from_paths(session, *files)
+                    session.add(file_group)
+                    session.flush([file_group, ])
+
                 if tag and file_group:
                     tag_file: TagFile = tag_files.get((tag.id, file_group.id))
                     if not tag_file:

@@ -47,7 +47,7 @@ logger = logger.getChild(__name__)
 
 __all__ = ['list_directories_contents', 'delete', 'split_path_stem_and_suffix', 'refresh_files', 'search_files',
            'get_mimetype', 'split_file_name_words', 'get_primary_file', 'get_file_statistics',
-           'search_file_suggestion_count',
+           'search_file_suggestion_count', 'glob_shared_stem',
            'move', 'rename', 'delete_directory', 'handle_file_group_search_results']
 
 

@@ -9,7 +9,6 @@ import {
     getChannels,
     getDirectories,
     getDownloads,
-    getFile,
     getFiles,
     getInventory,
     getOutdatedZims,
@@ -29,7 +28,7 @@ import {
 } from "../api";
 import {createSearchParams, useLocation, useSearchParams} from "react-router-dom";
 import {enumerate, filterToMimetypes, humanFileSize, secondsToFullDuration} from "../components/Common";
-import {StatusContext} from "../contexts/contexts";
+import {SettingsContext, StatusContext} from "../contexts/contexts";
 import {toast} from "react-semantic-toasts-2";
 import {useSearch} from "../components/Search";
 import _ from "lodash";
@@ -630,14 +629,10 @@ export const useDownloads = () => {
 
 export const useThrottle = () => {
     const [on, setOn] = useState(null);
+    const {settings, fetchSettings} = React.useContext(SettingsContext);
 
-    const fetchThrottleStatus = async () => {
-        let status;
-        try {
-            status = await getThrottleStatus();
-        } catch (e) {
-            console.error(e);
-        }
+    useEffect(() => {
+        const status = settings['throttle_status'];
         if (status === 'powersave') {
             setOn(true);
         } else if (status === 'ondemand') {
@@ -645,16 +640,12 @@ export const useThrottle = () => {
         } else {
             setOn(null);
         }
-    }
-
-    useEffect(() => {
-        fetchThrottleStatus();
-    }, []);
+    }, [JSON.stringify(settings)]);
 
     const localSetThrottle = async (on) => {
         setOn(null);
         await setThrottle(on);
-        await fetchThrottleStatus();
+        await fetchSettings();
     }
 
     return {on, setOn, setThrottle: localSetThrottle};
@@ -752,7 +743,7 @@ export const useSettings = () => {
 }
 
 export const useMediaDirectory = () => {
-    const {settings} = useSettings();
+    const {settings} = React.useContext(SettingsContext);
 
     return settings['media_directory'];
 }
@@ -760,7 +751,7 @@ export const useMediaDirectory = () => {
 export const useSettingsInterval = () => {
     const {settings, fetchSettings} = useSettings();
 
-    useRecurringTimeout(fetchSettings(), 1000 * 3);
+    useRecurringTimeout(fetchSettings, 1000 * 10);
 
     return {settings, fetchSettings};
 }
@@ -789,12 +780,16 @@ export const useStatusInterval = () => {
 }
 
 export const StatusProvider = (props) => {
-    const value = useStatusInterval();
+    const statusValue = useStatusInterval();
+    const settingsValue = useSettingsInterval();
 
-    const statusValue = React.useMemo(() => value, [value]);
+    const statusMemoValue = React.useMemo(() => statusValue, [statusValue]);
+    const settingsMemoValue = React.useMemo(() => settingsValue, [settingsValue]);
 
-    return <StatusContext.Provider value={statusValue}>
-        {props.children}
+    return <StatusContext.Provider value={statusMemoValue}>
+        <SettingsContext.Provider value={settingsMemoValue}>
+            {props.children}
+        </SettingsContext.Provider>
     </StatusContext.Provider>
 }
 

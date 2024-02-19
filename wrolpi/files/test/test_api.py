@@ -4,6 +4,7 @@ from unittest import mock
 
 import pytest
 
+from wrolpi.common import get_config
 from wrolpi.files import lib
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
@@ -599,3 +600,37 @@ async def test_get_file(test_session, test_async_client, test_directory, make_fi
     assert response.status_code == HTTPStatus.OK
     assert response.json['file']
     assert response.json['file']['path'] == 'foo/bar.txt'
+
+
+@pytest.mark.asyncio
+async def test_ignore_directory(test_session, test_async_client, test_directory, make_files_structure, test_config):
+    """A maintainer can ignore/un-ignore directories.  The files in the directory should not be refreshed."""
+    foo, bar, baz = make_files_structure(['foo/foo.txt', 'foo/bar.txt', 'baz/baz.txt'])
+    assert len(get_config().ignored_directories) == 0
+
+    # Ignore baz/
+    content = dict(path=str(baz.parent))
+    request, response = await test_async_client.post('/api/files/ignore_directory', json=content)
+    assert response.status_code == HTTPStatus.OK
+    assert len(get_config().ignored_directories) == 1
+
+    await lib.refresh_files()
+
+    files = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+    assert {i.primary_path.name for i in files} == {'foo.txt', 'bar.txt', 'wrolpi.yaml'}
+
+    # Un-ignore baz/
+    request, response = await test_async_client.post('/api/files/unignore_directory', json=content)
+    assert response.status_code == HTTPStatus.OK
+    assert len(get_config().ignored_directories) == 0
+
+    await lib.refresh_files()
+
+    files = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+    assert {i.primary_path.name for i in files} == {'foo.txt', 'bar.txt', 'baz.txt', 'wrolpi.yaml'}
+
+    # Cannot ignore special directories.
+    content = dict(path=str(test_directory / 'videos'))
+    request, response = await test_async_client.post('/api/files/ignore_directory', json=content)
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    assert len(get_config().ignored_directories) == 0

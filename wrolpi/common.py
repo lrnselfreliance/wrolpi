@@ -313,6 +313,7 @@ class WROLPiConfig(ConfigFile):
         hotspot_password='wrolpi hotspot',
         hotspot_ssid='WROLPi',
         ignore_outdated_zims=False,
+        ignored_directories=list(),
         throttle_on_startup=False,
         wrol_mode=False,
     )
@@ -388,6 +389,14 @@ class WROLPiConfig(ConfigFile):
     @wrol_mode.setter
     def wrol_mode(self, value: bool):
         self.update({'wrol_mode': value})
+
+    @property
+    def ignored_directories(self) -> List[str]:
+        return self._config['ignored_directories']
+
+    @ignored_directories.setter
+    def ignored_directories(self, value: List[str]):
+        self.update({'ignored_directories': value})
 
 
 WROLPI_CONFIG: WROLPiConfig = WROLPiConfig()

@@ -905,6 +905,22 @@ export async function movePaths(destination, paths) {
     }
 }
 
+export async function ignoreDirectory(directory) {
+    const body = {path: directory};
+    const response = await apiPost(`${API_URI}/files/ignore_directory`, body);
+    if (response.status !== 200) {
+        toast({type: 'error', title: 'Error', description: 'Failed to ignore directory!', time: 5000});
+    }
+}
+
+export async function unignoreDirectory(directory) {
+    const body = {path: directory};
+    const response = await apiPost(`${API_URI}/files/unignore_directory`, body);
+    if (response.status !== 200) {
+        toast({type: 'error', title: 'Error', description: 'Failed to unignore directory!', time: 5000});
+    }
+}
+
 export async function fetchZims() {
     const response = await apiGet(`${API_URI}/zim`);
     if (response.status === 200) {

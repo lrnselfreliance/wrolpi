@@ -26,7 +26,7 @@ import {
     useThrottle,
     useWROLMode
 } from "../hooks/customHooks";
-import {Media, StatusContext, ThemeContext} from "../contexts/contexts";
+import {Media, SettingsContext, StatusContext, ThemeContext} from "../contexts/contexts";
 import {
     Button,
     CardIcon,
@@ -1220,7 +1220,7 @@ export function DirectorySearch({onSelect, value, ...props}) {
 
 export function DirectoryInput({disabled, error, placeholder, setInput, value, required, isDirectory}) {
     const {directory, directories, setDirectory, isDir} = useDirectories(value);
-    const {settings} = useSettings();
+    const {settings} = React.useContext(SettingsContext);
 
     if (!directories || !settings) {
         return <></>;
@@ -1627,4 +1627,15 @@ function levenshteinDistance(a, b) {
 
 export function fuzzyMatch(a, b, threshold = 3) {
     return levenshteinDistance(a, b) <= threshold;
+}
+
+export function useIsIgnoredDirectory(directory) {
+    const {settings} = React.useContext(SettingsContext);
+
+    let ignoredDirectories = settings['ignored_directories'];
+    if (directory.endsWith('/')) {
+        ignoredDirectories = ignoredDirectories.map(i => `${i}/`);
+    }
+
+    return ignoredDirectories.indexOf(directory) >= 0;
 }

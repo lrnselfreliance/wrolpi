@@ -3,7 +3,15 @@ import {createMedia} from "@artsy/fresnel";
 
 export const ThemeContext = React.createContext({theme: null, i: {}});
 
-export const StatusContext = React.createContext({});
+export const StatusContext = React.createContext({
+    status: {},
+    fetchStatus: null,
+});
+
+export const SettingsContext = React.createContext({
+    settings: {},
+    fetchSettings: null,
+});
 
 export const AppMedia = createMedia({
     breakpoints: {

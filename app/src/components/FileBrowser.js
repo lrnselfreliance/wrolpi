@@ -11,14 +11,15 @@ import {
     TableHeaderCell,
     TableRow
 } from "semantic-ui-react";
-import {APIButton, DirectorySearch, ErrorMessage, FileIcon, humanFileSize} from "./Common";
+import {APIButton, DirectorySearch, ErrorMessage, FileIcon, humanFileSize, useIsIgnoredDirectory} from "./Common";
 import React, {useEffect, useState} from "react";
-import {deleteFile, makeDirectory, movePaths, renamePath} from "../api";
+import {deleteFile, ignoreDirectory, makeDirectory, movePaths, renamePath, unignoreDirectory} from "../api";
 import _ from 'lodash';
 import {SortableTable} from "./SortableTable";
 import {useBrowseFiles, useMediaDirectory, useWROLMode} from "../hooks/customHooks";
 import {DirectoryRefreshButton, FileRowTagIcon, FilesRefreshButton} from "./Files";
 import {FilePreviewContext} from "./FilePreview";
+import {SettingsContext} from "../contexts/contexts";
 
 function depthIndentation(path) {
     // Repeated spaces for every folder a path is in.
@@ -54,7 +55,8 @@ export function splitPathParentAndName(path) {
 
 function Folder({folder, onFolderClick, sortData, selectedPaths, onFileClick, onSelect, disabled}) {
     // Creates a single table row for a folder, or a row for itself and indented rows for its children.
-    let {path, children, is_empty, size} = folder;
+    let {path, children, is_empty} = folder;
+    const ignored = useIsIgnoredDirectory(path);
     const pathWithNoTrailingSlash = path.substring(0, path.length - 1);
     const name = path.substring(pathWithNoTrailingSlash.lastIndexOf('/') + 1);
     const f = <TableRow key={path} disabled={disabled}>
@@ -64,6 +66,7 @@ function Folder({folder, onFolderClick, sortData, selectedPaths, onFileClick, on
         <TableCell onClick={() => onFolderClick(path)} className='file-path' colSpan={2} disabled={is_empty}>
             {depthIndentation(pathWithNoTrailingSlash)}
             {is_empty ? <Icon name='folder outline'/> : <Icon name='folder'/>}
+            {ignored && <Icon name='eye slash' color='red'/>}
             {name}
         </TableCell>
     </TableRow>;
@@ -132,7 +135,14 @@ export function FileBrowser() {
     const [renameOpen, setRenameOpen] = React.useState(false);
     const [moveOpen, setMoveOpen] = React.useState(false);
     const [makeDirectoryOpen, setMakeDirectoryOpen] = React.useState(false);
+    const [ignoreDirectoryOpen, setIgnoreDirectoryOpen] = React.useState(false);
     const [pending, setPending] = React.useState(false);
+    // Only true if only one path is selected, and it is a directory.
+    const [singleDirectorySelected, setSingleDirectorySelected] = React.useState(false);
+    // Only true if single directory is selected, and it is in settings['ignored_directories']
+    const [isDirectoryIgnored, setIsDirectoryIgnored] = React.useState(false);
+
+    const {settings, fetchSettings} = React.useContext(SettingsContext);
 
     const selectedPathsCount = selectedPaths ? selectedPaths.length : 0;
 
@@ -153,6 +163,24 @@ export function FileBrowser() {
 
         return () => setCallbacks(null);
     }, []);
+
+    useEffect(() => {
+        if (selectedPaths.length === 1 && selectedPaths[0].endsWith('/')) {
+            setSingleDirectorySelected(true);
+            if (!_.isEmpty(settings)) {
+                // Used to toggle between ignore/un-ignore (eye/eye lash) icon.
+                const directory = selectedPaths[0].slice(0, -1);
+                setIsDirectoryIgnored(settings['ignored_directories'].indexOf(directory) >= 0);
+            }
+        } else {
+            setSingleDirectorySelected(false);
+        }
+    }, [selectedPaths, settings]);
+
+    const onIgnore = async () => {
+        setIgnoreDirectoryOpen(false);
+        await fetchSettings();
+    }
 
     const onSelect = (path) => {
         let newSelectedPaths;
@@ -229,7 +257,7 @@ export function FileBrowser() {
                 <Button
                     color='blue'
                     onClick={() => setMakeDirectoryOpen(true)}
-                    disabled={wrolModeEnabled || selectedPaths && selectedPaths.length > 1}
+                    disabled={!singleDirectorySelected || wrolModeEnabled}
                     style={{paddingLeft: '1em', paddingRight: '0.8em'}}
                 >
                     <IconGroup>
@@ -242,7 +270,20 @@ export function FileBrowser() {
                     onClose={() => setMakeDirectoryOpen(false)}
                     parent={selectedPaths.length ? selectedPaths[0] : null}
                     onSubmit={handleMakeDirectory}
-                    disabled={wrolModeEnabled}
+                    disabled={!singleDirectorySelected || wrolModeEnabled}
+                />
+                <Button
+                    color='grey'
+                    icon={isDirectoryIgnored ? 'eye' : 'eye slash'}
+                    disabled={!singleDirectorySelected || wrolModeEnabled}
+                    onClick={() => setIgnoreDirectoryOpen(true)}
+                />
+                <IgnoreDirectoryModal
+                    open={ignoreDirectoryOpen}
+                    onClose={onIgnore}
+                    onSubmit={onIgnore}
+                    directory={selectedPaths.length === 1 ? selectedPaths[0] : null}
+                    ignored={isDirectoryIgnored}
                 />
             </TableHeaderCell>
         </TableRow>
@@ -421,6 +462,48 @@ export function MoveModal({open, paths, onClose, onSubmit}) {
                 floated='left'
                 disabled={pending}
             >Reset</Button>
+        </ModalActions>
+    </Modal>
+}
+
+export function IgnoreDirectoryModal({open, onClose, onSubmit, directory, ignored}) {
+    const mediaDirectory = useMediaDirectory();
+    const [pending, setPending] = React.useState(false);
+
+    const handleIgnore = async () => {
+        try {
+            setPending(true);
+            if (ignored) {
+                await unignoreDirectory(`${mediaDirectory}/${directory}`);
+            } else {
+                await ignoreDirectory(`${mediaDirectory}/${directory}`);
+            }
+            if (onSubmit) {
+                onSubmit();
+            }
+        } finally {
+            setPending(false);
+        }
+    }
+
+    const header = ignored ? 'Remove Ignore Directory' : 'Ignore Directory';
+    const content = ignored ?
+        'Remove ignore of the following directory?  You must refresh your files after this.'
+        : 'Ignore the following directory? The files within will not be indexed and will not show in search results.';
+    let submitButton = <Button primary
+                               disabled={pending}
+                               onClick={handleIgnore}
+    >{ignored ? 'Un-ignore' : 'Ignore'}</Button>;
+
+    return <Modal closeIcon open={open} onClose={onClose}>
+        <ModalHeader>{header}</ModalHeader>
+        <ModalContent>
+            {content}
+            <pre>{mediaDirectory}/{directory}</pre>
+        </ModalContent>
+        <ModalActions>
+            {submitButton}
+            <Button secondary floated='left' onClick={onClose}>Close</Button>
         </ModalActions>
     </Modal>
 }

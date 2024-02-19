@@ -23,7 +23,7 @@ from wrolpi import tags
 from wrolpi.admin import HotspotStatus
 from wrolpi.common import logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, LOG_LEVEL, \
-    set_global_log_level
+    set_global_log_level, get_relative_to_media_directory
 from wrolpi.dates import now
 from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, APIError, HotspotError, InvalidDownload, \
@@ -141,6 +141,8 @@ async def echo(request: Request):
 def get_settings(_: Request):
     config = get_config()
 
+    ignored_directories = [get_relative_to_media_directory(i) for i in config.ignored_directories]
+
     settings = {
         'download_manager_disabled': download_manager.disabled.is_set(),
         'download_manager_stopped': download_manager.stopped.is_set(),
@@ -153,6 +155,7 @@ def get_settings(_: Request):
         'hotspot_status': admin.hotspot_status().name,
         'log_level': LOG_LEVEL.value,
         'ignore_outdated_zims': config.ignore_outdated_zims,
+        'ignored_directories': ignored_directories,
         'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.
         'throttle_on_startup': config.throttle_on_startup,
         'throttle_status': admin.throttle_status().name,

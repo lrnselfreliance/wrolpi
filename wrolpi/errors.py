@@ -149,3 +149,9 @@ class InvalidDatetime(APIError):
     code = 'INVALID_DATETIME'
     summary = 'Unable to parse a datetime string'
     status = HTTPStatus.INTERNAL_SERVER_ERROR
+
+
+class InvalidDirectory(APIError):
+    code = 'INVALID_DIRECTORY'
+    summary = 'Directory is not valid or impossible'
+    status = HTTPStatus.BAD_REQUEST

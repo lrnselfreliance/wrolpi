@@ -1,6 +1,6 @@
 import {LoadStatistic, PageContainer, SearchResultsInput, useTitle} from "./components/Common";
 import React, {useContext, useState} from "react";
-import {Media, StatusContext} from "./contexts/contexts";
+import {Media, SettingsContext, StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
 import {
     Button,
@@ -24,12 +24,12 @@ import {TagsDashboard} from "./Tags";
 import {Upload} from "./components/Upload";
 import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
 import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
-import {useSettings, useWROLMode} from "./hooks/customHooks";
+import {useWROLMode} from "./hooks/customHooks";
 import {FileSearchFilterButton} from "./components/Files";
 import {FilePreviewContext} from "./components/FilePreview";
 
 function FlagsMessages({flags}) {
-    const {settings, fetchSettings} = useSettings();
+    const {settings, fetchSettings} = React.useContext(SettingsContext);
 
     if (!flags) {
         return <></>

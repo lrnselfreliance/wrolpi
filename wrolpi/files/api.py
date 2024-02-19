@@ -375,3 +375,17 @@ async def post_upload(request: Request):
 
     # Request the next chunk.
     return json_response({'expected_chunk': expected_chunk_num}, HTTPStatus.OK)
+
+
+@bp.post('/ignore_directory')
+@validate(schema.Directory)
+async def post_ignore_directory(request: Request, body: schema.Directory):
+    lib.add_ignore_directory(body.path)
+    return response.empty(HTTPStatus.OK)
+
+
+@bp.post('/unignore_directory')
+@validate(schema.Directory)
+async def post_ignore_directory(request: Request, body: schema.Directory):
+    lib.remove_ignored_directory(body.path)
+    return response.empty(HTTPStatus.OK)

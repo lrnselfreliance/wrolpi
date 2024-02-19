@@ -23,11 +23,11 @@ from wrolpi import flags
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
     partition, cancelable_wrapper, \
-    get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk
+    get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk, get_config
 from wrolpi.dates import now, from_timestamp
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
 from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged, \
-    NoPrimaryFile
+    NoPrimaryFile, InvalidDirectory
 from wrolpi.events import Events
 from wrolpi.files.models import FileGroup, Directory
 from wrolpi.lang import ISO_639_CODES
@@ -433,6 +433,12 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
                              (list(map(str, non_primary_files)),))
 
 
+def remove_files_in_ignored_directories(files: List[pathlib.Path]) -> List[pathlib.Path]:
+    ignored_directories = list(map(str, get_config().ignored_directories))
+    files = [i for i in files if not any(str(i).startswith(j) for j in ignored_directories)]
+    return files
+
+
 async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetime.datetime = None):
     """Discover all files in the directories provided in paths, as well as all files in paths.
 
@@ -469,6 +475,10 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
                 continue
             directories.extend(new_directories)
             files.extend(new_files)
+
+            # Remove any files in ignored directories.
+            files = remove_files_in_ignored_directories(files)
+
             refresh_logger.debug(f'Discovered {len(new_files)} files in {directory}')
             if len(files) >= 100:
                 # Wait until there are enough files to perform the upsert.
@@ -1273,3 +1283,52 @@ async def rename(path: pathlib.Path, new_name: str) -> pathlib.Path:
         return await rename_directory(path, new_name)
 
     return await rename_file(path, new_name)
+
+
+def add_ignore_directory(directory: Union[pathlib.Path, str]):
+    """Add a directory to the `ignored_directories` in the WROLPi config.  This directory will be ignored when
+    refreshing."""
+    media_directory = get_media_directory()
+
+    directory = pathlib.Path(directory)
+
+    from modules.videos.common import get_videos_directory
+    from modules.archive.lib import get_archive_directory
+    from modules.map.lib import get_map_directory
+    from modules.zim.lib import get_zim_directory
+    from modules.videos.common import get_no_channel_directory
+    special_directories = [
+        get_media_directory(),
+        get_videos_directory(),
+        get_archive_directory(),
+        get_map_directory(),
+        get_zim_directory(),
+        get_no_channel_directory(),
+    ]
+
+    if directory in special_directories:
+        raise InvalidDirectory('Refusing to ignore special directory')
+
+    if not str(directory).startswith(str(media_directory)):
+        raise InvalidDirectory('Cannot ignore directory not in media directory')
+
+    wrolpi_config = get_config()
+    ignored_directories = wrolpi_config.ignored_directories if wrolpi_config.ignored_directories else list()
+
+    if str(directory) in ignored_directories:
+        logger.warning(f'Directory is already ignored: {directory}')
+        return
+
+    ignored_directories.append(str(directory))
+    wrolpi_config.ignored_directories = ignored_directories
+
+
+def remove_ignored_directory(directory: Union[pathlib.Path, str]):
+    """Remove a directory from the `ignored_directories` in the WROLPi config."""
+    directory = str(pathlib.Path(directory))
+    ignored_directories = get_config().ignored_directories
+    if directory in ignored_directories:
+        ignored_directories.remove(directory)
+        get_config().ignored_directories = ignored_directories
+    else:
+        raise UnknownDirectory('Directory is not ignored')

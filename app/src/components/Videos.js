@@ -181,8 +181,10 @@ function VideosPage() {
         !!searchStr,
     );
 
+    const [localSearchStr, setLocalSearchStr] = React.useState(searchStr || '');
     const searchInput = <SearchInput
-                                     searchStr={searchStr}
+                                     searchStr={localSearchStr}
+                                     onChange={setLocalSearchStr}
                                      onSubmit={setSearchStr}
                                      placeholder='Search Videos...'
     />;

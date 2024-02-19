@@ -492,8 +492,11 @@ function ArchivesPage() {
         !!searchStr,
     );
 
+
+    const [localSearchStr, setLocalSearchStr] = React.useState(searchStr || '');
     const searchInput = <SearchInput
-        searchStr={searchStr}
+        onChange={setLocalSearchStr}
+        searchStr={localSearchStr}
         onSubmit={setSearchStr}
         placeholder='Search Archives...'
     />;

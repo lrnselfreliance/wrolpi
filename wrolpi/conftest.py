@@ -389,7 +389,7 @@ def example_mobi(test_directory) -> pathlib.Path:
 
 
 @pytest.fixture
-def make_files_structure(test_directory) -> Callable[[Union[list[Union[pathlib.Path, str]], dict]], List[pathlib.Path]]:
+def make_files_structure(test_directory) -> Callable[[Union[List[Union[pathlib.Path, str]], dict]], List[pathlib.Path]]:
     """
     A fixture which creates test files passed to it.  If a list is provided, empty files will be created at those
     locations.  If a dict is provided, files will be created containing the value of the dict item.

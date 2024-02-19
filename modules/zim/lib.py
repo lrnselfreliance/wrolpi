@@ -329,9 +329,9 @@ async def subscribe(name: str, language: str, session: Session = None,
     elif name == 'DIY (Stack Exchange)':
         url = f'https://download.kiwix.org/zim/stack_exchange/diy.stackexchange.com_{language}_all_'
     elif name == 'Electronics (Stack Exchange)':
-        url = f'https://download.kiwix.org/zim/stack_exchange/electronics.stackexchange.com_{language}_all'
+        url = f'https://download.kiwix.org/zim/stack_exchange/electronics.stackexchange.com_{language}_all_'
     elif name == 'Unix (Stack Exchange)':
-        url = f'https://download.kiwix.org/zim/stack_exchange/unix.stackexchange.com_{language}_all'
+        url = f'https://download.kiwix.org/zim/stack_exchange/unix.stackexchange.com_{language}_all_'
     elif name == 'Ask Ubuntu (Stack Exchange)':
         url = f'https://download.kiwix.org/zim/stack_exchange/askubuntu.com_{language}_all_'
     elif name == 'Bicycles (Stack Exchange)':

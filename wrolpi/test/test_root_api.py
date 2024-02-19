@@ -503,6 +503,18 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
         1,
     )
 
+    # Channel name "Fool" is matched because spaces are stripped in addition to only
+    await assert_results(
+        dict(search_str='foo l'),
+        [
+         {'directory': 'Fool',
+          'id': 2,
+          'name': 'Fool',
+          'url': 'https://example.com/Fool'}],
+        [],
+        0,
+    )
+
     await assert_results(
         dict(search_str='bar'),
         [{'directory': 'Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar'}],

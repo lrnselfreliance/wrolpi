@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import List, Dict, Union
 
-from sqlalchemy import asc
+from sqlalchemy import asc, or_
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -203,9 +203,14 @@ def download_channel(id_: int, reset_attempts: bool = False):
 
 @optional_session
 async def search_channels_by_name(name: str, limit: int = 5, session: Session = None) -> List[Channel]:
-    channels = session.query(Channel) \
-        .filter(Channel.name.ilike(f'%{name}%')) \
+    name = name or ''
+    name_no_spaces = ''.join(name.split(' '))
+    stmt = session.query(Channel) \
+        .filter(or_(
+        Channel.name.ilike(f'%{name}%'),
+        Channel.name.ilike(f'%{name_no_spaces}%'),
+    )) \
         .order_by(asc(Channel.name)) \
-        .limit(limit) \
-        .all()
+        .limit(limit)
+    channels = stmt.all()
     return channels

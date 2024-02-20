@@ -515,6 +515,7 @@ async def test_directory_crud(test_session, test_async_client, test_directory, a
 
 @pytest.mark.asyncio
 async def test_move(test_session, test_directory, make_files_structure, test_async_client):
+    """Files can be moved up and down the media directory.  Destination directories should already exist."""
     baz, bar = make_files_structure({
         'foo/bar.txt': 'bar',
         'baz.txt': 'baz',
@@ -526,6 +527,7 @@ async def test_move(test_session, test_directory, make_files_structure, test_asy
     assert response.status_code == HTTPStatus.NOT_FOUND
 
     (test_directory / 'qux').mkdir()
+    (test_directory / 'quux/quuz').mkdir(parents=True)
 
     # mv foo baz.txt qux
     content = dict(paths=['foo', 'baz.txt'], destination='qux')
@@ -541,6 +543,26 @@ async def test_move(test_session, test_directory, make_files_structure, test_asy
     assert not bar.exists()
     assert (test_directory / 'qux/bar.txt').is_file()
     assert (test_directory / 'qux/foo').is_dir()
+
+    # mv qux/bar.txt ./
+    content = dict(paths=['qux/bar.txt', ], destination='')
+    request, response = await test_async_client.post('/api/files/move', json=content)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert (test_directory / 'bar.txt').is_file()
+
+    # mv bar.txt quux/quuz/bar.txt
+    content = dict(paths=['bar.txt', ], destination='quux/quuz')
+    request, response = await test_async_client.post('/api/files/move', json=content)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert (test_directory / 'quux/quuz/bar.txt').is_file()
+
+    # mv quux/quuz/bar.txt quux/bar.txt
+    content = dict(paths=['quux/quuz/bar.txt', ], destination='quux')
+    request, response = await test_async_client.post('/api/files/move', json=content)
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert (test_directory / 'quux/bar.txt').is_file()
+    assert (test_directory / 'qux/foo').is_dir()
+    assert (test_directory / 'quux/quuz').is_dir()
 
 
 @pytest.mark.asyncio

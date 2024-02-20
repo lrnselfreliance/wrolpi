@@ -220,17 +220,17 @@ def test_file_statistics(test_session, test_client, test_directory, example_pdf,
     assert response.status_code == HTTPStatus.OK
     assert response.json['file_statistics'] == {
         'archive_count': 0,
-        'total_size': 0,
         'audio_count': 0,
         'ebook_count': 0,
         'image_count': 0,
         'pdf_count': 0,
-        'total_count': 0,
-        'video_count': 0,
-        'zip_count': 0,
         'tagged_files': 0,
         'tagged_zims': 0,
         'tags_count': 0,
+        'total_count': 0,
+        'total_size': 0,
+        'video_count': 0,
+        'zip_count': 0,
     }
 
     test_client.post('/api/files/refresh')
@@ -245,12 +245,12 @@ def test_file_statistics(test_session, test_client, test_directory, example_pdf,
         'ebook_count': 2,
         'image_count': 0,
         'pdf_count': 1,
-        'total_count': 5,  # extracted cover
-        'video_count': 1,
-        'zip_count': 0,
         'tagged_files': 0,
         'tagged_zims': 0,
         'tags_count': 0,
+        'total_count': 5,  # extracted cover
+        'video_count': 1,
+        'zip_count': 0,
     }
 
 

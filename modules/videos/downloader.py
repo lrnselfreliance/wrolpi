@@ -451,6 +451,14 @@ class VideoDownloader(Downloader, ABC):
         Replace existing metadata files only after successful download."""
         url = download.url
 
+        with get_db_session(commit=True) as session:
+            # Find the existing video, replace its info json.
+            video = Video.get_by_url(url, session)
+
+            location = f'/videos/video/{video.id}'
+            if video.channel_id:
+                location = f'/videos/channel/{video.channel_id}/video/{video.id}'
+
         # Download metadata files into temporary directory so yt-dlp always downloads the latest files.
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_dir = pathlib.Path(tmp_dir)
@@ -483,6 +491,7 @@ class VideoDownloader(Downloader, ABC):
                 return DownloadResult(
                     success=False,
                     error=error,
+                    location=location,
                 )
 
             # Find the info json file in the temporary directory.
@@ -490,12 +499,14 @@ class VideoDownloader(Downloader, ABC):
             if len(info_json_paths) == 0:
                 return DownloadResult(
                     success=False,
-                    error='No info json file was downloaded.'
+                    error='No info json file was downloaded.',
+                    location=location,
                 )
             elif len(info_json_paths) > 1:
                 return DownloadResult(
                     success=False,
-                    error='More than one info json file was downloaded.'
+                    error='More than one info json file was downloaded.',
+                    location=location,
                 )
 
             info_json_path = info_json_paths[0]
@@ -504,6 +515,7 @@ class VideoDownloader(Downloader, ABC):
                 return DownloadResult(
                     success=False,
                     error='Video info json file was empty',
+                    location=location,
                 )
 
             # Reformat new info json file for human reading.
@@ -512,8 +524,6 @@ class VideoDownloader(Downloader, ABC):
             with get_db_session(commit=True) as session:
                 # Find the existing video, replace its info json.
                 video = Video.get_by_url(url, session)
-                video_id = video.id
-                channel_id = video.channel_id
 
                 if video.info_json_path and video.info_json_path.is_file():
                     # Move old file temporarily.  Only delete old data if the swap is successful.
@@ -542,11 +552,6 @@ class VideoDownloader(Downloader, ABC):
                     new_info_json_path = pathlib.Path(f'{stem}.info.json')
                     new_info_json_path.write_text(info_json_path.read_text())
                     video.file_group.append_files(new_info_json_path)
-
-            if channel_id:
-                location = f'/videos/channel/{channel_id}/video/{video_id}'
-            else:
-                location = f'/videos/video/{video_id}'
 
             logger.debug(f'Downloaded video info json {location=}')
             logger.info(f'Successfully downloaded video info json {url} {video}')

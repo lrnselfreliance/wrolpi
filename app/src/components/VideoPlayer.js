@@ -214,25 +214,6 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         </TabPane>
     };
 
-    const aboutPane = {
-        menuItem: 'About', render: () => <TabPane>
-            <h3>Size</h3>
-            <p>{videoFile.size ? humanFileSize(videoFile.size) : 'Unknown'}</p>
-
-            <h3>Source URL</h3>
-            <p>{videoFile.url ? <a href={videoFile.url}>{videoFile.url}</a> : 'N/A'}</p>
-
-            <h3>View Count</h3>
-            <p>{video.view_count ? humanNumber(video.view_count) : 'N/A'}</p>
-
-            <h3>Censored</h3>
-            <p>{video.censored ? 'Yes' : 'No'}</p>
-
-            <h3>Codec Names</h3>
-            <>{video.codec_names ? video.codec_names.map(i => <Label key={i}>{i}</Label>) : 'N/A'}</>
-        </TabPane>
-    }
-
     const captionsPane = {
         menuItem: 'Captions', render: () => <TabPane>
             <pre>{video.caption || 'No captions available.'}</pre>
@@ -278,8 +259,26 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
         </TabPane>,
     };
 
-    const tabPanes = [commentsPane, descriptionPane, aboutPane, filesPane, captionsPane];
+    const tabPanes = [commentsPane, descriptionPane, filesPane, captionsPane];
     const tabMenu = theme === darkTheme ? {inverted: true, attached: true} : {attached: true};
+
+    const aboutSegment = <Segment>
+        <Header as='h2'>About Video</Header>
+        <h3>Size</h3>
+        <p>{videoFile.size ? humanFileSize(videoFile.size) : 'Unknown'}</p>
+
+        <h3>Source URL</h3>
+        <p>{videoFile.url ? <a href={videoFile.url}>{videoFile.url}</a> : 'N/A'}</p>
+
+        <h3>View Count</h3>
+        <p>{video.view_count ? humanNumber(video.view_count) : 'N/A'}</p>
+
+        <h3>Censored</h3>
+        <p>{video.censored ? 'Yes' : 'No'}</p>
+
+        <h3>Codec Names</h3>
+        <>{video.codec_names ? video.codec_names.map(i => <Label key={i}>{i}</Label>) : 'N/A'}</>
+    </Segment>;
 
     const localAddTag = async (name) => {
         await tagFileGroup(videoFile, name);
@@ -370,6 +369,8 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
             </Segment>
 
             <Tab menu={tabMenu} panes={tabPanes}/>
+
+            {aboutSegment}
 
             {prevNextVideosSegment}
         </Container>

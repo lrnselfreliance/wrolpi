@@ -308,9 +308,9 @@ class VideoDownloader(Downloader, ABC):
                 '-o', file_name_format,
                 '--no-cache-dir',
                 '--compat-options', 'no-live-chat',
-                # Get top 20 comments.
+                # Get top 20 comments, 10 replies per parent.
                 '--write-comments',
-                '--extractor-args', 'youtube:max_comments=20,all,10;comment_sort=top',
+                '--extractor-args', 'youtube:max_comments=all,20,all,10;comment_sort=top',
                 # Use experimental feature to merge files.
                 '--ppa', 'Merger+ffmpeg_o1:-strict -2',
                 url,

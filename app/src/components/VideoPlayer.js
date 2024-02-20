@@ -359,6 +359,8 @@ function VideoPage({videoFile, prevFile, nextFile, fetchVideo, ...props}) {
                     <APIButton
                         color='blue'
                         onClick={handleRefresh}
+                        obeyWROLMode={true}
+                        disabled={!videoFile.url}
                     >Refresh</APIButton>
                 </p>
                 <br/>

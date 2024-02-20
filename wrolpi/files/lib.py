@@ -700,15 +700,15 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         tag_names: A list of tag names.
         headline: Includes Postgresql headline if True.
     """
-    params = dict(offset=offset, limit=limit)
+    params = dict(offset=offset, limit=limit, search_str=search_str, url_search_str=f'%{search_str}%')
     wheres = []
     selects = []
     order_by = '1 ASC'
     joins = []
 
     if search_str:
-        params['search_str'] = search_str
-        wheres.append('textsearch @@ websearch_to_tsquery(%(search_str)s)')
+        # Search by textsearch, and by matching url.
+        wheres.append("(textsearch @@ websearch_to_tsquery(%(search_str)s) OR fg.url ILIKE %(url_search_str)s)")
         selects.append('ts_rank(textsearch, websearch_to_tsquery(%(search_str)s))')
         order_by = '2 DESC'
 
@@ -1083,12 +1083,13 @@ async def search_file_suggestion_count(search_str: str, tag_names: List[str], mi
     """
     wheres = []
     joins = list()
-    params = dict(search_str=search_str, tag_names=tag_names, mimetypes=mimetypes)
+    params = dict(search_str=search_str, tag_names=tag_names, mimetypes=mimetypes, url_search_str=f'%{search_str}%')
     group_by = ''
     having = ''
 
     if search_str:
-        wheres.append('fg.textsearch @@ websearch_to_tsquery(%(search_str)s)')
+        # Search by textsearch, and by matching url.
+        wheres.append('(fg.textsearch @@ websearch_to_tsquery(%(search_str)s) OR fg.url ILIKE %(url_search_str)s)')
 
     wheres, params = tag_append_sub_select_where(tag_names, wheres, params)
 

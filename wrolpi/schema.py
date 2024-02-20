@@ -62,6 +62,7 @@ class DownloadRequest:
     suffix: Optional[str] = None
     depth: Optional[int] = None
     max_pages: Optional[int] = None
+    do_not_download: Optional[bool] = False
 
     def __post_init__(self):
         urls = [j for i in self.urls if (j := i.strip())]

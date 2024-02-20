@@ -22,7 +22,6 @@ import {
     useLoad,
     useSearchDirectories,
     useSearchOrder,
-    useSettings,
     useThrottle,
     useWROLMode
 } from "../hooks/customHooks";
@@ -1643,4 +1642,14 @@ export function useIsIgnoredDirectory(directory) {
     }
 
     return ignoredDirectories.indexOf(directory) >= 0;
+}
+
+export function getParentDirectory(filePath) {
+    // Remove trailing slashes for consistency
+    const normalizedPath = filePath.endsWith('/') ? filePath.slice(0, -1) : filePath;
+
+    // Find the last occurrence of "/" and extract the substring up to it
+    const parentDirectory = normalizedPath.substring(0, normalizedPath.lastIndexOf('/'));
+
+    return parentDirectory;
 }

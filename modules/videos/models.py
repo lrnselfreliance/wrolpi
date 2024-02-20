@@ -60,6 +60,8 @@ class Video(ModelHelper, Base):
         except Exception as e:
             logger.error(f'{self} ffprobe_json is invalid', exc_info=e)
 
+        info_json = self.get_info_json() or dict()
+
         # Put live data in "video" instead of "data" to avoid confusion on the frontend.
         d['video'] = dict(
             caption=self.file_group.d_text,
@@ -68,6 +70,7 @@ class Video(ModelHelper, Base):
             channel_id=self.channel_id,
             codec_names=codec_names,
             codec_types=codec_types,
+            comments=info_json.get('comments'),
             description=self.file_group.c_text or self.get_video_description(),
             id=self.id,
             info_json_file=self.info_json_file,
@@ -302,6 +305,14 @@ class Video(ModelHelper, Base):
         video = session.query(Video) \
             .join(FileGroup, FileGroup.id == Video.file_group_id) \
             .filter(FileGroup.primary_path == path).one_or_none()
+        return video
+
+    @staticmethod
+    @optional_session
+    def get_by_url(url: str, session: Session) -> Optional['Video']:
+        video = session.query(Video) \
+            .join(FileGroup, FileGroup.id == Video.file_group_id) \
+            .filter(FileGroup.url == url).one_or_none()
         return video
 
     @staticmethod

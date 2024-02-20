@@ -244,10 +244,9 @@ async def post_download(_: Request, body: schema.DownloadRequest):
 
     # Don't overwrite settings if restarting download.
     settings = None
-    if excluded_urls or destination or body.tag_names or body.suffix or body.depth:
+    if excluded_urls or destination or body.tag_names or body.suffix or body.depth or body.do_not_download:
         settings = dict(excluded_urls=excluded_urls, destination=destination, tag_names=body.tag_names,
-                        suffix=body.suffix,
-                        depth=body.depth)
+                        suffix=body.suffix, do_not_download=body.do_not_download, depth=body.depth)
 
     if body.frequency:
         download_manager.recurring_download(body.urls[0], body.frequency, downloader_name=body.downloader,

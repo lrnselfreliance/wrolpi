@@ -172,6 +172,22 @@ export async function deleteVideos(videoIds) {
     }
 }
 
+export async function downloadVideoMetadata(videoUrl, destination) {
+    return await postDownload(
+        [videoUrl],
+        'video',
+        null,
+        null,
+        null,
+        destination,
+        null,
+        null,
+        null,
+        null,
+        true,
+    );
+}
+
 export async function getDirectories(search_str) {
     let form_data = {'search_str': search_str || null};
     let response = await apiPost(`${API_URI}/files/directories`, form_data);
@@ -450,6 +466,7 @@ export async function postDownload(
     depth,
     suffix,
     max_pages,
+    doNotDownload,
 ) {
     if (!downloader) {
         toast({
@@ -477,7 +494,10 @@ export async function postDownload(
     if (tagNames) {
         body['tag_names'] = tagNames;
     }
-    let response = await apiPost(`${API_URI}/download`, body);
+    if (doNotDownload) {
+        body['do_not_download'] = doNotDownload;
+    }
+    const response = await apiPost(`${API_URI}/download`, body);
     return response;
 }
 

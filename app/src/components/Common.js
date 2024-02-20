@@ -1632,6 +1632,11 @@ export function fuzzyMatch(a, b, threshold = 3) {
 export function useIsIgnoredDirectory(directory) {
     const {settings} = React.useContext(SettingsContext);
 
+    if (!settings || _.isEmpty(settings)) {
+        // Settings have not yet been fetched.
+        return false;
+    }
+
     let ignoredDirectories = settings['ignored_directories'];
     if (directory.endsWith('/')) {
         ignoredDirectories = ignoredDirectories.map(i => `${i}/`);

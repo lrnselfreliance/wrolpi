@@ -2,7 +2,16 @@ import React, {useContext} from 'react';
 import {Divider, Input, SegmentGroup, StatisticLabel, StatisticValue, TableCell, TableRow} from "semantic-ui-react";
 import {Link, Route, Routes} from "react-router-dom";
 import {decryptOTP, encryptOTP} from "../api";
-import {APIButton, ErrorMessage, humanFileSize, mimetypeColor, PageContainer, toLocaleString, useTitle} from "./Common";
+import {
+    APIButton,
+    ErrorMessage,
+    humanFileSize,
+    humanNumber,
+    mimetypeColor,
+    PageContainer,
+    toLocaleString,
+    useTitle
+} from "./Common";
 import {ThemeContext} from "../contexts/contexts";
 import {Button, Header, Loader, Segment, Statistic, StatisticGroup, Table, TextArea} from "./Theme";
 import {useStatistics, useVINDecoder} from "../hooks/customHooks";
@@ -224,6 +233,9 @@ function StatisticsPage() {
             video_count,
             zip_count,
             total_size,
+            tagged_files,
+            tagged_zims,
+            tags_count,
         } = file_statistics;
         const {db_size} = global_statistics;
         return <>
@@ -276,6 +288,24 @@ function StatisticsPage() {
                     <Statistic color={mimetypeColor('audio/')}>
                         <StatisticValue>{toLocaleString(audio_count)}</StatisticValue>
                         <StatisticLabel>Audio</StatisticLabel>
+                    </Statistic>
+                </StatisticGroup>
+            </Segment>
+
+            <Header as='h2'>Tags</Header>
+            <Segment>
+                <StatisticGroup>
+                    <Statistic>
+                        <StatisticValue>{humanNumber(tags_count)}</StatisticValue>
+                        <StatisticLabel>Tags</StatisticLabel>
+                    </Statistic>
+                    <Statistic>
+                        <StatisticValue>{humanNumber(tagged_files)}</StatisticValue>
+                        <StatisticLabel>Tagged Files</StatisticLabel>
+                    </Statistic>
+                    <Statistic>
+                        <StatisticValue>{humanNumber(tagged_zims)}</StatisticValue>
+                        <StatisticLabel>Tagged Zims</StatisticLabel>
                     </Statistic>
                 </StatisticGroup>
             </Segment>

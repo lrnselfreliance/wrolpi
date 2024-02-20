@@ -228,6 +228,9 @@ def test_file_statistics(test_session, test_client, test_directory, example_pdf,
         'total_count': 0,
         'video_count': 0,
         'zip_count': 0,
+        'tagged_files': 0,
+        'tagged_zims': 0,
+        'tags_count': 0,
     }
 
     test_client.post('/api/files/refresh')
@@ -245,6 +248,9 @@ def test_file_statistics(test_session, test_client, test_directory, example_pdf,
         'total_count': 5,  # extracted cover
         'video_count': 1,
         'zip_count': 0,
+        'tagged_files': 0,
+        'tagged_zims': 0,
+        'tags_count': 0,
     }
 
 

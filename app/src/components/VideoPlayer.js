@@ -109,7 +109,7 @@ const VideoComment = ({comment, children}) => {
             <Comment.Author as='a'><span {...t}>{comment['author']}</span></Comment.Author>
             <Comment.Metadata>
                 <div {...t}>{comment['is_favorited'] && favoriteComment}</div>
-                <div {...t}>{isoDatetimeToString(comment['timestamp'])}</div>
+                <div {...t}>{isoDatetimeToString(comment['timestamp'] * 1000)}</div>
                 <div {...t}>{comment['like_count'] && likesCount}</div>
             </Comment.Metadata>
             <Comment.Text {...t}>{comment['text']}</Comment.Text>

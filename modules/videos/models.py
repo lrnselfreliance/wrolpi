@@ -239,10 +239,11 @@ class Video(ModelHelper, Base):
         video = session.query(Video).filter(Video.file_group_id == file_group.id).one_or_none()
         if not video:
             video = Video(file_group=file_group)
-
-        video.validate()
         session.add(video)
         session.flush([video, file_group])
+
+        video.validate()
+        session.flush([video, ])
         return video
 
     @property
@@ -333,9 +334,9 @@ class Video(ModelHelper, Base):
             raise UnknownVideo(f'Cannot find Video with id {id_}')
         return video
 
-    def add_tag(self, tag_or_tag_name: Union[Tag, str]) -> TagFile:
+    def add_tag(self, tag_or_tag_name: Union[Tag, str], session: Session = None) -> TagFile:
         tag = Tag.find_by_name(tag_or_tag_name) if isinstance(tag_or_tag_name, str) else tag_or_tag_name
-        return self.file_group.add_tag(tag)
+        return self.file_group.add_tag(tag, session=session)
 
     async def get_ffprobe_json(self) -> dict:
         """Return the ffprobe json object if previously stored.
@@ -385,6 +386,86 @@ class Video(ModelHelper, Base):
         """Return the info_json entry for this Video from its Channel."""
         if self.channel and self.source_id:
             return self.channel.get_video_entry_by_id(self.source_id)
+
+    @staticmethod
+    async def delete_duplicate_videos(session: Session, url: str, source_id: str, video_path: pathlib.Path) -> bool:
+        """Searches for Videos that share a `source_id` or `url`.  Attempts to keep the best video at `video_path`, then
+        deletes the rest."""
+        # Get all Videos that share the URL or the source_id.
+        matching_videos_with_url = session.query(Video) \
+            .join(FileGroup, FileGroup.id == Video.file_group_id) \
+            .filter(FileGroup.url == url) \
+            .all()
+        matching_videos_with_source_id = session.query(Video) \
+            .join(FileGroup, FileGroup.id == Video.file_group_id) \
+            .filter(FileGroup.model == 'video', Video.source_id == source_id) \
+            .all()
+        duplicate_videos = list()
+        for video in matching_videos_with_url:
+            if video.id not in [i.id for i in duplicate_videos]:
+                duplicate_videos.append(video)
+        for video in matching_videos_with_source_id:
+            if video.id not in [i.id for i in duplicate_videos]:
+                duplicate_videos.append(video)
+
+        # All the tags of all the files.
+        tag_names = {i for j in duplicate_videos for i in j.file_group.tag_names}
+
+        def delete_video(video_: Video):
+            """Delete a Video with any of its tags."""
+            for tag_name_ in video_.file_group.tag_names:
+                tag_ = Tag.find_by_name(tag_name_)
+                video_.file_group.remove_tag(tag_, session)
+            video_.delete()
+
+        changes = False
+        # Delete any Videos without real files.
+        missing_file_indexes = []
+        for idx, video in enumerate(duplicate_videos):
+            if not video.video_path.is_file():
+                logger.debug(f'Deleting {video} because the video file does not exist')
+                missing_file_indexes.append(idx)
+                delete_video(video)
+                changes = True
+        duplicate_videos = [i for idx, i in enumerate(duplicate_videos) if idx not in missing_file_indexes]
+
+        if len(duplicate_videos) < 2:
+            # No duplicates.
+            logger.debug(f'No duplicates to delete: {url=} {source_id=}')
+            return changes
+
+        # Order videos by oldest first, we should keep the oldest if all files are the same size.
+        duplicate_videos = sorted(duplicate_videos, key=lambda i: i.file_group.primary_path.stat().st_mtime)
+
+        # Find the largest video, if possible.  If all videos are the same size then rename the oldest.
+        largest_video_idx = 0
+        for idx, video in enumerate(duplicate_videos):
+            if video.file_group.size > duplicate_videos[largest_video_idx].file_group.size:
+                largest_video_idx = idx
+        largest_video = duplicate_videos.pop(largest_video_idx)
+
+        # Delete the video at the destination, if it is not the largest.
+        existing_video = Video.get_by_path(video_path, session=session)
+        if existing_video and largest_video != existing_video:
+            delete_video(existing_video)
+            for idx, video in enumerate(duplicate_videos):
+                if video == existing_video:
+                    duplicate_videos.pop(idx)
+
+        # Rename the video, add any missing tag names.
+        if largest_video.video_path != video_path:
+            largest_video.file_group.move(video_path)
+        for tag_name in tag_names:
+            if tag_name not in largest_video.file_group.tag_names:
+                largest_video.add_tag(tag_name, session)
+
+        logger.warning(f'Deleting duplicate videos: {duplicate_videos}')
+
+        # Remove tags from all videos, delete all videos.
+        for video in duplicate_videos:
+            delete_video(video)
+
+        return True
 
 
 class Channel(ModelHelper, Base):

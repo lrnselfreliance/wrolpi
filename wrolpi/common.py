@@ -813,6 +813,7 @@ def get_files_and_directories(directory: Path):
 
 # These characters are invalid in Windows or Linux.
 INVALID_FILE_CHARS = re.compile(r'[/<>:\|"\\\?\*%!\n\r]')
+
 SPACE_FILE_CHARS = re.compile(r'(  +)|(\t+)')
 
 

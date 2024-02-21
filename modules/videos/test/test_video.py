@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 import pytest
 
 from modules.videos.models import Video
@@ -87,3 +89,106 @@ async def test_video_channel_refresh(test_session, test_directory, channel_facto
     video_channel = video1.__json__()['video']['channel']
     assert video_channel['id'] == channel.id
     assert video_channel['name'] == channel.name
+
+
+@pytest.mark.asyncio
+async def test_delete_duplicate_video(test_session, channel_factory, video_factory, tag_factory):
+    """If duplicate Video's exist, and everything about the files matches, delete a random one."""
+    channel = channel_factory(name='Channel Name')
+    video_path = channel.directory / f'{channel.name}_20000101_ABC123456_The video title.mp4'
+
+    channel.info_json = {'entries': [{'id': 'ABC123456', 'title': 'The video title'}]}
+    entry = channel.info_json['entries'][0]
+
+    tag = tag_factory()
+    vid1 = video_factory(
+        channel_id=channel.id,
+        title=f'{channel.name}_20000101_ABC123456_The video title',
+        upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc),
+        source_id='ABC123456',
+        with_video_file=True,
+        with_info_json=True,
+        with_caption_file=True,
+        tag_names=[tag.name, ]
+    )
+    vid2 = video_factory(
+        channel_id=channel.id,
+        title=f'{channel.name}_20000101_ABC123456_The video title ',  # Video was renamed, trailing space was removed.
+        upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc),
+        source_id='ABC123456',
+        with_video_file=True,
+        with_info_json=True,
+        with_caption_file=True,
+    )
+    vid1.file_group.url = vid2.file_group.url = 'https://example.com/video'
+
+    assert test_session.query(Video).count() == 2
+
+    test_session.commit()
+
+    assert await Video.delete_duplicate_videos(test_session, 'https://example.com/video', entry['id'], video_path)
+    test_session.commit()
+
+    assert test_session.query(Video).count() == 1, 'Duplicate video was not deleted.'
+    video = test_session.query(Video).one()
+    assert video.video_path == video_path, 'Video path does not match'
+    assert video.video_path.is_file()
+    assert set(channel.directory.iterdir()) == set(video.file_group.my_paths())
+    assert video.file_group.tag_names == [tag.name, ]
+
+    # Running again has no effect.
+    assert not await Video.delete_duplicate_videos(test_session, 'https://example.com/video', entry['id'], video_path)
+    test_session.commit()
+
+    assert test_session.query(Video).count() == 1, 'Duplicate video was not deleted.'
+    video = test_session.query(Video).one()
+    assert video.video_path.is_file()
+    assert video.video_path == video_path, 'Video path does not match'
+    assert set(channel.directory.iterdir()) == set(video.file_group.my_paths())
+    assert video.file_group.tag_names == [tag.name, ]
+
+
+@pytest.mark.asyncio
+async def test_delete_renamed_video(test_session, channel_factory, video_factory, tag_factory):
+    """If duplicate Video's exist, delete all the videos that do not have the new title."""
+    channel = channel_factory(name='Channel Name')
+    video_path = channel.directory / f'{channel.name}_20000101_ABC123456_Some new title.mp4'
+
+    channel.info_json = {'entries': [{'id': 'ABC123456', 'title': 'Some new title'}]}
+    entry = channel.info_json['entries'][0]
+
+    tag = tag_factory()
+    vid1 = video_factory(
+        channel_id=channel.id,
+        title=f'{channel.name}_20000101_ABC123456_The video title',
+        upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc),
+        source_id='ABC123456',
+        with_video_file=True,
+        with_info_json=True,
+        with_caption_file=True,
+        tag_names=[tag.name, ]
+    )
+    vid2 = video_factory(
+        channel_id=channel.id,
+        title=f'{channel.name}_20000101_ABC123456_The video title ',  # Video was renamed, trailing space was removed.
+        upload_date=datetime(2000, 1, 1, tzinfo=timezone.utc),
+        source_id='ABC123456',
+        with_video_file=True,
+        with_info_json=True,
+        with_caption_file=True,
+    )
+    vid1.file_group.url = vid2.file_group.url = 'https://example.com/video'
+
+    assert test_session.query(Video).count() == 2
+
+    test_session.commit()
+
+    await Video.delete_duplicate_videos(test_session, 'https://example.com/video', entry['id'], video_path)
+    test_session.commit()
+
+    assert test_session.query(Video).count() == 1, 'Duplicate video was not deleted.'
+    video = test_session.query(Video).one()
+    assert video.video_path == video_path, 'Video path does not match'
+    assert video.video_path.is_file()
+    assert set(channel.directory.iterdir()) == set(video.file_group.my_paths())
+    assert video.file_group.tag_names == [tag.name, ]

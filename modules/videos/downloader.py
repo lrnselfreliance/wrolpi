@@ -207,18 +207,17 @@ class VideoDownloader(Downloader, ABC):
             raise UnrecoverableDownloadError('Max download attempts reached')
 
         url = normalize_video_url(download.url)
-        info = download.info_json or extract_info(url)
+        download.info_json = download.info_json or extract_info(url)
 
-        if not info:
+        if not download.info_json:
             raise ValueError(f'Cannot download video with no info_json.')
 
         found_channel = None
 
-        channel_name = info.get('channel')
-        source_channel_id = info.get('channel_id')
-        channel_url = info.get('channel_url')
+        channel_name = download.info_json.get('channel')
+        source_channel_id = download.info_json.get('channel_id')
+        channel_url = download.info_json.get('channel_url')
         channel = None
-        logger.debug(f'{channel_name=} {source_channel_id=} {channel_url=}')
         if channel_name or source_channel_id:
             # Try to find the channel via info_json from yt-dlp.
             try:
@@ -284,11 +283,12 @@ class VideoDownloader(Downloader, ABC):
 
         logs = None  # noqa
         try:
+            video_path, entry = self.prepare_filename(url, out_dir)
+
             if settings.get('do_not_download'):
                 # User has requested refresh of video metadata, skip the rest of the video downloader.
-                return await self.download_info_json(download)
+                return await self.download_info_json(download, video_path)
 
-            video_path, entry = self.prepare_filename(url, out_dir)
             # Do the real download.
             file_name_format = '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s'
             cmd = (
@@ -354,18 +354,24 @@ class VideoDownloader(Downloader, ABC):
                 video = Video.from_paths(session, *video_paths)
                 video.source_id = entry['id']
                 video.channel_id = channel_id
-                video_id = video.id
+                video_id, video_info_json_path = video.id, video.info_json_path
 
-                if video.info_json_path:
-                    format_json_file(video.info_json_path)
+            if video_info_json_path:
+                format_json_file(video_info_json_path)
 
-                session.commit()
-
+            with get_db_session() as session:
+                # Second session is started because SQLAlchemy will forget what we have done.
+                need_commit = False
+                video = Video.get_by_id(video_id, session)
                 if download.settings and (tag_names := download.settings.get('tag_names')):
                     existing_names = video.file_group.tag_names
                     for name in tag_names:
                         if name not in existing_names:
                             video.add_tag(name)
+                            need_commit = True
+
+                if need_commit:
+                    session.commit()
 
                 # Check that video has both audio and video streams.
                 await video.get_ffprobe_json()
@@ -379,7 +385,9 @@ class VideoDownloader(Downloader, ABC):
                         success=False,
                         error='Video was downloaded but did not contain audio stream',
                     )
-                session.commit()
+
+            with get_db_session(commit=True) as session:
+                await Video.delete_duplicate_videos(session, download.url, entry['id'], video_path)
 
         except UnrecoverableDownloadError:
             raise
@@ -390,7 +398,7 @@ class VideoDownloader(Downloader, ABC):
             if _skip_download(e):
                 # The video failed to download, and the error will never be fixed.  Skip it forever.
                 try:
-                    source_id = info.get('id')
+                    source_id = download.info_json.get('id')
                     logger.warning(f'Adding video "{source_id}" to skip list for this channel.  WROLPi will not '
                                    f'attempt to download it again.')
                     download.add_to_skip_list()
@@ -446,12 +454,19 @@ class VideoDownloader(Downloader, ABC):
         logger.debug(f'Downloading {url} to {out_dir}')
         return final_filename, entry
 
-    async def download_info_json(self, download: Download) -> DownloadResult:
+    async def download_info_json(self, download: Download, video_path: pathlib.Path) -> DownloadResult:
         """User has requested to refresh Video metadata.  Download only metadata files to temporary directory.
         Replace existing metadata files only after successful download."""
         url = download.url
+        source_id = download.info_json['id']
 
-        with get_db_session(commit=True) as session:
+        with get_db_session() as session:
+            # Delete any duplicate videos before attempting to get info json.
+            deleted = await Video.delete_duplicate_videos(session, download.url, source_id, video_path)
+            if deleted:
+                session.commit()
+
+        with get_db_session() as session:
             # Find the existing video, replace its info json.
             video = Video.get_by_url(url, session)
 

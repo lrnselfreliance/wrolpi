@@ -207,7 +207,25 @@ class VideoDownloader(Downloader, ABC):
             raise UnrecoverableDownloadError('Max download attempts reached')
 
         url = normalize_video_url(download.url)
-        download.info_json = download.info_json or extract_info(url)
+
+        # Video may have been downloaded previously, get its location for error reporting.
+        location = None
+        with get_db_session() as session:
+            video = Video.get_by_url(url, session=session)
+            if video and video.channel_id:
+                location = f'/videos/channel/{video.channel_id}/video/{video.id}'
+            elif video:
+                location = f'/videos/video/{video.id}'
+
+        try:
+            download.info_json = download.info_json or extract_info(url)
+        except yt_dlp.utils.DownloadError as e:
+            # Video may be private.
+            return DownloadResult(
+                success=False,
+                location=location,
+                error='\n'.join(traceback.format_exception(e)),
+            )
 
         if not download.info_json:
             raise ValueError(f'Cannot download video with no info_json.')
@@ -325,6 +343,7 @@ class VideoDownloader(Downloader, ABC):
                 return DownloadResult(
                     success=False,
                     error=error,
+                    location=location,
                 )
 
             preferred_path = video_path.with_suffix(f'.{PREFERRED_VIDEO_EXTENSION}')
@@ -340,12 +359,14 @@ class VideoDownloader(Downloader, ABC):
                 return DownloadResult(
                     success=False,
                     error=error,
+                    location=location,
                 )
 
             if not ffmpeg_video_complete(video_path):
                 return DownloadResult(
                     success=False,
                     error='Video was incomplete',
+                    location=location,
                 )
 
             with get_db_session(commit=True) as session:
@@ -379,11 +400,13 @@ class VideoDownloader(Downloader, ABC):
                     return DownloadResult(
                         success=False,
                         error='Video was downloaded but did not contain video stream',
+                        location=location,
                     )
                 if not video.get_streams_by_codec_type('audio'):
                     return DownloadResult(
                         success=False,
                         error='Video was downloaded but did not contain audio stream',
+                        location=location,
                     )
 
             with get_db_session(commit=True) as session:
@@ -413,7 +436,7 @@ class VideoDownloader(Downloader, ABC):
                 error = f'{stderr}\n\n{traceback.format_exc()}'
             else:
                 error = str(traceback.format_exc())
-            return DownloadResult(success=False, error=error)
+            return DownloadResult(success=False, error=error, location=location)
 
         if channel_id:
             location = f'/videos/channel/{channel_id}/video/{video_id}'

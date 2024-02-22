@@ -12,6 +12,7 @@ from sqlalchemy.orm.collections import InstrumentedList
 from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
 from wrolpi.db import optional_session
+from wrolpi.downloader import download_manager
 from wrolpi.errors import FileGroupIsTagged
 from wrolpi.files import indexers
 from wrolpi.media_path import MediaPathType

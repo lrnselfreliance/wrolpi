@@ -211,7 +211,8 @@ class VideoDownloader(Downloader, ABC):
         # Video may have been downloaded previously, get its location for error reporting.
         location = None
         with get_db_session() as session:
-            video = Video.get_by_url(url, session=session)
+            videos = session.query(Video).join(FileGroup).filter_by(url=url).all()
+            video = videos[0] if videos else None
             if video and video.channel_id:
                 location = f'/videos/channel/{video.channel_id}/video/{video.id}'
             elif video:

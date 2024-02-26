@@ -418,8 +418,8 @@ def get_domains():
 
 
 ARCHIVE_ORDERS = {
-    'published_datetime': (date := 'fg.published_datetime ASC, fg.download_datetime ASC'),
-    '-published_datetime': (_date := 'fg.published_datetime DESC NULLS LAST, fg.download_datetime DESC NULLS LAST'),
+    'published_datetime': (date := 'COALESCE(fg.published_datetime, fg.download_datetime) ASC'),
+    '-published_datetime': (_date := 'COALESCE(fg.published_datetime, fg.download_datetime) DESC NULLS LAST'),
     'published_modified_datetime': f'fg.published_modified_datetime ASC NULLS LAST, {date}',
     '-published_modified_datetime': f'fg.published_modified_datetime DESC, {_date}',
     'download_datetime': 'fg.download_datetime ASC',

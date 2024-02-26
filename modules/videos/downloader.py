@@ -209,14 +209,9 @@ class VideoDownloader(Downloader, ABC):
         url = normalize_video_url(download.url)
 
         # Video may have been downloaded previously, get its location for error reporting.
-        location = None
         with get_db_session() as session:
             videos = session.query(Video).join(FileGroup).filter_by(url=url).all()
-            video = videos[0] if videos else None
-            if video and video.channel_id:
-                location = f'/videos/channel/{video.channel_id}/video/{video.id}'
-            elif video:
-                location = f'/videos/video/{video.id}'
+            location = videos[0].location if videos else None
 
         try:
             download.info_json = download.info_json or extract_info(url)
@@ -391,6 +386,7 @@ class VideoDownloader(Downloader, ABC):
                         if name not in existing_names:
                             video.add_tag(name)
                             need_commit = True
+                location = video.location
 
                 if need_commit:
                     session.commit()
@@ -438,11 +434,6 @@ class VideoDownloader(Downloader, ABC):
             else:
                 error = str(traceback.format_exc())
             return DownloadResult(success=False, error=error, location=location)
-
-        if channel_id:
-            location = f'/videos/channel/{channel_id}/video/{video_id}'
-        else:
-            location = f'/videos/video/{video_id}'
 
         logger.debug(f'Downloaded video {location=}')
         logger.info(f'Successfully downloaded video {url} {video}')

@@ -467,6 +467,16 @@ class Video(ModelHelper, Base):
 
         return True
 
+    @property
+    def location(self) -> str:
+        """The href of the video in the App."""
+        if not self.id:
+            raise RuntimeError('Video id not set.  Flush to DB.')
+
+        if self.channel_id:
+            return f'/videos/channel/{self.channel_id}/video/{self.id}'
+        return f'/videos/video/{self.id}'
+
 
 class Channel(ModelHelper, Base):
     __tablename__ = 'channel'

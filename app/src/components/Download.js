@@ -130,6 +130,16 @@ class Downloader extends React.Component {
 
         const viewDownloads = <Link to='/admin'><Icon name='checkmark'/> View downloads</Link>;
 
+        const handleDrop = (e) => {
+            // Handle user dropping multiple URLs into the textarea.  Assume each drop is a URL.  Ensure each URL
+            // is on its own line.
+            e.preventDefault();
+            const url = e.dataTransfer.getData('text');
+            const separator = (this.state.urls.endsWith('\n') || this.state.urls === '') ? '' : '\n';
+            const urls = `${this.state.urls}${separator}${url}\n`;
+            this.setState({urls: urls}, this.validateUrls);
+        };
+
         return <ThemeContext.Consumer>
             {({i}) => (<Form onSubmit={this.submitDownload}>
                 <WROLModeMessage content='Downloading is disabled while WROL Mode is enabled'/>
@@ -140,6 +150,7 @@ class Downloader extends React.Component {
                           onChange={this.handleInputChange}
                           value={this.state.urls}
                           style={{marginBottom: '1em'}}
+                          onDrop={handleDrop}
                 />
                 {tagsSelector}
                 {pending && <Loader active={pending}/>}

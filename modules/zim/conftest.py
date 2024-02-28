@@ -85,7 +85,7 @@ def zim_path_factory(test_zim_bytes, test_directory):
 
 
 @pytest.fixture
-def test_zim(test_session, zim_path_factory, test_directory) -> Zim:
+def test_zim(test_session, zim_path_factory) -> Zim:
     zim = Zim.from_paths(test_session, zim_path_factory())
     return zim
 

@@ -1,12 +1,22 @@
+import asyncio
+import json
+import random
+from datetime import timedelta
 from typing import Tuple, Optional, List, Dict
 
+import yt_dlp
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from modules.videos.models import Video
-from wrolpi.common import run_after, logger
+from wrolpi.common import run_after, logger, limit_concurrent, wrol_mode_check
+from wrolpi.dates import now
 from wrolpi.db import get_db_session, optional_session
+from wrolpi.downloader import download_manager
 from wrolpi.files.lib import handle_file_group_search_results
+from wrolpi.files.models import FileGroup
 from wrolpi.tags import tag_append_sub_select_where
+from wrolpi.vars import VIDEO_COMMENTS_FETCH_COUNT
 from ..errors import UnknownVideo
 from ..lib import save_channels_config
 
@@ -157,3 +167,100 @@ def delete_videos(*video_ids: int, session: Session = None):
     for video in videos:
         video.delete()
     session.commit()
+
+
+def download_video_info_json(url: str) -> dict:
+    ydl_opts = dict(
+        getcomments=True,
+        skip_download=True,
+        extractor_args={'youtube': {'max_comments': ['all', '20', 'all', '10'], 'comment_sort': ['top']}},
+    )
+
+    ydl_logger = logger.getChild('youtube-dl')
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.params['logger'] = ydl_logger
+        info = ydl.extract_info(url, download=False)
+        ydl.sanitize_info(info)
+        return info
+
+
+@limit_concurrent(1)
+@wrol_mode_check
+async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
+    """
+    Fetches Video info json for videos without comments, if comments are found then the info json file is replaced.
+    """
+    one_month_ago = now() - timedelta(days=30)
+
+    # Get any videos over a month old that do not have comments.
+    with get_db_session() as session:
+        videos = session.query(Video).filter(
+            # Have yet to get comments.
+            Video.have_comments == False,
+            Video.comments_failed == False,
+            # Need a URL to try to get comments.
+            FileGroup.url != None,  # noqa
+            # We want old videos (time for comments to accumulate), or those which we don't know the published date.
+            or_(
+                one_month_ago > FileGroup.published_datetime,
+                FileGroup.published_datetime == None,
+            ),
+        ).join(FileGroup) \
+            .order_by(FileGroup.published_datetime.nullsfirst()) \
+            .limit(limit)
+        video_urls = [i.file_group.url for i in videos]
+
+    logger.info(f'Found {len(video_urls)} videos missing comments')
+
+    def add_video_to_skip_list(video_url: str):
+        """Do not attempt to get comments of the provided Video again."""
+        with get_db_session(commit=True) as session_:
+            for video_ in session_.query(Video).join(FileGroup).filter_by(url=video_url).all():
+                video_.comments_failed = True
+
+    for url in video_urls:
+        # Sleep to catch cancel.
+        await asyncio.sleep(0)
+
+        if download_manager.is_skipped(url):
+            # This video is skipped, do not try to get comments again.
+            add_video_to_skip_list(url)
+
+        with get_db_session(commit=True) as session:
+            have_comments = False
+            for video in session.query(Video).join(FileGroup).filter_by(url=url).all():
+                if (comments := video.get_comments()) and len(comments) >= 5:
+                    # We already have enough comments.  DB may have been wiped, we don't want to fetch comments again.
+                    logger.info(f'Already have comments for Video: {url=}')
+                    have_comments = video.have_comments = True
+
+            if have_comments:
+                download_manager.add_to_skip_list(url)
+                continue
+
+        tries = 5
+        while tries > 0:
+            try:
+                tries -= 1
+                # Get info json about the video.  Retry until we have a list of comments.
+                info = download_video_info_json(url)
+                if info and isinstance(info.get('comments'), list):
+                    break
+            except Exception as e:
+                logger.error(f'Got error when attempting to download comments: {url=}', exc_info=e)
+        else:
+            logger.error(f'Never got comments for video: {url=}')
+            download_manager.add_to_skip_list(url)
+            add_video_to_skip_list(url)
+            continue
+
+        logger.debug(f'Got {len(info["comments"])} comments for Video: {url=}')
+
+        with get_db_session(commit=True) as session:
+            for video in session.query(Video).join(FileGroup).filter_by(url=url).all():
+                video.replace_info_json(info)
+                video.have_comments = True
+
+        # Sleep a random amount of time, so we don't spam.
+        await asyncio.sleep(random.randint(2, 20))

@@ -19,7 +19,7 @@ from wrolpi.common import register_modeler, logger, extract_html_text, extract_h
     register_refresh_cleanup, background_task
 from wrolpi.db import get_db_session, optional_session, get_db_curs
 from wrolpi.downloader import DownloadFrequency
-from wrolpi.files.lib import refresh_files
+from wrolpi.files.lib import refresh_files, split_file_name_words
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, DOCKERIZED
 
@@ -62,6 +62,8 @@ async def zim_modeler():
                         session.add(zim)
                         session.flush([zim])
                     zim_id = zim.id
+                    file_group.title = file_group.primary_path.name
+                    file_group.a_text = split_file_name_words(file_group.primary_path.name)
                     file_group.indexed = True
                 except Exception as e:
                     if PYTEST:

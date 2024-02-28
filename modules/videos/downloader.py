@@ -2,7 +2,6 @@
 import json
 import pathlib
 import re
-import tempfile
 import traceback
 from abc import ABC
 from typing import Tuple, List, Dict
@@ -20,7 +19,7 @@ from wrolpi.db import get_db_session
 from wrolpi.db import optional_session
 from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
-from wrolpi.files.lib import glob_shared_stem, split_path_stem_and_suffix
+from wrolpi.files.lib import glob_shared_stem
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST
 from .channel.lib import create_channel, get_channel
@@ -30,6 +29,7 @@ from .lib import get_downloader_config
 from .models import Video, Channel
 from .normalize_video_url import normalize_video_url
 from .schema import ChannelPostRequest
+from .video.lib import download_video_info_json
 
 logger = logger.getChild(__name__)
 ydl_logger = logger.getChild('youtube-dl')
@@ -469,7 +469,8 @@ class VideoDownloader(Downloader, ABC):
         logger.debug(f'Downloading {url} to {out_dir}')
         return final_filename, entry
 
-    async def download_info_json(self, download: Download, video_path: pathlib.Path) -> DownloadResult:
+    @staticmethod
+    async def download_info_json(download: Download, video_path: pathlib.Path) -> DownloadResult:
         """User has requested to refresh Video metadata.  Download only metadata files to temporary directory.
         Replace existing metadata files only after successful download."""
         url = download.url
@@ -489,104 +490,25 @@ class VideoDownloader(Downloader, ABC):
             if video.channel_id:
                 location = f'/videos/channel/{video.channel_id}/video/{video.id}'
 
-        # Download metadata files into temporary directory so yt-dlp always downloads the latest files.
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            tmp_dir = pathlib.Path(tmp_dir)
+        # Download video info json directly using yt-dlp.
+        try:
+            info_json = download_video_info_json(url)
+        except Exception as e:
+            logger.error('Failed to download video info json', exc_info=e)
+            return DownloadResult(success=False, error='Failed to download video info json')
 
-            # Download the metadata files, but skip the video file.
-            file_name_format = '%(uploader)s_%(upload_date)s_%(id)s_%(title)s.%(ext)s'
-            cmd = (
-                str(YT_DLP_BIN),
-                '-f', PREFERRED_VIDEO_FORMAT,
-                '--skip-download',  # SKIP THE VIDEO FILE.
-                '--match-filter', '!is_live',  # Do not attempt to download Live videos.
-                '--write-info-json',
-                '--merge-output-format', PREFERRED_VIDEO_EXTENSION,
-                '--remux-video', PREFERRED_VIDEO_EXTENSION,
-                '-o', file_name_format,
-                '--no-cache-dir',
-                '--compat-options', 'no-live-chat',
-                # Get top 20 comments, 10 replies per parent.
-                '--write-comments',
-                '--extractor-args', 'youtube:max_comments=all,20,all,10;comment_sort=top',
-                url,
-            )
-            return_code, logs, _ = await self.process_runner(url, cmd, tmp_dir)
+        with get_db_session(commit=True) as session:
+            # Find the existing video, replace its info json.
+            video = Video.get_by_url(url, session)
+            video.replace_info_json(info_json)
 
-            stderr = logs['stderr'].decode() if hasattr(logs['stderr'], 'decode') else logs['stderr']
-            stdout = logs['stdout'].decode() if hasattr(logs['stdout'], 'decode') else logs['stdout']
+            if video.get_comments():
+                video.have_comments = True
 
-            if return_code != 0:
-                error = f'{stdout}\n\n\n{stderr}\n\nvideo info json downloader process exited with {return_code}'
-                return DownloadResult(
-                    success=False,
-                    error=error,
-                    location=location,
-                )
+        logger.debug(f'Downloaded video info json {location=}')
+        logger.info(f'Successfully downloaded video info json {url} {video}')
 
-            # Find the info json file in the temporary directory.
-            info_json_paths = [i for i in tmp_dir.iterdir() if i.name.endswith('.info.json') and i.stat().st_size]
-            if len(info_json_paths) == 0:
-                return DownloadResult(
-                    success=False,
-                    error='No info json file was downloaded.',
-                    location=location,
-                )
-            elif len(info_json_paths) > 1:
-                return DownloadResult(
-                    success=False,
-                    error='More than one info json file was downloaded.',
-                    location=location,
-                )
-
-            info_json_path = info_json_paths[0]
-
-            if not info_json_path.stat().st_size:
-                return DownloadResult(
-                    success=False,
-                    error='Video info json file was empty',
-                    location=location,
-                )
-
-            # Reformat new info json file for human reading.
-            format_json_file(info_json_path)
-
-            with get_db_session(commit=True) as session:
-                # Find the existing video, replace its info json.
-                video = Video.get_by_url(url, session)
-
-                if video.info_json_path and video.info_json_path.is_file():
-                    # Move old file temporarily.  Only delete old data if the swap is successful.
-                    logger.debug(f'Replacing info json file: {video.info_json_path}')
-                    tmp_info_json_path = pathlib.Path(f'{video.info_json_path}.tmp')
-                    if tmp_info_json_path.is_file():
-                        if video.info_json_path.stat().st_size:
-                            tmp_info_json_path.unlink()
-                        else:
-                            raise UnrecoverableDownloadError(
-                                f'Temporary info json file already exists: {tmp_info_json_path}')
-
-                    # Move existing info json file to a temporary location.  Move it back if this fails.
-                    video.info_json_path.rename(tmp_info_json_path)
-                    try:
-                        video.info_json_path.write_text(info_json_path.read_text())
-                        tmp_info_json_path.unlink()
-                    except Exception as e:
-                        logger.error('Failed to swap video info json file', exc_info=e)
-                        tmp_info_json_path.rename(video.info_json_path)
-                        raise
-                else:
-                    # info json file does not exist, write one next to the video.
-                    video_path = video.video_path
-                    stem, _ = split_path_stem_and_suffix(video_path)
-                    new_info_json_path = pathlib.Path(f'{stem}.info.json')
-                    new_info_json_path.write_text(info_json_path.read_text())
-                    video.file_group.append_files(new_info_json_path)
-
-            logger.debug(f'Downloaded video info json {location=}')
-            logger.info(f'Successfully downloaded video info json {url} {video}')
-
-            return DownloadResult(success=True, location=location)
+        return DownloadResult(success=True, location=location)
 
 
 channel_downloader = ChannelDownloader()

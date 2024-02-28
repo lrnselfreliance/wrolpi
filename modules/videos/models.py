@@ -30,6 +30,8 @@ class Video(ModelHelper, Base):
     source_id = Column(String)  # The id from yt-dlp
     view_count = Column(Integer)  # The view count from the ChannelDownloader (or from initial download)
     ffprobe_json = deferred(Column(JSON))  # Data that is fetched once from ffprobe (ffmpeg)
+    have_comments = Column(Boolean, default=False)  # see `get_missing_videos_comments`
+    comments_failed = Column(Boolean, default=False)  # see `get_missing_videos_comments`
 
     channel_id = Column(Integer, ForeignKey('channel.id'))
     channel = relationship('Channel', primaryjoin='Video.channel_id==Channel.id', back_populates='videos')
@@ -60,8 +62,6 @@ class Video(ModelHelper, Base):
         except Exception as e:
             logger.error(f'{self} ffprobe_json is invalid', exc_info=e)
 
-        info_json = self.get_info_json() or dict()
-
         # Put live data in "video" instead of "data" to avoid confusion on the frontend.
         d['video'] = dict(
             caption=self.file_group.d_text,
@@ -70,7 +70,7 @@ class Video(ModelHelper, Base):
             channel_id=self.channel_id,
             codec_names=codec_names,
             codec_types=codec_types,
-            comments=info_json.get('comments'),
+            comments=self.get_comments(),
             description=self.file_group.c_text or self.get_video_description(),
             id=self.id,
             info_json_file=self.info_json_file,
@@ -102,7 +102,7 @@ class Video(ModelHelper, Base):
             logger.warning(f'{self} cannot be added to skip list because it does not have a URL')
 
     def get_info_json(self) -> Optional[Dict]:
-        """If this Video has an info_json file, return it's contents.  Otherwise, return None."""
+        """If this Video has an info_json file, return its contents.  Otherwise, return None."""
         info_json_path = self.info_json_path
         if not info_json_path:
             return
@@ -121,12 +121,8 @@ class Video(ModelHelper, Base):
         """
         Get the Video description from the file system.
         """
-        # First try to get description from info_json file.
-        info_json = self.get_info_json()
-        if info_json:
-            description = info_json.get('description')
-            if description:
-                return description
+        if (info_json := self.get_info_json()) and (description := info_json.get('description')):
+            return description
 
     def get_surrounding_videos(self):
         """
@@ -230,6 +226,9 @@ class Video(ModelHelper, Base):
         self.file_group.a_text = self.file_group.title
         self.file_group.c_text = self.get_video_description()
         # self.file_group.d_text is handled in `validate_video`.
+
+        if (comments := self.get_comments()) and len(comments) >= 5:
+            self.have_comments = True
 
     @staticmethod
     def from_paths(session: Session, *paths: pathlib.Path) -> 'Video':
@@ -476,6 +475,17 @@ class Video(ModelHelper, Base):
         if self.channel_id:
             return f'/videos/channel/{self.channel_id}/video/{self.id}'
         return f'/videos/video/{self.id}'
+
+    def get_comments(self):
+        return (self.get_info_json() or dict()).get('comments')
+
+    def replace_info_json(self, info_json: dict):
+        """Replace the info json file with the new json dict.  Handles adding new info_json file, if necessary."""
+        info_json_path = self.info_json_path or self.video_path.with_suffix('.info.json')
+        info_json_path.write_text(json.dumps(info_json, indent=2))
+
+        if not self.info_json_path:
+            self.file_group.append_files(info_json_path)
 
 
 class Channel(ModelHelper, Base):

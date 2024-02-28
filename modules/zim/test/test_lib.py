@@ -328,3 +328,16 @@ async def test_zim_subscription_download_import(test_session, test_downloader_co
         assert subscription.download_id == recurring.id
         assert subscription.name == 'Wikisource'
         assert subscription.language == 'en'
+
+
+@pytest.mark.asyncio
+async def test_zim_modeler(test_session, zim_factory):
+    """Zim modeler sets FileGroup title and a_text."""
+    zim_factory('the_zim_title')
+    test_session.commit()
+
+    await files_lib.refresh_files()
+
+    fg: FileGroup = test_session.query(FileGroup).one()
+    assert fg.title == 'the_zim_title'
+    assert fg.a_text == 'the zim title'

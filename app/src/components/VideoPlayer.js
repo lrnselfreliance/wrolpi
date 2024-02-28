@@ -10,6 +10,7 @@ import {
     humanFileSize,
     humanNumber,
     isoDatetimeToString,
+    MultilineText,
     PageContainer,
     PreviewPath,
     useTitle
@@ -99,20 +100,33 @@ const NoComments = ({video}) => {
 const VideoComment = ({comment, children}) => {
     const {t} = React.useContext(ThemeContext);
 
-    const favoriteComment = <Icon name='heart'/>;
-    const likesCount = <React.Fragment>
-        <Icon name='thumbs up'/> {comment['like_count']}
-    </React.Fragment>;
+    const {is_favorited, like_count, author, timestamp, text, author_is_uploader} = comment;
+
+    // Author comments and favorited comments are important.
+    let specialIcon = null;
+    if (author_is_uploader) {
+        specialIcon = <Icon name='star' color='green'/>;
+    } else if (is_favorited) {
+        specialIcon = <Icon name='heart' color='red'/>;
+    }
+
+    const dateElm = <div {...t}>{isoDatetimeToString(timestamp * 1000)}</div>;
+    const likesElm = like_count && <div {...t}>
+        <Icon name='thumbs up'/>{comment['like_count']}
+    </div>;
 
     return <Comment>
         <Comment.Content>
-            <Comment.Author as='a'><span {...t}>{comment['author']}</span></Comment.Author>
+            <Comment.Author as='a'>
+                <span {...t}>{specialIcon}{author}</span>
+            </Comment.Author>
             <Comment.Metadata>
-                <div {...t}>{comment['is_favorited'] && favoriteComment}</div>
-                <div {...t}>{isoDatetimeToString(comment['timestamp'] * 1000)}</div>
-                <div {...t}>{comment['like_count'] && likesCount}</div>
+                {dateElm}
+                {likesElm}
             </Comment.Metadata>
-            <Comment.Text {...t}>{comment['text']}</Comment.Text>
+            <Comment.Text {...t}>
+                <MultilineText text={text} style={{marginLeft: '0.5em'}}/>
+            </Comment.Text>
         </Comment.Content>
         {children && !_.isEmpty(children) &&
             <CommentGroup>

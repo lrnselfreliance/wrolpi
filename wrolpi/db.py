@@ -80,9 +80,6 @@ def get_db_context() -> Tuple[sqlalchemy.create_engine, Session]:
     return local_engine, session
 
 
-# logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
-
-
 @contextmanager
 def get_db_session(commit: bool = False) -> ContextManager[Session]:
     """

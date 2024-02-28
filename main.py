@@ -11,6 +11,7 @@ from wrolpi import flags, BEFORE_STARTUP_FUNCTIONS
 from wrolpi import root_api, admin
 from wrolpi.common import logger, get_config, check_media_directory, limit_concurrent, \
     wrol_mode_enabled, cancel_refresh_tasks, set_log_level, background_task, cancel_background_tasks
+from wrolpi.dates import Seconds
 from wrolpi.downloader import download_manager, import_downloads_config
 from wrolpi.root_api import api_app
 from wrolpi.vars import PROJECT_DIR, DOCKERIZED, PYTEST
@@ -200,6 +201,23 @@ async def startup(app: Sanic):
 
     from modules.zim.lib import flag_outdated_zim_files
     flag_outdated_zim_files()
+
+    from modules.videos.video.lib import get_missing_videos_comments
+
+    async def periodic_start_video_missing_comments_download():
+        async with flags.refresh_complete.wait_for():
+            # We can't search for Videos missing comments until the refresh has completed.
+            pass
+
+        while True:
+            # Fetch comments for videos every hour.
+            if download_manager.disabled.is_set() or download_manager.stopped.is_set():
+                await asyncio.sleep(10)
+            else:
+                await get_missing_videos_comments()
+                await asyncio.sleep(int(Seconds.hour))
+
+    background_task(periodic_start_video_missing_comments_download())
 
 
 @api_app.after_server_start

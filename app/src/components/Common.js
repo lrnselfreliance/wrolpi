@@ -1653,3 +1653,11 @@ export function getParentDirectory(filePath) {
 
     return parentDirectory;
 }
+
+export function MultilineText({text, ...props}) {
+    return <div {...props}>
+        {text.split('\n').map((line, index, array) =>
+            index === array.length - 1 ? line : <p>{line}</p>
+        )}
+    </div>
+}

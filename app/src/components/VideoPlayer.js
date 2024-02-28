@@ -9,7 +9,7 @@ import {
     getParentDirectory,
     humanFileSize,
     humanNumber,
-    isoDatetimeToString,
+    isoDatetimeToString, MultilineText,
     PageContainer,
     PreviewPath,
     useTitle
@@ -112,7 +112,9 @@ const VideoComment = ({comment, children}) => {
                 <div {...t}>{isoDatetimeToString(comment['timestamp'] * 1000)}</div>
                 <div {...t}>{comment['like_count'] && likesCount}</div>
             </Comment.Metadata>
-            <Comment.Text {...t}>{comment['text']}</Comment.Text>
+            <Comment.Text {...t}>
+                <MultilineText text={comment['text']} style={{marginLeft: '0.5em'}}/>
+            </Comment.Text>
         </Comment.Content>
         {children && !_.isEmpty(children) &&
             <CommentGroup>

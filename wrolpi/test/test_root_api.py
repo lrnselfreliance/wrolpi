@@ -507,10 +507,10 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     await assert_results(
         dict(search_str='foo l'),
         [
-         {'directory': 'Fool',
-          'id': 2,
-          'name': 'Fool',
-          'url': 'https://example.com/Fool'}],
+            {'directory': 'Fool',
+             'id': 2,
+             'name': 'Fool',
+             'url': 'https://example.com/Fool'}],
         [],
         0,
     )
@@ -554,6 +554,11 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
 
     # No PDFs.
     await assert_results(dict(mimetypes=['application/pdf']))
+
+    # Can filter by published datetime.
+    await assert_results(dict(months=[1, ]), expected_file_groups=2)
+    await assert_results(dict(months=[2, ]), expected_file_groups=0)
+    await assert_results(dict(from_year=2000, to_year=2000), expected_file_groups=2)
 
 
 def test_recursive_errors():

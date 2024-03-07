@@ -10,7 +10,7 @@ import {MoreRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/Inventory";
 import {ArchiveRoute} from "./components/Archive";
 import {FilesRoute} from "./components/Files";
-import {StatusProvider} from "./hooks/customHooks";
+import {QueryProvider, StatusProvider} from "./hooks/customHooks";
 import {MapRoute} from "./components/Map";
 import {MediaContextProvider, mediaStyles, StatusContext, ThemeContext} from "./contexts/contexts";
 import {Header, ThemeProvider} from "./components/Theme";
@@ -61,17 +61,19 @@ function HelpPage() {
 }
 
 function Root() {
-    return <ThemeProvider>
-        <TagsProvider>
-            <FilePreviewProvider>
-                <header>
-                    <NavBar/>
-                </header>
-                <Outlet/>
-                <Footer/>
-            </FilePreviewProvider>
-        </TagsProvider>
-    </ThemeProvider>
+    return <QueryProvider>
+        <ThemeProvider>
+            <TagsProvider>
+                <FilePreviewProvider>
+                    <header>
+                        <NavBar/>
+                    </header>
+                    <Outlet/>
+                    <Footer/>
+                </FilePreviewProvider>
+            </TagsProvider>
+        </ThemeProvider>
+    </QueryProvider>
 }
 
 const router = createBrowserRouter(createRoutesFromElements(<Route

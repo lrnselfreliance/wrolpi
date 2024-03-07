@@ -23,7 +23,7 @@ from itertools import islice, filterfalse, tee
 from multiprocessing import Lock, Manager
 from pathlib import Path
 from types import GeneratorType
-from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any, Set
+from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any, Set, Coroutine
 from urllib.parse import urlparse, urlunsplit
 
 import aiohttp
@@ -1183,13 +1183,24 @@ def chunks_by_stem(it: List[Union[pathlib.Path, str]], size: int) -> Generator[L
 
 
 @contextlib.contextmanager
-def timer(name):
+def timer(name, level: str = 'debug'):
     """Prints out the time elapsed during the call of some block."""
     before = datetime.now()
+    log_method = getattr(logger_, level)
     try:
         yield
     finally:
-        logger_.warning(f'{name} elapsed {(datetime.now() - before).total_seconds()} seconds')
+        log_method(f'{name} elapsed {(datetime.now() - before).total_seconds()} seconds')
+
+
+def async_timer(coro: Coroutine, name: str = 'async timer', level: str = 'debug') -> callable:
+    """Returns a new coroutine which prints out time elapsed when calling the coroutine."""
+
+    async def _():
+        with timer(name, level):
+            return await coro
+
+    return _()
 
 
 @contextlib.contextmanager
@@ -1270,7 +1281,7 @@ def limit_concurrent(limit: int, throw: bool = False):
     return wrapper
 
 
-def truncate_object_bytes(obj: Union[List[str], str, None], maximum_bytes: int) -> Union[List[str], str]:
+def truncate_object_bytes(obj: Union[List[str], str, None, Generator], maximum_bytes: int) -> Union[List[str], str]:
     """
     Shorten an object.  This is useful when inserting something into a tsvector.
 

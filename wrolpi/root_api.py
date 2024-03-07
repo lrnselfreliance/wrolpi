@@ -31,7 +31,7 @@ from wrolpi.errors import WROLModeEnabled, APIError, HotspotError, InvalidDownlo
 from wrolpi.events import get_events, Events
 from wrolpi.files.lib import get_file_statistics, search_file_suggestion_count
 from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
-    truthy_arg
+    truthy_arg, IS_RPI, IS_RPI4, IS_RPI5
 from wrolpi.version import __version__
 
 logger = logger.getChild(__name__)
@@ -384,6 +384,9 @@ async def get_status(_: Request):
         cpu_info=s.cpu_info,
         disk_bandwidth=s.disk_bandwidth,
         dockerized=DOCKERIZED,
+        is_rpi=IS_RPI,
+        is_rpi4=IS_RPI4,
+        is_rpi5=IS_RPI5,
         downloads=downloads,
         drives=s.drives,
         flags=flags.get_flags(),
@@ -515,11 +518,18 @@ async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequ
     from modules.videos.channel.lib import search_channels_by_name
     from modules.archive.lib import search_domains_by_name
 
-    file_groups, channels, domains = await asyncio.gather(
-        search_file_suggestion_count(body.search_str, body.tag_names, body.mimetypes),
-        search_channels_by_name(body.search_str),
-        search_domains_by_name(body.search_str),
+    file_coro = search_file_suggestion_count(
+        body.search_str,
+        body.tag_names,
+        body.mimetypes,
+        body.months,
+        body.from_year,
+        body.to_year,
     )
+    channels_coro = search_channels_by_name(body.search_str)
+    domains_coro = search_domains_by_name(body.search_str)
+
+    file_groups, channels, domains = await asyncio.gather(file_coro, channels_coro, domains_coro)
 
     ret = dict(
         file_groups=file_groups,

@@ -1,5 +1,6 @@
 import {API_URI, ARCHIVES_API, DEFAULT_LIMIT, emptyToNull, OTP_API, VIDEOS_API, ZIM_API} from "./components/Common";
 import {toast} from "react-semantic-toasts-2";
+import _ from "lodash";
 
 function timeoutPromise(ms, promise) {
     // Create a timeout wrapper around a promise.  If the timeout is reached, throw an error.  Otherwise, return
@@ -545,7 +546,7 @@ export async function deleteDownload(downloadId) {
     }
 }
 
-export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline) {
+export async function filesSearch(offset, limit, searchStr, mimetypes, model, tagNames, headline, months, fromYear, toYear) {
     const body = {search_str: searchStr, offset: parseInt(offset), limit: parseInt(limit)};
     if (mimetypes) {
         body['mimetypes'] = mimetypes;
@@ -559,7 +560,16 @@ export async function filesSearch(offset, limit, searchStr, mimetypes, model, ta
     if (headline) {
         body['headline'] = true;
     }
-    console.debug('searching files', body);
+    if (!_.isEmpty(months)) {
+        body['months'] = months.map(i => parseInt(i));
+    }
+    if (fromYear) {
+        body['from_year'] = fromYear;
+    }
+    if (toYear) {
+        body['to_year'] = toYear;
+    }
+    console.info('searching files', body);
     const response = await apiPost(`${API_URI}/files/search`, body);
 
     if (response.status === 200) {
@@ -1050,8 +1060,14 @@ export async function fetchDecoded(vinNumber) {
     }
 }
 
-export async function searchSuggestions(search_str, tagNames, mimetypes) {
-    const body = {search_str: search_str, tag_names: tagNames, mimetypes: mimetypes};
+export async function searchSuggestions(search_str, tagNames, mimetypes, months, dateRange) {
+    months = months ? months.map(i => parseInt(i)) : [];
+
+    const body = {search_str, tag_names: tagNames, mimetypes, months};
+    if (dateRange) {
+        body['from_year'] = dateRange[0];
+        body['to_year'] = dateRange[1];
+    }
     const response = await apiPost(`${API_URI}/search_suggestions`, body);
     if (response.ok) {
         const content = await response.json();

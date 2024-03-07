@@ -52,7 +52,7 @@ import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {Button, Card, Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
 import {deleteVideos} from "../api";
-import {Media, ThemeContext} from "../contexts/contexts";
+import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
 
 export function VideoWrapper() {
@@ -69,7 +69,7 @@ export function VideoWrapper() {
 function VideosPage() {
 
     const {channelId} = useParams();
-    const {searchParams} = useQuery();
+    const {searchParams} = React.useContext(QueryContext);
     const [selectedVideos, setSelectedVideos] = useState([]);
 
     let searchOrder = defaultVideoOrder;

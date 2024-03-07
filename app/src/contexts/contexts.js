@@ -13,6 +13,13 @@ export const SettingsContext = React.createContext({
     fetchSettings: null,
 });
 
+export const QueryContext = React.createContext({
+    searchParams: null,
+    setSearchParams: null,
+    updateQuery: null,
+    getLocationStr: null,
+})
+
 export const AppMedia = createMedia({
     breakpoints: {
         mobile: 0, tablet: 700, computer: 1024,

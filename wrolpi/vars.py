@@ -1,5 +1,6 @@
 import multiprocessing
 import os
+import pathlib
 import sys
 from pathlib import Path
 
@@ -80,3 +81,9 @@ VIDEO_COMMENTS_FETCH_COUNT = int(os.environ.get('VIDEO_COMMENTS_FETCH_COUNT', 50
 DEFAULT_HTTP_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116 Safari/537.36',
 }
+
+RPI_DEVICE_PATH = pathlib.Path('/proc/device-tree/model')
+RPI_DEVICE_MODEL_CONTENTS = RPI_DEVICE_PATH.read_text() if RPI_DEVICE_PATH.is_file() else None
+IS_RPI4 = 'Raspberry Pi 4' in RPI_DEVICE_MODEL_CONTENTS if RPI_DEVICE_MODEL_CONTENTS else False
+IS_RPI5 = 'Raspberry Pi 5' in RPI_DEVICE_MODEL_CONTENTS if RPI_DEVICE_MODEL_CONTENTS else False
+IS_RPI = IS_RPI4 or IS_RPI5

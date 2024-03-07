@@ -1,3 +1,4 @@
+import unittest.mock
 from unittest import mock
 
 import pytest
@@ -82,3 +83,21 @@ async def test_run_import_command(test_directory, mock_create_subprocess_shell):
 ])
 def test_seconds_to_import_rpi4(size, expected):
     assert lib.seconds_to_import(size) == expected
+
+
+@pytest.mark.parametrize('size,expected', [
+    (0, 0),
+    (-1, 0),
+    (17737381, 130),
+    (63434267, 466),
+    (87745484, 645),
+    (116318111, 855),
+    (136372996, 1002),
+    (1936075318, 14235),
+    (2676094489, 19676),
+    (3392375001, 24943),
+    (11346305075, 188040),
+])
+def test_seconds_to_import_rpi5(size, expected):
+    with unittest.mock.patch('modules.map.lib.IS_RPI5', True):
+        assert lib.seconds_to_import(size) == expected

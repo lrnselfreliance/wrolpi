@@ -15,7 +15,6 @@ import {
     getSettings,
     getStatistics,
     getStatus,
-    getThrottleStatus,
     getVideo,
     getVideosStatistics,
     searchArchives,
@@ -28,7 +27,7 @@ import {
 } from "../api";
 import {createSearchParams, useLocation, useSearchParams} from "react-router-dom";
 import {enumerate, filterToMimetypes, humanFileSize, secondsToFullDuration} from "../components/Common";
-import {SettingsContext, StatusContext} from "../contexts/contexts";
+import {QueryContext, SettingsContext, StatusContext} from "../contexts/contexts";
 import {toast} from "react-semantic-toasts-2";
 import {useSearch} from "../components/Search";
 import _ from "lodash";
@@ -103,63 +102,95 @@ export const useLatestRequest = (delay = 300, defaultLoading = false) => {
     return {data, sendRequest, loading};
 };
 
+const getSearchParamCopy = (searchParams) => {
+    let copy = {};
+    if (searchParams) {
+        Array.from(searchParams.keys()).forEach(key => {
+            const value = searchParams.getAll(key)
+            copy[key] = value.length === 1 ? value[0] : value;
+        })
+    }
+    copy = removeEmptyValues(copy);
+    return copy;
+}
 
-export const useQuery = () => {
+const removeEmptyValues = (obj) => {
+    Object.entries(obj).forEach(([k, v]) => {
+        // Clear any empty values.
+        if (v === null || v === undefined || (Array.isArray(v) && v.length === 0)) {
+            delete obj[k];
+        }
+    });
+    return obj
+}
+
+
+export const useQuery = (defaultParams) => {
     const location = useLocation();
     const [searchParams, setSearchParams] = useSearchParams();
+    const [state, setState] = React.useState(defaultParams || getSearchParamCopy(searchParams));
 
-    const setQuery = (obj, replace = true) => {
-        console.debug(`setQuery`, obj);
-        setSearchParams(createSearchParams(obj), {replace: replace});
-    }
-
-    const getQuery = (obj) => {
-        const newQuery = {};
-        for (const entry of searchParams.entries()) {
-            newQuery[entry[0]] = entry[1];
+    React.useEffect(() => {
+        // Copy the state into the URL.
+        setSearchParams(state);
+        if (!_.isEmpty(state)) {
+            console.debug('Changing URL params', state);
         }
-        Object.entries(obj).forEach(([key, value]) => {
-            if (value === undefined || value === null || value === '') {
-                delete newQuery[key];
-            } else {
-                newQuery[key] = value;
-            }
-        })
-        return newQuery;
-    }
+    }, [state]);
 
-    const updateQuery = (obj) => {
-        const newQuery = getQuery(obj);
-        setQuery(newQuery);
-    }
+    React.useEffect(() => {
+        // Keep URL and state in sync.
+        setState(getSearchParamCopy(searchParams));
+    }, [searchParams]);
+
+    const updateQuery = (newParams, replace = false) => {
+        // Update the old state with the new values.
+        setState(oldState => {
+            if (replace) {
+                // Ignore oldState because all values are going to be replaced.
+                return removeEmptyValues(newParams);
+            } else {
+                return removeEmptyValues({...oldState, ...newParams});
+            }
+        });
+    };
 
     const getLocationStr = (newSearchParams, pathname) => {
         // Get the current location, but with new params appended.
-        const newQuery = createSearchParams(getQuery(newSearchParams));
+        newSearchParams = {...state, ...newSearchParams};
+        const newQuery = createSearchParams(newSearchParams);
         return `${pathname || location.pathname}?${newQuery.toString()}`
     }
 
-    return {searchParams, setSearchParams, setQuery, updateQuery, getLocationStr}
+    return {searchParams, updateQuery, getLocationStr}
+}
+
+
+export const QueryProvider = (props) => {
+    const value = useQuery();
+
+    return <QueryContext.Provider value={value}>
+        {props.children}
+    </QueryContext.Provider>
 }
 
 export const useOneQuery = (name) => {
-    const {searchParams, updateQuery} = useQuery();
+    const {searchParams, updateQuery} = React.useContext(QueryContext);
     const value = searchParams.get(name);
 
-    const setValue = (newValue) => {
-        console.debug(`useOneQuery setValue=${newValue}`);
-        updateQuery({[name]: newValue});
+    const setValue = (newValue, replace = false) => {
+        updateQuery({[name]: newValue}, replace);
     }
 
     return [value, setValue]
 }
 
 export const useAllQuery = (name) => {
-    const {searchParams, updateQuery} = useQuery();
+    const {searchParams, updateQuery} = React.useContext(QueryContext);
     const value = searchParams.getAll(name);
 
-    const setValue = (newValue) => {
-        updateQuery({[name]: newValue});
+    const setValue = (newValue, replace = false) => {
+        updateQuery({[name]: newValue}, replace);
     }
 
     return [value, setValue]
@@ -212,7 +243,7 @@ export const useArchive = (archiveId) => {
 }
 
 export const usePages = (defaultLimit = 24, totalPages = 0) => {
-    const {searchParams, updateQuery} = useQuery();
+    const {searchParams, updateQuery} = React.useContext(QueryContext);
     const offset = searchParams.get('o') || 0;
     const limit = parseInt(searchParams.get('l') || defaultLimit || 24);
     const [activePage, setActivePage] = useState(calculatePage(offset, limit));
@@ -232,7 +263,7 @@ export const usePages = (defaultLimit = 24, totalPages = 0) => {
 
     const setTotal = (total) => {
         const newTotalPages = calculateTotalPages(total, limit);
-        console.log('newTotalPages', newTotalPages);
+        console.debug('newTotalPages', newTotalPages);
         setTotalPages(newTotalPages);
     }
 
@@ -245,7 +276,7 @@ export const usePages = (defaultLimit = 24, totalPages = 0) => {
 export const useSearchArchives = (defaultLimit) => {
     const {domain} = useSearchDomain();
     const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit);
-    const {searchParams, updateQuery} = useQuery();
+    const {searchParams, updateQuery} = React.useContext(QueryContext);
     const searchStr = searchParams.get('q') || '';
     const order = searchParams.get('order');
     const activeTags = searchParams.getAll('tag');
@@ -304,7 +335,7 @@ export const useSearchArchives = (defaultLimit) => {
 }
 
 export const useSearchVideos = (defaultLimit, channelId, order_by) => {
-    const {searchParams, updateQuery} = useQuery();
+    const {searchParams, updateQuery} = React.useContext(QueryContext);
     const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit);
     const searchStr = searchParams.get('q') || '';
     const order = searchParams.get('order') || order_by;
@@ -473,7 +504,9 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
         searchStr,
         filter,
         model: model_,
-        setSearchStr
+        setSearchStr,
+        months,
+        dateRange,
     } = useSearch(defaultLimit, emptySearch, model);
     const {view} = useSearchView();
 
@@ -486,9 +519,16 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
         }
         const mimetypes = filterToMimetypes(filter);
         setSearchFiles(null);
+        let fromYear;
+        let toYear;
+        if (dateRange) {
+            fromYear = dateRange[0];
+            toYear = dateRange[1];
+        }
         try {
             let [file_groups, total] = await filesSearch(
-                pages.offset, pages.limit, searchStr, mimetypes, model || model_, activeTags, headline);
+                pages.offset, pages.limit, searchStr, mimetypes, model || model_, activeTags, headline,
+                months, fromYear, toYear);
             setSearchFiles(file_groups);
             pages.setTotal(total);
         } catch (e) {
@@ -514,7 +554,17 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
         }
         // Handle when this is unmounted.
         return () => debouncedLocalSearchFiles.cancel();
-    }, [searchStr, pages.effect, filter, model, model_, JSON.stringify(activeTags), headline]);
+    }, [
+        searchStr,
+        pages.effect,
+        filter,
+        model,
+        model_,
+        JSON.stringify(activeTags),
+        headline,
+        JSON.stringify(months),
+        JSON.stringify(dateRange),
+    ]);
 
     return {
         searchFiles,
@@ -933,6 +983,33 @@ export const useSearchOrder = () => {
     return {sort, setSort}
 }
 
+export const useSearchMonths = () => {
+    const {searchParams, updateQuery} = React.useContext(QueryContext);
+    const months = searchParams.getAll('month');
+
+    const setMonths = (newMonths) => {
+        // Set new months, go back to first page.
+        updateQuery({'month': newMonths, 'o': 0});
+    }
+
+    return {months, setMonths}
+}
+
+export const useSearchDateRange = () => {
+    const {searchParams, updateQuery} = React.useContext(QueryContext);
+    let fromDate = searchParams.get('fromDate');
+    let toDate = searchParams.get('toDate');
+    fromDate = fromDate ? parseInt(fromDate) : null;
+    toDate = toDate ? parseInt(toDate) : null;
+
+    const setDateRange = ([newFromDate, newToDate]) => {
+        // Set new date range, go back to first page.
+        updateQuery({fromDate: newFromDate, toDate: newToDate, 'o': 0});
+    }
+
+    return {dateRange: [fromDate, toDate], setDateRange}
+}
+
 export const useUploadFile = () => {
     const [files, setFiles] = useState([]);
     const [progresses, setProgresses] = useState({});
@@ -983,7 +1060,7 @@ export const useUploadFile = () => {
                     handleProgress(file.name, chunkNum, totalChunks, 'pending', file.type);
                     const expectedChunk = data['expected_chunk'];
                     if (xhr.status === 416) {
-                        console.log(`Server requested a different chunk ${chunkNum}`);
+                        console.warn(`Server requested a different chunk ${chunkNum}`);
                         await uploadChunk(file, expectedChunk, chunkSize, totalChunks, tries + 1, maxTries);
                     } else {
                         console.debug(`Uploading of chunk ${chunkNum} succeeded, got request for chunk ${chunkNum}`);
@@ -992,7 +1069,7 @@ export const useUploadFile = () => {
                     }
                 } else if (xhr.status === 201) {
                     handleProgress(file.name, totalChunks, totalChunks, 'complete', file.type);
-                    console.log(`Uploading of ${file.path} completed.`);
+                    console.info(`Uploading of ${file.path} completed.`);
                 } else if (xhr.status === 400) {
                     handleProgress(file.name, totalChunks, totalChunks, 'conflicting', file.type);
                     const data = JSON.parse(xhr.responseText);
@@ -1046,7 +1123,7 @@ export const useUploadFile = () => {
 
 export const useSearchZims = (defaultLimit) => {
     const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit);
-    const {searchParams, updateQuery} = useQuery();
+    const {searchParams, updateQuery} = React.useContext(QueryContext);
     const searchStr = searchParams.get('q') || '';
 
     const [zims, setZims] = useState(null);

@@ -177,6 +177,20 @@ async def test_refresh_files(test_session, make_files_structure, assert_file_gro
 
 
 @pytest.mark.asyncio
+async def test_file_group_location(test_session, make_files_structure):
+    """FileGroup can return the URL necessary to preview the FileGroup."""
+    make_files_structure({
+        'foo/one.txt': 'one',
+        'two.txt': 'two',
+    })
+    await lib.refresh_files()
+
+    one, two = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+    assert one.location == '/files?folders=foo&preview=foo%2Fone.txt'
+    assert two.location == '/files?preview=two.txt'
+
+
+@pytest.mark.asyncio
 async def test_refresh_bogus_files(test_session, make_files_structure, test_directory, assert_file_groups,
                                    insert_file_group):
     """Bogus files are removed during a refresh."""
@@ -945,3 +959,53 @@ async def test_html_index(test_session, test_directory, make_files_structure):
 Some Text
 Span Text
 Outside element.'''
+
+
+@pytest.mark.asyncio
+async def test_doc_indexer(test_session, example_doc):
+    """The contents of a Microsoft doc files can be indexed."""
+    await lib.refresh_files()
+    assert test_session.query(FileGroup).count() == 1
+    doc = test_session.query(FileGroup).one()
+    assert doc.title == 'example word.doc'
+    assert doc.a_text == 'example word doc'
+    assert doc.d_text == 'Example Word Document\n\nSecond page\n'
+
+
+@pytest.mark.asyncio
+async def test_docx_indexer(test_session, example_docx):
+    """The contents of a Microsoft docx files can be indexed."""
+    await lib.refresh_files()
+    assert test_session.query(FileGroup).count() == 1
+    doc = test_session.query(FileGroup).one()
+    assert doc.title == 'example word.docx'
+    assert doc.a_text == 'example word docx'
+    assert doc.d_text == 'Example Word Document Second page'
+
+
+@pytest.mark.asyncio
+async def test_file_search_date_range(test_session, example_pdf, example_doc):
+    """Test searching FileGroups by their published datetime."""
+    await lib.refresh_files()
+    doc, pdf = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
+
+    files, total = lib.search_files('', 10, 0)
+    assert total == 2, 'Should only be 2 files.'
+
+    # PDF was published in December.
+    files, total = lib.search_files('', 10, 0, months=[12, ])
+    assert total == 1, 'Only PDF should be from December 2022'
+    assert files[0]['id'] == pdf.id
+
+    # PDF was published in 2022.
+    files, total = lib.search_files('', 10, 0, from_year=2022, to_year=2022)
+    assert total == 1, 'Only PDF should be from December 2022'
+    assert files[0]['id'] == pdf.id
+
+    # PDF was NOT published in 2023.
+    files, total = lib.search_files('', 10, 0, from_year=2023)
+    assert total == 0, 'No example files are published in 2023'
+
+    files, total = lib.search_files('', 10, 0, to_year=2022)
+    assert total == 1
+    assert files[0]['id'] == pdf.id

@@ -1,6 +1,7 @@
 import copy
 import pathlib
 import shutil
+import urllib.parse
 from datetime import datetime
 from typing import List, Type, Optional
 
@@ -9,10 +10,10 @@ from sqlalchemy import types
 from sqlalchemy.orm import deferred, relationship, Session
 from sqlalchemy.orm.collections import InstrumentedList
 
-from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory
+from wrolpi.common import Base, ModelHelper, tsvector, logger, recursive_map, get_media_directory, \
+    get_relative_to_media_directory
 from wrolpi.dates import TZDateTime, now, from_timestamp, strptime_ms, strftime
 from wrolpi.db import optional_session
-from wrolpi.downloader import download_manager
 from wrolpi.errors import FileGroupIsTagged
 from wrolpi.files import indexers
 from wrolpi.media_path import MediaPathType
@@ -335,6 +336,18 @@ class FileGroup(ModelHelper, Base):
         self.indexed = False
         # Flush the changes to the FileGroup.
         Session.object_session(self).flush([self, ])
+
+    @property
+    def location(self):
+        """Returns the URL that the FileGroup can be previewed."""
+        parent = str(get_relative_to_media_directory(self.primary_path.parent))
+        preview = str(get_relative_to_media_directory(self.primary_path))
+        if parent == '.':
+            # File is in the top of the media directory, App already shows top directory open.
+            query = urllib.parse.urlencode(dict(preview=str(preview)))
+        else:
+            query = urllib.parse.urlencode(dict(folders=str(parent), preview=str(preview)))
+        return f'/files?{query}'
 
 
 class Directory(ModelHelper, Base):

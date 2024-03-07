@@ -389,6 +389,20 @@ def example_mobi(test_directory) -> pathlib.Path:
 
 
 @pytest.fixture
+def example_doc(test_directory) -> pathlib.Path:
+    destination = test_directory / 'example word.doc'
+    shutil.copy(PROJECT_DIR / 'test/example word.doc', destination)
+    yield destination
+
+
+@pytest.fixture
+def example_docx(test_directory) -> pathlib.Path:
+    destination = test_directory / 'example word.docx'
+    shutil.copy(PROJECT_DIR / 'test/example word.docx', destination)
+    yield destination
+
+
+@pytest.fixture
 def make_files_structure(test_directory) -> Callable[[Union[List[Union[pathlib.Path, str]], dict]], List[pathlib.Path]]:
     """
     A fixture which creates test files passed to it.  If a list is provided, empty files will be created at those

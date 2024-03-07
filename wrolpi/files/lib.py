@@ -23,8 +23,9 @@ from wrolpi import flags
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
     partition, cancelable_wrapper, \
-    get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk, get_config
-from wrolpi.dates import now, from_timestamp
+    get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk, get_config, \
+    timer
+from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
 from wrolpi.errors import InvalidFile, UnknownDirectory, UnknownFile, UnknownTag, FileConflict, FileGroupIsTagged, \
     NoPrimaryFile, InvalidDirectory
@@ -540,7 +541,7 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
 
     refreshing_all_files = False
 
-    with flags.refreshing:
+    with flags.refreshing, timer('refresh_files', 'info'):
         if not paths:
             refresh_logger.warning('Refreshing all files')
             refreshing_all_files = True
@@ -684,21 +685,22 @@ async def search_directories_by_name(name: str, excluded: List[str] = None, limi
 
 
 def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] = None, model: str = None,
-                 tag_names: List[str] = None, headline: bool = False) -> \
+                 tag_names: List[str] = None, headline: bool = False, months: List[int] = None,
+                 from_year: int = None, to_year: int = None) -> \
         Tuple[List[dict], int]:
     """Search the FileGroup table.
 
     Order the returned Files by their rank if `search_str` is provided.  Return all files if
     `search_str` is empty.
 
-    Parameters:
-        search_str: Search the ts_vector of the file.  Returns all files if this is empty.
-        limit: Return only this many files.
-        offset: Offset the query.
-        mimetypes: Only return files that match these mimetypes.
-        model: Only return files that match this model.
-        tag_names: A list of tag names.
-        headline: Includes Postgresql headline if True.
+    @param search_str: Search the ts_vector of the file.  Returns all files if this is empty.
+    @param limit: Return only this many files.
+    @param offset: Offset the query.
+    @param mimetypes: Only return files that match these mimetypes.
+    @param model: Only return files that match this model.
+    @param tag_names: A list of tag names.
+    @param headline: Includes Postgresql headline if True.
+    @param months: A list of integers representing the index of the month of the year, starting at 1.
     """
     params = dict(offset=offset, limit=limit, search_str=search_str, url_search_str=f'%{search_str}%')
     wheres = []
@@ -721,6 +723,8 @@ def search_files(search_str: str, limit: int, offset: int, mimetypes: List[str] 
         wheres.append('model = %(model)s')
 
     wheres, params = tag_append_sub_select_where(tag_names, wheres, params)
+    wheres, params = months_selector_to_where(months, wheres, params)
+    wheres, params = date_range_to_where(from_year, to_year, wheres, params)
 
     if search_str and headline:
         headline = ''',
@@ -1077,25 +1081,28 @@ def mimetypes_to_sql_wheres(mimetypes: List[str], params: dict):
     return '', params
 
 
-async def search_file_suggestion_count(search_str: str, tag_names: List[str], mimetypes: List[str]):
+async def search_file_suggestion_count(search_str: str, tag_names: List[str], mimetypes: List[str],
+                                       months: List[int] = None, from_year: int = None, to_year: int = None):
     """
     Return FileGroup count of what will be returned if the search is actually performed.
     """
     wheres = []
     joins = list()
-    params = dict(search_str=search_str, tag_names=tag_names, mimetypes=mimetypes, url_search_str=f'%{search_str}%')
+    params = dict(search_str=search_str, tag_names=tag_names, mimetypes=mimetypes)
     group_by = ''
     having = ''
 
     if search_str:
         # Search by textsearch, and by matching url.
-        wheres.append('(fg.textsearch @@ websearch_to_tsquery(%(search_str)s) OR fg.url ILIKE %(url_search_str)s)')
+        wheres.append('fg.textsearch @@ websearch_to_tsquery(%(search_str)s)')
 
     wheres, params = tag_append_sub_select_where(tag_names, wheres, params)
 
     mimetype_wheres, params = mimetypes_to_sql_wheres(mimetypes, params)
     if mimetype_wheres:
         wheres.append(mimetype_wheres)
+    wheres, params = months_selector_to_where(months, wheres, params)
+    wheres, params = date_range_to_where(from_year, to_year, wheres, params)
 
     joins = "\n".join(joins)
     wheres = 'WHERE ' + "\nAND ".join(wheres) if wheres else ''

@@ -55,11 +55,12 @@ class FileDownloader(Downloader, ABC):
             background_task(save_and_tag(output_path, download.settings.get('tag_names')))
 
             with get_db_session(commit=True) as session:
-                FileGroup.from_paths(session, output_path)
+                fg = FileGroup.from_paths(session, output_path)
+                location = fg.location
 
             return DownloadResult(
                 success=True,
-                location=f'/download/{output_path.relative_to(media_directory)}'
+                location=location,
             )
         except Exception as e:
             logger.error(f'Failed to download {repr(str(download.url))}', exc_info=e)

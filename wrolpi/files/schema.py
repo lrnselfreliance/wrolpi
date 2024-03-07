@@ -26,6 +26,9 @@ class FilesSearchRequest:
     model: Optional[str] = None
     tag_names: List[str] = field(default_factory=list)
     headline: bool = False
+    months: Optional[List[int]] = None
+    from_year: Optional[int] = None
+    to_year: Optional[int] = None
 
 
 @dataclass

@@ -1,7 +1,7 @@
 import React, {useState} from "react";
-import {createSearchParams, Route, Routes, useNavigate} from "react-router-dom";
+import {Route, Routes, useNavigate} from "react-router-dom";
 import {FilesSearchView} from "./Files";
-import {useLatestRequest, usePages, useQuery, useSearchFilter} from "../hooks/customHooks";
+import {useLatestRequest, usePages, useSearchDateRange, useSearchFilter, useSearchMonths} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
 import {searchEstimateZims, searchSuggestions} from "../api";
 import {filterToMimetypes, fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
@@ -9,6 +9,7 @@ import _ from "lodash";
 import {TagsContext} from "../Tags";
 import {Button as SButton, Header as SHeader, Label} from "semantic-ui-react";
 import {Modal, ModalContent} from "./Theme";
+import {QueryContext} from "../contexts/contexts";
 
 const SUGGESTED_APPS = [
     {location: '/admin', title: 'Downloads', description: 'View and control your downloads'},
@@ -37,7 +38,9 @@ const SUGGESTED_APPS = [
 export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {
     const navigate = useNavigate();
 
-    const {searchParams, updateQuery} = useQuery();
+    const {months, setMonths} = useSearchMonths();
+    const {dateRange, setDateRange} = useSearchDateRange();
+    const {searchParams, updateQuery, getLocationStr} = React.useContext(QueryContext);
     // `searchStr` means actually fetch the files/zims.
     const searchStr = searchParams.get('q');
     // User can search only by Tags, `searchStr` not required.
@@ -53,11 +56,8 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
         if (filter) {
             searchQuery['filter'] = filter;
         }
-        navigate({
-            pathname: '/search',
-            // Start new search at offset 0.
-            search: createSearchParams(searchQuery).toString(),
-        });
+        const location = getLocationStr(searchQuery, '/search');
+        navigate(location);
     }
 
     const clearSearch = () => {
@@ -90,6 +90,8 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
         setSearchStr,
         clearSearch,
         setTags,
+        months, setMonths,
+        dateRange, setDateRange,
     }
 }
 
@@ -101,6 +103,8 @@ export function useSuggestions(searchStr, tagNames, filter) {
         zimsEstimates: [],
     }
     const [suggestions, setSuggestions] = React.useState(defaultSuggestions);
+    const {months} = useSearchMonths();
+    const {dateRange} = useSearchDateRange();
     // fileGroups/channels/domains.
     const {data, sendRequest, loading} = useLatestRequest(500);
     // Zims are slow, so they are separate.
@@ -109,10 +113,17 @@ export function useSuggestions(searchStr, tagNames, filter) {
     React.useEffect(() => {
         if ((searchStr && searchStr.length > 0) || (tagNames && tagNames.length > 0)) {
             const mimetypes = filterToMimetypes(filter);
-            sendRequest(async () => await searchSuggestions(searchStr, tagNames, mimetypes));
+            sendRequest(async () => await searchSuggestions(searchStr, tagNames, mimetypes, months, dateRange));
             sendZimRequest(async () => await searchEstimateZims(searchStr, tagNames));
         }
-    }, [searchStr, sendRequest, sendZimRequest, JSON.stringify(tagNames)]);
+    }, [
+        searchStr,
+        sendRequest,
+        sendZimRequest,
+        JSON.stringify(tagNames),
+        JSON.stringify(months),
+        JSON.stringify(dateRange),
+    ]);
 
     React.useEffect(() => {
         if (!_.isEmpty(data)) {
@@ -141,8 +152,10 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
     const [searchStr, setSearchStr] = React.useState(defaultSearchStr || '');
     const [searchTags, setSearchTags] = React.useState(defaultTagNames);
     const {SingleTag, fuzzyMatchTagsByName} = React.useContext(TagsContext);
+    const {months, setMonths} = useSearchMonths();
+    const {dateRange, setDateRange} = useSearchDateRange();
     const {suggestions, loading} = useSuggestions(searchStr, searchTags, filter);
-    const {getLocationStr} = useQuery();
+    const {getLocationStr} = React.useContext(QueryContext);
 
     // The results that will be displayed by <Search>.
     const [suggestionsResults, setSuggestionsResults] = useState({});
@@ -275,12 +288,13 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
         suggestions,
         suggestionsResults,
         suggestionsSums,
-        searchStr,
-        setSearchStr,
+        searchStr, setSearchStr,
         setSearchTags,
+        months, setMonths,
         handleResultSelect,
         resultRenderer,
         loading,
+        dateRange, setDateRange,
     }
 }
 

@@ -13,7 +13,7 @@ from wrolpi.common import get_media_directory, walk, logger
 from wrolpi.dates import now, timedelta_to_timestamp, seconds_to_timestamp
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.events import Events
-from wrolpi.vars import PROJECT_DIR
+from wrolpi.vars import PROJECT_DIR, IS_RPI5
 
 logger = logger.getChild(__name__)
 
@@ -224,16 +224,42 @@ def get_import_status(session: Session = None) -> List[MapFile]:
     return map_paths
 
 
-# Bps calculated using many tests on a well-cooled RPi4.
+# Calculated using many tests on a well-cooled RPi4 (4GB).
 RPI4_PBF_BYTES_PER_SECOND = 61879
+RPI4_A = 7.17509261732342e-14
+RPI4_B = 6.6590760410412e-5
+RPI4_C = 10283
+# Calculated using many tests on a well-cooled RPi5 (8GB).
+RPI5_PBF_BYTES_PER_SECOND = 136003
+RPI5_A = 1.6681382703586e-15
+RPI5_B = 2.35907824676145e-6
+RPI5_C = 53.727
+
+
+def seconds_to_import_rpi4(size_in_bytes: int) -> int:
+    if size_in_bytes > 1_000_000_000:
+        # Use exponential curve for large files.
+        a = RPI4_A * size_in_bytes ** 2
+        b = RPI4_B * size_in_bytes
+        return int(a - b + RPI4_C)
+    # Use simpler equation for small files.
+    return max(int(size_in_bytes // RPI4_PBF_BYTES_PER_SECOND), 0)
+
+
+def seconds_to_import_rpi5(size_in_bytes: int) -> int:
+    if size_in_bytes > 5_000_000_000:
+        # Use exponential curve for large files.
+        a = RPI5_A * size_in_bytes ** 2
+        b = RPI5_B * size_in_bytes
+        return int(a - b + RPI5_C)
+    # Use simpler equation for small files.
+    return max(int(size_in_bytes // RPI5_PBF_BYTES_PER_SECOND), 0)
 
 
 def seconds_to_import(size_in_bytes: int) -> int:
     """Attempt to predict how long it will take an RPi4 to import a given PBF file."""
-    if size_in_bytes > 1_000_000_000:
-        # Use exponential curve for large files.  These magic numbers are from testing many imports on an RPi 4.
-        a = 7.17509261732342e-14 * size_in_bytes ** 2
-        b = 6.6590760410412e-5 * size_in_bytes
-        c = 10283
-        return int(a - b + c)
-    return max(int(size_in_bytes // RPI4_PBF_BYTES_PER_SECOND), 0)
+    if IS_RPI5:
+        return seconds_to_import_rpi5(size_in_bytes)
+
+    # Default to RPi4, because it's the most conservative estimate.
+    return seconds_to_import_rpi4(size_in_bytes)

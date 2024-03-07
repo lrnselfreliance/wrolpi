@@ -143,3 +143,6 @@ class SearchSuggestionsRequest:
     search_str: Optional[str] = None
     mimetypes: List[str] = field(default_factory=lambda: list())
     tag_names: List[str] = field(default_factory=lambda: list())
+    months: Optional[List[int]] = None
+    from_year: Optional[int] = None
+    to_year: Optional[int] = None

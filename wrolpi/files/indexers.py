@@ -1,8 +1,11 @@
 import pathlib
+import subprocess
 from abc import ABC
 from collections import defaultdict
 from typing import List, Type, Tuple
 from zipfile import ZipFile
+
+import docx
 
 from wrolpi.vars import PYTEST, FILE_MAX_TEXT_SIZE
 
@@ -135,3 +138,38 @@ class HTMLIndexer(Indexer, ABC):
         title = metadata.title or get_title_from_html(contents)
 
         return title, a, metadata.description, words
+
+
+@register_indexer('application/msword')
+class DocIndexer(Indexer, ABC):
+    """Extracts words from old Doc files."""
+
+    @classmethod
+    def create_index(cls, path: pathlib.Path):
+        a = cls.get_title(path)
+
+        cmd = ('catdoc', str(path.absolute()))
+        proc = subprocess.run(cmd, capture_output=True)
+        text = proc.stdout.decode()
+        text = truncate_object_bytes(text, FILE_MAX_TEXT_SIZE)
+        words = split_lines_by_length(text)
+
+        return a, None, None, words
+
+
+@register_indexer('application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+class DocxIndexer(Indexer, ABC):
+    """Extracts words from Docx files."""
+
+    @classmethod
+    def create_index(cls, path: pathlib.Path):
+        a = cls.get_title(path)
+
+        doc = docx.Document(str(path))
+        text = ' '.join(truncate_object_bytes(
+            (i.text for i in doc.paragraphs),
+            FILE_MAX_TEXT_SIZE)
+        )
+        words = split_lines_by_length(text)
+
+        return a, None, None, words

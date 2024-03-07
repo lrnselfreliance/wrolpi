@@ -194,7 +194,7 @@ export function FilePreviewProvider({children}) {
         if (previewQuery && !previewFile) {
             initPreviewFile();
         }
-    }, []);
+    }, [previewQuery]);
 
     const localFetchFile = async () => {
         // Get the file again with its Tags.

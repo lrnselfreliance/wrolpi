@@ -8,6 +8,7 @@ bzip2
 ca-certificates
 calibre
 cargo
+catdoc
 chromium
 cpufrequtils
 curl

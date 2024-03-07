@@ -1,8 +1,7 @@
 # Development containers, these should only be used if you are developing.
 version: '3'
 services:
-  db:
-    # https://github.com/docker-library/docs/tree/master/postgres
+  db: # https://github.com/docker-library/docs/tree/master/postgres
     image: postgres:12
     environment:
       - POSTGRES_DB=wrolpi
@@ -11,6 +10,7 @@ services:
       - "5432:5432"
     healthcheck:
       test: [ 'CMD-SHELL', 'pg_isready -U postgres' ]
+      interval: 10s
 
   api:
     depends_on:
@@ -30,10 +30,11 @@ services:
       - ${REACT_APP_API-127.0.0.1:8081}:8081
     command: '-vv api --host 0.0.0.0'
     user: '${UID-1000}:${GID-1000}'
-  #    healthcheck:
-  #      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8081/api/echo' ]
+    healthcheck:
+      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8081/api/echo' ]
+      interval: 2m
 
-  archive:
+  archive: # Python/Sanic wrapper around Singlefile and Readability.
     build:
       context: .
       dockerfile: docker/archive/Dockerfile
@@ -43,8 +44,9 @@ services:
       - '8083:8080'
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8080/' ]
+      interval: 2m
 
-  app:
+  app: # React App
     depends_on:
       - api
     build:
@@ -59,13 +61,13 @@ services:
     stdin_open: true
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:3000' ]
+      interval: 1m
     user: '${UID-1000}:${GID-1000}'
     environment:
       # Force React to use nginx port to connect to it's websocket.
       - WDS_SOCKET_PORT=0
 
-  map:
-    # https://github.com/Overv/openstreetmap-tile-server
+  map: # https://github.com/Overv/openstreetmap-tile-server
     image: overv/openstreetmap-tile-server:v1.6.0
     volumes:
       - 'openstreetmap-data:/var/lib/postgresql/12/main'
@@ -77,6 +79,9 @@ services:
       - '8084:80'
     command: 'run'
     shm_size: 1g  # Increase shared size to render large map tiles
+    healthcheck:
+      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:80' ]
+      interval: 1m
 
   web:
     depends_on:
@@ -91,8 +96,9 @@ services:
       - './test:/opt/media'
     healthcheck:
       test: [ 'CMD-SHELL', 'curl http://127.0.0.1:80' ]
+      interval: 1m
 
-  zim:
+  zim: # kiwix-serve
     build:
       context: .
       dockerfile: docker/zim/Dockerfile
@@ -101,6 +107,9 @@ services:
       - './docker/zim/entrypoint.sh:/entrypoint.sh'
     ports:
       - '8085:8085'
+    healthcheck:
+      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8085' ]
+      interval: 1m
 
   help: # The WROLPi Help documentation.
     build:
@@ -110,6 +119,9 @@ services:
       - './docker/help/wrolpi-help:/opt/wrolpi-help'
     ports:
       - '8086:8086'
+    healthcheck:
+      test: [ 'CMD-SHELL', 'curl http://127.0.0.1:8086' ]
+      interval: 1m
 
 volumes:
   openstreetmap-data:

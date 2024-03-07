@@ -26,7 +26,7 @@ import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
 import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
 import {useWROLMode} from "./hooks/customHooks";
 import {FileSearchFilterButton} from "./components/Files";
-import {FilePreviewContext} from "./components/FilePreview";
+import {dateRangeIsEmpty, DateSelectorButton} from "./components/DatesSelector";
 
 function FlagsMessages({flags}) {
     const {settings, fetchSettings} = React.useContext(SettingsContext);
@@ -170,10 +170,10 @@ export function DashboardPage() {
         loading,
         setSearchStr: setSuggestionSearchStr,
         setSearchTags,
+        months, setMonths,
+        dateRange, setDateRange,
     } = useSearchSuggestions(searchStr, activeTags);
     const {status} = useContext(StatusContext);
-
-    const {setPreviewFile} = React.useContext(FilePreviewContext);
 
     React.useEffect(() => {
         setSuggestionSearchStr(localSearchStr);
@@ -231,23 +231,52 @@ export function DashboardPage() {
         <Media at='mobile'>
             <Grid>
                 <Grid.Row columns={2}>
-                    <Grid.Column width={13}>
-                        {getSearchResultsInput({size: 'large'})}
+                    <Grid.Column width={12}>
+                        {getSearchResultsInput()}
                     </Grid.Column>
-                    <Grid.Column width={3} textAlign='right'>
-                        <FileSearchFilterButton size='large'/>
+                    <Grid.Column width={1} textAlign='right' style={{padding: 0}}>
+                        <DateSelectorButton onMonthsChange={setMonths} defaultMonthsSelected={months}
+                                            defaultDateRange={dateRange}
+                                            onDateRangeChange={setDateRange}/>
+                    </Grid.Column>
+                    <Grid.Column width={1} textAlign='right'>
+                        <FileSearchFilterButton/>
                     </Grid.Column>
                 </Grid.Row>
             </Grid>
         </Media>
-        <Media greaterThanOrEqual='tablet'>
+        <Media at='tablet'>
             <Grid>
                 <Grid.Row columns={2}>
-                    <Grid.Column mobile={14}>
-                        {getSearchResultsInput({size: 'big'})}
+                    <Grid.Column textAlign='right' width={2}>
+                        <DateSelectorButton onMonthsChange={setMonths} defaultMonthsSelected={months}
+                                            defaultDateRange={dateRange}
+                                            onDateRangeChange={setDateRange}
+                                            buttonProps={{size: 'big'}}/>
                     </Grid.Column>
                     <Grid.Column textAlign='right' width={2}>
                         <FileSearchFilterButton size='big'/>
+                    </Grid.Column>
+                    <Grid.Column mobile={12}>
+                        {getSearchResultsInput({size: 'big'})}
+                    </Grid.Column>
+                </Grid.Row>
+            </Grid>
+        </Media>
+        <Media greaterThanOrEqual='computer'>
+            <Grid>
+                <Grid.Row columns={2}>
+                    <Grid.Column textAlign='right' width={1}>
+                        <DateSelectorButton onMonthsChange={setMonths} defaultMonthsSelected={months}
+                                            defaultDateRange={dateRange}
+                                            onDateRangeChange={setDateRange}
+                                            buttonProps={{size: 'big'}}/>
+                    </Grid.Column>
+                    <Grid.Column textAlign='right' width={1}>
+                        <FileSearchFilterButton size='big'/>
+                    </Grid.Column>
+                    <Grid.Column mobile={14}>
+                        {getSearchResultsInput({size: 'big'})}
                     </Grid.Column>
                 </Grid.Row>
             </Grid>

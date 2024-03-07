@@ -5,7 +5,7 @@ WORKDIR /opt/wrolpi
 # Update dependencies for the services install.
 RUN apt update
 # ffmpeg for Videos
-RUN apt-get install -y ffmpeg
+RUN apt-get install -y ffmpeg catdoc
 RUN ffmpeg -version
 
 # Install WROLPi

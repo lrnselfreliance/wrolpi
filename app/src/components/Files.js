@@ -32,9 +32,9 @@ import {
     useTitle
 } from "./Common";
 import {
+    useAllQuery,
     useFilesProgressInterval,
     usePages,
-    useQuery,
     useSearchFiles,
     useSearchFilter,
     useSearchView,
@@ -149,7 +149,7 @@ function FileCard({file}) {
                 </ExternalCardLink>
             </CardHeader>
             {author && <b {...s}>{author}</b>}
-            <p>{isoDatetimeToString(file.modified)}</p>
+            <p>{isoDatetimeToString(file.published_datetime) || isoDatetimeToString(file.modified)}</p>
             <p>{size}</p>
         </CardContent>
     </Card>
@@ -403,6 +403,9 @@ export function SearchFilter({filters = [], modalHeader, size = 'medium'}) {
         </Form.Field>
     );
 
+    // Use violet color when filter has been applied.
+    const buttonColor = filter ? 'violet' : 'grey';
+
     if (filters && filters.length > 0) {
         return <>
             <Modal open={open} onOpen={() => handleOpen()} onClose={() => setOpen(false)} closeIcon>
@@ -420,7 +423,7 @@ export function SearchFilter({filters = [], modalHeader, size = 'medium'}) {
             <Button
                 icon='filter'
                 onClick={handleOpen}
-                primary={!!filter}
+                color={buttonColor}
                 size={size}
             />
         </>
@@ -430,12 +433,11 @@ export function SearchFilter({filters = [], modalHeader, size = 'medium'}) {
 }
 
 export function TagsQuerySelector({onChange}) {
-    // Creates  dropdown that the User can use to manipulate the tag query.
-    const {searchParams, updateQuery} = useQuery();
-    const activeTags = searchParams.getAll('tag');
+    // Creates modal that the User can use to manipulate the tag query.
+    const [activeTags, setActiveTags] = useAllQuery('tag');
 
     const localOnChange = (tagNames) => {
-        updateQuery({'tag': tagNames});
+        setActiveTags(tagNames);
         if (onChange) {
             onChange(tagNames);
         }

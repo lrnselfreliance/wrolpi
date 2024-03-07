@@ -73,7 +73,7 @@ jobs:
     steps:
       - checkout
       - run: sudo apt-get update
-      - run: sudo apt-get install -y ffmpeg
+      - run: sudo apt-get install -y ffmpeg catdoc
       - restore_cache:
           key: deps-3.8-{{ checksum "requirements.txt" }}-2
       - run:
@@ -100,7 +100,7 @@ jobs:
     steps:
       - checkout
       - run: sudo apt-get update
-      - run: sudo apt-get install -y ffmpeg
+      - run: sudo apt-get install -y ffmpeg catdoc
       - restore_cache:
           key: deps-3.9-{{ checksum "requirements.txt" }}-2
       - run:
@@ -127,7 +127,7 @@ jobs:
     steps:
       - checkout
       - run: sudo apt-get update
-      - run: sudo apt-get install -y ffmpeg
+      - run: sudo apt-get install -y ffmpeg catdoc
       - restore_cache:
           key: deps-3.10-{{ checksum "requirements.txt" }}-2
       - run:
@@ -154,7 +154,7 @@ jobs:
     steps:
       - checkout
       - run: sudo apt-get update
-      - run: sudo apt-get install -y ffmpeg
+      - run: sudo apt-get install -y ffmpeg catdoc
       - restore_cache:
           key: deps-3.11-{{ checksum "requirements.txt" }}-2
       - run:
@@ -181,7 +181,7 @@ jobs:
     steps:
       - checkout
       - run: sudo apt-get update
-      - run: sudo apt-get install -y ffmpeg
+      - run: sudo apt-get install -y ffmpeg catdoc
       - restore_cache:
           key: deps-3.12-{{ checksum "requirements.txt" }}-2
       - run:

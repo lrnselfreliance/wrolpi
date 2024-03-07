@@ -1,5 +1,4 @@
 import asyncio
-import json
 import random
 from datetime import timedelta
 from typing import Tuple, Optional, List, Dict
@@ -218,6 +217,7 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
         with get_db_session(commit=True) as session_:
             for video_ in session_.query(Video).join(FileGroup).filter_by(url=video_url).all():
                 video_.comments_failed = True
+        download_manager.add_to_skip_list(video_url)
 
     for url in video_urls:
         # Sleep to catch cancel.
@@ -240,6 +240,7 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
                 continue
 
         tries = 5
+        info = None
         while tries > 0:
             try:
                 tries -= 1
@@ -248,10 +249,23 @@ async def get_missing_videos_comments(limit: int = VIDEO_COMMENTS_FETCH_COUNT):
                 if info and isinstance(info.get('comments'), list):
                     break
             except Exception as e:
-                logger.error(f'Got error when attempting to download comments: {url=}', exc_info=e)
-        else:
+                if 'no longer available' in str(e):
+                    logger.error(f'Giving up on downloading comments because video does not exist: {url=}', exc_info=e)
+                    break
+                if 'Comments are turned off' in str(e):
+                    logger.error(f'Giving up on downloading comments because comments are disabled: {url=}', exc_info=e)
+                    break
+                if 'Private video' in str(e):
+                    logger.error(f'Giving up on downloading comments because video is private: {url=}', exc_info=e)
+                    break
+                if 'Video unavailable' in str(e):
+                    logger.error(f'Giving up on downloading comments because video is unavailable: {url=}', exc_info=e)
+                    break
+                logger.error(f'Got error when attempting to download video comments: {url=}', exc_info=e)
+                await asyncio.sleep(random.randint(1, 5))
+
+        if not info or not isinstance(info.get('comments'), list):
             logger.error(f'Never got comments for video: {url=}')
-            download_manager.add_to_skip_list(url)
             add_video_to_skip_list(url)
             continue
 

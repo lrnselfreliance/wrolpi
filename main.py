@@ -209,6 +209,9 @@ async def startup(app: Sanic):
             # We can't search for Videos missing comments until the refresh has completed.
             pass
 
+        # Wait for download manager to startup.
+        await asyncio.sleep(5)
+
         while True:
             # Fetch comments for videos every hour.
             if download_manager.disabled.is_set() or download_manager.stopped.is_set():

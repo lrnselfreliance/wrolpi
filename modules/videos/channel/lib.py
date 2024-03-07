@@ -207,8 +207,8 @@ async def search_channels_by_name(name: str, limit: int = 5, session: Session = 
     name_no_spaces = ''.join(name.split(' '))
     stmt = session.query(Channel) \
         .filter(or_(
-        Channel.name.ilike(f'%{name}%'),
-        Channel.name.ilike(f'%{name_no_spaces}%'),
+            Channel.name.ilike(f'%{name}%'),
+            Channel.name.ilike(f'%{name_no_spaces}%'),
     )) \
         .order_by(asc(Channel.name)) \
         .limit(limit)

@@ -1657,7 +1657,22 @@ export function getParentDirectory(filePath) {
 export function MultilineText({text, ...props}) {
     return <div {...props}>
         {text.split('\n').map((line, index, array) =>
-            index === array.length - 1 ? line : <p>{line}</p>
+            index === array.length - 1 ? line : <p key={index}>{line}</p>
         )}
     </div>
 }
+
+export const monthNames = [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+];

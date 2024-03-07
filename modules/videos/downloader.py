@@ -77,7 +77,6 @@ class ChannelDownloader(Downloader, ABC):
     @staticmethod
     def is_a_playlist(info: dict):
         # A playlist may have an id different from its channel.
-        logger.debug(f'is_a_playlist {info["id"]=} {info.get("channel_id")=}')
         return info['id'] != info.get('channel_id')
 
     async def do_download(self, download: Download) -> DownloadResult:

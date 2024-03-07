@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone, timedelta
 from enum import Enum
-from typing import Union
+from typing import Union, List
 
 import dateutil.parser
 import pytz
@@ -192,3 +192,44 @@ class TZDateTime(types.TypeDecorator):
             # Assume the DB timestamp is UTC.
             value = value.replace(tzinfo=pytz.utc) if not value.tzinfo else value
         return value
+
+
+def months_selector_to_where(months: List[int], wheres: list, params: dict):
+    """Filter FileGroup results by the month that the file was published.  Returns wheres/params unchanged if months
+    is empty.
+
+    @param months: List of integers representing the index of the month of the year (January is 1).
+    @param wheres: A list of strings which are SQL where filters.
+    @param params: Dict which contains the parameters passed to SQLAlchemy query.
+    """
+    if not months:
+        return wheres, params
+
+    if not set(months).issubset(set(range(1, 13))):
+        raise ValueError('Months must be between 1 and 12')
+
+    wheres.append('EXTRACT (MONTH FROM published_datetime) IN %(months_list)s')
+    params['months_list'] = tuple(months)
+    return wheres, params
+
+
+def date_range_to_where(from_year: int, to_year: int, wheres: list, params: dict):
+    """Filter FileGroup results by the year that the file was published.
+
+    @param from_year: The earliest year the file was published
+    @param to_year: The latest year the file was published
+    @param wheres: A list of strings which are SQL where filters.
+    @param params: Dict which contains the parameters passed to SQLAlchemy query.
+    """
+    if from_year and to_year:
+        wheres.append('EXTRACT (YEAR FROM published_datetime) BETWEEN %(from_year)s AND %(to_year)s')
+        params['from_year'] = from_year
+        params['to_year'] = to_year
+    elif from_year:
+        wheres.append('EXTRACT (YEAR FROM published_datetime) >= %(from_year)s')
+        params['from_year'] = from_year
+    elif to_year:
+        wheres.append('EXTRACT (YEAR FROM published_datetime) <= %(to_year)s')
+        params['to_year'] = to_year
+
+    return wheres, params

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from modules.map.models import MapFile
 from wrolpi import flags
 from wrolpi.cmd import SUDO_BIN
-from wrolpi.common import get_media_directory, walk, logger
+from wrolpi.common import get_media_directory, walk, logger, get_wrolpi_config
 from wrolpi.dates import now, timedelta_to_timestamp, seconds_to_timestamp
 from wrolpi.db import optional_session, get_db_session
 from wrolpi.events import Events
@@ -23,14 +23,14 @@ IMPORTING = Manager().dict(dict(
 
 
 def get_map_directory() -> Path:
-    map_directory = get_media_directory() / 'map'
+    map_directory = get_media_directory() / get_wrolpi_config().map_directory
     if not map_directory.is_dir():
-        map_directory.mkdir()
+        map_directory.mkdir(parents=True)
     return map_directory
 
 
 def is_pbf_file(pbf: Path) -> bool:
-    """Uses file command to check type of a file.  Returns True if a file is an OpenStreetMap PBF file."""
+    """Uses file command to check type of file.  Returns True if a file is an OpenStreetMap PBF file."""
     cmd = ('/usr/bin/file', pbf)
     try:
         output = subprocess.check_output(cmd)

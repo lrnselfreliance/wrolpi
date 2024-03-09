@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from wrolpi.captions import FFMPEG_BIN
 from wrolpi.cmd import FFPROBE_BIN
-from wrolpi.common import logger, get_media_directory
+from wrolpi.common import logger, get_media_directory, get_wrolpi_config
 from wrolpi.dates import seconds_to_timestamp
 from wrolpi.db import get_db_session, get_db_curs
 from wrolpi.vars import DEFAULT_FILE_PERMISSIONS
@@ -35,7 +35,8 @@ class ConfigError(Exception):
 
 def get_videos_directory() -> pathlib.Path:
     """Get the "videos" directory in the media directory.  Make it if it does not exist."""
-    directory = get_media_directory() / 'videos'
+    config = get_wrolpi_config()
+    directory = get_media_directory() / config.videos_directory
     if not directory.is_dir():
         directory.mkdir(parents=True)
     return directory

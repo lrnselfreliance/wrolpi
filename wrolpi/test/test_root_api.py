@@ -7,7 +7,7 @@ import pytest
 from mock import mock
 
 from wrolpi.admin import HotspotStatus
-from wrolpi.common import get_config
+from wrolpi.common import get_wrolpi_config
 from wrolpi.downloader import Download, get_download_manager_config
 from wrolpi.errors import ValidationError, SearchEmpty
 from wrolpi.root_api import json_error_handler
@@ -207,7 +207,7 @@ def test_hotspot_settings(test_session, test_client, test_config):
     """
     The User can toggle the Hotspot via /settings.  The Hotspot can be automatically started on startup.
     """
-    config = get_config()
+    config = get_wrolpi_config()
     assert config.hotspot_on_startup is True
 
     with mock.patch('wrolpi.root_api.admin') as mock_admin:
@@ -598,3 +598,34 @@ def test_recursive_errors():
                 },
             },
         }
+
+
+@pytest.mark.asyncio
+async def test_settings_special_directories(test_async_client, test_config):
+    """Maintainer can change special directories."""
+    assert get_wrolpi_config().archive_directory == 'archive'
+
+    data = {'archive_directory': 'archives'}
+    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+
+    assert get_wrolpi_config().archive_directory == 'archives'
+
+    data = {'archive_directory': '/absolute/not/allowed'}
+    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    data = {'videos_directory': '/absolute/not/allowed'}
+    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    data = {'map_directory': '/absolute/not/allowed'}
+    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+    data = {'zims_directory': '/absolute/not/allowed'}
+    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.BAD_REQUEST
+
+    # Empty directory restores default.
+    data = {'archive_directory': ''}
+    request, response = await test_async_client.patch('/api/settings', content=json.dumps(data))
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    assert get_wrolpi_config().archive_directory == 'archive'

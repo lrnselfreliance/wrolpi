@@ -126,7 +126,7 @@ __all__ = [
     'extract_headlines',
     'extract_html_text',
     'get_absolute_media_path',
-    'get_config',
+    'get_wrolpi_config',
     'get_download_info',
     'get_files_and_directories',
     'get_html_soup',
@@ -210,6 +210,51 @@ def compile_tsvector(element, compiler, **kw):
 
 
 URL_CHARS = string.ascii_lowercase + string.digits
+
+
+def find_file(directory: pathlib.Path, name: str, depth=1) -> Optional[pathlib.Path]:
+    """Recursively searches a directory for a file with the provided name."""
+    if depth == 0:
+        return
+
+    for path in sorted(directory.iterdir()):
+        if path.is_file() and path.name == name:
+            return path
+        if path.is_dir() and (result := find_file(path, name, depth - 1)):
+            return result
+
+
+TEST_MEDIA_DIRECTORY = None
+
+
+def set_test_media_directory(path):
+    global TEST_MEDIA_DIRECTORY
+    if isinstance(path, pathlib.Path):
+        TEST_MEDIA_DIRECTORY = path
+    elif path:
+        TEST_MEDIA_DIRECTORY = pathlib.Path(path)
+    else:
+        TEST_MEDIA_DIRECTORY = None
+
+
+def get_media_directory() -> Path:
+    """Get the media directory.
+
+    This will typically be /opt/wrolpi, or something else from the .env.
+
+    During testing, this function returns TEST_MEDIA_DIRECTORY.
+    """
+    global TEST_MEDIA_DIRECTORY
+
+    if PYTEST and not TEST_MEDIA_DIRECTORY:
+        raise ValueError('No test media directory set during testing!!')
+
+    if isinstance(TEST_MEDIA_DIRECTORY, pathlib.Path):
+        if not str(TEST_MEDIA_DIRECTORY).startswith('/tmp'):
+            raise RuntimeError('Refusing to run test outside tmp directory!')
+        return TEST_MEDIA_DIRECTORY
+
+    return MEDIA_DIRECTORY
 
 
 class ConfigFile:
@@ -306,6 +351,7 @@ class ConfigFile:
 class WROLPiConfig(ConfigFile):
     file_name = 'wrolpi.yaml'
     default_config = dict(
+        archive_directory='archive',
         download_on_startup=True,
         download_timeout=0,
         hotspot_device='wlan0',
@@ -314,9 +360,33 @@ class WROLPiConfig(ConfigFile):
         hotspot_ssid='WROLPi',
         ignore_outdated_zims=False,
         ignored_directories=list(),
+        map_directory='map',
         throttle_on_startup=False,
+        videos_directory='videos',
         wrol_mode=False,
+        zims_directory='zims',
     )
+
+    def get_file(self) -> Path:
+        """WROLPiConfig must be discovered so that other config files can be found."""
+        if not self.file_name:
+            raise NotImplementedError(f'You must define a file name for this {self.__class__.__name__} config.')
+
+        if PYTEST:
+            return get_media_directory() / f'config/{self.file_name}'
+
+        # Use the usual "/media/wrolpi/config/wrolpi.yaml" if it exists.
+        default_config_path = CONFIG_DIR / self.file_name
+        if default_config_path.is_file():
+            return default_config_path
+
+        # Search the media directory for the special "wrolpi.yaml" file.  Assume the first one found is the config.
+        # Use a depth of 3; multiple drives may exist and the config directory may be down in a second drive.
+        if config_path := find_file(get_media_directory(), self.file_name, 3):
+            return config_path
+
+        # Not testing, and can't find file deep in media directory.  Use the default.
+        return default_config_path
 
     @property
     def download_on_startup(self) -> bool:
@@ -398,12 +468,44 @@ class WROLPiConfig(ConfigFile):
     def ignored_directories(self, value: List[str]):
         self.update({'ignored_directories': value})
 
+    @property
+    def videos_directory(self) -> str:
+        return self._config['videos_directory']
+
+    @videos_directory.setter
+    def videos_directory(self, value: str):
+        self.update({'videos_directory': value})
+
+    @property
+    def archive_directory(self) -> str:
+        return self._config['archive_directory']
+
+    @archive_directory.setter
+    def archive_directory(self, value: str):
+        self.update({'archive_directory': value})
+
+    @property
+    def map_directory(self) -> str:
+        return self._config['map_directory']
+
+    @map_directory.setter
+    def map_directory(self, value: str):
+        self.update({'map_directory': value})
+
+    @property
+    def zims_directory(self) -> str:
+        return self._config['zims_directory']
+
+    @zims_directory.setter
+    def zims_directory(self, value: str):
+        self.update({'zims_directory': value})
+
 
 WROLPI_CONFIG: WROLPiConfig = WROLPiConfig()
 TEST_WROLPI_CONFIG: WROLPiConfig = None
 
 
-def get_config() -> WROLPiConfig:
+def get_wrolpi_config() -> WROLPiConfig:
     """Read the global WROLPi yaml config file."""
     global TEST_WROLPI_CONFIG
     if isinstance(TEST_WROLPI_CONFIG, WROLPiConfig):
@@ -420,7 +522,7 @@ def set_test_config(enable: bool):
 
 def wrol_mode_enabled() -> bool:
     """Return True if WROL Mode is enabled."""
-    return get_config().wrol_mode
+    return get_wrolpi_config().wrol_mode
 
 
 def wrol_mode_check(func):
@@ -445,7 +547,7 @@ def enable_wrol_mode(download_manager=None):
     Stop downloads and Download Manager.
     """
     logger_.warning('ENABLING WROL MODE')
-    get_config().wrol_mode = True
+    get_wrolpi_config().wrol_mode = True
     if not download_manager:
         from wrolpi.downloader import download_manager
         download_manager.stop()
@@ -461,7 +563,7 @@ def disable_wrol_mode(download_manager=None):
     Start downloads and Download Manager.
     """
     logger_.warning('DISABLING WROL MODE')
-    get_config().wrol_mode = False
+    get_wrolpi_config().wrol_mode = False
     if not download_manager:
         from wrolpi.downloader import download_manager
         download_manager.enable()
@@ -547,39 +649,6 @@ def run_after(after: callable, *args, **kwargs) -> callable:
         return wrapped
 
     return wrapper
-
-
-TEST_MEDIA_DIRECTORY = None
-
-
-def set_test_media_directory(path):
-    global TEST_MEDIA_DIRECTORY
-    if isinstance(path, pathlib.Path):
-        TEST_MEDIA_DIRECTORY = path
-    elif path:
-        TEST_MEDIA_DIRECTORY = pathlib.Path(path)
-    else:
-        TEST_MEDIA_DIRECTORY = None
-
-
-def get_media_directory() -> Path:
-    """Get the media directory.
-
-    This will typically be /opt/wrolpi, or something else from the .env.
-
-    During testing, this function returns TEST_MEDIA_DIRECTORY.
-    """
-    global TEST_MEDIA_DIRECTORY
-
-    if PYTEST and not TEST_MEDIA_DIRECTORY:
-        raise ValueError('No test media directory set during testing!!')
-
-    if isinstance(TEST_MEDIA_DIRECTORY, pathlib.Path):
-        if not str(TEST_MEDIA_DIRECTORY).startswith('/tmp'):
-            raise RuntimeError('Refusing to run test outside tmp directory!')
-        return TEST_MEDIA_DIRECTORY
-
-    return MEDIA_DIRECTORY
 
 
 MEDIA_DIRECTORY_PERMISSIONS = 0o40755
@@ -1190,7 +1259,8 @@ def timer(name, level: str = 'debug'):
     try:
         yield
     finally:
-        log_method(f'{name} elapsed {(datetime.now() - before).total_seconds()} seconds')
+        elapsed = (datetime.now() - before).total_seconds()
+        log_method(f'{name} elapsed {elapsed} seconds')
 
 
 def async_timer(coro: Coroutine, name: str = 'async timer', level: str = 'debug') -> callable:

@@ -23,7 +23,7 @@ from wrolpi import flags
 from wrolpi.cmd import which
 from wrolpi.common import get_media_directory, wrol_mode_check, logger, limit_concurrent, \
     partition, cancelable_wrapper, \
-    get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk, get_config, \
+    get_files_and_directories, chunks_by_stem, apply_modelers, apply_refresh_cleanup, background_task, walk, get_wrolpi_config, \
     timer
 from wrolpi.dates import now, from_timestamp, months_selector_to_where, date_range_to_where
 from wrolpi.db import get_db_session, get_db_curs, mogrify, optional_session
@@ -435,7 +435,7 @@ def _upsert_files(files: List[pathlib.Path], idempotency: datetime.datetime):
 
 
 def remove_files_in_ignored_directories(files: List[pathlib.Path]) -> List[pathlib.Path]:
-    ignored_directories = list(map(str, get_config().ignored_directories))
+    ignored_directories = list(map(str, get_wrolpi_config().ignored_directories))
     files = [i for i in files if not any(str(i).startswith(j) for j in ignored_directories)]
     return files
 
@@ -1323,7 +1323,7 @@ def add_ignore_directory(directory: Union[pathlib.Path, str]):
     if not str(directory).startswith(str(media_directory)):
         raise InvalidDirectory('Cannot ignore directory not in media directory')
 
-    wrolpi_config = get_config()
+    wrolpi_config = get_wrolpi_config()
     ignored_directories = wrolpi_config.ignored_directories if wrolpi_config.ignored_directories else list()
 
     if str(directory) in ignored_directories:
@@ -1337,9 +1337,9 @@ def add_ignore_directory(directory: Union[pathlib.Path, str]):
 def remove_ignored_directory(directory: Union[pathlib.Path, str]):
     """Remove a directory from the `ignored_directories` in the WROLPi config."""
     directory = str(pathlib.Path(directory))
-    ignored_directories = get_config().ignored_directories
+    ignored_directories = get_wrolpi_config().ignored_directories
     if directory in ignored_directories:
         ignored_directories.remove(directory)
-        get_config().ignored_directories = ignored_directories
+        get_wrolpi_config().ignored_directories = ignored_directories
     else:
         raise UnknownDirectory('Directory is not ignored')

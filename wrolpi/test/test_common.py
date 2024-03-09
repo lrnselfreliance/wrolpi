@@ -778,3 +778,22 @@ def test_format_html_file():
 )
 def test_chain(iterable, length, step, expected):
     assert list(common.chain(iterable, length)) == expected
+
+
+def test_find_file(test_directory, make_files_structure):
+    bar, baz, foo = make_files_structure({
+        'foo/foo.txt': 'foo',
+        'bar/bar.txt': 'bar',
+        'baz.txt': 'baz',
+    })
+
+    # Files are too deep.
+    assert common.find_file(test_directory, 'foo.txt') is None
+    assert common.find_file(test_directory, 'bar.txt') is None
+    assert common.find_file(test_directory, 'baz.txt') == baz
+    # Enough depth to find files.
+    assert common.find_file(test_directory, 'foo.txt', 2) == foo
+    assert common.find_file(test_directory, 'bar.txt', 2) == bar
+    assert common.find_file(test_directory, 'baz.txt', 2) == baz
+
+    assert common.find_file(test_directory, 'does not exist', 100) is None

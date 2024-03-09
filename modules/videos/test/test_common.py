@@ -7,7 +7,7 @@ import pytest
 from PIL import Image
 
 from modules.videos.models import Channel, Video
-from wrolpi.common import get_absolute_media_path
+from wrolpi.common import get_absolute_media_path, get_wrolpi_config
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.files import lib as files_lib
 from wrolpi.vars import PROJECT_DIR
@@ -273,3 +273,23 @@ async def test_video_ffprobe_json(test_session, video_file):
     video = test_session.query(Video).one()
     assert video.ffprobe_json
     assert video.file_group.length
+
+
+def test_get_videos_directory(test_directory):
+    """Default videos directory path"""
+    # Directory does not yet exist.
+    assert not (test_directory / 'videos').exists()
+
+    # Directory is created when first gotten.
+    assert common.get_videos_directory() == (test_directory / 'videos')
+    assert (test_directory / 'videos').is_dir()
+
+
+def test_get_custom_videos_directory(test_directory, test_config):
+    """Custom directory can be used for videos directory."""
+    config = get_wrolpi_config()
+    config.videos_directory = 'custom/directory/videos'
+
+    assert common.get_videos_directory() == (test_directory / 'custom/directory/videos')
+    assert (test_directory / 'custom/directory/videos').is_dir()
+    assert not (test_directory / 'videos').is_dir()

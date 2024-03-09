@@ -8,7 +8,7 @@ from modules.zim import lib
 from modules.zim.errors import UnknownZim
 from modules.zim.models import TagZimEntry, ZimSubscription
 from wrolpi import tags, flags
-from wrolpi.common import DownloadFileInfo
+from wrolpi.common import DownloadFileInfo, get_wrolpi_config
 from wrolpi.downloader import Download, import_downloads_config, save_downloads_config
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
@@ -341,3 +341,12 @@ async def test_zim_modeler(test_session, zim_factory):
     fg: FileGroup = test_session.query(FileGroup).one()
     assert fg.title == 'the_zim_title'
     assert fg.a_text == 'the zim title'
+
+
+def test_get_custom_zims_directory(test_directory, test_config):
+    """Custom directory can be used for zims directory."""
+    assert lib.get_zim_directory() == (test_directory / 'zims')
+
+    get_wrolpi_config().zims_directory = 'custom/zims'
+
+    assert lib.get_zim_directory() == (test_directory / 'custom/zims')

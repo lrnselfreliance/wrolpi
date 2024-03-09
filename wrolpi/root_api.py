@@ -1,5 +1,6 @@
 import asyncio
 import json
+import pathlib
 import re
 from datetime import datetime, date, timezone
 from decimal import Decimal
@@ -21,7 +22,7 @@ from vininfo.details._base import VinDetails
 from wrolpi import admin, status, flags, schema, dates
 from wrolpi import tags
 from wrolpi.admin import HotspotStatus
-from wrolpi.common import logger, get_config, wrol_mode_enabled, Base, get_media_directory, \
+from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, Base, get_media_directory, \
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, LOG_LEVEL, \
     set_global_log_level, get_relative_to_media_directory
 from wrolpi.dates import now
@@ -139,11 +140,12 @@ async def echo(request: Request):
 @openapi.description('Get WROLPi settings')
 @openapi.response(HTTPStatus.OK, schema.SettingsResponse)
 def get_settings(_: Request):
-    config = get_config()
+    config = get_wrolpi_config()
 
     ignored_directories = [get_relative_to_media_directory(i) for i in config.ignored_directories]
 
     settings = {
+        'archive_directory': config.archive_directory,
         'download_manager_disabled': download_manager.disabled.is_set(),
         'download_manager_stopped': download_manager.stopped.is_set(),
         'download_on_startup': config.download_on_startup,
@@ -153,14 +155,17 @@ def get_settings(_: Request):
         'hotspot_password': config.hotspot_password,
         'hotspot_ssid': config.hotspot_ssid,
         'hotspot_status': admin.hotspot_status().name,
-        'log_level': LOG_LEVEL.value,
         'ignore_outdated_zims': config.ignore_outdated_zims,
         'ignored_directories': ignored_directories,
+        'log_level': LOG_LEVEL.value,
+        'map_directory': config.map_directory,
         'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.
         'throttle_on_startup': config.throttle_on_startup,
         'throttle_status': admin.throttle_status().name,
         'version': __version__,
+        'videos_directory': config.videos_directory,
         'wrol_mode': config.wrol_mode,
+        'zims_directory': config.zims_directory,
     }
     return json_response(settings)
 
@@ -168,7 +173,7 @@ def get_settings(_: Request):
 @api_bp.patch('/settings')
 @openapi.description('Update WROLPi settings')
 @validate(json=schema.SettingsRequest)
-def update_settings(request: Request, body: schema.SettingsRequest):
+def update_settings(_: Request, body: schema.SettingsRequest):
     if wrol_mode_enabled() and body.wrol_mode is None:
         # Cannot update settings while WROL Mode is enabled, unless you want to disable WROL Mode.
         raise WROLModeEnabled()
@@ -187,10 +192,30 @@ def update_settings(request: Request, body: schema.SettingsRequest):
 
     # Remove any keys with None values, then save the config.
     config = {k: v for k, v in body.__dict__.items() if v is not None}
-    wrolpi_config = get_config()
+    wrolpi_config = get_wrolpi_config()
 
     if not config:
         raise InvalidConfig()
+
+    if body.archive_directory and pathlib.Path(body.archive_directory).is_absolute():
+        raise InvalidConfig('Archive directory must be relative to media directory')
+    elif not body.archive_directory:
+        config['archive_directory'] = wrolpi_config.default_config['archive_directory']
+
+    if body.videos_directory and pathlib.Path(body.videos_directory).is_absolute():
+        raise InvalidConfig('Videos directory must be relative to media directory')
+    elif not body.videos_directory:
+        config['videos_directory'] = wrolpi_config.default_config['videos_directory']
+
+    if body.map_directory and pathlib.Path(body.map_directory).is_absolute():
+        raise InvalidConfig('Map directory must be relative to media directory')
+    elif not body.map_directory:
+        config['map_directory'] = wrolpi_config.default_config['map_directory']
+
+    if body.zims_directory and pathlib.Path(body.zims_directory).is_absolute():
+        raise InvalidConfig('Zims directory must be relative to media directory')
+    elif not body.zims_directory:
+        config['zims_directory'] = wrolpi_config.default_config['zims_directory']
 
     log_level = config.pop('log_level', None)
     if isinstance(log_level, int):

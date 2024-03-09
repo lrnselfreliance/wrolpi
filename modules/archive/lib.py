@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from modules.archive.models import Domain, Archive
 from wrolpi import dates
 from wrolpi.common import get_media_directory, logger, extract_domain, escape_file_name, aiohttp_post, \
-    format_html_string, split_lines_by_length, get_html_soup, get_title_from_html
+    format_html_string, split_lines_by_length, get_html_soup, get_title_from_html, get_wrolpi_config
 from wrolpi.dates import now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import UnknownArchive, InvalidOrderBy, InvalidDatetime
@@ -48,7 +48,7 @@ class ArchiveFiles:
 
 
 def get_archive_directory() -> pathlib.Path:
-    archive_directory = get_media_directory() / 'archive'
+    archive_directory = get_media_directory() / get_wrolpi_config().archive_directory
     return archive_directory
 
 

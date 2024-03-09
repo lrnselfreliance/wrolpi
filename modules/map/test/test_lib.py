@@ -4,6 +4,7 @@ from unittest import mock
 import pytest
 
 from modules.map import lib
+from wrolpi.common import get_wrolpi_config
 
 
 def test_get_map_paths(test_directory, make_files_structure):
@@ -101,3 +102,14 @@ def test_seconds_to_import_rpi4(size, expected):
 def test_seconds_to_import_rpi5(size, expected):
     with unittest.mock.patch('modules.map.lib.IS_RPI5', True):
         assert lib.seconds_to_import(size) == expected
+
+
+def test_get_custom_map_directory(test_directory, test_config):
+    """Custom directory can be used for map directory."""
+    # Default location.
+    assert lib.get_map_directory() == (test_directory / 'map')
+
+    get_wrolpi_config().map_directory = 'custom/deep/map/directory'
+
+    assert lib.get_map_directory() == (test_directory / 'custom/deep/map/directory')
+    assert (test_directory / 'custom/deep/map/directory').is_dir()

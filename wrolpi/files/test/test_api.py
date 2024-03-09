@@ -4,7 +4,7 @@ from unittest import mock
 
 import pytest
 
-from wrolpi.common import get_config
+from wrolpi.common import get_wrolpi_config
 from wrolpi.files import lib
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import TagFile
@@ -634,13 +634,13 @@ async def test_get_file(test_session, test_async_client, test_directory, make_fi
 async def test_ignore_directory(test_session, test_async_client, test_directory, make_files_structure, test_config):
     """A maintainer can ignore/un-ignore directories.  The files in the directory should not be refreshed."""
     foo, bar, baz = make_files_structure(['foo/foo.txt', 'foo/bar.txt', 'baz/baz.txt'])
-    assert len(get_config().ignored_directories) == 0
+    assert len(get_wrolpi_config().ignored_directories) == 0
 
     # Ignore baz/
     content = dict(path=str(baz.parent))
     request, response = await test_async_client.post('/api/files/ignore_directory', json=content)
     assert response.status_code == HTTPStatus.OK
-    assert len(get_config().ignored_directories) == 1
+    assert len(get_wrolpi_config().ignored_directories) == 1
 
     await lib.refresh_files()
 
@@ -650,7 +650,7 @@ async def test_ignore_directory(test_session, test_async_client, test_directory,
     # Un-ignore baz/
     request, response = await test_async_client.post('/api/files/unignore_directory', json=content)
     assert response.status_code == HTTPStatus.OK
-    assert len(get_config().ignored_directories) == 0
+    assert len(get_wrolpi_config().ignored_directories) == 0
 
     await lib.refresh_files()
 
@@ -661,4 +661,4 @@ async def test_ignore_directory(test_session, test_async_client, test_directory,
     content = dict(path=str(test_directory / 'videos'))
     request, response = await test_async_client.post('/api/files/ignore_directory', json=content)
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert len(get_config().ignored_directories) == 0
+    assert len(get_wrolpi_config().ignored_directories) == 0

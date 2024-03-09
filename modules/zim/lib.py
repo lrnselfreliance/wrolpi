@@ -16,7 +16,7 @@ from modules.zim.kiwix import KIWIX_CATALOG
 from modules.zim.models import Zim, Zims, TagZimEntry, ZimSubscription
 from wrolpi import flags
 from wrolpi.common import register_modeler, logger, extract_html_text, extract_headlines, get_media_directory, walk, \
-    register_refresh_cleanup, background_task
+    register_refresh_cleanup, background_task, get_wrolpi_config
 from wrolpi.db import get_db_session, optional_session, get_db_curs
 from wrolpi.downloader import DownloadFrequency
 from wrolpi.files.lib import refresh_files, split_file_name_words
@@ -464,8 +464,7 @@ def zim_download_url_to_name(url: str) -> Tuple[str, str]:
 
 
 def get_zim_directory() -> pathlib.Path:
-    media_directory = get_media_directory()
-    zim_directory = media_directory / 'zims'
+    zim_directory = get_media_directory() / get_wrolpi_config().zims_directory
     return zim_directory
 
 

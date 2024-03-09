@@ -1,11 +1,26 @@
 import React from "react";
 import {getSettings, postRestart, postShutdown, saveSettings} from "../../api";
-import {Button, Form, FormGroup, FormInput, Header, Loader, Modal, ModalContent, ModalHeader, Segment} from "../Theme";
-import {Container, Dimmer, Icon} from "semantic-ui-react";
+import {
+    Button,
+    Divider,
+    Form,
+    FormField,
+    FormGroup,
+    FormInput,
+    Header,
+    Loader,
+    Modal,
+    ModalContent,
+    ModalHeader,
+    Segment
+} from "../Theme";
+import {Container, Dimmer, GridColumn, GridRow, Icon, Input} from "semantic-ui-react";
 import {APIButton, ErrorMessage, HelpPopup, HotspotToggle, ThrottleToggle, Toggle, WROLModeMessage} from "../Common";
 import QRCode from "react-qr-code";
 import {useDockerized} from "../../hooks/customHooks";
 import {toast} from "react-semantic-toasts-2";
+import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
+import {SettingsContext} from "../../contexts/contexts";
 
 export function ShutdownButton() {
     const dockerized = useDockerized();
@@ -151,11 +166,13 @@ export class SettingsPage extends React.Component {
         this.state = {
             disabled: false,
             hotspot_encryption: 'WPA',
+            edit_special_directories: false,
             pending: false,
             qrCodeValue: '',
             qrOpen: false,
             ready: false,
 
+            archive_directory: null,
             download_on_startup: null,
             download_timeout: null,
             hotspot_device: null,
@@ -164,8 +181,11 @@ export class SettingsPage extends React.Component {
             hotspot_status: null,
             ignore_outdated_zims: null,
             log_level: null,
+            map_directory: null,
             throttle_on_startup: null,
             throttle_status: null,
+            videos_directory: null,
+            zims_directory: null,
         }
 
         this.handleSubmit = this.handleSubmit.bind(this);
@@ -177,6 +197,7 @@ export class SettingsPage extends React.Component {
             const settings = await getSettings();
             this.setState({
                 ready: true,
+                archive_directory: settings.archive_directory,
                 disabled: settings.wrol_mode,
                 download_on_startup: settings.download_on_startup,
                 download_timeout: settings.download_timeout || '',
@@ -186,8 +207,11 @@ export class SettingsPage extends React.Component {
                 hotspot_status: settings.hotspot_status,
                 ignore_outdated_zims: settings.ignore_outdated_zims,
                 log_level: fromApiLogLevel(settings.log_level),
+                map_directory: settings.map_directory,
                 throttle_on_startup: settings.throttle_on_startup,
                 throttle_status: settings.throttle_status,
+                videos_directory: settings.videos_directory,
+                zims_directory: settings.zims_directory,
             }, this.handleHotspotChange);
         } catch (e) {
             console.error(e);
@@ -201,6 +225,7 @@ export class SettingsPage extends React.Component {
         }
         this.setState({disabled: true, pending: true});
         let settings = {
+            archive_directory: this.state.archive_directory,
             download_on_startup: this.state.download_on_startup,
             download_timeout: this.state.download_timeout ? parseInt(this.state.download_timeout) : 0,
             hotspot_device: this.state.hotspot_device,
@@ -208,7 +233,10 @@ export class SettingsPage extends React.Component {
             hotspot_ssid: this.state.hotspot_ssid,
             ignore_outdated_zims: this.state.ignore_outdated_zims,
             log_level: toApiLogLevel(this.state.log_level),
+            map_directory: this.state.map_directory,
             throttle_on_startup: this.state.throttle_on_startup,
+            videos_directory: this.state.videos_directory,
+            zims_directory: this.state.zims_directory,
         }
         try {
             const response = await saveSettings(settings);
@@ -263,157 +291,231 @@ export class SettingsPage extends React.Component {
             return <ErrorMessage>Unable to fetch settings</ErrorMessage>
         }
 
-        let {
+        const {
+            archive_directory,
             disabled,
             download_on_startup,
             download_timeout,
+            edit_special_directories,
             hotspot_device,
             hotspot_password,
             hotspot_ssid,
             ignore_outdated_zims,
             log_level,
+            map_directory,
             pending,
             qrCodeValue,
             throttle_on_startup,
+            videos_directory,
+            zims_directory,
         } = this.state;
 
         const qrButton = <Button icon style={{marginBottom: '1em'}}><Icon name='qrcode' size='big'/></Button>;
 
-        return <Container fluid>
-            <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
+        return <SettingsContext.Consumer>{({settings}) => {
+            const mediaDirectoryLabel = `${settings.media_directory}/`;
+            return <Container fluid>
+                <WROLModeMessage content='Settings are disabled because WROL Mode is enabled.'/>
 
-            <Segment>
-                <HotspotToggle/>
-                <ThrottleToggle/>
-            </Segment>
+                <Segment>
+                    <HotspotToggle/>
+                    <ThrottleToggle/>
+                </Segment>
 
-            <Segment>
-                <Header as='h2'>
-                    Settings
-                </Header>
-                <p>Any changes will be written to <i>config/wrolpi.yaml</i>.</p>
+                <Segment>
+                    <Header as='h2'>Settings</Header>
+                    <p>Any changes will be written to <i>{settings.media_directory}/config/wrolpi.yaml</i>.</p>
 
-                <Form id="settings" onSubmit={this.handleSubmit}>
-                    <div style={{margin: '0.5em'}}>
-                        <Toggle
-                            label='Download on Startup'
-                            disabled={disabled || download_on_startup === null}
-                            checked={download_on_startup === true}
-                            onChange={checked => this.handleInputChange(null, 'download_on_startup', checked)}
-                        />
-                    </div>
+                    <Form id="settings" onSubmit={this.handleSubmit}>
+                        <div style={{margin: '0.5em'}}>
+                            <Toggle
+                                label='Download on Startup'
+                                disabled={disabled || download_on_startup === null}
+                                checked={download_on_startup === true}
+                                onChange={checked => this.handleInputChange(null, 'download_on_startup', checked)}
+                            />
+                        </div>
 
-                    <div style={{margin: '0.5em'}}>
-                        <Toggle
-                            label='CPU Power-save on Startup'
-                            disabled={disabled || throttle_on_startup === null}
-                            checked={throttle_on_startup === true}
-                            onChange={checked => this.handleInputChange(null, 'throttle_on_startup', checked)}
-                        />
-                    </div>
+                        <div style={{margin: '0.5em'}}>
+                            <Toggle
+                                label='CPU Power-save on Startup'
+                                disabled={disabled || throttle_on_startup === null}
+                                checked={throttle_on_startup === true}
+                                onChange={checked => this.handleInputChange(null, 'throttle_on_startup', checked)}
+                            />
+                        </div>
 
-                    <div style={{margin: '0.5em'}}>
-                        <Toggle
-                            label='Ignore outdated Zims'
-                            disabled={disabled || ignore_outdated_zims === null}
-                            checked={ignore_outdated_zims === true}
-                            onChange={checked => this.handleInputChange(null, 'ignore_outdated_zims', checked)}
-                        />
-                    </div>
+                        <div style={{margin: '0.5em'}}>
+                            <Toggle
+                                label='Ignore outdated Zims'
+                                disabled={disabled || ignore_outdated_zims === null}
+                                checked={ignore_outdated_zims === true}
+                                onChange={checked => this.handleInputChange(null, 'ignore_outdated_zims', checked)}
+                            />
+                        </div>
 
-                    <FormGroup inline>
-                        <FormInput
-                            label={<>
-                                <b>Download Timeout</b>
-                                <HelpPopup content='Downloads will be stopped after this many seconds have elapsed.
+                        <FormGroup inline>
+                            <FormInput
+                                label={<>
+                                    <b>Download Timeout</b>
+                                    <HelpPopup content='Downloads will be stopped after this many seconds have elapsed.
                                 Downloads will never timeout if this is empty.'/>
-                            </>}
-                            value={download_timeout}
-                            disabled={disabled || download_timeout === null}
-                            onChange={(e, d) => this.handleTimeoutChange(e, 'download_timeout', d.value)}
+                                </>}
+                                value={download_timeout}
+                                disabled={disabled || download_timeout === null}
+                                onChange={(e, d) => this.handleTimeoutChange(e, 'download_timeout', d.value)}
+                            />
+                        </FormGroup>
+
+                        <FormGroup inline>
+                            <FormInput
+                                label='Hotspot SSID'
+                                value={hotspot_ssid}
+                                disabled={disabled || hotspot_ssid === null}
+                                onChange={(e, d) => this.setState({hotspot_ssid: d.value}, this.handleHotspotChange)}
+                            />
+                            <FormInput
+                                label='Hotspot Password'
+                                disabled={disabled || hotspot_password === null}
+                                value={hotspot_password}
+                                onChange={(e, d) => this.setState({hotspot_password: d.value}, this.handleHotspotChange)}
+                            />
+                            <FormInput
+                                label='Hotspot Device'
+                                disabled={disabled || hotspot_password === null}
+                                value={hotspot_device}
+                                onChange={(e, d) => this.handleInputChange(e, 'hotspot_device', d.value)}
+                            />
+                        </FormGroup>
+
+                        <Modal closeIcon
+                               onClose={() => this.setState({qrOpen: false})}
+                               onOpen={this.handleQrOpen}
+                               open={this.state.qrOpen}
+                               trigger={qrButton}
+                        >
+                            <ModalHeader>
+                                Scan this code to join the hotspot
+                            </ModalHeader>
+                            <ModalContent>
+                                <div style={{display: 'inline-block', backgroundColor: '#ffffff', padding: '1em'}}>
+                                    <QRCode value={qrCodeValue} size={300}/>
+                                </div>
+                            </ModalContent>
+                        </Modal>
+
+                        <br/>
+
+                        <label htmlFor='log_levels_input'>Log Level: {logLevelToName(log_level)}</label>
+                        <br/>
+                        <input type='range'
+                               id='log_levels_input'
+                               list='log_levels'
+                               min='1'
+                               max='5'
+                               value={log_level}
+                               onChange={e => this.setState({'log_level': parseInt(e.target.value)})}
+                               style={{marginBottom: '1em'}}
                         />
-                    </FormGroup>
+                        <datalist id='log_levels'>
+                            <option value='1'>Critical</option>
+                            <option value='2'>Warning</option>
+                            <option value='3'>Info</option>
+                            <option value='4'>Debug</option>
+                            <option value='5'>All</option>
+                        </datalist>
 
-                    <FormGroup inline>
-                        <FormInput
-                            label='Hotspot SSID'
-                            value={hotspot_ssid}
-                            disabled={disabled || hotspot_ssid === null}
-                            onChange={(e, d) => this.setState({hotspot_ssid: d.value}, this.handleHotspotChange)}
-                        />
-                        <FormInput
-                            label='Hotspot Password'
-                            disabled={disabled || hotspot_password === null}
-                            value={hotspot_password}
-                            onChange={(e, d) => this.setState({hotspot_password: d.value}, this.handleHotspotChange)}
-                        />
-                        <FormInput
-                            label='Hotspot Device'
-                            disabled={disabled || hotspot_password === null}
-                            value={hotspot_device}
-                            onChange={(e, d) => this.handleInputChange(e, 'hotspot_device', d.value)}
-                        />
-                    </FormGroup>
+                        <Divider/>
 
-                    <Modal closeIcon
-                           onClose={() => this.setState({qrOpen: false})}
-                           onOpen={this.handleQrOpen}
-                           open={this.state.qrOpen}
-                           trigger={qrButton}
-                    >
-                        <ModalHeader>
-                            Scan this code to join the hotspot
-                        </ModalHeader>
-                        <ModalContent>
-                            <div style={{display: 'inline-block', backgroundColor: '#ffffff', padding: '1em'}}>
-                                <QRCode value={qrCodeValue} size={300}/>
-                            </div>
-                        </ModalContent>
-                    </Modal>
+                        <Header as='h3'>Special Directories</Header>
+                        <p>WROLPi will save files to these directories (any video files will be saved to
+                            the <i>videos</i> by default, etc.).</p>
 
-                    <br/>
+                        <Grid stackable>
+                            <GridRow columns={2}>
+                                <GridColumn>
+                                    <FormField>
+                                        <label>Archive Directory</label>
+                                        <Input
+                                            label={mediaDirectoryLabel}
+                                            value={archive_directory}
+                                            disabled={!edit_special_directories}
+                                            onChange={(e, d) => this.handleInputChange(e, 'archive_directory', d.value)}
+                                        />
+                                    </FormField>
+                                </GridColumn>
+                                <GridColumn>
+                                    <FormField>
+                                        <label>Videos Directory</label>
+                                        <Input
+                                            label={mediaDirectoryLabel}
+                                            value={videos_directory}
+                                            disabled={!edit_special_directories}
+                                            onChange={(e, d) => this.handleInputChange(e, 'videos_directory', d.value)}
+                                        />
+                                    </FormField>
+                                </GridColumn>
+                            </GridRow>
+                            <GridRow columns={2}>
+                                <GridColumn>
+                                    <FormField>
+                                        <label>Map Directory</label>
+                                        <Input
+                                            label={mediaDirectoryLabel}
+                                            value={map_directory}
+                                            disabled={!edit_special_directories}
+                                            onChange={(e, d) => this.handleInputChange(e, 'map_directory', d.value)}
+                                        />
+                                    </FormField>
+                                </GridColumn>
+                                <GridColumn>
+                                    <FormField>
+                                        <label>Zims Directory</label>
+                                        <Input
+                                            label={mediaDirectoryLabel}
+                                            value={zims_directory}
+                                            disabled={!edit_special_directories}
+                                            onChange={(e, d) => this.handleInputChange(e, 'zims_directory', d.value)}
+                                        />
+                                    </FormField>
+                                </GridColumn>
+                            </GridRow>
+                            <GridRow columns={1}>
+                                <GridColumn>
+                                    <Toggle
+                                        label='Edit Directories'
+                                        disabled={disabled}
+                                        checked={edit_special_directories === true}
+                                        onChange={checked => this.handleInputChange(null, 'edit_special_directories', checked)}
+                                    />
+                                </GridColumn>
+                            </GridRow>
+                        </Grid>
 
-                    <label htmlFor='log_levels_input'>Log Level: {logLevelToName(log_level)}</label>
-                    <br/>
-                    <input type='range'
-                           id='log_levels_input'
-                           list='log_levels'
-                           min='1'
-                           max='5'
-                           value={log_level}
-                           onChange={e => this.setState({'log_level': parseInt(e.target.value)})}
-                           style={{marginBottom: '1em'}}
-                    />
-                    <datalist id='log_levels'>
-                        <option value='1'>Critical</option>
-                        <option value='2'>Warning</option>
-                        <option value='3'>Info</option>
-                        <option value='4'>Debug</option>
-                        <option value='5'>All</option>
-                    </datalist>
+                        <Divider/>
 
-                    <br/>
+                        <APIButton
+                            color='violet'
+                            size='big'
+                            onClick={this.handleSubmit}
+                            obeyWROLMode={true}
+                            disabled={disabled}
+                        >Save</APIButton>
 
-                    <APIButton
-                        color='violet'
-                        size='big'
-                        onClick={this.handleSubmit}
-                        obeyWROLMode={true}
-                        disabled={disabled}
-                    >Save</APIButton>
+                        <Dimmer active={pending}>
+                            <Loader active={pending} size='large'/>
+                        </Dimmer>
 
-                    <Dimmer active={pending}>
-                        <Loader active={pending} size='large'/>
-                    </Dimmer>
+                    </Form>
+                </Segment>
 
-                </Form>
-            </Segment>
-
-            <Segment>
-                <Header as='h3'>Control WROLPi</Header>
-                <RestartButton/>
-                <ShutdownButton/>
-            </Segment>
-        </Container>
+                <Segment>
+                    <Header as='h3'>Control WROLPi</Header>
+                    <RestartButton/>
+                    <ShutdownButton/>
+                </Segment>
+            </Container>;
+        }
+        }</SettingsContext.Consumer>
     }
 }

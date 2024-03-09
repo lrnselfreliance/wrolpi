@@ -9,7 +9,7 @@ from sanic.signals import Event
 
 from wrolpi import flags, BEFORE_STARTUP_FUNCTIONS
 from wrolpi import root_api, admin
-from wrolpi.common import logger, get_config, check_media_directory, limit_concurrent, \
+from wrolpi.common import logger, get_wrolpi_config, check_media_directory, limit_concurrent, \
     wrol_mode_enabled, cancel_refresh_tasks, set_log_level, background_task, cancel_background_tasks
 from wrolpi.dates import Seconds
 from wrolpi.downloader import download_manager, import_downloads_config
@@ -136,7 +136,7 @@ def main():
     if args.sub_commands == 'db':
         return db_main(args)
 
-    config = get_config()
+    config = get_wrolpi_config()
 
     # Hotspot/throttle are not supported in Docker containers.
     if not DOCKERIZED and config.hotspot_on_startup:
@@ -246,7 +246,7 @@ async def periodic_downloads(app: Sanic):
         download_manager.disable()
         return
 
-    config = get_config()
+    config = get_wrolpi_config()
     if config.download_on_startup is False:
         logger.warning('Not starting download manager because Downloads are disabled on startup.')
         download_manager.disable()

@@ -217,6 +217,8 @@ async def post_move(_: Request, body: schema.Move):
     for source in sources:
         if not source.exists():
             raise FileNotFoundError(f'Cannot find {source} to move')
+        if source.is_mount():
+            raise FileConflict(f'Cannot move mounted directory!')
 
     try:
         await lib.move(destination, *sources)

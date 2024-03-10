@@ -68,6 +68,8 @@
 <script>
     // Get the current hostname (probably an IP) link to the ports above.
     const hostname = window.location.hostname;
+    let port = window.location.port;
+    port = port ? `:${port}` : '';
 
     function replaceHref(elm_id, url) {
         const elm = document.getElementById(elm_id);
@@ -79,7 +81,7 @@
 
     if (hostname) {
         replaceHref('help_link', `http://${hostname}:8086`);
-        replaceHref('media_link', `http://${hostname}:8080/media`);
+        replaceHref('media_link', `http://${hostname}${port}/media`);
         replaceHref('api_link', `http://${hostname}:8081`);
         replaceHref('map_link', `http://${hostname}:8084`);
         replaceHref('kiwix_link', `http://${hostname}:8085`);

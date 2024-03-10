@@ -196,7 +196,6 @@ class ChannelsConfig(ConfigFile):
                 download_frequency=604800,
             )
         },
-        favorites=dict(),
     )
 
     @property
@@ -206,16 +205,6 @@ class ChannelsConfig(ConfigFile):
     @channels.setter
     def channels(self, value: dict):
         self.update({'channels': value})
-
-    @property
-    def favorites(self) -> dict:
-        warnings.warn('Favorites have been moved to Tags', DeprecationWarning)
-        return self._config['favorites']
-
-    @favorites.setter
-    def favorites(self, value: dict):
-        warnings.warn('Favorites have been moved to Tags', DeprecationWarning)
-        self.update({'favorites': value})
 
 
 CHANNELS_CONFIG: ChannelsConfig = ChannelsConfig()

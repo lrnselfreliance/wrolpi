@@ -252,7 +252,7 @@ DRIVE_REGEX = re.compile(r'^.+?'  # filesystem
                          r'\s+(.*)',  # mount
                          re.MULTILINE)
 IGNORED_DRIVES = ['/boot', '/etc']
-VALID_FORMATS = {'btrfs', 'ext4', 'ext3', 'ext2', 'vfat'}
+VALID_FORMATS = {'btrfs', 'ext4', 'ext3', 'ext2', 'vfat', 'exfat'}
 
 
 def get_drives_info_psutil() -> List[DriveInfo]:
@@ -265,7 +265,7 @@ def get_drives_info_psutil() -> List[DriveInfo]:
         if disk.fstype not in VALID_FORMATS:
             continue
         if disk.device not in info:
-            # Only use the first use of the partition.
+            # Only use the first partition.
             usage = psutil.disk_usage(disk.mountpoint)
             info[disk.device] = DriveInfo(
                 mount=disk.mountpoint,

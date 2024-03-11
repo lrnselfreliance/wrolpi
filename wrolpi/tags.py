@@ -158,6 +158,7 @@ class TagsConfig(ConfigFile):
                 tag_file.created_at.isoformat() if tag_file.created_at else dates.now().isoformat(),
             ]
             tag_files.append(value)
+        logger.debug(f'Got {len(tag_files)} tag files for config.')
 
         from modules.zim.models import Zim, TagZimEntry
         results = session.query(Tag, Zim, TagZimEntry) \
@@ -176,6 +177,7 @@ class TagsConfig(ConfigFile):
                 tag_zim_entry.created_at.isoformat() if tag_zim_entry.created_at else dates.now().isoformat(),
             ]
             tag_zims.append(value)
+        logger.debug(f'Got {len(tag_zims)} tag zims for config.')
 
         # Write to the config.
         self.update({
@@ -481,3 +483,11 @@ def tag_names_to_zim_sub_select(tag_names: List[str], zim_id: int = None) -> Tup
             HAVING array_agg(t.name)::TEXT[] @> %(tag_names)s::TEXT[]
         '''
     return stmt, params
+
+
+if __name__ == '__main__':
+    from wrolpi.db import get_db_session
+
+    if input('Save Tags to config file? (y/n) ').strip().lower() == 'y':
+        with get_db_session() as session:
+            get_tags_config().save_tags(session)

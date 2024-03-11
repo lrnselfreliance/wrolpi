@@ -9,6 +9,7 @@ import multiprocessing
 import os
 import pathlib
 import re
+import shutil
 import string
 import sys
 import tempfile
@@ -290,6 +291,15 @@ class ConfigFile:
             with config_file.open('rt') as fh:
                 self._config.update(yaml.load(fh, Loader=yaml.Loader))
 
+    def _get_backup_filename(self):
+        """Returns the path for the backup file for today."""
+        # TODO what if the RPi clock is not working?  Change this so the "version" of the config is used each day.
+        path = get_media_directory() / f'config/backup/{self.file_name}'
+        date_str = now().strftime('%Y%m%d')
+        name = f'{path.stem}-{date_str}{path.suffix}'
+        path = path.with_name(name)
+        return path
+
     def save(self):
         """
         Write this config to its file.
@@ -310,15 +320,22 @@ class ConfigFile:
             if not config_file.parent.is_dir():
                 config_file.parent.mkdir()
 
+            backup_file = self._get_backup_filename()
+
             # Read the existing config, replace all values, then save.
             if config_file.is_file():
                 with config_file.open('rt') as fh:
                     config = yaml.load(fh, Loader=yaml.Loader)
+                # Copy the existing config to the backup directory.  One for each day.
+                if not backup_file.parent.exists():
+                    backup_file.parent.mkdir(parents=True)
+                shutil.copy(config_file, backup_file)
             else:
                 # Config file does not yet exist.
                 config = dict()
 
             config.update({k: v for k, v in self._config.items() if v is not None})
+            logger.warning(f'Saving config: {config_file}')
             with config_file.open('wt') as fh:
                 yaml.dump(config, fh, width=self.width)
         finally:

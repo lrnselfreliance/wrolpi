@@ -4,6 +4,7 @@ import json
 import multiprocessing
 import os
 import pathlib
+import re
 import tempfile
 from datetime import date, datetime
 from decimal import Decimal
@@ -797,3 +798,24 @@ def test_find_file(test_directory, make_files_structure):
     assert common.find_file(test_directory, 'baz.txt', 2) == baz
 
     assert common.find_file(test_directory, 'does not exist', 100) is None
+
+
+def test_config_backup(test_config, test_directory):
+    """Configs have a backup each day."""
+    config = common.get_wrolpi_config()
+
+    # No backups yet.
+    config.save()
+    assert (test_directory / 'config').is_dir()
+    assert not (test_directory / 'config/backup').is_dir()
+    assert (test_directory / 'config/wrolpi.yaml').is_file()
+
+    # Backups directory is created.  New backup config is saved.
+    config.save()
+    assert (test_directory / 'config').is_dir()
+    assert (test_directory / 'config/backup').is_dir()
+    assert (test_directory / 'config/wrolpi.yaml').is_file()
+
+    backup_file, = list((test_directory / 'config/backup').glob('*'))
+    assert re.match(r'wrolpi-\d{8}\.yaml', backup_file.name), \
+        f'{backup_file.name} is not in the expected format'

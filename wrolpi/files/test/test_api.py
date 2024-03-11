@@ -655,7 +655,9 @@ async def test_ignore_directory(test_session, test_async_client, test_directory,
     await lib.refresh_files()
 
     files = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()
-    assert {i.primary_path.name for i in files} == {'foo.txt', 'bar.txt', 'baz.txt', 'wrolpi.yaml'}
+    # Ignore configs.
+    files = {i for i in files if not i.primary_path.name.endswith('.yaml')}
+    assert {i.primary_path.name for i in files} == {'foo.txt', 'bar.txt', 'baz.txt'}
 
     # Cannot ignore special directories.
     content = dict(path=str(test_directory / 'videos'))

@@ -283,6 +283,7 @@ async def archive_modeler():
                         except InvalidArchive:
                             # It was not a real Archive.  Many HTML files will not be an Archive.
                             file_group.indexed = False
+                            invalid_archives.add(file_group.id)
 
             session.commit()
 

@@ -17,7 +17,7 @@ import {deleteFile, ignoreDirectory, makeDirectory, movePaths, renamePath, unign
 import _ from 'lodash';
 import {SortableTable} from "./SortableTable";
 import {useBrowseFiles, useMediaDirectory, useWROLMode} from "../hooks/customHooks";
-import {DirectoryRefreshButton, FileRowTagIcon, FilesRefreshButton} from "./Files";
+import {FileRowTagIcon, FilesRefreshButton} from "./Files";
 import {FilePreviewContext} from "./FilePreview";
 import {SettingsContext} from "../contexts/contexts";
 
@@ -217,10 +217,7 @@ export function FileBrowser() {
     const footer = <TableFooter fullWidth>
         <TableRow>
             <TableHeaderCell colSpan={3}>
-                {selectedPathsCount ?
-                    <DirectoryRefreshButton paths={selectedPaths}/>
-                    : <FilesRefreshButton/>
-                }
+                <FilesRefreshButton paths={selectedPaths}/>
                 <APIButton
                     icon='trash'
                     color='red'

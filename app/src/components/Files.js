@@ -606,29 +606,15 @@ const useRefresh = () => {
     }
 }
 
-export function FilesRefreshButton() {
-    const {refreshing, refreshingDirectory, wrolModeEnabled, loading, refreshFiles} = useRefresh();
-
-    return <Button icon
-                   labelPosition='left'
-                   loading={loading || refreshing || refreshingDirectory}
-                   onClick={() => refreshFiles()}
-                   disabled={wrolModeEnabled || loading || refreshing}>
-        <Icon name='refresh'/>
-        Refresh All
-    </Button>;
-}
-
-export function DirectoryRefreshButton({paths}) {
+export function FilesRefreshButton({paths}) {
     const {refreshing, refreshingDirectory, wrolModeEnabled, loading, refreshFiles} = useRefresh();
 
     return <Button icon
                    labelPosition='left'
                    loading={loading || refreshing || refreshingDirectory}
                    onClick={() => refreshFiles(paths)}
-                   disabled={wrolModeEnabled || loading || refreshing || refreshingDirectory}
-    >
+                   disabled={wrolModeEnabled || loading || refreshing}>
         <Icon name='refresh'/>
         Refresh
-    </Button>
+    </Button>;
 }

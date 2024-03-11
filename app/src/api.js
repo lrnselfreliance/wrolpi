@@ -589,12 +589,13 @@ export async function filesSearch(offset, limit, searchStr, mimetypes, model, ta
 
 export async function refreshFiles(paths) {
     let response;
-    if (paths && paths.constructor === Array) {
+    if (Array.isArray(paths) && paths.length > 0) {
+        // Refresh user-selected files/directories only.
         const body = {paths};
-        console.debug(`Refreshing: ${paths}`);
+        console.info(`Refreshing: ${paths}`);
         response = await apiPost(`${API_URI}/files/refresh`, body);
     } else {
-        console.debug(`Refreshing all files`);
+        console.info(`Refreshing all files`);
         response = await apiPost(`${API_URI}/files/refresh`);
     }
     return response;

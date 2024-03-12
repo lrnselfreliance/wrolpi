@@ -136,12 +136,12 @@ export const useQuery = (defaultParams) => {
         if (!_.isEmpty(state)) {
             console.debug('Changing URL params', state);
         }
-    }, [state]);
+    }, [JSON.stringify(state)]);
 
     React.useEffect(() => {
         // Keep URL and state in sync.
         setState(getSearchParamCopy(searchParams));
-    }, [searchParams]);
+    }, [JSON.stringify(searchParams)]);
 
     const updateQuery = (newParams, replace = false) => {
         // Update the old state with the new values.

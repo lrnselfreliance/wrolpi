@@ -113,7 +113,7 @@ def video_factory(test_session, test_directory):
         info_json_path = None
         if with_info_json:
             # Use the provided object as the json.
-            with_info_json = {'duration': 5} if with_info_json is True else with_info_json
+            with_info_json = {'duration': 5, 'epoch': 12345678} if with_info_json is True else with_info_json
             info_json_path = path.with_suffix('.info.json')
             info_json_path.write_text(json.dumps(with_info_json))
 

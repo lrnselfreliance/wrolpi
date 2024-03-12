@@ -52,6 +52,8 @@ VIDEO_ORDERS = {
     '-viewed': 'fg.viewed DESC',
     'view_count': 'v.view_count ASC',
     '-view_count': 'v.view_count DESC',
+    'download_datetime': 'fg.download_datetime ASC, LOWER(fg.primary_path) ASC',
+    '-download_datetime': 'fg.download_datetime DESC NULLS LAST, LOWER(fg.primary_path) ASC',
 }
 NO_NULL_ORDERS = {
     'viewed': 'fg.viewed IS NOT NULL',
@@ -63,8 +65,7 @@ NO_NULL_ORDERS = {
     'view_count': 'v.view_count IS NOT NULL',
     '-view_count': 'v.view_count IS NOT NULL',
 }
-JOIN_ORDERS = ('published_datetime', '-published_datetime', 'viewed', '-viewed', 'view_count', '-view_count',
-               'length', '-length')
+JOIN_ORDERS = ('view_count', '-view_count')
 DEFAULT_VIDEO_ORDER = 'rank'
 VIDEO_QUERY_LIMIT = 24
 

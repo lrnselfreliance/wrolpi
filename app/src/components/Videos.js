@@ -98,6 +98,7 @@ function VideosPage() {
         {value: 'size', text: 'Size'},
         {value: 'view_count', text: 'Views'},
         {value: 'viewed', text: 'Recently Viewed', short: 'R.Viewed'},
+        {value: 'download_datetime', text: 'Download Date', short: 'D.Date'},
     ]
 
     if (searchStr) {

@@ -1699,6 +1699,6 @@ def get_title_from_html(html: str, url: str = None) -> str:
     """
     soup = get_html_soup(html)
     try:
-        return soup.title.string
+        return soup.title.string.strip()
     except Exception:  # noqa
         logger.debug(f'Unable to extract title {url}')

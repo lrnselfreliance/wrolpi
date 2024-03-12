@@ -14,7 +14,7 @@ from yt_dlp import YoutubeDL
 from wrolpi import before_startup, dates
 from wrolpi.captions import extract_captions
 from wrolpi.common import ConfigFile, get_media_directory, register_refresh_cleanup, limit_concurrent
-from wrolpi.dates import Seconds
+from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.errors import UnknownDirectory
 from wrolpi.vars import PYTEST
@@ -34,6 +34,7 @@ class VideoInfoJSON(object):
     title = None
     url = None
     view_count = None
+    epoch = None
 
 
 def process_video_info_json(video: Video) -> VideoInfoJSON:
@@ -49,6 +50,8 @@ def process_video_info_json(video: Video) -> VideoInfoJSON:
         video_info_json.view_count = info_json.get('view_count') or None
         video_info_json.url = info_json.get('webpage_url') or info_json.get('url') or None
         video_info_json.channel_source_id = info_json.get('channel_id') or None
+        video_info_json.epoch = info_json.get('epoch')
+        video_info_json.epoch = int(video_info_json.epoch) if video_info_json.epoch else None
 
     return video_info_json
 
@@ -78,13 +81,14 @@ def validate_video(video: Video, channel_generate_poster: bool):
     """
     info_json_path = video.info_json_path
     json_data_missing = bool(video.file_group.title) and bool(video.file_group.length) and bool(video.view_count) \
-                        and bool(video.file_group.url)
+                        and bool(video.file_group.url) and bool(video.file_group.download_datetime)
     if info_json_path and json_data_missing is False:
         # These properties can be found in the info json.
         video_info_json = process_video_info_json(video)
         video.file_group.title = video_info_json.title
         video.file_group.length = video_info_json.duration
         video.file_group.url = video_info_json.url
+        video.file_group.download_datetime = from_timestamp(video_info_json.epoch) if video_info_json.epoch else None
         # View count will probably be overwritten by more recent data when this Video's Channel is
         # updated.
         video.view_count = video.view_count or video_info_json.view_count

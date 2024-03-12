@@ -1,5 +1,6 @@
 import asyncio
 import random
+import tempfile
 from datetime import timedelta
 from typing import Tuple, Optional, List, Dict
 
@@ -8,14 +9,14 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from modules.videos.models import Video
-from wrolpi.common import run_after, logger, limit_concurrent, wrol_mode_check
+from wrolpi.common import run_after, logger, limit_concurrent, wrol_mode_check, chdir
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, optional_session
 from wrolpi.downloader import download_manager
 from wrolpi.files.lib import handle_file_group_search_results
 from wrolpi.files.models import FileGroup
 from wrolpi.tags import tag_append_sub_select_where
-from wrolpi.vars import VIDEO_COMMENTS_FETCH_COUNT
+from wrolpi.vars import VIDEO_COMMENTS_FETCH_COUNT, YTDLP_CACHE_DIR
 from ..errors import UnknownVideo
 from ..lib import save_channels_config
 
@@ -174,6 +175,7 @@ def download_video_info_json(url: str) -> dict:
         getcomments=True,
         skip_download=True,
         extractor_args={'youtube': {'max_comments': ['all', '20', 'all', '10'], 'comment_sort': ['top']}},
+        cachedir=YTDLP_CACHE_DIR,
     )
 
     ydl_logger = logger.getChild('youtube-dl')

@@ -3,7 +3,6 @@ import functools
 import html
 import pathlib
 import re
-import warnings
 from typing import Tuple, Optional, Generator
 
 import pytz
@@ -17,7 +16,7 @@ from wrolpi.common import ConfigFile, get_media_directory, register_refresh_clea
 from wrolpi.dates import Seconds, from_timestamp
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.errors import UnknownDirectory
-from wrolpi.vars import PYTEST
+from wrolpi.vars import PYTEST, YTDLP_CACHE_DIR
 from .common import is_valid_poster, convert_image, \
     generate_video_poster, logger, REQUIRED_OPTIONS, ConfigError, \
     get_video_duration
@@ -458,8 +457,8 @@ def import_channels_config():
             raise
 
 
-YDL = YoutubeDL()
-YDL.params['logger'] = logger.getChild('youtube-dl')
+YDL = YoutubeDL(dict(cachedir=YTDLP_CACHE_DIR))
+ydl_logger = YDL.params['logger'] = logger.getChild('youtube-dl')
 YDL.add_default_info_extractors()
 
 

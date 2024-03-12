@@ -21,22 +21,17 @@ from wrolpi.downloader import Downloader, Download, DownloadResult
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.lib import glob_shared_stem
 from wrolpi.files.models import FileGroup
-from wrolpi.vars import PYTEST
+from wrolpi.vars import PYTEST, YTDLP_CACHE_DIR
 from .channel.lib import create_channel, get_channel
 from .common import get_no_channel_directory, get_videos_directory, update_view_counts, ffmpeg_video_complete
 from .errors import UnknownChannel
-from .lib import get_downloader_config
+from .lib import get_downloader_config, YDL, ydl_logger
 from .models import Video, Channel
 from .normalize_video_url import normalize_video_url
 from .schema import ChannelPostRequest
 from .video.lib import download_video_info_json
 
 logger = logger.getChild(__name__)
-ydl_logger = logger.getChild('youtube-dl')
-
-YDL = YoutubeDL()
-YDL.params['logger'] = ydl_logger
-YDL.add_default_info_extractors()
 
 # Channels are handled differently than a single video.
 ChannelIEs = {
@@ -455,6 +450,7 @@ class VideoDownloader(Downloader, ABC):
         options['merge_output_format'] = PREFERRED_VIDEO_EXTENSION
         options['remuxvideo'] = PREFERRED_VIDEO_EXTENSION
         options['format'] = PREFERRED_VIDEO_FORMAT
+        options['cachdir'] = YTDLP_CACHE_DIR
 
         # Create a new YoutubeDL for the output directory.
         ydl = YoutubeDL(options)

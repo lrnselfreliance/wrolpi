@@ -77,6 +77,7 @@ FILE_MAX_PDF_SIZE = int(os.environ.get('FILE_MAX_PDF_SIZE', 40_000_000))
 FILE_MAX_TEXT_SIZE = int(os.environ.get('FILE_MAX_TEXT_SIZE', 100_000))
 
 VIDEO_COMMENTS_FETCH_COUNT = int(os.environ.get('VIDEO_COMMENTS_FETCH_COUNT', 50))
+YTDLP_CACHE_DIR = os.environ.get('YTDLP_CACHE_DIR', '/tmp/ytdlp_cache')
 
 DEFAULT_HTTP_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116 Safari/537.36',

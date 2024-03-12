@@ -44,7 +44,11 @@ from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT
 
 LOG_LEVEL = multiprocessing.Value(ctypes.c_int, 20)
 
+# Get root handler, delete any existing handlers.
 logger = logging.getLogger()
+for handler in logger.handlers:
+    logger.removeHandler(handler)
+
 ch = logging.StreamHandler()
 formatter = logging.Formatter('[%(asctime)s] [%(process)d] [%(name)s:%(lineno)d] [%(levelname)s] %(message)s')
 ch.setFormatter(formatter)

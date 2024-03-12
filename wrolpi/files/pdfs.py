@@ -7,7 +7,7 @@ import pytz
 
 from wrolpi import dates
 from wrolpi.common import register_modeler, logger, truncate_generator_bytes, truncate_object_bytes, \
-    split_lines_by_length
+    split_lines_by_length, slow_logger
 from wrolpi.db import get_db_session
 from wrolpi.files.indexers import Indexer
 from wrolpi.files.models import FileGroup
@@ -124,29 +124,32 @@ async def pdf_modeler():
 
                     reader = PdfReader(pdf_file)
 
-                    metadata = get_pdf_metadata(reader, pdf_file)
+                    with slow_logger(2, f'Modeling PDF took %(elapsed)s seconds: {file_group}',
+                                     logger__=logger):
+                        metadata = get_pdf_metadata(reader, pdf_file)
 
-                    words = ''
-                    if pdf_file.stat().st_size > FILE_MAX_PDF_SIZE:
-                        logger.warning(f'PDF too large to fully index: {pdf_file}')
-                    else:
-                        try:
-                            # PDFs are complex, don't fail to create title index if text extraction fails.
-                            words = '\n'.join(truncate_generator_bytes(get_words(reader, pdf_file), FILE_MAX_TEXT_SIZE))
-                            words = truncate_object_bytes(words, FILE_MAX_TEXT_SIZE)
-                            words = split_lines_by_length(words)
-                        except Exception as e:
-                            logger.error(f'Failed to index {pdf_file}', exc_info=e)
-                            if PYTEST:
-                                raise
+                        words = ''
+                        if pdf_file.stat().st_size > FILE_MAX_PDF_SIZE:
+                            logger.warning(f'PDF too large to fully index: {pdf_file}')
+                        else:
+                            try:
+                                # PDFs are complex, don't fail to create title index if text extraction fails.
+                                words = '\n'.join(
+                                    truncate_generator_bytes(get_words(reader, pdf_file), FILE_MAX_TEXT_SIZE))
+                                words = truncate_object_bytes(words, FILE_MAX_TEXT_SIZE)
+                                words = split_lines_by_length(words)
+                            except Exception as e:
+                                logger.error(f'Failed to index {pdf_file}', exc_info=e)
+                                if PYTEST:
+                                    raise
 
-                    file_group.title = file_group.a_text = metadata.title or file_title
-                    file_group.author = file_group.b_text = metadata.author
-                    file_group.c_text = file_title  # The name of the file may not match the title in the PDF metadata.
-                    file_group.d_text = words or None
-                    file_group.published_datetime = metadata.published_datetime
-                    file_group.published_modified_datetime = metadata.modification_datetime
-                    file_group.model = 'pdf'
+                        file_group.title = file_group.a_text = metadata.title or file_title
+                        file_group.author = file_group.b_text = metadata.author
+                        file_group.c_text = file_title  # The name of the file may not match the title in the PDF metadata.
+                        file_group.d_text = words or None
+                        file_group.published_datetime = metadata.published_datetime
+                        file_group.published_modified_datetime = metadata.modification_datetime
+                        file_group.model = 'pdf'
                 except Exception as e:
                     logger.error(f'Failed to index PDF {pdf_file}', exc_info=e)
                     if PYTEST:

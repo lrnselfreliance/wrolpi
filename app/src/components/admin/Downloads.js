@@ -24,7 +24,6 @@ import {
 import {Button, Header, Modal, ModalActions, ModalContent, ModalHeader, Placeholder, Segment, Table} from "../Theme";
 import {useDownloads} from "../../hooks/customHooks";
 import {toast} from "react-semantic-toasts-2";
-import {Media} from "../../contexts/contexts";
 
 function ClearCompleteDownloads({callback}) {
     async function localClearDownloads() {

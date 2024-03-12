@@ -4,7 +4,7 @@ import logging
 import pathlib
 from typing import List, Optional, Tuple
 
-from sqlalchemy import Column, Integer, String, BigInteger, ForeignKey, or_, and_
+from sqlalchemy import Column, Integer, BigInteger, ForeignKey, or_, and_
 from sqlalchemy.orm import relationship
 
 from wrolpi.common import ModelHelper, Base, register_modeler, get_html_soup

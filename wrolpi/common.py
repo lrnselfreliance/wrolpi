@@ -130,14 +130,17 @@ __all__ = [
     'extract_domain',
     'extract_headlines',
     'extract_html_text',
+    'format_html_string',
+    'format_json_file',
     'get_absolute_media_path',
-    'get_wrolpi_config',
     'get_download_info',
     'get_files_and_directories',
     'get_html_soup',
     'get_media_directory',
     'get_relative_to_media_directory',
     'get_warn_once',
+    'get_wrolpi_config',
+    'html_screenshot',
     'insert_parameter',
     'iterify',
     'limit_concurrent',
@@ -150,6 +153,7 @@ __all__ = [
     'register_modeler',
     'register_refresh_cleanup',
     'remove_whitespace',
+    'resolve_generators',
     'run_after',
     'set_log_level',
     'set_test_config',
@@ -164,8 +168,6 @@ __all__ = [
     'wrol_mode_check',
     'wrol_mode_enabled',
     'zig_zag',
-    'html_screenshot',
-    'format_html_string',
 ]
 
 # Base is used for all SQLAlchemy models.
@@ -902,7 +904,7 @@ def get_files_and_directories(directory: Path):
 
 
 # These characters are invalid in Windows or Linux.
-INVALID_FILE_CHARS = re.compile(r'[/<>:\|"\\\?\*%!\n\r]')
+INVALID_FILE_CHARS = re.compile(r'[/<>:|"\\?*%!\n\r]')
 
 SPACE_FILE_CHARS = re.compile(r'(  +)|(\t+)')
 
@@ -1228,7 +1230,7 @@ def chunks(it: Iterable, size: int):
     return iter(lambda: tuple(islice(it, size)), ())
 
 
-def chunks_by_stem(it: List[Union[pathlib.Path, str]], size: int) -> Generator[List[pathlib.Path], None, None]:
+def chunks_by_stem(it: List[Union[pathlib.Path, str, int]], size: int) -> Generator[List[pathlib.Path], None, None]:
     """
     Attempt to split a list of paths near the defined size.  Keep groups of files together when they share
     matching names.

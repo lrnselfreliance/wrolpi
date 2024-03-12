@@ -39,14 +39,7 @@ import {
     TableCell
 } from "semantic-ui-react";
 import {ChannelEditPage, ChannelNewPage, ChannelsPage} from "./Channels";
-import {
-    useChannel,
-    useQuery,
-    useSearchOrder,
-    useSearchVideos,
-    useVideo,
-    useVideoStatistics
-} from "../hooks/customHooks";
+import {useChannel, useSearchOrder, useSearchVideos, useVideo, useVideoStatistics} from "../hooks/customHooks";
 import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
@@ -184,10 +177,10 @@ function VideosPage() {
 
     const [localSearchStr, setLocalSearchStr] = React.useState(searchStr || '');
     const searchInput = <SearchInput
-                                     searchStr={localSearchStr}
-                                     onChange={setLocalSearchStr}
-                                     onSubmit={setSearchStr}
-                                     placeholder='Search Videos...'
+        searchStr={localSearchStr}
+        onChange={setLocalSearchStr}
+        onSubmit={setSearchStr}
+        placeholder='Search Videos...'
     />;
 
     return <>

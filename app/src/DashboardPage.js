@@ -26,7 +26,7 @@ import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
 import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
 import {useWROLMode} from "./hooks/customHooks";
 import {FileSearchFilterButton} from "./components/Files";
-import {dateRangeIsEmpty, DateSelectorButton} from "./components/DatesSelector";
+import {DateSelectorButton} from "./components/DatesSelector";
 
 function FlagsMessages({flags}) {
     const {settings, fetchSettings} = React.useContext(SettingsContext);

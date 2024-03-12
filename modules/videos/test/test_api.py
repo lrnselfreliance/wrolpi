@@ -251,8 +251,10 @@ def test_search_videos(test_session, video_factory, assert_video_search, simple_
     assert_video_search(assert_total=3, assert_ids=[vid1.id, vid2.id, vid3.id], order_by='published_datetime')
     assert_video_search(assert_total=3, assert_ids=[vid3.id, vid2.id, vid1.id], order_by='-published_datetime')
     assert_video_search(assert_total=3, assert_ids=[vid3.id, vid2.id], order_by='-published_datetime', limit=2)
-    assert_video_search(assert_total=3, assert_ids=[vid2.id, vid1.id], order_by='-published_datetime', limit=2, offset=1)
-    assert_video_search(assert_total=1, assert_ids=[vid2.id], order_by='-published_datetime', channel_id=simple_channel.id)
+    assert_video_search(assert_total=3, assert_ids=[vid2.id, vid1.id], order_by='-published_datetime', limit=2,
+                        offset=1)
+    assert_video_search(assert_total=1, assert_ids=[vid2.id], order_by='-published_datetime',
+                        channel_id=simple_channel.id)
     assert_video_search(assert_total=2, assert_ids=[vid1.id, vid2.id], tag_names=[tag1.name])
     assert_video_search(assert_total=2, assert_ids=[vid3.id, vid2.id], tag_names=[tag2.name])
     assert_video_search(assert_total=2, assert_ids=[vid1.id], tag_names=[tag1.name], limit=1)

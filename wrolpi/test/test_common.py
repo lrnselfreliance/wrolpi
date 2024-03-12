@@ -66,38 +66,38 @@ def test_insert_parameter():
     wherever that may be according to the function's signature.
     """
 
-    def func(foo, bar):
+    def func(foo, bar):  # noqa
         pass
 
     results = common.insert_parameter(func, 'bar', 'bar', (1,), {})
     assert results == ((1, 'bar'), {})
 
-    def func(foo, bar, baz):
+    def func(foo, bar, baz):  # noqa
         pass
 
     results = common.insert_parameter(func, 'bar', 'bar', (1, 2), {})
     assert results == ((1, 'bar', 2), {})
 
-    def func(foo, baz, bar=None):
+    def func(foo, baz, bar=None):  # noqa
         pass
 
     results = common.insert_parameter(func, 'bar', 'bar', (1, 2), {})
     assert results == ((1, 2, 'bar'), {})
 
-    def func(foo, baz, bar=None):
+    def func(foo, baz, bar=None):  # noqa
         pass
 
     results = common.insert_parameter(func, 'baz', 'baz', (1, 2), {})
     assert results == ((1, 'baz', 2), {})
 
-    def func(foo, baz, qux=None, bar=None):
+    def func(foo, baz, qux=None, bar=None):  # noqa
         pass
 
     results = common.insert_parameter(func, 'bar', 'bar', (1, 2, 3), {})
     assert results == ((1, 2, 3, 'bar'), {})
 
     # bar is not defined as a parameter!
-    def func(foo):
+    def func(foo):  # noqa
         pass
 
     pytest.raises(TypeError, common.insert_parameter, func, 'bar', 'bar', (1,), {})

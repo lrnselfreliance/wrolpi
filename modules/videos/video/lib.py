@@ -1,6 +1,5 @@
 import asyncio
 import random
-import tempfile
 from datetime import timedelta
 from typing import Tuple, Optional, List, Dict
 
@@ -9,7 +8,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from modules.videos.models import Video
-from wrolpi.common import run_after, logger, limit_concurrent, wrol_mode_check, chdir
+from wrolpi.common import run_after, logger, limit_concurrent, wrol_mode_check
 from wrolpi.dates import now
 from wrolpi.db import get_db_session, optional_session
 from wrolpi.downloader import download_manager

@@ -334,6 +334,7 @@ class Video(ModelHelper, Base):
         return video
 
     def add_tag(self, tag_or_tag_name: Union[Tag, str], session: Session = None) -> TagFile:
+        session = session or Session.object_session(self)
         tag = Tag.find_by_name(tag_or_tag_name) if isinstance(tag_or_tag_name, str) else tag_or_tag_name
         return self.file_group.add_tag(tag, session=session)
 

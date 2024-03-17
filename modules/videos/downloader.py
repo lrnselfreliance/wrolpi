@@ -41,8 +41,10 @@ ChannelIEs = {
 PREFERRED_VIDEO_EXTENSION = 'mp4'
 PREFERRED_VIDEO_FORMAT = ','.join([
     'res:720',  # Use the best 720p available first
-    '136+140',  # 130=720p video-only, 140= high quality audio only
+    '136+140',  # 130=720p video-only, 140=medium quality audio only
     '22',  # 720p video with audio
+    '135+140',  # 135=480p video-only, 140=medium quality audio only
+    '135+139',  # 135=480p video-only, 139=low quality audio only
     'mp4-480p',
     'bestvideo*+bestaudio/best',  # Download the highest resolution as a last resort (can be quite large).
 ])
@@ -382,11 +384,12 @@ class VideoDownloader(Downloader, ABC):
                             need_commit = True
                 location = video.location
 
+                await video.get_ffprobe_json()
+
                 if need_commit:
                     session.commit()
 
                 # Check that video has both audio and video streams.
-                await video.get_ffprobe_json()
                 if not video.get_streams_by_codec_type('video'):
                     return DownloadResult(
                         success=False,
@@ -399,6 +402,7 @@ class VideoDownloader(Downloader, ABC):
                         error='Video was downloaded but did not contain audio stream',
                         location=location,
                     )
+                logger.info(f'Successfully downloaded video {url} {video}')
 
             with get_db_session(commit=True) as session:
                 await Video.delete_duplicate_videos(session, download.url, entry['id'], video_path)
@@ -430,7 +434,6 @@ class VideoDownloader(Downloader, ABC):
             return DownloadResult(success=False, error=error, location=location)
 
         logger.debug(f'Downloaded video {location=}')
-        logger.info(f'Successfully downloaded video {url} {video}')
 
         result = DownloadResult(
             success=True,
@@ -499,6 +502,8 @@ class VideoDownloader(Downloader, ABC):
 
             if video.get_comments():
                 video.have_comments = True
+
+            await video.get_ffprobe_json()
 
         logger.debug(f'Downloaded video info json {location=}')
         logger.info(f'Successfully downloaded video info json {url} {video}')

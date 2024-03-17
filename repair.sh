@@ -119,6 +119,10 @@ systemctl enable renderd
 
 # Create the media directory.  This should be mounted by the maintainer.
 [ -d /media/wrolpi ] || mkdir /media/wrolpi
+# Create config directory if external drive is mounted, and is empty.
+if grep -qs /media/wrolpi /proc/mounts && [ -z "$(ls -A /media/wrolpi)" ] && [ ! -d /media/wrolpi/config ]; then
+  mkdir /media/wrolpi/config
+fi
 chown wrolpi:wrolpi /media/wrolpi
 
 chown -R wrolpi:wrolpi /home/wrolpi /opt/wrolpi*

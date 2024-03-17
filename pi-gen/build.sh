@@ -48,4 +48,6 @@ grep "04-run-chroot.sh completed" "${SCRIPT_DIR}/build.log" >/dev/null 2>&1 || (
 mv "${BUILD_DIR}"/deploy/*lite*xz "${SCRIPT_DIR}"/WROLPi-v"${VERSION}"-aarch64-lite.img.xz
 mv "${BUILD_DIR}"/deploy/*desktop*xz "${SCRIPT_DIR}"/WROLPi-v"${VERSION}"-aarch64-desktop.img.xz
 chmod 644 "${SCRIPT_DIR}"/*xz
-chown 1000:1000 "${SCRIPT_DIR}"/*xz
+chown -R 1000:1000 "${SCRIPT_DIR}"
+
+rm -rf "${BUILD_DIR}"

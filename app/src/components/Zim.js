@@ -259,6 +259,8 @@ const ZimAccordion = ({data, index, activeIndex, onClick, searchStr, activeTags}
         <Paginator activePage={pages.activePage} totalPages={pages.totalPages} onPageChange={pages.setPage}/>
     </center>;
 
+    const label = <Label color={estimate > 0 ? 'violet' : undefined}>{normalizeEstimate(estimate)}</Label>;
+
     return <React.Fragment>
         <AccordionTitle
             index={index}
@@ -266,7 +268,7 @@ const ZimAccordion = ({data, index, activeIndex, onClick, searchStr, activeTags}
             onClick={() => onClick(index, activeIndex)}
         >
             <Header as='h3'>
-                <Icon name='dropdown'/> {title} <Label>{normalizeEstimate(estimate)}</Label>
+                <Icon name='dropdown'/> {title} {label}
             </Header>
         </AccordionTitle>
         <AccordionContent active={index === activeIndex}>

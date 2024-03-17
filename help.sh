@@ -233,6 +233,11 @@ if [ -d "${MEDIA_DIRECTORY}" ] && [ -d ${MEDIA_DIRECTORY}/config ]; then
     echo "FAILED: Cannot modify media directory"
   fi
 fi
+if grep -qs "${MEDIA_DIRECTORY}" /proc/mounts >/dev/null 2>&1 ; then
+  echo "OK: Media directory is a mounted drive"
+else
+  echo "FAILED: Media directory is not a mounted drive.  (This is fine if you don't have an external drive.)"
+fi
 
 if curl -s http://0.0.0.0/media/ | grep "Index of" >/dev/null; then
   echo "OK: Media directory files are served by nginx"

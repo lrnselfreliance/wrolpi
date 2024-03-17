@@ -1121,60 +1121,6 @@ export const useUploadFile = () => {
     return {files, setFiles: handleFilesChange, progresses, destination, setDestination, doClear, doUpload}
 }
 
-export const useSearchZims = (defaultLimit) => {
-    const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit);
-    const {searchParams, updateQuery} = React.useContext(QueryContext);
-    const searchStr = searchParams.get('q') || '';
-
-    const [zims, setZims] = useState(null);
-    const [totalPages, setTotalPages] = useState(0);
-
-    const localSearchZims = async () => {
-        setZims(null);
-        try {
-            let [zims_,] = await searchZims(offset, limit, searchStr);
-            setZims(zims_);
-        } catch (e) {
-            console.error(e);
-            toast({
-                type: 'error',
-                title: 'Unexpected server response',
-                description: 'Could not get archives',
-                time: 5000,
-            });
-            setZims([]);
-        }
-    }
-
-    useEffect(() => {
-        localSearchZims();
-    }, [searchStr, limit, activePage, setZims]);
-
-    const setSearchStr = (value) => {
-        updateQuery({q: value, o: 0, order: undefined});
-    }
-
-    const setOrderBy = (value) => {
-        setPage(1);
-        updateQuery({order: value});
-    }
-
-    return {
-        zims,
-        limit,
-        setLimit,
-        offset,
-        setOrderBy,
-        totalPages,
-        activePage,
-        setPage,
-        searchStr,
-        setSearchStr,
-        fetchArchives: localSearchZims,
-    }
-}
-
-
 export const useSearchZim = (searchStr, zimId, active, activeTags, defaultLimit = 10) => {
     const [zim, setZim] = useState(null);
     const pages = usePages(defaultLimit);

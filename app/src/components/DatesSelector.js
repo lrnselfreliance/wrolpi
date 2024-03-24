@@ -4,13 +4,14 @@ import {Checkbox, Dropdown} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {monthNames} from "./Common";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
+import {useSearchDateRange, useSearchMonths} from "../hooks/customHooks";
 
 export const dateRangeIsEmpty = (dateRange) => {
     return dateRange[0] === null && dateRange[1] === null;
 }
 
 function MonthsForm({monthsSelected, setMonthsSelected}) {
-    monthsSelected = monthsSelected.map(i => parseInt(i));
+    monthsSelected = (monthsSelected || []).map(i => parseInt(i));
 
     const handleWinter = (e) => {
         if (e) e.preventDefault();
@@ -148,27 +149,20 @@ function DateRangeForm({dateRange, setDateRange}) {
     </React.Fragment>
 }
 
-export function DateSelectorButton({
-                                       onMonthsChange,
-                                       onDateRangeChange,
-                                       defaultMonthsSelected,
-                                       defaultDateRange,
-                                       buttonProps
-                                   }) {
-    const emptyDateRange = [null, null];
+export function DateSelectorButton({buttonProps}) {
+    const {dateRange, setDateRange, pendingDateRange, setPendingDateRange, clearDateRange} = useSearchDateRange();
+    const {months, setMonths, pendingMonths, setPendingMonths, clearMonths} = useSearchMonths();
 
     const [open, setOpen] = React.useState(false);
-    const [monthsSelected, setMonthsSelected] = React.useState(defaultMonthsSelected || []);
-    const [dateRange, setDateRange] = React.useState(defaultDateRange || emptyDateRange);
     const [color, setColor] = React.useState('grey');
 
     React.useEffect(() => {
-        if (monthsSelected.length > 0 || (!dateRangeIsEmpty(dateRange))) {
+        if (months.length > 0 || (!dateRangeIsEmpty(dateRange))) {
             setColor('violet');
         } else {
             setColor('grey');
         }
-    }, [JSON.stringify(dateRange), JSON.stringify(monthsSelected)]);
+    }, [JSON.stringify(dateRange), JSON.stringify(months)]);
 
     const handleOpen = (e) => {
         if (e) e.preventDefault();
@@ -179,25 +173,20 @@ export function DateSelectorButton({
         if (e) e.preventDefault();
         setOpen(false);
         // Only submit selection when user has closed selector.
-        if (onDateRangeChange && dateRange[0] <= dateRange[1]) {
-            onDateRangeChange(dateRange);
-        } else if (onDateRangeChange && dateRangeIsEmpty(dateRange)) {
-            //Clear the date range.
-            onDateRangeChange(dateRange);
+        if (pendingDateRange[0] <= pendingDateRange[1]) {
+            setDateRange(pendingDateRange);
+        } else if (dateRangeIsEmpty(dateRange)) {
+            // Clear the date range.
+            clearDateRange();
         }
-        if (onMonthsChange) {
-            onMonthsChange(monthsSelected);
-        }
-    }
-
-    const localOnSetDateRange = (newDateRange) => {
-        setDateRange(newDateRange);
+        setMonths(pendingMonths);
     }
 
     const handleClear = (e) => {
         if (e) e.preventDefault();
-        setDateRange(emptyDateRange);
-        setMonthsSelected([]);
+        clearDateRange();
+        clearMonths();
+        setOpen(false);
     }
 
     return <React.Fragment>
@@ -215,10 +204,10 @@ export function DateSelectorButton({
             <ModalHeader>Filter by Date</ModalHeader>
             <ModalContent>
                 <Segment>
-                    <DateRangeForm dateRange={dateRange} setDateRange={localOnSetDateRange}/>
+                    <DateRangeForm dateRange={pendingDateRange} setDateRange={setPendingDateRange}/>
                 </Segment>
                 <Segment>
-                    <MonthsForm monthsSelected={monthsSelected} setMonthsSelected={setMonthsSelected}/>
+                    <MonthsForm monthsSelected={pendingMonths} setMonthsSelected={setPendingMonths}/>
                 </Segment>
             </ModalContent>
             <ModalActions>

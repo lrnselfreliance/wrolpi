@@ -3,7 +3,6 @@ import {
     fetchDecoded,
     fetchDomains,
     fetchFilesProgress,
-    filesSearch,
     getArchive,
     getChannel,
     getChannels,
@@ -21,16 +20,13 @@ import {
     searchDirectories,
     searchVideos,
     searchZim,
-    searchZims,
     setHotspot,
     setThrottle,
 } from "../api";
-import {createSearchParams, useLocation, useSearchParams} from "react-router-dom";
-import {enumerate, filterToMimetypes, humanFileSize, secondsToFullDuration} from "../components/Common";
-import {QueryContext, SettingsContext, StatusContext} from "../contexts/contexts";
+import {createSearchParams, useLocation, useNavigate, useSearchParams} from "react-router-dom";
+import {defaultFileOrder, enumerate, humanFileSize, secondsToFullDuration} from "../components/Common";
+import {QueryContext, SearchGlobalContext, SettingsContext, StatusContext,} from "../contexts/contexts";
 import {toast} from "react-semantic-toasts-2";
-import {useSearch} from "../components/Search";
-import _ from "lodash";
 
 const calculatePage = (offset, limit) => {
     return offset && limit ? Math.round((offset / limit) + 1) : 1;
@@ -116,7 +112,7 @@ const getSearchParamCopy = (searchParams) => {
 
 const removeEmptyValues = (obj) => {
     Object.entries(obj).forEach(([k, v]) => {
-        // Clear any empty values.
+        // Delete any items that have null/undefined/empty-array values.
         if (v === null || v === undefined || (Array.isArray(v) && v.length === 0)) {
             delete obj[k];
         }
@@ -125,64 +121,67 @@ const removeEmptyValues = (obj) => {
 }
 
 
-export const useQuery = (defaultParams) => {
-    const location = useLocation();
-    const [searchParams, setSearchParams] = useSearchParams();
-    const [state, setState] = React.useState(defaultParams || getSearchParamCopy(searchParams));
-
-    React.useEffect(() => {
-        // Copy the state into the URL.
-        setSearchParams(state);
-        if (!_.isEmpty(state)) {
-            console.debug('Changing URL params', state);
-        }
-    }, [JSON.stringify(state)]);
-
-    React.useEffect(() => {
-        // Keep URL and state in sync.
-        setState(getSearchParamCopy(searchParams));
-    }, [JSON.stringify(searchParams)]);
-
-    const updateQuery = (newParams, replace = false) => {
-        // Update the old state with the new values.
-        setState(oldState => {
-            if (replace) {
-                // Ignore oldState because all values are going to be replaced.
-                return removeEmptyValues(newParams);
-            } else {
-                return removeEmptyValues({...oldState, ...newParams});
-            }
-        });
-    };
-
-    const getLocationStr = (newSearchParams, pathname) => {
-        // Get the current location, but with new params appended.
-        newSearchParams = {...state, ...newSearchParams};
-        const newQuery = createSearchParams(newSearchParams);
-        return `${pathname || location.pathname}?${newQuery.toString()}`
-    }
-
-    return {searchParams, updateQuery, getLocationStr}
-}
-
-
-export const QueryProvider = (props) => {
+export function QueryProvider({...props}) {
     const value = useQuery();
-
     return <QueryContext.Provider value={value}>
         {props.children}
     </QueryContext.Provider>
 }
 
-export const useOneQuery = (name) => {
+export const useQuery = () => {
+    // Used to control URL query parameters.
+
+    const location = useLocation();
+    const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [state, setState] = React.useState(getSearchParamCopy(searchParams));
+
+    React.useEffect(() => {
+        // Always copy URL to state.  URL may change outside useQuery.
+        setState(getSearchParamCopy(searchParams));
+    }, [JSON.stringify(location)]);
+
+    const updateQuery = (newParams, replace = false) => {
+        // Update the old state with the new values.
+        setState(oldState => {
+            console.debug(`updateParams replace=${replace}`, newParams, oldState);
+            const newState = replace ?
+                removeEmptyValues(newParams) : removeEmptyValues({...oldState, ...newParams});
+            setSearchParams(newState);
+            return newState;
+        });
+    };
+
+    const queryNavigate = (newSearchParams, pathname, replace = false) => {
+        // Navigate to a new page, but keep the state in sync with the params.
+        newSearchParams = replace ?
+            removeEmptyValues(newSearchParams) : removeEmptyValues({...state, ...newSearchParams});
+        const newQuery = createSearchParams(newSearchParams);
+        const newLocation = `${pathname || location.pathname}?${newQuery.toString()}`;
+        navigate(newLocation);
+    }
+
+    const clearQuery = () => setState({});
+
+    return {searchParams, setSearchParams, updateQuery, clearQuery, queryNavigate}
+}
+
+export const useOneQuery = (name, defaultValue = null, type) => {
     const {searchParams, updateQuery} = React.useContext(QueryContext);
-    const value = searchParams.get(name);
+    let value = searchParams.get(name) || defaultValue;
+    if (type && value) {
+        value = type(value)
+    }
 
     const setValue = (newValue, replace = false) => {
         updateQuery({[name]: newValue}, replace);
     }
 
-    return [value, setValue]
+    const clearValue = (replace = false) => {
+        setValue(defaultValue, replace);
+    }
+
+    return [value, setValue, clearValue]
 }
 
 export const useAllQuery = (name) => {
@@ -193,7 +192,11 @@ export const useAllQuery = (name) => {
         updateQuery({[name]: newValue}, replace);
     }
 
-    return [value, setValue]
+    const clearValue = (replace = false) => {
+        updateQuery({[name]: null}, replace);
+    }
+
+    return [value, setValue, clearValue]
 }
 
 export const useDomains = () => {
@@ -242,23 +245,23 @@ export const useArchive = (archiveId) => {
     return {archiveFile: archiveFileGroup, history, fetchArchive};
 }
 
-export const usePages = (defaultLimit = 24, totalPages = 0) => {
-    const {searchParams, updateQuery} = React.useContext(QueryContext);
-    const offset = searchParams.get('o') || 0;
-    const limit = parseInt(searchParams.get('l') || defaultLimit || 24);
-    const [activePage, setActivePage] = useState(calculatePage(offset, limit));
-    const [totalPages_, setTotalPages] = useState(totalPages);
-
-    const setLimit = (value) => {
-        setPage(1);
-        updateQuery({l: value, o: null});
-    }
+export const usePages = () => {
+    // o=0&l=24
+    const [offset, setOffset, clearOffset] = useOneQuery('o', 0);
+    const [limit, setLimit, clearLimit] = useOneQuery('l', 24, parseInt);
+    const activePage = calculatePage(offset, limit);
+    // This is set by the caller.
+    const [totalPages_, setTotalPages] = useState(1);
 
     const setPage = (value) => {
         console.debug(`setPage ${value}`);
-        setActivePage(value);
         value = value - 1;  // Page really starts as 0.
-        updateQuery({o: value * limit});
+        setOffset(value * limit);
+    }
+
+    const localSetLimit = (value) => {
+        setLimit(value);
+        setOffset(null);
     }
 
     const setTotal = (total) => {
@@ -270,29 +273,59 @@ export const usePages = (defaultLimit = 24, totalPages = 0) => {
     // Used for useEffect.
     const effect = JSON.stringify({offset, limit, activePage});
 
-    return {offset, limit, setLimit, activePage, setPage, totalPages: totalPages_, setTotal, effect};
+    const clearPages = () => {
+        clearOffset();
+        clearLimit();
+    }
+
+    return {
+        offset,
+        limit,
+        setLimit: localSetLimit,
+        activePage,
+        setPage,
+        totalPages: totalPages_,
+        setTotal,
+        effect,
+        clearPages
+    };
 }
 
-export const useSearchArchives = (defaultLimit) => {
+export const useSearchArchives = () => {
+    const {
+        pages,
+        searchStr, setSearchStr, clearSearch,
+        pendingSearchStr, setPendingSearchStr,
+        activeTags,
+        view,
+        order,
+        effect,
+        submitSearch,
+    } = React.useContext(SearchGlobalContext);
+
     const {domain} = useSearchDomain();
-    const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit);
-    const {searchParams, updateQuery} = React.useContext(QueryContext);
-    const searchStr = searchParams.get('q') || '';
-    const order = searchParams.get('order');
-    const activeTags = searchParams.getAll('tag');
-    const {view} = useSearchView();
     const headline = view === 'headline';
 
+    const [loading, setLoading] = useState(false);
     const [archives, setArchives] = useState(null);
     const [totalPages, setTotalPages] = useState(0);
 
     const localSearchArchives = async () => {
+        setLoading(true);
         setArchives(null);
         setTotalPages(0);
         try {
-            let [archives_, total] = await searchArchives(offset, limit, domain, searchStr, order, activeTags, headline);
+            let [archives_, total] = await searchArchives(
+                pages.offset,
+                pages.limit,
+                domain,
+                searchStr,
+                order || defaultFileOrder,
+                activeTags,
+                headline,
+            );
             setArchives(archives_);
-            setTotalPages(calculateTotalPages(total, limit));
+            setTotalPages(calculateTotalPages(total, pages.limit));
         } catch (e) {
             console.error(e);
             toast({
@@ -302,57 +335,64 @@ export const useSearchArchives = (defaultLimit) => {
                 time: 5000,
             });
             setArchives(undefined); // Could not get Archives, display error.
+        } finally {
+            setLoading(false);
         }
     }
 
     useEffect(() => {
+        // Search archives again whenever search params change.
         localSearchArchives();
-    }, [searchStr, limit, domain, order, activePage, JSON.stringify(activeTags), headline]);
-
-    const setSearchStr = (value) => {
-        updateQuery({q: value, o: 0, order: undefined});
-    }
-
-    const setOrderBy = (value) => {
-        setPage(1);
-        updateQuery({order: value});
-    }
+    }, [effect, domain]);
 
     return {
+        loading,
         archives,
-        limit,
-        setLimit,
-        offset,
+        limit: pages.limit,
+        setLimit: pages.setLimit,
+        offset: pages.offset,
         order,
-        setOrderBy,
+        setOrderBy: pages.setOrder,
         totalPages,
-        activePage,
-        setPage,
-        searchStr,
-        setSearchStr,
+        activePage: pages.activePage,
+        setPage: pages.setPage,
+        searchStr, setSearchStr,
+        pendingSearchStr, setPendingSearchStr,
         fetchArchives: localSearchArchives,
+        submitSearch, clearSearch,
     }
 }
 
-export const useSearchVideos = (defaultLimit, channelId, order_by) => {
-    const {searchParams, updateQuery} = React.useContext(QueryContext);
-    const {offset, limit, setLimit, activePage, setPage} = usePages(defaultLimit);
-    const searchStr = searchParams.get('q') || '';
-    const order = searchParams.get('order') || order_by;
-    const activeTags = searchParams.getAll('tag');
-    const {view} = useSearchView();
+export const useSearchVideos = (defaultLimit, channelId) => {
+    const {
+        pages,
+        searchStr, setSearchStr, clearSearch,
+        pendingSearchStr, setPendingSearchStr,
+        activeTags,
+        view,
+        order,
+        effect,
+        submitSearch,
+    } = React.useContext(SearchGlobalContext);
+
     const headline = view === 'headline';
 
     const [videos, setVideos] = useState(null);
-    const [totalPages, setTotalPages] = useState(0);
 
     const localSearchVideos = async () => {
         setVideos(null);
-        setTotalPages(0);
         try {
-            let [videos_, total] = await searchVideos(offset, limit, channelId, searchStr, order, activeTags, headline);
+            let [videos_, total] = await searchVideos(
+                pages.offset,
+                pages.limit,
+                channelId,
+                searchStr,
+                order || defaultFileOrder,
+                activeTags,
+                headline,
+            );
             setVideos(videos_);
-            setTotalPages(calculateTotalPages(total, limit));
+            pages.setTotal(total);
         } catch (e) {
             console.error(e);
             setVideos(undefined);// Could not get Videos, display error.
@@ -360,30 +400,22 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
     }
 
     useEffect(() => {
+        // Search videos again whenever search params change.
         localSearchVideos();
-    }, [searchStr, limit, channelId, offset, order_by, JSON.stringify(activeTags), headline]);
-
-    const setSearchStr = (value) => {
-        updateQuery({q: value, o: 0, order: undefined});
-    }
-
-    const setOrderBy = (value) => {
-        setPage(1);
-        updateQuery({order: value});
-    }
+    }, [effect, channelId]);
 
     return {
         videos,
-        totalPages,
-        limit,
-        offset,
+        totalPages: pages.totalPages,
+        limit: pages.limit,
+        activePage: pages.activePage,
+        setPage: pages.setPage,
+        setLimit: pages.setLimit,
+        setOrderBy: pages.setOrder,
+        offset: pages.offset,
         order,
-        searchStr,
-        activePage,
-        setPage,
-        setLimit,
-        setSearchStr,
-        setOrderBy,
+        searchStr, setSearchStr, clearSearch, submitSearch,
+        pendingSearchStr, setPendingSearchStr,
         fetchVideos: localSearchVideos,
         activeTags,
     }
@@ -495,85 +527,6 @@ export const useChannels = () => {
     }, []);
 
     return {channels, fetchChannels}
-}
-
-export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) => {
-    const {
-        activeTags,
-        pages,
-        searchStr,
-        filter,
-        model: model_,
-        setSearchStr,
-        months,
-        dateRange,
-    } = useSearch(defaultLimit, emptySearch, model);
-    const {view} = useSearchView();
-
-    const [searchFiles, setSearchFiles] = useState(null);
-    const headline = view === 'headline';
-
-    const localSearchFiles = async () => {
-        if (!emptySearch && !searchStr && !activeTags) {
-            return;
-        }
-        const mimetypes = filterToMimetypes(filter);
-        setSearchFiles(null);
-        let fromYear;
-        let toYear;
-        if (dateRange) {
-            fromYear = dateRange[0];
-            toYear = dateRange[1];
-        }
-        try {
-            let [file_groups, total] = await filesSearch(
-                pages.offset, pages.limit, searchStr, mimetypes, model || model_, activeTags, headline,
-                months, fromYear, toYear);
-            setSearchFiles(file_groups);
-            pages.setTotal(total);
-        } catch (e) {
-            pages.setTotal(0);
-            console.error(e);
-            toast({
-                type: 'error',
-                title: 'Unexpected server response',
-                description: 'Could not get files',
-                time: 5000,
-            });
-        }
-    }
-
-    // Only search after the user has stopped typing.  Estimates will always happen.
-    const debouncedLocalSearchFiles = _.debounce(async () => {
-        await localSearchFiles();
-    }, 1000);
-
-    useEffect(() => {
-        if (searchStr || (activeTags && activeTags.length > 0)) {
-            debouncedLocalSearchFiles();
-        }
-        // Handle when this is unmounted.
-        return () => debouncedLocalSearchFiles.cancel();
-    }, [
-        searchStr,
-        pages.effect,
-        filter,
-        model,
-        model_,
-        JSON.stringify(activeTags),
-        headline,
-        JSON.stringify(months),
-        JSON.stringify(dateRange),
-    ]);
-
-    return {
-        searchFiles,
-        searchStr,
-        filter,
-        setSearchStr,
-        pages,
-        activeTags
-    };
 }
 
 export const useBrowseFiles = () => {
@@ -785,10 +738,6 @@ export const useSettings = () => {
         }
     }
 
-    useEffect(() => {
-        fetchSettings();
-    }, []);
-
     return {settings, fetchSettings};
 }
 
@@ -963,51 +912,131 @@ export const useStatistics = () => {
 }
 
 export const useSearchFilter = () => {
+    // Filter implies more than one mimetype.  See `filterToMimetypes`
+    // video, image, etc.
+    const {updateQuery} = React.useContext(QueryContext);
     const [filter, setFilter] = useOneQuery('filter');
-    return {filter, setFilter}
+    const localSetFilter = (newFilter) => {
+        // Set new search string, go back to first page.
+        updateQuery({'filter': newFilter, 'o': 0});
+    }
+    const clearFilter = () => setFilter(null);
+    return {filter, setFilter: localSetFilter, clearFilter}
 }
 
 export const useSearchDomain = () => {
     const [domains] = useDomains();
     const [domain, setDomain] = useOneQuery('domain');
-    return {domain, domains, setDomain}
+    const clearDomain = () => setDomain(null);
+    return {domain, domains, setDomain, clearDomain}
+}
+
+export const useSearchModel = () => {
+    // archive/video/ebook/etc.
+    const [model, setModel] = useOneQuery('model');
+    const clearModel = () => setModel(null);
+    return {model, setModel, clearModel}
 }
 
 export const useSearchView = () => {
+    // view=...
     const [view, setView] = useOneQuery('view');
-    return {view, setView}
+    const clearView = () => setView(null);
+    return {view, setView, clearView}
 }
 
 export const useSearchOrder = () => {
-    const [sort, setSort] = useOneQuery('order');
-    return {sort, setSort}
+    // o=...
+    let [order, setOrder] = useOneQuery('order');
+    const clearOrder = () => setOrder(null);
+    return {order, setOrder, clearOrder}
+}
+
+export const useSearchStr = () => {
+    const {searchParams, updateQuery, clearQuery, queryNavigate} = React.useContext(QueryContext);
+    const searchStr = searchParams.get('q');
+    // What the user is typing, can be submitted later.
+    const [pendingSearchStr, setPendingSearchStr] = React.useState(searchStr);
+
+    const setSearchStr = (newSearchStr) => {
+        // Set new search string, go back to first page.
+        updateQuery({'q': newSearchStr, 'o': 0});
+    }
+
+    const clearSearchStr = () => {
+        setPendingSearchStr(''); // Use empty string for text inputs.
+        clearQuery(); // Clear any URL parameters that may exist.
+    }
+
+    const submitSearch = (newSearchStr) => setSearchStr(newSearchStr || pendingSearchStr);
+
+    // Submit pending search string, navigate to first page of results on /search.
+    const submitGlobalSearch = (newSearchStr) => queryNavigate({q: newSearchStr || pendingSearchStr, o: 0}, '/search');
+
+    return {
+        searchStr,
+        setSearchStr,
+        clearSearchStr,
+        pendingSearchStr,
+        setPendingSearchStr,
+        submitSearch,
+        submitGlobalSearch,
+        searchParams,
+    }
+}
+
+export const useSearchTags = () => {
+    // tag=Name1&tag=Name2
+    const [activeTags, setSearchTags] = useAllQuery('tag');
+
+    const addTag = (name) => setSearchTags([...activeTags, name]);
+    const removeTag = (name) => setSearchTags(activeTags.filter(i => i !== name));
+    const clearTags = () => setSearchTags([]);
+
+    return {activeTags, setSearchTags, addTag, removeTag, clearTags}
 }
 
 export const useSearchMonths = () => {
     const {searchParams, updateQuery} = React.useContext(QueryContext);
     const months = searchParams.getAll('month');
-
+    const [pendingMonths, setPendingMonths] = React.useState(months);
     const setMonths = (newMonths) => {
         // Set new months, go back to first page.
-        updateQuery({'month': newMonths, 'o': 0});
+        updateQuery({'month': newMonths, 'o': null});
+    };
+
+    const clearMonths = () => {
+        setMonths([]);
+        setPendingMonths([]);
     }
 
-    return {months, setMonths}
+    return {months, setMonths, pendingMonths, setPendingMonths, clearMonths}
 }
 
+
 export const useSearchDateRange = () => {
+    // fromDate=...&toDate=...
     const {searchParams, updateQuery} = React.useContext(QueryContext);
+
+    const emptyDateRange = [null, null];
     let fromDate = searchParams.get('fromDate');
     let toDate = searchParams.get('toDate');
     fromDate = fromDate ? parseInt(fromDate) : null;
     toDate = toDate ? parseInt(toDate) : null;
+    const [pendingDateRange, setPendingDateRange] = React.useState([fromDate, toDate]);
 
     const setDateRange = ([newFromDate, newToDate]) => {
         // Set new date range, go back to first page.
         updateQuery({fromDate: newFromDate, toDate: newToDate, 'o': 0});
     }
 
-    return {dateRange: [fromDate, toDate], setDateRange}
+    const clearDateRange = () => {
+        console.log('clearDateRange');
+        setDateRange(emptyDateRange);
+        setPendingDateRange(emptyDateRange);
+    }
+
+    return {dateRange: [fromDate, toDate], setDateRange, pendingDateRange, setPendingDateRange, clearDateRange}
 }
 
 export const useUploadFile = () => {

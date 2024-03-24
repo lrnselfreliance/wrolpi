@@ -799,6 +799,45 @@ async def test_move_files(test_session, test_directory, make_files_structure):
 
 
 @pytest.mark.asyncio
+async def test_move_deep_directory(test_session, test_directory, make_files_structure):
+    """Moving files/directories from one deep directory to another is supported."""
+    baz, foo, quuz_mp4, quuz_txt, quux = make_files_structure({
+        'foo/foo.txt': 'foo',
+        'foo/bar/baz.txt': 'baz',
+        'foo/qux/quux.txt': 'quux',
+        'foo/quuz.txt': 'quuz text',  # this text file will be moved when it's MP4 is moved.
+        'foo/quuz.mp4': 'quuz mp4',
+    })
+    assert foo.name == 'foo.txt' \
+           and baz.name == 'baz.txt' \
+           and quux.name == 'quux.txt' \
+           and quuz_mp4.name == 'quuz.mp4' \
+           and quuz_txt.name == 'quuz.txt', \
+        'Test directory was not initiated correctly.'
+    bar, qux = baz.parent, quux.parent
+    dest = test_directory / 'deep/dest'
+
+    # mv foo/bar foo/qux foo/quuz.mp4 deep/dest
+    await lib.move(dest, bar, qux, quuz_mp4)
+
+    # Unrelated files and directories are untouched.
+    assert not (test_directory / 'deep/dest/foo').is_dir(), 'foo/ should not have been moved.'
+    assert (test_directory / 'foo').is_dir(), 'foo/ should not be deleted.'
+    assert (test_directory / 'foo/foo.txt').read_text() == 'foo', 'foo.txt should not be moved.'
+
+    # Files are moved, preserving the name of their directory.
+    assert (test_directory / 'deep/dest/bar').is_dir(), 'foo/bar/ was not moved'
+    assert (test_directory / 'deep/dest/bar/baz.txt').is_file(), 'foo/bar/baz.txt was not moved'
+    assert (test_directory / 'deep/dest/bar/baz.txt').read_text() == 'baz', 'foo/bar/baz.txt has wrong contents.'
+    assert (test_directory / 'deep/dest/qux/quux.txt').read_text() == 'quux', 'quux.txt has the wrong contents'
+    assert (test_directory / 'deep/dest/quuz.txt').read_text() == 'quuz text', 'quuz.txt has the wrong contents'
+    assert (test_directory / 'deep/dest/quuz.mp4').read_text() == 'quuz mp4', 'quuz.mp4 has the wrong contents'
+
+    # Old directory was removed.
+    assert not (test_directory / 'foo/bar').is_dir(), 'bar directory was not moved'
+
+
+@pytest.mark.asyncio
 async def test_move_directory(test_session, test_directory, make_files_structure, assert_directories):
     """A Directory record is deleted when it's directory is deleted."""
     make_files_structure({

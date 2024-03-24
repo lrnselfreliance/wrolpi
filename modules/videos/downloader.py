@@ -368,26 +368,22 @@ class VideoDownloader(Downloader, ABC):
                 video.source_id = entry['id']
                 video.channel_id = channel_id
                 video_id, video_info_json_path = video.id, video.info_json_path
+                session.commit()
 
             if video_info_json_path:
                 format_json_file(video_info_json_path)
 
-            with get_db_session() as session:
+            with get_db_session(commit=True) as session:
                 # Second session is started because SQLAlchemy will forget what we have done.
-                need_commit = False
                 video = Video.get_by_id(video_id, session)
                 if download.settings and (tag_names := download.settings.get('tag_names')):
                     existing_names = video.file_group.tag_names
                     for name in tag_names:
                         if name not in existing_names:
                             video.add_tag(name)
-                            need_commit = True
                 location = video.location
 
                 await video.get_ffprobe_json()
-
-                if need_commit:
-                    session.commit()
 
                 # Check that video has both audio and video streams.
                 if not video.get_streams_by_codec_type('video'):

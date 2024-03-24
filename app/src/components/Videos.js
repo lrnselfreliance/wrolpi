@@ -4,8 +4,6 @@ import {
     APIButton,
     CardLink,
     CardPoster,
-    defaultSearchOrder,
-    defaultVideoOrder,
     Duration,
     encodeMediaPath,
     ErrorMessage,
@@ -45,7 +43,7 @@ import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {Button, Card, Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
 import {deleteVideos} from "../api";
-import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
+import {Media, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
 
 export function VideoWrapper() {
@@ -60,22 +58,19 @@ export function VideoWrapper() {
 }
 
 function VideosPage() {
-
     const {channelId} = useParams();
-    const {searchParams} = React.useContext(QueryContext);
     const [selectedVideos, setSelectedVideos] = useState([]);
 
-    let searchOrder = defaultVideoOrder;
-    if (searchParams.get('order')) {
-        // Use whatever order the user specified.
-        searchOrder = searchParams.get('order');
-    } else if (searchParams.get('q')) {
-        // User used a search_str
-        searchOrder = defaultSearchOrder;
-    }
+    const {
+        searchStr, clearSearch, submitSearch,
+        videos,
+        activePage,
+        setPage,
+        totalPages,
+        fetchVideos,
+    } = useSearchVideos(null, channelId);
 
-    const {searchStr, setSearchStr, videos, activePage, setPage, totalPages, fetchVideos} =
-        useSearchVideos(null, channelId, searchOrder);
+    const [pendingSearchStr, setPendingSearchStr] = useState(searchStr);
 
     const {channel} = useChannel(channelId);
 
@@ -175,11 +170,11 @@ function VideosPage() {
         !!searchStr,
     );
 
-    const [localSearchStr, setLocalSearchStr] = React.useState(searchStr || '');
     const searchInput = <SearchInput
-        searchStr={localSearchStr}
-        onChange={setLocalSearchStr}
-        onSubmit={setSearchStr}
+        searchStr={pendingSearchStr}
+        onChange={setPendingSearchStr}
+        onSubmit={() => submitSearch(pendingSearchStr)}
+        onClear={clearSearch}
         placeholder='Search Videos...'
     />;
 
@@ -233,11 +228,14 @@ function VideosStatistics() {
     const videoNames = [
         {key: 'videos', label: 'Videos'},
         {key: 'sum_size', label: 'Total Size'},
-        {key: 'max_size', label: 'Largest Video'},
+        {key: 'max_size', label: 'Largestcd Video'},
         {key: 'week', label: 'Downloads Past Week'},
         {key: 'month', label: 'Downloads Past Month'},
         {key: 'year', label: 'Downloads Past Year'},
         {key: 'sum_duration', label: 'Total Duration'},
+        {key: 'have_comments', label: 'Have Comments'},
+        {key: 'no_comments', label: 'Missing Comments'},
+        {key: 'failed_comments', label: 'Failed Comments'},
     ];
     const historicalNames = [
         {key: 'average_count', label: 'Average Monthly Downloads'},
@@ -347,8 +345,8 @@ export function VideoCard({file}) {
 
 export function VideoRowCells({file}) {
     const {video} = file;
-    let {sort} = useSearchOrder();
-    sort = sort ? sort.replace(/^-+/, '') : null;
+    let {order} = useSearchOrder();
+    order = order ? order.replace(/^-+/, '') : null;
 
     let video_url = `/videos/video/${video.id}`;
     const poster_path = findPosterPath(file);
@@ -367,13 +365,13 @@ export function VideoRowCells({file}) {
     }
 
     let dataCell = file.published_datetime ? isoDatetimeToString(file.published_datetime) : '';
-    if (sort === 'length') {
+    if (order === 'length') {
         dataCell = secondsToFullDuration(file.length || 0);
-    } else if (sort === 'size') {
+    } else if (order === 'size') {
         dataCell = humanFileSize(file.size);
-    } else if (sort === 'view_count') {
+    } else if (order === 'view_count') {
         dataCell = humanNumber(video.view_count || 0);
-    } else if (sort === 'viewed') {
+    } else if (order === 'viewed') {
         dataCell = isoDatetimeToString(file.viewed);
     }
 

@@ -501,7 +501,7 @@ export function ChannelsPage() {
     useTitle('Channels');
 
     const {channels} = useChannels();
-    const [searchStr, setSearchStr] = useOneQuery('name');
+    const [searchStr, setSearchStr, clearSearchStr] = useOneQuery('name');
     // Hides Channels with few videos.
     const [hideSmall, setHideSmall] = React.useState(true);
     const enoughChannelsToHideSmall = channels && channels.length > 10;
@@ -515,7 +515,7 @@ export function ChannelsPage() {
                         size='large'
                         searchStr={searchStr}
                         disabled={!Array.isArray(channels) || channels.length === 0}
-                        onClear={() => setSearchStr('')}
+                        onClear={clearSearchStr}
                         onChange={setSearchStr}
                         onSubmit={null}
                     />

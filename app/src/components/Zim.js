@@ -56,9 +56,8 @@ import {
     zimSubscribe,
     zimUnsubscribe
 } from "../api";
-import {useSearch} from "./Search";
 import {TagsQuerySelector} from "./Files";
-import {ThemeContext} from "../contexts/contexts";
+import {SearchGlobalContext, ThemeContext} from "../contexts/contexts";
 import {Link, Route, Routes} from "react-router-dom";
 import {SortableTable} from "./SortableTable";
 import {toast} from "react-semantic-toasts-2";
@@ -291,7 +290,7 @@ const ZimsRefreshWarning = () => {
 
 export const ZimSearchView = ({suggestions, loading}) => {
     const [activeIndex, setActiveIndex] = React.useState(null);
-    const {searchStr, activeTags, setTags} = useSearch();
+    const {searchStr, activeTags, setTags} = React.useContext(SearchGlobalContext);
     const {zimsEstimates} = suggestions;
 
     const handleClick = (index, activeIndex_) => {

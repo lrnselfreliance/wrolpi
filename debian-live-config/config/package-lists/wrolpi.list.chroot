@@ -12,6 +12,7 @@ catdoc
 chromium
 cpufrequtils
 curl
+ethtool
 exfat-fuse
 ffmpeg
 firefox-esr
@@ -62,6 +63,7 @@ netcat-openbsd
 network-manager
 nginx-doc
 nginx-full
+nicstat
 nodejs
 npm
 osm2pgsql
@@ -86,6 +88,7 @@ rsync
 software-properties-common
 sudo
 tar
+tcpdump
 tmux
 unzip
 vim

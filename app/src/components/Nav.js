@@ -1,12 +1,12 @@
 import React from "react";
 import {NavLink} from "react-router-dom";
 import {Dropdown, Menu} from "semantic-ui-react";
-import {Media, ThemeContext} from "../contexts/contexts";
+import {Media, SearchGlobalContext, ThemeContext} from "../contexts/contexts";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {CPUTemperatureIcon, DarkModeToggle, HotspotStatusIcon, NAME, SystemLoadIcon} from "./Common";
 import {ShareButton} from "./Share";
 import {useWROLMode} from "../hooks/customHooks";
-import {SearchIconButton} from "./Search";
+import {SearchIconButton, useSearchGlobal} from "./Search";
 
 const links = [
     {text: 'Videos', to: '/videos', key: 'videos'},
@@ -77,7 +77,9 @@ export function NavBar() {
         <NavIconWrapper><ShareButton/></NavIconWrapper>
         <NavIconWrapper><HotspotStatusIcon/></NavIconWrapper>
         <NavIconWrapper><DarkModeToggle/></NavIconWrapper>
-        <span style={{marginTop: '0.5em'}}><SearchIconButton/></span>
+        <span style={{marginTop: '0.5em'}}>
+            <SearchIconButton/>
+        </span>
     </React.Fragment>;
 
     return <>

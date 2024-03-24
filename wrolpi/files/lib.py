@@ -1143,7 +1143,8 @@ def _move(destination: pathlib.Path, *sources: pathlib.Path) -> List[Tuple[pathl
         if source.is_dir():
             # Recursively move the directory's files.
             for path in walk(source):
-                new_file = destination / path.relative_to(media_directory)
+                # Preserve the directory structure that contains this file.
+                new_file = destination / source.name / path.relative_to(source)
                 if new_file.exists():
                     raise FileConflict(f'Cannot move {path} to {new_file} because it already exists')
                 if path not in unique_paths:

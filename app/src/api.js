@@ -387,7 +387,6 @@ export async function deleteArchives(archiveIds) {
     const response = await apiDelete(`${API_URI}/archive/${i}`);
     if (response.status !== 204) {
         const content = await response.json();
-        console.debug(content);
         throw Error(content['error']);
     }
 }

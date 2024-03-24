@@ -1,15 +1,27 @@
 import React, {useState} from "react";
 import {Route, Routes, useNavigate} from "react-router-dom";
 import {FilesSearchView} from "./Files";
-import {useLatestRequest, usePages, useSearchDateRange, useSearchFilter, useSearchMonths} from "../hooks/customHooks";
+import {
+    useLatestRequest,
+    usePages,
+    useSearchDateRange,
+    useSearchFilter,
+    useSearchModel,
+    useSearchMonths,
+    useSearchOrder,
+    useSearchStr,
+    useSearchTags,
+    useSearchView
+} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
-import {searchEstimateZims, searchSuggestions} from "../api";
+import {filesSearch, searchEstimateZims, searchSuggestions} from "../api";
 import {filterToMimetypes, fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
 import _ from "lodash";
 import {TagsContext} from "../Tags";
 import {Button as SButton, Header as SHeader, Label} from "semantic-ui-react";
 import {Modal, ModalContent} from "./Theme";
-import {QueryContext} from "../contexts/contexts";
+import {QueryContext, SearchGlobalContext} from "../contexts/contexts";
+import {toast} from "react-semantic-toasts-2";
 
 const SUGGESTED_APPS = [
     {location: '/admin', title: 'Downloads', description: 'View and control your downloads'},
@@ -35,127 +47,125 @@ const SUGGESTED_APPS = [
     {location: '/zim/manage', title: 'Manage Zim', description: 'Manage your Zims'},
 ];
 
-export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {
-    const navigate = useNavigate();
+export const useSearchQuery = () => {
+    // The URL query parameters used to filter FileGroups and Zims.
 
+    const {clearQuery} = React.useContext(QueryContext);
+    // q=...
+    const {
+        searchStr, setSearchStr, submitSearch, submitGlobalSearch,
+        pendingSearchStr, setPendingSearchStr,
+    } = useSearchStr();
+    // month=1&month=2
     const {months, setMonths} = useSearchMonths();
+    // fromDate=...&toDate=...
     const {dateRange, setDateRange} = useSearchDateRange();
-    const {searchParams, updateQuery, getLocationStr} = React.useContext(QueryContext);
-    // `searchStr` means actually fetch the files/zims.
-    const searchStr = searchParams.get('q');
-    // User can search only by Tags, `searchStr` not required.
-    const activeTags = searchParams.getAll('tag');
-    const pages = usePages(defaultLimit, totalPages);
-    // text/html, video*, image*, etc.
-    const filter = searchParams.get('filter');
+    // tag=Name1&tag=Name2
+    const {activeTags, setSearchTags, addTag, removeTag} = useSearchTags();
+    // o=0&l=24
+    const pages = usePages();
+    // video, image, etc.
+    const {filter, setFilter} = useSearchFilter();
     // archive/video/ebook/etc.
-    const model_ = searchParams.get('model') || model;
+    const {model, setModel} = useSearchModel();
+    // view=highlight
+    const {view, setView} = useSearchView()
+    // o=...
+    const {order, setOrder} = useSearchOrder();
 
-    const setSearchStr = (value) => {
-        const searchQuery = {q: value, o: 0};
-        if (filter) {
-            searchQuery['filter'] = filter;
-        }
-        const location = getLocationStr(searchQuery, '/search');
-        navigate(location);
-    }
+    // TODO global clear button does nothing
+
+    // Shorthand for React.useEffect to detect when these values change.
+    const effect = JSON.stringify({
+        searchStr, months, dateRange, activeTags, pages: pages.effect, filter, model, view, order
+    });
 
     const clearSearch = () => {
-        navigate({pathname: window.location.pathname, search: ''});
-    }
-
-    const setTags = (tags) => {
-        updateQuery({tag: tags});
-    }
-
-    const addTag = (name) => {
-        const newTags = [...activeTags, name];
-        setTags(newTags);
-    }
-
-    const removeTag = (name) => {
-        const newTags = activeTags.filter(i => i !== name);
-        setTags(newTags);
+        clearQuery();
+        setPendingSearchStr('');
     }
 
     return {
-        activeTags,
-        addTag,
-        filter,
-        model: model_,
-        pages,
-        removeTag,
-        searchParams,
-        searchStr,
-        setSearchStr,
-        clearSearch,
-        setTags,
+        searchStr, setSearchStr, clearSearch, pendingSearchStr, setPendingSearchStr, submitSearch, submitGlobalSearch,
         months, setMonths,
         dateRange, setDateRange,
+        activeTags, setSearchTags, addTag, removeTag,
+        pages,
+        filter, setFilter,
+        model, setModel,
+        view, setView,
+        order, setOrder,
+        effect,
     }
 }
 
-export function useSuggestions(searchStr, tagNames, filter) {
-    const defaultSuggestions = {
+export function SearchGlobalProvider({...props}) {
+    const value = useSearchGlobal();
+    return <SearchGlobalContext.Provider value={value}>
+        {props.children}
+    </SearchGlobalContext.Provider>
+}
+
+export const useSearchGlobal = () => {
+    // Used to search Files and Zims.  Modifies URL query when user submits search.
+    const emptySearch = false;
+
+    const navigate = useNavigate();
+    const {queryNavigate} = React.useContext(QueryContext);
+    const {SingleTag, fuzzyMatchTagsByName} = React.useContext(TagsContext);
+
+    const searchQuery = useSearchQuery();
+    const {
+        searchStr, clearSearch, pendingSearchStr, setPendingSearchStr, submitSearch, submitGlobalSearch,
+        months, setMonths,
+        dateRange, setDateRange,
+        activeTags, setSearchTags, addTag, removeTag,
+        pages,
+        filter, setFilter,
+        model,
+        view, setView,
+        order, setOrder,
+    } = searchQuery;
+
+    const [searchFiles, setSearchFiles] = useState(null);
+    const headline = view === 'headline';
+
+    const emptySuggestions = {
         fileGroups: [],
         channels: [],
         domains: [],
         zimsEstimates: [],
     }
-    const [suggestions, setSuggestions] = React.useState(defaultSuggestions);
-    const {months} = useSearchMonths();
-    const {dateRange} = useSearchDateRange();
+    const [suggestions, setSuggestions] = React.useState(emptySuggestions);
     // fileGroups/channels/domains.
-    const {data, sendRequest, loading} = useLatestRequest(500);
+    const {data: filesData, sendRequest: sendFilesRequest, loading: filesLoading} = useLatestRequest(500);
     // Zims are slow, so they are separate.
     const {data: zimData, sendRequest: sendZimRequest, loading: zimLoading} = useLatestRequest(500);
 
-    React.useEffect(() => {
-        if ((searchStr && searchStr.length > 0) || (tagNames && tagNames.length > 0)) {
+    const fetchSuggestions = () => {
+        if ((pendingSearchStr && pendingSearchStr.length > 0) || (activeTags && activeTags.length > 0)) {
             const mimetypes = filterToMimetypes(filter);
-            sendRequest(async () => await searchSuggestions(searchStr, tagNames, mimetypes, months, dateRange));
-            sendZimRequest(async () => await searchEstimateZims(searchStr, tagNames));
+            sendFilesRequest(async () => await searchSuggestions(pendingSearchStr, activeTags, mimetypes, months, dateRange));
+            sendZimRequest(async () => await searchEstimateZims(pendingSearchStr, activeTags));
         }
-    }, [
-        searchStr,
-        sendRequest,
-        sendZimRequest,
-        JSON.stringify(tagNames),
-        JSON.stringify(months),
-        JSON.stringify(dateRange),
-    ]);
+    }
 
     React.useEffect(() => {
-        if (!_.isEmpty(data)) {
+        if (!_.isEmpty(filesData)) {
             setSuggestions({
                 ...suggestions,
-                channels: data.channels,
-                fileGroups: data.fileGroups,
-                domains: data.domains,
+                channels: filesData.channels,
+                fileGroups: filesData.fileGroups,
+                domains: filesData.domains,
             });
         }
-    }, [JSON.stringify(data)]);
+    }, [JSON.stringify(filesData)]);
 
     React.useEffect(() => {
         if (!_.isEmpty(zimData)) {
             setSuggestions({...suggestions, zimsEstimates: zimData.zimsEstimates});
         }
     }, [JSON.stringify(zimData)]);
-
-    return {suggestions, loading: loading || zimLoading}
-}
-
-
-export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
-    const navigate = useNavigate();
-    const {filter} = useSearchFilter();
-    const [searchStr, setSearchStr] = React.useState(defaultSearchStr || '');
-    const [searchTags, setSearchTags] = React.useState(defaultTagNames);
-    const {SingleTag, fuzzyMatchTagsByName} = React.useContext(TagsContext);
-    const {months, setMonths} = useSearchMonths();
-    const {dateRange, setDateRange} = useSearchDateRange();
-    const {suggestions, loading} = useSuggestions(searchStr, searchTags, filter);
-    const {getLocationStr} = React.useContext(QueryContext);
 
     // The results that will be displayed by <Search>.
     const [suggestionsResults, setSuggestionsResults] = useState({});
@@ -166,7 +176,7 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
 
     const normalizeSuggestionsResults = (newSuggestions) => {
         // Convert the suggestions from the Backend to what the Semantic <Search> expects.
-        const lowerSearchStr = searchStr ? searchStr.toLowerCase() : '';
+        const lowerPendingStr = pendingSearchStr ? pendingSearchStr.toLowerCase() : '';
 
         let results = {};
 
@@ -178,7 +188,7 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
                         title: newSuggestions.fileGroups.toString(),
                         type: 'files',
                         // Add search query onto current location.
-                        location: getLocationStr({q: searchStr}, '/search'),
+                        location: [{q: pendingSearchStr}, '/search'],
                     }
                 ]
             };
@@ -194,7 +204,11 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
             results.zimsSum = {
                 name: 'Zims', results: [
                     // Navigating to Zims is not relative. We don't want to keep filters or other extra params.
-                    {title: zimSum.toString(), type: 'zims', location: `/search/zim?q=${encodeURIComponent(searchStr)}`}
+                    {
+                        title: zimSum.toString(),
+                        type: 'zims',
+                        location: [{q: pendingSearchStr}, '/search/zim'],
+                    }
                 ],
             };
         } else if (newSuggestions && zimSum === 0) {
@@ -215,25 +229,25 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
                         title: i.domain,
                         id: i.id,
                         domain: i.domain,
-                        location: `/archive?domain=${i.domain}`
+                        location: [{domain: i.domain}, '/archive'],
                     }
                 })
             }
         }
 
         // Match at most 5 Tags.
-        const matchingTags = searchStr ? fuzzyMatchTagsByName(searchStr).slice(0, 5) : null;
+        const matchingTags = pendingSearchStr ? fuzzyMatchTagsByName(pendingSearchStr).slice(0, 5) : null;
         if (matchingTags && matchingTags.length > 0) {
             results.tags = {
                 name: 'Tags', results: matchingTags.map(i => {
-                    return {type: 'tag', title: i.name, location: `/search?tag=${encodeURIComponent(i.name)}`}
+                    return {type: 'tag', title: i.name, location: [{tag: i.name}, '/search']}
                 })
             }
         }
 
         const matchingApps = SUGGESTED_APPS.filter(i =>
-            i.title.toLowerCase().includes(lowerSearchStr)
-            || fuzzyMatch(i.title.toLowerCase(), lowerSearchStr));
+            i.title.toLowerCase().includes(lowerPendingStr)
+            || fuzzyMatch(i.title.toLowerCase(), lowerPendingStr));
         if (matchingApps && matchingApps.length > 0) {
             // Match at most 5 apps.
             results.apps = {name: 'Apps', results: matchingApps.slice(0, 5)};
@@ -261,9 +275,12 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
 
     // User clicked on a result in the dropdown.
     const handleResultSelect = ({result}) => {
-        if (result.location) {
-            console.info(`useSearchSuggestions Navigating: ${result.location}`)
+        if (typeof result.location === 'string') {
+            console.info(`queryNavigate string: ${result.location}`);
             navigate(result.location);
+        } else if (Array.isArray(result.location) && result.location.length === 2) {
+            console.info(`queryNavigate special: ${result.location}`);
+            queryNavigate(result.location[0], result.location[1]);
         } else {
             console.error('No location to navigate');
         }
@@ -284,29 +301,70 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
         return <span>{title}</span>
     };
 
+    const fetchFiles = async () => {
+        if (!emptySearch && !searchStr && !activeTags) {
+            return;
+        }
+        const mimetypes = filterToMimetypes(filter);
+        setSearchFiles(null);
+        let fromYear;
+        let toYear;
+        if (dateRange) {
+            fromYear = dateRange[0];
+            toYear = dateRange[1];
+        }
+        try {
+            let [file_groups, total] = await filesSearch(
+                pages.offset, pages.limit, searchStr, mimetypes, model, activeTags, headline,
+                months, fromYear, toYear);
+            setSearchFiles(file_groups);
+            pages.setTotal(total);
+        } catch (e) {
+            pages.setTotal(0);
+            console.error(e);
+            toast({
+                type: 'error',
+                title: 'Unexpected server response',
+                description: 'Could not get files',
+                time: 5000,
+            });
+        }
+    }
+
+    const localSetSearchStr = (newSearchStr) => {
+        queryNavigate({q: newSearchStr, o: null});
+    }
+
     return {
-        suggestions,
-        suggestionsResults,
-        suggestionsSums,
-        searchStr, setSearchStr,
-        setSearchTags,
+        loading: filesLoading || zimLoading,
+        pages,
+        searchStr, setSearchStr: localSetSearchStr, clearSearch,
+        pendingSearchStr, setPendingSearchStr, submitSearch, submitGlobalSearch,
+        filter, setFilter,
         months, setMonths,
-        handleResultSelect,
-        resultRenderer,
-        loading,
         dateRange, setDateRange,
+        activeTags, setSearchTags, addTag, removeTag,
+        view, setView,
+        order, setOrder,
+        suggestions, suggestionsResults, suggestionsSums,
+        searchFiles,
+        resultRenderer,
+        handleResultSelect,
+        effect: searchQuery.effect,
+        fetchSuggestions, fetchFiles,
     }
 }
 
 
-export function SearchView({suggestions, suggestionsSums, loading}) {
+export function SearchView() {
+    const {suggestions, suggestionsSums, loading} = React.useContext(SearchGlobalContext);
 
     const filesTabName = <span>Files <Label>{normalizeEstimate(suggestionsSums?.fileGroups)}</Label></span>;
     const zimsTabName = <span>Zims <Label>{normalizeEstimate(suggestionsSums?.zims)}</Label></span>;
 
     const links = [
-        {text: filesTabName, to: '/search', key: 'filesSearch', end: true},
-        {text: zimsTabName, to: '/search/zim', key: 'zimsSearch'},
+        {text: filesTabName, to: '/search', key: 'filesSearch', end: true, replace: false},
+        {text: zimsTabName, to: '/search/zim', key: 'zimsSearch', replace: false},
     ];
 
     return <React.Fragment>
@@ -325,9 +383,9 @@ export function SearchIconButton() {
         handleResultSelect,
         resultRenderer,
         loading,
-        searchStr,
-        setSearchStr,
-    } = useSearchSuggestions();
+        pendingSearchStr, setPendingSearchStr, clearSearch, submitGlobalSearch,
+        fetchSuggestions,
+    } = React.useContext(SearchGlobalContext);
     const [open, setOpen] = React.useState(false);
 
     const localHandleResultSelect = (i) => {
@@ -336,20 +394,40 @@ export function SearchIconButton() {
         handleResultSelect(i);
     }
 
+    const localSubmitSearch = () => {
+        // Close modal when user searches.  Use the global search page.
+        submitGlobalSearch();
+        setOpen(false);
+    }
+
+    React.useEffect(() => {
+        // Fetch suggestions only when this modal is open and user is typing.
+        if (open) {
+            fetchSuggestions();
+        }
+    }, [pendingSearchStr]);
+
     return <React.Fragment>
-        <SButton icon='search' onClick={() => setOpen(!open)} color='blue'/>
+        <SButton
+            icon='search'
+            color='blue'
+            style={{padding: '0.6em', paddingBottom: '0.55em'}}
+            onClick={() => setOpen(!open)}
+        />
         <Modal open={open} onClose={() => setOpen(false)} centered={false}>
             <ModalContent>
                 <SearchResultsInput clearable
-                                    searchStr={searchStr}
-                                    onChange={setSearchStr}
-                                    onSubmit={setSearchStr}
+                                    searchStr={pendingSearchStr}
+                                    onChange={setPendingSearchStr}
+                                    onSubmit={localSubmitSearch}
+                                    onClear={clearSearch}
                                     size='large'
                                     placeholder='Search everywhere...'
                                     results={suggestionsResults}
                                     handleResultSelect={localHandleResultSelect}
                                     resultRenderer={resultRenderer}
                                     loading={loading}
+                                    autoFocus={true}
                 />
             </ModalContent>
         </Modal>

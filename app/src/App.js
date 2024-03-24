@@ -21,6 +21,7 @@ import {SemanticToastContainer} from "react-semantic-toasts-2";
 import {FilePreviewProvider} from "./components/FilePreview";
 import {TagsProvider} from "./Tags";
 import {ZimRoute} from "./components/Zim";
+import {SearchGlobalProvider} from "./components/Search";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);
@@ -64,13 +65,15 @@ function Root() {
     return <QueryProvider>
         <ThemeProvider>
             <TagsProvider>
-                <FilePreviewProvider>
-                    <header>
-                        <NavBar/>
-                    </header>
-                    <Outlet/>
-                    <Footer/>
-                </FilePreviewProvider>
+                <SearchGlobalProvider>
+                    <FilePreviewProvider>
+                        <header>
+                            <NavBar/>
+                        </header>
+                        <Outlet/>
+                        <Footer/>
+                    </FilePreviewProvider>
+                </SearchGlobalProvider>
             </TagsProvider>
         </ThemeProvider>
     </QueryProvider>

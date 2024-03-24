@@ -35,8 +35,6 @@ import {
     useAllQuery,
     useFilesProgressInterval,
     usePages,
-    useSearchFiles,
-    useSearchFilter,
     useSearchView,
     useStatusFlag,
     useWROLMode
@@ -45,7 +43,7 @@ import {Route, Routes} from "react-router-dom";
 import {CardPlaceholder} from "./Placeholder";
 import {ArchiveCard, ArchiveRowCells} from "./Archive";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
-import {Media, ThemeContext} from "../contexts/contexts";
+import {Media, SearchGlobalContext, ThemeContext} from "../contexts/contexts";
 import {
     Button,
     Card,
@@ -373,14 +371,24 @@ export function FilesView(
 }
 
 export function SearchFilter({filters = [], modalHeader, size = 'medium'}) {
-    const {filter, setFilter} = useSearchFilter();
+    const {filter, setFilter} = React.useContext(SearchGlobalContext);
     const [open, setOpen] = useState(false);
+    const [pendingFilter, setPendingFilter] = React.useState(filter);
 
     const handleOpen = (e) => {
         if (e) {
             e.preventDefault();
         }
         setOpen(true);
+    }
+
+    const handleClose = (e) => {
+        // Submit selection when closing modal.
+        if (e) e.preventDefault();
+        if (pendingFilter) {
+            setFilter(pendingFilter);
+        }
+        setOpen(false);
     }
 
     const handleClear = (e) => {
@@ -396,9 +404,9 @@ export function SearchFilter({filters = [], modalHeader, size = 'medium'}) {
             <Checkbox radio
                       label={i['text']}
                       name='searchFilterRadioGroup'
-                      checked={filter === i['value']}
+                      checked={pendingFilter === i['value']}
                       value={i['value']}
-                      onChange={() => setFilter(i['value'])}
+                      onChange={() => setPendingFilter(i['value'])}
             />
         </Form.Field>
     );
@@ -408,7 +416,7 @@ export function SearchFilter({filters = [], modalHeader, size = 'medium'}) {
 
     if (filters && filters.length > 0) {
         return <>
-            <Modal open={open} onOpen={() => handleOpen()} onClose={() => setOpen(false)} closeIcon>
+            <Modal open={open} onOpen={() => handleOpen()} onClose={handleClose} closeIcon>
                 {modalHeader || <ModalHeader>Filter</ModalHeader>}
                 <ModalContent>
                     <Form>
@@ -476,7 +484,7 @@ export function FilesSearchView({
                                     model,
                                 }) {
 
-    const {searchFiles, pages} = useSearchFiles(24, emptySearch, model);
+    const {searchFiles, pages} = React.useContext(SearchGlobalContext);
 
     const {body, paginator, selectButton, viewButton, limitDropdown, tagQuerySelector} = FilesView(
         searchFiles,

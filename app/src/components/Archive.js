@@ -5,7 +5,6 @@ import {
     CardHeader,
     CardMeta,
     Container,
-    Dropdown,
     GridColumn,
     GridRow,
     Image,
@@ -39,7 +38,7 @@ import {
 import {deleteArchives, postDownload, tagFileGroup, untagFileGroup} from "../api";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useArchive, useDomains, useSearchArchives, useSearchDomain, useSearchOrder} from "../hooks/customHooks";
+import {useArchive, useDomains, useSearchArchives, useSearchOrder} from "../hooks/customHooks";
 import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
@@ -379,31 +378,6 @@ export function DomainsPage() {
     </>;
 }
 
-export function SearchDomain() {
-    // A Dropdown which allows the user to filter by Archive domains.
-    const {domain, domains, setDomain} = useSearchDomain();
-
-    const handleChange = (e, {value}) => {
-        setDomain(value);
-    }
-
-    let domainOptions = [];
-
-    if (domains && domains.length > 0) {
-        domainOptions = domains.map(i => {
-            return {key: i['domain'], value: i['domain'], text: i['domain']}
-        });
-    }
-    return <>
-        <Dropdown selection search clearable fluid
-                  placeholder='Domains'
-                  options={domainOptions}
-                  onChange={handleChange}
-                  value={domain}
-        />
-    </>
-}
-
 function ArchivesPage() {
     const [selectedArchives, setSelectedArchives] = useState([]);
 
@@ -414,8 +388,9 @@ function ArchivesPage() {
         totalPages,
         activePage,
         setPage,
-        searchStr,
-        setSearchStr,
+        searchStr, clearSearch,
+        pendingSearchStr, setPendingSearchStr,
+        submitSearch,
         fetchArchives,
     } = useSearchArchives();
 
@@ -492,12 +467,11 @@ function ArchivesPage() {
         !!searchStr,
     );
 
-
-    const [localSearchStr, setLocalSearchStr] = React.useState(searchStr || '');
     const searchInput = <SearchInput
-        onChange={setLocalSearchStr}
-        searchStr={localSearchStr}
-        onSubmit={setSearchStr}
+        onChange={setPendingSearchStr}
+        searchStr={pendingSearchStr}
+        onSubmit={submitSearch}
+        onClear={clearSearch}
         placeholder='Search Archives...'
     />;
 
@@ -535,8 +509,8 @@ function ArchivesPage() {
 
 export function ArchiveRowCells({file}) {
     const {data} = file;
-    let {sort} = useSearchOrder();
-    sort = sort ? sort.replace(/^-+/, '') : null;
+    let {order} = useSearchOrder();
+    order = order ? order.replace(/^-+/, '') : null;
 
     const archiveUrl = `/archive/${data.id}`;
     const posterPath = findPosterPath(file);
@@ -552,13 +526,13 @@ export function ArchiveRowCells({file}) {
     }
 
     let dataCell = file.published_datetime ? isoDatetimeToString(file.published_datetime) : '';
-    if (sort === 'published_modified_datetime') {
+    if (order === 'published_modified_datetime') {
         dataCell = file.published_modified_datetime ? isoDatetimeToString(file.published_modified_datetime) : '';
-    } else if (sort === 'download_datetime') {
+    } else if (order === 'download_datetime') {
         dataCell = file.download_datetime ? isoDatetimeToString(file.download_datetime) : '';
-    } else if (sort === 'size') {
+    } else if (order === 'size') {
         dataCell = humanFileSize(file.size);
-    } else if (sort === 'viewed') {
+    } else if (order === 'viewed') {
         dataCell = isoDatetimeToString(file.viewed);
     }
 
@@ -579,13 +553,14 @@ export function ArchiveRowCells({file}) {
 
 export function ArchiveRoute() {
     const links = [
-        {text: 'Archives', to: '/archive', end: true},
-        {text: 'Domains', to: '/archive/domains'},
+        {text: 'Archives', to: '/archive', end: true, replace: true},
+        {text: 'Domains', to: '/archive/domains', replace: true},
     ];
+
     return <PageContainer>
         <TabLinks links={links}/>
         <Routes>
-            <Route path='/' element={<ArchivesPage/>}/>
+            <Route path='/*' element={<ArchivesPage/>}/>
             <Route path='domains' element={<DomainsPage/>}/>
             <Route path=':archiveId' element={<ArchivePage/>}/>
         </Routes>

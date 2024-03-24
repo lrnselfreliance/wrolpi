@@ -10,11 +10,11 @@ import {MoreRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/Inventory";
 import {ArchiveRoute} from "./components/Archive";
 import {FilesRoute} from "./components/Files";
-import {QueryProvider, StatusProvider} from "./hooks/customHooks";
+import {StatusProvider, useQuery} from "./hooks/customHooks";
 import {MapRoute} from "./components/Map";
-import {MediaContextProvider, mediaStyles, StatusContext, ThemeContext} from "./contexts/contexts";
+import {MediaContextProvider, mediaStyles, QueryContext, StatusContext, ThemeContext} from "./contexts/contexts";
 import {Header, ThemeProvider} from "./components/Theme";
-import {DashboardPage} from "./DashboardPage";
+import {DashboardWrapper} from "./DashboardPage";
 import {DonatePage} from "./components/DonatePage";
 import {useEventsInterval} from "./Events";
 import {SemanticToastContainer} from "react-semantic-toasts-2";
@@ -61,7 +61,10 @@ function HelpPage() {
 }
 
 function Root() {
-    return <QueryProvider>
+    const queryContext = useQuery();
+    queryContext.id = 'root';
+
+    return <QueryContext.Provider value={queryContext}>
         <ThemeProvider>
             <TagsProvider>
                 <FilePreviewProvider>
@@ -73,7 +76,7 @@ function Root() {
                 </FilePreviewProvider>
             </TagsProvider>
         </ThemeProvider>
-    </QueryProvider>
+    </QueryContext.Provider>
 }
 
 const router = createBrowserRouter(createRoutesFromElements(<Route
@@ -81,8 +84,8 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     element={<Root/>}
     errorElement={<PageNotFound/>}
 >
-    <Route index element={<DashboardPage/>}/>
-    <Route path='search/*' element={<DashboardPage/>}/>
+    <Route index element={<DashboardWrapper/>}/>
+    <Route path='search/*' element={<DashboardWrapper/>}/>
     <Route path='donate' element={<DonatePage/>}/>
     <Route path='videos/video/:videoId' exact element={<VideoWrapper/>}/>
     <Route path='videos/channel/:channelId/video/:videoId' exact element={<VideoWrapper/>}/>

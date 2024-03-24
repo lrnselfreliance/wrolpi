@@ -482,7 +482,11 @@ async def get_statistics():
             -- sum of all video file sizes
             COALESCE(SUM(fg.size), 0)::BIGINT AS "sum_size",
             -- largest video
-            COALESCE(MAX(fg.size), 0) AS "max_size"
+            COALESCE(MAX(fg.size), 0) AS "max_size",
+            -- Videos may or may not have comments.
+            COUNT(v.id) FILTER ( WHERE v.have_comments = TRUE ) AS "have_comments",
+            COUNT(v.id) FILTER ( WHERE  v.have_comments = FALSE ) AS "no_comments",
+            COUNT(v.id) FILTER ( WHERE  v.comments_failed = TRUE ) AS "failed_comments"
         FROM
             video v
             LEFT JOIN file_group fg on v.file_group_id = fg.id

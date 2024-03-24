@@ -1,11 +1,12 @@
 import {LoadStatistic, PageContainer, SearchResultsInput, useTitle} from "./components/Common";
 import React, {useContext, useState} from "react";
-import {Media, SettingsContext, StatusContext} from "./contexts/contexts";
+import {Media, SearchGlobalContext, SettingsContext, StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
 import {
     Button,
     Divider,
     Header,
+    Loader,
     Modal,
     ModalContent,
     ModalHeader,
@@ -13,16 +14,16 @@ import {
     Statistic,
     StatisticGroup
 } from "./components/Theme";
-import {Link, useNavigate} from "react-router-dom";
+import {Link} from "react-router-dom";
 import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
 import {ProgressPlaceholder} from "./components/Placeholder";
-import {GridColumn, GridRow, Icon, Message} from "semantic-ui-react";
+import {Dimmer, GridColumn, GridRow, Icon, Message} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {refreshFiles} from "./api";
 import _ from "lodash";
 import {TagsDashboard} from "./Tags";
 import {Upload} from "./components/Upload";
-import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
+import {SearchView, useSearchGlobal} from "./components/Search";
 import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
 import {useWROLMode} from "./hooks/customHooks";
 import {FileSearchFilterButton} from "./components/Files";
@@ -155,33 +156,20 @@ export function Getters() {
 }
 
 export function DashboardPage() {
-    const navigate = useNavigate();
-
-    // The search the user submitted.
-    const {searchStr, setSearchStr, activeTags} = useSearch();
-    // The search that the user is typing.
-    const [localSearchStr, setLocalSearchStr] = React.useState(searchStr);
     const {
-        suggestions,
+        searchStr, setSearchStr, clearSearch, fetchSuggestions, searchFiles,
+        pendingSearchStr, setPendingSearchStr,
+        activeTags,
         suggestionsResults,
-        suggestionsSums,
         handleResultSelect,
         resultRenderer,
         loading,
-        setSearchStr: setSuggestionSearchStr,
         setSearchTags,
         months, setMonths,
         dateRange, setDateRange,
-    } = useSearchSuggestions(searchStr, activeTags);
+    } = React.useContext(SearchGlobalContext);
+    // The search that the user is typing.
     const {status} = useContext(StatusContext);
-
-    React.useEffect(() => {
-        setSuggestionSearchStr(localSearchStr);
-    }, [localSearchStr]);
-
-    React.useEffect(() => {
-        setLocalSearchStr(searchStr);
-    }, [searchStr]);
 
     React.useEffect(() => {
         if (activeTags) {
@@ -208,16 +196,24 @@ export function DashboardPage() {
     </React.Fragment>;
     if (searchStr || (activeTags && activeTags.length > 0)) {
         // User has submitted and wants full search.
-        body = <SearchView suggestions={suggestions} suggestionsSums={suggestionsSums} loading={loading}/>;
+        body = <>
+            {loading && <Dimmer active><Loader size='large'/></Dimmer>}
+            <SearchView/>
+        </>;
     }
+
+    React.useEffect(() => {
+        // Fetch suggestions when user is typing.
+        fetchSuggestions();
+    }, [pendingSearchStr]);
 
     const getSearchResultsInput = (props) => {
         return <SearchResultsInput clearable
-                                   searchStr={localSearchStr}
-                                   onChange={setLocalSearchStr}
+                                   searchStr={pendingSearchStr}
+                                   onChange={setPendingSearchStr}
                                    onSubmit={setSearchStr}
                                    placeholder='Search everywhere...'
-                                   onClear={() => navigate('/')}
+                                   onClear={clearSearch}
                                    style={{marginBottom: '2em'}}
                                    results={suggestionsResults}
                                    handleResultSelect={handleResultSelect}
@@ -284,6 +280,14 @@ export function DashboardPage() {
         {!searchStr && <FlagsMessages flags={status['flags']}/>}
         {body}
     </PageContainer>
+}
+
+export function DashboardWrapper() {
+    const value = useSearchGlobal();
+
+    return <SearchGlobalContext.Provider value={value}>
+        <DashboardPage/>
+    </SearchGlobalContext.Provider>
 }
 
 function DashboardStatus() {

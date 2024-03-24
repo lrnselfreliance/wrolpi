@@ -39,7 +39,14 @@ import {
     TableCell
 } from "semantic-ui-react";
 import {ChannelEditPage, ChannelNewPage, ChannelsPage} from "./Channels";
-import {useChannel, useSearchOrder, useSearchVideos, useVideo, useVideoStatistics} from "../hooks/customHooks";
+import {
+    useChannel,
+    useQuery,
+    useSearchOrder,
+    useSearchVideos,
+    useVideo,
+    useVideoStatistics
+} from "../hooks/customHooks";
 import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
@@ -60,9 +67,9 @@ export function VideoWrapper() {
 }
 
 function VideosPage() {
-
     const {channelId} = useParams();
-    const {searchParams} = React.useContext(QueryContext);
+    const queryContext = React.useContext(QueryContext);
+    const {searchParams} = queryContext;
     const [selectedVideos, setSelectedVideos] = useState([]);
 
     let searchOrder = defaultVideoOrder;
@@ -74,8 +81,15 @@ function VideosPage() {
         searchOrder = defaultSearchOrder;
     }
 
-    const {searchStr, setSearchStr, videos, activePage, setPage, totalPages, fetchVideos} =
-        useSearchVideos(null, channelId, searchOrder);
+    const {
+        searchStr, clearSearch, submitSearch,
+        pendingSearchStr, setPendingSearchStr,
+        videos,
+        activePage,
+        setPage,
+        totalPages,
+        fetchVideos,
+    } = useSearchVideos(null, channelId, searchOrder);
 
     const {channel} = useChannel(channelId);
 
@@ -175,11 +189,11 @@ function VideosPage() {
         !!searchStr,
     );
 
-    const [localSearchStr, setLocalSearchStr] = React.useState(searchStr || '');
     const searchInput = <SearchInput
-        searchStr={localSearchStr}
-        onChange={setLocalSearchStr}
-        onSubmit={setSearchStr}
+        searchStr={pendingSearchStr}
+        onChange={setPendingSearchStr}
+        onSubmit={submitSearch}
+        onClear={clearSearch}
         placeholder='Search Videos...'
     />;
 
@@ -233,11 +247,14 @@ function VideosStatistics() {
     const videoNames = [
         {key: 'videos', label: 'Videos'},
         {key: 'sum_size', label: 'Total Size'},
-        {key: 'max_size', label: 'Largest Video'},
+        {key: 'max_size', label: 'Largestcd Video'},
         {key: 'week', label: 'Downloads Past Week'},
         {key: 'month', label: 'Downloads Past Month'},
         {key: 'year', label: 'Downloads Past Year'},
         {key: 'sum_duration', label: 'Total Duration'},
+        {key: 'have_comments', label: 'Have Comments'},
+        {key: 'no_comments', label: 'Missing Comments'},
+        {key: 'failed_comments', label: 'Failed Comments'},
     ];
     const historicalNames = [
         {key: 'average_count', label: 'Average Monthly Downloads'},
@@ -270,6 +287,9 @@ function VideosStatistics() {
 }
 
 export function VideosRoute(props) {
+    const videosQueryContext = useQuery();
+    videosQueryContext.id = 'videos';
+
     const links = [
         {text: 'Videos', to: '/videos', key: 'videos', end: true},
         {text: 'Channels', to: '/videos/channel', key: 'channel'},
@@ -278,14 +298,16 @@ export function VideosRoute(props) {
 
     return <PageContainer>
         <TabLinks links={links}/>
-        <Routes>
-            <Route path='/' exact element={<VideosPage/>}/>
-            <Route path='channel' exact element={<ChannelsPage/>}/>
-            <Route path='statistics' exact element={<VideosStatistics/>}/>
-            <Route path='channel/new' exact element={<ChannelNewPage/>}/>
-            <Route path='channel/:channelId/edit' exact element={<ChannelEditPage/>}/>
-            <Route path='channel/:channelId/video' exact element={<VideosPage/>}/>
-        </Routes>
+        <QueryContext.Provider value={videosQueryContext}>
+            <Routes>
+                <Route path='/' exact element={<VideosPage/>}/>
+                <Route path='channel' exact element={<ChannelsPage/>}/>
+                <Route path='statistics' exact element={<VideosStatistics/>}/>
+                <Route path='channel/new' exact element={<ChannelNewPage/>}/>
+                <Route path='channel/:channelId/edit' exact element={<ChannelEditPage/>}/>
+                <Route path='channel/:channelId/video' exact element={<VideosPage/>}/>
+            </Routes>
+        </QueryContext.Provider>
     </PageContainer>
 }
 
@@ -347,8 +369,8 @@ export function VideoCard({file}) {
 
 export function VideoRowCells({file}) {
     const {video} = file;
-    let {sort} = useSearchOrder();
-    sort = sort ? sort.replace(/^-+/, '') : null;
+    let {order} = useSearchOrder();
+    order = order ? order.replace(/^-+/, '') : null;
 
     let video_url = `/videos/video/${video.id}`;
     const poster_path = findPosterPath(file);
@@ -367,13 +389,13 @@ export function VideoRowCells({file}) {
     }
 
     let dataCell = file.published_datetime ? isoDatetimeToString(file.published_datetime) : '';
-    if (sort === 'length') {
+    if (order === 'length') {
         dataCell = secondsToFullDuration(file.length || 0);
-    } else if (sort === 'size') {
+    } else if (order === 'size') {
         dataCell = humanFileSize(file.size);
-    } else if (sort === 'view_count') {
+    } else if (order === 'view_count') {
         dataCell = humanNumber(video.view_count || 0);
-    } else if (sort === 'viewed') {
+    } else if (order === 'viewed') {
         dataCell = isoDatetimeToString(file.viewed);
     }
 

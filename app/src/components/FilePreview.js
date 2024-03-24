@@ -8,7 +8,7 @@ import {fetchFile, getFile, tagFileGroup, untagFileGroup} from "../api";
 import {StlViewer} from "react-stl-viewer";
 import {Button, Modal, ModalActions, ModalContent, ModalHeader} from "./Theme";
 import {toast} from "react-semantic-toasts-2";
-import {useOneQuery} from "../hooks/customHooks";
+import {useOneQuery, useQuery} from "../hooks/customHooks";
 import {ShareButton} from "./Share";
 
 function getMediaPathURL(previewFile) {

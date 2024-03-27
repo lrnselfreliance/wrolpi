@@ -402,7 +402,6 @@ export function scrollToTopOfElement(element, smooth = true) {
 
 const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small', placeholder = 'Search...', icon = 'search') => {
     const [value, setValue] = useState(searchStr || '');
-    const [submitted, setSubmitted] = useState(false);
 
     React.useEffect(() => {
         // Search was changed above.
@@ -419,7 +418,6 @@ const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small
             e.preventDefault();
         }
         setValue(e.target.value);
-        setSubmitted(false);
         if (onChange) {
             // Try to call the remote function, don't let its failure break this.
             try {
@@ -431,13 +429,10 @@ const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small
     }
 
     const handleClearSearch = (e) => {
+        console.log('handleClearSearch');
         e.preventDefault();
         // Clear the input when the "clear" button is clicked, search again.
         setValue('');
-        setSubmitted(false);
-        if (onSubmit) {
-            onSubmit('');
-        }
         if (onClear) {
             onClear();
         }
@@ -446,7 +441,6 @@ const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small
     const localOnSubmit = (e) => {
         // Send the value up when submitting.
         e.preventDefault();
-        setSubmitted(true);
         if (onSubmit) {
             onSubmit(value);
         } else {
@@ -464,7 +458,7 @@ const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small
     />;
 
     // Can only clear after submitting.
-    let action = submitted ? clearButton : <Button type='button' icon={icon} size='big'/>;
+    let action = searchStr ? clearButton : <Button type='button' icon={icon} size='big'/>;
 
     const input = <Input fluid
                          placeholder={placeholder}
@@ -476,7 +470,7 @@ const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small
                          action={action}
     />;
 
-    return {value, submitted, clearButton, input, localOnSubmit, handleChange}
+    return {value, clearButton, input, localOnSubmit, handleChange}
 }
 
 export function SearchInput({
@@ -551,6 +545,7 @@ export function SearchResultsInput({
                 resultRenderer={resultRenderer}
                 className='search-input'
                 loading={loading}
+                autoFocus={autoFocus}
         />
         {clearable === true && <div style={{marginLeft: '1em'}}>{clearButton}</div>}
     </Form>
@@ -588,7 +583,7 @@ export function TabLinks({links}) {
 
     return <Menu tabular>
         {links.map((link) => <NavLink
-            to={getTo(link.to)}
+            to={link.replace ? link.to : getTo(link.to)}
             className='item'
             style={{padding: '1em'}}
             key={link.to}
@@ -1338,14 +1333,14 @@ export const encodeMediaPath = (path) => {
 }
 
 export function SortButton({sorts = []}) {
-    const {sort, setSort} = useSearchOrder();
+    const {order, setOrder} = useSearchOrder();
 
     if (!sorts || (sorts && sorts.length === 0)) {
         console.error('No sorts have been defined!');
     }
 
-    const [localSort, setLocalSort] = useState(sort ? sort.replaceAll(/^-/g, '') : null);
-    const [desc, setDesc] = useState(sort ? sort.startsWith('-') : true);
+    const [localSort, setLocalSort] = useState(order ? order.replaceAll(/^-/g, '') : null);
+    const [desc, setDesc] = useState(order ? order.startsWith('-') : true);
     const [open, setOpen] = useState(false);
 
     // Remove the - from the front of the query sort, it will be added when toggling direction.
@@ -1354,9 +1349,9 @@ export function SortButton({sorts = []}) {
 
     useEffect(() => {
         if (localSort) {
-            const newSort = desc ? `-${localSort}` : localSort;
-            console.debug(`Setting new sort: ${newSort}`)
-            setSort(newSort);
+            const newOrder = desc ? `-${localSort}` : localSort;
+            console.debug(`Setting new order: ${newOrder}`)
+            setOrder(newOrder);
         }
     }, [localSort, desc]);
 

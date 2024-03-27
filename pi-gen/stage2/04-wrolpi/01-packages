@@ -13,6 +13,7 @@ chromium-browser
 chromium-chromedriver
 cpufrequtils
 curl
+ethtool
 exfat-fuse
 ffmpeg
 fonts-noto-cjk
@@ -60,6 +61,7 @@ netcat-openbsd
 network-manager
 nginx-doc
 nginx-full
+nicstat
 nodejs
 npm
 osm2pgsql
@@ -83,6 +85,7 @@ renderd
 rsync
 software-properties-common
 tar
+tcpdump
 tmux
 unzip
 vim

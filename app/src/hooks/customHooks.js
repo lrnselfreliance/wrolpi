@@ -23,12 +23,11 @@ import {
     setHotspot,
     setThrottle,
 } from "../api";
-import {createSearchParams, useLocation, useSearchParams} from "react-router-dom";
+import {createSearchParams, useLocation, useNavigate, useSearchParams} from "react-router-dom";
 import {enumerate, humanFileSize, secondsToFullDuration} from "../components/Common";
-import {QueryContext, SettingsContext, StatusContext,} from "../contexts/contexts";
+import {QueryContext, SearchGlobalContext, SettingsContext, StatusContext,} from "../contexts/contexts";
 import {toast} from "react-semantic-toasts-2";
 import _ from "lodash";
-import {useSearchQuery} from "../components/Search";
 
 const calculatePage = (offset, limit) => {
     return offset && limit ? Math.round((offset / limit) + 1) : 1;
@@ -114,7 +113,7 @@ const getSearchParamCopy = (searchParams) => {
 
 const removeEmptyValues = (obj) => {
     Object.entries(obj).forEach(([k, v]) => {
-        // Clear any empty values.
+        // Delete any items that have null/undefined/empty-array values.
         if (v === null || v === undefined || (Array.isArray(v) && v.length === 0)) {
             delete obj[k];
         }
@@ -123,10 +122,20 @@ const removeEmptyValues = (obj) => {
 }
 
 
-export const useQuery = (defaultParams) => {
+export function QueryProvider({...props}) {
+    const value = useQuery();
+    return <QueryContext.Provider value={value}>
+        {props.children}
+    </QueryContext.Provider>
+}
+
+export const useQuery = () => {
+    // Used to control URL query parameters.
+
     const location = useLocation();
+    const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
-    const [state, setState] = React.useState(defaultParams || getSearchParamCopy(searchParams));
+    const [state, setState] = React.useState(getSearchParamCopy(searchParams));
 
     React.useEffect(() => {
         // Copy the state into the URL.
@@ -138,12 +147,14 @@ export const useQuery = (defaultParams) => {
 
     React.useEffect(() => {
         // Keep URL and state in sync.
+        console.debug('useQuery location=', location);
         setState(getSearchParamCopy(searchParams));
-    }, [JSON.stringify(searchParams)]);
+    }, [JSON.stringify(location)]);
 
     const updateQuery = (newParams, replace = false) => {
         // Update the old state with the new values.
         setState(oldState => {
+            console.debug(`updateParams replace=${replace}`, newParams, oldState);
             if (replace) {
                 // Ignore oldState because all values are going to be replaced.
                 return removeEmptyValues(newParams);
@@ -153,16 +164,18 @@ export const useQuery = (defaultParams) => {
         });
     };
 
-    const getLocationStr = (newSearchParams, pathname) => {
-        // Get the current location, but with new params appended.
-        newSearchParams = {...state, ...newSearchParams};
+    const queryNavigate = (newSearchParams, pathname, replace = false) => {
+        // Navigate to a new page, but keep the state in sync with the params.
+        newSearchParams = removeEmptyValues({...state, ...newSearchParams});
         const newQuery = createSearchParams(newSearchParams);
-        return `${pathname || location.pathname}?${newQuery.toString()}`
+        const newLocation = `${pathname || location.pathname}?${newQuery.toString()}`;
+        // updateQuery(newSearchParams, replace)
+        navigate(newLocation);
     }
 
     const clearQuery = () => setState({});
 
-    return {searchParams, setSearchParams, updateQuery, getLocationStr, clearQuery}
+    return {searchParams, setSearchParams, updateQuery, clearQuery, queryNavigate}
 }
 
 export const useOneQuery = (name) => {
@@ -173,7 +186,11 @@ export const useOneQuery = (name) => {
         updateQuery({[name]: newValue}, replace);
     }
 
-    return [value, setValue]
+    const clearValue = (replace = false) => {
+        updateQuery({[name]: null}, replace);
+    }
+
+    return [value, setValue, clearValue]
 }
 
 export const useAllQuery = (name) => {
@@ -184,7 +201,11 @@ export const useAllQuery = (name) => {
         updateQuery({[name]: newValue}, replace);
     }
 
-    return [value, setValue]
+    const clearValue = (replace = false) => {
+        updateQuery({[name]: null}, replace);
+    }
+
+    return [value, setValue, clearValue]
 }
 
 export const useDomains = () => {
@@ -275,7 +296,7 @@ export const useSearchArchives = () => {
         order,
         effect,
         submitSearch,
-    } = useSearchQuery();
+    } = React.useContext(SearchGlobalContext);
 
     const {domain} = useSearchDomain();
     const headline = view === 'headline';
@@ -309,7 +330,7 @@ export const useSearchArchives = () => {
     useEffect(() => {
         // Search archives again whenever search params change.
         localSearchArchives();
-    }, [effect]);
+    }, [effect, domain]);
 
     React.useEffect(() => {
         // Clear search when navigating away from this page.
@@ -344,7 +365,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
         order,
         effect,
         submitSearch,
-    } = useSearchQuery();
+    } = React.useContext(SearchGlobalContext);
 
     const headline = view === 'headline';
 
@@ -367,7 +388,7 @@ export const useSearchVideos = (defaultLimit, channelId, order_by) => {
     useEffect(() => {
         // Search videos again whenever search params change.
         localSearchVideos();
-    }, [effect]);
+    }, [effect, channelId]);
 
     React.useEffect(() => {
         // Clear search when navigating away from this page.
@@ -708,10 +729,6 @@ export const useSettings = () => {
         }
     }
 
-    useEffect(() => {
-        fetchSettings();
-    }, []);
-
     return {settings, fetchSettings};
 }
 
@@ -918,7 +935,7 @@ export const useSearchOrder = () => {
 }
 
 export const useSearchStr = () => {
-    const {searchParams, updateQuery, clearQuery, id} = React.useContext(QueryContext);
+    const {searchParams, updateQuery, clearQuery} = React.useContext(QueryContext);
     const searchStr = searchParams.get('q');
     // What the user is typing, can be submitted later.
     const [pendingSearchStr, setPendingSearchStr] = React.useState(searchStr);
@@ -930,14 +947,20 @@ export const useSearchStr = () => {
     }
 
     const clearSearchStr = () => {
-        console.debug('useSearchStr.clearSearch');
-        setPendingSearchStr('');
-        clearQuery();
+        setPendingSearchStr(''); // Use empty string for text inputs.
+        clearQuery(); // Clear any URL parameters that may exist.
     }
 
-    const submitSearch = (e) => {
-        // Submit pending search string as real search string.
-        setSearchStr(pendingSearchStr);
+    const submitSearch = (newSearchStr) => {
+        if (newSearchStr) {
+            // Caller isn't using our pendingSearchStr, use what value was sent.
+            setSearchStr(newSearchStr);
+        } else if (pendingSearchStr) {
+            // Submit pendingSearchStr as real search string (submit it to the URL, reload page).
+            setSearchStr(pendingSearchStr);
+        } else {
+            throw Error('Cannot submit search without value!');
+        }
     }
 
     return {searchStr, setSearchStr, clearSearchStr, pendingSearchStr, setPendingSearchStr, submitSearch, searchParams}
@@ -953,21 +976,47 @@ export const useSearchTags = () => {
     return {activeTags, setSearchTags, addTag, removeTag}
 }
 
+export const useSearchMonths = () => {
+    const {searchParams, updateQuery} = React.useContext(QueryContext);
+    const months = searchParams.getAll('month');
+    const [pendingMonths, setPendingMonths] = React.useState(months);
+    const setMonths = (newMonths) => {
+        // Set new months, go back to first page.
+        updateQuery({'month': newMonths, 'o': null});
+    };
+
+    const clearMonths = () => {
+        setMonths([]);
+        setPendingMonths([]);
+    }
+
+    return {months, setMonths, pendingMonths, setPendingMonths, clearMonths}
+}
+
 
 export const useSearchDateRange = () => {
     // fromDate=...&toDate=...
     const {searchParams, updateQuery} = React.useContext(QueryContext);
+
+    const emptyDateRange = [null, null];
     let fromDate = searchParams.get('fromDate');
     let toDate = searchParams.get('toDate');
     fromDate = fromDate ? parseInt(fromDate) : null;
     toDate = toDate ? parseInt(toDate) : null;
+    const [pendingDateRange, setPendingDateRange] = React.useState([fromDate, toDate]);
 
     const setDateRange = ([newFromDate, newToDate]) => {
         // Set new date range, go back to first page.
         updateQuery({fromDate: newFromDate, toDate: newToDate, 'o': 0});
     }
 
-    return {dateRange: [fromDate, toDate], setDateRange}
+    const clearDateRange = () => {
+        console.log('clearDateRange');
+        setDateRange(emptyDateRange);
+        setPendingDateRange(emptyDateRange);
+    }
+
+    return {dateRange: [fromDate, toDate], setDateRange, pendingDateRange, setPendingDateRange, clearDateRange}
 }
 
 export const useUploadFile = () => {

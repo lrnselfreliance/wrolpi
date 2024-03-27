@@ -6,7 +6,6 @@ import {
     Button,
     Divider,
     Header,
-    Loader,
     Modal,
     ModalContent,
     ModalHeader,
@@ -17,13 +16,13 @@ import {
 import {Link} from "react-router-dom";
 import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
 import {ProgressPlaceholder} from "./components/Placeholder";
-import {Dimmer, GridColumn, GridRow, Icon, Message} from "semantic-ui-react";
+import {GridColumn, GridRow, Icon, Message} from "semantic-ui-react";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import {refreshFiles} from "./api";
 import _ from "lodash";
 import {TagsDashboard} from "./Tags";
 import {Upload} from "./components/Upload";
-import {SearchView, useSearchGlobal} from "./components/Search";
+import {SearchView} from "./components/Search";
 import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
 import {useWROLMode} from "./hooks/customHooks";
 import {FileSearchFilterButton} from "./components/Files";
@@ -157,7 +156,7 @@ export function Getters() {
 
 export function DashboardPage() {
     const {
-        searchStr, setSearchStr, clearSearch, fetchSuggestions, searchFiles,
+        searchStr, setSearchStr, clearSearch,
         pendingSearchStr, setPendingSearchStr,
         activeTags,
         suggestionsResults,
@@ -165,8 +164,8 @@ export function DashboardPage() {
         resultRenderer,
         loading,
         setSearchTags,
-        months, setMonths,
-        dateRange, setDateRange,
+        fetchSuggestions, fetchFiles,
+        effect,
     } = React.useContext(SearchGlobalContext);
     // The search that the user is typing.
     const {status} = useContext(StatusContext);
@@ -197,10 +196,16 @@ export function DashboardPage() {
     if (searchStr || (activeTags && activeTags.length > 0)) {
         // User has submitted and wants full search.
         body = <>
-            {loading && <Dimmer active><Loader size='large'/></Dimmer>}
             <SearchView/>
         </>;
     }
+
+    React.useEffect(() => {
+        // Only fetch search results if the user has searched for something, or if a tag is active.
+        if (searchStr || (activeTags && activeTags.length > 0)) {
+            fetchFiles();
+        }
+    }, [effect]);
 
     React.useEffect(() => {
         // Fetch suggestions when user is typing.
@@ -231,9 +236,7 @@ export function DashboardPage() {
                         {getSearchResultsInput()}
                     </Grid.Column>
                     <Grid.Column width={1} textAlign='right' style={{padding: 0}}>
-                        <DateSelectorButton onMonthsChange={setMonths} defaultMonthsSelected={months}
-                                            defaultDateRange={dateRange}
-                                            onDateRangeChange={setDateRange}/>
+                        <DateSelectorButton/>
                     </Grid.Column>
                     <Grid.Column width={1} textAlign='right'>
                         <FileSearchFilterButton/>
@@ -245,10 +248,7 @@ export function DashboardPage() {
             <Grid>
                 <Grid.Row columns={2}>
                     <Grid.Column textAlign='right' width={2}>
-                        <DateSelectorButton onMonthsChange={setMonths} defaultMonthsSelected={months}
-                                            defaultDateRange={dateRange}
-                                            onDateRangeChange={setDateRange}
-                                            buttonProps={{size: 'big'}}/>
+                        <DateSelectorButton buttonProps={{size: 'big'}}/>
                     </Grid.Column>
                     <Grid.Column textAlign='right' width={2}>
                         <FileSearchFilterButton size='big'/>
@@ -263,10 +263,7 @@ export function DashboardPage() {
             <Grid>
                 <Grid.Row columns={2}>
                     <Grid.Column textAlign='right' width={1}>
-                        <DateSelectorButton onMonthsChange={setMonths} defaultMonthsSelected={months}
-                                            defaultDateRange={dateRange}
-                                            onDateRangeChange={setDateRange}
-                                            buttonProps={{size: 'big'}}/>
+                        <DateSelectorButton buttonProps={{size: 'big'}}/>
                     </Grid.Column>
                     <Grid.Column textAlign='right' width={1}>
                         <FileSearchFilterButton size='big'/>
@@ -280,14 +277,6 @@ export function DashboardPage() {
         {!searchStr && <FlagsMessages flags={status['flags']}/>}
         {body}
     </PageContainer>
-}
-
-export function DashboardWrapper() {
-    const value = useSearchGlobal();
-
-    return <SearchGlobalContext.Provider value={value}>
-        <DashboardPage/>
-    </SearchGlobalContext.Provider>
 }
 
 function DashboardStatus() {

@@ -583,7 +583,7 @@ export function TabLinks({links}) {
 
     return <Menu tabular>
         {links.map((link) => <NavLink
-            to={getTo(link.to)}
+            to={link.replace ? link.to : getTo(link.to)}
             className='item'
             style={{padding: '1em'}}
             key={link.to}

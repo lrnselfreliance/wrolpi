@@ -10,17 +10,18 @@ import {MoreRoute} from "./components/Apps";
 import {InventoryRoute} from "./components/Inventory";
 import {ArchiveRoute} from "./components/Archive";
 import {FilesRoute} from "./components/Files";
-import {StatusProvider, useQuery} from "./hooks/customHooks";
+import {QueryProvider, StatusProvider} from "./hooks/customHooks";
 import {MapRoute} from "./components/Map";
-import {MediaContextProvider, mediaStyles, QueryContext, StatusContext, ThemeContext} from "./contexts/contexts";
+import {MediaContextProvider, mediaStyles, StatusContext, ThemeContext} from "./contexts/contexts";
 import {Header, ThemeProvider} from "./components/Theme";
-import {DashboardWrapper} from "./DashboardPage";
+import {DashboardPage} from "./DashboardPage";
 import {DonatePage} from "./components/DonatePage";
 import {useEventsInterval} from "./Events";
 import {SemanticToastContainer} from "react-semantic-toasts-2";
 import {FilePreviewProvider} from "./components/FilePreview";
 import {TagsProvider} from "./Tags";
 import {ZimRoute} from "./components/Zim";
+import {SearchGlobalProvider} from "./components/Search";
 
 function PageNotFound() {
     const {t} = useContext(ThemeContext);
@@ -61,22 +62,21 @@ function HelpPage() {
 }
 
 function Root() {
-    const queryContext = useQuery();
-    queryContext.id = 'root';
-
-    return <QueryContext.Provider value={queryContext}>
+    return <QueryProvider>
         <ThemeProvider>
             <TagsProvider>
-                <FilePreviewProvider>
-                    <header>
-                        <NavBar/>
-                    </header>
-                    <Outlet/>
-                    <Footer/>
-                </FilePreviewProvider>
+                <SearchGlobalProvider>
+                    <FilePreviewProvider>
+                        <header>
+                            <NavBar/>
+                        </header>
+                        <Outlet/>
+                        <Footer/>
+                    </FilePreviewProvider>
+                </SearchGlobalProvider>
             </TagsProvider>
         </ThemeProvider>
-    </QueryContext.Provider>
+    </QueryProvider>
 }
 
 const router = createBrowserRouter(createRoutesFromElements(<Route
@@ -84,8 +84,8 @@ const router = createBrowserRouter(createRoutesFromElements(<Route
     element={<Root/>}
     errorElement={<PageNotFound/>}
 >
-    <Route index element={<DashboardWrapper/>}/>
-    <Route path='search/*' element={<DashboardWrapper/>}/>
+    <Route index element={<DashboardPage/>}/>
+    <Route path='search/*' element={<DashboardPage/>}/>
     <Route path='donate' element={<DonatePage/>}/>
     <Route path='videos/video/:videoId' exact element={<VideoWrapper/>}/>
     <Route path='videos/channel/:channelId/video/:videoId' exact element={<VideoWrapper/>}/>

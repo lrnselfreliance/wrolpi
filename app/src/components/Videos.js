@@ -41,7 +41,6 @@ import {
 import {ChannelEditPage, ChannelNewPage, ChannelsPage} from "./Channels";
 import {
     useChannel,
-    useQuery,
     useSearchOrder,
     useSearchVideos,
     useVideo,
@@ -83,13 +82,14 @@ function VideosPage() {
 
     const {
         searchStr, clearSearch, submitSearch,
-        pendingSearchStr, setPendingSearchStr,
         videos,
         activePage,
         setPage,
         totalPages,
         fetchVideos,
     } = useSearchVideos(null, channelId, searchOrder);
+
+    const [pendingSearchStr, setPendingSearchStr] = useState(searchStr);
 
     const {channel} = useChannel(channelId);
 
@@ -192,7 +192,7 @@ function VideosPage() {
     const searchInput = <SearchInput
         searchStr={pendingSearchStr}
         onChange={setPendingSearchStr}
-        onSubmit={submitSearch}
+        onSubmit={() => submitSearch(pendingSearchStr)}
         onClear={clearSearch}
         placeholder='Search Videos...'
     />;
@@ -287,9 +287,6 @@ function VideosStatistics() {
 }
 
 export function VideosRoute(props) {
-    const videosQueryContext = useQuery();
-    videosQueryContext.id = 'videos';
-
     const links = [
         {text: 'Videos', to: '/videos', key: 'videos', end: true},
         {text: 'Channels', to: '/videos/channel', key: 'channel'},
@@ -297,17 +294,15 @@ export function VideosRoute(props) {
     ];
 
     return <PageContainer>
-        <TabLinks links={links}/>
-        <QueryContext.Provider value={videosQueryContext}>
-            <Routes>
-                <Route path='/' exact element={<VideosPage/>}/>
-                <Route path='channel' exact element={<ChannelsPage/>}/>
-                <Route path='statistics' exact element={<VideosStatistics/>}/>
-                <Route path='channel/new' exact element={<ChannelNewPage/>}/>
-                <Route path='channel/:channelId/edit' exact element={<ChannelEditPage/>}/>
-                <Route path='channel/:channelId/video' exact element={<VideosPage/>}/>
-            </Routes>
-        </QueryContext.Provider>
+    <TabLinks links={links}/>
+        <Routes>
+            <Route path='/' exact element={<VideosPage/>}/>
+            <Route path='channel' exact element={<ChannelsPage/>}/>
+            <Route path='statistics' exact element={<VideosStatistics/>}/>
+            <Route path='channel/new' exact element={<ChannelNewPage/>}/>
+            <Route path='channel/:channelId/edit' exact element={<ChannelEditPage/>}/>
+            <Route path='channel/:channelId/video' exact element={<VideosPage/>}/>
+        </Routes>
     </PageContainer>
 }
 

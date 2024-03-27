@@ -7,6 +7,7 @@ import {
     useSearchDateRange,
     useSearchFilter,
     useSearchModel,
+    useSearchMonths,
     useSearchOrder,
     useSearchStr,
     useSearchTags,
@@ -53,15 +54,9 @@ export const useSearchQuery = () => {
     const {
         searchStr, setSearchStr, clearSearchStr, submitSearch,
         pendingSearchStr, setPendingSearchStr,
-        searchParams, updateQuery
     } = useSearchStr();
     // month=1&month=2
-    const months = searchParams.getAll('month');
-    const setMonths = (newMonths) => {
-        // Set new months, go back to first page.
-        updateQuery({'month': newMonths, 'o': 0});
-    };
-
+    const {months, setMonths} = useSearchMonths();
     // fromDate=...&toDate=...
     const {dateRange, setDateRange} = useSearchDateRange();
     // tag=Name1&tag=Name2
@@ -84,10 +79,6 @@ export const useSearchQuery = () => {
 
     const clearSearch = () => clearSearchStr();
 
-    React.useEffect(() => {
-        clearSearch();
-    }, []);
-
     return {
         searchStr, setSearchStr, clearSearch, pendingSearchStr, setPendingSearchStr, submitSearch,
         months, setMonths,
@@ -102,14 +93,19 @@ export const useSearchQuery = () => {
     }
 }
 
+export function SearchGlobalProvider({...props}) {
+    const value = useSearchGlobal();
+    return <SearchGlobalContext.Provider value={value}>
+        {props.children}
+    </SearchGlobalContext.Provider>
+}
+
 export const useSearchGlobal = () => {
     // Used to search Files and Zims.  Modifies URL query when user submits search.
-
-    const navigate = useNavigate();
     const emptySearch = false;
 
-    const queryContext = React.useContext(QueryContext);
-    const {getLocationStr} = queryContext;
+    const navigate = useNavigate();
+    const {queryNavigate} = React.useContext(QueryContext);
     const {SingleTag, fuzzyMatchTagsByName} = React.useContext(TagsContext);
 
     const searchQuery = useSearchQuery();
@@ -120,10 +116,9 @@ export const useSearchGlobal = () => {
         activeTags, setSearchTags, addTag, removeTag,
         pages,
         filter, setFilter,
-        model, setModel,
+        model,
         view, setView,
         order, setOrder,
-        effect,
     } = searchQuery;
 
     const [searchFiles, setSearchFiles] = useState(null);
@@ -187,7 +182,7 @@ export const useSearchGlobal = () => {
                         title: newSuggestions.fileGroups.toString(),
                         type: 'files',
                         // Add search query onto current location.
-                        location: getLocationStr({q: pendingSearchStr}, '/search'),
+                        location: [{q: pendingSearchStr}, '/search'],
                     }
                 ]
             };
@@ -206,7 +201,7 @@ export const useSearchGlobal = () => {
                     {
                         title: zimSum.toString(),
                         type: 'zims',
-                        location: `/search/zim?q=${encodeURIComponent(pendingSearchStr)}`
+                        location: [{q: pendingSearchStr}, '/search/zim'],
                     }
                 ],
             };
@@ -228,7 +223,7 @@ export const useSearchGlobal = () => {
                         title: i.domain,
                         id: i.id,
                         domain: i.domain,
-                        location: `/archive?domain=${i.domain}`
+                        location: [{domain: i.domain}, '/archive'],
                     }
                 })
             }
@@ -239,7 +234,7 @@ export const useSearchGlobal = () => {
         if (matchingTags && matchingTags.length > 0) {
             results.tags = {
                 name: 'Tags', results: matchingTags.map(i => {
-                    return {type: 'tag', title: i.name, location: `/search?tag=${encodeURIComponent(i.name)}`}
+                    return {type: 'tag', title: i.name, location: [{tag: i.name}, '/search']}
                 })
             }
         }
@@ -274,9 +269,12 @@ export const useSearchGlobal = () => {
 
     // User clicked on a result in the dropdown.
     const handleResultSelect = ({result}) => {
-        if (result.location) {
-            console.info(`useSearchSuggestions Navigating: ${result.location}`)
+        if (typeof result.location === 'string') {
+            console.info(`queryNavigate string: ${result.location}`);
             navigate(result.location);
+        } else if (Array.isArray(result.location) && result.location.length === 2) {
+            console.info(`queryNavigate special: ${result.location}`);
+            queryNavigate(result.location[0], result.location[1]);
         } else {
             console.error('No location to navigate');
         }
@@ -297,7 +295,7 @@ export const useSearchGlobal = () => {
         return <span>{title}</span>
     };
 
-    const localFilesSearch = async () => {
+    const fetchFiles = async () => {
         if (!emptySearch && !searchStr && !activeTags) {
             return;
         }
@@ -327,17 +325,14 @@ export const useSearchGlobal = () => {
         }
     }
 
-    React.useEffect(() => {
-        if (searchStr || (activeTags && activeTags.length > 0)) {
-            console.warn('searching...');
-            localFilesSearch();
-        }
-    }, [effect]);
+    const localSetSearchStr = (newSearchStr) => {
+        queryNavigate({q: newSearchStr, o: null});
+    }
 
     return {
         loading: filesLoading || zimLoading,
         pages,
-        searchStr, setSearchStr, clearSearch,
+        searchStr, setSearchStr: localSetSearchStr, clearSearch,
         pendingSearchStr, setPendingSearchStr, submitSearch,
         filter, setFilter,
         months, setMonths,
@@ -350,7 +345,7 @@ export const useSearchGlobal = () => {
         resultRenderer,
         handleResultSelect,
         effect: searchQuery.effect,
-        fetchSuggestions,
+        fetchSuggestions, fetchFiles,
     }
 }
 
@@ -377,13 +372,14 @@ export function SearchView() {
 
 export function SearchIconButton() {
     // A single button which displays a modal for search suggestions.
+    const {queryNavigate} = React.useContext(QueryContext);
     const {
         suggestionsResults,
         handleResultSelect,
         resultRenderer,
         loading,
         pendingSearchStr, setPendingSearchStr,
-        submitSearch, fetchSuggestions,
+        fetchSuggestions,
     } = React.useContext(SearchGlobalContext);
     const [open, setOpen] = React.useState(false);
 
@@ -395,7 +391,7 @@ export function SearchIconButton() {
 
     const localSubmitSearch = () => {
         // Close modal when user searches.
-        submitSearch();
+        queryNavigate({q: pendingSearchStr, o: 0}, '/search');
         setOpen(false);
     }
 

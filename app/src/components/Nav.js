@@ -78,10 +78,7 @@ export function NavBar() {
         <NavIconWrapper><HotspotStatusIcon/></NavIconWrapper>
         <NavIconWrapper><DarkModeToggle/></NavIconWrapper>
         <span style={{marginTop: '0.5em'}}>
-            {/* Need new useQuery for this button */}
-            <SearchGlobalContext.Provider value={useSearchGlobal()}>
-                <SearchIconButton/>
-            </SearchGlobalContext.Provider>
+            <SearchIconButton/>
         </span>
     </React.Fragment>;
 

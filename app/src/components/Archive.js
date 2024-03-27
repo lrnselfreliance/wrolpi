@@ -5,7 +5,6 @@ import {
     CardHeader,
     CardMeta,
     Container,
-    Dimmer,
     GridColumn,
     GridRow,
     Image,
@@ -39,11 +38,11 @@ import {
 import {deleteArchives, postDownload, tagFileGroup, untagFileGroup} from "../api";
 import {Link, Route, Routes, useNavigate, useParams} from "react-router-dom";
 import Message from "semantic-ui-react/dist/commonjs/collections/Message";
-import {useArchive, useDomains, useQuery, useSearchArchives, useSearchOrder} from "../hooks/customHooks";
+import {useArchive, useDomains, useSearchArchives, useSearchDomain, useSearchOrder} from "../hooks/customHooks";
 import {FileCards, FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import _ from "lodash";
-import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
+import {Media, ThemeContext} from "../contexts/contexts";
 import {Button, Card, CardIcon, darkTheme, Header, Loader, Placeholder, Segment, Tab, TabPane} from "./Theme";
 import {SortableTable} from "./SortableTable";
 import {taggedImageLabel, TagsSelector} from "../Tags";
@@ -266,6 +265,7 @@ function ArchivePage() {
 export function ArchiveCard({file}) {
     const {s} = useContext(ThemeContext);
     const {data} = file;
+    const {setDomain} = useSearchDomain();
 
     const imageSrc = data.screenshot_path ? `/media/${encodeMediaPath(data.screenshot_path)}` : null;
     const singlefileUrl = data.singlefile_path ? `/media/${encodeMediaPath(data.singlefile_path)}` : null;
@@ -478,7 +478,6 @@ function ArchivesPage() {
     />;
 
     return <>
-        {loading && <Dimmer active><Loader size='large'/></Dimmer>}
         <Media at='mobile'>
             <Grid>
                 <Grid.Row>
@@ -555,22 +554,17 @@ export function ArchiveRowCells({file}) {
 }
 
 export function ArchiveRoute() {
-    const archiveQueryContext = useQuery();
-    archiveQueryContext.id = 'archive';
-
     const links = [
-        {text: 'Archives', to: '/archive', end: true},
-        {text: 'Domains', to: '/archive/domains'},
+        {text: 'Archives', to: '/archive', end: true, replace: true},
+        {text: 'Domains', to: '/archive/domains', replace: true},
     ];
 
     return <PageContainer>
         <TabLinks links={links}/>
-        <QueryContext.Provider value={archiveQueryContext}>
-            <Routes>
-                <Route path='/*' element={<ArchivesPage/>}/>
-                <Route path='domains' element={<DomainsPage/>}/>
-                <Route path=':archiveId' element={<ArchivePage/>}/>
-            </Routes>
-        </QueryContext.Provider>
+        <Routes>
+            <Route path='/*' element={<ArchivesPage/>}/>
+            <Route path='domains' element={<DomainsPage/>}/>
+            <Route path=':archiveId' element={<ArchivePage/>}/>
+        </Routes>
     </PageContainer>
 }

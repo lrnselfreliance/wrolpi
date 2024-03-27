@@ -4,8 +4,6 @@ import {
     APIButton,
     CardLink,
     CardPoster,
-    defaultSearchOrder,
-    defaultVideoOrder,
     Duration,
     encodeMediaPath,
     ErrorMessage,
@@ -39,19 +37,13 @@ import {
     TableCell
 } from "semantic-ui-react";
 import {ChannelEditPage, ChannelNewPage, ChannelsPage} from "./Channels";
-import {
-    useChannel,
-    useSearchOrder,
-    useSearchVideos,
-    useVideo,
-    useVideoStatistics
-} from "../hooks/customHooks";
+import {useChannel, useSearchOrder, useSearchVideos, useVideo, useVideoStatistics} from "../hooks/customHooks";
 import {FileRowTagIcon, FilesView} from "./Files";
 import Grid from "semantic-ui-react/dist/commonjs/collections/Grid";
 import Icon from "semantic-ui-react/dist/commonjs/elements/Icon";
 import {Button, Card, Header, Loader, Placeholder, Segment, Statistic, StatisticGroup} from "./Theme";
 import {deleteVideos} from "../api";
-import {Media, QueryContext, ThemeContext} from "../contexts/contexts";
+import {Media, ThemeContext} from "../contexts/contexts";
 import _ from "lodash";
 
 export function VideoWrapper() {
@@ -67,18 +59,7 @@ export function VideoWrapper() {
 
 function VideosPage() {
     const {channelId} = useParams();
-    const queryContext = React.useContext(QueryContext);
-    const {searchParams} = queryContext;
     const [selectedVideos, setSelectedVideos] = useState([]);
-
-    let searchOrder = defaultVideoOrder;
-    if (searchParams.get('order')) {
-        // Use whatever order the user specified.
-        searchOrder = searchParams.get('order');
-    } else if (searchParams.get('q')) {
-        // User used a search_str
-        searchOrder = defaultSearchOrder;
-    }
 
     const {
         searchStr, clearSearch, submitSearch,
@@ -87,7 +68,7 @@ function VideosPage() {
         setPage,
         totalPages,
         fetchVideos,
-    } = useSearchVideos(null, channelId, searchOrder);
+    } = useSearchVideos(null, channelId);
 
     const [pendingSearchStr, setPendingSearchStr] = useState(searchStr);
 
@@ -294,7 +275,7 @@ export function VideosRoute(props) {
     ];
 
     return <PageContainer>
-    <TabLinks links={links}/>
+        <TabLinks links={links}/>
         <Routes>
             <Route path='/' exact element={<VideosPage/>}/>
             <Route path='channel' exact element={<ChannelsPage/>}/>

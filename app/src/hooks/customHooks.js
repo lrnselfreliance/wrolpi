@@ -24,7 +24,7 @@ import {
     setThrottle,
 } from "../api";
 import {createSearchParams, useLocation, useNavigate, useSearchParams} from "react-router-dom";
-import {enumerate, humanFileSize, secondsToFullDuration} from "../components/Common";
+import {defaultVideoOrder, enumerate, humanFileSize, secondsToFullDuration} from "../components/Common";
 import {QueryContext, SearchGlobalContext, SettingsContext, StatusContext,} from "../contexts/contexts";
 import {toast} from "react-semantic-toasts-2";
 import _ from "lodash";
@@ -169,7 +169,6 @@ export const useQuery = () => {
         newSearchParams = removeEmptyValues({...state, ...newSearchParams});
         const newQuery = createSearchParams(newSearchParams);
         const newLocation = `${pathname || location.pathname}?${newQuery.toString()}`;
-        // updateQuery(newSearchParams, replace)
         navigate(newLocation);
     }
 
@@ -355,7 +354,7 @@ export const useSearchArchives = () => {
     }
 }
 
-export const useSearchVideos = (defaultLimit, channelId, order_by) => {
+export const useSearchVideos = (defaultLimit, channelId) => {
     const {
         pages,
         searchStr, setSearchStr, clearSearch,
@@ -930,7 +929,8 @@ export const useSearchView = () => {
 
 export const useSearchOrder = () => {
     // o=...
-    const [order, setOrder] = useOneQuery('order');
+    let [order, setOrder] = useOneQuery('order');
+    order = order || defaultVideoOrder;
     return {order, setOrder}
 }
 

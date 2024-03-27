@@ -110,7 +110,7 @@ export const useSearchGlobal = () => {
 
     const searchQuery = useSearchQuery();
     const {
-        searchStr, setSearchStr, clearSearch, pendingSearchStr, setPendingSearchStr, submitSearch,
+        searchStr, clearSearch, pendingSearchStr, setPendingSearchStr, submitSearch,
         months, setMonths,
         dateRange, setDateRange,
         activeTags, setSearchTags, addTag, removeTag,
@@ -390,7 +390,7 @@ export function SearchIconButton() {
     }
 
     const localSubmitSearch = () => {
-        // Close modal when user searches.
+        // Close modal when user searches.  Use the global search page.
         queryNavigate({q: pendingSearchStr, o: 0}, '/search');
         setOpen(false);
     }

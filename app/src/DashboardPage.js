@@ -1,6 +1,6 @@
 import {LoadStatistic, PageContainer, SearchResultsInput, useTitle} from "./components/Common";
 import React, {useContext, useState} from "react";
-import {Media, SearchGlobalContext, SettingsContext, StatusContext} from "./contexts/contexts";
+import {Media, QueryContext, SearchGlobalContext, SettingsContext, StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
 import {
     Button,
@@ -155,8 +155,9 @@ export function Getters() {
 }
 
 export function DashboardPage() {
+    const {queryNavigate} = React.useContext(QueryContext);
     const {
-        searchStr, setSearchStr, clearSearch,
+        searchStr, clearSearch,
         pendingSearchStr, setPendingSearchStr,
         activeTags,
         suggestionsResults,
@@ -212,11 +213,16 @@ export function DashboardPage() {
         fetchSuggestions();
     }, [pendingSearchStr]);
 
+    const localSubmitSearch = () => {
+        // Use the global search page.
+        queryNavigate({q: pendingSearchStr, o: 0}, '/search');
+    }
+
     const getSearchResultsInput = (props) => {
         return <SearchResultsInput clearable
                                    searchStr={pendingSearchStr}
                                    onChange={setPendingSearchStr}
-                                   onSubmit={setSearchStr}
+                                   onSubmit={localSubmitSearch}
                                    placeholder='Search everywhere...'
                                    onClear={clearSearch}
                                    style={{marginBottom: '2em'}}

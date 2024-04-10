@@ -28,4 +28,4 @@ srt==3.5.3
 vininfo[cli]==1.7.0
 websockets==10.4
 webvtt-py==0.4.6
-yt-dlp==2023.11.16
+yt-dlp==2024.4.9

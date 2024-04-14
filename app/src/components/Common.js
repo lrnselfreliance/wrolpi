@@ -229,7 +229,7 @@ export function RequiredAsterisk() {
     return <span style={{color: '#db2828'}}> *</span>
 }
 
-export let defaultVideoOrder = '-published_datetime';
+export let defaultFileOrder = '-published_datetime';
 export let defaultSearchOrder = 'rank';
 
 export const frequencyOptions = [{key: null, text: '', value: null}, {
@@ -580,7 +580,7 @@ export function textEllipsis(str, maxLength = 100, {side = "end", ellipsis = "..
 }
 
 export function TabLinks({links}) {
-    const [searchParams, setSearchParams] = useSearchParams();
+    const [searchParams] = useSearchParams();
 
     const getTo = (to) => {
         return `${to}?${searchParams.toString()}`;

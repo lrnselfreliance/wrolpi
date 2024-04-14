@@ -5,7 +5,7 @@ import {
     CardLink,
     CardPoster,
     defaultSearchOrder,
-    defaultVideoOrder,
+    defaultFileOrder,
     Duration,
     encodeMediaPath,
     ErrorMessage,
@@ -65,7 +65,7 @@ function VideosPage() {
     const {searchParams} = React.useContext(QueryContext);
     const [selectedVideos, setSelectedVideos] = useState([]);
 
-    let searchOrder = defaultVideoOrder;
+    let searchOrder = defaultFileOrder;
     if (searchParams.get('order')) {
         // Use whatever order the user specified.
         searchOrder = searchParams.get('order');
@@ -238,6 +238,9 @@ function VideosStatistics() {
         {key: 'month', label: 'Downloads Past Month'},
         {key: 'year', label: 'Downloads Past Year'},
         {key: 'sum_duration', label: 'Total Duration'},
+        {key: 'have_comments', label: 'Have Comments'},
+        {key: 'no_comments', label: 'Missing Comments'},
+        {key: 'failed_comments', label: 'Failed Comments'},
     ];
     const historicalNames = [
         {key: 'average_count', label: 'Average Monthly Downloads'},

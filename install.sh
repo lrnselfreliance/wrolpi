@@ -69,4 +69,9 @@ fi
 set +x
 
 echo "Install end $(date '+%Y-%m-%d %H:%M:%S')" >>/opt/wrolpi/install.log
+
+if [ "${install_code}" -ne 0 ]; then
+  echo "Installation failed!"
+fi
+
 exit "${install_code}"

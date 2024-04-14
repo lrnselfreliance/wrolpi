@@ -4,8 +4,8 @@ import {
     APIButton,
     CardLink,
     CardPoster,
-    defaultSearchOrder,
     defaultFileOrder,
+    defaultSearchOrder,
     Duration,
     encodeMediaPath,
     ErrorMessage,
@@ -238,6 +238,8 @@ function VideosStatistics() {
         {key: 'month', label: 'Downloads Past Month'},
         {key: 'year', label: 'Downloads Past Year'},
         {key: 'sum_duration', label: 'Total Duration'},
+    ];
+    const commentsNames = [
         {key: 'have_comments', label: 'Have Comments'},
         {key: 'no_comments', label: 'Missing Comments'},
         {key: 'failed_comments', label: 'Failed Comments'},
@@ -267,6 +269,7 @@ function VideosStatistics() {
 
     return <>
         {buildSegment('Videos', videoNames, videos)}
+        {buildSegment('Video Comments', commentsNames, videos)}
         {buildSegment('Historical Video', historicalNames, historical)}
         {buildSegment('Channels', channelNames, channels)}
     </>

@@ -105,13 +105,23 @@ function ArchivePage() {
         navigate(-1);
     }
     const localUpdateArchive = async () => {
-        await postDownload([data.url], 'archive');
-        toast({
-            type: 'success',
-            title: 'Archive Downloading',
-            description: 'Archive update has been scheduled.',
-            time: 2000,
-        })
+        const response = await postDownload([archiveFile.url], 'archive');
+        if (response.ok) {
+            toast({
+                type: 'success',
+                title: 'Archive Downloading',
+                description: 'Archive update has been scheduled.',
+                time: 2000,
+            });
+        } else {
+            toast({
+                type: 'error',
+                title: 'Archive Downloading',
+                description: 'Archive update failed.',
+                time: 2000,
+            });
+        }
+
     }
 
     const updateButton = <APIButton

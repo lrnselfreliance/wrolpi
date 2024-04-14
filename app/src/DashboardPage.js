@@ -13,7 +13,7 @@ import {
     Statistic,
     StatisticGroup
 } from "./components/Theme";
-import {Link, useNavigate, useSearchParams} from "react-router-dom";
+import {Link, useNavigate} from "react-router-dom";
 import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
 import {ProgressPlaceholder} from "./components/Placeholder";
 import {GridColumn, GridRow, Icon, Message} from "semantic-ui-react";

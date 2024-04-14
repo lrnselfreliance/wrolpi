@@ -104,6 +104,7 @@ function ArchivePage() {
         })
         navigate(-1);
     }
+
     const localUpdateArchive = async () => {
         const response = await postDownload([archiveFile.url], 'archive');
         if (response.ok) {
@@ -121,7 +122,6 @@ function ArchivePage() {
                 time: 2000,
             });
         }
-
     }
 
     const updateButton = <APIButton

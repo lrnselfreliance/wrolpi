@@ -149,10 +149,10 @@ function DateRangeForm({dateRange, setDateRange}) {
 }
 
 export function DateSelectorButton({
-                                       onMonthsChange,
-                                       onDateRangeChange,
+                                       onDatesChange,
                                        defaultMonthsSelected,
                                        defaultDateRange,
+                                       onClear,
                                        buttonProps
                                    }) {
     const emptyDateRange = [null, null];
@@ -179,14 +179,18 @@ export function DateSelectorButton({
         if (e) e.preventDefault();
         setOpen(false);
         // Only submit selection when user has closed selector.
-        if (onDateRangeChange && dateRange[0] <= dateRange[1]) {
-            onDateRangeChange(dateRange);
-        } else if (onDateRangeChange && dateRangeIsEmpty(dateRange)) {
-            //Clear the date range.
-            onDateRangeChange(dateRange);
+        let newFromDate;
+        let newToDate;
+        let newMonths;
+        if (dateRange && dateRange[0] < dateRange[1]) {
+            newFromDate = dateRange[0];
+            newToDate = dateRange[1];
         }
-        if (onMonthsChange) {
-            onMonthsChange(monthsSelected);
+        if (monthsSelected) {
+            newMonths = monthsSelected;
+        }
+        if (onDatesChange) {
+            onDatesChange(newFromDate, newToDate, newMonths);
         }
     }
 
@@ -198,6 +202,10 @@ export function DateSelectorButton({
         if (e) e.preventDefault();
         setDateRange(emptyDateRange);
         setMonthsSelected([]);
+        if (onClear) {
+            onClear();
+        }
+        setOpen(false);
     }
 
     return <React.Fragment>

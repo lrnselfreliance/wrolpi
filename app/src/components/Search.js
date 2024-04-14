@@ -1,7 +1,7 @@
 import React, {useState} from "react";
 import {Route, Routes, useNavigate} from "react-router-dom";
 import {FilesSearchView} from "./Files";
-import {useLatestRequest, usePages, useSearchDateRange, useSearchFilter, useSearchMonths} from "../hooks/customHooks";
+import {useLatestRequest, usePages, useSearchDate, useSearchFilter} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
 import {searchEstimateZims, searchSuggestions} from "../api";
 import {filterToMimetypes, fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
@@ -38,8 +38,7 @@ const SUGGESTED_APPS = [
 export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {
     const navigate = useNavigate();
 
-    const {months, setMonths} = useSearchMonths();
-    const {dateRange, setDateRange} = useSearchDateRange();
+    const {dateRange, setDateRange, months, setDates} = useSearchDate();
     const {searchParams, updateQuery, getLocationStr} = React.useContext(QueryContext);
     // `searchStr` means actually fetch the files/zims.
     const searchStr = searchParams.get('q');
@@ -90,8 +89,7 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
         setSearchStr,
         clearSearch,
         setTags,
-        months, setMonths,
-        dateRange, setDateRange,
+        months, dateRange, setDateRange, setDates,
     }
 }
 
@@ -103,8 +101,7 @@ export function useSuggestions(searchStr, tagNames, filter) {
         zimsEstimates: [],
     }
     const [suggestions, setSuggestions] = React.useState(defaultSuggestions);
-    const {months} = useSearchMonths();
-    const {dateRange} = useSearchDateRange();
+    const {dateRange, months} = useSearchDate();
     // fileGroups/channels/domains.
     const {data, sendRequest, loading} = useLatestRequest(500);
     // Zims are slow, so they are separate.
@@ -152,8 +149,7 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
     const [searchStr, setSearchStr] = React.useState(defaultSearchStr || '');
     const [searchTags, setSearchTags] = React.useState(defaultTagNames);
     const {SingleTag, fuzzyMatchTagsByName} = React.useContext(TagsContext);
-    const {months, setMonths} = useSearchMonths();
-    const {dateRange, setDateRange} = useSearchDateRange();
+    const {dateRange, months, setDates, clearDate} = useSearchDate();
     const {suggestions, loading} = useSuggestions(searchStr, searchTags, filter);
     const {getLocationStr} = React.useContext(QueryContext);
 
@@ -290,11 +286,10 @@ export function useSearchSuggestions(defaultSearchStr, defaultTagNames) {
         suggestionsSums,
         searchStr, setSearchStr,
         setSearchTags,
-        months, setMonths,
+        months, dateRange, setDates, clearDate,
         handleResultSelect,
         resultRenderer,
         loading,
-        dateRange, setDateRange,
     }
 }
 
@@ -329,12 +324,21 @@ export function SearchIconButton() {
         setSearchStr,
     } = useSearchSuggestions();
     const [open, setOpen] = React.useState(false);
+    const prevOpen = React.useRef(open);
 
     const localHandleResultSelect = (i) => {
         // Close modal when user selects a result.
         setOpen(false);
         handleResultSelect(i);
     }
+
+    React.useEffect(() => {
+        if (prevOpen.current === true && !open) {
+            // User has closed the modal.
+            setSearchStr('');
+        }
+        prevOpen.current = open;
+    }, [open]);
 
     return <React.Fragment>
         <SButton icon='search' onClick={() => setOpen(!open)} color='blue'/>

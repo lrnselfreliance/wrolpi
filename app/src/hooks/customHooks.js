@@ -21,7 +21,6 @@ import {
     searchDirectories,
     searchVideos,
     searchZim,
-    searchZims,
     setHotspot,
     setThrottle,
 } from "../api";
@@ -125,39 +124,23 @@ const removeEmptyValues = (obj) => {
 }
 
 
-export const useQuery = (defaultParams) => {
+export const useQuery = () => {
     const location = useLocation();
     const [searchParams, setSearchParams] = useSearchParams();
-    const [state, setState] = React.useState(defaultParams || getSearchParamCopy(searchParams));
-
-    React.useEffect(() => {
-        // Copy the state into the URL.
-        setSearchParams(state);
-        if (!_.isEmpty(state)) {
-            console.debug('Changing URL params', state);
-        }
-    }, [JSON.stringify(state)]);
-
-    React.useEffect(() => {
-        // Keep URL and state in sync.
-        setState(getSearchParamCopy(searchParams));
-    }, [JSON.stringify(searchParams)]);
 
     const updateQuery = (newParams, replace = false) => {
         // Update the old state with the new values.
-        setState(oldState => {
-            if (replace) {
-                // Ignore oldState because all values are going to be replaced.
-                return removeEmptyValues(newParams);
-            } else {
-                return removeEmptyValues({...oldState, ...newParams});
-            }
-        });
+        let newSearchParams = replace ?
+            newParams
+            : {...getSearchParamCopy(searchParams), ...newParams};
+        newSearchParams = removeEmptyValues(newSearchParams);
+        console.debug('useQuery.updateQuery', newSearchParams);
+        setSearchParams(newSearchParams);
     };
 
     const getLocationStr = (newSearchParams, pathname) => {
         // Get the current location, but with new params appended.
-        newSearchParams = {...state, ...newSearchParams};
+        newSearchParams = removeEmptyValues({...getSearchParamCopy(searchParams), ...newSearchParams});
         const newQuery = createSearchParams(newSearchParams);
         return `${pathname || location.pathname}?${newQuery.toString()}`
     }
@@ -167,9 +150,7 @@ export const useQuery = (defaultParams) => {
 
 
 export const QueryProvider = (props) => {
-    const value = useQuery();
-
-    return <QueryContext.Provider value={value}>
+    return <QueryContext.Provider value={useQuery()}>
         {props.children}
     </QueryContext.Provider>
 }
@@ -519,16 +500,17 @@ export const useSearchFiles = (defaultLimit = 48, emptySearch = false, model) =>
         }
         const mimetypes = filterToMimetypes(filter);
         setSearchFiles(null);
-        let fromYear;
-        let toYear;
+        let fromDate;
+        let toDate;
         if (dateRange) {
-            fromYear = dateRange[0];
-            toYear = dateRange[1];
+            fromDate = dateRange[0];
+            toDate = dateRange[1];
         }
+        console.log('localSearchFiles', fromDate, toDate, months);
         try {
             let [file_groups, total] = await filesSearch(
                 pages.offset, pages.limit, searchStr, mimetypes, model || model_, activeTags, headline,
-                months, fromYear, toYear);
+                months, fromDate, toDate);
             setSearchFiles(file_groups);
             pages.setTotal(total);
         } catch (e) {
@@ -983,31 +965,29 @@ export const useSearchOrder = () => {
     return {sort, setSort}
 }
 
-export const useSearchMonths = () => {
+export const useSearchDate = () => {
+    // Filters files using
+    //      ?month=1&month=2&month=3
+    // and
+    //      ?fromDate=2023&toDate=2024
     const {searchParams, updateQuery} = React.useContext(QueryContext);
     const months = searchParams.getAll('month');
-
-    const setMonths = (newMonths) => {
-        // Set new months, go back to first page.
-        updateQuery({'month': newMonths, 'o': 0});
-    }
-
-    return {months, setMonths}
-}
-
-export const useSearchDateRange = () => {
-    const {searchParams, updateQuery} = React.useContext(QueryContext);
     let fromDate = searchParams.get('fromDate');
     let toDate = searchParams.get('toDate');
     fromDate = fromDate ? parseInt(fromDate) : null;
     toDate = toDate ? parseInt(toDate) : null;
 
-    const setDateRange = ([newFromDate, newToDate]) => {
-        // Set new date range, go back to first page.
-        updateQuery({fromDate: newFromDate, toDate: newToDate, 'o': 0});
+    const clearDate = () => {
+        console.log('clearDate');
+        updateQuery({fromDate: null, toDate: null, month: null, 'o': 0});
     }
 
-    return {dateRange: [fromDate, toDate], setDateRange}
+    const setDates = (newFromDate, newToDate, newMonths) => {
+        console.log('setDates', newFromDate, newToDate, newMonths);
+        updateQuery({fromDate: newFromDate, toDate: newToDate, month: newMonths, 'o': 0});
+    }
+
+    return {dateRange: [fromDate, toDate], setDates, months, clearDate}
 }
 
 export const useUploadFile = () => {

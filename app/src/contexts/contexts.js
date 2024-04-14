@@ -18,7 +18,7 @@ export const QueryContext = React.createContext({
     setSearchParams: null,
     updateQuery: null,
     getLocationStr: null,
-})
+});
 
 export const AppMedia = createMedia({
     breakpoints: {

@@ -13,7 +13,7 @@ import {
     Statistic,
     StatisticGroup
 } from "./components/Theme";
-import {Link, useNavigate} from "react-router-dom";
+import {Link, useNavigate, useSearchParams} from "react-router-dom";
 import {BandwidthProgressCombined, CPUUsageProgress} from "./components/admin/Status";
 import {ProgressPlaceholder} from "./components/Placeholder";
 import {GridColumn, GridRow, Icon, Message} from "semantic-ui-react";
@@ -170,8 +170,7 @@ export function DashboardPage() {
         loading,
         setSearchStr: setSuggestionSearchStr,
         setSearchTags,
-        months, setMonths,
-        dateRange, setDateRange,
+        months, dateRange, setDates, clearDate,
     } = useSearchSuggestions(searchStr, activeTags);
     const {status} = useContext(StatusContext);
 
@@ -235,9 +234,9 @@ export function DashboardPage() {
                         {getSearchResultsInput()}
                     </Grid.Column>
                     <Grid.Column width={1} textAlign='right' style={{padding: 0}}>
-                        <DateSelectorButton onMonthsChange={setMonths} defaultMonthsSelected={months}
-                                            defaultDateRange={dateRange}
-                                            onDateRangeChange={setDateRange}/>
+                        <DateSelectorButton defaultMonthsSelected={months} defaultDateRange={dateRange}
+                                            onClear={clearDate} onDatesChange={setDates}
+                        />
                     </Grid.Column>
                     <Grid.Column width={1} textAlign='right'>
                         <FileSearchFilterButton/>
@@ -249,9 +248,8 @@ export function DashboardPage() {
             <Grid>
                 <Grid.Row columns={2}>
                     <Grid.Column textAlign='right' width={2}>
-                        <DateSelectorButton onMonthsChange={setMonths} defaultMonthsSelected={months}
-                                            defaultDateRange={dateRange}
-                                            onDateRangeChange={setDateRange}
+                        <DateSelectorButton defaultMonthsSelected={months} defaultDateRange={dateRange}
+                                            onClear={clearDate} onDatesChange={setDates}
                                             buttonProps={{size: 'big'}}/>
                     </Grid.Column>
                     <Grid.Column textAlign='right' width={2}>
@@ -267,9 +265,8 @@ export function DashboardPage() {
             <Grid>
                 <Grid.Row columns={2}>
                     <Grid.Column textAlign='right' width={1}>
-                        <DateSelectorButton onMonthsChange={setMonths} defaultMonthsSelected={months}
-                                            defaultDateRange={dateRange}
-                                            onDateRangeChange={setDateRange}
+                        <DateSelectorButton defaultMonthsSelected={months} defaultDateRange={dateRange}
+                                            onClear={clearDate} onDatesChange={setDates}
                                             buttonProps={{size: 'big'}}/>
                     </Grid.Column>
                     <Grid.Column textAlign='right' width={1}>

@@ -468,13 +468,14 @@ async def test_post_vin_number_decoder(test_async_client):
 
 
 @pytest.mark.asyncio
-async def test_search_suggestions(test_session, test_async_client, channel_factory, archive_factory):
+async def test_search_suggestions(test_session, test_async_client, channel_factory, archive_factory, video_factory):
     # WARNING results are cached, this test uses unique queries to avoid conflicts.
     channel_factory(name='Foo')
     channel_factory(name='Fool')
     channel_factory(name='Bar')
     archive_factory(domain='foo.com')
     archive_factory(domain='bar.com')
+    video_factory(channel_id=2)  # Channel "Fool" will be first in results because it has the most videos.
     test_session.commit()
 
     async def assert_results(body: dict, expected_channels=None, expected_domains=None):
@@ -489,11 +490,12 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
 
     await assert_results(
         dict(search_str='foo'),
-        [{'directory': 'Foo', 'id': 1, 'name': 'Foo', 'url': 'https://example.com/Foo'},
-         {'directory': 'Fool',
+        [{'directory': 'Fool',
           'id': 2,
           'name': 'Fool',
-          'url': 'https://example.com/Fool'}],
+          'url': 'https://example.com/Fool'},
+         {'directory': 'Foo', 'id': 1, 'name': 'Foo', 'url': 'https://example.com/Foo'},
+         ],
         [{'directory': 'archive/foo.com', 'domain': 'foo.com', 'id': 1}],
     )
 

@@ -145,6 +145,7 @@ class VINDecoderResponse:
 @dataclass
 class SearchSuggestionsRequest:
     search_str: Optional[str] = None
+    order_by_video_count: bool = True
 
 
 @dataclass

@@ -538,13 +538,13 @@ async def post_shutdown(_: Request):
 
 @api_bp.post('/search_suggestions')
 @validate(json=schema.SearchSuggestionsRequest)
-async def post_search_suggestions(_: Request, body: schema.SearchFileEstimateRequest):
+async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequest):
     """Used by the Global search to suggest related Channels/Domains/etc. to the user."""
     from modules.videos.channel.lib import search_channels_by_name
     from modules.archive.lib import search_domains_by_name
 
     channels, domains = await asyncio.gather(
-        search_channels_by_name(body.search_str, order_by_video_count=True),
+        search_channels_by_name(body.search_str, order_by_video_count=body.order_by_video_count),
         search_domains_by_name(body.search_str),
     )
 

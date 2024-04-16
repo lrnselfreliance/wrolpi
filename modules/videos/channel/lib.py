@@ -212,9 +212,9 @@ async def search_channels_by_name(name: str, limit: int = 5, session: Session = 
             Channel.name.ilike(f'%{name}%'),
             Channel.name.ilike(f'%{name_no_spaces}%'),
         )) \
-            .join(Video, Video.channel_id == Channel.id) \
+            .outerjoin(Video, Video.channel_id == Channel.id) \
             .group_by(Channel.id, Channel.name) \
-            .order_by(desc('video_count')) \
+            .order_by(desc('video_count'), asc(Channel.name)) \
             .limit(limit)
         channels = [i[0] for i in stmt]
     else:

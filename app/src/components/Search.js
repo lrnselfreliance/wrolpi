@@ -109,10 +109,13 @@ export function useSuggestions(searchStr, tagNames, filter) {
     const {data: zimData, sendRequest: sendZimRequest, loading: zimLoading} = useLatestRequest(500);
 
     React.useEffect(() => {
-        if ((searchStr && searchStr.length > 0) || (tagNames && tagNames.length > 0)) {
+        if (searchStr || (tagNames && tagNames.length > 0)) {
             const mimetypes = filterToMimetypes(filter);
             setSuggestions(defaultSuggestions);
-            sendGeneralReqeust(async () => await searchSuggestions(searchStr));
+            if (searchStr && searchStr.length > 0) {
+                // We can't search Channels/Domains without some string to filter by.
+                sendGeneralReqeust(async () => await searchSuggestions(searchStr));
+            }
             sendFilesRequest(async () => await searchEstimateFiles(searchStr, tagNames, mimetypes, months, dateRange));
             sendZimRequest(async () => await searchEstimateZims(searchStr, tagNames));
         }

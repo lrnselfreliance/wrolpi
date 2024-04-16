@@ -544,7 +544,7 @@ async def post_search_suggestions(_: Request, body: schema.SearchFileEstimateReq
     from modules.archive.lib import search_domains_by_name
 
     channels, domains = await asyncio.gather(
-        search_channels_by_name(body.search_str),
+        search_channels_by_name(body.search_str, order_by_video_count=True),
         search_domains_by_name(body.search_str),
     )
 

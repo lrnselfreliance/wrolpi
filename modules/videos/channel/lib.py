@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import List, Dict, Union
 
-from sqlalchemy import asc, or_
+from sqlalchemy import or_, func, desc, asc
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -14,7 +14,7 @@ from .. import schema
 from ..common import check_for_channel_conflicts
 from ..errors import UnknownChannel
 from ..lib import save_channels_config
-from ..models import Channel
+from ..models import Channel, Video
 
 logger = logger.getChild(__name__)
 
@@ -202,15 +202,28 @@ def download_channel(id_: int, reset_attempts: bool = False):
 
 
 @optional_session
-async def search_channels_by_name(name: str, limit: int = 5, session: Session = None) -> List[Channel]:
+async def search_channels_by_name(name: str, limit: int = 5, session: Session = None,
+                                  order_by_video_count: bool = False) -> List[Channel]:
     name = name or ''
     name_no_spaces = ''.join(name.split(' '))
-    stmt = session.query(Channel) \
-        .filter(or_(
-        Channel.name.ilike(f'%{name}%'),
-        Channel.name.ilike(f'%{name_no_spaces}%'),
-    )) \
-        .order_by(asc(Channel.name)) \
-        .limit(limit)
-    channels = stmt.all()
+    if order_by_video_count:
+        stmt = session.query(Channel, func.count(Video.id).label('video_count')) \
+            .filter(or_(
+            Channel.name.ilike(f'%{name}%'),
+            Channel.name.ilike(f'%{name_no_spaces}%'),
+        )) \
+            .join(Video, Video.channel_id == Channel.id) \
+            .group_by(Channel.id, Channel.name) \
+            .order_by(desc('video_count')) \
+            .limit(limit)
+        channels = [i[0] for i in stmt]
+    else:
+        stmt = session.query(Channel) \
+            .filter(or_(
+            Channel.name.ilike(f'%{name}%'),
+            Channel.name.ilike(f'%{name_no_spaces}%'),
+        )) \
+            .order_by(asc(Channel.name)) \
+            .limit(limit)
+        channels = stmt.all()
     return channels

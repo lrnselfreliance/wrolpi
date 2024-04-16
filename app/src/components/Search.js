@@ -110,8 +110,8 @@ export function useSuggestions(searchStr, tagNames, filter) {
 
     React.useEffect(() => {
         if ((searchStr && searchStr.length > 0) || (tagNames && tagNames.length > 0)) {
-            setSuggestions(defaultSuggestions);
             const mimetypes = filterToMimetypes(filter);
+            setSuggestions(defaultSuggestions);
             sendGeneralReqeust(async () => await searchSuggestions(searchStr));
             sendFilesRequest(async () => await searchEstimateFiles(searchStr, tagNames, mimetypes, months, dateRange));
             sendZimRequest(async () => await searchEstimateZims(searchStr, tagNames));
@@ -127,29 +127,31 @@ export function useSuggestions(searchStr, tagNames, filter) {
 
     React.useEffect(() => {
         if (!_.isEmpty(generalData)) {
-            setSuggestions({
-                ...suggestions,
-                channels: generalData.channels,
-                domains: generalData.domains,
+            setSuggestions((prevState) => {
+                return {
+                    ...prevState,
+                    channels: generalData.channels,
+                    domains: generalData.domains,
+                }
             });
         }
-    }, [JSON.stringify(generalData)]);
+    }, [setSuggestions, generalData]);
 
     React.useEffect(() => {
         if (!_.isEmpty(filesData)) {
-            console.log(filesData);
-            setSuggestions({
-                ...suggestions,
-                fileGroups: filesData.fileGroups,
+            setSuggestions((prevState) => {
+                return {...prevState, fileGroups: filesData.fileGroups}
             });
         }
-    }, [JSON.stringify(filesData)]);
+    }, [setSuggestions, filesData]);
 
     React.useEffect(() => {
         if (!_.isEmpty(zimData)) {
-            setSuggestions({...suggestions, zimsEstimates: zimData.zimsEstimates});
+            setSuggestions((prevState) => {
+                return {...prevState, zimsEstimates: zimData.zimsEstimates}
+            });
         }
-    }, [JSON.stringify(zimData)]);
+    }, [setSuggestions, zimData]);
 
     return {suggestions, loading: generalLoading || zimLoading || filesLoading}
 }

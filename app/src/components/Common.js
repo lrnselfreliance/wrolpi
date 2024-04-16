@@ -1676,3 +1676,35 @@ export const monthNames = [
     'November',
     'December',
 ];
+
+export function IframeViewer({title, viewerUrl}) {
+    // Bottom of iframe is hidden when height is 100%.  These values display the entire iframe.
+    return <>
+        <Media at='mobile'>
+            <iframe
+                title={title}
+                src={viewerUrl}
+                style={{
+                    position: 'fixed',
+                    height: '80%',
+                    width: '100%',
+                    border: 'none',
+                    padding: 0,
+                    backgroundColor: '#FFFFFF',
+                }}/>
+        </Media>
+        <Media greaterThan='mobile'>
+            <iframe
+                title={title}
+                src={viewerUrl}
+                style={{
+                    position: 'fixed',
+                    height: '93%',
+                    width: '100%',
+                    border: 'none',
+                    padding: 0,
+                    backgroundColor: '#FFFFFF',
+                }}/>
+        </Media>
+    </>
+}

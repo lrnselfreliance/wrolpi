@@ -4,6 +4,7 @@ import {
     ErrorMessage,
     HelpPopup,
     humanFileSize,
+    IframeViewer,
     InfoMessage,
     PageContainer,
     TabLinks,
@@ -281,15 +282,7 @@ class ManageMap extends React.Component {
 }
 
 function MapPage() {
-    return <iframe
-        title='map'
-        src={`http://${window.location.hostname}:8084/`}
-        style={{
-            position: 'fixed',
-            height: '100%',
-            width: '100%',
-            border: 'none',
-        }}/>
+    return <IframeViewer title='map' viewerUrl={`http://${window.location.hostname}:8084/`}/>
 }
 
 export function MapRoute() {

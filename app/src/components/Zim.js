@@ -34,6 +34,7 @@ import {
     encodeMediaPath,
     ErrorMessage,
     humanFileSize,
+    IframeViewer,
     InfoMessage,
     normalizeEstimate,
     PageContainer,
@@ -529,16 +530,7 @@ class ManageZim extends React.Component {
 }
 
 function ZimViewer() {
-    return <iframe
-        title='zim'
-        src={VIEWER_URL}
-        style={{
-            position: 'fixed',
-            height: '100%',
-            width: '100%',
-            border: 'none',
-            backgroundColor: '#FFFFFF',
-        }}/>
+    return <IframeViewer title='zim' viewerUrl={VIEWER_URL}/>
 }
 
 export function ZimRoute() {

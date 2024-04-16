@@ -12,6 +12,7 @@ import {
 } from "../Common";
 import {
     Button as SButton,
+    Label,
     Loader,
     PlaceholderLine,
     TableBody,
@@ -353,7 +354,9 @@ export function DownloadsPage() {
 
     const {onceDownloads, recurringDownloads, pendingOnceDownloads, fetchDownloads} = useDownloads();
 
-    const pendingOnceDownloadsSpan = pendingOnceDownloads > 0 ? <span>({pendingOnceDownloads})</span> : null;
+    const pendingOnceDownloadsSpan = pendingOnceDownloads > 0 ?
+        <Label color='violet' size='large'>{pendingOnceDownloads}</Label>
+        : null;
 
     return <>
         <WROLModeMessage content='Downloads are disabled because WROL Mode is enabled.'/>

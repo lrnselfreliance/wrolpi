@@ -3,7 +3,7 @@ import {Route, Routes, useNavigate} from "react-router-dom";
 import {FilesSearchView} from "./Files";
 import {useLatestRequest, usePages, useSearchDate, useSearchFilter} from "../hooks/customHooks";
 import {ZimSearchView} from "./Zim";
-import {searchEstimateZims, searchSuggestions} from "../api";
+import {searchEstimateFiles, searchEstimateZims, searchSuggestions} from "../api";
 import {filterToMimetypes, fuzzyMatch, normalizeEstimate, SearchResultsInput, TabLinks} from "./Common";
 import _ from "lodash";
 import {TagsContext} from "../Tags";
@@ -102,20 +102,23 @@ export function useSuggestions(searchStr, tagNames, filter) {
     }
     const [suggestions, setSuggestions] = React.useState(defaultSuggestions);
     const {dateRange, months} = useSearchDate();
-    // fileGroups/channels/domains.
-    const {data, sendRequest, loading} = useLatestRequest(500);
+    // channels/domains.
+    const {data: generalData, sendRequest: sendGeneralReqeust, loading: generalLoading} = useLatestRequest(500);
+    const {data: filesData, sendRequest: sendFilesRequest, loading: filesLoading} = useLatestRequest(500);
     // Zims are slow, so they are separate.
     const {data: zimData, sendRequest: sendZimRequest, loading: zimLoading} = useLatestRequest(500);
 
     React.useEffect(() => {
         if ((searchStr && searchStr.length > 0) || (tagNames && tagNames.length > 0)) {
+            setSuggestions(defaultSuggestions);
             const mimetypes = filterToMimetypes(filter);
-            sendRequest(async () => await searchSuggestions(searchStr, tagNames, mimetypes, months, dateRange));
+            sendGeneralReqeust(async () => await searchSuggestions(searchStr));
+            sendFilesRequest(async () => await searchEstimateFiles(searchStr, tagNames, mimetypes, months, dateRange));
             sendZimRequest(async () => await searchEstimateZims(searchStr, tagNames));
         }
     }, [
         searchStr,
-        sendRequest,
+        sendGeneralReqeust,
         sendZimRequest,
         JSON.stringify(tagNames),
         JSON.stringify(months),
@@ -123,15 +126,24 @@ export function useSuggestions(searchStr, tagNames, filter) {
     ]);
 
     React.useEffect(() => {
-        if (!_.isEmpty(data)) {
+        if (!_.isEmpty(generalData)) {
             setSuggestions({
                 ...suggestions,
-                channels: data.channels,
-                fileGroups: data.fileGroups,
-                domains: data.domains,
+                channels: generalData.channels,
+                domains: generalData.domains,
             });
         }
-    }, [JSON.stringify(data)]);
+    }, [JSON.stringify(generalData)]);
+
+    React.useEffect(() => {
+        if (!_.isEmpty(filesData)) {
+            console.log(filesData);
+            setSuggestions({
+                ...suggestions,
+                fileGroups: filesData.fileGroups,
+            });
+        }
+    }, [JSON.stringify(filesData)]);
 
     React.useEffect(() => {
         if (!_.isEmpty(zimData)) {
@@ -139,7 +151,7 @@ export function useSuggestions(searchStr, tagNames, filter) {
         }
     }, [JSON.stringify(zimData)]);
 
-    return {suggestions, loading: loading || zimLoading}
+    return {suggestions, loading: generalLoading || zimLoading || filesLoading}
 }
 
 

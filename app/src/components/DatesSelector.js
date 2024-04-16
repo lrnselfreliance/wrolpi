@@ -182,7 +182,7 @@ export function DateSelectorButton({
         let newFromDate;
         let newToDate;
         let newMonths;
-        if (dateRange && dateRange[0] < dateRange[1]) {
+        if (dateRange && dateRange[0] <= dateRange[1]) {
             newFromDate = dateRange[0];
             newToDate = dateRange[1];
         }

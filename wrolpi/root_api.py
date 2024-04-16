@@ -538,12 +538,28 @@ async def post_shutdown(_: Request):
 
 @api_bp.post('/search_suggestions')
 @validate(json=schema.SearchSuggestionsRequest)
-async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequest):
+async def post_search_suggestions(_: Request, body: schema.SearchFileEstimateRequest):
     """Used by the Global search to suggest related Channels/Domains/etc. to the user."""
     from modules.videos.channel.lib import search_channels_by_name
     from modules.archive.lib import search_domains_by_name
 
-    file_coro = search_file_suggestion_count(
+    channels, domains = await asyncio.gather(
+        search_channels_by_name(body.search_str),
+        search_domains_by_name(body.search_str),
+    )
+
+    ret = dict(
+        channels=channels,
+        domains=domains,
+    )
+    return json_response(ret)
+
+
+@api_bp.post('/search_file_estimates')
+@validate(json=schema.SearchFileEstimateRequest)
+async def post_search_file_estimates(_: Request, body: schema.SearchFileEstimateRequest):
+    """Used by the Global search to suggest FileGroup count to the user."""
+    file_groups = await search_file_suggestion_count(
         body.search_str,
         body.tag_names,
         body.mimetypes,
@@ -551,15 +567,9 @@ async def post_search_suggestions(_: Request, body: schema.SearchSuggestionsRequ
         body.from_year,
         body.to_year,
     )
-    channels_coro = search_channels_by_name(body.search_str)
-    domains_coro = search_domains_by_name(body.search_str)
-
-    file_groups, channels, domains = await asyncio.gather(file_coro, channels_coro, domains_coro)
 
     ret = dict(
         file_groups=file_groups,
-        channels=channels,
-        domains=domains,
     )
     return json_response(ret)
 

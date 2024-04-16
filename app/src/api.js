@@ -1061,7 +1061,20 @@ export async function fetchDecoded(vinNumber) {
     }
 }
 
-export async function searchSuggestions(search_str, tagNames, mimetypes, months, dateRange) {
+export async function searchSuggestions(search_str) {
+    const body = {search_str};
+    const response = await apiPost(`${API_URI}/search_suggestions`, body);
+    if (response.ok) {
+        const content = await response.json();
+
+        return {
+            channels: content.channels,
+            domains: content.domains,
+        }
+    }
+}
+
+export async function searchEstimateFiles(search_str, tagNames, mimetypes, months, dateRange) {
     months = months ? months.map(i => parseInt(i)) : [];
 
     const body = {search_str, tag_names: tagNames, mimetypes, months};
@@ -1069,17 +1082,12 @@ export async function searchSuggestions(search_str, tagNames, mimetypes, months,
         body['from_year'] = dateRange[0];
         body['to_year'] = dateRange[1];
     }
-    const response = await apiPost(`${API_URI}/search_suggestions`, body);
+    const response = await apiPost(`${API_URI}/search_file_estimates`, body);
     if (response.ok) {
         const content = await response.json();
 
-        const fileGroups = content.file_groups;
-        const channels = content.channels;
-        const domains = content.domains;
         return {
-            fileGroups,
-            channels,
-            domains,
+            fileGroups: content.file_groups,
         }
     }
 }

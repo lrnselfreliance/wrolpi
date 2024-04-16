@@ -468,29 +468,24 @@ async def test_post_vin_number_decoder(test_async_client):
 
 
 @pytest.mark.asyncio
-async def test_search_suggestions(test_session, test_async_client, channel_factory, archive_factory, tag_factory,
-                                  video_factory):
+async def test_search_suggestions(test_session, test_async_client, channel_factory, archive_factory):
     # WARNING results are cached, this test uses unique queries to avoid conflicts.
     channel_factory(name='Foo')
     channel_factory(name='Fool')
     channel_factory(name='Bar')
-    tag1, tag2, tag3 = tag_factory(), tag_factory(), tag_factory()
-    archive_factory(domain='foo.com', contents='contents of foo with bunny', tag_names=[tag1.name, ])
-    archive_factory(domain='bar.com', contents='contents of bar', tag_names=[tag2.name, ])
-    video_factory(with_caption_file=True, tag_names=[tag1.name, tag2.name])
+    archive_factory(domain='foo.com')
+    archive_factory(domain='bar.com')
     test_session.commit()
 
-    async def assert_results(body: dict, expected_channels=None, expected_domains=None, expected_file_groups=None):
+    async def assert_results(body: dict, expected_channels=None, expected_domains=None):
         expected_channels = expected_channels or []
         expected_domains = expected_domains or []
-        expected_file_groups = expected_file_groups or 0
 
         request, response = await test_async_client.post('/api/search_suggestions', json=body)
         assert response.status_code == HTTPStatus.OK
         if expected_channels:
             assert response.json['channels'] == expected_channels
         assert response.json['domains'] == expected_domains
-        assert response.json['file_groups'] == expected_file_groups or 0
 
     await assert_results(
         dict(search_str='foo'),
@@ -500,7 +495,6 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
           'name': 'Fool',
           'url': 'https://example.com/Fool'}],
         [{'directory': 'archive/foo.com', 'domain': 'foo.com', 'id': 1}],
-        1,
     )
 
     # Channel name "Fool" is matched because spaces are stripped in addition to only
@@ -512,40 +506,61 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
              'name': 'Fool',
              'url': 'https://example.com/Fool'}],
         [],
-        0,
     )
 
     await assert_results(
         dict(search_str='bar'),
         [{'directory': 'Bar', 'id': 3, 'name': 'Bar', 'url': 'https://example.com/Bar'}],
         [{'directory': 'archive/bar.com', 'domain': 'bar.com', 'id': 2}],
-        1,
     )
 
+
+@pytest.mark.asyncio
+async def test_search_file_estimates(test_session, test_async_client, archive_factory, tag_factory, video_factory):
+    # WARNING results are cached, this test uses unique queries to avoid conflicts.
+    tag1, tag2, tag3 = tag_factory(), tag_factory(), tag_factory()
+    archive_factory(domain='foo.com', contents='contents of foo with bunny', tag_names=[tag1.name, ])
+    archive_factory(domain='bar.com', contents='contents of bar', tag_names=[tag2.name, ])
+    video_factory(with_caption_file=True, tag_names=[tag1.name, tag2.name])
+    test_session.commit()
+
+    async def assert_results(body: dict, expected_file_groups=None):
+        expected_file_groups = expected_file_groups or 0
+
+        request, response = await test_async_client.post('/api/search_file_estimates', json=body)
+        assert response.status_code == HTTPStatus.OK
+        assert response.json['file_groups'] == expected_file_groups or 0
+
+    await assert_results(dict(search_str='foo'), 1)
+
+    # Channel name "Fool" is matched because spaces are stripped in addition to only
+    await assert_results(dict(search_str='foo l'), 0)
+
+    await assert_results(dict(search_str='bar'), 1)
+
     # "foo" archive and video both contain bunny.
-    await assert_results(dict(search_str='bunny'), expected_file_groups=2)
+    await assert_results(dict(search_str='bunny'), 2)
 
     # Filtering with mimetypes removes archive result.
-    await assert_results(dict(search_str='bunny', mimetypes=['video']), expected_file_groups=1)
+    await assert_results(dict(search_str='bunny', mimetypes=['video']), 1)
 
     # tag1 has been used twice
-    await assert_results(dict(tag_names=[tag1.name, ]), expected_file_groups=2)
+    await assert_results(dict(tag_names=[tag1.name, ]), 2)
 
     # archive2 was tagged with tag2, but only video contains bunny.
-    await assert_results(dict(search_str='bunny', tag_names=[tag2.name, ]), expected_file_groups=1)
+    await assert_results(dict(search_str='bunny', tag_names=[tag2.name, ]), 1)
 
     # tag2 has been used twice
-    await assert_results(dict(tag_names=[tag2.name, ]), expected_file_groups=2)
+    await assert_results(dict(tag_names=[tag2.name, ]), 2)
 
     # tag2 has been used twice, but filter by video mimetype.
-    await assert_results(dict(tag_names=[tag2.name], mimetypes=['video']), expected_file_groups=1)
+    await assert_results(dict(tag_names=[tag2.name], mimetypes=['video']), 1)
 
     # Can use all filters simultaneously.
-    await assert_results(dict(search_str='bunny', tag_names=[tag2.name], mimetypes=['video']),
-                         expected_file_groups=1)
+    await assert_results(dict(search_str='bunny', tag_names=[tag2.name], mimetypes=['video']), 1)
 
     # Only the video has been tagged with both tag1 and tag2.
-    await assert_results(dict(tag_names=[tag1.name, tag2.name]), expected_file_groups=1)
+    await assert_results(dict(tag_names=[tag1.name, tag2.name]), 1)
 
     # tag3 was never used
     await assert_results(dict(tag_names=[tag3.name]))
@@ -556,9 +571,9 @@ async def test_search_suggestions(test_session, test_async_client, channel_facto
     await assert_results(dict(mimetypes=['application/pdf']))
 
     # Can filter by published datetime.
-    await assert_results(dict(months=[1, ]), expected_file_groups=2)
-    await assert_results(dict(months=[2, ]), expected_file_groups=0)
-    await assert_results(dict(from_year=2000, to_year=2000), expected_file_groups=2)
+    await assert_results(dict(months=[1, ]), 2)
+    await assert_results(dict(months=[2, ]), 0)
+    await assert_results(dict(from_year=2000, to_year=2000), 2)
 
 
 def test_recursive_errors():

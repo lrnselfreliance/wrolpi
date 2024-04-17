@@ -1,35 +1,34 @@
 import asyncio
-import json
 import pathlib
 import re
-from datetime import datetime, date, timezone
-from decimal import Decimal
-from functools import wraps
 from http import HTTPStatus
-from pathlib import Path
-from typing import Union
 
 import vininfo.exceptions
-from sanic import Sanic, response, Blueprint, __version__ as sanic_version
-from sanic.blueprint_group import BlueprintGroup
+from sanic import response, Blueprint, __version__ as sanic_version
 from sanic.request import Request
-from sanic.response import HTTPResponse
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 from vininfo import Vin
 from vininfo.details._base import VinDetails
 
+from modules.archive import archive_bp
+from modules.inventory import inventory_bp
+from modules.map.api import map_bp
+from modules.otp.api import otp_bp
+from modules.videos.api import videos_bp
+from modules.zim.api import zim_bp
 from wrolpi import admin, status, flags, schema, dates
 from wrolpi import tags
 from wrolpi.admin import HotspotStatus
-from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, Base, get_media_directory, \
-    wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, LOG_LEVEL, \
+from wrolpi.api_utils import json_response, json_error_handler, api_app
+from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_media_directory, \
+    wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, \
     set_global_log_level, get_relative_to_media_directory
 from wrolpi.dates import now
-from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, APIError, HotspotError, InvalidDownload, \
     HotspotPasswordTooShort, NativeOnly, InvalidConfig
 from wrolpi.events import get_events, Events
+from wrolpi.files import files_bp
 from wrolpi.files.lib import get_file_statistics, search_file_suggestion_count
 from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
     truthy_arg, IS_RPI, IS_RPI4, IS_RPI5
@@ -37,25 +36,19 @@ from wrolpi.version import __version__
 
 logger = logger.getChild(__name__)
 
-api_app = Sanic(name='api_app')
 api_app.config.FALLBACK_ERROR_FORMAT = 'json'
 
 api_bp = Blueprint('RootAPI', url_prefix='/api')
 
-BLUEPRINTS = [api_bp, ]
-
-
-def get_blueprint(name: str, url_prefix: str) -> Blueprint:
-    """
-    Create a new Sanic blueprint.  This will be attached to the app just before run.  See `root_api.run_webserver`.
-    """
-    bp = Blueprint(name, url_prefix)
-    add_blueprint(bp)
-    return bp
-
-
-def add_blueprint(bp: Union[Blueprint, BlueprintGroup]):
-    BLUEPRINTS.append(bp)
+# Blueprints order here defines what order they are displayed in OpenAPI Docs.
+api_app.blueprint(api_bp)
+api_app.blueprint(archive_bp)
+api_app.blueprint(files_bp)
+api_app.blueprint(inventory_bp)
+api_app.blueprint(map_bp)
+api_app.blueprint(otp_bp)
+api_app.blueprint(videos_bp)
+api_app.blueprint(zim_bp)
 
 
 def run_webserver(
@@ -66,8 +59,6 @@ def run_webserver(
         access_log: bool = API_ACCESS_LOG,
 ):
     # Attach all blueprints after they have been defined.
-    for bp in BLUEPRINTS:
-        api_app.blueprint(bp)
 
     kwargs = dict(
         host=host,
@@ -140,6 +131,7 @@ async def echo(request: Request):
 @openapi.description('Get WROLPi settings')
 @openapi.response(HTTPStatus.OK, schema.SettingsResponse)
 def get_settings(_: Request):
+    from wrolpi.downloader import download_manager
     config = get_wrolpi_config()
 
     ignored_directories = [get_relative_to_media_directory(i) for i in config.ignored_directories]
@@ -157,7 +149,7 @@ def get_settings(_: Request):
         'hotspot_status': admin.hotspot_status().name,
         'ignore_outdated_zims': config.ignore_outdated_zims,
         'ignored_directories': ignored_directories,
-        'log_level': LOG_LEVEL.value,
+        'log_level': api_app.shared_ctx.log_level.value,
         'map_directory': config.map_directory,
         'media_directory': str(get_media_directory()),  # Convert to string to avoid conversion to relative.
         'throttle_on_startup': config.throttle_on_startup,
@@ -173,14 +165,14 @@ def get_settings(_: Request):
 @api_bp.patch('/settings')
 @openapi.description('Update WROLPi settings')
 @validate(json=schema.SettingsRequest)
-def update_settings(_: Request, body: schema.SettingsRequest):
+async def update_settings(_: Request, body: schema.SettingsRequest):
     if wrol_mode_enabled() and body.wrol_mode is None:
         # Cannot update settings while WROL Mode is enabled, unless you want to disable WROL Mode.
         raise WROLModeEnabled()
 
     if body.wrol_mode is False:
         # Disable WROL Mode
-        disable_wrol_mode()
+        await disable_wrol_mode()
         return response.empty()
     elif body.wrol_mode is True:
         # Enable WROL Mode
@@ -257,6 +249,7 @@ def valid_regex(_: Request, body: schema.RegexRequest):
 @validate(schema.DownloadRequest)
 @wrol_mode_check
 async def post_download(_: Request, body: schema.DownloadRequest):
+    from wrolpi.downloader import download_manager
     downloader = download_manager.get_downloader_by_name(body.downloader)
     if not downloader:
         raise InvalidDownload(f'Cannot find downloader with name {body.downloader}')
@@ -290,6 +283,7 @@ async def post_download(_: Request, body: schema.DownloadRequest):
 @api_bp.post('/download/<download_id:int>/restart')
 @openapi.description('Restart a download.')
 async def restart_download(_: Request, download_id: int):
+    from wrolpi.downloader import download_manager
     download_manager.restart_download(download_id)
     return response.empty()
 
@@ -297,6 +291,7 @@ async def restart_download(_: Request, download_id: int):
 @api_bp.get('/download')
 @openapi.description('Get all Downloads that need to be processed.')
 async def get_downloads(_: Request):
+    from wrolpi.downloader import download_manager
     data = download_manager.get_fe_downloads()
     return json_response(data)
 
@@ -304,6 +299,7 @@ async def get_downloads(_: Request):
 @api_bp.post('/download/<download_id:int>/kill')
 @openapi.description('Kill a download.  It will be stopped if it is pending.')
 async def kill_download(_: Request, download_id: int):
+    from wrolpi.downloader import download_manager
     download_manager.kill_download(download_id)
     return response.empty()
 
@@ -311,6 +307,8 @@ async def kill_download(_: Request, download_id: int):
 @api_bp.post('/download/kill')
 @openapi.description('Kill all downloads.  Disable downloading.')
 async def kill_downloads(_: Request):
+    from wrolpi.downloader import download_manager
+    logger.warning('Disabled downloads')
     download_manager.disable()
     return response.empty()
 
@@ -318,13 +316,15 @@ async def kill_downloads(_: Request):
 @api_bp.post('/download/enable')
 @openapi.description('Enable and start downloading.')
 async def enable_downloads(_: Request):
-    download_manager.enable()
+    from wrolpi.downloader import download_manager
+    await download_manager.enable()
     return response.empty()
 
 
 @api_bp.post('/download/clear_completed')
 @openapi.description('Clear completed downloads')
 async def clear_completed(_: Request):
+    from wrolpi.downloader import download_manager
     download_manager.delete_completed()
     return response.empty()
 
@@ -332,7 +332,16 @@ async def clear_completed(_: Request):
 @api_bp.post('/download/clear_failed')
 @openapi.description('Clear failed downloads')
 async def clear_failed(_: Request):
+    from wrolpi.downloader import download_manager
     download_manager.delete_failed()
+    return response.empty()
+
+
+@api_bp.post('/download/delete_once')
+@openapi.description('Delete all once downloads')
+async def delete_once(_: Request):
+    from wrolpi.downloader import download_manager
+    download_manager.delete_once()
     return response.empty()
 
 
@@ -340,6 +349,7 @@ async def clear_failed(_: Request):
 @openapi.description('Delete a download')
 @wrol_mode_check
 async def delete_download(_: Request, download_id: int):
+    from wrolpi.downloader import download_manager
     deleted = download_manager.delete_download(download_id)
     return response.empty(HTTPStatus.NO_CONTENT if deleted else HTTPStatus.NOT_FOUND)
 
@@ -347,6 +357,7 @@ async def delete_download(_: Request, download_id: int):
 @api_bp.get('/downloaders')
 @openapi.description('List all Downloaders that can be specified by the user.')
 async def get_downloaders(_: Request):
+    from wrolpi.downloader import download_manager
     downloaders = download_manager.list_downloaders()
     disabled = download_manager.disabled.is_set()
     ret = dict(downloaders=downloaders, manager_disabled=disabled)
@@ -396,6 +407,8 @@ async def throttle_off(_: Request):
 @api_bp.get('/status')
 @openapi.description('Get the status of CPU/load/etc.')
 async def get_status(_: Request):
+    from wrolpi.downloader import download_manager
+
     s = await status.get_status()
     downloads = dict()
     if flags.db_up.is_set():
@@ -440,8 +453,12 @@ async def get_statistics(_):
 
 @api_bp.get('/events/feed')
 @validate(query=schema.EventsRequest)
-async def feed(_: Request, query: schema.EventsRequest):
+async def feed(request: Request, query: schema.EventsRequest):
+    # Get the current datetime from the API.  The frontend will use this to request any events that happen after it's
+    # previous request.  The API decides what the time is, just in case the RPi's clock is wrong, or no NTP is
+    # available.
     start = now()
+
     after = None if query.after == 'None' else dates.strpdate(query.after)
     events = get_events(after)
     return json_response(dict(events=events, now=start))
@@ -456,8 +473,8 @@ async def get_tags_request(_: Request):
     return json_response(dict(tags=tags_))
 
 
-@api_bp.post('/tag')
-@api_bp.post('/tag/<tag_id:int>')
+@api_bp.post('/tag', name='tag_crate')
+@api_bp.post('/tag/<tag_id:int>', name='tag_update')
 @validate(schema.TagRequest)
 @openapi.definition(
     summary='Create or update a Tag',
@@ -572,83 +589,6 @@ async def post_search_file_estimates(_: Request, body: schema.SearchFileEstimate
         file_groups=file_groups,
     )
     return json_response(ret)
-
-
-class CustomJSONEncoder(json.JSONEncoder):
-
-    def default(self, obj):
-        try:
-            if hasattr(obj, '__json__'):
-                # Get __json__ before others.
-                return obj.__json__()
-            elif isinstance(obj, datetime):
-                # API always returns dates in UTC.
-                if obj.tzinfo:
-                    obj = obj.astimezone(timezone.utc)
-                else:
-                    # A datetime with no timezone is UTC.
-                    obj = obj.replace(tzinfo=timezone.utc)
-                obj = obj.isoformat()
-                return obj
-            elif isinstance(obj, date):
-                # API always returns dates in UTC.
-                obj = datetime(obj.year, obj.month, obj.day, tzinfo=timezone.utc)
-                return obj.isoformat()
-            elif isinstance(obj, Decimal):
-                return str(obj)
-            elif isinstance(obj, Base):
-                if hasattr(obj, 'dict'):
-                    return obj.dict()
-            elif isinstance(obj, Path):
-                media_directory = get_media_directory()
-                try:
-                    path = obj.relative_to(media_directory)
-                except ValueError:
-                    # Path may not be absolute.
-                    path = obj
-                if str(path) == '.':
-                    return ''
-                return str(path)
-            return super(CustomJSONEncoder, self).default(obj)
-        except Exception as e:
-            logger.fatal(f'Failed to JSON encode {obj}', exc_info=e)
-            raise
-
-
-@wraps(response.json)
-def json_response(*a, **kwargs) -> HTTPResponse:
-    """
-    Handles encoding date/datetime in JSON.
-    """
-    resp = response.json(*a, **kwargs, cls=CustomJSONEncoder, dumps=json.dumps)
-    return resp
-
-
-def get_error_json(exception: BaseException):
-    """Return a JSON representation of the Exception instance."""
-    if isinstance(exception, APIError):
-        # Error especially defined for WROLPi.
-        body = dict(error=str(exception), summary=exception.summary, code=exception.code)
-    else:
-        # Not a WROLPi APIError error.
-        body = dict(
-            error=str(exception),
-            summary=None,
-            code=None,
-        )
-    if exception.__cause__:
-        # This exception was caused by another, follow the stack.
-        body['cause'] = get_error_json(exception.__cause__)
-    return body
-
-
-def json_error_handler(request: Request, exception: APIError):
-    body = get_error_json(exception)
-    error = repr(str(body["error"]))
-    summary = repr(str(body["summary"]))
-    code = body['code']
-    logger.debug(f'API returning JSON error {exception=} {error=} {summary=} {code=}')
-    return json_response(body, exception.status)
 
 
 api_app.error_handler.add(APIError, json_error_handler)

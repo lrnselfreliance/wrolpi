@@ -1,6 +1,5 @@
 import asyncio
 import subprocess
-from multiprocessing import Manager
 from pathlib import Path
 from typing import List
 
@@ -8,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from modules.map.models import MapFile
 from wrolpi import flags
+from wrolpi.api_utils import api_app
 from wrolpi.cmd import SUDO_BIN
 from wrolpi.common import get_media_directory, walk, logger, get_wrolpi_config
 from wrolpi.dates import now, timedelta_to_timestamp, seconds_to_timestamp
@@ -16,10 +16,6 @@ from wrolpi.events import Events
 from wrolpi.vars import PROJECT_DIR, IS_RPI5
 
 logger = logger.getChild(__name__)
-
-IMPORTING = Manager().dict(dict(
-    pending=None,
-))
 
 
 def get_map_directory() -> Path:
@@ -100,7 +96,7 @@ async def import_files(paths: List[str]):
             if pbfs:
                 success = False
                 try:
-                    IMPORTING.update(dict(
+                    api_app.shared_ctx.map_importing.update(dict(
                         pending=list(pbfs),
                     ))
                     total_elapsed += await run_import_command(*pbfs)
@@ -109,7 +105,7 @@ async def import_files(paths: List[str]):
                 except Exception as e:
                     import_logger.warning('Failed to run import', exc_info=e)
                 finally:
-                    IMPORTING.update(dict(
+                    api_app.shared_ctx.map_importing.update(dict(
                         pending=None,
                     ))
 
@@ -137,7 +133,7 @@ async def import_files(paths: List[str]):
 
                 success = False
                 try:
-                    IMPORTING.update(dict(
+                    api_app.shared_ctx.map_importing.update(dict(
                         pending=str(path),
                     ))
                     total_elapsed += await run_import_command(path)
@@ -146,7 +142,7 @@ async def import_files(paths: List[str]):
                 except Exception as e:
                     import_logger.warning('Failed to run import', exc_info=e)
                 finally:
-                    IMPORTING.update(dict(
+                    api_app.shared_ctx.map_importing.update(dict(
                         pending=None,
                     ))
 

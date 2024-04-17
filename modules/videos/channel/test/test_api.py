@@ -270,8 +270,8 @@ def test_channel_empty_url_doesnt_conflict(test_client, test_session, test_direc
 
 
 @pytest.mark.asyncio
-async def test_channel_download_requires_refresh(test_session, download_channel, video_download_manager, video_factory,
-                                                 events_history):
+async def test_channel_download_requires_refresh(
+        test_async_client, test_session, download_channel, video_download_manager, video_factory, events_history):
     """A Channel cannot be downloaded until it has been refreshed.
 
     Videos already downloaded are not downloaded again."""
@@ -286,6 +286,8 @@ async def test_channel_download_requires_refresh(test_session, download_channel,
         channel: Channel = test_session.query(Channel).one()
         assert channel.refreshed == expected
         assert bool(channel.info_json) == expected
+
+    await test_async_client.sanic_app.dispatch('wrolpi.download.')
 
     assert_refreshed(False)
     test_session.commit()
@@ -318,7 +320,7 @@ async def test_channel_download_requires_refresh(test_session, download_channel,
     assert downloaded_urls == ['https://example.com/2']
 
     # Should not send refresh events because downloads are automated.
-    assert events_history == []
+    assert list(events_history) == []
 
 
 def test_channel_post_directory(test_session, test_client, test_directory):

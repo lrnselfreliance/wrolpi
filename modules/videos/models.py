@@ -9,7 +9,7 @@ from sqlalchemy.orm.collections import InstrumentedList
 
 from modules.videos.errors import UnknownVideo, UnknownChannel
 from wrolpi.captions import read_captions
-from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task
+from wrolpi.common import Base, ModelHelper, logger, get_media_directory, background_task, truncate_object_bytes
 from wrolpi.db import get_db_curs, get_db_session, optional_session
 from wrolpi.downloader import Download, download_manager
 from wrolpi.files.lib import refresh_files, split_path_stem_and_suffix
@@ -62,15 +62,19 @@ class Video(ModelHelper, Base):
         except Exception as e:
             logger.error(f'{self} ffprobe_json is invalid', exc_info=e)
 
+        # TODO these are large objects.  Can they be fetched on demand?
+        captions = self.file_group.d_text
+        comments = self.get_comments()
+
         # Put live data in "video" instead of "data" to avoid confusion on the frontend.
         d['video'] = dict(
-            caption=self.file_group.d_text,
+            caption=captions,
             caption_files=self.caption_files,
             channel=channel,
             channel_id=self.channel_id,
             codec_names=codec_names,
             codec_types=codec_types,
-            comments=self.get_comments(),
+            comments=comments,
             description=self.file_group.c_text or self.get_video_description(),
             id=self.id,
             info_json_file=self.info_json_file,

@@ -10,7 +10,7 @@ import mock
 import pytest
 
 from wrolpi.common import get_media_directory
-from wrolpi.conftest import ROUTES_ATTACHED, test_db, test_client  # noqa
+from wrolpi.conftest import test_db, test_client  # noqa
 from wrolpi.db import postgres_engine
 
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)

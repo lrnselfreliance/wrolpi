@@ -150,7 +150,7 @@ def test_delete_invalid_file(test_client, paths):
 @pytest.mark.asyncio
 async def test_delete_wrol_mode(test_async_client, wrol_mode_fixture):
     """Can't delete a file when WROL Mode is enabled."""
-    wrol_mode_fixture(True)
+    await wrol_mode_fixture(True)
 
     request, response = await test_async_client.post('/api/files/delete', content=json.dumps({'paths': ['foo', ]}))
     assert response.status_code == HTTPStatus.FORBIDDEN

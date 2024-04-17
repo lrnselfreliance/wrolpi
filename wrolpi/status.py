@@ -10,6 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+from wrolpi.api_utils import api_app
 from wrolpi.cmd import which
 from wrolpi.common import logger, limit_concurrent, get_warn_once
 from wrolpi.dates import now
@@ -337,8 +338,6 @@ IGNORED_NIC_NAMES = {
     'br-',
 }
 
-BANDWIDTH = multiprocessing.Manager().dict()
-
 
 def get_nic_names() -> List[str]:
     """Finds all non-virtual and non-docker network interface names."""
@@ -374,18 +373,17 @@ IGNORED_DISK_NAMES = (
     'loop',
     'ram',
 )
-DISKS_BANDWIDTH = multiprocessing.Manager().dict()
-MAX_DISKS_BANDWIDTH = multiprocessing.Manager().dict()
 
 
 async def get_bandwidth_info() -> Tuple[List[NICBandwidthInfo], List[DiskBandwidthInfo]]:
     """Get all bandwidth information for all NICs and Disks."""
+    from wrolpi.api_utils import api_app
     nics_info = []
     disks_info = []
 
     try:
-        for name in sorted(BANDWIDTH.keys()):
-            nic = BANDWIDTH[name]
+        for name in sorted(api_app.shared_ctx.bandwidth.keys()):
+            nic = api_app.shared_ctx.bandwidth[name]
             if 'bytes_recv_ps' not in nic:
                 # Not stats collected yet.
                 continue
@@ -397,8 +395,8 @@ async def get_bandwidth_info() -> Tuple[List[NICBandwidthInfo], List[DiskBandwid
                 speed=nic['speed'],
             ))
         used_disks = []
-        for name in sorted(DISKS_BANDWIDTH.keys()):
-            disk = DISKS_BANDWIDTH[name]
+        for name in sorted(api_app.shared_ctx.disks_bandwidth.keys()):
+            disk = api_app.shared_ctx.disks_bandwidth[name]
             if 'bytes_read_ps' not in disk:
                 # No status collected yet
                 continue
@@ -411,15 +409,17 @@ async def get_bandwidth_info() -> Tuple[List[NICBandwidthInfo], List[DiskBandwid
             used_disks.append(name)
 
             try:
-                maximum_read_ps = max(disk['bytes_read_ps'], MAX_DISKS_BANDWIDTH[name]['maximum_read_ps'])
-                maximum_write_ps = max(disk['bytes_write_ps'], MAX_DISKS_BANDWIDTH[name]['maximum_write_ps'])
+                maximum_read_ps = max(disk['bytes_read_ps'],
+                                      api_app.shared_ctx.max_disks_bandwidth[name]['maximum_read_ps'])
+                maximum_write_ps = max(disk['bytes_write_ps'],
+                                       api_app.shared_ctx.max_disks_bandwidth[name]['maximum_write_ps'])
             except KeyError:
                 # Use a low first value.  Hopefully all drives are capable of this speed.
                 maximum_read_ps = 500_000
                 maximum_write_ps = 500_000
             # Always write the new maximums.
             value = {name: {'maximum_read_ps': maximum_read_ps, 'maximum_write_ps': maximum_write_ps}}
-            MAX_DISKS_BANDWIDTH.update(value)
+            api_app.shared_ctx.max_disks_bandwidth.update(value)
 
             disks_info.append(DiskBandwidthInfo(
                 bytes_read_ps=disk['bytes_read_ps'],
@@ -460,9 +460,11 @@ def _calculate_bytes_per_second(history: List[Tuple]) -> Tuple[int, int, int]:
     return bytes_recv_ps, bytes_sent_ps, elapsed
 
 
-@limit_concurrent(1)
+@api_app.signal('wrolpi.periodic.bandwidth')
 async def bandwidth_worker(count: int = None):
     """A background process which will gather historical data about all NIC bandwidth statistics."""
+    from wrolpi.api_utils import api_app
+
     if not psutil:
         return
 
@@ -472,25 +474,25 @@ async def bandwidth_worker(count: int = None):
 
     def append_all_stats():
         for name_ in nic_names:
-            nic = BANDWIDTH.get(name_)
+            nic = api_app.shared_ctx.bandwidth.get(name_)
             if not nic:
                 # Initialize history for this NIC.
-                BANDWIDTH.update({
+                api_app.shared_ctx.bandwidth.update({
                     name_: dict(historical=[_get_nic_tick(name_), ]),
                 })
             else:
                 # Append to history for this NIC.
                 nic['historical'] = (nic['historical'] + [_get_nic_tick(name_), ])[-21:]
-                BANDWIDTH.update({name_: nic})
+                api_app.shared_ctx.bandwidth.update({name_: nic})
 
         timestamp = now().timestamp()
         for name_, disk in psutil.disk_io_counters(perdisk=True).items():
             tic = timestamp, disk.read_bytes, disk.write_bytes
-            if bw := DISKS_BANDWIDTH.get(name_):
+            if bw := api_app.shared_ctx.disks_bandwidth.get(name_):
                 bw['historical'] = (bw['historical'] + [tic, ])[-21:]
-                DISKS_BANDWIDTH.update({name_: bw})
+                api_app.shared_ctx.disks_bandwidth.update({name_: bw})
             else:
-                DISKS_BANDWIDTH.update({
+                api_app.shared_ctx.disks_bandwidth.update({
                     name_: dict(historical=[tic, ]),
                 })
 
@@ -498,17 +500,22 @@ async def bandwidth_worker(count: int = None):
     append_all_stats()
 
     while count is None or count > 0:
-        await asyncio.sleep(1)
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            # Server is restarting.
+            break
+
         if count is not None:
             count -= 1
 
         append_all_stats()
 
         # Calculate the difference between the first and last bandwidth ticks for all NICs.
-        for name, nic in BANDWIDTH.items():
+        for name, nic in api_app.shared_ctx.bandwidth.items():
             historical = nic['historical']
             bytes_recv_ps, bytes_sent_ps, elapsed = _calculate_bytes_per_second(historical)
-            BANDWIDTH.update({
+            api_app.shared_ctx.bandwidth.update({
                 name: dict(
                     historical=historical,
                     bytes_recv_ps=bytes_recv_ps,
@@ -517,13 +524,13 @@ async def bandwidth_worker(count: int = None):
                     speed=historical[-1][-1],  # Use the most recent speed.
                 )
             })
-        for name, stats in DISKS_BANDWIDTH.items():
+        for name, stats in api_app.shared_ctx.disks_bandwidth.items():
             if 'historical' not in stats:
                 continue
 
             historical = stats['historical']
             bytes_read_ps, bytes_write_ps, elapsed = _calculate_bytes_per_second(historical)
-            DISKS_BANDWIDTH.update({
+            api_app.shared_ctx.disks_bandwidth.update({
                 name: dict(
                     historical=historical,
                     bytes_read_ps=bytes_read_ps,

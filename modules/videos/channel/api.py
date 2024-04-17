@@ -11,7 +11,7 @@ from wrolpi.common import logger, wrol_mode_check, make_media_directory, \
     get_media_directory, run_after, get_relative_to_media_directory
 from wrolpi.downloader import download_manager
 from wrolpi.events import Events
-from wrolpi.root_api import json_response
+from wrolpi.api_utils import json_response
 from wrolpi.schema import JSONErrorResponse
 from wrolpi.vars import PYTEST
 from . import lib

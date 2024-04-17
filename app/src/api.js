@@ -772,6 +772,20 @@ export async function clearFailedDownloads() {
     }
 }
 
+export async function deleteOnceDownloads() {
+    let response = await apiPost(`${API_URI}/download/delete_once`);
+    if (response.status === 204) {
+        return null
+    } else {
+        toast({
+            type: 'error',
+            title: 'Error!',
+            description: 'Could not delete once downloads!  See server logs.',
+            time: 5000,
+        });
+    }
+}
+
 export async function getStatistics() {
     let response = await apiGet(`${API_URI}/statistics`);
     if (response.status === 200) {

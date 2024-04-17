@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from datetime import timedelta, datetime
 from enum import Enum
 from itertools import filterfalse
-from queue import Empty
 from typing import List, Dict, Generator, Iterable, Coroutine
 from typing import Tuple, Optional
 from urllib.parse import urlparse
@@ -22,16 +21,42 @@ from feedparser import FeedParserDict
 from sqlalchemy import Column, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import Delete
 
 from wrolpi import flags
+from wrolpi.api_utils import api_app
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, WROLPI_CONFIG, \
-    background_task, limit_concurrent
+    limit_concurrent, wrol_mode_enabled
 from wrolpi.dates import TZDateTime, now, Seconds
 from wrolpi.db import get_db_session, get_db_curs, optional_session
 from wrolpi.errors import InvalidDownload, UnrecoverableDownloadError
-from wrolpi.vars import PYTEST
+from wrolpi.vars import PYTEST, SIMULTANEOUS_DOWNLOAD_DOMAINS
 
 logger = logger.getChild(__name__)
+
+
+async def perpetual_download_worker():
+    logger.debug('perpetual_download waiting for db...')
+    async with flags.db_up.wait_for():
+        pass
+
+    logger.debug('perpetual_download starting...')
+
+    while True:
+        try:
+            logger.debug('perpetual_download is running')
+            await asyncio.sleep(10)
+
+            if download_manager.is_stopped:
+                logger.warning('DownloadManager stopped, quitting...')
+                return
+
+            await download_manager.do_downloads()
+        except asyncio.CancelledError:
+            logger.info('perpetual_download cancelled...')
+            return
+        except Exception as e:
+            logger.error('perpetual_download failed from unexpected error', exc_info=e)
 
 
 class DownloadFrequency(int, Enum):
@@ -56,6 +81,14 @@ class DownloadResult:
     settings: dict = field(default_factory=dict)
 
 
+class DownloadStatus(str, Enum):
+    new = 'new'
+    pending = 'pending'
+    complete = 'complete'
+    failed = 'failed'
+    deferred = 'deferred'
+
+
 class Download(ModelHelper, Base):  # noqa
     """Model that is used to schedule downloads."""
     __tablename__ = 'download'  # noqa
@@ -72,7 +105,7 @@ class Download(ModelHelper, Base):  # noqa
     location = Column(Text)  # Relative App URL where the item is downloaded
     next_download = Column(TZDateTime)
     settings = Column(JSONB)  # information about how the download should happen (destination, etc.)
-    status = Column(String, default='new')  # 'new', 'pending', 'complete', 'failed', 'deferred'
+    status = Column(String, default=DownloadStatus.new)  # `DownloadStatus` enum.
     _manager: 'DownloadManager' = None
 
     def __init__(self, *args, **kwargs):
@@ -103,65 +136,60 @@ class Download(ModelHelper, Base):  # noqa
 
     def renew(self, reset_attempts: bool = False):
         """Mark this Download as "new" so it will be retried."""
-        self.status = 'new'
+        self.status = DownloadStatus.new
         if reset_attempts:
             self.attempts = 0
 
+    @property
     def is_new(self) -> bool:
-        return self.status == 'new'
+        return self.status == DownloadStatus.new
 
     def defer(self):
         """Download should be tried again after a time."""
-        self.status = 'deferred'
+        self.status = DownloadStatus.deferred
 
+    @property
     def is_deferred(self) -> bool:
-        return self.status == 'deferred'
+        return self.status == DownloadStatus.deferred
 
     def fail(self):
         """Download should not be attempted again.  A recurring Download will raise an error."""
         if self.frequency:
             raise ValueError('Recurring download should not be failed.')
-        self.status = 'failed'
+        self.status = DownloadStatus.failed
 
+    @property
     def is_failed(self) -> bool:
-        return self.status == 'failed'
+        return self.status == DownloadStatus.failed
 
     def started(self):
         """Mark this Download as in progress."""
         self.attempts += 1
-        self.status = 'pending'
+        self.status = DownloadStatus.pending
 
+    @property
     def is_pending(self) -> bool:
-        return self.status == 'pending'
+        return self.status == DownloadStatus.pending
 
     def complete(self):
         """Mark this Download as successfully downloaded."""
-        self.status = 'complete'
+        self.status = DownloadStatus.complete
         self.error = None  # clear any old errors
         self.last_successful_download = now()
 
+    @property
     def is_complete(self) -> bool:
-        return self.status == 'complete'
+        return self.status == DownloadStatus.complete
 
     def get_downloader(self):
         if self.downloader:
-            return self.manager.get_downloader_by_name(self.downloader)
+            return download_manager.get_downloader_by_name(self.downloader)
 
         raise UnrecoverableDownloadError(f'Cannot find downloader for {repr(str(self.url))}')
 
     @property
     def domain(self):
         return urlparse(self.url).netloc
-
-    @property
-    def manager(self) -> 'DownloadManager':
-        if self._manager:
-            return self._manager
-        raise ValueError('No manager has been set!')
-
-    @manager.setter
-    def manager(self, value):
-        self._manager = value
 
     def filter_excluded(self, urls: List[str]) -> List[str]:
         """Return any URLs that do not match my excluded_urls."""
@@ -173,10 +201,7 @@ class Download(ModelHelper, Base):  # noqa
         return urls
 
     def add_to_skip_list(self):
-        if self.manager:
-            self.manager.add_to_skip_list(self.url)
-        else:
-            raise RuntimeError(f'Cannot add {self} to skip list because I do not have a manager.')
+        download_manager.add_to_skip_list(self.url)
 
 
 class Downloader:
@@ -191,7 +216,6 @@ class Downloader:
 
         self.name: str = self.name or name
         self.timeout: int = timeout or self.timeout
-        self._kill = multiprocessing.Event()
 
         self._manager: DownloadManager = None  # noqa
 
@@ -212,25 +236,10 @@ class Downloader:
 
     @property
     def manager(self):
-        if self._manager is None:
-            raise NotImplementedError('This needs to be registered, see DownloadManager.register_downloader')
-        return self._manager
+        return download_manager
 
-    @manager.setter
-    def manager(self, value):
-        self._manager = value
-
-    def kill(self):
-        """Kill the running download for this Downloader."""
-        if not self._kill.is_set():
-            self._kill.set()
-
-    def clear(self):
-        """Clear any "kill" request for this Downloader."""
-        if self._kill.is_set():
-            self._kill.clear()
-
-    async def process_runner(self, url: str, cmd: Tuple[str, ...], cwd: pathlib.Path, timeout: int = None,
+    async def process_runner(self, download_id: int, url: str, cmd: Tuple[str, ...], cwd: pathlib.Path,
+                             timeout: int = None,
                              **kwargs) -> Tuple[int, dict, bytes]:
         """
         Run a subprocess using the provided arguments.  This process can be killed by the Download Manager.
@@ -271,9 +280,9 @@ class Downloader:
                 elapsed = (now() - start).total_seconds()
                 if timeout and elapsed > timeout:
                     logger.warning(f'Download has exceeded its timeout {elapsed=}')
-                    self.kill()
+                    download_manager.kill_download(download_id)
 
-                if self._kill.is_set():
+                if download_manager.download_is_killed(download_id):
                     logger.warning(f'Killing download {pid=}, {elapsed} seconds elapsed (timeout was not exceeded).')
                     proc.kill()
                     break
@@ -281,8 +290,6 @@ class Downloader:
             logger.error(f'{self}.process_runner had a download error', exc_info=e)
             raise
         finally:
-            self.clear()
-
             # Output all logs from the process.
             # TODO is there a way to stream this output while the process is running?
             logger.debug(f'Download exited with {proc.returncode}')
@@ -290,26 +297,29 @@ class Downloader:
 
         return proc.returncode, logs, stdout
 
-    async def cancel_wrapper(self, coro: Coroutine, download: Download):
+    @staticmethod
+    async def cancel_wrapper(coro: Coroutine, download: Download):
         """
         Converts an async coroutine to a task.  If DownloadManager receives a kill request, this method will cancel
         the task.
         """
+        download_id = download.id
         task = asyncio.create_task(coro)
         while not task.done():
-            if self._kill.is_set():
+            if download_manager.download_is_killed(
+                    download_id) or download_manager.is_disabled or download_manager.is_stopped:
                 logger.warning(f'Cancel download of {download.url}')
                 task.cancel()
                 try:
                     await task
                 except asyncio.CancelledError as e:
-                    logger.debug(f'Successful cancel of {download.url}', exc_info=e)
+                    logger.info(f'Successful cancel of {download.url}', exc_info=e)
                     return DownloadResult(
                         success=False,
                         error='Download was canceled',
                     )
                 finally:
-                    self.clear()
+                    download_manager.unkill_download(download_id)
             else:
                 # Wait for the download to complete.  Cancel if requested.
                 await asyncio.sleep(0.1)
@@ -330,21 +340,49 @@ class DownloadManager:
     def __init__(self):
         self.instances: Tuple[Downloader] = tuple()
         self._instances = dict()
-        self.disabled = multiprocessing.Event()
-        self.stopped = multiprocessing.Event()
 
-        self.download_queue: multiprocessing.Queue = multiprocessing.Queue()
         self.workers: List[Dict] = []
         self.worker_count: int = 1
         self.worker_alive_frequency = timedelta(minutes=10)
 
-        self.data = multiprocessing.Manager().dict()
-        # We haven't started downloads yet, so no domains are downloading.
-        self.data['processing_domains'] = []
-        self.data['workers'] = dict()
-
     def __repr__(self):
         return f'<DownloadManager pid={os.getpid()}>'
+
+    @property
+    def disabled(self):
+        # Server is going to keep running, but downloads should stop.
+        return api_app.shared_ctx.download_manager_disabled
+
+    @property
+    def is_disabled(self):
+        return self.disabled.is_set()
+
+    @property
+    def stopped(self):
+        # Server is stopping and perpetual download should stop.
+        return api_app.shared_ctx.download_manager_stopped
+
+    @property
+    def is_stopped(self):
+        return self.stopped.is_set()
+
+    @property
+    def download_queue(self) -> multiprocessing.Queue:
+        return api_app.shared_ctx.download_manager_queue
+
+    @property
+    def processing_domains(self):
+        return api_app.shared_ctx.download_manager_data['processing_domains']
+
+    @processing_domains.setter
+    def processing_domains(self, value: list):
+        api_app.shared_ctx.download_manager_data.update({'processing_domains': value})
+
+    def _add_processing_domain(self, domain: str):
+        self.processing_domains = list(self.processing_domains) + [domain, ]
+
+    def _delete_processing_domain(self, domain: str):
+        self.processing_domains = [i for i in self.processing_domains if i != domain]
 
     def register_downloader(self, instance: Downloader):
         if not isinstance(instance, Downloader):
@@ -352,119 +390,8 @@ class DownloadManager:
         if instance in self.instances:
             raise ValueError(f'Downloader already registered! {instance=}')
 
-        instance.manager = self
-
         self.instances = (*self.instances, instance)
         self._instances[instance.name] = instance
-
-    async def download_worker(self, num: int):
-        """Fetch a download from the queue, perform the download then store the results.
-
-        Calls DownloadManger.start_downloads() after a download completes.
-        """
-        from wrolpi.db import get_db_session
-
-        pid = os.getpid()
-        name = f'{pid}.{num}'
-        worker_logger = logger.getChild(f'download_worker.{name}')
-
-        disabled = 'disabled' if self.disabled.is_set() else 'enabled'
-        worker_logger.info(f'Starting up.  DownloadManager is {disabled}.')
-        last_heartbeat = now()
-
-        while True:
-            if self.stopped.is_set():
-                # Service may be restarting, close the worker.
-                worker_logger.warning("DownloadManager is stopped.  I'm stopping.")
-                return
-
-            if now() - last_heartbeat > self.worker_alive_frequency:
-                last_heartbeat = now()
-
-            disabled = self.disabled.is_set()
-
-            if disabled:
-                # Downloading is disabled, wait for it to enable.
-                await asyncio.sleep(1)
-                continue
-
-            try:
-                download_id, url = self.download_queue.get_nowait()
-                worker_logger.debug(f'Got download {download_id}')
-
-                with get_db_session(commit=True) as session:
-                    # Mark the download as started in new session so the change is committed.
-                    download = session.query(Download).filter_by(id=download_id).one()
-                    download.started()
-
-                # Set the Download's manager.  Testing will not use the global manager.
-                download.manager = self
-
-                downloader: Downloader = download.get_downloader()
-                if not downloader:
-                    worker_logger.warning(f'Could not find downloader for {download.downloader=}')
-
-                self.data['processing_domains'].append(download.domain)
-
-                try_again = True
-                try:
-                    # Create download coroutine; wrap it, so it can be canceled
-                    coro = downloader.do_download(download)
-                    if not inspect.iscoroutine(coro):
-                        raise RuntimeError(f'Coroutine expected from {downloader} do_download method.')
-                    result = await downloader.cancel_wrapper(coro, download)
-                except UnrecoverableDownloadError as e:
-                    # Download failed and should not be retried.
-                    worker_logger.warning(f'UnrecoverableDownloadError for {url}', exc_info=e)
-                    result = DownloadResult(success=False, error=str(traceback.format_exc()))
-                    try_again = False
-                except Exception as e:
-                    worker_logger.warning(f'Failed to download {url}.  Will be tried again later.', exc_info=e)
-                    result = DownloadResult(success=False, error=str(traceback.format_exc()))
-
-                error_len = len(result.error) if result.error else 0
-                worker_logger.debug(
-                    f'Got success={result.success} from {downloader} download_id={download.id} with {error_len=}')
-
-                with get_db_session(commit=True) as session:
-                    # Modify the download in a new session because downloads may take a long time.
-                    download: Download = session.query(Download).filter_by(id=download_id).one()
-                    # Use a new location if provided, keep the old location if no new location is provided, otherwise
-                    # clear out an outdated location.
-                    download.location = result.location or download.location or None
-                    # Clear any old errors if the download succeeded.
-                    download.error = result.error if result.error else None
-                    download.next_download = self.calculate_next_download(download, session)
-
-                    if result.downloads:
-                        worker_logger.info(f'Adding {len(result.downloads)} downloads from result of {download.url}')
-                        urls = download.filter_excluded(result.downloads)
-                        self.create_downloads(urls, session, downloader_name=download.sub_downloader,
-                                              settings=result.settings)
-
-                    if try_again is False and not download.frequency:
-                        # Only once-downloads can fail.
-                        download.fail()
-                    elif result.success:
-                        download.complete()
-                    else:
-                        download.defer()
-
-                # Remove this domain from the running list.
-                self._remove_domain(download.domain)
-                # Request any new downloads be added to the queue.
-                background_task(self.queue_downloads())
-                # Save the config now that the Download has finished.
-                background_task(save_downloads_config())
-            except asyncio.CancelledError as e:
-                worker_logger.warning('Canceled!', exc_info=e)
-                self.download_queue.task_done()
-                return
-            except Empty:
-                # No work yet.
-                await asyncio.sleep(0.1)
-            except Exception as e:
-                worker_logger.warning(f'Unexpected error', exc_info=e)
 
     def log(self, message: str, level=logging.DEBUG, exc_info=None):
         logger.log(level, f'{self} {message}', exc_info=exc_info)
@@ -481,19 +408,6 @@ class DownloadManager:
     def log_warning(self, message: str):
         return self.log(message, logging.WARNING)
 
-    def _add_domain(self, domain: str):
-        """Add a domain to the processing list.
-
-        Raises ValueError if the domain is already processing."""
-        processing_domains = self.data['processing_domains']
-        if domain in processing_domains:
-            raise ValueError(f'Domain already being downloaded! {domain}')
-        self.data['processing_domains'] = [*processing_domains, domain]
-
-    def _remove_domain(self, domain: str):
-        """Remove a domain from the processing list."""
-        self.data['processing_domains'] = [i for i in self.data['processing_domains'] if i != domain]
-
     @wrol_mode_check
     def start_workers(self, loop=None):
         """Start all download worker tasks.  Does nothing if they are already running."""
@@ -509,40 +423,6 @@ class DownloadManager:
                 coro = self.download_worker(i)
                 task = loop.create_task(coro)
                 self.workers.append(task)
-
-    def workers_running(self):
-        for task in self.workers:
-            if not task.done():
-                return True
-        return False
-
-    def cancel_workers(self):
-        if self.workers_running():
-            for task in self.workers:
-                task.cancel()
-
-    async def perpetual_download(self):
-        """
-        A method that calls itself forever.  It will queue new downloads when they are ready.
-
-        Only one of these can be running at a time.
-        """
-        if self.manager.is_set():
-            # Only one manager needs to be running.
-            return
-
-        self.manager.set()
-
-        async def _perpetual_download():
-            self.log_debug(f'perpetual download is alive with {self.download_queue.qsize()} queued downloads')
-            if self.stopped.is_set():
-                return
-
-            await download_manager.do_downloads()
-            await asyncio.sleep(30)
-            background_task(_perpetual_download())
-
-        background_task(_perpetual_download())
 
     def get_downloader_by_name(self, name: str) -> Optional[Downloader]:
         """Attempt to find a registered Downloader by its name.  Returns None if it cannot be found."""
@@ -566,7 +446,6 @@ class DownloadManager:
             download = Download(url=url, status='new')
             session.add(download)
             session.flush()
-        download.manager = self
         return download
 
     @optional_session
@@ -599,9 +478,9 @@ class DownloadManager:
 
         try:
             # Start downloading ASAP.
-            background_task(self.queue_downloads())
+            api_app.add_task(self.dispatch_downloads())
             # Save the config now that new Downloads exist.
-            background_task(save_downloads_config())
+            api_app.add_task(save_downloads_config())
         except RuntimeError:
             # Event loop isn't running.  Probably testing?
             if not PYTEST:
@@ -636,14 +515,14 @@ class DownloadManager:
 
     @wrol_mode_check
     @optional_session
-    async def queue_downloads(self, session: Session = None):
-        """Put all downloads in queue.  Will only queue downloads if there are workers to take them.  Each worker
-        only receives one domain, this is to prevent downloading from one domain many times at once."""
-        if self.disabled.is_set() or self.stopped.is_set():
+    async def dispatch_downloads(self, session: Session = None):
+        """Dispatch Sanic signals to start downloads.  This only starts as many downloads as the
+         SIMULTANEOUS_DOWNLOAD_DOMAINS variable."""
+        if self.is_disabled or self.is_stopped:
             # Don't queue downloads when disabled.
             return
 
-        if (domains := len(self.data['processing_domains'])) >= 4:
+        if (domains := len(self.processing_domains)) > SIMULTANEOUS_DOWNLOAD_DOMAINS:
             self.log_debug(
                 f'Unable to queue downloads because there are more domains than workers: {domains} >= 4')
             return
@@ -651,18 +530,18 @@ class DownloadManager:
         # Find download whose domain isn't already being downloaded.
         new_downloads = list(session.query(Download).filter(
             Download.status == 'new',
-            Download.domain not in self.data['processing_domains'],
+            Download.domain not in self.processing_domains,
         ).order_by(
             Download.frequency.is_(None),
             Download.frequency,
             Download.id))  # noqa
         count = 0
         for download in new_downloads:
-            download.manager = self  # Assign this Download to this manager.
             domain = download.domain
-            if domain not in self.data['processing_domains']:
-                self._add_domain(domain)
-                self.download_queue.put((download.id, download.url))
+            if domain not in self.processing_domains and len(self.processing_domains) < SIMULTANEOUS_DOWNLOAD_DOMAINS:
+                self._add_processing_domain(domain)
+                context = dict(download_id=download.id, download_url=download.url)
+                await api_app.dispatch('wrolpi.download.download', context=context)
                 count += 1
         if count:
             self.log_debug(f'Added {count} downloads to queue.')
@@ -672,7 +551,7 @@ class DownloadManager:
 
         Warning: Downloads will still be running even after this returns!  See `wait_for_all_downloads`.
         """
-        if self.disabled.is_set():
+        if self.disabled.is_set() or wrol_mode_enabled():
             return
 
         try:
@@ -685,31 +564,34 @@ class DownloadManager:
         except Exception as e:
             self.log_error(f'Unable to delete old downloads!', exc_info=e)
 
-        await self.queue_downloads()
+        await self.dispatch_downloads()
 
-    async def wait_for_all_downloads(self):
-        """Wait for all Downloads in queue AND any new Downloads to complete.
+    async def wait_for_all_downloads(self, timeout: int = 10):
+        """Signals start of all pending Downloads, waits for all Downloads to be processed.
 
-        THIS METHOD IS FOR TESTING.
+        @param timeout: Give up waiting after this many seconds.
+        @raises TimeoutError: If timeout is exceeded.
+
+        @warning: THIS METHOD IS FOR TESTING.
         """
-        while True:
-            await asyncio.sleep(0.1)
+        # Use real datetime.now to avoid `fake_now`.
+        start = datetime.now()
 
-            if not self.workers_running():
-                raise ValueError('No workers are running!')
+        while (datetime.now() - start).total_seconds() < timeout:
+            # Send out download signals.
+            await self.dispatch_downloads()
 
-            await self.queue_downloads()
+            # Wait for processes to start.
+            await asyncio.sleep(1)
 
-            try:
-                next(self.get_new_downloads())
-                continue
-            except StopIteration:
-                # Give any new downloads a chance to start up.
-                await asyncio.sleep(0.1)
-
-            if self.download_queue.empty():
-                # Queue is empty.  Wait for background tasks.
-                break
+            # Break out of loop only when all downloads have been processed.
+            with get_db_session() as session:
+                statuses = {i.status for i in self.get_downloads(session)}
+                if DownloadStatus.new not in statuses and DownloadStatus.pending not in statuses:
+                    # All downloads must be complete/deferred/failed.
+                    break
+        else:
+            raise TimeoutError('Downloads never finished!')
 
     @staticmethod
     def reset_downloads():
@@ -717,7 +599,13 @@ class DownloadManager:
         with get_db_curs(commit=True) as curs:
             curs.execute("UPDATE download SET status='new' WHERE status='pending' OR status='deferred'")
 
-    DOWNLOAD_SORT = ('pending', 'failed', 'new', 'deferred', 'complete')
+    DOWNLOAD_SORT = (
+        DownloadStatus.pending,
+        DownloadStatus.failed,
+        DownloadStatus.new,
+        DownloadStatus.deferred,
+        DownloadStatus.complete,
+    )
 
     @optional_session
     def get_new_downloads(self, session: Session) -> Generator[Download, None, None]:
@@ -734,7 +622,6 @@ class DownloadManager:
                 # Got the last download again.  Is something wrong?
                 return
             last = download
-            download.manager = self
             yield download
 
     @optional_session
@@ -784,15 +671,15 @@ class DownloadManager:
             session.commit()
 
             # Save the config now that some Downloads renewed.
-            background_task(save_downloads_config())
+            api_app.add_task(save_downloads_config())
 
-    def get_downloads(self, session: Session) -> List[Download]:
+    @staticmethod
+    def get_downloads(session: Session) -> List[Download]:
         downloads = list(session.query(Download).all())
-        for download in downloads:
-            download.manager = self
         return downloads
 
-    def get_download(self, session: Session, url: str = None, id_: int = None) -> Optional[Download]:
+    @staticmethod
+    def get_download(session: Session, url: str = None, id_: int = None) -> Optional[Download]:
         """Attempt to find a Download by its URL or by its id."""
         query = session.query(Download)
         if url:
@@ -800,9 +687,7 @@ class DownloadManager:
         elif id:
             download = query.filter_by(id=id_).one_or_none()
         else:
-            raise ValueError('Cannot find download without some params.')
-        if download:
-            download.manager = self
+            raise RuntimeError('Cannot find download without some params.')
         return download
 
     @optional_session
@@ -830,50 +715,46 @@ class DownloadManager:
 
     def kill_download(self, download_id: int):
         """Fail a Download. If it is pending, kill the Downloader so the download stops."""
+        logger.info(f'Killing Download: {download_id}')
+        download_manager_data = api_app.shared_ctx.download_manager_data.copy()
+        download_manager_data['killed_downloads'] = download_manager_data['killed_downloads'] + [download_id, ]
+        api_app.shared_ctx.download_manager_data.update(download_manager_data)
+
         with get_db_session(commit=True) as session:
-            download = self.get_download(session, id_=download_id)
-            downloader = download.get_downloader()
-            self.log_warning(f'Killing download {download_id} in {downloader}')
-            if download.is_pending():
-                downloader.kill()
-            download.fail()
+            if download := self.get_download(session, id_=download_id):
+                download.error = 'User stopped this download'
+                download.fail()
+
+    @staticmethod
+    def unkill_download(download_id: int):
+        """Remove a Download from the killed_downloads list.  This allows it to be run again."""
+        download_manager_data = api_app.shared_ctx.download_manager_data.copy()
+        download_manager_data['killed_downloads'] = \
+            [i for i in download_manager_data['killed_downloads'] if i != download_id]
+        api_app.shared_ctx.download_manager_data.update(download_manager_data)
+
+    @staticmethod
+    def download_is_killed(download_id: int):
+        return download_id in api_app.shared_ctx.download_manager_data['killed_downloads']
 
     def disable(self):
-        """Stop all downloads and downloaders.  Workers will stay idle."""
-        self.log_info('Disabling downloads and downloaders.')
-        self.disabled.set()
-        for downloader in self.instances:
-            downloader.kill()
-        if flags.db_up.is_set():
-            # Only defer downloads if the DB is up.
-            for download in self.get_pending_downloads():
-                download.defer()
-        self.cancel_workers()
+        """Stop all downloads and downloaders."""
+        if not self.disabled.is_set():
+            self.disabled.set()
 
     def stop(self):
-        """Stop all downloads, downloaders and workers, defer all pending downloads."""
-        self.log_warning('Stopping all workers')
-        self.stopped.set()
+        """Stop all downloads, downloaders and workers.  This is called when the server is shutting down."""
+        if not self.is_stopped:
+            self.stopped.set()
         self.disable()
 
-    def enable(self, loop=None):
-        """Enable downloading.  Start downloading.  Start workers."""
+    async def enable(self):
+        """Enable downloading.  Start downloading."""
         self.log_info('Enabling downloading')
-        for downloader in self.instances:
-            downloader.clear()
         self.stopped.clear()
         self.disabled.clear()
-        self.start_workers(loop)
 
-        try:
-            background_task(self.perpetual_download())
-            background_task(self.do_downloads())
-        except RuntimeError:
-            # This may not work while testing.
-            if not PYTEST:
-                raise
-
-    FINISHED_STATUSES = ('complete', 'failed')
+    FINISHED_STATUSES = (DownloadStatus.complete, DownloadStatus.failed)
 
     def delete_old_once_downloads(self):
         """Delete all once-downloads that have expired.
@@ -901,7 +782,7 @@ class DownloadManager:
                     END'''
 
     def get_fe_downloads(self):
-        """Get downloads for the Frontend."""
+        """Get downloads for the Frontend.  Uses raw SQL for faster result."""
         # Use custom SQL because SQLAlchemy is slow.
         with get_db_curs() as curs:
             stmt = f'''
@@ -982,16 +863,14 @@ class DownloadManager:
         summary = dict(
             pending=counts['pending_downloads'],
             recurring=counts['recurring_downloads'],
-            disabled=self.disabled.is_set(),
-            stopped=self.stopped.is_set(),
+            disabled=self.is_disabled,
+            stopped=self.is_stopped,
         )
         return summary
 
     @optional_session
     def get_pending_downloads(self, session: Session) -> List[Download]:
-        downloads = session.query(Download).filter_by(status='pending').all()
-        for download in downloads:
-            download.manager = self
+        downloads = session.query(Download).filter_by(status=DownloadStatus.pending).all()
         return downloads
 
     @staticmethod
@@ -1003,7 +882,7 @@ class DownloadManager:
         If the download is "complete" and the download has a frequency, schedule the download in it's next iteration.
         (Next week, month, etc.)
         """
-        if download.is_deferred():
+        if download.is_deferred:
             # Increase next_download slowly at first, then by large gaps later.  The largest gap is the download
             # frequency.
             hours = 3 ** (download.attempts or 1)
@@ -1040,30 +919,42 @@ class DownloadManager:
         next_download = next_download
         return next_download
 
+    @staticmethod
+    def _delete_downloads_q(once: bool = False, status: str = None, returning=Download.id) -> Delete:
+        stmt = Download.__table__.delete().returning(returning)
+        if once:
+            stmt = stmt.where(Download.frequency == None)
+        if status:
+            stmt = stmt.where(Download.status == status)
+        return stmt
+
     @optional_session
-    def delete_completed(self, session: Session):
+    def delete_completed(self, session: Session) -> List[int]:
         """Delete any completed download records."""
-        session.query(Download).filter(
-            Download.status == 'complete',
-            Download.frequency == None,  # noqa
-        ).delete()
+        stmt = self._delete_downloads_q(once=True, status=DownloadStatus.complete)
+        deleted_ids = [i for i, in session.execute(stmt).fetchall()]
         session.commit()
+        return deleted_ids
 
     @optional_session
     def delete_failed(self, session: Session):
         """Delete any failed download records."""
-        failed_downloads = session.query(Download).filter(
-            Download.status == 'failed',
-            Download.frequency == None,  # noqa
-        ).all()
+        stmt = self._delete_downloads_q(once=True, status=DownloadStatus.failed, returning=Download.url)
+        deleted_urls = [i for i, in session.execute(stmt).fetchall()]
 
         # Add all downloads to permanent skip list.
-        ids = [i.id for i in failed_downloads]
-        self.add_to_skip_list(*(i.url for i in failed_downloads))
+        self.add_to_skip_list(*deleted_urls)
 
-        # Delete all failed once-downloads.
-        session.execute('DELETE FROM download WHERE id = ANY(:ids)', {'ids': ids})
         session.commit()
+
+    @optional_session
+    def delete_once(self, session: Session):
+        """Delete any once-download records."""
+        stmt = self._delete_downloads_q(once=True)
+        deleted_ids = [i for i, in session.execute(stmt).fetchall()]
+        session.commit()
+        api_app.add_task(save_downloads_config())
+        return deleted_ids
 
     @staticmethod
     def is_skipped(*urls: str) -> bool:
@@ -1081,12 +972,103 @@ class DownloadManager:
         get_download_manager_config().skip_urls = [i for i in get_download_manager_config().skip_urls if i != url]
         get_download_manager_config().save()
 
+    @staticmethod
+    def get_download_by_url(url: str) -> Optional[Download]:
+        with get_db_session() as session:
+            download = session.query(Download).filter_by(url=url).one_or_none()
+            return download
+
 
 # The global DownloadManager.  This should be used everywhere!
 download_manager = DownloadManager()
 
 
-class DownloadMangerConfig(ConfigFile):
+@api_app.signal('wrolpi.download.download')
+async def signal_download_download(download_id: int, download_url: str):
+    """Calls Downloaders based on the download information provided, as well as what is in the DB."""
+    from wrolpi.db import get_db_session
+
+    url = download_url
+    download_domain = None
+
+    name = f'download_worker'
+    worker_logger = logger.getChild(name)
+
+    try:
+        worker_logger.debug(f'Got download {download_id}')
+
+        with get_db_session(commit=True) as session:
+            # Mark the download as started in new session so the change is committed.
+            download = session.query(Download).filter_by(id=download_id).one()
+            download.started()
+        download_domain = download.domain
+
+        downloader: Downloader = download.get_downloader()
+        if not downloader:
+            worker_logger.warning(f'Could not find downloader for {download.downloader=}')
+
+        try_again = True
+        try:
+            # Create download coroutine.  Wrap it, so it can be canceled.
+            if not inspect.iscoroutinefunction(downloader.do_download):
+                raise RuntimeError(f'Coroutine expected from {downloader} do_download method.')
+            coro = downloader.do_download(download)
+            result = await downloader.cancel_wrapper(coro, download)
+        except UnrecoverableDownloadError as e:
+            # Download failed and should not be retried.
+            worker_logger.warning(f'UnrecoverableDownloadError for {url}', exc_info=e)
+            result = DownloadResult(success=False, error=str(traceback.format_exc()))
+            try_again = False
+        except Exception as e:
+            worker_logger.warning(f'Failed to download {url}.  Will be tried again later.', exc_info=e)
+            result = DownloadResult(success=False, error=str(traceback.format_exc()))
+
+        error_len = len(result.error) if result.error else 0
+        worker_logger.debug(
+            f'Got success={result.success} from {downloader} download_id={download.id} with {error_len=}')
+
+        with get_db_session(commit=True) as session:
+            # Modify the download in a new session because downloads may take a long time.
+            download: Download = session.query(Download).filter_by(id=download_id).one()
+            # Use a new location if provided, keep the old location if no new location is provided, otherwise
+            # clear out an outdated location.
+            download.location = result.location or download.location or None
+            # Clear any old errors if the download succeeded.
+            download.error = result.error if result.error else None
+            download.next_download = download_manager.calculate_next_download(download, session)
+
+            if result.downloads:
+                worker_logger.info(f'Adding {len(result.downloads)} downloads from result of {download.url}')
+                urls = download.filter_excluded(result.downloads)
+                download_manager.create_downloads(urls, session, downloader_name=download.sub_downloader,
+                                                  settings=result.settings)
+
+            if try_again is False and not download.frequency:
+                # Only once-downloads can fail.
+                download.fail()
+            elif result.success:
+                download.complete()
+            else:
+                download.defer()
+
+        # Remove this domain from the running list.
+        download_manager._delete_processing_domain(download_domain)
+        # Allow the download to resume.
+        download_manager.unkill_download(download_id)
+        # Save the config now that the Download has finished.
+        api_app.add_task(save_downloads_config())
+    except asyncio.CancelledError as e:
+        worker_logger.warning('Canceled!', exc_info=e)
+        return
+    except Exception as e:
+        worker_logger.warning(f'Unexpected error', exc_info=e)
+    finally:
+        # Remove this domain from the running list.
+        if download_domain:
+            download_manager._delete_processing_domain(download_domain)
+
+
+class DownloadManagerConfig(ConfigFile):
     file_name = 'download_manager.yaml'
     default_config = dict(
         skip_urls=[],
@@ -1110,20 +1092,20 @@ class DownloadMangerConfig(ConfigFile):
         self.update({'downloads': value})
 
 
-DOWNLOAD_MANAGER_CONFIG: DownloadMangerConfig = DownloadMangerConfig()
-TEST_DOWNLOAD_MANAGER_CONFIG: DownloadMangerConfig = None
+DOWNLOAD_MANAGER_CONFIG: DownloadManagerConfig = DownloadManagerConfig()
+TEST_DOWNLOAD_MANAGER_CONFIG: DownloadManagerConfig = None
 
 
 @contextlib.contextmanager
-def downloads_manager_config_context():
+def downloads_manager_config_context() -> DownloadManagerConfig:
     """Used to create a test config."""
     global TEST_DOWNLOAD_MANAGER_CONFIG
-    TEST_DOWNLOAD_MANAGER_CONFIG = DownloadMangerConfig()
-    yield
+    TEST_DOWNLOAD_MANAGER_CONFIG = DownloadManagerConfig()
+    yield TEST_DOWNLOAD_MANAGER_CONFIG
     TEST_DOWNLOAD_MANAGER_CONFIG = None
 
 
-def get_download_manager_config() -> DownloadMangerConfig:
+def get_download_manager_config() -> DownloadManagerConfig:
     global TEST_DOWNLOAD_MANAGER_CONFIG
     if isinstance(TEST_DOWNLOAD_MANAGER_CONFIG, ConfigFile):
         return TEST_DOWNLOAD_MANAGER_CONFIG
@@ -1264,7 +1246,7 @@ class RSSDownloader(Downloader, ABC):
 
         # Only download URLs that have not yet been downloaded.
         urls = []
-        sub_downloader = self.manager.get_downloader_by_name(download.sub_downloader)
+        sub_downloader = download_manager.get_downloader_by_name(download.sub_downloader)
         if not sub_downloader:
             raise ValueError(f'Unable to find sub_downloader for {download.url}')
 

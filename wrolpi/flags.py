@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 import multiprocessing
 import subprocess
-import threading
 from datetime import datetime
 from typing import List
 
@@ -22,22 +21,20 @@ logger = logger.getChild(__name__)
 
 TESTING_LOCK = multiprocessing.Event()
 
+FLAG_NAMES = set()
+
 
 class Flag:
     """A simple wrapper around multiprocessing.Event.
 
     This allows synchronization between the App and this API.
 
-    This may store it's value in the DB table wrolpi_flag."""
+    This may store its value in the DB table wrolpi_flag."""
 
     def __init__(self, name: str, store_db: bool = False):
-        if PYTEST:
-            # Use threading Event during testing to avoid tests clobbering each other.
-            self._flag = threading.Event()
-        else:
-            self._flag = multiprocessing.Event()
         self.name = name
         self.store_db = store_db
+        FLAG_NAMES.add(name)
 
     def __repr__(self):
         return f'<Flag {repr(self.name)}>'
@@ -48,7 +45,8 @@ class Flag:
             # Testing, but the test does not need flags.
             return
 
-        self._flag.set()
+        from wrolpi.api_utils import api_app
+        api_app.shared_ctx.flags.update({self.name: True})
         self._save(True)
 
     def clear(self):
@@ -57,7 +55,8 @@ class Flag:
             # Testing, but the test does not need flags.
             return
 
-        self._flag.clear()
+        from wrolpi.api_utils import api_app
+        api_app.shared_ctx.flags.update({self.name: False})
         self._save(False)
 
     def is_set(self):
@@ -66,14 +65,15 @@ class Flag:
             # Testing, but the test does not need flags.
             return
 
-        return self._flag.is_set()
+        from wrolpi.api_utils import api_app
+        return api_app.shared_ctx.flags[self.name]
 
     def __enter__(self):
         if PYTEST and not TESTING_LOCK.is_set():
             # Testing, but the test does not need flags.
             return
 
-        if self._flag.is_set():
+        if self.is_set():
             raise ValueError(f'{self} flag is already set!')
         self.set()
 
@@ -84,7 +84,7 @@ class Flag:
 
         self.clear()
 
-    def _save(self, value):
+    def _save(self, value: bool):
         if self.store_db:
             from wrolpi.db import get_db_curs
             # Store the value of this Flag in it's matching column in the DB.  Not all flags will do this.
@@ -101,7 +101,6 @@ class Flag:
     @contextlib.asynccontextmanager
     async def wait_for(self, timeout: int = 0):
         """Wait for this Flag to be set."""
-        logger.debug(f'Waiting for flag {self.name}')
         async with wait_for_flag(self, timeout=timeout):
             yield
 
@@ -126,15 +125,6 @@ refresh_cleanup = Flag('refresh_cleanup')
 
 # The global refresh has been performed.  This is False on a fresh instance of WROLPi.
 refresh_complete = Flag('refresh_complete', store_db=True)
-# Third party packages that may be required.  See `cmd.py`
-chromium_installed = Flag('chromium_installed')
-ffmpeg_installed = Flag('ffmpeg_installed')
-ffprobe_installed = Flag('ffprobe_installed')
-nmcli_installed = Flag('nmcli_installed')
-readability_installed = Flag('readability_installed')
-singlefile_installed = Flag('singlefile_installed')
-wget_installed = Flag('wget_installed')
-yt_dlp_installed = Flag('yt_dlp_installed')
 
 
 def get_flags() -> List[str]:
@@ -146,20 +136,6 @@ def get_flags() -> List[str]:
         flags.append('refreshing')
     if refresh_complete.is_set():
         flags.append('refresh_complete')
-    if chromium_installed.is_set():
-        flags.append('chromium_installed')
-    if ffmpeg_installed.is_set():
-        flags.append('ffmpeg_installed')
-    if ffprobe_installed.is_set():
-        flags.append('ffprobe_installed')
-    if nmcli_installed.is_set():
-        flags.append('nmcli_installed')
-    if readability_installed.is_set():
-        flags.append('readability_installed')
-    if singlefile_installed.is_set():
-        flags.append('singlefile_installed')
-    if yt_dlp_installed.is_set():
-        flags.append('yt_dlp_installed')
     if outdated_zims.is_set():
         flags.append('outdated_zims')
     if kiwix_restart.is_set():
@@ -205,16 +181,15 @@ def check_db_is_up():
         db_up.clear()
 
 
-FLAGS_INITIALIZED = multiprocessing.Event()
-
-
 def init_flags():
-    """Set flags to match their DB values."""
-    if FLAGS_INITIALIZED.is_set():
-        return
-
+    """Read flag values from the DB, copy them to the shared context flags."""
     if not db_up.is_set():
         logger.error(f'Refusing to initialize flags when DB is not up.')
+        return
+
+    from wrolpi.api_utils import api_app
+    if api_app.shared_ctx.flags_initialized.is_set():
+        # Only need to read from once DB at startup.
         return
 
     from wrolpi.db import get_db_session
@@ -229,8 +204,6 @@ def init_flags():
                 outdated_zims.set()
             else:
                 outdated_zims.clear()
-
-    FLAGS_INITIALIZED.set()
 
 
 @contextlib.asynccontextmanager

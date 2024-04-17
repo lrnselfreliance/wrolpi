@@ -1,4 +1,3 @@
-import asyncio
 import json
 from http import HTTPStatus
 from itertools import zip_longest
@@ -7,10 +6,10 @@ import pytest
 from mock import mock
 
 from wrolpi.admin import HotspotStatus
+from wrolpi.api_utils import json_error_handler
 from wrolpi.common import get_wrolpi_config
 from wrolpi.downloader import Download, get_download_manager_config
 from wrolpi.errors import ValidationError, SearchEmpty
-from wrolpi.root_api import json_error_handler
 from wrolpi.test.common import skip_circleci, assert_dict_contains
 
 
@@ -348,6 +347,15 @@ async def test_clear_downloads(test_session, test_async_client, test_config, tes
     # Failed once-downloads will not be downloaded again.
     assert get_download_manager_config().skip_urls == ['https://example.com/5', ]
 
+    # "Delete All" button deletes all once-downloads.
+    request, response = await test_async_client.post('/api/download/delete_once')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    request, response = await test_async_client.get('/api/download')
+    check_downloads(response, [], recurring_downloads, status_code=HTTPStatus.OK)
+
+    # Failed once-downloads will not be downloaded again.
+    assert get_download_manager_config().skip_urls == ['https://example.com/5', ]
+
 
 @pytest.mark.asyncio
 async def test_get_status(test_async_client, test_session):
@@ -368,10 +376,10 @@ async def test_get_status(test_async_client, test_session):
 def test_post_download(test_session, test_client, test_download_manager_config):
     """Test creating once-downloads and recurring downloads."""
 
-    async def queue_downloads(*a, **kw):
+    async def dispatch_downloads(*a, **kw):
         pass
 
-    with mock.patch('wrolpi.downloader.DownloadManager.queue_downloads', queue_downloads):
+    with mock.patch('wrolpi.downloader.DownloadManager.dispatch_downloads', dispatch_downloads):
         # Create a single recurring Download.
         content = dict(
             urls=['https://example.com/1', ],
@@ -423,18 +431,20 @@ async def test_restart_download(test_session, test_async_client, test_download_m
     download = test_download_manager.create_download('https://example.com', test_downloader.name)
     download.fail()
     test_session.commit()
-    assert test_session.query(Download).one().is_failed()
+    assert test_session.query(Download).one().is_failed
 
     test_downloader.set_test_failure()
 
     # Download is now "new" again.
     request, response = await test_async_client.post(f'/api/download/{download.id}/restart')
     assert response.status_code == HTTPStatus.NO_CONTENT
-    assert test_session.query(Download).one().is_new()
+    download = test_session.query(Download).one()
+    assert download.is_new, download.status
 
     # Wait for the background download to fail.  It should be deferred.
-    await asyncio.sleep(0.5)
-    assert test_session.query(Download).one().is_deferred()
+    await test_download_manager.wait_for_all_downloads()
+    download = test_session.query(Download).one()
+    assert download.is_deferred, download.status
 
 
 def test_get_global_statistics(test_session, test_client):

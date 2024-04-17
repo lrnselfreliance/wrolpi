@@ -62,7 +62,7 @@ def test_get_channel(test_session, test_directory, channel_factory):
         assert lib.get_channel(**p)
 
 
-def test_channels_no_url(test_session, test_directory):
+def test_channels_no_url(test_session, test_directory, test_channels_config):
     """Test that a Channel's URL is coerced to None if it is empty."""
     channel1_directory = test_directory / 'channel1'
     channel1_directory.mkdir()

@@ -11,10 +11,11 @@ import pytest
 from PIL import Image
 
 from modules.videos.downloader import VideoDownloader, ChannelDownloader
-from modules.videos.lib import set_test_channels_config, set_test_downloader_config
+from modules.videos.lib import set_test_channels_config, set_test_downloader_config, get_channels_config
 from modules.videos.models import Channel, Video
 from wrolpi.downloader import DownloadFrequency, DownloadManager, Download
 from wrolpi.files.models import FileGroup
+from wrolpi.api_utils import api_app
 from wrolpi.vars import PROJECT_DIR
 
 
@@ -162,7 +163,8 @@ def video_download_manager(test_download_manager) -> DownloadManager:
 def test_channels_config(test_directory):
     (test_directory / 'config').mkdir(exist_ok=True)
     config_path = test_directory / 'config/channels.yaml'
-    with set_test_channels_config():
+    with set_test_channels_config() as config:
+        config.initialize(api_app.shared_ctx.channels_config)
         yield config_path
 
 

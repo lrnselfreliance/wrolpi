@@ -1,23 +1,23 @@
 from http import HTTPStatus
 
-from sanic import response, Request
+from sanic import response, Request, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import logger, wrol_mode_check, api_param_limiter
 from wrolpi.errors import ValidationError
-from wrolpi.root_api import get_blueprint, json_response
+from wrolpi.api_utils import json_response
 from wrolpi.schema import JSONErrorResponse
 from . import lib, schema
 
 NAME = 'archive'
 
-bp = get_blueprint('Archive', '/api/archive')
+archive_bp = Blueprint('Archive', '/api/archive')
 
 logger = logger.getChild(__name__)
 
 
-@bp.get('/<archive_id:int>')
+@archive_bp.get('/<archive_id:int>')
 @openapi.description('Get an archive')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 async def get_archive(_: Request, archive_id: int):
@@ -27,8 +27,8 @@ async def get_archive(_: Request, archive_id: int):
     return json_response({'file_group': archive_file_group, 'history': history})
 
 
-@bp.delete('/<archive_ids:int>')
-@bp.delete('/<archive_ids:[0-9,]+>')
+@archive_bp.delete('/<archive_ids:int>', name='archive_delete_one')
+@archive_bp.delete('/<archive_ids:[0-9,]+>', name='archive_delete_many')
 @openapi.description('Delete an individual archive')
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @wrol_mode_check
@@ -41,7 +41,7 @@ async def delete_archive(_: Request, archive_ids: str):
     return response.empty()
 
 
-@bp.get('/domains')
+@archive_bp.get('/domains')
 @openapi.summary('Get a list of all Domains and their Archive statistics')
 @openapi.response(200, schema.GetDomainsResponse, "The list of domains")
 async def get_domains(_: Request):
@@ -52,7 +52,7 @@ async def get_domains(_: Request):
 archive_limit_limiter = api_param_limiter(100)
 
 
-@bp.post('/search')
+@archive_bp.post('/search')
 @openapi.definition(
     summary='A File search with more filtering related to Archives',
     body=schema.ArchiveSearchRequest,

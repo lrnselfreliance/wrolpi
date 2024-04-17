@@ -163,7 +163,7 @@ def set_test_inventories_config(enabled: bool):
 
 
 def save_inventories_file():
-    """Write all inventories and their respective items to a YAML file."""
+    """Write all inventories and their respective items to a WROLPi Config file."""
     config = get_inventories_config()
 
     inventories = []

@@ -191,14 +191,12 @@ def convert_or_generate_poster(video: Video) -> Tuple[Optional[pathlib.Path], Op
 class ChannelsConfig(ConfigFile):
     file_name = 'channels.yaml'
     default_config = dict(
-        channels={
-            'wrolpi': dict(
-                name='WROLPi',
-                url='https://www.youtube.com/channel/UC4t8bw1besFTyjW7ZBCOIrw/videos',
-                directory='videos/wrolpi',
-                download_frequency=604800,
-            )
-        },
+        channels=[dict(
+            name='WROLPi',
+            url='https://www.youtube.com/channel/UC4t8bw1besFTyjW7ZBCOIrw/videos',
+            directory='videos/wrolpi',
+            download_frequency=604800,
+        )],
     )
 
     @property
@@ -216,7 +214,11 @@ TEST_CHANNELS_CONFIG: ChannelsConfig = None
 
 def get_channels_config() -> ChannelsConfig:
     global TEST_CHANNELS_CONFIG
-    if isinstance(TEST_CHANNELS_CONFIG, ConfigFile):
+    if PYTEST and not TEST_CHANNELS_CONFIG:
+        logger.warning('Test did not initialize the channels config')
+        return
+
+    if TEST_CHANNELS_CONFIG:
         return TEST_CHANNELS_CONFIG
 
     global CHANNELS_CONFIG
@@ -227,7 +229,8 @@ def get_channels_config() -> ChannelsConfig:
 def set_test_channels_config():
     global TEST_CHANNELS_CONFIG
     TEST_CHANNELS_CONFIG = ChannelsConfig()
-    yield
+    TEST_CHANNELS_CONFIG.initialize()
+    yield TEST_CHANNELS_CONFIG
     TEST_CHANNELS_CONFIG = None
 
 
@@ -342,10 +345,7 @@ def get_downloader_config() -> VideoDownloaderConfig:
 
 def set_test_downloader_config(enabled: bool):
     global TEST_VIDEO_DOWNLOADER_CONFIG
-    if enabled:
-        TEST_VIDEO_DOWNLOADER_CONFIG = VideoDownloaderConfig()
-    else:
-        TEST_VIDEO_DOWNLOADER_CONFIG = None
+    TEST_VIDEO_DOWNLOADER_CONFIG = VideoDownloaderConfig() if enabled else None
 
 
 def get_channels_config_from_db(session: Session) -> dict:
@@ -360,6 +360,11 @@ def save_channels_config(session: Session = None):
     """Get the Channel information from the DB, save it to the config."""
     config = get_channels_config_from_db(session)
     channels_config = get_channels_config()
+
+    if PYTEST and not channels_config:
+        logger.warning('Refusing to save channels config because test did not initialize a test config!')
+        return
+
     channels_config.update(config)
 
 
@@ -371,10 +376,8 @@ channel_import_logger = logger.getChild('channel_import')
 @limit_concurrent(1)
 def import_channels_config():
     """Import channel settings to the DB.  Existing channels will be updated."""
-    if PYTEST and not TEST_CHANNELS_CONFIG:
-        channel_import_logger.warning(
-            f'Not importing channels during this test.  Use `test_channels_config` fixture if you would '
-            f'like to call this.')
+    if PYTEST and not get_channels_config():
+        logger.warning('Skipping import_channels_config for this test')
         return
 
     channel_import_logger.info('Importing videos config')

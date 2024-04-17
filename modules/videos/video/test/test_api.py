@@ -155,7 +155,7 @@ async def test_wrol_mode(test_async_client, simple_channel, simple_video, wrol_m
     channel = dumps(dict(name=simple_channel.name, directory=str(simple_channel.directory)))
     tag = tag_factory()
 
-    wrol_mode_fixture(True)
+    await wrol_mode_fixture(True)
 
     # Can't create, update, or delete a channel.
     _, resp = await test_async_client.post('/api/videos/channels', content=channel)
@@ -188,5 +188,5 @@ async def test_wrol_mode(test_async_client, simple_channel, simple_video, wrol_m
 
     assert test_download_manager.stopped.is_set()
 
-    wrol_mode_fixture(False)
+    await wrol_mode_fixture(False)
     assert not test_download_manager.stopped.is_set()

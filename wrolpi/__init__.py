@@ -17,6 +17,6 @@ def after_startup(func: callable):
     """
     Run a function after the startup of the WROLPi Sanic API.  This will be run for each process!
     """
-    from .root_api import api_app
+    from wrolpi.api_utils import api_app
     api_app.after_server_start(func)
     return func

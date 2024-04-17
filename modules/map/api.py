@@ -1,21 +1,21 @@
 from http import HTTPStatus
 from pathlib import Path
 
-from sanic import Request, response
+from sanic import Request, response, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from modules.map import lib, schema
 from wrolpi import flags
+from wrolpi.api_utils import json_response
 from wrolpi.common import wrol_mode_check, get_media_directory, background_task
 from wrolpi.errors import ValidationError
-from wrolpi.root_api import get_blueprint, json_response
 from wrolpi.vars import PYTEST, DOCKERIZED
 
-bp = get_blueprint('Map', '/api/map')
+map_bp = Blueprint('Map', '/api/map')
 
 
-@bp.post('/import')
+@map_bp.post('/import')
 @openapi.definition(
     summary='Import PBF/dump map files',
     body=schema.ImportPost,
@@ -38,12 +38,12 @@ async def import_pbfs(_: Request, body: schema.ImportPost):
     return response.empty()
 
 
-@bp.get('/files')
+@map_bp.get('/files')
 @openapi.description('Find any map files, get their import status')
-def get_files_status(_: Request):
+def get_files_status(request: Request):
     paths = lib.get_import_status()
     paths = sorted(paths, key=lambda i: str(i.path))
-    pending = lib.IMPORTING.get('pending')
+    pending = request.app.shared_ctx.map_importing.get('pending')
     if pending:
         pending = [Path(i).relative_to(get_media_directory()) for i in pending]
     body = dict(

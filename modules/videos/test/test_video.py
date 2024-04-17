@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from modules.videos.lib import save_channels_config
 from modules.videos.models import Video
 from wrolpi.errors import FileGroupIsTagged
 from wrolpi.files import lib as files_lib

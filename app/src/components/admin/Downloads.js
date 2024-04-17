@@ -1,5 +1,12 @@
 import React from "react";
-import {clearCompletedDownloads, clearFailedDownloads, deleteDownload, killDownload, restartDownload} from "../../api";
+import {
+    clearCompletedDownloads,
+    clearFailedDownloads,
+    deleteDownload,
+    deleteOnceDownloads,
+    killDownload,
+    restartDownload
+} from "../../api";
 import {Link} from "react-router-dom";
 import {
     APIButton,
@@ -40,7 +47,7 @@ function ClearCompleteDownloads({callback}) {
     return <>
         <APIButton
             onClick={localClearDownloads}
-            color='yellow'
+            color='violet'
             obeyWROLMode={true}
         >Clear Completed</APIButton>
     </>
@@ -58,13 +65,35 @@ function ClearFailedDownloads({callback}) {
     }
 
     return <APIButton
-        color='red'
+        color='yellow'
         onClick={localDeleteFailed}
         confirmContent='Are you sure you want to delete failed downloads?  They will not be retried.'
         confirmButton='Delete'
         obeyWROLMode={true}
     >
         Clear Failed
+    </APIButton>
+}
+
+function DeleteOnceDownloads({callback}) {
+    async function localDeleteOnce() {
+        try {
+            await deleteOnceDownloads();
+        } finally {
+            if (callback) {
+                callback()
+            }
+        }
+    }
+
+    return <APIButton
+        color='red'
+        onClick={localDeleteOnce}
+        confirmContent='Are you sure you want to delete all downloads?  They may be retried!'
+        confirmButton='Delete'
+        obeyWROLMode={true}
+    >
+        Delete All
     </APIButton>
 }
 
@@ -306,6 +335,7 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
                         <TableHeaderCell colSpan={3}>
                             <ClearCompleteDownloads callback={fetchDownloads}/>
                             <ClearFailedDownloads callback={fetchDownloads}/>
+                            <DeleteOnceDownloads callback={fetchDownloads}/>
                         </TableHeaderCell>
                     </TableRow>
                 </TableFooter>

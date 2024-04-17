@@ -13,7 +13,7 @@ from wrolpi.files.models import FileGroup
 
 
 @pytest.mark.asyncio
-async def test_refresh_videos_index(test_session, test_directory, video_factory):
+async def test_refresh_videos_index(test_async_client, test_session, test_directory, video_factory):
     """The video modeler indexes video data into the Video's FileGroup."""
     video_factory(with_video_file=True, with_caption_file=True, with_poster_ext='jpg', with_info_json=True)
     test_session.commit()

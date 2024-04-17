@@ -33,6 +33,7 @@ import {
     APIButton,
     encodeMediaPath,
     ErrorMessage,
+    HandPointMessage,
     humanFileSize,
     IframeViewer,
     InfoMessage,
@@ -328,14 +329,18 @@ export const ZimSearchView = ({suggestions, loading}) => {
     </>
 }
 
-const ViewerMessage = () => {
+const DownloadMessage = () => {
     return <InfoMessage>
         <p>More Zim files are available from the full Kiwix library&nbsp;
             <a href='https://download.kiwix.org/'>https://download.kiwix.org/</a>
         </p>
-
-        <p>You can view your Zim files using the Kiwix app, or at <a href={VIEWER_URL}>{VIEWER_URL}</a></p>
     </InfoMessage>
+}
+
+const ViewerMessage = () => {
+    return <HandPointMessage>
+        <p>You can view your Zim files using the Kiwix app, or at <a href={VIEWER_URL}>{VIEWER_URL}</a></p>
+    </HandPointMessage>
 }
 
 const ZimCatalogItemRow = ({item, subscriptions, iso_639_codes, fetchSubscriptions}) => {
@@ -524,6 +529,7 @@ class ManageZim extends React.Component {
 
             <Divider/>
 
+            <DownloadMessage/>
             <ViewerMessage/>
         </PageContainer>
     }

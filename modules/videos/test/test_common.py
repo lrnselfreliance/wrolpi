@@ -10,6 +10,7 @@ from modules.videos.models import Channel, Video
 from wrolpi.common import get_absolute_media_path, get_wrolpi_config
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.files import lib as files_lib
+from wrolpi.api_utils import api_app
 from wrolpi.vars import PROJECT_DIR
 from .. import common
 from ..common import convert_image, update_view_counts, get_video_duration, generate_video_poster, is_valid_poster
@@ -170,7 +171,8 @@ def test_import_channel_downloads(test_session, channel_factory, test_channels_c
     assert download.frequency == channel1.download_frequency
 
     # Download frequency is adjusted when config file changes.
-    update_channel_config(channels_config, 'foo', {'download_frequency': DownloadFrequency.weekly})
+    update_channel_config(channels_config,
+                          'foo', {'download_frequency': DownloadFrequency.weekly})
     import_channels_config()
     assert len(test_session.query(Channel).all()) == 2
     assert download.url == channel1.url

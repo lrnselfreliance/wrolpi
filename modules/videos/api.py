@@ -4,19 +4,18 @@ from sanic import Blueprint
 from sanic.request import Request
 from sanic_ext.extensions.openapi import openapi
 
+from wrolpi.api_utils import json_response
 from wrolpi.common import logger
-from wrolpi.root_api import add_blueprint, json_response
 from . import lib, schema
 from .channel.api import channel_bp
 from .video.api import video_bp
 
 content_bp = Blueprint('VideoContent', '/api/videos')
-bp = Blueprint('Videos', '/api/videos').group(
+videos_bp = Blueprint('Videos', '/api/videos').group(
     content_bp,  # view and manage video content and settings
     channel_bp,  # view and manage channels
     video_bp,  # view videos
 )
-add_blueprint(bp)
 
 logger = logger.getChild(__name__)
 

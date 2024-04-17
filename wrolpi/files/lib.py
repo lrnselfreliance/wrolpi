@@ -4,7 +4,6 @@ import datetime
 import functools
 import glob
 import json
-import multiprocessing
 import os
 import pathlib
 import re
@@ -524,21 +523,19 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
         curs.execute(stmt)
 
 
-REFRESH = multiprocessing.Manager().dict()
-
-
 @limit_concurrent(1)  # Only one refresh at a time.
 @wrol_mode_check
 @cancelable_wrapper
 async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = True):
     """Find, model, and index all files in the media directory."""
+    from wrolpi.api_utils import api_app
     if isinstance(paths, str):
         paths = [pathlib.Path(paths), ]
     if isinstance(paths, pathlib.Path):
         paths = [paths, ]
 
     idempotency = now()
-    REFRESH['idempotency'] = idempotency
+    api_app.shared_ctx.refresh['idempotency'] = idempotency
 
     refreshing_all_files = False
 
@@ -563,10 +560,10 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
                     files, dirs = get_files_and_directories(directory)
                     directories.extend(dirs)
                     found_directories |= set(dirs)
-                    REFRESH['counted_files'] = REFRESH.get('counted_files', 0) + len(files)
+                    api_app.shared_ctx.refresh['counted_files'] = api_app.shared_ctx.refresh.get('counted_files', 0) + len(files)
                     # Sleep to catch cancel.
                     await asyncio.sleep(0)
-                refresh_logger.info(f'Counted {REFRESH["counted_files"]} files')
+                refresh_logger.info(f'Counted {api_app.shared_ctx.refresh["counted_files"]} files')
 
         with flags.refresh_discovery:
             await refresh_discover_paths(paths, idempotency)
@@ -1023,7 +1020,9 @@ class RefreshProgress:
 
 
 def get_refresh_progress() -> RefreshProgress:
-    idempotency = REFRESH.get('idempotency')
+    from wrolpi.api_utils import api_app
+
+    idempotency = api_app.shared_ctx.refresh.get('idempotency')
     if idempotency:
         stmt = '''
             SELECT
@@ -1052,7 +1051,7 @@ def get_refresh_progress() -> RefreshProgress:
         # TODO counts are wrong if we are not refreshing all files.
 
         progress = RefreshProgress(
-            counted_files=REFRESH.get('counted_files', 0),
+            counted_files=api_app.shared_ctx.refresh.get('counted_files', 0),
             counting=flags.refresh_counting.is_set(),
             discovery=flags.refresh_discovery.is_set(),
             indexed=int(results['indexed'] or 0),

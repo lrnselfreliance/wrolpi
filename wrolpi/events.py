@@ -12,8 +12,6 @@ logger = logger.getChild(__name__)
 HISTORY_SIZE = 100
 EVENTS_LOCK = multiprocessing.Lock()
 
-EVENTS_HISTORY = multiprocessing.Manager().list()
-
 
 class Events:
 
@@ -94,6 +92,7 @@ def log_event(event: str, message: str = None, action: str = None, subject: str 
 
 
 def send_event(event: str, message: str = None, action: str = None, subject: str = None, url: str = None):
+    from wrolpi.api_utils import api_app
     EVENTS_LOCK.acquire()
     try:
         # All events will be in time order, they should never be at the exact same time.
@@ -107,11 +106,11 @@ def send_event(event: str, message: str = None, action: str = None, subject: str
             subject=subject,
             url=url,
         )
-        EVENTS_HISTORY.append(e)
+        api_app.shared_ctx.events_history.append(e)
 
         # Keep events below limit.
-        while len(EVENTS_HISTORY) > HISTORY_SIZE:
-            EVENTS_HISTORY.pop(0)
+        while len(api_app.shared_ctx.events_history) > HISTORY_SIZE:
+            api_app.shared_ctx.events_history.pop(0)
     finally:
         EVENTS_LOCK.release()
 
@@ -120,10 +119,12 @@ def send_event(event: str, message: str = None, action: str = None, subject: str
 
 @iterify(list)
 def get_events(after: datetime = None):
+    from wrolpi.api_utils import api_app
+    events_history = api_app.shared_ctx.events_history
     if not after:
-        events = [i for i in EVENTS_HISTORY]
+        events = [i for i in events_history]
     else:
-        events = [i for i in EVENTS_HISTORY if i['dt'] > after]
+        events = [i for i in events_history if i['dt'] > after]
 
     # Most recent first.
     return events[::-1]

@@ -126,6 +126,7 @@ docker-compose.override.yml
 
 # test directory is used as media directory, we don't want to commit what a user downloads.
 test
+pg_data
 
 # Directories used to build images
 /debian-live-config/config/includes.chroot/opt/wrolpi-blobs/gis-map.dump.gz

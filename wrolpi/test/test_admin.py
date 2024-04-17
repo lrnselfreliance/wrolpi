@@ -69,7 +69,7 @@ def test_enable_hotspot_connected():
         )
 
 
-def test_change_hotspot(test_config):
+def test_change_hotspot(test_config, test_async_client):
     """The hotspot can be configured."""
     with mock.patch('wrolpi.admin.hotspot_status') as mock_hotspot_status, \
             mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
@@ -113,7 +113,7 @@ def test_throttle_off():
 
 
 @skip_circleci
-def test_hotspot_device():
+def test_hotspot_device(test_async_client):
     """Changing the hotspot device changes what device is turned on."""
     from wrolpi.common import WROLPI_CONFIG
     WROLPI_CONFIG.hotspot_device = 'wlp2s0'

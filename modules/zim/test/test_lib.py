@@ -15,7 +15,7 @@ from wrolpi.files.models import FileGroup
 
 
 @pytest.mark.asyncio
-async def test_get_zim(test_session, zim_path_factory):
+async def test_get_zim(test_async_client, test_session, zim_path_factory):
     zim_path_factory()
     await files_lib.refresh_files()
 
@@ -26,7 +26,7 @@ async def test_get_zim(test_session, zim_path_factory):
 
 
 @pytest.mark.asyncio
-async def test_zim_get_entry(test_session, zim_path_factory):
+async def test_zim_get_entry(test_async_client, test_session, zim_path_factory):
     zim_path_factory()
     await files_lib.refresh_files()
 
@@ -50,7 +50,7 @@ async def test_zim_get_entry(test_session, zim_path_factory):
 
 
 @pytest.mark.asyncio
-async def test_zim_get_entries_tags(test_session, test_zim, tag_factory):
+async def test_zim_get_entries_tags(test_async_client, test_session, test_zim, tag_factory):
     tag1, tag2 = tag_factory('tag1'), tag_factory('tag2')
     test_zim.tag_entry(tag1.name, 'one')
     test_zim.tag_entry(tag2.name, 'one')

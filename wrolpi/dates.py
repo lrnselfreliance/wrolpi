@@ -60,6 +60,9 @@ def strpdate(dt: str) -> datetime:
                 if len(a) == 4:
                     # Y/m/d
                     return datetime.strptime(dt, '%Y/%m/%d')
+                if len(a) == 2 and len(b) == 2 and len(c) == 13:
+                    # Assume d/m/Y HH:MM:SS
+                    return datetime.strptime(dt, '%m/%d/%Y %H:%M:%S')
             except ValueError:
                 pass
         elif dt.count('-') == 2 and len(dt) <= 10:

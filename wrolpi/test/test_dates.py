@@ -120,7 +120,8 @@ def test_timedelta_to_timestamp(td, expected):
     # PDFs are the Wild West...
     ("D:20221226113758-07'00", datetime(2022, 12, 26, 11, 37, 58, tzinfo=timezone(timedelta(days=-1, seconds=61200)))),
     ('D:20200205184724', datetime(2020, 2, 5, 18, 47, 24)),
-    ("D:20091019120104+", datetime(2009, 10, 19, 12, 1, 4)),
+    ('D:20091019120104+', datetime(2009, 10, 19, 12, 1, 4)),
+    ('04/27/2024 18:52:55', datetime(2024, 4, 27, 18, 52, 55)),
 ])
 def test_strpdate(dt, expected):
     assert dates.strpdate(dt) == expected
@@ -139,3 +140,6 @@ def test_invalid_strpdate():
         dates.strpdate('2001-2-31')
     with pytest.raises(InvalidDatetime):
         dates.strpdate('2001-2-30')
+
+    with pytest.raises(InvalidDatetime):
+        dates.strpdate('27/04/2024 18:52:55')

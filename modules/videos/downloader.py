@@ -202,6 +202,7 @@ class VideoDownloader(Downloader, ABC):
         if download.attempts >= 10:
             raise UnrecoverableDownloadError('Max download attempts reached')
 
+        download_id = download.id
         url = normalize_video_url(download.url)
 
         # Video may have been downloaded previously, get its location for error reporting.
@@ -325,7 +326,7 @@ class VideoDownloader(Downloader, ABC):
                 '--ppa', 'Merger+ffmpeg_o1:-strict -2',
                 url,
             )
-            return_code, logs, _ = await self.process_runner(url, cmd, out_dir)
+            return_code, logs, _ = await self.process_runner(download_id, url, cmd, out_dir)
 
             stdout = logs['stdout'].decode() if hasattr(logs['stdout'], 'decode') else logs['stdout']
             stderr = logs['stderr'].decode() if hasattr(logs['stderr'], 'decode') else logs['stderr']
@@ -408,7 +409,7 @@ class VideoDownloader(Downloader, ABC):
         except yt_dlp.utils.UnsupportedError as e:
             raise UnrecoverableDownloadError('URL is not supported by yt-dlp') from e
         except Exception as e:
-            logger.warning(f'VideoDownloader failed to download: {download.url}', exc_info=e)
+            logger.warning(f'VideoDownloader failed to download: {url}', exc_info=e)
             if _skip_download(e):
                 # The video failed to download, and the error will never be fixed.  Skip it forever.
                 try:

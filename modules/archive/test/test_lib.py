@@ -17,7 +17,7 @@ from wrolpi.common import get_wrolpi_config
 from wrolpi.db import get_db_session
 from wrolpi.files import lib as files_lib
 from wrolpi.files.models import FileGroup
-from wrolpi.root_api import CustomJSONEncoder
+from wrolpi.api_utils import CustomJSONEncoder
 from wrolpi.test.common import skip_circleci
 
 
@@ -37,7 +37,7 @@ def make_fake_archive_result(readability=True, screenshot=True, title=True):
 
 
 @pytest.mark.asyncio
-async def test_no_screenshot(test_session):
+async def test_no_screenshot(test_directory, test_session):
     singlefile, readability, screenshot = make_fake_archive_result(screenshot=False)
     archive = await model_archive_result('https://example.com', singlefile, readability, screenshot)
     assert isinstance(archive.singlefile_path, pathlib.Path)
@@ -80,7 +80,7 @@ async def test_relationships(test_session, example_singlefile):
 
 
 @pytest.mark.asyncio
-async def test_archive_title(test_session, archive_factory, singlefile_contents_factory):
+async def test_archive_title(test_async_client, test_session, archive_factory, singlefile_contents_factory):
     """An Archive's title can be fetched in multiple ways.  This tests from most to least reliable."""
     # Create some test files, delete all records for a fresh refresh.
     archive_factory(
@@ -329,7 +329,7 @@ async def test_new_archive(test_session, fake_now):
 
 
 @pytest.mark.asyncio
-async def test_get_title_from_html(test_session, fake_now):
+async def test_get_title_from_html(test_directory, test_session, fake_now):
     fake_now(datetime(2000, 1, 1))
     singlefile, readability, screenshot = make_fake_archive_result()
     archive = await model_archive_result('https://example.com', singlefile, readability, screenshot)

@@ -1583,6 +1583,15 @@ export function InfoMessage({children, size = null}) {
     </Message>
 }
 
+export function HandPointMessage({children, size = null}) {
+    return <Message info icon size={size}>
+        <SIcon name='hand point right'/>
+        <Message.Content>
+            {children}
+        </Message.Content>
+    </Message>
+}
+
 export function WarningMessage({children, size = null}) {
     return <Message warning icon size={size}>
         <SIcon name='hand point right'/>

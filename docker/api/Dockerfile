@@ -8,12 +8,14 @@ RUN apt update
 RUN apt-get install -y ffmpeg catdoc
 RUN ffmpeg -version
 
-# Install WROLPi
-COPY main.py /opt/wrolpi/
-COPY wrolpi /opt/wrolpi/wrolpi
-COPY modules /opt/wrolpi/modules
+# Install dependencies.
 COPY requirements.txt /opt/wrolpi/requirements.txt
 RUN pip3 install -r /opt/wrolpi/requirements.txt
 
+# Install WROLPi.
+COPY main.py /opt/wrolpi/
+COPY wrolpi /opt/wrolpi/wrolpi
+COPY modules /opt/wrolpi/modules
+
 ENTRYPOINT [ "python3", "-OO", "/opt/wrolpi/main.py"]
-CMD ["api", "--host", "0.0.0.0" ]
+CMD ["-vv", "api", "--host", "0.0.0.0"]

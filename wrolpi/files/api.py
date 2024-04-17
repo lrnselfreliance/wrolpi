@@ -1,27 +1,26 @@
 import pathlib
 from http import HTTPStatus
-from multiprocessing import Manager
 from typing import List
 
 import sanic.request
-from sanic import response, Request
+from sanic import response, Request, Blueprint
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from wrolpi.common import get_media_directory, wrol_mode_check, get_relative_to_media_directory, logger, \
     background_task, walk
 from wrolpi.errors import InvalidFile, UnknownDirectory, FileUploadFailed, FileConflict
-from wrolpi.root_api import get_blueprint, json_response
 from . import lib, schema
+from ..api_utils import json_response, api_app
 from ..schema import JSONErrorResponse
 from ..vars import PYTEST
 
-bp = get_blueprint('Files', '/api/files')
+files_bp = Blueprint('Files', '/api/files')
 
 logger = logger.getChild(__name__)
 
 
-@bp.post('/')
+@files_bp.post('/')
 @openapi.definition(
     summary='List files in a directory',
     body=schema.FilesRequest,
@@ -34,7 +33,7 @@ async def get_files(_: Request, body: schema.FilesRequest):
     return json_response({'files': files})
 
 
-@bp.post('/file')
+@files_bp.post('/file')
 @openapi.definition(
     summary='Get the dict of one file',
     body=schema.FileRequest,
@@ -48,7 +47,7 @@ async def get_file(_: Request, body: schema.FileRequest):
     return json_response({'file': file})
 
 
-@bp.post('/delete')
+@files_bp.post('/delete')
 @openapi.definition(
     summary='Delete files or directories.  Directories are deleted recursively.'
             '  Returns an error if WROL Mode is enabled.',
@@ -63,7 +62,7 @@ async def delete_file(_: Request, body: schema.DeleteRequest):
     return response.empty()
 
 
-@bp.post('/refresh')
+@files_bp.post('/refresh')
 @openapi.definition(
     summary='Refresh and index all paths (files/directories) in the provided list.  Refresh all files if not provided.',
     body=schema.FilesRefreshRequest,
@@ -81,7 +80,7 @@ async def refresh(request: Request):
     return response.empty()
 
 
-@bp.get('/refresh_progress')
+@files_bp.get('/refresh_progress')
 @openapi.definition(
     summary='Get the progress of the file refresh'
 )
@@ -92,7 +91,7 @@ async def refresh_progress(request: Request):
     ))
 
 
-@bp.post('/search')
+@files_bp.post('/search')
 @openapi.definition(
     summary='Search Files',
     body=schema.FilesSearchRequest,
@@ -104,7 +103,7 @@ async def post_search_files(_: Request, body: schema.FilesSearchRequest):
     return json_response(dict(file_groups=file_groups, totals=dict(file_groups=total)))
 
 
-@bp.post('/directories')
+@files_bp.post('/directories')
 @openapi.definition(
     summary='Get all directories that match the search_str, prefixed by the media directory.',
     body=schema.DirectoriesRequest,
@@ -122,7 +121,7 @@ def post_directories(_, body: schema.DirectoriesRequest):
     return response.json(body)
 
 
-@bp.post('/search_directories')
+@files_bp.post('/search_directories')
 @openapi.definition(
     summary='Get all directories whose name matches the provided name.',
     body=schema.DirectoriesSearchRequest,
@@ -156,7 +155,7 @@ async def post_search_directories(_, body: schema.DirectoriesSearchRequest):
     return json_response(body)
 
 
-@bp.post('/get_directory')
+@files_bp.post('/get_directory')
 @openapi.definition(
     summary='Get data about a directory',
     body=schema.Directory,
@@ -182,7 +181,7 @@ async def post_get_directory(_: Request, body: schema.Directory):
     return json_response(body)
 
 
-@bp.post('/directory')
+@files_bp.post('/directory')
 @openapi.definition(
     summary='Create a directory in the media directory.',
     body=schema.Directory,
@@ -203,7 +202,7 @@ async def post_create_directory(_: Request, body: schema.Directory):
     return response.empty(HTTPStatus.CREATED)
 
 
-@bp.post('/move')
+@files_bp.post('/move')
 @openapi.definition(
     summary='Move a file/directory into another directory in the media directory.',
     body=schema.Move,
@@ -228,7 +227,7 @@ async def post_move(_: Request, body: schema.Move):
     return response.empty(HTTPStatus.NO_CONTENT)
 
 
-@bp.post('/rename')
+@files_bp.post('/rename')
 @openapi.definition(
     summary='Rename a file/directory in-place.',
     body=schema.Rename,
@@ -256,7 +255,7 @@ async def post_rename(_: Request, body: schema.Rename):
     return response.empty(HTTPStatus.NO_CONTENT)
 
 
-@bp.post('/tag')
+@files_bp.post('/tag')
 @validate(schema.TagFileGroupPost)
 async def post_tag_file_group(_, body: schema.TagFileGroupPost):
     if not body.tag_id and not body.tag_name:
@@ -274,7 +273,7 @@ async def post_tag_file_group(_, body: schema.TagFileGroupPost):
     return response.empty(HTTPStatus.CREATED)
 
 
-@bp.post('/untag')
+@files_bp.post('/untag')
 @validate(schema.TagFileGroupPost)
 async def post_untag_file_group(_, body: schema.TagFileGroupPost):
     await lib.remove_file_group_tag(body.file_group_id, body.file_group_primary_path, body.tag_name, body.tag_id)
@@ -284,16 +283,16 @@ async def post_untag_file_group(_, body: schema.TagFileGroupPost):
 # {
 #   '/media/directory/sub-dir/the-file-name.suffix': 2,  # The chunk number we will receive next.
 # }
-UPLOADED_FILES = Manager().dict()
 
 
-@bp.post('/upload')
+@files_bp.post('/upload')
 async def post_upload(request: Request):
     """Accepts a multipart/form-data request to upload a single file.
 
     Tracks the number of chunks and will request the correct chunk of the chunks come out of order.
 
     Will not overwrite an existing file, unless a previous upload did not complete."""
+
     try:
         destination = request.form['destination'][0]
     except Exception as e:
@@ -324,7 +323,7 @@ async def post_upload(request: Request):
     output_str = str(output)
 
     # Chunks start at 0.
-    expected_chunk_num = UPLOADED_FILES.get(output_str, 0)
+    expected_chunk_num = api_app.shared_ctx.uploaded_files.get(output_str, 0)
     logger.debug(f'last_chunk_num is {expected_chunk_num} for {repr(output_str)} received {chunk_num=}')
 
     chunk_size = int(request.form['chunkSize'][0])
@@ -333,7 +332,7 @@ async def post_upload(request: Request):
     if (body_size := len(chunk.body)) != chunk_size:
         raise FileUploadFailed(f'Chunk size does not match the size of the chunk! {chunk_size} != {body_size=}')
 
-    if chunk_num == 0 and output.is_file() and output_str in UPLOADED_FILES:
+    if chunk_num == 0 and output.is_file() and output_str in api_app.shared_ctx.uploaded_files:
         # User attempted to upload this same file, but it did not finish.  User has started over again.
         logger.info(f'Restarting upload of {repr(output_str)}')
         output.unlink()
@@ -366,12 +365,12 @@ async def post_upload(request: Request):
 
     # Store what we expect to receive next.
     expected_chunk_num += 1
-    UPLOADED_FILES[output_str] = expected_chunk_num
+    api_app.shared_ctx.uploaded_files[output_str] = expected_chunk_num
 
     # Chunks start at 0.
     if chunk_num == total_chunks:
         # File upload is complete.
-        del UPLOADED_FILES[output_str]
+        del api_app.shared_ctx.uploaded_files[output_str]
         background_task(lib.refresh_files([output.parent]))
         return response.empty(HTTPStatus.CREATED)
 
@@ -379,15 +378,15 @@ async def post_upload(request: Request):
     return json_response({'expected_chunk': expected_chunk_num}, HTTPStatus.OK)
 
 
-@bp.post('/ignore_directory')
+@files_bp.post('/ignore_directory')
 @validate(schema.Directory)
 async def post_ignore_directory(request: Request, body: schema.Directory):
     lib.add_ignore_directory(body.path)
     return response.empty(HTTPStatus.OK)
 
 
-@bp.post('/unignore_directory')
+@files_bp.post('/unignore_directory')
 @validate(schema.Directory)
-async def post_ignore_directory(request: Request, body: schema.Directory):
+async def post_unignore_directory(request: Request, body: schema.Directory):
     lib.remove_ignored_directory(body.path)
     return response.empty(HTTPStatus.OK)

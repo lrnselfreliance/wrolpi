@@ -18,7 +18,7 @@ from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import FileGroup
 from wrolpi.vars import PYTEST, DOCKERIZED
 from . import lib
-from .api import bp  # noqa
+from .api import archive_bp  # noqa
 from .errors import InvalidArchive
 from .lib import is_singlefile_file, request_archive, SINGLEFILE_HEADER
 from .models import Archive, Domain
@@ -74,6 +74,7 @@ class ArchiveDownloader(Downloader, ABC):
                '--browser-args', '["--no-sandbox"]',
                '--dump-content')
         return_code, _, stdout = await self.process_runner(
+            download.id,
             download.url,
             cmd,
             pathlib.Path('/home/wrolpi'),
@@ -91,6 +92,7 @@ class ArchiveDownloader(Downloader, ABC):
             cmd = (READABILITY_BIN, fh.name, download.url)
             logger.debug(f'readability cmd: {cmd}')
             return_code, logs, stdout = await self.process_runner(
+                download.id,
                 download.url,
                 cmd,
                 pathlib.Path('/home/wrolpi'),

@@ -1,7 +1,6 @@
 import pytest
 
 from modules.inventory import Inventory, Item, DEFAULT_CATEGORIES, DEFAULT_INVENTORIES
-from modules.inventory.common import set_test_inventories_config
 
 
 @pytest.fixture
@@ -24,6 +23,4 @@ def init_test_inventory(test_session):
 
     inventory = test_session.query(Inventory).filter_by(name='Food Storage').one()
     test_session.commit()
-    set_test_inventories_config(True)
     yield inventory
-    set_test_inventories_config(False)

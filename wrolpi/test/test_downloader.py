@@ -10,6 +10,7 @@ import pytest
 import pytz
 import yaml
 
+from wrolpi.common import get_wrolpi_config
 from wrolpi.dates import Seconds
 from wrolpi.db import get_db_context
 from wrolpi.downloader import Downloader, Download, DownloadFrequency, import_downloads_config, \
@@ -178,11 +179,11 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     test_downloader.set_test_success()
 
     # Download every hour.
-    test_download_manager.recurring_download('https://example.com', Seconds.hour, test_downloader.name)
+    test_download_manager.recurring_download('https://example.com/recurring', Seconds.hour, test_downloader.name)
 
     # One download is scheduled.
     downloads = test_download_manager.get_new_downloads(test_session)
-    assert [(i.url, i.frequency) for i in downloads] == [('https://example.com', Seconds.hour)]
+    assert [(i.url, i.frequency) for i in downloads] == [('https://example.com/recurring', Seconds.hour)]
 
     now_ = fake_now(datetime(2020, 1, 1, 0, 0, 0, tzinfo=pytz.UTC))
 
@@ -194,6 +195,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     assert len(downloads) == 1
     download = downloads[0]
     expected = datetime(2020, 1, 1, 1, 0, 0, tzinfo=pytz.UTC)
+    assert download.is_complete, download.status
     assert download.next_download == expected
     assert download.last_successful_download == now_
 
@@ -208,9 +210,9 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     test_download_manager.renew_recurring_downloads(test_session)
     (download,) = list(test_download_manager.get_new_downloads(test_session))
     # Download is "new" but has not been downloaded a second time.
+    assert download.is_new, download.status
     assert download.next_download == expected
     assert download.last_successful_download == now_
-    assert download.is_new()
 
     # Try the download, but it fails.
     test_downloader.do_download.reset_mock()
@@ -219,7 +221,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     test_downloader.do_download.assert_called_once()
     download = test_session.query(Download).one()
     # Download is deferred, last successful download remains the same.
-    assert download.is_deferred()
+    assert download.is_deferred, download.status
     assert download.last_successful_download == now_
     # Download should be retried after the DEFAULT_RETRY_FREQUENCY.
     expected = datetime(2020, 1, 1, 3, 0, 0, 997200, tzinfo=pytz.UTC)
@@ -233,7 +235,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     await test_download_manager.wait_for_all_downloads()
     test_downloader.do_download.assert_called_once()
     download = test_session.query(Download).one()
-    assert download.is_complete()
+    assert download.is_complete, download.status
     assert download.last_successful_download == now_
     # Floats cause slightly wrong date.
     assert download.next_download == datetime(2020, 1, 1, 5, 0, 0, 997200, tzinfo=pytz.UTC)
@@ -262,11 +264,12 @@ async def test_max_attempts(test_session, test_download_manager, test_downloader
     await test_download_manager.wait_for_all_downloads()
     download = session.query(Download).one()
     assert download.attempts == 3
-    assert download.is_failed()
+    assert download.is_failed
 
 
 @pytest.mark.asyncio
-async def test_skip_urls(test_session, test_download_manager, assert_download_urls, test_downloader):
+async def test_skip_urls(test_session, test_download_manager, assert_download_urls, test_downloader,
+                         test_download_manager_config):
     """The DownloadManager will not create downloads for URLs in its skip list."""
     _, session = get_db_context()
     get_download_manager_config().skip_urls = ['https://example.com/skipme']
@@ -282,7 +285,7 @@ async def test_skip_urls(test_session, test_download_manager, assert_download_ur
     assert_download_urls({'https://example.com/1', 'https://example.com/2'})
     assert get_download_manager_config().skip_urls == ['https://example.com/skipme']
 
-    test_download_manager.delete_completed()
+    test_download_manager.delete_once()
 
     # The user can start a download even if the URL is in the skip list.
     test_download_manager.create_download('https://example.com/skipme', test_downloader.name, reset_attempts=True)
@@ -291,28 +294,27 @@ async def test_skip_urls(test_session, test_download_manager, assert_download_ur
 
 
 @pytest.mark.asyncio
-async def test_process_runner_timeout(test_directory):
-    """A Downloader can cancel it's download using a timeout."""
+async def test_process_runner_timeout(test_async_client, test_session, test_directory):
+    """A Downloader can cancel its download using a timeout."""
     # Default timeout of 3 seconds.
     downloader = Downloader('downloader', timeout=3)
 
     # Default timeout is obeyed.
     start = datetime.now()
-    await downloader.process_runner('https://example.com', ('sleep', '8'), test_directory)
+    await downloader.process_runner(1, 'https://example.com', ('sleep', '8'), test_directory)
     elapsed = datetime.now() - start
     assert 3 < elapsed.total_seconds() < 4
 
     # One-off timeout is obeyed.
     start = datetime.now()
-    await downloader.process_runner('https://example.com', ('sleep', '8'), test_directory, timeout=1)
+    await downloader.process_runner(2, 'https://example.com', ('sleep', '8'), test_directory, timeout=1)
     elapsed = datetime.now() - start
     assert 1 < elapsed.total_seconds() < 2
 
     # Global timeout is obeyed.
-    from wrolpi.common import WROLPI_CONFIG
-    WROLPI_CONFIG.download_timeout = 3
+    get_wrolpi_config().download_timeout = 3
     start = datetime.now()
-    await downloader.process_runner('https://example.com', ('sleep', '8'), test_directory)
+    await downloader.process_runner(3, 'https://example.com', ('sleep', '8'), test_directory)
     elapsed = datetime.now() - start
     assert 2 < elapsed.total_seconds() < 4
 

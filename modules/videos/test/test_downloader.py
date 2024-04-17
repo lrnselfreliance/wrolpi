@@ -125,12 +125,11 @@ async def test_download_video_tags(test_session, video_download_manager, video_f
 
 
 @skip_circleci
-@pytest.mark.skip  # TODO this test fails when running multiple tests.
 @pytest.mark.asyncio
 async def test_download_channel(test_session, simple_channel, video_download_manager, video_file,
                                 mock_video_extract_info, mock_video_prepare_filename,
                                 mock_video_process_runner):
-    """Downloading (updating the catalog of) a Channel updates it's info_json.
+    """Downloading (updating the catalog of) a Channel updates its info_json.
 
     If a Channel has `match_regex` only those videos with matching titles will be downloaded."""
     url = 'https://www.youtube.com/c/LearningSelfReliance/videos'
@@ -262,7 +261,7 @@ async def test_video_download(test_session, test_directory, simple_channel, vide
         await video_download_manager.wait_for_all_downloads()
 
         mock_video_process_runner.assert_called_once()
-        video_url, _, out_dir = mock_video_process_runner.call_args[0]
+        download_id, video_url, _, out_dir = mock_video_process_runner.call_args[0]
 
     download: Download = test_session.query(Download).one()
     assert video_url == download.url

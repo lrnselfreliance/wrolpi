@@ -7,14 +7,17 @@ import sys
 from sanic import Sanic
 from sanic.signals import Event
 
-from wrolpi import flags, BEFORE_STARTUP_FUNCTIONS
-from wrolpi import root_api, admin
-from wrolpi.common import logger, get_wrolpi_config, check_media_directory, limit_concurrent, \
-    wrol_mode_enabled, cancel_refresh_tasks, set_log_level, background_task, cancel_background_tasks
+from wrolpi import flags, BEFORE_STARTUP_FUNCTIONS, admin
+from wrolpi import root_api
+from wrolpi import tags
+from wrolpi.api_utils import api_app
+from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
+    cancel_refresh_tasks, cancel_background_tasks, get_wrolpi_config
+from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import Seconds
-from wrolpi.downloader import download_manager, import_downloads_config
-from wrolpi.root_api import api_app
-from wrolpi.vars import PROJECT_DIR, DOCKERIZED, PYTEST
+from wrolpi.downloader import import_downloads_config, download_manager, \
+    perpetual_download_worker
+from wrolpi.vars import PROJECT_DIR, DOCKERIZED
 from wrolpi.version import get_version_string
 
 logger = logger.getChild('wrolpi-main')
@@ -22,7 +25,7 @@ logger = logger.getChild('wrolpi-main')
 
 def db_main(args):
     """
-    Handle database migrations.  Currently this uses Alembic, supported commands are "upgrade" and "downgrade".
+    Handle database migrations.  This uses Alembic, supported commands are "upgrade" and "downgrade".
     """
     from alembic.config import Config
     from alembic import command
@@ -115,45 +118,128 @@ def main():
         return 1
 
     logger.warning(f'Starting with: {sys.argv}')
-    from wrolpi.common import LOG_LEVEL
-    with LOG_LEVEL.get_lock():
-        if args.verbose == 1:
-            LOG_LEVEL.value = logging.INFO
-            set_log_level(logging.INFO)
-        elif args.verbose and args.verbose == 2:
-            LOG_LEVEL.value = logging.DEBUG
-            set_log_level(logging.DEBUG)
-        elif args.verbose and args.verbose >= 3:
-            # Log everything.  Add SQLAlchemy debug logging.
-            LOG_LEVEL.value = logging.NOTSET
-            set_log_level(logging.NOTSET)
+    if args.verbose == 1:
+        set_log_level(logging.INFO)
+    elif args.verbose and args.verbose == 2:
+        set_log_level(logging.DEBUG)
+    elif args.verbose and args.verbose >= 3:
+        # Log everything.  Add SQLAlchemy debug logging.
+        set_log_level(logging.NOTSET)
     logger.info(get_version_string())
 
     if DOCKERIZED:
         logger.info('Running in Docker')
 
+    check_media_directory()
+
     # Run DB migrations before anything else.
     if args.sub_commands == 'db':
         return db_main(args)
 
-    config = get_wrolpi_config()
+    # Run the API.
+    if args.sub_commands == 'api':
+        return root_api.main(args)
+
+
+@api_app.main_process_start
+async def startup(app: Sanic):
+    """
+    Initializes multiprocessing tools, flags, etc.
+
+    Performed only once when the server starts, this is done before server processes are forked.
+
+    @warning: This is NOT run after auto-reload!  You must stop and start Sanic.
+    """
+    logger.debug('startup')
+    # Initialize multiprocessing shared contexts before forking Sanic processes.
+    attach_shared_contexts(app)
+    logger.debug('startup done')
+
+
+@api_app.listener('before_server_start')  # FileConfigs need to be initialized first.
+async def initialize_configs(app: Sanic):
+    """Each Sanic process runs this once."""
+    # Each process will have their own FileConfig object, but share the `app.shared_ctx.*config`
+    logger.debug('initialize_configs')
+
+    try:
+        initialize_configs_contexts(app)
+    except Exception as e:
+        logger.error('initialize_configs failed with', exc_info=e)
+        raise
+
+    logger.debug('initialize_configs done')
+
+
+@api_app.signal(Event.SERVER_SHUTDOWN_BEFORE)
+@api_app.listener('reload_process_stop')
+@limit_concurrent(1)
+async def handle_server_shutdown(*args, **kwargs):
+    """Stop downloads when server is shutting down."""
+    logger.debug('handle_server_shutdown')
+    download_manager.stop()
+    await cancel_refresh_tasks()
+    await cancel_background_tasks()
+
+
+@api_app.signal(Event.SERVER_SHUTDOWN_AFTER)
+async def handle_server_shutdown_reset(app: Sanic, loop):
+    """Reset things after shutdown is complete, just in case server is going to start again."""
+    reset_shared_contexts(app)
+
+
+# Start periodic tasks after configs are ready.
+@api_app.listener('after_server_start')
+async def start_single_tasks(app: Sanic):
+    """Recurring/Single tasks that are started in only one Sanic process."""
+    # Only allow one child process to perform periodic tasks.  See `handle_server_shutdown`
+    if app.shared_ctx.single_tasks_started.is_set():
+        return
+    app.shared_ctx.single_tasks_started.set()
+
+    from modules.zim.lib import flag_outdated_zim_files
+
+    logger.debug(f'start_single_tasks started')
+    if get_wrolpi_config().download_on_startup:
+        download_manager.enable()
+    else:
+        download_manager.disable()
+
+    # Start perpetual tasks.  DO NOT AWAIT!
+    app.add_task(perpetual_check_db_is_up_worker())  # noqa
+    app.add_task(perpetual_download_worker())  # noqa
+
+    # await app.dispatch('wrolpi.periodic.start_video_missing_comments_download')
+    await app.dispatch('wrolpi.periodic.bandwidth')
+
+    try:
+        flag_outdated_zim_files()
+    except Exception as e:
+        logger.error('Failed to flag outdated Zims', exc_info=e)
+
+    logger.debug('start_single_tasks waiting for db...')
+    async with flags.db_up.wait_for():
+        logger.debug('start_single_tasks db is up')
+
+    tags.import_tags_config()
+
+    await import_downloads_config()
+
+    if flags.refresh_complete.is_set():
+        # Set all downloads to new.
+        download_manager.reset_downloads()
 
     # Hotspot/throttle are not supported in Docker containers.
-    if not DOCKERIZED and config.hotspot_on_startup:
+    if not DOCKERIZED and get_wrolpi_config().hotspot_on_startup:
         try:
             admin.enable_hotspot()
         except Exception as e:
             logger.error('Failed to enable hotspot', exc_info=e)
-    if not DOCKERIZED and config.throttle_on_startup:
+    if not DOCKERIZED and get_wrolpi_config().throttle_on_startup:
         try:
             admin.throttle_cpu_on()
         except Exception as e:
             logger.error('Failed to throttle CPU', exc_info=e)
-
-    check_media_directory()
-
-    # Import modules before calling BEFORE_STARTUP_FUNCTIONS.
-    import modules  # noqa
 
     # Run the startup functions
     for func in BEFORE_STARTUP_FUNCTIONS:
@@ -163,128 +249,77 @@ def main():
         except Exception as e:
             logger.warning(f'Startup {func} failed!', exc_info=e)
 
-    # Run the API.
-    if args.sub_commands == 'api':
-        return root_api.main(args)
+    logger.debug(f'start_single_tasks done')
 
 
-@api_app.before_server_start
-@limit_concurrent(1)
-async def startup(app: Sanic):
-    from wrolpi.common import LOG_LEVEL
+@api_app.listener('after_server_start')
+async def start_sanic_worker(app: Sanic):
+    logger.debug(f'start_sanic_worker')
 
-    # Check database status first.  Many functions will reference flags.db_up.
-    flags.check_db_is_up()
+    await app.dispatch('wrolpi.periodic.check_log_level')
 
-    flags.init_flags()
-    await import_downloads_config()
 
-    async def periodic_check_db_is_up():
-        while True:
-            flags.check_db_is_up()
+@api_app.listener('after_server_start')
+async def start_initialize_flags(app: Sanic):
+    # Only allow one child process to initialize flags.
+    if not app.shared_ctx.flags_initialized.is_set():
+        logger.warning('start_initialize_flags')
+        app.shared_ctx.flags_initialized.set()
+        async with flags.db_up.wait_for():
             flags.init_flags()
-            await asyncio.sleep(10)
 
-    background_task(periodic_check_db_is_up())
 
-    async def periodic_check_log_level():
+@api_app.signal('wrolpi.periodic.check_log_level')
+async def periodic_check_log_level():
+    """Copies global log level into this Sanic worker's logger."""
+    log_level = api_app.shared_ctx.log_level.value
+    if log_level != logger.getEffectiveLevel():
+        logger.info(f'changing log level {log_level}')
+        set_log_level(log_level)
+
+    try:
+        await asyncio.sleep(1)
+        await api_app.dispatch('wrolpi.periodic.check_log_level')
+    except asyncio.CancelledError:
+        # Server is shutting down.
+        pass
+
+
+async def perpetual_check_db_is_up_worker():
+    try:
         while True:
-            log_level = LOG_LEVEL.value
-            if log_level != logger.getEffectiveLevel():
-                set_log_level(log_level)
-            await asyncio.sleep(1)
+            try:
+                flags.check_db_is_up()
+                flags.init_flags()
+            except Exception as e:
+                logger.error('Failed to check if db is up', exc_info=e)
 
-    background_task(periodic_check_log_level())
+            await asyncio.sleep(10)
+    except asyncio.CancelledError:
+        logger.info('periodic_check_db_is_up was cancelled...')
 
-    from wrolpi import status
-    background_task(status.bandwidth_worker())
 
-    from modules.zim.lib import flag_outdated_zim_files
-    flag_outdated_zim_files()
+@api_app.signal('wrolpi.periodic.start_video_missing_comments_download')
+async def periodic_start_video_missing_comments_download():
+    logger.debug('periodic_start_video_missing_comments_download is running')
 
     from modules.videos.video.lib import get_missing_videos_comments
 
-    async def periodic_start_video_missing_comments_download():
-        async with flags.refresh_complete.wait_for():
-            # We can't search for Videos missing comments until the refresh has completed.
-            pass
-
-        # Wait for download manager to startup.
-        await asyncio.sleep(5)
-
-        while True:
-            # Fetch comments for videos every hour.
-            if download_manager.disabled.is_set() or download_manager.stopped.is_set():
-                await asyncio.sleep(10)
-            else:
-                await get_missing_videos_comments()
-                await asyncio.sleep(int(Seconds.hour))
-
-    background_task(periodic_start_video_missing_comments_download())
-
-
-@api_app.after_server_start
-async def periodic_downloads(app: Sanic):
-    """
-    Starts the perpetual downloader on download manager.
-
-    Limited to only one process.
-    """
-    async with flags.db_up.wait_for():
+    async with flags.refresh_complete.wait_for():
+        # We can't search for Videos missing comments until the refresh has completed.
         pass
 
-    if not flags.refresh_complete.is_set():
-        logger.warning('Refusing to download without refresh')
-        download_manager.disable()
-        return
+    # Wait for download manager to startup.
+    await asyncio.sleep(5)
 
-    # Set all downloads to new.
-    download_manager.reset_downloads()
+    # Fetch comments for videos every hour.
+    if download_manager.disabled.is_set() or download_manager.stopped.is_set():
+        await asyncio.sleep(10)
+    else:
+        await get_missing_videos_comments()
+        await asyncio.sleep(int(Seconds.hour))
 
-    if wrol_mode_enabled():
-        logger.warning('Not starting download manager because WROL Mode is enabled.')
-        download_manager.disable()
-        return
-
-    config = get_wrolpi_config()
-    if config.download_on_startup is False:
-        logger.warning('Not starting download manager because Downloads are disabled on startup.')
-        download_manager.disable()
-        return
-
-    async with flags.db_up.wait_for():
-        download_manager.enable()
-        app.add_task(download_manager.perpetual_download())
-
-
-@api_app.after_server_start
-async def start_workers(app: Sanic):
-    """All Sanic processes have their own Download workers."""
-    if wrol_mode_enabled():
-        logger.warning(f'Not starting download workers because WROL Mode is enabled.')
-        download_manager.stop()
-        return
-
-    async with flags.db_up.wait_for():
-        download_manager.start_workers()
-
-
-@api_app.before_server_start
-@limit_concurrent(1)
-async def main_import_tags_config(app: Sanic):
-    from wrolpi import tags
-    async with flags.db_up.wait_for():
-        tags.import_tags_config()
-
-
-@root_api.api_app.signal(Event.SERVER_SHUTDOWN_BEFORE)
-@limit_concurrent(1)
-async def handle_server_shutdown(*args, **kwargs):
-    """Stop downloads when server is shutting down."""
-    if not PYTEST:
-        download_manager.stop()
-        await cancel_refresh_tasks()
-        await cancel_background_tasks()
+    await api_app.dispatch('wrolpi.periodic.start_video_missing_comments_download')
 
 
 if __name__ == '__main__':

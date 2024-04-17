@@ -1,10 +1,10 @@
 import asyncio
 import atexit
 import contextlib
-import ctypes
 import inspect
 import json
 import logging
+import logging.config
 import multiprocessing
 import os
 import pathlib
@@ -21,7 +21,7 @@ from decimal import Decimal
 from functools import wraps
 from http import HTTPStatus
 from itertools import islice, filterfalse, tee
-from multiprocessing import Lock, Manager
+from multiprocessing.managers import DictProxy
 from pathlib import Path
 from types import GeneratorType
 from typing import Union, Callable, Tuple, Dict, List, Iterable, Optional, Generator, Any, Set, Coroutine
@@ -42,17 +42,34 @@ from wrolpi.dates import now, from_timestamp, seconds_to_timestamp
 from wrolpi.errors import WROLModeEnabled, NativeOnly, UnrecoverableDownloadError, LogLevelError
 from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT_HTTP_HEADERS
 
-LOG_LEVEL = multiprocessing.Value(ctypes.c_int, 20)
+LOGGING_CONFIG = {
+    'version': 1,
+    'disable_existing_loggers': True,
+    'formatters': {
+        'standard': {
+            'format': '[%(asctime)s] [%(process)d] [%(name)s:%(lineno)d] [%(levelname)s] %(message)s'
+        },
+        'detailed': {
+            'format': '[%(asctime)s] [%(process)d] [%(name)s:%(lineno)d] [%(levelname)s] %(message)s'
+        }
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'level': 'DEBUG',
+            'formatter': 'standard',
+            'stream': 'ext://sys.stdout'  # Use standard output
+        }
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'DEBUG'
+    }
+}
 
-# Get root handler, delete any existing handlers.
+# Apply logging config.
 logger = logging.getLogger()
-for handler in logger.handlers:
-    logger.removeHandler(handler)
-
-ch = logging.StreamHandler()
-formatter = logging.Formatter('[%(asctime)s] [%(process)d] [%(name)s:%(lineno)d] [%(levelname)s] %(message)s')
-ch.setFormatter(formatter)
-logger.addHandler(ch)
+logging.config.dictConfig(LOGGING_CONFIG)
 
 logger_ = logger.getChild(__name__)
 
@@ -86,8 +103,9 @@ def set_global_log_level(log_level: int):
     """Set the global (shared between processes) log level."""
     if not isinstance(log_level, int) or 0 > log_level or log_level > 40:
         raise LogLevelError()
-    with LOG_LEVEL.get_lock():
-        LOG_LEVEL.value = log_level
+    from wrolpi.api_utils import api_app
+    with api_app.shared_ctx.log_level.get_lock():
+        api_app.shared_ctx.log_level.value = log_level
 
 
 @contextlib.contextmanager
@@ -103,7 +121,6 @@ __all__ = [
     'ConfigFile',
     'DownloadFileInfo',
     'DownloadFileInfoLink',
-    'LOG_LEVEL',
     'ModelHelper',
     'WROLPI_CONFIG',
     'aiohttp_get',
@@ -113,6 +130,7 @@ __all__ = [
     'apply_modelers',
     'apply_refresh_cleanup',
     'background_task',
+    'cancel_background_tasks',
     'cancel_refresh_tasks',
     'cancelable_wrapper',
     'chain',
@@ -123,6 +141,7 @@ __all__ = [
     'compile_tsvector',
     'cum_timer',
     'date_range',
+    'LOGGING_CONFIG',
     'disable_wrol_mode',
     'download_file',
     'enable_wrol_mode',
@@ -135,9 +154,11 @@ __all__ = [
     'get_absolute_media_path',
     'get_download_info',
     'get_files_and_directories',
+    'get_global_statistics',
     'get_html_soup',
     'get_media_directory',
     'get_relative_to_media_directory',
+    'get_title_from_html',
     'get_warn_once',
     'get_wrolpi_config',
     'html_screenshot',
@@ -155,6 +176,7 @@ __all__ = [
     'remove_whitespace',
     'resolve_generators',
     'run_after',
+    'set_global_log_level',
     'set_log_level',
     'set_test_config',
     'set_test_media_directory',
@@ -164,6 +186,7 @@ __all__ = [
     'truncate_generator_bytes',
     'truncate_object_bytes',
     'tsvector',
+    'url_strip_host',
     'walk',
     'wrol_mode_check',
     'wrol_mode_enabled',
@@ -254,7 +277,7 @@ def get_media_directory() -> Path:
     global TEST_MEDIA_DIRECTORY
 
     if PYTEST and not TEST_MEDIA_DIRECTORY:
-        raise ValueError('No test media directory set during testing!!')
+        raise RuntimeError('No test media directory set during testing!!')
 
     if isinstance(TEST_MEDIA_DIRECTORY, pathlib.Path):
         if not str(TEST_MEDIA_DIRECTORY).startswith('/tmp'):
@@ -274,28 +297,28 @@ class ConfigFile:
     width: int = None
 
     def __init__(self):
-        self.file_lock = Lock()
         self.width = self.width or 90
 
         if PYTEST:
-            # Do not load a global config on import while testing.  A global instance will never be used for testing.
+            # Do not load a global config on import while testing.  A global instance should never be used for testing.
             self._config = self.default_config.copy()
             return
-        self.initialize()
 
     def __repr__(self):
         return f'<{self.__class__.__name__} file={self.get_file()}>'
 
-    def initialize(self):
+    def initialize(self, multiprocessing_dict: Optional[DictProxy] = None):
         """Initializes this config dict using the default config and the config file."""
         config_file = self.get_file()
-        self._config = Manager().dict()
+        # Use the provided multiprocessing.Manager().dict(), or dict() for testing.
+        self._config = multiprocessing_dict or dict()
         # Use the default settings to initialize the config.
         self._config.update(deepcopy(self.default_config))
         if config_file.is_file():
             # Use the config file to get the values the user set.
             with config_file.open('rt') as fh:
                 self._config.update(yaml.load(fh, Loader=yaml.Loader))
+        return self
 
     def _get_backup_filename(self):
         """Returns the path for the backup file for today."""
@@ -313,13 +336,16 @@ class ConfigFile:
         Use the existing config file as a template; if any values are missing in the new config, use the values from the
         config file.
         """
+        from wrolpi.api_utils import api_app
+
         config_file = self.get_file()
         # Don't overwrite a real config while testing.
         if PYTEST and not str(config_file).startswith('/tmp'):
             raise ValueError(f'Refusing to save config file while testing: {config_file}')
 
-        # Only one process can write to the file.
-        acquired = self.file_lock.acquire(block=True, timeout=5.0)
+        # Only one process can write to a config.
+        lock = api_app.shared_ctx.config_save_lock
+        acquired = lock.acquire(block=True, timeout=5.0)
 
         try:
             # Config directory may not exist.
@@ -341,12 +367,15 @@ class ConfigFile:
                 config = dict()
 
             config.update({k: v for k, v in self._config.items() if v is not None})
-            logger.warning(f'Saving config: {config_file}')
+            logger.debug(f'Saving config: {config_file}')
             with config_file.open('wt') as fh:
                 yaml.dump(config, fh, width=self.width)
+                # Wait for data to be written before releasing lock.
+                fh.flush()
+                os.fsync(fh.fileno())
         finally:
             if acquired:
-                self.file_lock.release()
+                lock.release()
 
     def get_file(self) -> Path:
         if not self.file_name:
@@ -563,7 +592,7 @@ def wrol_mode_check(func):
     return check
 
 
-def enable_wrol_mode(download_manager=None):
+def enable_wrol_mode():
     """
     Modify config to enable WROL Mode.
 
@@ -571,15 +600,11 @@ def enable_wrol_mode(download_manager=None):
     """
     logger_.warning('ENABLING WROL MODE')
     get_wrolpi_config().wrol_mode = True
-    if not download_manager:
-        from wrolpi.downloader import download_manager
-        download_manager.stop()
-    else:
-        # Testing.
-        download_manager.stop()
+    from wrolpi.downloader import download_manager
+    download_manager.stop()
 
 
-def disable_wrol_mode(download_manager=None):
+async def disable_wrol_mode():
     """
     Modify config to disable WROL Mode.
 
@@ -587,12 +612,8 @@ def disable_wrol_mode(download_manager=None):
     """
     logger_.warning('DISABLING WROL MODE')
     get_wrolpi_config().wrol_mode = False
-    if not download_manager:
-        from wrolpi.downloader import download_manager
-        download_manager.enable()
-    else:
-        # Testing.
-        download_manager.enable()
+    from wrolpi.downloader import download_manager
+    await download_manager.enable()
 
 
 def insert_parameter(func: Callable, parameter_name: str, item, args: Tuple, kwargs: Dict) -> Tuple[Tuple, Dict]:
@@ -1276,7 +1297,13 @@ def chunks_by_stem(it: List[Union[pathlib.Path, str, int]], size: int) -> Genera
 
 @contextlib.contextmanager
 def timer(name, level: str = 'debug'):
-    """Prints out the time elapsed during the call of some block."""
+    """Prints out the time elapsed during the call of some block.
+
+    Example:
+        with timer('sleepy'):
+            time.sleep(10)
+
+    """
     before = datetime.now()
     log_method = getattr(logger_, level)
     try:

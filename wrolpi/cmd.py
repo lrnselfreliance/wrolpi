@@ -4,7 +4,6 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
-from wrolpi import flags
 from wrolpi.common import logger
 from wrolpi.vars import PYTEST, DOCKERIZED
 
@@ -16,7 +15,7 @@ def is_executable(path: Path) -> bool:
     return path.is_file() and os.access(path, os.X_OK)
 
 
-def which(*possible_paths: str, warn: bool = False, flag: flags.Flag = None) -> Optional[Path]:
+def which(*possible_paths: str, warn: bool = False) -> Optional[Path]:
     """
     Find an executable in the system $PATH.  If the executable cannot be found in $PATH, then return the first
     executable found in possible_paths.
@@ -39,20 +38,18 @@ def which(*possible_paths: str, warn: bool = False, flag: flags.Flag = None) -> 
         logger.warning(f'Cannot find executable {possible_paths[0]}')
         return
     elif found:
-        if flag:
-            flag.set()
 
         return found.absolute()
 
 
 # Admin
 SUDO_BIN = which('sudo', '/usr/bin/sudo')
-NMCLI_BIN = which('nmcli', '/usr/bin/nmcli', flag=flags.nmcli_installed)
+NMCLI_BIN = which('nmcli', '/usr/bin/nmcli')
 CPUFREQ_INFO_BIN = which('cpufreq-info', '/usr/bin/cpufreq-info')
 CPUFREQ_SET_BIN = which('cpufreq-set', '/usr/bin/cpufreq-set')
 
 # Files
-WGET_BIN = which('wget', '/usr/bin/wget', flag=flags.wget_installed)
+WGET_BIN = which('wget', '/usr/bin/wget')
 
 # Map
 BASH_BIN = which('bash', '/bin/bash')
@@ -61,17 +58,14 @@ BASH_BIN = which('bash', '/bin/bash')
 SINGLE_FILE_BIN = which('single-file',
                         '/usr/bin/single-file',  # rpi os
                         '/usr/local/bin/single-file',  # debian
-                        flag=flags.singlefile_installed,
                         )
 CHROMIUM = which('chromium-browser', 'chromium',
                  '/usr/bin/chromium-browser',  # rpi os
                  '/usr/bin/chromium',  # debian
-                 flag=flags.chromium_installed,
                  )
 READABILITY_BIN = which('readability-extractor',
                         '/usr/bin/readability-extractor',  # rpi os
                         '/usr/local/bin/readability-extractor',  # debian
-                        flag=flags.readability_installed,
                         )
 
 # Videos
@@ -79,7 +73,6 @@ YT_DLP_BIN = which(
     'yt-dlp',
     '/usr/local/bin/yt-dlp',  # Location in docker container
     '/opt/wrolpi/venv/bin/yt-dlp',  # Use virtual environment location
-    flag=flags.yt_dlp_installed,
 )
-FFPROBE_BIN = which('ffprobe', '/usr/bin/ffprobe', flag=flags.ffprobe_installed)
-FFMPEG_BIN = which('ffmpeg', '/usr/bin/ffmpeg', flag=flags.ffmpeg_installed)
+FFPROBE_BIN = which('ffprobe', '/usr/bin/ffprobe')
+FFMPEG_BIN = which('ffmpeg', '/usr/bin/ffmpeg')

@@ -100,17 +100,12 @@ def get_db_session(commit: bool = False) -> ContextManager[Session]:
 
 
 @contextmanager
-def get_db_curs(commit: bool = False):
-    """
-    Context manager that yields a DictCursor to execute raw SQL statements.
-    """
+def get_db_conn(isolation_level=psycopg2.extensions.ISOLATION_LEVEL_DEFAULT):
     local_engine, session = get_db_context()
     connection = local_engine.raw_connection()
-    curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+    connection.set_isolation_level(isolation_level)
     try:
-        yield curs
-        if commit:
-            connection.commit()
+        yield connection, session
     except sqlalchemy.exc.DatabaseError:
         session.rollback()
         raise
@@ -118,6 +113,26 @@ def get_db_curs(commit: bool = False):
         # Rollback only if a transaction hasn't been committed.
         if session.transaction.is_active:
             connection.rollback()
+
+
+@contextmanager
+def get_db_curs(commit: bool = False, isolation_level=psycopg2.extensions.ISOLATION_LEVEL_DEFAULT):
+    """
+    Context manager that yields a DictCursor to execute raw SQL statements.
+    """
+    with get_db_conn(isolation_level=isolation_level) as (connection, session):
+        curs = connection.cursor(cursor_factory=psycopg2.extras.DictCursor)
+        try:
+            yield curs
+            if commit:
+                connection.commit()
+        except sqlalchemy.exc.DatabaseError:
+            session.rollback()
+            raise
+        finally:
+            # Rollback only if a transaction hasn't been committed.
+            if session.transaction.is_active:
+                connection.rollback()
 
 
 def optional_session(commit: Union[callable, bool] = False) -> callable:

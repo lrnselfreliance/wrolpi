@@ -1,39 +1,39 @@
 from http import HTTPStatus
 
-from sanic import response
+from sanic import response, Blueprint
 from sanic.request import Request
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
 from modules.inventory import common, inventory, schema
+from wrolpi.api_utils import json_response
 from wrolpi.common import run_after, recursive_map
 from wrolpi.errors import ValidationError
-from wrolpi.root_api import get_blueprint, json_response
 
 NAME = 'inventory'
 
-bp = get_blueprint('Inventory', '/api/inventory')
+inventory_bp = Blueprint('Inventory', '/api/inventory')
 
 
-@bp.get('/categories')
+@inventory_bp.get('/categories')
 def get_categories(_: Request):
     categories = inventory.get_categories()
     return json_response(dict(categories=categories))
 
 
-@bp.get('/brands')
+@inventory_bp.get('/brands')
 def get_brands(_: Request):
     brands = inventory.get_brands()
     return json_response(dict(brands=brands))
 
 
-@bp.get('/')
+@inventory_bp.get('/')
 def get_inventories(_: Request):
     inventories = inventory.get_inventories()
     return json_response(dict(inventories=inventories))
 
 
-@bp.get('/<inventory_id:int>')
+@inventory_bp.get('/<inventory_id:int>')
 def get_inventory(_: Request, inventory_id: int):
     by_category = common.get_inventory_by_category(inventory_id)
     by_subcategory = common.get_inventory_by_subcategory(inventory_id)
@@ -41,7 +41,7 @@ def get_inventory(_: Request, inventory_id: int):
     return json_response(dict(by_category=by_category, by_subcategory=by_subcategory, by_name=by_name))
 
 
-@bp.post('/')
+@inventory_bp.post('/')
 @openapi.definition(
     summary='Save a new inventory',
     body=schema.InventoryPostRequest,
@@ -55,7 +55,7 @@ def post_inventory(_: Request, body: schema.InventoryPostRequest):
     return response.empty(HTTPStatus.CREATED)
 
 
-@bp.put('/<inventory_id:int>')
+@inventory_bp.put('/<inventory_id:int>')
 @openapi.definition(
     summary='Update an inventory',
     body=schema.InventoryPutRequest,
@@ -69,7 +69,7 @@ def put_inventory(_: Request, inventory_id: int, body: schema.InventoryPutReques
     return response.empty()
 
 
-@bp.delete('/<inventory_id:int>')
+@inventory_bp.delete('/<inventory_id:int>')
 @openapi.description('Delete an inventory.')
 @run_after(common.save_inventories_file)
 def inventory_delete(_: Request, inventory_id: int):
@@ -77,14 +77,14 @@ def inventory_delete(_: Request, inventory_id: int):
     return response.empty()
 
 
-@bp.get('/<inventory_id:int>/item')
+@inventory_bp.get('/<inventory_id:int>/item')
 @openapi.description('Get all items from an inventory.')
 def items_get(_: Request, inventory_id: int):
     items = inventory.get_items(inventory_id)
     return json_response({'items': items})
 
 
-@bp.post('/<inventory_id:int>/item')
+@inventory_bp.post('/<inventory_id:int>/item')
 @openapi.definition(
     summary="Save an item into it's inventory.",
     body=schema.ItemPostRequest,
@@ -98,7 +98,7 @@ def post_item(_: Request, inventory_id: int, body: schema.ItemPostRequest):
     return response.empty()
 
 
-@bp.put('/item/<item_id:int>')
+@inventory_bp.put('/item/<item_id:int>')
 @openapi.definition(
     summary='Update an item.',
     body=schema.ItemPutRequest,
@@ -112,8 +112,8 @@ def put_item(_: Request, item_id: int, body: schema.ItemPutRequest):
     return response.empty()
 
 
-@bp.delete('/item/<item_ids:[0-9,]+>')
-@bp.delete('/item/<item_ids:int>')
+@inventory_bp.delete('/item/<item_ids:[0-9,]+>', name='item_delete_many')
+@inventory_bp.delete('/item/<item_ids:int>', name='item_delete_one')
 @openapi.description('Delete items from an inventory.')
 @run_after(common.save_inventories_file)
 def item_delete(_: Request, item_ids: str):

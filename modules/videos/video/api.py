@@ -1,14 +1,17 @@
+import json
+import sys
 from http import HTTPStatus
 
+import sanic.response
 from sanic import response, Blueprint
 from sanic.request import Request
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
 
+from wrolpi.api_utils import json_response, CustomJSONEncoder
 from wrolpi.common import logger, wrol_mode_check, run_after
 from wrolpi.errors import InvalidOrderBy, ValidationError
 from wrolpi.events import Events
-from wrolpi.root_api import json_response
 from wrolpi.schema import JSONErrorResponse
 from . import lib
 from .. import schema
@@ -35,7 +38,7 @@ def video_get(_: Request, video_id: int):
 @openapi.response(HTTPStatus.OK, schema.VideoSearchResponse)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)
 @validate(schema.VideoSearchRequest)
-async def search(_: Request, body: schema.VideoSearchRequest):
+async def search_videos(_: Request, body: schema.VideoSearchRequest):
     if body.order_by not in lib.VIDEO_ORDERS:
         raise InvalidOrderBy('Invalid order by')
 
@@ -53,8 +56,8 @@ async def search(_: Request, body: schema.VideoSearchRequest):
     return json_response(ret)
 
 
-@video_bp.delete('/video/<video_ids:[0-9,]+>')
-@video_bp.delete('/video/<video_ids:int>')
+@video_bp.delete('/video/<video_ids:[0-9,]+>', name='Video Delete Many')
+@video_bp.delete('/video/<video_ids:int>', name='Video Delete One')
 @openapi.description('Delete videos.')
 @openapi.response(HTTPStatus.NO_CONTENT)
 @openapi.response(HTTPStatus.NOT_FOUND, JSONErrorResponse)

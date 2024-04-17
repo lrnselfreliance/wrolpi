@@ -13,10 +13,10 @@ import zipfile
 from abc import ABC
 from datetime import datetime
 from itertools import zip_longest
-from typing import List, Callable, Dict, Sequence, Union
+from typing import List, Callable, Dict, Sequence, Union, Coroutine
 from typing import Tuple, Set
 from unittest import mock
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock
 from uuid import uuid1, uuid4
 
 import pytest
@@ -28,16 +28,19 @@ from sanic_testing.testing import SanicASGITestClient
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+# Import root api so blueprints are attached.
+import wrolpi.root_api  # noqa
 from wrolpi import flags
-from wrolpi.common import iterify, log_level_context
+from wrolpi.api_utils import api_app
+from wrolpi.common import iterify, log_level_context, enable_wrol_mode, disable_wrol_mode
 from wrolpi.common import set_test_media_directory, Base, set_test_config
+from wrolpi.contexts import attach_shared_contexts, initialize_configs_contexts
 from wrolpi.dates import set_test_now
 from wrolpi.db import postgres_engine, get_db_args
 from wrolpi.downloader import DownloadManager, DownloadResult, Download, Downloader, \
     downloads_manager_config_context
 from wrolpi.errors import UnrecoverableDownloadError
 from wrolpi.files.models import Directory, FileGroup
-from wrolpi.root_api import BLUEPRINTS, api_app
 from wrolpi.tags import Tag
 from wrolpi.vars import PROJECT_DIR
 
@@ -96,7 +99,7 @@ def test_debug_logger(level: int = logging.DEBUG):
         yield
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def test_directory() -> pathlib.Path:
     """
     Overwrite the media directory with a temporary directory.
@@ -109,7 +112,7 @@ def test_directory() -> pathlib.Path:
         yield tmp_path
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def test_config(test_directory) -> pathlib.Path:
     """
     Create a test config based off the example config.
@@ -124,17 +127,14 @@ ROUTES_ATTACHED = False
 
 
 @pytest.fixture()
-def test_client() -> ReusableClient:
+def test_client(test_directory) -> ReusableClient:
     """Get a Reusable Sanic Test Client with all default routes attached.
 
     (A non-reusable client would turn on for each request)
     """
-    global ROUTES_ATTACHED
-    if ROUTES_ATTACHED is False:
-        # Attach any blueprints for the test.
-        for bp in BLUEPRINTS:
-            api_app.blueprint(bp)
-        ROUTES_ATTACHED = True
+    attach_shared_contexts(api_app)
+
+    initialize_configs_contexts(api_app)
 
     for _ in range(5):
         # Sometimes the Sanic client tries to use a port already in use, try again...
@@ -151,21 +151,18 @@ def test_client() -> ReusableClient:
         raise RuntimeError('Test never got unused port')
 
 
-@pytest.fixture()
-def test_async_client() -> SanicASGITestClient:
+@pytest.fixture
+def test_async_client(test_directory) -> SanicASGITestClient:
     """Get an Async Sanic Test Client with all default routes attached."""
-    global ROUTES_ATTACHED
-    if ROUTES_ATTACHED is False:
-        # Attach any blueprints for the test.
-        for bp in BLUEPRINTS:
-            api_app.blueprint(bp)
-        ROUTES_ATTACHED = True
+    attach_shared_contexts(api_app)
+
+    initialize_configs_contexts(api_app)
 
     return SanicASGITestClient(api_app)
 
 
 @pytest.fixture
-def test_download_manager_config(test_directory):
+def test_download_manager_config(test_async_client, test_directory):
     with downloads_manager_config_context():
         (test_directory / 'config').mkdir(exist_ok=True)
         config_path = test_directory / 'config/download_manager.yaml'
@@ -174,15 +171,15 @@ def test_download_manager_config(test_directory):
 
 @pytest.fixture
 async def test_download_manager(
+        test_async_client,
         test_session,  # session is required because downloads can start without the test DB in place.
         test_download_manager_config,
 ):
+    # Needed to use signals in test app?
+    api_app.signalize()
+
     manager = DownloadManager()
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.get_event_loop()
-    manager.enable(loop)
+    await manager.enable()
 
     yield manager
 
@@ -243,28 +240,36 @@ def test_downloader(test_download_manager):
         def __repr__(self):
             return '<TESTING Downloader>'
 
-        do_download = MagicMock()
+        do_download = AsyncMock()
 
         def set_test_success(self):
             async def _(*a, **kwargs):
+                # Sleep so download happens after testing is waiting.
+                await asyncio.sleep(1)
                 return DownloadResult(success=True)
 
             self.do_download.side_effect = _
 
         def set_test_failure(self):
             async def _(*a, **kwargs):
+                # Sleep so download happens after testing is waiting.
+                await asyncio.sleep(1)
                 return DownloadResult(success=False)
 
             self.do_download.side_effect = _
 
         def set_test_exception(self, exception: Exception = Exception('Test downloader exception')):
             async def _(*a, **kwargs):
+                # Sleep so download happens after testing is waiting.
+                await asyncio.sleep(1)
                 raise exception
 
             self.do_download.side_effect = _
 
         def set_test_unrecoverable_exception(self):
             async def _(*a, **kwargs):
+                # Sleep so download happens after testing is waiting.
+                await asyncio.sleep(1)
                 raise UnrecoverableDownloadError()
 
             self.do_download.side_effect = _
@@ -311,15 +316,6 @@ def video_file_factory(test_directory):
 @pytest.fixture
 def video_bytes():
     return (PROJECT_DIR / 'test/big_buck_bunny_720p_1mb.mp4').read_bytes()
-
-
-@pytest.fixture
-def corrupted_video_file(test_directory) -> pathlib.Path:
-    """Return a copy of the corrupted video file in the `test_directory`."""
-    destination = test_directory / f'{uuid4()}.mp4'
-    shutil.copy(PROJECT_DIR / 'test/corrupted.mp4', destination)
-
-    yield destination
 
 
 @pytest.fixture
@@ -445,16 +441,15 @@ def make_files_structure(test_directory) -> Callable[[Union[List[Union[pathlib.P
     return create_files
 
 
+async def set_wrol_mode(enabled: bool):
+    if enabled:
+        enable_wrol_mode()
+    else:
+        await disable_wrol_mode()
+
+
 @pytest.fixture
-def wrol_mode_fixture(test_config, test_download_manager):
-    from wrolpi.common import enable_wrol_mode, disable_wrol_mode
-
-    def set_wrol_mode(enabled: bool):
-        if enabled:
-            enable_wrol_mode(test_download_manager)
-        else:
-            disable_wrol_mode(test_download_manager)
-
+def wrol_mode_fixture(test_config, test_download_manager) -> Callable[[bool], Coroutine]:
     return set_wrol_mode
 
 
@@ -477,12 +472,10 @@ def mock_create_subprocess_shell():
     return mocker
 
 
-@pytest.fixture(autouse=True)
-def events_history():
-    """Give each test it's own Events history."""
-    with mock.patch('wrolpi.events.EVENTS_HISTORY', list()):
-        from wrolpi.events import EVENTS_HISTORY
-        yield EVENTS_HISTORY
+@pytest.fixture
+def events_history(test_async_client):
+    """Give each test its own Events history."""
+    yield api_app.shared_ctx.events_history
 
 
 FLAGS_LOCK = multiprocessing.Lock()
@@ -575,6 +568,7 @@ def assert_file_groups(test_session, test_directory):
 @pytest.fixture
 def assert_files_search(test_client):
     from wrolpi.test.common import assert_dict_contains
+
     def _(search_str: str, expected: List[dict]):
         content = json.dumps({'search_str': search_str})
         request, response = test_client.post('/api/files/search', content=content)

@@ -22,7 +22,7 @@ from wrolpi.vars import PROJECT_DIR
 
 
 @pytest.mark.asyncio
-async def test_delete_file(test_session, make_files_structure, test_directory):
+async def test_delete_file(test_async_client, test_session, make_files_structure, test_directory):
     """
     File in the media directory can be deleted.
     """
@@ -54,7 +54,7 @@ async def test_delete_file(test_session, make_files_structure, test_directory):
 
 
 @pytest.mark.asyncio
-async def test_delete_file_multiple(test_session, make_files_structure, test_directory):
+async def test_delete_file_multiple(test_async_client, test_session, make_files_structure, test_directory):
     """Multiple files can be deleted at once."""
     foo, bar, baz = make_files_structure([
         'archives/foo.txt',
@@ -72,7 +72,7 @@ async def test_delete_file_multiple(test_session, make_files_structure, test_dir
 
 
 @pytest.mark.asyncio
-async def test_delete_file_names(test_session, make_files_structure, test_directory, tag_factory):
+async def test_delete_file_names(test_async_client, test_session, make_files_structure, test_directory, tag_factory):
     """Will not refuse to delete a file that shares the name of a nearby file when they are in different FileGroups."""
     foo, foo1 = make_files_structure({
         'archives/foo': 'text',
@@ -92,7 +92,7 @@ async def test_delete_file_names(test_session, make_files_structure, test_direct
 
 
 @pytest.mark.asyncio
-async def test_delete_file_link(test_session, test_directory):
+async def test_delete_file_link(test_async_client, test_session, test_directory):
     """Links can be deleted."""
     foo, bar = test_directory / 'foo', test_directory / 'bar'
     foo.touch()
@@ -524,7 +524,7 @@ def test_split_file_name_words(name, expected):
 
 
 @pytest.mark.asyncio
-async def test_large_text_indexer(test_session, make_files_structure):
+async def test_large_text_indexer(test_async_client, test_session, make_files_structure):
     """
     Large files have their indexes truncated.
     """

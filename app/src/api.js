@@ -643,7 +643,7 @@ export async function deleteFile(paths) {
         toast({
             type: 'error',
             title: 'Delete error',
-            description: content['message'] || content['summary'],
+            description: content['message'],
             time: 5000,
         });
     }
@@ -886,7 +886,7 @@ export async function deleteTag(id, name) {
         const content = await response.json();
         if (content['code'] === 'USED_TAG') {
             toast({
-                type: 'error', title: 'Error!', description: content['error'] || content['summary'], time: 5000,
+                type: 'error', title: 'Error!', description: content['message'], time: 5000,
             })
         }
     } else if (response.status !== 204) {

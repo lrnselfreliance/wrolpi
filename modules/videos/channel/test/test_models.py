@@ -27,7 +27,7 @@ async def test_delete_channel_with_videos(test_session, test_async_client, chann
 
     # Delete the Channel.
     request, response = await test_async_client.delete(f'/api/videos/channels/{channel.id}')
-    assert response.status == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.NO_CONTENT
 
     # Video still exists, but has no channel.
     video: Video = test_session.query(Video).one()
@@ -53,9 +53,9 @@ async def test_nested_channel_directories(test_session, test_async_client, test_
         directory=str(channel2_directory),
     )
     request, response = await test_async_client.post('/api/videos/channels', content=json.dumps(content))
-    assert response.status == HTTPStatus.BAD_REQUEST
+    assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json['cause'] and \
-           response.json['cause']['summary'] == 'The directory is already used by another channel.'
+           response.json['cause']['message'] == 'The directory is already used by another channel.'
 
     # Channel 3 cannot be above Channel 1's directory.
     content = dict(
@@ -63,6 +63,6 @@ async def test_nested_channel_directories(test_session, test_async_client, test_
         directory=str(test_directory),
     )
     request, response = await test_async_client.post('/api/videos/channels', content=json.dumps(content))
-    assert response.status == HTTPStatus.BAD_REQUEST
+    assert response.status_code == HTTPStatus.BAD_REQUEST
     assert response.json['cause'] and \
-           response.json['cause']['summary'] == 'The directory is already used by another channel.'
+           response.json['cause']['message'] == 'The directory is already used by another channel.'

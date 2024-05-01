@@ -25,6 +25,7 @@ from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_medi
     wrol_mode_check, native_only, disable_wrol_mode, enable_wrol_mode, get_global_statistics, url_strip_host, \
     set_global_log_level, get_relative_to_media_directory
 from wrolpi.dates import now
+from wrolpi.downloader import download_manager
 from wrolpi.errors import WROLModeEnabled, APIError, HotspotError, InvalidDownload, \
     HotspotPasswordTooShort, NativeOnly, InvalidConfig
 from wrolpi.events import get_events, Events
@@ -131,15 +132,14 @@ async def echo(request: Request):
 @openapi.description('Get WROLPi settings')
 @openapi.response(HTTPStatus.OK, schema.SettingsResponse)
 def get_settings(_: Request):
-    from wrolpi.downloader import download_manager
     config = get_wrolpi_config()
 
     ignored_directories = [get_relative_to_media_directory(i) for i in config.ignored_directories]
 
     settings = {
         'archive_directory': config.archive_directory,
-        'download_manager_disabled': download_manager.disabled.is_set(),
-        'download_manager_stopped': download_manager.stopped.is_set(),
+        'download_manager_disabled': download_manager.is_disabled,
+        'download_manager_stopped': download_manager.is_stopped,
         'download_on_startup': config.download_on_startup,
         'download_timeout': config.download_timeout,
         'hotspot_device': config.hotspot_device,
@@ -249,7 +249,6 @@ def valid_regex(_: Request, body: schema.RegexRequest):
 @validate(schema.DownloadRequest)
 @wrol_mode_check
 async def post_download(_: Request, body: schema.DownloadRequest):
-    from wrolpi.downloader import download_manager
     downloader = download_manager.get_downloader_by_name(body.downloader)
     if not downloader:
         raise InvalidDownload(f'Cannot find downloader with name {body.downloader}')
@@ -283,7 +282,6 @@ async def post_download(_: Request, body: schema.DownloadRequest):
 @api_bp.post('/download/<download_id:int>/restart')
 @openapi.description('Restart a download.')
 async def restart_download(_: Request, download_id: int):
-    from wrolpi.downloader import download_manager
     download_manager.restart_download(download_id)
     return response.empty()
 
@@ -291,7 +289,6 @@ async def restart_download(_: Request, download_id: int):
 @api_bp.get('/download')
 @openapi.description('Get all Downloads that need to be processed.')
 async def get_downloads(_: Request):
-    from wrolpi.downloader import download_manager
     data = download_manager.get_fe_downloads()
     return json_response(data)
 
@@ -299,7 +296,6 @@ async def get_downloads(_: Request):
 @api_bp.post('/download/<download_id:int>/kill')
 @openapi.description('Kill a download.  It will be stopped if it is pending.')
 async def kill_download(_: Request, download_id: int):
-    from wrolpi.downloader import download_manager
     download_manager.kill_download(download_id)
     return response.empty()
 
@@ -307,7 +303,6 @@ async def kill_download(_: Request, download_id: int):
 @api_bp.post('/download/kill')
 @openapi.description('Kill all downloads.  Disable downloading.')
 async def kill_downloads(_: Request):
-    from wrolpi.downloader import download_manager
     logger.warning('Disabled downloads')
     download_manager.disable()
     return response.empty()
@@ -316,7 +311,6 @@ async def kill_downloads(_: Request):
 @api_bp.post('/download/enable')
 @openapi.description('Enable and start downloading.')
 async def enable_downloads(_: Request):
-    from wrolpi.downloader import download_manager
     await download_manager.enable()
     return response.empty()
 
@@ -324,7 +318,6 @@ async def enable_downloads(_: Request):
 @api_bp.post('/download/clear_completed')
 @openapi.description('Clear completed downloads')
 async def clear_completed(_: Request):
-    from wrolpi.downloader import download_manager
     download_manager.delete_completed()
     return response.empty()
 
@@ -332,7 +325,6 @@ async def clear_completed(_: Request):
 @api_bp.post('/download/clear_failed')
 @openapi.description('Clear failed downloads')
 async def clear_failed(_: Request):
-    from wrolpi.downloader import download_manager
     download_manager.delete_failed()
     return response.empty()
 
@@ -340,7 +332,6 @@ async def clear_failed(_: Request):
 @api_bp.post('/download/delete_once')
 @openapi.description('Delete all once downloads')
 async def delete_once(_: Request):
-    from wrolpi.downloader import download_manager
     download_manager.delete_once()
     return response.empty()
 
@@ -349,7 +340,6 @@ async def delete_once(_: Request):
 @openapi.description('Delete a download')
 @wrol_mode_check
 async def delete_download(_: Request, download_id: int):
-    from wrolpi.downloader import download_manager
     deleted = download_manager.delete_download(download_id)
     return response.empty(HTTPStatus.NO_CONTENT if deleted else HTTPStatus.NOT_FOUND)
 
@@ -357,7 +347,6 @@ async def delete_download(_: Request, download_id: int):
 @api_bp.get('/downloaders')
 @openapi.description('List all Downloaders that can be specified by the user.')
 async def get_downloaders(_: Request):
-    from wrolpi.downloader import download_manager
     downloaders = download_manager.list_downloaders()
     disabled = download_manager.disabled.is_set()
     ret = dict(downloaders=downloaders, manager_disabled=disabled)
@@ -407,8 +396,6 @@ async def throttle_off(_: Request):
 @api_bp.get('/status')
 @openapi.description('Get the status of CPU/load/etc.')
 async def get_status(_: Request):
-    from wrolpi.downloader import download_manager
-
     s = await status.get_status()
     downloads = dict()
     if flags.db_up.is_set():
@@ -591,4 +578,4 @@ async def post_search_file_estimates(_: Request, body: schema.SearchFileEstimate
     return json_response(ret)
 
 
-api_app.error_handler.add(APIError, json_error_handler)
+api_app.error_handler.add(Exception, json_error_handler)

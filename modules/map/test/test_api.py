@@ -135,4 +135,4 @@ def test_empty_import(test_client, test_session, test_directory):
     body = {'files': []}
     request, response = test_client.post('/api/map/import', content=json.dumps(body))
     assert response.status_code == HTTPStatus.BAD_REQUEST
-    assert 'validate' in response.json['summary']
+    assert 'validate' in response.json['message']

@@ -42,8 +42,8 @@ class ScrapeHTMLDownloader(Downloader):
     async def fetch_http(url: str) -> str:
         async with aiohttp_session(timeout=60 * 5) as session:
             async with session.get(url, headers=DEFAULT_HTTP_HEADERS) as response:
-                logger.debug(f'Got status={response.status} from {url}')
-                if response.status == HTTPStatus.OK:
+                logger.debug(f'Got status={response.status_code} from {url}')
+                if response.status_code == HTTPStatus.OK:
                     return await response.text()
 
     async def do_download(self, download: Download) -> DownloadResult:

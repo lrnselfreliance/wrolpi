@@ -4,6 +4,7 @@ from itertools import zip_longest
 
 import pytest
 from mock import mock
+from sanic import Request
 
 from wrolpi.admin import HotspotStatus
 from wrolpi.api_utils import json_error_handler
@@ -258,8 +259,8 @@ def test_hotspot_settings(test_session, test_client, test_config):
         request, response = test_client.patch('/api/settings', content=json.dumps(content))
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert response.json == {'code': 'HOTSPOT_PASSWORD_TOO_SHORT',
-                                 'error': '',
-                                 'summary': 'Hotspot password must be at least 8 characters'
+                                 'error': 'Hotspot password must be at least 8 characters',
+                                 'message': 'Hotspot password must be at least 8 characters'
                                  }
 
 
@@ -439,12 +440,12 @@ async def test_restart_download(test_session, test_async_client, test_download_m
     request, response = await test_async_client.post(f'/api/download/{download.id}/restart')
     assert response.status_code == HTTPStatus.NO_CONTENT
     download = test_session.query(Download).one()
-    assert download.is_new, download.status
+    assert download.is_new, download.status_code
 
     # Wait for the background download to fail.  It should be deferred.
     await test_download_manager.wait_for_all_downloads()
     download = test_session.query(Download).one()
-    assert download.is_deferred, download.status
+    assert download.is_deferred, download.status_code
 
 
 def test_get_global_statistics(test_session, test_client):
@@ -588,6 +589,18 @@ async def test_search_file_estimates(test_session, test_async_client, archive_fa
     await assert_results(dict(from_year=2000, to_year=2000), 2)
 
 
+@pytest.mark.asyncio
+async def test_external_error(test_async_client):
+    """A non-SanicException error is handled as an Internal Server Error."""
+    @test_async_client.sanic_app.get('/error')
+    async def error(_: Request):
+        raise RuntimeError('Oh no!')
+
+    request, response = await test_async_client.get('/error')
+    assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+    assert response.json == {'code': 'RuntimeError', 'error': 'Oh no!', 'message': None}
+
+
 def test_recursive_errors():
     """Errors are reported recursively."""
 
@@ -597,14 +610,14 @@ def test_recursive_errors():
     def two():
         try:
             one()
-        except Exception as e:
-            raise SearchEmpty('A more specific error') from e
+        except Exception as e1:
+            raise SearchEmpty('A more specific error') from e1
 
     def three():
         try:
             two()
-        except Exception as e:
-            raise ValidationError('A broad error') from e
+        except Exception as e2:
+            raise ValidationError('A broad error') from e2
 
     try:
         three()
@@ -613,15 +626,15 @@ def test_recursive_errors():
         assert json.loads(response.body.decode()) == {
             'code': 'VALIDATION_ERROR',
             'error': 'A broad error',
-            'summary': 'Could not validate the contents of the request',
+            'message': 'Could not validate the contents of the request',
             'cause': {
                 'code': 'SEARCH_EMPTY',
                 'error': 'A more specific error',
-                'summary': 'Search is empty, search_str must have content.',
+                'message': 'Search is empty, search_str must have content.',
                 'cause': {
-                    'code': None,
+                    'code': 'ValueError',  # Code falls back to Exception type.
                     'error': 'Some error outside WROLPi',
-                    'summary': None,
+                    'message': None,
                 },
             },
         }

@@ -195,7 +195,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     assert len(downloads) == 1
     download = downloads[0]
     expected = datetime(2020, 1, 1, 1, 0, 0, tzinfo=pytz.UTC)
-    assert download.is_complete, download.status
+    assert download.is_complete, download.status_code
     assert download.next_download == expected
     assert download.last_successful_download == now_
 
@@ -210,7 +210,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     test_download_manager.renew_recurring_downloads(test_session)
     (download,) = list(test_download_manager.get_new_downloads(test_session))
     # Download is "new" but has not been downloaded a second time.
-    assert download.is_new, download.status
+    assert download.is_new, download.status_code
     assert download.next_download == expected
     assert download.last_successful_download == now_
 
@@ -221,7 +221,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     test_downloader.do_download.assert_called_once()
     download = test_session.query(Download).one()
     # Download is deferred, last successful download remains the same.
-    assert download.is_deferred, download.status
+    assert download.is_deferred, download.status_code
     assert download.last_successful_download == now_
     # Download should be retried after the DEFAULT_RETRY_FREQUENCY.
     expected = datetime(2020, 1, 1, 3, 0, 0, 997200, tzinfo=pytz.UTC)
@@ -235,7 +235,7 @@ async def test_recurring_downloads(test_session, test_download_manager, fake_now
     await test_download_manager.wait_for_all_downloads()
     test_downloader.do_download.assert_called_once()
     download = test_session.query(Download).one()
-    assert download.is_complete, download.status
+    assert download.is_complete, download.status_code
     assert download.last_successful_download == now_
     # Floats cause slightly wrong date.
     assert download.next_download == datetime(2020, 1, 1, 5, 0, 0, 997200, tzinfo=pytz.UTC)

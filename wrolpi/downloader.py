@@ -949,7 +949,7 @@ class DownloadManager:
 
     @optional_session
     def delete_once(self, session: Session):
-        """Delete any once-download records."""
+        """Delete all once-download records."""
         stmt = self._delete_downloads_q(once=True)
         deleted_ids = [i for i, in session.execute(stmt).fetchall()]
         session.commit()

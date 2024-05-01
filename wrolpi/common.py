@@ -985,21 +985,21 @@ async def aiohttp_post(url: str, json_, timeout: int = None) -> Tuple[Dict, int]
     """Perform an async aiohttp POST request.  Return the json contents."""
     async with aiohttp_session(timeout) as session:
         async with session.post(url, json=json_) as response:
-            return await response.json(), response.status
+            return await response.json(), response.status_code
 
 
 async def aiohttp_get(url: str, timeout: int = None, headers: dict = None) -> Tuple[bytes, int]:
     """Perform an async aiohttp GET request.  Return the contents."""
     async with aiohttp_session(timeout) as session:
         async with session.get(url, headers=headers) as response:
-            return await response.content.read(), response.status
+            return await response.content.read(), response.status_code
 
 
 async def aiohttp_head(url: str, timeout: int = None) -> Tuple[ClientResponse, int]:
     """Perform an async aiohttp HEAD request.  Return the contents."""
     async with aiohttp_session(timeout) as session:
         async with session.head(url) as response:
-            return response, response.status
+            return response, response.status_code
 
 
 async def speed_test(url: str) -> int:

@@ -2,12 +2,14 @@ import json
 from datetime import datetime, timezone, date
 from decimal import Decimal
 from functools import wraps
+from http import HTTPStatus
 from pathlib import Path
 
-from sanic import response, HTTPResponse, Request, Sanic
+from sanic import response, HTTPResponse, Request, Sanic, SanicException
 
 from wrolpi.common import Base, get_media_directory, logger, LOGGING_CONFIG
 from wrolpi.errors import APIError
+from wrolpi.vars import PYTEST
 
 logger = logger.getChild(__name__)
 
@@ -68,14 +70,17 @@ class CustomJSONEncoder(json.JSONEncoder):
 def get_error_json(exception: BaseException):
     """Return a JSON representation of the Exception instance."""
     if isinstance(exception, APIError):
-        # Error especially defined for WROLPi.
-        body = dict(error=str(exception), summary=exception.summary, code=exception.code)
+        # An exception from WROLPi.
+        body = dict(error=str(exception), message=exception.message, code=exception.code)
+    elif isinstance(exception, SanicException):
+        # An exception from Sanic.
+        body = dict(error=str(exception), message=exception.message, code=type(exception).__name__)
     else:
         # Not a WROLPi APIError error.
         body = dict(
             error=str(exception),
-            summary=None,
-            code=None,
+            message=None,
+            code=type(exception).__name__,
         )
     if exception.__cause__:
         # This exception was caused by another, follow the stack.
@@ -83,10 +88,23 @@ def get_error_json(exception: BaseException):
     return body
 
 
-def json_error_handler(request: Request, exception: APIError):
-    body = get_error_json(exception)
+def json_error_handler(request: Request, exception: Exception):
+    """Converts all API APIError/SanicException to more informative json object."""
+    try:
+        body = get_error_json(exception)
+    except Exception as e:
+        logger.error('Failed to create error json', exc_info=e)
+        raise
+
     error = repr(str(body["error"]))
-    summary = repr(str(body["summary"]))
+    message = repr(str(body["message"]))
     code = body['code']
-    logger.debug(f'API returning JSON error {exception=} {error=} {summary=} {code=}')
-    return json_response(body, exception.status)
+    logger.error(f'API returning JSON error {type(exception).__name__} {error=} {message=} {code=}')
+    if isinstance(exception, SanicException):
+        return json_response(body, exception.status_code)
+
+    if PYTEST:
+        logger.error('Unexpected error', exc_info=exception)
+
+    # Some unknown error, use internal error code.
+    return json_response(body, HTTPStatus.INTERNAL_SERVER_ERROR)

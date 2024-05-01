@@ -80,7 +80,7 @@ async def test_extract_cover(test_session, test_directory, example_epub):
 def test_search(test_session, test_client, example_epub):
     """Ebooks are handled in File search results."""
     request, response = test_client.post('/api/files/refresh')
-    assert response.status == HTTPStatus.NO_CONTENT
+    assert response.status_code == HTTPStatus.NO_CONTENT
 
     assert test_session.query(EBook).count() == 1
 
@@ -92,7 +92,7 @@ def test_search(test_session, test_client, example_epub):
 
     content = dict(mimetypes=['application/epub', 'application/x-mobipocket-ebook'])
     request, response = test_client.post('/api/files/search', content=json.dumps(content))
-    assert response.status == HTTPStatus.OK
+    assert response.status_code == HTTPStatus.OK
     assert response.json
     file_group = response.json['file_groups'][0]
     epub_file = file_group['files'][0]
@@ -106,7 +106,7 @@ def test_search(test_session, test_client, example_epub):
     # No Mobi ebook.
     content = dict(mimetypes=['application/x-mobipocket-ebook'])
     request, response = test_client.post('/api/files/search', content=json.dumps(content))
-    assert response.status == HTTPStatus.OK
+    assert response.status_code == HTTPStatus.OK
     assert response.json
     assert len(response.json['file_groups']) == 0
 

@@ -154,7 +154,7 @@ async def test_download_channel(test_session, simple_channel, video_download_man
     downloads = filter(lambda i: 'watch' in i.url, downloads)
     assert {i.url for i in downloads} == \
            {'https://youtube.com/watch?v=video_2_url', 'https://youtube.com/watch?v=video_1_url'}
-    assert all(i.status == 'complete' for i in downloads)
+    assert all(i.status_code == 'complete' for i in downloads)
 
     # A channel with `match_regex` only returns matching video URLs.
     simple_channel.match_regex = '.*(2).*'

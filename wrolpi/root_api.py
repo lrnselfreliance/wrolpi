@@ -4,7 +4,7 @@ import re
 from http import HTTPStatus
 
 import vininfo.exceptions
-from sanic import response, Blueprint, __version__ as sanic_version
+from sanic import response, Blueprint
 from sanic.request import Request
 from sanic_ext import validate
 from sanic_ext.extensions.openapi import openapi
@@ -26,13 +26,12 @@ from wrolpi.common import logger, get_wrolpi_config, wrol_mode_enabled, get_medi
     set_global_log_level, get_relative_to_media_directory
 from wrolpi.dates import now
 from wrolpi.downloader import download_manager
-from wrolpi.errors import WROLModeEnabled, APIError, HotspotError, InvalidDownload, \
+from wrolpi.errors import WROLModeEnabled, HotspotError, InvalidDownload, \
     HotspotPasswordTooShort, NativeOnly, InvalidConfig
 from wrolpi.events import get_events, Events
 from wrolpi.files import files_bp
 from wrolpi.files.lib import get_file_statistics, search_file_suggestion_count
-from wrolpi.vars import API_HOST, API_PORT, DOCKERIZED, API_DEBUG, API_ACCESS_LOG, API_WORKERS, API_AUTO_RELOAD, \
-    truthy_arg, IS_RPI, IS_RPI4, IS_RPI5
+from wrolpi.vars import DOCKERIZED, IS_RPI, IS_RPI4, IS_RPI5
 from wrolpi.version import __version__
 
 logger = logger.getChild(__name__)
@@ -50,48 +49,6 @@ api_app.blueprint(map_bp)
 api_app.blueprint(otp_bp)
 api_app.blueprint(videos_bp)
 api_app.blueprint(zim_bp)
-
-
-def run_webserver(
-        host: str = API_HOST,
-        port: int = API_PORT,
-        workers: int = API_WORKERS,
-        api_debug: bool = API_DEBUG,
-        access_log: bool = API_ACCESS_LOG,
-):
-    # Attach all blueprints after they have been defined.
-
-    kwargs = dict(
-        host=host,
-        port=port,
-        workers=workers,
-        debug=api_debug,
-        access_log=access_log,
-        auto_reload=DOCKERIZED,
-    )
-    logger.warning(f'Running Sanic {sanic_version} with kwargs {kwargs}')
-    return api_app.run(**kwargs)
-
-
-def init_parser(parser):
-    # Called by WROLPI's main() function
-    parser.add_argument('-H', '--host', default=API_HOST, help='What network interface to connect webserver')
-    parser.add_argument('-p', '--port', default=API_PORT, type=int, help='What port to connect webserver')
-    parser.add_argument('-w', '--workers', default=API_WORKERS, type=int, help='How many web workers to run')
-    parser.add_argument('--access-log', default=API_ACCESS_LOG, type=truthy_arg, help='Enable Sanic access log')
-    parser.add_argument('--api-debug', default=API_DEBUG, type=truthy_arg, help='Enable Sanic debug log')
-    parser.add_argument('--api-auto-reload', default=API_AUTO_RELOAD, type=truthy_arg, help='Enable Sanic auto reload')
-
-
-def main(args):
-    return run_webserver(
-        host=args.host,
-        port=args.port,
-        workers=args.workers,
-        api_debug=args.api_debug,
-        access_log=args.access_log,
-    )
-
 
 index_html = '''
 <html>

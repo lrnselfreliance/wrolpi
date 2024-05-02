@@ -8,7 +8,6 @@ from sanic import Sanic
 from sanic.signals import Event
 
 from wrolpi import flags, BEFORE_STARTUP_FUNCTIONS, admin
-from wrolpi import root_api
 from wrolpi import tags
 from wrolpi.api_utils import api_app
 from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
@@ -52,12 +51,13 @@ INTERACTIVE_BANNER = '''
 This is the interactive WROLPi shell.  Use this to interact with the WROLPi API library.
 
 Example (get the duration of every video file):
-from modules.videos.models import Video
-from modules.videos.common import get_video_duration
-videos = session.query(Video).filter(Video.video_path != None).all()
-videos = list(videos)
-for video in videos:
-    get_video_duration(video.video_path.path)
+    from modules.videos.models import Video
+    from modules.videos.common import get_video_duration
+
+    videos = session.query(Video).all()
+    videos = list(videos)
+    for video in videos:
+        get_video_duration(video.file_group.primary_path)
 
 Check local variables:
 locals().keys()
@@ -85,10 +85,6 @@ def main():
                         help='Enter an interactive shell with some WROLPi tools')
 
     sub_commands = parser.add_subparsers(title='sub-commands', dest='sub_commands')
-
-    # Add the API parser, this will allow the user to specify host/port etc.
-    api_parser = sub_commands.add_parser('api')
-    root_api.init_parser(api_parser)
 
     # DB Parser for running Alembic migrations
     db_parser = sub_commands.add_parser('db')
@@ -136,9 +132,7 @@ def main():
     if args.sub_commands == 'db':
         return db_main(args)
 
-    # Run the API.
-    if args.sub_commands == 'api':
-        return root_api.main(args)
+    return 1
 
 
 @api_app.main_process_start
@@ -151,6 +145,9 @@ async def startup(app: Sanic):
     @warning: This is NOT run after auto-reload!  You must stop and start Sanic.
     """
     logger.debug('startup')
+
+    check_media_directory()
+
     # Initialize multiprocessing shared contexts before forking Sanic processes.
     attach_shared_contexts(app)
     logger.debug('startup done')

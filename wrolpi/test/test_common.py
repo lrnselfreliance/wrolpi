@@ -18,7 +18,7 @@ import pytz
 import wrolpi.vars
 from wrolpi import common
 from wrolpi.common import cum_timer, TIMERS, print_timer, limit_concurrent, run_after
-from wrolpi.test.common import build_test_directories
+from wrolpi.test.common import build_test_directories, skip_circleci
 
 
 def test_build_video_directories(test_directory):
@@ -819,3 +819,18 @@ def test_config_backup(test_config, test_directory):
     backup_file, = list((test_directory / 'config/backup').glob('*'))
     assert re.match(r'wrolpi-\d{8}\.yaml', backup_file.name), \
         f'{backup_file.name} is not in the expected format'
+
+
+@pytest.mark.asyncio
+@skip_circleci
+async def test_aiohttp(simple_web_server):
+    """Test that aiohttp convenience functions work."""
+    httpd, server_url = simple_web_server
+
+    content, status = await common.aiohttp_get(server_url)
+    assert content
+    assert status == 200
+
+    content, status = await common.aiohttp_head(server_url)
+    assert content
+    assert status == 200

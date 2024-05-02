@@ -30,7 +30,7 @@ from urllib.parse import urlparse, urlunsplit
 import aiohttp
 import bs4
 import yaml
-from aiohttp import ClientResponse
+from aiohttp import ClientResponse, ClientSession
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from sqlalchemy import types
@@ -970,7 +970,7 @@ def recursive_map(obj: Any, func: callable):
 
 
 @contextlib.asynccontextmanager
-async def aiohttp_session(timeout: int = None):
+async def aiohttp_session(timeout: int = None) -> ClientSession:
     """Convenience function because aiohttp timeout cannot be None."""
     if timeout:
         timeout = aiohttp.ClientTimeout(total=timeout) if timeout else None
@@ -985,21 +985,21 @@ async def aiohttp_post(url: str, json_, timeout: int = None) -> Tuple[Dict, int]
     """Perform an async aiohttp POST request.  Return the json contents."""
     async with aiohttp_session(timeout) as session:
         async with session.post(url, json=json_) as response:
-            return await response.json(), response.status_code
+            return await response.json(), response.status
 
 
 async def aiohttp_get(url: str, timeout: int = None, headers: dict = None) -> Tuple[bytes, int]:
     """Perform an async aiohttp GET request.  Return the contents."""
     async with aiohttp_session(timeout) as session:
         async with session.get(url, headers=headers) as response:
-            return await response.content.read(), response.status_code
+            return await response.content.read(), response.status
 
 
 async def aiohttp_head(url: str, timeout: int = None) -> Tuple[ClientResponse, int]:
     """Perform an async aiohttp HEAD request.  Return the contents."""
     async with aiohttp_session(timeout) as session:
         async with session.head(url) as response:
-            return response, response.status_code
+            return response, response.status
 
 
 async def speed_test(url: str) -> int:

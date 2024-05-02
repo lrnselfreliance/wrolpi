@@ -3,12 +3,15 @@ Fixtures for Pytest tests.
 """
 import asyncio
 import copy
+import http.server
 import json
 import logging
 import multiprocessing
 import pathlib
 import shutil
+import socketserver
 import tempfile
+import threading
 import zipfile
 from abc import ABC
 from datetime import datetime
@@ -717,3 +720,29 @@ def make_multipart_form():
         return body
 
     return _
+
+
+@pytest.fixture
+def simple_web_server():
+    """Start a simple HTTP server in a background thread and yield its URL."""
+    # Define the handler to serve files from the current directory
+    handler = http.server.SimpleHTTPRequestHandler
+
+    # Set up an HTTP server on a free port
+    with socketserver.TCPServer(("localhost", 0), handler) as httpd:
+        # Get the port where the server is running
+        port = httpd.server_address[1]
+        server_url = f"http://localhost:{port}/"
+
+        # Start the server in a background thread
+        server_thread = threading.Thread(target=httpd.serve_forever)
+        server_thread.daemon = True
+        server_thread.start()
+
+        # Yield the URL of the running server
+        try:
+            yield httpd, server_url
+        finally:
+            # Stop the server after the test
+            httpd.shutdown()
+            server_thread.join()

@@ -8,6 +8,7 @@ from sanic import Sanic
 from sanic.signals import Event
 
 from wrolpi import flags, BEFORE_STARTUP_FUNCTIONS, admin
+from wrolpi import root_api  # noqa
 from wrolpi import tags
 from wrolpi.api_utils import api_app
 from wrolpi.common import logger, check_media_directory, set_log_level, limit_concurrent, \
@@ -147,6 +148,10 @@ async def startup(app: Sanic):
     logger.debug('startup')
 
     check_media_directory()
+
+    if ('api',) not in app.router.routes_all:
+        logger.debug(f'{app.router.routes_all=}')
+        raise RuntimeError('WROLPi routes do not exist!  Was root_api imported?')
 
     # Initialize multiprocessing shared contexts before forking Sanic processes.
     attach_shared_contexts(app)

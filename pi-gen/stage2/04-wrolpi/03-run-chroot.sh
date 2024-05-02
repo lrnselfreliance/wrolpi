@@ -20,7 +20,7 @@ usermod -aG pi wrolpi
 sed -i 's/port = 5433/port = 5432/' /etc/postgresql/15/main/postgresql.conf
 
 # Install Node console commands.
-npm i -g serve@12.0.1 single-file-cli@1.0.15 readability-extractor@0.0.6 carto@1.2.0
+npm i -g serve@12.0.1 single-file-cli@2.0.34 readability-extractor@0.0.6 carto@1.2.0
 
 # Put the latest WROLPi master in /opt/wrolpi.
 git clone -b master https://github.com/lrnselfreliance/wrolpi.git /opt/wrolpi

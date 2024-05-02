@@ -16,6 +16,6 @@ RUN pip3 install -r /app/requirements.txt
 COPY docker/archive /app
 
 # Install a newer singlefile and Readability.
-RUN npm install -g single-file-cli@1.1.16 'git+https://github.com/pirate/readability-extractor'
+RUN npm install -g single-file-cli@2.0.34 readability-extractor@0.0.6
 
 ENTRYPOINT [ "python3", "/app/main.py"]

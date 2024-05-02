@@ -265,7 +265,7 @@ async def start_sanic_worker(app: Sanic):
 async def start_initialize_flags(app: Sanic):
     # Only allow one child process to initialize flags.
     if not app.shared_ctx.flags_initialized.is_set():
-        logger.warning('start_initialize_flags')
+        logger.info('start_initialize_flags')
         app.shared_ctx.flags_initialized.set()
         async with flags.db_up.wait_for():
             flags.init_flags()

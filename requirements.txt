@@ -21,7 +21,7 @@ python-dotenv==1.0.0
 python-magic~=0.4.27
 pytz==2023.3
 sanic-ext==23.6.0
-sanic-testing==23.6.0
+sanic-testing==22.6.0  # 23.6.0 has error with "expandtabs"
 sanic==23.6.0  # This is the latest version of Sanic that avoids this bug: https://github.com/sanic-org/sanic/issues/2921
 selenium==4.9.1
 srt==3.5.3

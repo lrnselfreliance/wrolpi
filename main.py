@@ -87,6 +87,10 @@ def main():
 
     sub_commands = parser.add_subparsers(title='sub-commands', dest='sub_commands')
 
+    # Add the API parser, this will allow the user to specify host/port etc.
+    api_parser = sub_commands.add_parser('api')
+    root_api.init_parser(api_parser)
+
     # DB Parser for running Alembic migrations
     db_parser = sub_commands.add_parser('db')
     db_parser.add_argument('command', help='Supported commands: upgrade, downgrade')
@@ -132,6 +136,10 @@ def main():
     # Run DB migrations before anything else.
     if args.sub_commands == 'db':
         return db_main(args)
+
+    # Run the API.
+    if args.sub_commands == 'api':
+        return root_api.main(args)
 
     return 1
 

@@ -17,4 +17,5 @@ COPY main.py /opt/wrolpi/
 COPY wrolpi /opt/wrolpi/wrolpi
 COPY modules /opt/wrolpi/modules
 
-CMD ["sanic", "main:api_app", "--host", "0.0.0.0", "--port", "8081"]
+ENTRYPOINT [ "python3", "-OO", "/opt/wrolpi/main.py"]
+CMD ["-vv", "api", "--host", "0.0.0.0"]

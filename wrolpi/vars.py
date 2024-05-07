@@ -12,13 +12,6 @@ PROJECT_DIR: Path = Path(__file__).parents[1].absolute()
 # Load any .env file.  This may contain our MEDIA_DIRECTORY.
 load_dotenv(PROJECT_DIR / '.env')
 
-# Special environment variable set in the docker/api/Dockerfile.
-DOCKERIZED = True if os.environ.get('DOCKER', '').lower().startswith('t') else False
-# tests are running
-PYTEST = 'pytest' in sys.modules
-# running on circlci
-CIRCLECI = os.environ.get('CIRCLECI', '').strip().lower() == 'true'
-
 
 def truthy_arg(value: str) -> bool:
     """Attempts to convert `value` from console arguments to a boolean value.
@@ -45,6 +38,14 @@ def truthy_arg(value: str) -> bool:
     v = str(value).lower()
     return v == 'true' or v == 't' or v == '1' or v == 'yes' or v == 'y'
 
+
+# Special environment variable set in the docker/api/Dockerfile.
+DOCKERIZED = truthy_arg(os.environ.get('DOCKER', ''))
+# tests are running
+PYTEST = 'pytest' in sys.modules
+
+# running on circlci
+CIRCLECI = truthy_arg(os.environ.get('CIRCLECI', ''))
 
 # Get the media directory from the environment.
 DEFAULT_MEDIA_DIRECTORY = Path('/media/wrolpi')

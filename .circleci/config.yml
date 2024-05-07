@@ -83,7 +83,7 @@ jobs:
             . venv/bin/activate
             pip install -r requirements.txt
       - save_cache:
-          key: deps-3.11-{{ checksum "requirements.txt" }}
+          key: deps-3.11-{{ checksum "requirements.txt" }}-2
           paths:
             - "venv"
       - run:
@@ -110,13 +110,44 @@ jobs:
             . venv/bin/activate
             pip install -r requirements.txt
       - save_cache:
-          key: deps-3.12-{{ checksum "requirements.txt" }}
+          key: deps-3.12-{{ checksum "requirements.txt" }}-2
           paths:
             - "venv"
       - run:
           command: './venv/bin/pytest -svv'
+  sanic-api-start:
+    docker:
+      - image: cimg/python:3.11
+    steps:
+      - checkout
+      - restore_cache:
+          key: deps-3.11-{{ checksum "requirements.txt" }}-2
+      - run:
+          name: Install dependencies
+          command: |
+            python -m venv venv
+            . venv/bin/activate
+            pip install -r requirements.txt
+            sudo mkdir -p /media/wrolpi
+      - run:
+          name: Start Sanic API
+          command: |
+            . venv/bin/activate
+            sanic main:api_app -H 0.0.0.0 -p 8081
+          background: true
+      - run:
+          name: Test Sanic API
+          command: |
+            sleep 20
+            curl http://0.0.0.0:8081/api/echo
+      - run:
+          name: Stop Sanic API
+          command: pkill -f sanic
 
 workflows:
+  wrolpi-sanic-tests:
+    jobs:
+      - sanic-api-start
   wrolpi-api-tests:
     jobs:
       - api-tests-3-11

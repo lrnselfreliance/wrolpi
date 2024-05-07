@@ -1,4 +1,3 @@
-import os
 import pathlib
 import tempfile
 from contextlib import contextmanager
@@ -12,12 +11,11 @@ import pytest
 from wrolpi.common import get_media_directory
 from wrolpi.conftest import test_db, test_client  # noqa
 from wrolpi.db import postgres_engine
+from wrolpi.vars import CIRCLECI
 
 TEST_CONFIG_PATH = tempfile.NamedTemporaryFile(mode='rt', delete=False)
 
-skip_circleci = pytest.mark.skipif(
-    os.environ.get('CIRCLECI', '').strip().lower() == 'true',
-    reason='This test is not supported in Circle CI')
+skip_circleci = pytest.mark.skipif(CIRCLECI, reason='This test is not supported in Circle CI')
 
 
 def wrap_test_db(func):

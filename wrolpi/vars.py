@@ -16,6 +16,8 @@ load_dotenv(PROJECT_DIR / '.env')
 DOCKERIZED = True if os.environ.get('DOCKER', '').lower().startswith('t') else False
 # tests are running
 PYTEST = 'pytest' in sys.modules
+# running on circlci
+CIRCLECI = os.environ.get('CIRCLECI', '').strip().lower() == 'true'
 
 
 def truthy_arg(value: str) -> bool:

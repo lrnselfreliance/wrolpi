@@ -192,6 +192,8 @@ def init_flags():
         # Only need to read from once DB at startup.
         return
 
+    logger.debug('Initializing flags...')
+
     from wrolpi.db import get_db_session
     with get_db_session() as session:
         flags: WROLPiFlag = session.query(WROLPiFlag).one_or_none()
@@ -204,6 +206,8 @@ def init_flags():
                 outdated_zims.set()
             else:
                 outdated_zims.clear()
+
+    logger.debug('Initialized flags')
 
 
 @contextlib.asynccontextmanager

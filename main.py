@@ -269,16 +269,6 @@ async def start_sanic_worker(app: Sanic):
     await app.dispatch('wrolpi.periodic.check_log_level')
 
 
-@api_app.listener('after_server_start')
-async def start_initialize_flags(app: Sanic):
-    # Only allow one child process to initialize flags.
-    if not app.shared_ctx.flags_initialized.is_set():
-        logger.info('start_initialize_flags')
-        app.shared_ctx.flags_initialized.set()
-        async with flags.db_up.wait_for():
-            flags.init_flags()
-
-
 @api_app.signal('wrolpi.periodic.check_log_level')
 async def periodic_check_log_level():
     """Copies global log level into this Sanic worker's logger."""

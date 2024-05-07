@@ -17,7 +17,7 @@ from wrolpi.contexts import attach_shared_contexts, reset_shared_contexts, initi
 from wrolpi.dates import Seconds
 from wrolpi.downloader import import_downloads_config, download_manager, \
     perpetual_download_worker
-from wrolpi.vars import PROJECT_DIR, DOCKERIZED
+from wrolpi.vars import PROJECT_DIR, DOCKERIZED, CIRCLECI
 from wrolpi.version import get_version_string
 
 logger = logger.getChild('wrolpi-main')

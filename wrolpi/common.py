@@ -932,6 +932,7 @@ SPACE_FILE_CHARS = re.compile(r'(  +)|(\t+)')
 
 def escape_file_name(name: str) -> str:
     """Remove any invalid characters in a file name."""
+    name = name.replace(' | ', ' - ')
     name = SPACE_FILE_CHARS.sub(' ', name)
     name = INVALID_FILE_CHARS.sub('', name)
     return name.strip()

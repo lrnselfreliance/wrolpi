@@ -87,7 +87,9 @@ jobs:
           paths:
             - "venv"
       - run:
-          command: './venv/bin/pytest -svv'
+          command: './venv/bin/pytest -svv --junitxml=test-results.xml'
+      - store_test_results:
+          path: test-results.xml
   api-tests-3-12:
     docker:
       - image: cimg/python:3.12

@@ -14,7 +14,7 @@ def assert_db(session: Session, name: str, expected: bool):
     assert getattr(f, name) is expected
 
 
-def test_flags(test_session, flags_lock):
+def test_flags(test_async_client, test_session, flags_lock):
     """DB flags can be saved."""
     assert flags.refresh_complete.is_set() is False
     assert flags.get_flags() == []
@@ -28,7 +28,7 @@ def test_flags(test_session, flags_lock):
     assert flags.get_flags() == []
 
 
-def test_flags_with(flags_lock):
+def test_flags_with(test_async_client, flags_lock):
     """A Flag can be used with `with` context."""
     assert flags.refreshing.is_set() is False, 'Flag should not be set by default'
     assert flags.get_flags() == []
@@ -48,7 +48,7 @@ def test_flags_with(flags_lock):
 
 
 @pytest.mark.asyncio
-async def test_flag_wait_for(flags_lock):
+async def test_flag_wait_for(test_async_client, flags_lock):
     """Wait for throws an error when waiting exceeds timeout."""
     with pytest.raises(TimeoutError):
         async with flags.refreshing.wait_for(timeout=1):

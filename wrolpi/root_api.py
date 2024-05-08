@@ -329,6 +329,13 @@ async def clear_failed(_: Request):
     return response.empty()
 
 
+@api_bp.post('/download/retry_once')
+@openapi.description('Retry failed once-downloads')
+async def retry_once(_: Request):
+    download_manager.retry_downloads()
+    return response.empty()
+
+
 @api_bp.post('/download/delete_once')
 @openapi.description('Delete all once downloads')
 async def delete_once(_: Request):

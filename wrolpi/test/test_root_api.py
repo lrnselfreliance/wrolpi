@@ -348,6 +348,17 @@ async def test_clear_downloads(test_session, test_async_client, test_config, tes
     # Failed once-downloads will not be downloaded again.
     assert get_download_manager_config().skip_urls == ['https://example.com/5', ]
 
+    # Downloads can be retried.
+    request, response = await test_async_client.post('/api/download/retry_once')
+    assert response.status_code == HTTPStatus.NO_CONTENT
+    request, response = await test_async_client.get('/api/download')
+    once_downloads = [
+        {'url': 'https://example.com/2', 'status': 'new'},
+        {'url': 'https://example.com/3', 'status': 'new'},
+        {'url': 'https://example.com/4', 'status': 'new'},
+    ]
+    check_downloads(response, once_downloads, recurring_downloads, status_code=HTTPStatus.OK)
+
     # "Delete All" button deletes all once-downloads.
     request, response = await test_async_client.post('/api/download/delete_once')
     assert response.status_code == HTTPStatus.NO_CONTENT
@@ -592,6 +603,7 @@ async def test_search_file_estimates(test_session, test_async_client, archive_fa
 @pytest.mark.asyncio
 async def test_external_error(test_async_client):
     """A non-SanicException error is handled as an Internal Server Error."""
+
     @test_async_client.sanic_app.get('/error')
     async def error(_: Request):
         raise RuntimeError('Oh no!')

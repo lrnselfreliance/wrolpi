@@ -1,11 +1,11 @@
 import React from "react";
 import {
     clearCompletedDownloads,
-    clearFailedDownloads,
     deleteDownload,
     deleteOnceDownloads,
     killDownload,
-    restartDownload
+    restartDownload,
+    retryOnceDownloads
 } from "../../api";
 import {Link} from "react-router-dom";
 import {
@@ -33,7 +33,7 @@ import {Button, Header, Modal, ModalActions, ModalContent, ModalHeader, Placehol
 import {useDownloads} from "../../hooks/customHooks";
 import {toast} from "react-semantic-toasts-2";
 
-function ClearCompleteDownloads({callback}) {
+function ClearDownloadsButton({callback}) {
     async function localClearDownloads() {
         try {
             await clearCompletedDownloads();
@@ -49,14 +49,14 @@ function ClearCompleteDownloads({callback}) {
             onClick={localClearDownloads}
             color='violet'
             obeyWROLMode={true}
-        >Clear Completed</APIButton>
+        >Clear</APIButton>
     </>
 }
 
-function ClearFailedDownloads({callback}) {
-    async function localDeleteFailed() {
+function RetryDownloadsButton({callback}) {
+    async function localRetryOnce() {
         try {
-            await clearFailedDownloads();
+            await retryOnceDownloads();
         } finally {
             if (callback) {
                 callback()
@@ -65,17 +65,13 @@ function ClearFailedDownloads({callback}) {
     }
 
     return <APIButton
-        color='yellow'
-        onClick={localDeleteFailed}
-        confirmContent='Are you sure you want to delete failed downloads?  They will not be retried.'
-        confirmButton='Delete'
+        color='green'
+        onClick={localRetryOnce}
         obeyWROLMode={true}
-    >
-        Clear Failed
-    </APIButton>
+    >Retry</APIButton>
 }
 
-function DeleteOnceDownloads({callback}) {
+function DeleteOnceDownloadsButton({callback}) {
     async function localDeleteOnce() {
         try {
             await deleteOnceDownloads();
@@ -89,12 +85,10 @@ function DeleteOnceDownloads({callback}) {
     return <APIButton
         color='red'
         onClick={localDeleteOnce}
-        confirmContent='Are you sure you want to delete all downloads?  They may be retried!'
+        confirmContent='Are you sure you want to delete all downloads?  Some may be retried!'
         confirmButton='Delete'
         obeyWROLMode={true}
-    >
-        Delete All
-    </APIButton>
+    >Delete</APIButton>
 }
 
 class RecurringDownloadRow extends React.Component {
@@ -333,9 +327,9 @@ export function OnceDownloadsTable({downloads, fetchDownloads}) {
                 <TableFooter>
                     <TableRow>
                         <TableHeaderCell colSpan={3}>
-                            <ClearCompleteDownloads callback={fetchDownloads}/>
-                            <ClearFailedDownloads callback={fetchDownloads}/>
-                            <DeleteOnceDownloads callback={fetchDownloads}/>
+                            <ClearDownloadsButton callback={fetchDownloads}/>
+                            <RetryDownloadsButton callback={fetchDownloads}/>
+                            <DeleteOnceDownloadsButton callback={fetchDownloads}/>
                         </TableHeaderCell>
                     </TableRow>
                 </TableFooter>

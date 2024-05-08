@@ -593,10 +593,12 @@ class DownloadManager:
             raise TimeoutError('Downloads never finished!')
 
     @staticmethod
-    def reset_downloads():
+    def retry_downloads():
         """Set any incomplete Downloads to `new` so they will be retried."""
         with get_db_curs(commit=True) as curs:
             curs.execute("UPDATE download SET status='new' WHERE status='pending' OR status='deferred'")
+
+        api_app.add_task(save_downloads_config())
 
     DOWNLOAD_SORT = (
         DownloadStatus.pending,

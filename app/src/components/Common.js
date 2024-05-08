@@ -1537,10 +1537,6 @@ export function useAPIButton(
         </>
     }
 
-    button = <>
-        {button}
-    </>
-
     return {button, ref}
 }
 

@@ -237,7 +237,7 @@ async def start_single_tasks(app: Sanic):
 
     if flags.refresh_complete.is_set():
         # Set all downloads to new.
-        download_manager.reset_downloads()
+        download_manager.retry_downloads()
 
     # Hotspot/throttle are not supported in Docker containers.
     if not DOCKERIZED and get_wrolpi_config().hotspot_on_startup:

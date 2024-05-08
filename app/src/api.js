@@ -786,6 +786,20 @@ export async function deleteOnceDownloads() {
     }
 }
 
+export async function retryOnceDownloads() {
+    let response = await apiPost(`${API_URI}/download/retry_once`);
+    if (response.status === 204) {
+        return null
+    } else {
+        toast({
+            type: 'error',
+            title: 'Error!',
+            description: 'Could not retry once downloads!  See server logs.',
+            time: 5000,
+        });
+    }
+}
+
 export async function getStatistics() {
     let response = await apiGet(`${API_URI}/statistics`);
     if (response.status === 200) {

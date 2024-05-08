@@ -49,7 +49,7 @@ def test_events_history_limit():
 
 
 @pytest.mark.asyncio
-async def test_get_events():
+async def test_get_events(test_async_client):
     after = now()
 
     Events.send_global_refresh_started()

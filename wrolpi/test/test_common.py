@@ -801,7 +801,7 @@ def test_find_file(test_directory, make_files_structure):
     assert common.find_file(test_directory, 'does not exist', 100) is None
 
 
-def test_config_backup(test_config, test_directory):
+def test_config_backup(test_async_client, test_config, test_directory):
     """Configs have a backup each day."""
     config = common.get_wrolpi_config()
 

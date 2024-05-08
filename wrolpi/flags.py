@@ -3,7 +3,6 @@ import contextlib
 import multiprocessing
 import subprocess
 from datetime import datetime
-from typing import List
 
 from sqlalchemy import Column, Boolean, Integer
 
@@ -127,19 +126,15 @@ refresh_cleanup = Flag('refresh_cleanup')
 refresh_complete = Flag('refresh_complete', store_db=True)
 
 
-def get_flags() -> List[str]:
+def get_flags() -> dict:
     """Return a list of all Flags which are set."""
-    flags = []
-    if db_up.is_set():
-        flags.append('db_up')
-    if refreshing.is_set():
-        flags.append('refreshing')
-    if refresh_complete.is_set():
-        flags.append('refresh_complete')
-    if outdated_zims.is_set():
-        flags.append('outdated_zims')
-    if kiwix_restart.is_set():
-        flags.append('kiwix_restart')
+    flags = dict(
+        db_up=db_up.is_set(),
+        refreshing=refreshing.is_set(),
+        refresh_complete=refresh_complete.is_set(),
+        outdated_zims=outdated_zims.is_set(),
+        kiwix_restart=kiwix_restart.is_set(),
+    )
     return flags
 
 

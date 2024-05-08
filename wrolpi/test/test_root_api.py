@@ -382,7 +382,7 @@ async def test_get_status(test_async_client, test_session):
     assert 'throttle_status' in response.json and isinstance(response.json['throttle_status'], str)
     assert 'version' in response.json and isinstance(response.json['version'], str)
     assert 'memory_stats' in response.json and isinstance(response.json['memory_stats'], dict)
-    assert 'flags' in response.json and isinstance(response.json['flags'], list)
+    assert 'flags' in response.json and isinstance(response.json['flags'], dict)
 
 
 def test_post_download(test_session, test_client, test_download_manager_config):

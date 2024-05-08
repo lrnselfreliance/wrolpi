@@ -150,7 +150,7 @@ def test_split_path_stem_and_suffix(path, expected):
 
 
 @pytest.mark.asyncio
-async def test_refresh_files(test_session, make_files_structure, assert_file_groups):
+async def test_refresh_files(test_async_client, test_session, make_files_structure, assert_file_groups):
     """All files in the media directory should be found when calling `refresh_files`"""
     files = make_files_structure([
         'foo.txt',
@@ -177,7 +177,7 @@ async def test_refresh_files(test_session, make_files_structure, assert_file_gro
 
 
 @pytest.mark.asyncio
-async def test_file_group_location(test_session, make_files_structure):
+async def test_file_group_location(test_async_client, test_session, make_files_structure):
     """FileGroup can return the URL necessary to preview the FileGroup."""
     make_files_structure({
         'foo/one.txt': 'one',
@@ -191,8 +191,8 @@ async def test_file_group_location(test_session, make_files_structure):
 
 
 @pytest.mark.asyncio
-async def test_refresh_bogus_files(test_session, make_files_structure, test_directory, assert_file_groups,
-                                   insert_file_group):
+async def test_refresh_bogus_files(test_async_client, test_session, make_files_structure, test_directory,
+                                   assert_file_groups, insert_file_group):
     """Bogus files are removed during a refresh."""
     make_files_structure(['does exist.txt'])
     await lib.refresh_files()
@@ -212,7 +212,7 @@ async def test_refresh_bogus_files(test_session, make_files_structure, test_dire
 
 
 @pytest.mark.asyncio
-async def test_refresh_empty_media_directory(test_session, test_directory):
+async def test_refresh_empty_media_directory(test_async_client, test_session, test_directory):
     """refresh_paths will refuse to refresh with an empty media directory."""
     with pytest.raises(UnknownDirectory):
         await lib.refresh_files()
@@ -369,7 +369,7 @@ async def test_file_group_tag(test_session, make_files_structure, test_directory
 
 
 @pytest.mark.asyncio
-async def test_refresh_a_text_no_indexer(test_session, make_files_structure):
+async def test_refresh_a_text_no_indexer(test_async_client, test_session, make_files_structure):
     """File.a_text is filled even if the file does not match an Indexer."""
     make_files_structure(['foo', 'bar-bar'])
 
@@ -380,7 +380,7 @@ async def test_refresh_a_text_no_indexer(test_session, make_files_structure):
 
 
 @pytest.mark.asyncio
-async def test_refresh_many_files(test_session, make_files_structure):
+async def test_refresh_many_files(test_async_client, test_session, make_files_structure):
     """Used to profile file refreshing"""
     count = 10_000
     make_files_structure([f'{uuid4()}.txt' for _ in range(count)])
@@ -416,7 +416,7 @@ async def test_refresh_cancel(test_session, make_files_structure, test_directory
 
 
 @pytest.mark.asyncio
-async def test_mime_type(test_session, make_files_structure, test_directory, assert_files):
+async def test_mime_type(test_async_client, test_session, make_files_structure, test_directory, assert_files):
     """Files module uses the `file` command to get the mimetype of each file."""
     from PIL import Image
 
@@ -450,7 +450,7 @@ async def test_mime_type(test_session, make_files_structure, test_directory, ass
 
 
 @pytest.mark.asyncio
-async def test_files_indexer(test_session, make_files_structure, test_directory):
+async def test_files_indexer(test_async_client, test_session, make_files_structure, test_directory):
     """An Indexer is provided for each file based on it's mimetype or contents."""
     source_files: List[str] = [
         'a text file.txt',
@@ -751,7 +751,8 @@ def test_file_group_merge(test_session, test_directory, make_files_structure, ta
 
 
 @pytest.mark.asyncio
-async def test_move(test_session, test_directory, make_files_structure, video_bytes, singlefile_contents_factory):
+async def test_move(test_async_client, test_session, test_directory, make_files_structure, video_bytes,
+                    singlefile_contents_factory):
     """files.lib.move behaves likes posix mv"""
     make_files_structure({
         'foo/bar/video.mp4': video_bytes,
@@ -784,7 +785,7 @@ async def test_move(test_session, test_directory, make_files_structure, video_by
 
 
 @pytest.mark.asyncio
-async def test_move_files(test_session, test_directory, make_files_structure):
+async def test_move_files(test_async_client, test_session, test_directory, make_files_structure):
     """Files can be moved using files.lib.move."""
     one, two = make_files_structure({
         'foo/one.txt': 'one',
@@ -799,7 +800,7 @@ async def test_move_files(test_session, test_directory, make_files_structure):
 
 
 @pytest.mark.asyncio
-async def test_move_deep_directory(test_session, test_directory, make_files_structure):
+async def test_move_deep_directory(test_async_client, test_session, test_directory, make_files_structure):
     """Moving files/directories from one deep directory to another is supported."""
     baz, foo, quuz_mp4, quuz_txt, quux = make_files_structure({
         'foo/foo.txt': 'foo',
@@ -838,7 +839,7 @@ async def test_move_deep_directory(test_session, test_directory, make_files_stru
 
 
 @pytest.mark.asyncio
-async def test_move_directory(test_session, test_directory, make_files_structure, assert_directories):
+async def test_move_directory(test_async_client, test_session, test_directory, make_files_structure, assert_directories):
     """A Directory record is deleted when it's directory is deleted."""
     make_files_structure({
         'foo/one.txt': 'one',
@@ -889,7 +890,7 @@ async def test_move_error(test_session, test_directory, make_files_structure, vi
 
 
 @pytest.mark.asyncio
-async def test_file_group_move(test_session, make_files_structure, test_directory, video_bytes, srt_text):
+async def test_file_group_move(test_async_client, test_session, make_files_structure, test_directory, video_bytes, srt_text):
     """Test FileGroup's move method"""
     video, srt = make_files_structure({
         'video.mp4': video_bytes,
@@ -913,7 +914,7 @@ async def test_file_group_move(test_session, make_files_structure, test_director
 
 
 @pytest.mark.asyncio
-async def test_move_tagged(test_session, test_directory, make_files_structure, tag_factory):
+async def test_move_tagged(test_async_client, test_session, test_directory, make_files_structure, tag_factory):
     """A FileGroup's tag is preserved when moved or renamed."""
     tag = tag_factory()
     foo, bar, = make_files_structure({
@@ -955,7 +956,7 @@ async def test_move_tagged(test_session, test_directory, make_files_structure, t
 
 
 @pytest.mark.asyncio
-async def test_html_index(test_session, test_directory, make_files_structure):
+async def test_html_index(test_async_client, test_session, test_directory, make_files_structure):
     make_files_structure({
         'archive.html': '''<html>
         <title>The Title</title>
@@ -1001,7 +1002,7 @@ Outside element.'''
 
 
 @pytest.mark.asyncio
-async def test_doc_indexer(test_session, example_doc):
+async def test_doc_indexer(test_async_client, test_session, example_doc):
     """The contents of a Microsoft doc files can be indexed."""
     await lib.refresh_files()
     assert test_session.query(FileGroup).count() == 1
@@ -1012,7 +1013,7 @@ async def test_doc_indexer(test_session, example_doc):
 
 
 @pytest.mark.asyncio
-async def test_docx_indexer(test_session, example_docx):
+async def test_docx_indexer(test_async_client, test_session, example_docx):
     """The contents of a Microsoft docx files can be indexed."""
     await lib.refresh_files()
     assert test_session.query(FileGroup).count() == 1
@@ -1023,7 +1024,7 @@ async def test_docx_indexer(test_session, example_docx):
 
 
 @pytest.mark.asyncio
-async def test_file_search_date_range(test_session, example_pdf, example_doc):
+async def test_file_search_date_range(test_async_client, test_session, example_pdf, example_doc):
     """Test searching FileGroups by their published datetime."""
     await lib.refresh_files()
     doc, pdf = test_session.query(FileGroup).order_by(FileGroup.primary_path).all()

@@ -827,7 +827,7 @@ export const StatusProvider = (props) => {
 
 export const useStatusFlag = (flag) => {
     const {status} = useContext(StatusContext);
-    return status && status['flags'] && status['flags'].indexOf(flag) >= 0;
+    return status && status['flags'] && status['flags'][flag];
 }
 
 export const useCPUTemperature = () => {

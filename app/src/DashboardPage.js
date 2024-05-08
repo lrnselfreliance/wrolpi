@@ -28,12 +28,15 @@ import {useWROLMode} from "./hooks/customHooks";
 import {FileSearchFilterButton} from "./components/Files";
 import {DateSelectorButton} from "./components/DatesSelector";
 
-function FlagsMessages({flags}) {
+function FlagsMessages() {
     const {settings, fetchSettings} = React.useContext(SettingsContext);
+    const {status} = useContext(StatusContext);
 
-    if (!flags) {
+    if (!status || !'flags' in status || _.isEmpty(status['flags'])) {
         return <></>
     }
+
+    const flags = status['flags'];
 
     let refreshing;
     let refreshRequired;
@@ -41,7 +44,7 @@ function FlagsMessages({flags}) {
     let kiwixRestart;
 
     // Do not tell the maintainer to refresh the files if they are already refreshing.
-    if (flags.indexOf('refreshing') >= 0) {
+    if (flags['refreshing']) {
         // Actively refreshing.
         refreshing = <Message icon>
             <Icon name='circle notched' loading/>
@@ -50,7 +53,7 @@ function FlagsMessages({flags}) {
                 <p><Link to='/files'>Click here to view the progress</Link></p>
             </Message.Content>
         </Message>;
-    } else if (flags.indexOf('refresh_complete') === -1) {
+    } else if (!flags['refresh_complete']) {
         // `refresh_complete` flag is not set.  Tell the maintainer to refresh the files.
         refreshRequired = <Message icon warning onClick={refreshFiles}>
             <Icon name='hand point right'/>
@@ -61,11 +64,11 @@ function FlagsMessages({flags}) {
         </Message>;
     }
 
-    if (flags.indexOf('kiwix_restart') >= 0) {
+    if (flags['kiwix_restart']) {
         kiwixRestart = <KiwixRestartMessage/>;
     }
 
-    if (flags.indexOf('db_up') === -1) {
+    if (!flags['db_up']) {
         dbDown = <Message icon error>
             <Icon name='exclamation'/>
             <Message.Content>
@@ -78,7 +81,7 @@ function FlagsMessages({flags}) {
     return <>
         {refreshing}
         {dbDown || refreshRequired}
-        {settings && settings['ignore_outdated_zims'] === false && flags.indexOf('outdated_zims') >= 0 ?
+        {settings && settings['ignore_outdated_zims'] === false && flags['outdated_zims'] ?
             <OutdatedZimsMessage onClick={fetchSettings}/> : null}
         {kiwixRestart}
     </>
@@ -90,7 +93,7 @@ export function Getters() {
 
     // Getters are Downloads or Uploads.
     const [selectedGetter, setSelectedGetter] = useState(null);
-    const gettersDisabled = status?.flags?.indexOf('refresh_complete') === -1;
+    const gettersDisabled = status?.flags?.refresh_completed !== true;
 
     const handleSetGetter = (e, value) => {
         if (e) {
@@ -172,7 +175,6 @@ export function DashboardPage() {
         setSearchTags,
         months, dateRange, setDates, clearDate,
     } = useSearchSuggestions(searchStr, activeTags);
-    const {status} = useContext(StatusContext);
 
     React.useEffect(() => {
         setSuggestionSearchStr(localSearchStr);
@@ -278,7 +280,7 @@ export function DashboardPage() {
                 </Grid.Row>
             </Grid>
         </Media>
-        {!searchStr && <FlagsMessages flags={status['flags']}/>}
+        {!searchStr && <FlagsMessages/>}
         {body}
     </PageContainer>
 }

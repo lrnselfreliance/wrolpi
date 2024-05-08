@@ -9,7 +9,7 @@ from wrolpi.files.models import FileGroup
 
 
 @pytest.mark.asyncio
-async def test_pdf_title(test_session, example_pdf):
+async def test_pdf_title(test_async_client, test_session, example_pdf):
     """PDF modeler extracts a PDF's title and contents."""
     await files_lib.refresh_files()
 

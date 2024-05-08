@@ -220,7 +220,7 @@ export function DateSelectorButton({
                onClose={handleClose}
                size='tiny'
         >
-            <ModalHeader>Filter by Date</ModalHeader>
+            <ModalHeader>Filter by Published Date</ModalHeader>
             <ModalContent>
                 <Segment>
                     <DateRangeForm dateRange={dateRange} setDateRange={localOnSetDateRange}/>

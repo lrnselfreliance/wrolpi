@@ -179,6 +179,7 @@ function VideosPage() {
     const searchInput = <SearchInput
         searchStr={localSearchStr}
         onChange={setLocalSearchStr}
+        onClear={() => setLocalSearchStr(null)}
         onSubmit={setSearchStr}
         placeholder='Search Videos...'
     />;

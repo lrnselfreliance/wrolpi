@@ -13,32 +13,35 @@ def attach_shared_contexts(app: Sanic):
     """Initializes Sanic's shared context with WROLPi's multiprocessing tools.
 
     This is called by main.py, and by testing."""
+    manager = multiprocessing.Manager()
+
     # Many things wait for flags.db_up, initialize before starting.
     from wrolpi import flags
-    app.shared_ctx.flags = multiprocessing.Manager().dict({i: False for i in flags.FLAG_NAMES})
+
+    app.shared_ctx.flags = manager.dict({i: False for i in flags.FLAG_NAMES})
 
     # ConfigFile multiprocessing_dict's.
     # Shared Configs
-    app.shared_ctx.wrolpi_config = multiprocessing.Manager().dict()
-    app.shared_ctx.tags_config = multiprocessing.Manager().dict()
-    app.shared_ctx.inventories_config = multiprocessing.Manager().dict()
-    app.shared_ctx.channels_config = multiprocessing.Manager().dict()
-    app.shared_ctx.download_manager_config = multiprocessing.Manager().dict()
-    app.shared_ctx.video_downloader_config = multiprocessing.Manager().dict()
+    app.shared_ctx.wrolpi_config = manager.dict()
+    app.shared_ctx.tags_config = manager.dict()
+    app.shared_ctx.inventories_config = manager.dict()
+    app.shared_ctx.channels_config = manager.dict()
+    app.shared_ctx.download_manager_config = manager.dict()
+    app.shared_ctx.video_downloader_config = manager.dict()
     # Shared dicts.
-    app.shared_ctx.refresh = multiprocessing.Manager().dict()
-    app.shared_ctx.uploaded_files = multiprocessing.Manager().dict()
-    app.shared_ctx.bandwidth = multiprocessing.Manager().dict()
-    app.shared_ctx.disks_bandwidth = multiprocessing.Manager().dict()
-    app.shared_ctx.max_disks_bandwidth = multiprocessing.Manager().dict()
-    app.shared_ctx.map_importing = multiprocessing.Manager().dict()
+    app.shared_ctx.refresh = manager.dict()
+    app.shared_ctx.uploaded_files = manager.dict()
+    app.shared_ctx.bandwidth = manager.dict()
+    app.shared_ctx.disks_bandwidth = manager.dict()
+    app.shared_ctx.max_disks_bandwidth = manager.dict()
+    app.shared_ctx.map_importing = manager.dict()
     # Shared lists.
-    app.shared_ctx.events_history = multiprocessing.Manager().list()
+    app.shared_ctx.events_history = manager.list()
     # Shared ints
     app.shared_ctx.log_level = multiprocessing.Value(ctypes.c_int, default_log_level)
 
     # Download Manager
-    app.shared_ctx.download_manager_data = multiprocessing.Manager().dict()
+    app.shared_ctx.download_manager_data = manager.dict()
     app.shared_ctx.download_manager_queue = multiprocessing.Queue()
     app.shared_ctx.download_manager_disabled = multiprocessing.Event()
     app.shared_ctx.download_manager_stopped = multiprocessing.Event()

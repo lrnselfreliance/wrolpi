@@ -106,7 +106,7 @@ def _get_recursive_directory_dict(directory: pathlib.Path, directories: List[pat
     return d
 
 
-IGNORED_DIRECTORIES = ('lost+found',)
+HIDDEN_DIRECTORIES = ('lost+found',)
 
 
 def list_directories_contents(directories_: List[str]) -> Dict:
@@ -126,7 +126,7 @@ def list_directories_contents(directories_: List[str]) -> Dict:
 
     paths = dict()
     for path in media_directory.iterdir():
-        if path.is_dir() and path.name in IGNORED_DIRECTORIES:
+        if path.is_dir() and path.name in HIDDEN_DIRECTORIES:
             # Never show ignored directories.
             continue
         if path.is_dir():
@@ -1337,7 +1337,7 @@ def add_ignore_directory(directory: Union[pathlib.Path, str]):
 
 def remove_ignored_directory(directory: Union[pathlib.Path, str]):
     """Remove a directory from the `ignored_directories` in the WROLPi config."""
-    directory = str(pathlib.Path(directory))
+    directory = str(pathlib.Path(directory)).rstrip('/')
     ignored_directories = get_wrolpi_config().ignored_directories
     if directory in ignored_directories:
         ignored_directories.remove(directory)

@@ -4,6 +4,10 @@ import multiprocessing
 
 from sanic import Sanic
 
+from wrolpi.common import LOGGING_CONFIG
+
+default_log_level = logging.getLevelName(LOGGING_CONFIG['root']['level'])
+
 
 def attach_shared_contexts(app: Sanic):
     """Initializes Sanic's shared context with WROLPi's multiprocessing tools.
@@ -31,7 +35,7 @@ def attach_shared_contexts(app: Sanic):
     # Shared lists.
     app.shared_ctx.events_history = multiprocessing.Manager().list()
     # Shared ints
-    app.shared_ctx.log_level = multiprocessing.Value(ctypes.c_int, logging.DEBUG)
+    app.shared_ctx.log_level = multiprocessing.Value(ctypes.c_int, default_log_level)
 
     # Download Manager
     app.shared_ctx.download_manager_data = multiprocessing.Manager().dict()
@@ -68,7 +72,7 @@ def reset_shared_contexts(app: Sanic):
     app.shared_ctx.max_disks_bandwidth.clear()
     app.shared_ctx.map_importing.clear()
     # Shared ints
-    app.shared_ctx.log_level.value = logging.DEBUG
+    app.shared_ctx.log_level.value = default_log_level
 
     # Download Manager
     app.shared_ctx.download_manager_data.clear()

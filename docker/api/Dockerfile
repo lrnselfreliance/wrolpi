@@ -18,4 +18,4 @@ COPY wrolpi /opt/wrolpi/wrolpi
 COPY modules /opt/wrolpi/modules
 
 ENTRYPOINT [ "python3", "-OO", "/opt/wrolpi/main.py"]
-CMD ["-vv", "api", "--host", "0.0.0.0"]
+CMD ["-v", "api", "--host", "0.0.0.0"]

@@ -56,14 +56,14 @@ LOGGING_CONFIG = {
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'level': 'DEBUG',
+            'level': 'INFO',
             'formatter': 'standard',
             'stream': 'ext://sys.stdout'  # Use standard output
         }
     },
     'root': {
         'handlers': ['console'],
-        'level': 'DEBUG'
+        'level': 'INFO'
     }
 }
 
@@ -101,7 +101,7 @@ def set_log_level(level, warn_level: bool = True):
 
 def set_global_log_level(log_level: int):
     """Set the global (shared between processes) log level."""
-    if not isinstance(log_level, int) or 0 > log_level or log_level > 40:
+    if not isinstance(log_level, int) or not 0 <= log_level <= 40:
         raise LogLevelError()
     from wrolpi.api_utils import api_app
     with api_app.shared_ctx.log_level.get_lock():

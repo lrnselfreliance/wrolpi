@@ -411,7 +411,7 @@ class WROLPiConfig(ConfigFile):
         hotspot_password='wrolpi hotspot',
         hotspot_ssid='WROLPi',
         ignore_outdated_zims=False,
-        ignored_directories=list(),
+        ignored_directories=['/media/wrolpi/config', ],
         map_directory='map',
         throttle_on_startup=False,
         videos_directory='videos',

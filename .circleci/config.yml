@@ -131,17 +131,52 @@ jobs:
       - run:
           name: Stop Sanic API
           command: pkill -f sanic
+  react-app-build:
+    docker:
+      - image: cimg/node:20.13
+    resource_class: large
+    steps:
+      - checkout
+      - restore_cache:
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+      - run: cd app && npm install --legacy-peer-deps
+      - run:
+          name: Build React App
+          command: cd app && DISABLE_ESLINT_PLUGIN=true npm run build
+  react-app-start:
+    docker:
+      - image: cimg/node:20.13
+    resource_class: small
+    steps:
+      - checkout
+      - restore_cache:
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+      - run: cd app && npm install --legacy-peer-deps
+      - run:
+          name: Start React App
+          command: |
+            cd app
+            npm run start
+          background: true
+      - run:
+          name: Test React App
+          command: |
+            sleep 20
+            curl http://0.0.0.0:3000/manifest.json
+      - run:
+          name: Stop React App
+          command: pkill -f npm
 
 workflows:
-  wrolpi-sanic-tests:
-    jobs:
-      - sanic-api-start
   wrolpi-api-tests:
     jobs:
+      - sanic-api-start
       - api-tests-3-11
-#      - api-tests-3-12 Sanic does not yet support 3.12.
+  #      - api-tests-3-12 Sanic does not yet support 3.12.
   wrolpi-app-test:
     jobs:
       - app-tests-18
       - app-tests-20
       - app-tests-22
+      - react-app-build
+      - react-app-start

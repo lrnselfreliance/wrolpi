@@ -5,34 +5,6 @@ version: 2.1
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/2.0/configuration-reference/#jobs
 jobs:
-  app-tests-14:
-    docker:
-      - image: cimg/node:14.21
-    resource_class: small
-    steps:
-      - checkout
-      - restore_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}
-      - run: cd app && npm install
-      - save_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}
-          paths:
-            - ./app/node_modules
-      - run: cd app && npm run test
-  app-tests-16:
-    docker:
-      - image: cimg/node:16.19
-    resource_class: small
-    steps:
-      - checkout
-      - restore_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}
-      - run: cd app && npm install --legacy-peer-deps
-      - save_cache:
-          key: dependency-cache-{{ checksum "app/package-lock.json" }}
-          paths:
-            - ./app/node_modules
-      - run: cd app && npm run test
   app-tests-18:
     docker:
       - image: cimg/node:18.12
@@ -49,7 +21,21 @@ jobs:
       - run: cd app && npm run test
   app-tests-20:
     docker:
-      - image: cimg/node:20.11
+      - image: cimg/node:20.13
+    resource_class: small
+    steps:
+      - checkout
+      - restore_cache:
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+      - run: cd app && npm install --legacy-peer-deps
+      - save_cache:
+          key: dependency-cache-{{ checksum "app/package-lock.json" }}
+          paths:
+            - ./app/node_modules
+      - run: cd app && npm run test
+  app-tests-22:
+    docker:
+      - image: cimg/node:22.1
     resource_class: small
     steps:
       - checkout
@@ -156,7 +142,6 @@ workflows:
 #      - api-tests-3-12 Sanic does not yet support 3.12.
   wrolpi-app-test:
     jobs:
-      - app-tests-14
-      - app-tests-16
       - app-tests-18
       - app-tests-20
+      - app-tests-22

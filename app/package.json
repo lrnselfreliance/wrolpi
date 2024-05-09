@@ -17,10 +17,9 @@
     "react-router-dom": "^6.8.0",
     "react-scripts": "5.0.1",
     "react-semantic-toasts-2": "^0.6.7",
-    "react-stl-viewer": "^2.2.5",
+    "react-stl-viewer": "^2.5.0",
     "semantic-ui-offline": "^2.5.0",
     "semantic-ui-react": "^2.1.4",
-    "three": "^0.151.3",
     "web-vitals": "^2.1.4"
   },
   "scripts": {

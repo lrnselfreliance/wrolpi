@@ -20,6 +20,7 @@
     "react-stl-viewer": "^2.5.0",
     "semantic-ui-offline": "^2.5.0",
     "semantic-ui-react": "^2.1.4",
+    "three": "^0.154",
     "web-vitals": "^2.1.4"
   },
   "scripts": {

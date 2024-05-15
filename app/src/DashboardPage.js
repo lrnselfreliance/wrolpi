@@ -93,7 +93,7 @@ export function Getters() {
 
     // Getters are Downloads or Uploads.
     const [selectedGetter, setSelectedGetter] = useState(null);
-    const gettersDisabled = status?.flags?.refresh_completed !== true;
+    const gettersDisabled = status?.flags?.refresh_complete !== true;
 
     const handleSetGetter = (e, value) => {
         if (e) {

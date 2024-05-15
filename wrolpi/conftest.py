@@ -126,6 +126,13 @@ def test_config(test_directory) -> pathlib.Path:
     set_test_config(False)
 
 
+@pytest.fixture
+def skip_config_backups():
+    """Do not backup configs during testing."""
+    with mock.patch('wrolpi.common.TESTING_SKIP_BACKUP', True):
+        yield
+
+
 ROUTES_ATTACHED = False
 
 

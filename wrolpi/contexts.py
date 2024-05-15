@@ -22,7 +22,7 @@ def attach_shared_contexts(app: Sanic):
 
     # ConfigFile multiprocessing_dict's.
     # Shared Configs
-    app.shared_ctx.wrolpi_config = manager.dict()
+    app.shared_ctx.wrolpi_config = multiprocessing.Manager().dict()
     app.shared_ctx.tags_config = manager.dict()
     app.shared_ctx.inventories_config = manager.dict()
     app.shared_ctx.channels_config = manager.dict()

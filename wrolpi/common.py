@@ -287,6 +287,9 @@ def get_media_directory() -> Path:
     return MEDIA_DIRECTORY
 
 
+TESTING_SKIP_BACKUP = False
+
+
 class ConfigFile:
     """
     This class keeps track of the contents of a config file.  You can update the config (and it's file) by
@@ -360,9 +363,10 @@ class ConfigFile:
                 with config_file.open('rt') as fh:
                     config = yaml.load(fh, Loader=yaml.Loader)
                 # Copy the existing config to the backup directory.  One for each day.
-                if not backup_file.parent.exists():
-                    backup_file.parent.mkdir(parents=True)
-                shutil.copy(config_file, backup_file)
+                if PYTEST and not TESTING_SKIP_BACKUP:
+                    if not backup_file.parent.exists():
+                        backup_file.parent.mkdir(parents=True)
+                    shutil.copy(config_file, backup_file)
             else:
                 # Config file does not yet exist.
                 config = dict()

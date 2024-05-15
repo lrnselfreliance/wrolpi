@@ -631,8 +631,12 @@ async def test_get_file(test_session, test_async_client, test_directory, make_fi
 
 
 @pytest.mark.asyncio
-async def test_ignore_directory(test_session, test_async_client, test_directory, make_files_structure, test_config):
+async def test_ignore_directory(test_session, test_async_client, test_directory, make_files_structure, test_config,
+                                skip_config_backups):
     """A maintainer can ignore/un-ignore directories.  The files in the directory should not be refreshed."""
+    # Remove any default ignored directories.
+    get_wrolpi_config().ignored_directories = []
+
     foo, bar, baz = make_files_structure(['foo/foo.txt', 'foo/bar.txt', 'baz/baz.txt'])
     assert len(get_wrolpi_config().ignored_directories) == 0
 

@@ -51,6 +51,8 @@ async def test_valid_regex(test_session, test_async_client):
 
 @pytest.mark.asyncio
 async def test_get_settings(test_session, test_async_client):
+    get_wrolpi_config().ignored_directories = list()
+
     with mock.patch('wrolpi.admin.CPUFREQ_INFO_BIN', '/usr/bin/cpufreq-info'), \
             mock.patch('wrolpi.admin.NMCLI_BIN', '/usr/bin/nmcli'):
         request, response = await test_async_client.get('/api/settings')
@@ -266,6 +268,8 @@ def test_hotspot_settings(test_session, test_client, test_config):
 
 @skip_circleci
 def test_throttle_toggle(test_session, test_client, test_config):
+    get_wrolpi_config().ignored_directories = list()
+
     with mock.patch('wrolpi.admin.subprocess') as mock_subprocess, \
             mock.patch('wrolpi.admin.CPUFREQ_INFO_BIN', "this value isn't even used"):
         mock_subprocess.check_output.side_effect = [

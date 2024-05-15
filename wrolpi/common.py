@@ -309,11 +309,12 @@ class ConfigFile:
 
     def initialize(self, multiprocessing_dict: Optional[DictProxy] = None):
         """Initializes this config dict using the default config and the config file."""
-        config_file = self.get_file()
         # Use the provided multiprocessing.Manager().dict(), or dict() for testing.
         self._config = multiprocessing_dict or dict()
         # Use the default settings to initialize the config.
         self._config.update(deepcopy(self.default_config))
+
+        config_file = self.get_file()
         if config_file.is_file():
             # Use the config file to get the values the user set.
             with config_file.open('rt') as fh:

@@ -66,14 +66,14 @@ class ArchiveDownloader(Downloader, ABC):
         file_groups = list(session.query(FileGroup).filter(FileGroup.url.in_(urls), FileGroup.model == 'archive'))
         return file_groups
 
-    async def do_singlefile(self, download: Download) -> bytes:
+    async def do_singlefile(self, download: Download) -> Tuple[bytes, dict]:
         """Create a Singlefile from the archive's URL."""
         cmd = (str(SINGLE_FILE_BIN),
                download.url,
                '--browser-executable-path', CHROMIUM,
                '--browser-args', '["--no-sandbox"]',
                '--dump-content')
-        return_code, _, stdout = await self.process_runner(
+        return_code, logs, stdout = await self.process_runner(
             download.id,
             download.url,
             cmd,
@@ -82,7 +82,7 @@ class ArchiveDownloader(Downloader, ABC):
         if return_code != 0:
             raise RuntimeError(f'Archive singlefile exited with {return_code}')
 
-        return stdout
+        return stdout, logs
 
     async def do_readability(self, download: Download, html: bytes) -> dict:
         """Extract the readability dict from the provided HTML."""
@@ -127,9 +127,12 @@ class ArchiveDownloader(Downloader, ABC):
 
         @warning: Will not raise errors if readability or screenshot cannot be extracted.
         """
-        singlefile = await self.do_singlefile(download)
+        singlefile, logs = await self.do_singlefile(download)
 
         if SINGLEFILE_HEADER.encode() not in singlefile[:1000]:
+            if logs and (stderr := logs.get('stderr') or ''):
+                e = RuntimeError(stderr)
+                raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
             raise RuntimeError(f'Singlefile created was invalid: {download.url}')
 
         # Extract Readability from the Singlefile.

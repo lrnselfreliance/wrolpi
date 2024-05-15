@@ -44,7 +44,7 @@ async def perpetual_download_worker():
 
     while True:
         try:
-            await asyncio.sleep(10)
+            await asyncio.sleep(1)
 
             if download_manager.is_stopped:
                 logger.warning('DownloadManager stopped, quitting...')

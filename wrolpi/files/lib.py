@@ -65,10 +65,18 @@ def get_file_tag_names(file: pathlib.Path, session: Session = None) -> List[str]
 
 def _get_file_dict(file: pathlib.Path) -> Dict:
     media_directory = get_media_directory()
+    try:
+        size = file.stat().st_size
+    except PermissionError:
+        size = None
+    try:
+        mimetype = get_mimetype(file)
+    except PermissionError:
+        mimetype = None
     return dict(
         path=file.relative_to(media_directory),
-        size=file.stat().st_size,
-        mimetype=get_mimetype(file),
+        size=size,
+        mimetype=mimetype,
         tags=get_file_tag_names(file),
     )
 
@@ -83,9 +91,13 @@ def _get_directory_dict(directory: pathlib.Path,
                         directories_cache: str,  # Used to cache by requested directories.
                         ) -> Dict:
     media_directory = get_media_directory()
+    try:
+        is_empty = not next(directory.iterdir(), False)
+    except PermissionError:
+        is_empty = False
     return dict(
         path=f'{directory.relative_to(media_directory)}/',
-        is_empty=not next(directory.iterdir(), False),
+        is_empty=is_empty,
     )
 
 
@@ -560,7 +572,8 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
                     files, dirs = get_files_and_directories(directory)
                     directories.extend(dirs)
                     found_directories |= set(dirs)
-                    api_app.shared_ctx.refresh['counted_files'] = api_app.shared_ctx.refresh.get('counted_files', 0) + len(files)
+                    api_app.shared_ctx.refresh['counted_files'] = api_app.shared_ctx.refresh.get('counted_files',
+                                                                                                 0) + len(files)
                     # Sleep to catch cancel.
                     await asyncio.sleep(0)
                 refresh_logger.info(f'Counted {api_app.shared_ctx.refresh["counted_files"]} files')

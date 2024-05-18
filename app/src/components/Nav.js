@@ -61,7 +61,7 @@ function NavIconWrapper(props) {
 export function NavBar() {
     const wrolModeEnabled = useWROLMode();
     const wrolpiIcon = <img src='/icon.svg' height='32px' width='32px' alt='WROLPi Home Icon'/>;
-    const name = NAME || wrolpiIcon;
+    const name = <i>{NAME || wrolpiIcon}</i>;
     const topNavText = wrolModeEnabled ? <>{name}&nbsp; <Icon name='lock'/></> : name;
     const {i} = React.useContext(ThemeContext);
 

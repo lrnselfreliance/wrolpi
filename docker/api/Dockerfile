@@ -7,6 +7,8 @@ RUN apt update
 # ffmpeg for Videos
 RUN apt-get install -y ffmpeg catdoc
 RUN ffmpeg -version
+# yt-dlp needs cache directory
+RUN mkdir /.cache && chown -R 1000:1000 /.cache
 
 # Install dependencies.
 COPY requirements.txt /opt/wrolpi/requirements.txt

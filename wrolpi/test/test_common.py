@@ -8,6 +8,7 @@ import re
 import tempfile
 from datetime import date, datetime
 from decimal import Decimal
+from http import HTTPStatus
 from itertools import zip_longest
 from time import sleep
 from unittest import mock
@@ -835,3 +836,30 @@ async def test_aiohttp(simple_web_server):
     content, status = await common.aiohttp_head(server_url)
     assert content
     assert status == 200
+
+
+@pytest.mark.asyncio
+async def test_log_level(test_async_client, test_config):
+    """User can change API log level."""
+    from wrolpi.api_utils import api_app
+    try:
+        # Default log level is INFO.
+        assert api_app.shared_ctx.log_level.value == 20
+
+        # Change log level to WARNING.
+        body = dict(log_level=30)
+        request, response = await test_async_client.patch('/api/settings', json=body)
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.json
+        assert api_app.shared_ctx.log_level.value == 30
+
+        # Change log level to NOTSET.
+        body = dict(log_level=0)
+        request, response = await test_async_client.patch('/api/settings', json=body)
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.json
+        assert api_app.shared_ctx.log_level.value == 0
+    finally:
+        # Reset log level to debug.
+        body = dict(log_level=10)
+        request, response = await test_async_client.patch('/api/settings', json=body)
+        assert response.status_code == HTTPStatus.NO_CONTENT, response.json
+        assert api_app.shared_ctx.log_level.value == 10

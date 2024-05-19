@@ -1,12 +1,9 @@
 import ctypes
-import logging
 import multiprocessing
 
 from sanic import Sanic
 
-from wrolpi.common import LOGGING_CONFIG
-
-default_log_level = logging.getLevelName(LOGGING_CONFIG['root']['level'])
+default_log_level = 20
 
 
 def attach_shared_contexts(app: Sanic):

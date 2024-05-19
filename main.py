@@ -186,7 +186,7 @@ async def initialize_configs(app: Sanic):
 @limit_concurrent(1)
 async def handle_server_shutdown(*args, **kwargs):
     """Stop downloads when server is shutting down."""
-    logger.debug('handle_server_shutdown')
+    logger.warning('Shutting down')
     download_manager.stop()
     await cancel_refresh_tasks()
     await cancel_background_tasks()

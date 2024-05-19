@@ -186,6 +186,9 @@ async def delete(*paths: Union[str, pathlib.Path]):
                     # File that will be deleted is in a Tagged FileGroup.
                     raise FileGroupIsTagged(f"Cannot delete {file_group} because it is tagged")
     for path in paths:
+        ignored_directories = get_wrolpi_config().ignored_directories
+        if ignored_directories and str(path) in ignored_directories:
+            remove_ignored_directory(path)
         if path.is_dir():
             delete_directory(path, recursive=True)
         else:

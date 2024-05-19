@@ -504,7 +504,7 @@ export function ChannelsPage() {
     const [searchStr, setSearchStr] = useOneQuery('name');
     // Hides Channels with few videos.
     const [hideSmall, setHideSmall] = React.useState(true);
-    const enoughChannelsToHideSmall = channels && channels.length > 10;
+    const enoughChannelsToHideSmall = channels && channels.length > 20;
 
     const header = <div style={{marginBottom: '1em'}}>
         <Grid stackable columns={2}>
@@ -562,10 +562,17 @@ export function ChannelsPage() {
         const re = new RegExp(_.escapeRegExp(searchStr), 'i');
         filteredChannels = channels.filter(i => re.test(i['name']));
     } else if (channels && hideSmall && enoughChannelsToHideSmall) {
-        filteredChannels = channels.filter(i =>
-            i['video_count'] > 5 // Channels need to have at least 5 videos.
-            || i['name'].toLowerCase() === 'wrolpi'  // Always show the WROLPi channel so users can find tutorials.
-        );
+        // Get the top 80% of Channels.
+        let index80 = Math.floor(channels.length * 0.8);
+        const sortedChannels = channels.sort((a, b) => b.video_count - a.video_count);
+        let percentile = sortedChannels[index80].video_count;
+        filteredChannels = channels.filter(i => {
+            return i.video_count > percentile || i.name.toLowerCase() === 'wrolpi'
+        });
+        if (filteredChannels.length < 21) {
+            // Filtering hid too many Channels, show them all.
+            filteredChannels = channels;
+        }
     }
 
     return <>

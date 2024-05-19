@@ -45,21 +45,54 @@ from wrolpi.vars import PYTEST, DOCKERIZED, CONFIG_DIR, MEDIA_DIRECTORY, DEFAULT
 LOGGING_CONFIG = {
     'version': 1,
     'disable_existing_loggers': True,
-    'formatters': {
-        'standard': {
-            'format': '[%(asctime)s] [%(process)d] [%(name)s:%(lineno)d] [%(levelname)s] %(message)s'
+    'loggers': {
+        'sanic.root': {
+            'level': 'INFO',
+            'handlers': ['console'],
         },
-        'detailed': {
-            'format': '[%(asctime)s] [%(process)d] [%(name)s:%(lineno)d] [%(levelname)s] %(message)s'
-        }
+        'sanic.error': {
+            'level': 'INFO',
+            'handlers': ['error_console'],
+            'qualname': 'sanic.error',
+        },
+        'sanic.access': {
+            'level': 'INFO',
+            'handlers': ['access_console'],
+            'qualname': 'sanic.access',
+        },
+        'sanic.server': {
+            'level': 'INFO',
+            'handlers': ['console'],
+            'qualname': 'sanic.server',
+        },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'level': 'INFO',
-            'formatter': 'standard',
-            'stream': 'ext://sys.stdout'  # Use standard output
-        }
+            'formatter': 'generic',
+            'stream': sys.stdout,
+        },
+        'error_console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'generic',
+            'stream': sys.stderr,
+        },
+        'access_console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'access',
+            'stream': sys.stdout,
+        },
+    },
+    'formatters': {
+        'generic': {
+            'format': '[%(asctime)s] [%(process)d] [%(name)s:%(lineno)d] [%(levelname)s] %(message)s',
+            'class': 'logging.Formatter',
+        },
+        'access': {
+            'format': '[%(asctime)s] [%(process)d] [%(name)s:%(lineno)d] [%(levelname)s]: '
+                      + '%(request)s %(message)s %(status)s %(byte)s',
+            'class': 'logging.Formatter',
+        },
     },
     'root': {
         'handlers': ['console'],
@@ -81,6 +114,7 @@ def set_log_level(level, warn_level: bool = True):
     @warning: Child processes will not share this level.  See set_global_log_level
     """
     logger.setLevel(level)
+    logger_.setLevel(level)
 
     # Always warn about the log level, so we know what should have been logged.
     effective_level = logger.getEffectiveLevel()
@@ -90,7 +124,7 @@ def set_log_level(level, warn_level: bool = True):
 
     # Change log level for all handlers.
     for handler in logger.handlers:
-        handler.setLevel(effective_level)
+        handler.setLevel(level)
 
     # Enable debug logging in SQLAlchemy when logging is NOTSET.
     sa_logger = logging.getLogger('sqlalchemy.engine')

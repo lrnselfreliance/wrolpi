@@ -274,8 +274,8 @@ async def periodic_check_log_level():
     """Copies global log level into this Sanic worker's logger."""
     log_level = api_app.shared_ctx.log_level.value
     if log_level != logger.getEffectiveLevel():
-        logger.info(f'changing log level {log_level}')
-        set_log_level(log_level)
+        logger.info(f'changing log level from {logger.getEffectiveLevel()} to {log_level}')
+        set_log_level(log_level, warn_level=False)
 
     try:
         await asyncio.sleep(1)

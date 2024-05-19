@@ -489,6 +489,10 @@ async def refresh_discover_paths(paths: List[pathlib.Path], idempotency: datetim
                 # Directory may have been deleted during refresh.
                 logger.warning(f'Cannot refresh directory because it is missing: {directory}', exc_info=e)
                 continue
+            except PermissionError as e:
+                # Directory may have been deleted during refresh.
+                logger.warning(f'Do not have permission to refresh directory: {directory}', exc_info=e)
+                continue
             directories.extend(new_directories)
             files.extend(new_files)
 
@@ -572,7 +576,11 @@ async def refresh_files(paths: List[pathlib.Path] = None, send_events: bool = Tr
             with flags.refresh_counting:
                 while directories:
                     directory = directories.pop()
-                    files, dirs = get_files_and_directories(directory)
+                    try:
+                        files, dirs = get_files_and_directories(directory)
+                    except PermissionError as e:
+                        refresh_logger.error(f'Error refreshing {directory}', exc_info=e)
+                        continue
                     directories.extend(dirs)
                     found_directories |= set(dirs)
                     api_app.shared_ctx.refresh['counted_files'] = api_app.shared_ctx.refresh.get('counted_files',

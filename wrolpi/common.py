@@ -88,6 +88,10 @@ def set_log_level(level, warn_level: bool = True):
     if warn_level:
         logger.warning(f'Logging level: {level_name}')
 
+    # Change log level for all handlers.
+    for handler in logger.handlers:
+        handler.setLevel(effective_level)
+
     # Enable debug logging in SQLAlchemy when logging is NOTSET.
     sa_logger = logging.getLogger('sqlalchemy.engine')
     sa_level = logging.DEBUG if level == logging.NOTSET else logging.WARNING

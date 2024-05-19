@@ -186,6 +186,7 @@ def init_flags():
     if api_app.shared_ctx.flags_initialized.is_set():
         # Only need to read from once DB at startup.
         return
+    api_app.shared_ctx.flags_initialized.set()
 
     logger.debug('Initializing flags...')
 

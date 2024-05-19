@@ -1,6 +1,7 @@
 import {Button, Header, Icon, Modal, ModalActions, ModalContent, ModalHeader, Placeholder, Table} from "./Theme";
 import {
     Checkbox,
+    Form,
     IconGroup,
     Input,
     PlaceholderLine,
@@ -254,7 +255,7 @@ export function FileBrowser() {
                 <Button
                     color='blue'
                     onClick={() => setMakeDirectoryOpen(true)}
-                    disabled={!singleDirectorySelected || wrolModeEnabled}
+                    disabled={wrolModeEnabled}
                     style={{paddingLeft: '1em', paddingRight: '0.8em'}}
                 >
                     <IconGroup>
@@ -267,7 +268,6 @@ export function FileBrowser() {
                     onClose={() => setMakeDirectoryOpen(false)}
                     parent={selectedPaths.length ? selectedPaths[0] : null}
                     onSubmit={handleMakeDirectory}
-                    disabled={!singleDirectorySelected || wrolModeEnabled}
                 />
                 <Button
                     color='grey'
@@ -369,14 +369,16 @@ export function RenameModal({open, onClose, path, onSubmit, onPending}) {
     >
         <ModalHeader>Rename: {name}</ModalHeader>
         <ModalContent>
-            <Header as='h4'>New Name</Header>
-            <pre>{parent ? parent + '/' : null}{value}</pre>
+            <Form onSubmit={handleSubmit}>
+                <Header as='h4'>New Name</Header>
+                <pre>{parent ? parent + '/' : null}{value}</pre>
 
-            <Input fluid
-                   label='Name'
-                   value={value}
-                   onChange={handleInputChange}
-            />
+                <Input fluid
+                       label='Name'
+                       value={value}
+                       onChange={handleInputChange}
+                />
+            </Form>
         </ModalContent>
         <ModalActions>
             <Button
@@ -535,12 +537,14 @@ export function MakeDirectoryModal({open, onClose, parent, onSubmit}) {
     return <Modal closeIcon open={open} onClose={onClose}>
         <ModalHeader>Make Directory</ModalHeader>
         <ModalContent>
-            <pre>{mediaDirectory}/{parent}{value}</pre>
-            <Input fluid
-                   label='Name'
-                   value={value}
-                   onChange={handleInputChange}
-            />
+            <Form onSubmit={handleSubmit}>
+                <pre>{mediaDirectory}/{parent}{value}</pre>
+                <Input fluid
+                       label='Name'
+                       value={value}
+                       onChange={handleInputChange}
+                />
+            </Form>
         </ModalContent>
         <ModalActions>
             <Button color='violet' onClick={handleSubmit}>Create</Button>

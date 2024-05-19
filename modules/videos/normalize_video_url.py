@@ -21,6 +21,8 @@ def strip_extra_from_url(url: str) -> str:
     return url
 
 
+# TODO Move this to a global location.  We want an Archive's URL to mat a Video's URL.
+
 def normalize_video_url(url: str) -> str:
     """Convert video URLs to what is expected to be in the yt-dlp info json."""
     url = url.strip()

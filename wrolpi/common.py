@@ -317,7 +317,7 @@ class ConfigFile:
     def initialize(self, multiprocessing_dict: Optional[DictProxy] = None):
         """Initializes this config dict using the default config and the config file."""
         # Use the provided multiprocessing.Manager().dict(), or dict() for testing.
-        self._config = multiprocessing_dict or dict()
+        self._config = multiprocessing_dict if multiprocessing_dict is not None else dict()
         # Use the default settings to initialize the config.
         self._config.update(deepcopy(self.default_config))
 
@@ -376,7 +376,7 @@ class ConfigFile:
                 config = dict()
 
             config.update({k: v for k, v in self._config.items() if v is not None})
-            logger.debug(f'Saving config: {config_file}')
+            logger_.debug(f'Saving config: {config_file}')
             with config_file.open('wt') as fh:
                 yaml.dump(config, fh, width=self.width)
                 # Wait for data to be written before releasing lock.
@@ -1032,7 +1032,7 @@ async def get_fastest_mirror(urls: List[str]) -> str:
         try:
             speed = await speed_test(url)
         except Exception as e:
-            logger.error(f'Speedtest of {url} failed', exc_info=e)
+            logger_.error(f'Speedtest of {url} failed', exc_info=e)
             continue
 
         if speed > fastest_speed:
@@ -1744,4 +1744,4 @@ def get_title_from_html(html: str, url: str = None) -> str:
     try:
         return soup.title.string.strip()
     except Exception:  # noqa
-        logger.debug(f'Unable to extract title {url}')
+        logger_.debug(f'Unable to extract title {url}')

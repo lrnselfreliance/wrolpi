@@ -10,11 +10,10 @@ from modules.videos.models import Channel, Video
 from wrolpi.common import get_absolute_media_path, get_wrolpi_config
 from wrolpi.downloader import Download, DownloadFrequency
 from wrolpi.files import lib as files_lib
-from wrolpi.api_utils import api_app
 from wrolpi.vars import PROJECT_DIR
 from .. import common
 from ..common import convert_image, update_view_counts, get_video_duration, generate_video_poster, is_valid_poster
-from ..lib import save_channels_config, get_channels_config, import_channels_config
+from ..lib import save_channels_config, get_channels_config, import_channels_config, ChannelsConfig
 
 
 def test_get_absolute_media_path():
@@ -133,7 +132,7 @@ def test_generate_video_poster(video_file):
     assert duration == 5
 
 
-def test_import_channel_downloads(test_session, channel_factory, test_channels_config):
+def test_import_channel_downloads(test_async_client, test_session, channel_factory, test_channels_config):
     """Importing the Channels' config should create any missing download records"""
     channel1 = channel_factory(source_id='foo')
     channel2 = channel_factory(source_id='bar')
@@ -145,10 +144,13 @@ def test_import_channel_downloads(test_session, channel_factory, test_channels_c
     assert len(test_session.query(Channel).all()) == 2
     assert test_session.query(Download).all() == []
 
-    def update_channel_config(conf, source_id, d):
-        for c in conf.channels:
+    def update_channel_config(conf: ChannelsConfig, source_id, d):
+        # Creat a copy of the old config, replace the data of the provided Channel.
+        old_config = conf._config.copy()
+        for c in old_config['channels']:
             if c['source_id'] == source_id:
                 c.update(d)
+        conf.channels = old_config['channels']
         conf.save()
 
     # Config has no channels with a download_frequency.

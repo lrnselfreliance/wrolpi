@@ -42,6 +42,15 @@ def which(*possible_paths: str, warn: bool = False) -> Optional[Path]:
         return found.absolute()
 
 
+def pid_is_running(pid: int) -> bool:
+    """Return True if a process with PID exists."""
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError:
+        return False
+
+
 # Admin
 SUDO_BIN = which('sudo', '/usr/bin/sudo')
 NMCLI_BIN = which('nmcli', '/usr/bin/nmcli')

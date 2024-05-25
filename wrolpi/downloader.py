@@ -25,6 +25,7 @@ from sqlalchemy.sql import Delete
 
 from wrolpi import flags
 from wrolpi.api_utils import api_app
+from wrolpi.cmd import pid_is_running
 from wrolpi.common import Base, ModelHelper, logger, wrol_mode_check, zig_zag, ConfigFile, WROLPI_CONFIG, \
     limit_concurrent, wrol_mode_enabled
 from wrolpi.dates import TZDateTime, now, Seconds
@@ -245,7 +246,8 @@ class Downloader:
 
         Global timeout takes precedence over the timeout argument, unless it is 0.  (Smaller global timeout wins)
         """
-        logger.debug(f'{self} launching download process with args: {" ".join(list(map(str, cmd)))}')
+        str_cmd = " ".join([str(i) for i in cmd])
+        logger.debug(f'{self} launching download process with args: {str_cmd}')
         start = now()
         proc = await asyncio.create_subprocess_exec(*cmd,
                                                     stdout=asyncio.subprocess.PIPE,
@@ -276,13 +278,17 @@ class Downloader:
                     stdout, stderr = await proc.communicate()
                     break
 
+                if not pid_is_running(pid):
+                    logger.debug(f'Process is no longer running!  {str_cmd}')
+                    break
+
                 elapsed = (now() - start).total_seconds()
                 if timeout and elapsed > timeout:
                     logger.warning(f'Download has exceeded its timeout {elapsed=}')
                     download_manager.kill_download(download_id)
 
                 if download_manager.download_is_killed(download_id):
-                    logger.warning(f'Killing download {pid=}, {elapsed} seconds elapsed (timeout was not exceeded).')
+                    logger.warning(f'Killing download {pid=}, {elapsed} seconds elapsed.')
                     proc.kill()
                     break
         except Exception as e:

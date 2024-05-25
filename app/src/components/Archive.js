@@ -84,11 +84,15 @@ function ArchivePage() {
     const {data, size} = archiveFile;
 
     const singlefileUrl = data.singlefile_path ? `/media/${encodeMediaPath(data.singlefile_path)}` : null;
+    const readabilityUrl = data.readability_path ? `/media/${encodeMediaPath(data.readability_path)}` : null;
     const screenshotUrl = data.screenshot_path ? `/media/${encodeMediaPath(data.screenshot_path)}` : null;
 
     const singlefileButton = <ExternalCardLink to={singlefileUrl}>
         <Button content='View' color='violet'/>
     </ExternalCardLink>;
+    const readButton = <ExternalCardLink to={readabilityUrl}>
+        <Button content='Read' color='blue' disabled={!!!readabilityUrl}/>
+    </ExternalCardLink>
 
     const screenshot = screenshotUrl ?
         <Image src={screenshotUrl} size='large' style={{marginTop: '1em', marginBottom: '1em'}}/> :
@@ -253,6 +257,7 @@ function ArchivePage() {
             </Grid>
 
             {singlefileButton}
+            {readButton}
             {updateButton}
             {deleteButton}
         </Segment>

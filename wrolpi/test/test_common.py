@@ -273,7 +273,7 @@ def test_zig_zag(low, high, expected):
         ('', ''),
         ('foo', 'foo'),
         ('foo\\', 'foo'),
-        ('foo/', 'foo'),
+        ('foo/', 'foo⧸'),
         ('foo<', 'foo'),
         ('foo>', 'foo'),
         ('foo:', 'foo'),

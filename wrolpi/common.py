@@ -107,7 +107,7 @@ logging.config.dictConfig(LOGGING_CONFIG)
 logger_ = logger.getChild(__name__)
 
 
-def set_log_level(level, warn_level: bool = True):
+def set_log_level(level: int, warn_level: bool = True):
     """Set the level of the root logger so all children that have been created (or will be created) share the same
     level.
 
@@ -381,6 +381,9 @@ class ConfigFile:
         from wrolpi.api_utils import api_app
 
         config_file = self.get_file()
+        logger.warning(f'Save config called for {config_file}')
+        logger_.warning(f'Save config called for {config_file}')
+        logger_.debug(f'Save config called for {config_file}')
         # Don't overwrite a real config while testing.
         if PYTEST and not str(config_file).startswith('/tmp'):
             raise ValueError(f'Refusing to save config file while testing: {config_file}')
@@ -410,12 +413,17 @@ class ConfigFile:
                 config = dict()
 
             config.update({k: v for k, v in self._config.items() if v is not None})
-            logger_.debug(f'Saving config: {config_file}')
             with config_file.open('wt') as fh:
                 yaml.dump(config, fh, width=self.width)
                 # Wait for data to be written before releasing lock.
                 fh.flush()
                 os.fsync(fh.fileno())
+            logger.info(f'Saved config: {config_file}')
+            logger_.info(f'Saved config: {config_file}')
+        except Exception as e:
+            # Configs are vital, raise a big error when this fails.
+            logger_.critical(f'Failed to save config: {config_file}', exc_info=e)
+            raise e
         finally:
             if acquired:
                 lock.release()
@@ -975,7 +983,11 @@ SPACE_FILE_CHARS = re.compile(r'(  +)|(\t+)')
 
 def escape_file_name(name: str) -> str:
     """Remove any invalid characters in a file name."""
+    # Replace forward-slash (linux directories) with unicode Big Solidus (U+29F8)
+    name = name.replace('/', '⧸')
+    # Replace commonly used pipe with dash.
     name = name.replace(' | ', ' - ')
+    # Replace multiple spaces or tabs with a single space.
     name = SPACE_FILE_CHARS.sub(' ', name)
     name = INVALID_FILE_CHARS.sub('', name)
     return name.strip()

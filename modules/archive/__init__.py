@@ -133,6 +133,9 @@ class ArchiveDownloader(Downloader, ABC):
             if logs and (stderr := logs.get('stderr') or ''):
                 e = RuntimeError(stderr)
                 raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
+            if singlefile:
+                e = RuntimeError(singlefile)
+                raise RuntimeError(f'Singlefile created was invalid: {download.url}') from e
             raise RuntimeError(f'Singlefile created was invalid: {download.url}')
 
         # Extract Readability from the Singlefile.

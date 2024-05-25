@@ -16,7 +16,7 @@ import {
 import _ from "lodash";
 import {HexColorPicker} from "react-colorful";
 import {useRecurringTimeout} from "./hooks/customHooks";
-import {Media, ThemeContext} from "./contexts/contexts";
+import {Media, QueryContext, ThemeContext} from "./contexts/contexts";
 import {Link, useNavigate} from "react-router-dom";
 import {TagPlaceholder} from "./components/Placeholder";
 import {SortableTable} from "./components/SortableTable";
@@ -38,6 +38,7 @@ const DEFAULT_TAG_COLOR = '#000000';
 export function useTags() {
     const [tags, setTags] = React.useState(null);
     const [tagNames, setTagNames] = React.useState(null);
+    const {getLocationStr} = React.useContext(QueryContext);
 
     const fetchTags = async () => {
         try {
@@ -104,7 +105,7 @@ export function useTags() {
     }
 
     const TagLabelLink = ({name, props}) => {
-        const to = `/search?tag=${encodeURIComponent(name)}`;
+        const to = getLocationStr({tag: name}, '/search');
         const style = {marginLeft: '0.3em', marginRight: '0.3em'};
         try {
             // We prefer to use Link to avoid reloading the page, check if React Router is available, so we can use it.

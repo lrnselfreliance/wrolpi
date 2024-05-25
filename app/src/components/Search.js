@@ -38,7 +38,7 @@ const SUGGESTED_APPS = [
 export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false, model) => {
     const navigate = useNavigate();
 
-    const {dateRange, setDateRange, months, setDates} = useSearchDate();
+    const {dateRange, setDateRange, months, setDates, isEmpty: datesIsEmpty} = useSearchDate();
     const {searchParams, updateQuery, getLocationStr} = React.useContext(QueryContext);
     // `searchStr` means actually fetch the files/zims.
     const searchStr = searchParams.get('q');
@@ -49,6 +49,9 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
     const filter = searchParams.get('filter');
     // archive/video/ebook/etc.
     const model_ = searchParams.get('model') || model;
+
+    const anySearch = (!datesIsEmpty) || searchStr || (activeTags && activeTags.length > 0) || filter || model;
+    const isEmpty = !anySearch;
 
     const setSearchStr = (value) => {
         const searchQuery = {q: value, o: 0};
@@ -90,6 +93,7 @@ export const useSearch = (defaultLimit = 48, totalPages = 0, emptySearch = false
         clearSearch,
         setTags,
         months, dateRange, setDateRange, setDates,
+        anySearch, isEmpty,
     }
 }
 

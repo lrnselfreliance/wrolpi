@@ -13,6 +13,7 @@ export const SettingsContext = React.createContext({
     fetchSettings: null,
 });
 
+// `useQuery`
 export const QueryContext = React.createContext({
     searchParams: null,
     setSearchParams: null,

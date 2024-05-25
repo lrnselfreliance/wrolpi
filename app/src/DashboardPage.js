@@ -1,6 +1,6 @@
 import {LoadStatistic, PageContainer, SearchResultsInput, useTitle} from "./components/Common";
 import React, {useContext, useState} from "react";
-import {Media, SettingsContext, StatusContext} from "./contexts/contexts";
+import {Media, QueryContext, SettingsContext, StatusContext} from "./contexts/contexts";
 import {DownloadMenu} from "./components/Download";
 import {
     Button,
@@ -24,7 +24,7 @@ import {TagsDashboard} from "./Tags";
 import {Upload} from "./components/Upload";
 import {SearchView, useSearch, useSearchSuggestions} from "./components/Search";
 import {KiwixRestartMessage, OutdatedZimsMessage} from "./components/Zim";
-import {useWROLMode} from "./hooks/customHooks";
+import {useSearchDate, useSearchFilter, useWROLMode} from "./hooks/customHooks";
 import {FileSearchFilterButton} from "./components/Files";
 import {DateSelectorButton} from "./components/DatesSelector";
 
@@ -161,7 +161,7 @@ export function DashboardPage() {
     const navigate = useNavigate();
 
     // The search the user submitted.
-    const {searchStr, setSearchStr, activeTags} = useSearch();
+    const {searchStr, setSearchStr, activeTags, isEmpty} = useSearch();
     // The search that the user is typing.
     const [localSearchStr, setLocalSearchStr] = React.useState(searchStr);
     const {
@@ -211,6 +211,14 @@ export function DashboardPage() {
         // User has submitted and wants full search.
         body = <SearchView suggestions={suggestions} suggestionsSums={suggestionsSums} loading={loading}/>;
     }
+    const {setFilter} = useSearchFilter();
+
+    const clearAllSearch = () => {
+        clearDate();
+        setFilter(null);
+        setSearchStr(null);
+        navigate('/');
+    }
 
     const getSearchResultsInput = (props) => {
         return <SearchResultsInput clearable
@@ -218,7 +226,8 @@ export function DashboardPage() {
                                    onChange={setLocalSearchStr}
                                    onSubmit={setSearchStr}
                                    placeholder='Search everywhere...'
-                                   onClear={() => navigate('/')}
+                                   onClear={clearAllSearch}
+                                   clearDisabled={isEmpty}
                                    style={{marginBottom: '2em'}}
                                    results={suggestionsResults}
                                    handleResultSelect={handleResultSelect}

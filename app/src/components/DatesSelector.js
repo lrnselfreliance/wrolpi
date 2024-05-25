@@ -170,6 +170,17 @@ export function DateSelectorButton({
         }
     }, [JSON.stringify(dateRange), JSON.stringify(monthsSelected)]);
 
+    React.useEffect(() => {
+        if (!defaultMonthsSelected || (defaultMonthsSelected && defaultMonthsSelected.length === 0)) {
+            setMonthsSelected([]);
+        }
+        console.log(defaultDateRange);
+        if (!defaultDateRange || (defaultDateRange && defaultDateRange.length === 2
+            && defaultDateRange[0] == null && defaultDateRange[1] === null)) {
+            setDateRange(emptyDateRange);
+        }
+    }, [JSON.stringify(defaultMonthsSelected), JSON.stringify(defaultDateRange)]);
+
     const handleOpen = (e) => {
         if (e) e.preventDefault();
         setOpen(true);

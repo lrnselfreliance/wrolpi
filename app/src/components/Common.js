@@ -400,7 +400,7 @@ export function scrollToTopOfElement(element, smooth = true) {
     });
 }
 
-const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small', placeholder = 'Search...', icon = 'search') => {
+const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small', placeholder = 'Search...', icon = 'search', clearDisabled = null) => {
     const [value, setValue] = useState(searchStr || '');
     const [submitted, setSubmitted] = useState(false);
 
@@ -459,7 +459,9 @@ const useClearableInput = (searchStr, onChange, onClear, onSubmit, size = 'small
         size={size}
         onClick={handleClearSearch}
         type='button'
-        disabled={!!!value}
+        // If `clearDisabled` is provided, use it to disable the clear button.  Fallback to disabling if there is no
+        // search value.
+        disabled={clearDisabled !== null ? clearDisabled : !!!value}
         className='search-clear'
     />;
 
@@ -508,6 +510,7 @@ export function SearchResultsInput({
                                        action,
                                        actionIcon,
                                        clearable = false,
+                                       clearDisabled = null,
                                        autoFocus = false,
                                        results = undefined,
                                        handleResultSelect = null,
@@ -521,7 +524,7 @@ export function SearchResultsInput({
         clearButton,
         localOnSubmit,
         handleChange,
-    } = useClearableInput(searchStr, onChange, onClear, onSubmit, size, placeholder);
+    } = useClearableInput(searchStr, onChange, onClear, onSubmit, size, placeholder, icon, clearDisabled);
 
     // Show a "Loading" message rather than "No results" while results are pending.
     const loadingResults = {'loading': {name: 'Loading', results: [{title: 'Results are pending...'}]}};

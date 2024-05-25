@@ -987,7 +987,10 @@ export const useSearchDate = () => {
         updateQuery({fromDate: newFromDate, toDate: newToDate, month: newMonths, 'o': 0});
     }
 
-    return {dateRange: [fromDate, toDate], setDates, months, clearDate}
+    const anySearch = (months && months.length > 0) || (fromDate !== null || toDate !== null);
+    const isEmpty = !anySearch;
+
+    return {dateRange: [fromDate, toDate], setDates, months, clearDate, isEmpty}
 }
 
 export const useUploadFile = () => {
